@@ -26,10 +26,8 @@ const INITIAL_EQUIPMENT = [
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const CATEGORIES  = ["מצלמות","עדשות","מיקרופונים","מקליטי אודיו","תאורה","חצובות","אביזרים"];
 const STATUSES    = ["תקין","פגום","בתיקון","נעלם"];
-const NIMROD_PHONE    = "972521234567"; // ← החלף במספר של נמרוד
-const EMAILJS_SERVICE  = "service_machsan";
-const EMAILJS_TEMPLATE = "template_rvuh819";
-const EMAILJS_KEY      = "UXmFrVePaaBdbDpnt";
+const RESEND_API_KEY   = "re_CojPb5gu_14LGQnquknMWcjVntE1sGzec";
+const NIMROD_PHONE     = "972521234567"; // ← החלף במספר של נמרוד
 const TERMS = `הסטודנט מתחייב להחזיר את הציוד במועד שנקבע ובמצב תקין.
 אחריות על נזק לציוד תחול על הסטודנט.
 במקרה של אובדן, יחויב הסטודנט בעלות החלפת הציוד.
@@ -492,28 +490,47 @@ function PublicForm({ equipment, reservations, setReservations, showToast }) {
 
   const sendEmail = async (res) => {
     try {
-      if (!window.emailjs) {
-        await new Promise((resolve, reject) => {
-          const s = document.createElement("script");
-          s.src = "https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js";
-          s.onload = resolve; s.onerror = reject;
-          document.head.appendChild(s);
-        });
-        window.emailjs.init({ publicKey: EMAILJS_KEY });
-      }
       const waText = encodeURIComponent("שלום נמרוד הגשתי בקשה להשאלה ממתין לאישורך תודה");
       const waLink = `https://wa.me/${NIMROD_PHONE}?text=${waText}`;
-      const itemsList = res.items.map(i => `• ${i.name} × ${i.quantity}`).join("\n");
-      await window.emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
-        to_email:     res.email,
-        student_name: res.student_name,
-        items_list:   itemsList,
-        borrow_date:  formatDate(res.borrow_date),
-        return_date:  formatDate(res.return_date),
-        wa_link:      waLink,
+      const itemsList = res.items.map(i => `<li>${i.name} × ${i.quantity}</li>`).join("");
+      await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${RESEND_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: "onboarding@resend.dev",
+          to: res.email,
+          subject: "✅ בקשת ההשאלה שלך התקבלה — המחסן של קישקתא ונמרוד",
+          html: `
+            <div dir="rtl" style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
+              <div style="background:#1a1a2e;padding:28px;text-align:center;border-radius:12px 12px 0 0">
+                <h1 style="color:#f5a623;margin:0">🎬 המחסן של קישקתא ונמרוד</h1>
+              </div>
+              <div style="background:#fff;padding:28px;border:1px solid #eee">
+                <h2>שלום ${res.student_name} 👋</h2>
+                <div style="background:#eaffea;border-right:4px solid #2ecc71;padding:14px;border-radius:8px;margin-bottom:20px">
+                  <strong style="color:#27ae60">✅ בקשתך התקבלה בהצלחה!</strong><br/>
+                  <span style="color:#555">צוות המכללה יעבור עליה לאישורה הסופי.</span>
+                </div>
+                <p><strong>ציוד שהוזמן:</strong></p>
+                <ul>${itemsList}</ul>
+                <p>📅 תאריך השאלה: <strong>${formatDate(res.borrow_date)}</strong></p>
+                <p>📅 תאריך החזרה: <strong>${formatDate(res.return_date)}</strong></p>
+                <div style="background:#f0fff4;border:1px solid #b7ebc8;border-radius:10px;padding:18px;margin-top:24px;text-align:center">
+                  <p style="font-weight:bold">📲 שלח ווצאפ לנמרוד גרא:</p>
+                  <p style="font-style:italic;color:#555">"שלום נמרוד הגשתי בקשה להשאלה ממתין לאישורך תודה"</p>
+                  <a href="${waLink}" style="background:#25d366;color:#fff;text-decoration:none;padding:12px 28px;border-radius:25px;font-weight:bold;display:inline-block">
+                    💬 שלח ווצאפ עכשיו
+                  </a>
+                </div>
+              </div>
+            </div>`,
+        }),
       });
     } catch(e) {
-      console.error("EmailJS error:", e);
+      console.error("Resend error:", e);
     }
   };
 
