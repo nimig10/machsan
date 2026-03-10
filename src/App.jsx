@@ -493,44 +493,20 @@ function PublicForm({ equipment, reservations, setReservations, showToast }) {
       const waText = encodeURIComponent("שלום נמרוד הגשתי בקשה להשאלה ממתין לאישורך תודה");
       const waLink = `https://wa.me/${NIMROD_PHONE}?text=${waText}`;
       const itemsList = res.items.map(i => `<li>${i.name} × ${i.quantity}</li>`).join("");
-      await fetch("https://api.resend.com/emails", {
+      await fetch("/api/send-email", {
         method: "POST",
-        headers: {
-          "Authorization": `Bearer ${RESEND_API_KEY}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          from: "onboarding@resend.dev",
-          to: res.email,
-          subject: "✅ בקשת ההשאלה שלך התקבלה — המחסן של קישקתא ונמרוד",
-          html: `
-            <div dir="rtl" style="font-family:Arial,sans-serif;max-width:600px;margin:auto;direction:rtl;text-align:right">
-              <div style="background:#1a1a2e;padding:28px;text-align:center;border-radius:12px 12px 0 0">
-                <h1 style="color:#f5a623;margin:0">🎬 המחסן של קישקתא ונמרוד</h1>
-              </div>
-              <div style="background:#fff;padding:28px;border:1px solid #eee">
-                <h2>שלום ${res.student_name} 👋</h2>
-                <div style="background:#eaffea;border-right:4px solid #2ecc71;padding:14px;border-radius:8px;margin-bottom:20px">
-                  <strong style="color:#27ae60">✅ בקשתך התקבלה בהצלחה!</strong><br/>
-                  <span style="color:#555">צוות המכללה יעבור עליה לאישורה הסופי.</span>
-                </div>
-                <p><strong>ציוד שהוזמן:</strong></p>
-                <ul>${itemsList}</ul>
-                <p>📅 תאריך השאלה: <strong>${formatDate(res.borrow_date)}</strong></p>
-                <p>📅 תאריך החזרה: <strong>${formatDate(res.return_date)}</strong></p>
-                <div style="background:#f0fff4;border:1px solid #b7ebc8;border-radius:10px;padding:18px;margin-top:24px;text-align:center">
-                  <p style="font-weight:bold">📲 שלח ווצאפ לנמרוד גרא:</p>
-                  <p style="font-style:italic;color:#555">"שלום נמרוד הגשתי בקשה להשאלה ממתין לאישורך תודה"</p>
-                  <a href="${waLink}" style="background:#25d366;color:#fff;text-decoration:none;padding:12px 28px;border-radius:25px;font-weight:bold;display:inline-block">
-                    💬 שלח ווצאפ עכשיו
-                  </a>
-                </div>
-              </div>
-            </div>`,
+          to:           res.email,
+          student_name: res.student_name,
+          items_list:   itemsList,
+          borrow_date:  formatDate(res.borrow_date),
+          return_date:  formatDate(res.return_date),
+          wa_link:      waLink,
         }),
       });
     } catch(e) {
-      console.error("Resend error:", e);
+      console.error("send email error:", e);
     }
   };
 
