@@ -490,12 +490,40 @@ function PublicForm({ equipment, reservations, setReservations, showToast }) {
   const waText = encodeURIComponent("שלום נמרוד הגשתי בקשה להשאלה ממתין לאישורך תודה");
   const waLink = `https://wa.me/${NIMROD_PHONE}?text=${waText}`;
 
+  const sendEmail = async (res) => {
+    try {
+      if (!window.emailjs) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement("script");
+          s.src = "https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js";
+          s.onload = resolve; s.onerror = reject;
+          document.head.appendChild(s);
+        });
+        window.emailjs.init({ publicKey: EMAILJS_KEY });
+      }
+      const waText = encodeURIComponent("שלום נמרוד הגשתי בקשה להשאלה ממתין לאישורך תודה");
+      const waLink = `https://wa.me/${NIMROD_PHONE}?text=${waText}`;
+      const itemsList = res.items.map(i => `• ${i.name} × ${i.quantity}`).join("\n");
+      await window.emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
+        to_email:     res.email,
+        student_name: res.student_name,
+        items_list:   itemsList,
+        borrow_date:  formatDate(res.borrow_date),
+        return_date:  formatDate(res.return_date),
+        wa_link:      waLink,
+      });
+    } catch(e) {
+      console.error("EmailJS error:", e);
+    }
+  };
+
   const submit = async () => {
     setSub(true);
     const newRes = { ...form, id:Date.now(), status:"ממתין", created_at:today(), items };
     const updated = [...reservations, newRes];
     setReservations(updated);
     await storageSet("reservations", updated);
+    await sendEmail(newRes);
     setSub(false);
     setDone(true);
     showToast("success","הבקשה נשלחה בהצלחה!");
