@@ -26,7 +26,10 @@ const INITIAL_EQUIPMENT = [
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const CATEGORIES  = ["מצלמות","עדשות","מיקרופונים","מקליטי אודיו","תאורה","חצובות","אביזרים"];
 const STATUSES    = ["תקין","פגום","בתיקון","נעלם"];
-const NIMROD_PHONE = "972521234567";
+const NIMROD_PHONE    = "972521234567"; // ← החלף במספר של נמרוד
+const EMAILJS_SERVICE  = "service_machsan";
+const EMAILJS_TEMPLATE = "template_rvuh819";
+const EMAILJS_KEY      = "UXmFrVePaaBdbDpnt";
 const TERMS = `הסטודנט מתחייב להחזיר את הציוד במועד שנקבע ובמצב תקין.
 אחריות על נזק לציוד תחול על הסטודנט.
 במקרה של אובדן, יחויב הסטודנט בעלות החלפת הציוד.
