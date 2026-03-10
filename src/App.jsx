@@ -504,7 +504,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast }) {
           to: res.email,
           subject: "✅ בקשת ההשאלה שלך התקבלה — המחסן של קישקתא ונמרוד",
           html: `
-            <div dir="rtl" style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
+            <div dir="rtl" style="font-family:Arial,sans-serif;max-width:600px;margin:auto;direction:rtl;text-align:right">
               <div style="background:#1a1a2e;padding:28px;text-align:center;border-radius:12px 12px 0 0">
                 <h1 style="color:#f5a623;margin:0">🎬 המחסן של קישקתא ונמרוד</h1>
               </div>
