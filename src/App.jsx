@@ -139,7 +139,7 @@ const css = `
   .modal-header { padding:20px 24px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; background:var(--surface); z-index:1; }
   .modal-title { font-size:18px; font-weight:800; }
   .modal-body { padding:24px; }
-  .modal-footer { padding:16px 24px; border-top:1px solid var(--border); display:flex; gap:10px; background:var(--surface); }
+  .modal-footer { padding:16px 24px; border-top:1px solid var(--border); display:flex; gap:8px; background:var(--surface); flex-wrap:wrap; }
   @keyframes fadeIn { from{opacity:0} to{opacity:1} }
   @keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
   @keyframes spin { to{transform:rotate(360deg)} }
@@ -166,8 +166,9 @@ const css = `
   .toast-success { border-right:3px solid var(--green); }
   .toast-error   { border-right:3px solid var(--red); }
   .toast-info    { border-right:3px solid var(--blue); }
-  .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(6,1fr); gap:2px; height:540px; }
-  .cal-day-header { text-align:center; font-size:11px; font-weight:700; color:var(--text3); padding:8px 4px; }
+  .cal-headers { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; margin-bottom:2px; }
+  .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(6,1fr); gap:2px; height:480px; }
+  .cal-day-header { text-align:center; font-size:11px; font-weight:700; color:var(--text3); padding:6px 4px; }
   .cal-day { background:var(--surface2); border-radius:var(--r-sm); padding:6px; border:1px solid var(--border); overflow:hidden; min-height:0; }
   .cal-day.is-today { border-color:var(--accent); }
   .cal-day-num { font-size:12px; font-weight:700; margin-bottom:4px; color:var(--text2); }
@@ -191,6 +192,11 @@ const css = `
   .req-detail-label { color:var(--text2); min-width:110px; }
   .spinner { width:36px; height:36px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; }
   .loading-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:80px 20px; gap:16px; color:var(--text2); }
+  .res-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:16px; transition:border-color 0.15s; }
+  .res-card:hover { border-color:var(--accent); }
+  .res-card-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:8px; }
+  .res-card-mid { padding:12px 0; border-top:1px solid var(--border); border-bottom:1px solid var(--border); margin-bottom:12px; }
+  .res-card-actions { display:flex; gap:6px; flex-wrap:wrap; }
   /* ── DESKTOP WIDE ── */
   @media (min-width:1400px) {
     .sidebar { width:280px; min-width:280px; }
@@ -227,8 +233,7 @@ const css = `
     .form-card-body { padding:20px; }
     .toast-container { left:12px; right:12px; bottom:76px; }
     .toast { min-width:0; width:100%; }
-    .cal-grid { height:336px; }
-    .cal-day { min-height:0; }
+    .cal-grid { height:300px; }
   }
   @media (max-width:400px) {
     .eq-grid { grid-template-columns:1fr; }
@@ -500,37 +505,48 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
           </select>
         </div>
       </div>
-      <div className="card" style={{padding:0}}>
-        <div className="table-wrap">
-          <table>
-            <thead><tr><th>תאריך</th><th>שם סטודנט</th><th>קורס</th><th>תאריכי השאלה</th><th>ציוד</th><th>סטטוס</th><th>פעולות</th></tr></thead>
-            <tbody>
-              {filtered.length===0
-                ? <tr><td colSpan={7} style={{textAlign:"center",padding:40,color:"var(--text3)"}}>אין בקשות</td></tr>
-                : filtered.map(r=>(
-                  <tr key={r.id}>
-                    <td style={{fontSize:12,color:"var(--text3)"}}>{formatDate(r.created_at)}</td>
-                    <td><div style={{fontWeight:700}}>{r.student_name}</div><div style={{fontSize:11,color:"var(--text3)"}}>{r.email}</div></td>
-                    <td><span className="chip">{r.course}</span></td>
-                    <td style={{fontSize:12}}><div>📅 {formatDate(r.borrow_date)}</div><div>📅 {formatDate(r.return_date)}</div></td>
-                    <td>{r.items?.map((i,j)=><div key={j} style={{fontSize:12,marginBottom:2,display:"flex",alignItems:"center",gap:4}}><EqImg id={i.equipment_id} size={16}/> {eqName(i.equipment_id)} × {i.quantity}</div>)}</td>
-                    <td>{statusBadge(r.status)}</td>
-                    <td>
-                      <div className="flex gap-2">
-                        <button className="btn btn-secondary btn-sm" onClick={()=>setSelected(r)}>👁️</button>
-                        <button className="btn btn-secondary btn-sm" title="ייצא PDF" onClick={()=>exportPDF(r)}>📄</button>
-                        {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" onClick={()=>updateStatus(r.id,"מאושר")}>✅</button><button className="btn btn-danger btn-sm" onClick={()=>updateStatus(r.id,"נדחה")}>❌</button></>}
-                        {r.status==="מאושר"&&<button className="btn btn-secondary btn-sm" onClick={()=>updateStatus(r.id,"הוחזר")}>🔄</button>}
-                        <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${r.student_name}?`)) deleteReservation(r.id); }}>🗑️</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              }
-            </tbody>
-          </table>
+      {filtered.length===0
+        ? <div className="empty-state"><div className="emoji">📭</div><div>אין בקשות</div></div>
+        : <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          {filtered.map(r=>(
+            <div key={r.id} className="res-card">
+              <div className="res-card-top">
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{width:38,height:38,borderRadius:"50%",background:"var(--surface3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,flexShrink:0}}>
+                    {r.student_name?.[0]||"?"}
+                  </div>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:15}}>{r.student_name}</div>
+                    <div style={{fontSize:11,color:"var(--text3)"}}>{r.email}</div>
+                  </div>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  {statusBadge(r.status)}
+                  <span style={{fontSize:11,color:"var(--text3)"}}>{formatDate(r.created_at)}</span>
+                </div>
+              </div>
+              <div className="res-card-mid">
+                <div style={{display:"flex",gap:16,fontSize:12,color:"var(--text2)",flexWrap:"wrap"}}>
+                  <span>📚 {r.course}</span>
+                  <span>📅 {formatDate(r.borrow_date)} ← {formatDate(r.return_date)}</span>
+                  <span>📦 {r.items?.length||0} פריטים</span>
+                </div>
+                <div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:4}}>
+                  {r.items?.slice(0,3).map((i,j)=><span key={j} className="chip"><EqImg id={i.equipment_id} size={13}/> {eqName(i.equipment_id)} ×{i.quantity}</span>)}
+                  {(r.items?.length||0)>3&&<span className="chip">+{r.items.length-3} נוספים</span>}
+                </div>
+              </div>
+              <div className="res-card-actions">
+                <button className="btn btn-secondary btn-sm" onClick={()=>setSelected(r)}>👁️ פרטים</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>exportPDF(r)}>📄 PDF</button>
+                {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" onClick={()=>updateStatus(r.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger btn-sm" onClick={()=>updateStatus(r.id,"נדחה")}>❌ דחה</button></>}
+                {r.status==="מאושר"&&<button className="btn btn-secondary btn-sm" onClick={()=>updateStatus(r.id,"הוחזר")}>🔄 הוחזר</button>}
+                <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${r.student_name}?`)) deleteReservation(r.id); }}>🗑️</button>
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
+      }
       {selected && (
         <Modal title={`📋 בקשה — ${selected.student_name}`} onClose={()=>setSelected(null)} size="modal-lg"
           footer={<>
@@ -540,7 +556,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
             <button className="btn btn-danger" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${selected.student_name}?`)) deleteReservation(selected.id); }}>🗑️ מחק</button>
             <button className="btn btn-secondary" onClick={()=>setSelected(null)}>סגור</button>
           </>}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:20}}>
             <div>
               <div className="form-section-title">פרטי סטודנט</div>
               <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:16,border:"1px solid var(--border)"}}>
@@ -626,8 +642,10 @@ function DashboardPage({ equipment, reservations }) {
               <button className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo+1,1))}>›</button>
             </div>
           </div>
-          <div className="cal-grid">
+          <div className="cal-headers">
             {HE_D.map(d=><div key={d} className="cal-day-header">{d}</div>)}
+          </div>
+          <div className="cal-grid">
             {days.map((d,i)=>{
               const ev=eventsFor(d); const isT=d&&d.toISOString().split("T")[0]===todayStr;
               return <div key={i} className={`cal-day ${isT?"is-today":""}`} style={{opacity:!d?0.2:1}}>
