@@ -596,6 +596,7 @@ function DashboardPage({ equipment, reservations }) {
   const days=[]; const sd=new Date(yr,mo,1).getDay();
   for(let i=0;i<sd;i++) days.push(null);
   for(let d=1;d<=new Date(yr,mo+1,0).getDate();d++) days.push(new Date(yr,mo,d));
+  while(days.length<42) days.push(null);
   const HE_M=["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
   const HE_D=["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
 
