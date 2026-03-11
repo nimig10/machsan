@@ -191,6 +191,47 @@ const css = `
   .req-detail-label { color:var(--text2); min-width:110px; }
   .spinner { width:36px; height:36px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; }
   .loading-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:80px 20px; gap:16px; color:var(--text2); }
+  /* ── DESKTOP WIDE ── */
+  @media (min-width:1400px) {
+    .sidebar { width:280px; min-width:280px; }
+    .main { margin-right:280px; }
+    .page { padding:36px 40px; }
+    .stats-grid { grid-template-columns:repeat(4,1fr); }
+    .eq-grid { grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); }
+  }
+  /* ── MOBILE ── */
+  @media (max-width:768px) {
+    .sidebar { position:fixed; bottom:0; top:auto; right:0; left:0; width:100%; flex-direction:row; height:64px; border-left:none; border-top:1px solid var(--border); z-index:200; }
+    .sidebar-logo { display:none; }
+    .nav { display:flex; flex-direction:row; padding:0; flex:1; overflow:visible; }
+    .nav-section { display:none; }
+    .nav-item { flex:1; flex-direction:column; gap:3px; padding:8px 4px; font-size:10px; border-right:none; border-top:3px solid transparent; justify-content:center; text-align:center; margin:0; }
+    .nav-item.active { border-right-color:transparent; border-top-color:var(--accent); background:var(--accent-glow); }
+    .nav-item .icon { font-size:20px; width:auto; }
+    .sidebar > div:last-child { display:none; }
+    .main { margin-right:0; padding-bottom:72px; }
+    .topbar { padding:0 16px; }
+    .page { padding:16px; }
+    .stats-grid { grid-template-columns:1fr 1fr; gap:12px; }
+    .stat-value { font-size:24px; }
+    .grid-2 { grid-template-columns:1fr; }
+    .eq-grid { grid-template-columns:1fr 1fr; gap:12px; }
+    .eq-card { padding:12px; }
+    .modal { max-width:100%; max-height:95vh; border-radius:var(--r) var(--r) 0 0; }
+    .modal-overlay { align-items:flex-end; padding:0; }
+    .modal-lg { max-width:100%; }
+    .search-bar { min-width:0; flex:1; }
+    .flex-between { flex-wrap:wrap; gap:10px; }
+    .form-page { padding:16px 12px 80px; align-items:flex-start; }
+    .form-card-header { padding:20px; }
+    .form-card-body { padding:20px; }
+    .toast-container { left:12px; right:12px; bottom:76px; }
+    .toast { min-width:0; width:100%; }
+    .cal-day { min-height:50px; }
+  }
+  @media (max-width:400px) {
+    .eq-grid { grid-template-columns:1fr; }
+  }
 `;
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
