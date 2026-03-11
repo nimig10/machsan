@@ -328,6 +328,8 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
     showToast("success", "הבקשה נמחקה");
     setSelected(null);
   };
+
+  const updateStatus = async (id, status) => {
     const updated = reservations.map(r=>r.id===id?{...r,status}:r);
     setReservations(updated);
     await storageSet("reservations", updated);
