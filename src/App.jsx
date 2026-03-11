@@ -321,7 +321,13 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
   const eqName = id => equipment.find(e=>e.id==id)?.name||"?";
   const eqIcon = id => equipment.find(e=>e.id==id)?.image||"📦";
 
-  const updateStatus = async (id, status) => {
+  const deleteReservation = async (id) => {
+    const updated = reservations.filter(r => r.id !== id);
+    setReservations(updated);
+    await storageSet("reservations", updated);
+    showToast("success", "הבקשה נמחקה");
+    setSelected(null);
+  };
     const updated = reservations.map(r=>r.id===id?{...r,status}:r);
     setReservations(updated);
     await storageSet("reservations", updated);
@@ -381,6 +387,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
                         <button className="btn btn-secondary btn-sm" onClick={()=>setSelected(r)}>👁️</button>
                         {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" onClick={()=>updateStatus(r.id,"מאושר")}>✅</button><button className="btn btn-danger btn-sm" onClick={()=>updateStatus(r.id,"נדחה")}>❌</button></>}
                         {r.status==="מאושר"&&<button className="btn btn-secondary btn-sm" onClick={()=>updateStatus(r.id,"הוחזר")}>🔄</button>}
+                        <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${r.student_name}?`)) deleteReservation(r.id); }}>🗑️</button>
                       </div>
                     </td>
                   </tr>
@@ -395,6 +402,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
           footer={<>
             {selected.status==="ממתין"&&<><button className="btn btn-success" onClick={()=>updateStatus(selected.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger" onClick={()=>updateStatus(selected.id,"נדחה")}>❌ דחה</button></>}
             {selected.status==="מאושר"&&<button className="btn btn-secondary" onClick={()=>updateStatus(selected.id,"הוחזר")}>🔄 סמן כהוחזר</button>}
+            <button className="btn btn-danger" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${selected.student_name}?`)) deleteReservation(selected.id); }}>🗑️ מחק</button>
             <button className="btn btn-secondary" onClick={()=>setSelected(null)}>סגור</button>
           </>}>
           <div className="grid-2">
