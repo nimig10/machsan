@@ -255,6 +255,17 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast }) {
   const EqForm = ({ initial }) => {
     const [f, setF] = useState(initial||{name:"",category:"מצלמות",description:"",total_quantity:1,image:"📷",notes:"",status:"תקין"});
     const s = (k,v) => setF(p=>({...p,[k]:v}));
+
+    const handleImageUpload = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => s("image", reader.result);
+      reader.readAsDataURL(file);
+    };
+
+    const isUrl = f.image?.startsWith("data:") || f.image?.startsWith("http");
+
     return (
       <div>
         <div className="grid-2">
@@ -264,7 +275,22 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast }) {
         <div className="form-group"><label className="form-label">תיאור</label><textarea className="form-textarea" rows={2} value={f.description} onChange={e=>s("description",e.target.value)}/></div>
         <div className="grid-2">
           <div className="form-group"><label className="form-label">כמות *</label><input type="number" min="0" className="form-input" value={f.total_quantity} onChange={e=>s("total_quantity",Number(e.target.value))}/></div>
-          <div className="form-group"><label className="form-label">אימוג׳י</label><input className="form-input" value={f.image} onChange={e=>s("image",e.target.value)}/></div>
+          <div className="form-group">
+            <label className="form-label">תמונה / אימוג׳י</label>
+            <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
+              {isUrl
+                ? <img src={f.image} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:8,border:"1px solid var(--border)"}}/>
+                : <span style={{fontSize:36}}>{f.image}</span>
+              }
+              <div style={{flex:1}}>
+                <input className="form-input" value={isUrl?"":f.image} placeholder="אימוג׳י (למשל 📷)" onChange={e=>s("image",e.target.value)} style={{marginBottom:6}}/>
+                <label style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",cursor:"pointer",fontSize:12,color:"var(--text2)"}}>
+                  🖼️ העלה תמונה מהמחשב
+                  <input type="file" accept="image/*" style={{display:"none"}} onChange={handleImageUpload}/>
+                </label>
+              </div>
+            </div>
+          </div>
         </div>
         <div className="grid-2">
           <div className="form-group"><label className="form-label">מצב</label><select className="form-select" value={f.status} onChange={e=>s("status",e.target.value)}>{STATUSES.map(st=><option key={st}>{st}</option>)}</select></div>
@@ -291,7 +317,12 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast }) {
         <div className="eq-grid">
           {filtered.map(eq=>(
             <div key={eq.id} className="eq-card">
-              <div style={{fontSize:36,marginBottom:10}}>{eq.image||"📦"}</div>
+              <div style={{marginBottom:10,display:"flex",justifyContent:"center"}}>
+                {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
+                  ? <img src={eq.image} alt={eq.name} style={{width:72,height:72,objectFit:"cover",borderRadius:10,border:"1px solid var(--border)"}}/>
+                  : <span style={{fontSize:36}}>{eq.image||"📦"}</span>
+                }
+              </div>
               <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>{eq.name}</div>
               <div style={{fontSize:11,color:"var(--text3)",marginBottom:8}}>{eq.category}</div>
               <div style={{fontSize:13}}><strong style={{color:"var(--accent)",fontSize:20}}>{eq.total_quantity-used(eq.id)}</strong><span style={{color:"var(--text3)"}}> / {eq.total_quantity} זמין</span></div>
