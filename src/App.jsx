@@ -1,12 +1,10 @@
 import { useState, useEffect, useMemo } from "react";
 
-// ─── GOOGLE SHEETS STORAGE ────────────────────────────────────────────────────
-const GS_URL = "https://script.google.com/macros/s/AKfycbzgolfwnz7pDzuXz-FNX23yDoU50WgufLB_a48ZPBHq10TipT3v6FfnLsab5hpxL0hjaw/exec";
-
+// ─── GOOGLE SHEETS STORAGE (דרך Vercel) ──────────────────────────────────────
 async function storageGet(key) {
   try {
     const action = key === "reservations" ? "getReservations" : "getEquipment";
-    const res = await fetch(`${GS_URL}?action=${action}`);
+    const res = await fetch(`/api/sheets?action=${action}`);
     const json = await res.json();
     return json.ok ? json.data : null;
   } catch { return null; }
@@ -15,8 +13,9 @@ async function storageGet(key) {
 async function storageSet(key, value) {
   try {
     const action = key === "reservations" ? "saveReservations" : "saveEquipment";
-    await fetch(GS_URL, {
+    await fetch("/api/sheets", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, payload: value }),
     });
   } catch {}
