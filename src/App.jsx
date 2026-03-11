@@ -167,20 +167,14 @@ const css = `
   .toast-error   { border-right:3px solid var(--red); }
   .toast-info    { border-right:3px solid var(--blue); }
   .cal-headers { display:grid; grid-template-columns:repeat(7,1fr); gap:1px; margin-bottom:2px; }
-  .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(6,80px); gap:1px; }
-  .cal-day-header { text-align:center; font-size:11px; font-weight:700; color:var(--text3); padding:6px 4px; }
-  .cal-day { background:var(--surface2); border-radius:4px; padding:4px; border:1px solid var(--border); overflow:hidden; height:80px; box-sizing:border-box; }
+  .cal-wrap { overflow:hidden; }
+  .cal-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:1px; }
+  .cal-day-header { text-align:center; font-size:11px; font-weight:700; color:var(--text3); padding:6px 2px; }
+  .cal-day { background:var(--surface2); border-radius:4px; padding:4px; border:1px solid var(--border); overflow:hidden; height:82px; min-height:82px; max-height:82px; box-sizing:border-box; flex-shrink:0; }
   .cal-day.is-today { border-color:var(--accent); }
-  .cal-day-num { font-size:12px; font-weight:700; margin-bottom:3px; color:var(--text2); }
-  .cal-span-row { position:relative; height:18px; margin-bottom:2px; }
-  .cal-event { font-size:10px; padding:2px 6px; border-radius:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; height:16px; line-height:16px; display:block; }
-  .cal-event-start { border-radius:3px 0 0 3px; }
-  .cal-event-mid { border-radius:0; margin-left:-1px; margin-right:-1px; }
-  .cal-event-end { border-radius:0 3px 3px 0; margin-left:-1px; }
-  .cal-event-single { border-radius:3px; }
-  .cal-borrow { background:rgba(52,152,219,0.35); color:var(--blue); border-right:2px solid var(--blue); }
-  .cal-return  { background:rgba(46,204,113,0.35); color:var(--green); }
-  .cal-span { background:rgba(155,89,182,0.25); color:#c39bd3; }
+  .cal-day.cal-empty { opacity:0.25; }
+  .cal-day-num { font-size:11px; font-weight:700; margin-bottom:2px; color:var(--text2); }
+  .cal-event { font-size:10px; padding:1px 5px; border-radius:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; height:15px; line-height:15px; display:block; margin-bottom:1px; }
   .form-page { min-height:100vh; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:40px 20px; }
   .form-card { width:100%; max-width:680px; background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
   .form-card-header { padding:32px 36px 24px; background:linear-gradient(135deg,var(--surface2),var(--surface)); border-bottom:1px solid var(--border); }
@@ -239,8 +233,7 @@ const css = `
     .form-card-body { padding:20px; }
     .toast-container { left:12px; right:12px; bottom:76px; }
     .toast { min-width:0; width:100%; }
-    .cal-grid { grid-template-rows:repeat(6,52px); }
-    .cal-day { height:52px; }
+    .cal-day { height:54px; min-height:54px; max-height:54px; }
   }
   @media (max-width:400px) {
     .eq-grid { grid-template-columns:1fr; }
@@ -624,7 +617,15 @@ function DashboardPage({ equipment, reservations }) {
   const HE_D=["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
 
   // build span events for calendar
+  const SPAN_COLORS = [
+    ["rgba(52,152,219,0.4)","#5dade2"],["rgba(46,204,113,0.4)","#58d68d"],
+    ["rgba(231,76,60,0.4)","#ec7063"],["rgba(155,89,182,0.4)","#c39bd3"],
+    ["rgba(241,196,15,0.4)","#f7dc6f"],["rgba(230,126,34,0.4)","#f0a27a"],
+    ["rgba(26,188,156,0.4)","#76d7c4"],["rgba(236,112,99,0.4)","#f1948a"],
+  ];
   const activeRes = reservations.filter(r=>r.status!=="נדחה"&&r.borrow_date&&r.return_date);
+  const resColorMap = {};
+  activeRes.forEach((r,i)=>{ resColorMap[r.id]=SPAN_COLORS[i%SPAN_COLORS.length]; });
   const getSpans = (cellDate) => {
     if(!cellDate) return [];
     const ds = cellDate.toISOString().split("T")[0];
@@ -632,7 +633,8 @@ function DashboardPage({ equipment, reservations }) {
       const isStart = r.borrow_date===ds;
       const isEnd = r.return_date===ds;
       const pos = isStart&&isEnd?"single":isStart?"start":isEnd?"end":"mid";
-      return {id:r.id, name:r.student_name, pos, status:r.status};
+      const [bg,color] = resColorMap[r.id]||SPAN_COLORS[0];
+      return {id:r.id, name:r.student_name, pos, bg, color};
     });
   };
 
@@ -663,14 +665,22 @@ function DashboardPage({ equipment, reservations }) {
               const isT=d&&d.toISOString().split("T")[0]===todayStr;
               const spans=getSpans(d);
               return <div key={i} className={`cal-day${isT?" is-today":""}${!d?" cal-empty":""}`}>
-                {d&&<div className="cal-day-num">{d.getDate()}</div>}
+                {d&&<div className="cal-day-num" style={{color:isT?"var(--accent)":"var(--text2)",fontWeight:isT?900:700}}>{d.getDate()}</div>}
                 {spans.slice(0,3).map((s,j)=>(
-                  <div key={j} className={`cal-event cal-span cal-event-${s.pos}`}
-                    style={{fontSize:10,marginBottom:1}}>
-                    {(s.pos==="start"||s.pos==="single")&&`${s.name}`}
+                  <div key={j} className="cal-event"
+                    style={{
+                      background:s.bg,
+                      color:s.color,
+                      borderRadius: s.pos==="start"||s.pos==="single"?"3px 0 0 3px": s.pos==="end"?"0 3px 3px 0":"0",
+                      marginLeft: s.pos==="mid"||s.pos==="end"?"-4px":"0",
+                      marginRight: s.pos==="mid"||s.pos==="start"?"-4px":"0",
+                      paddingRight: s.pos==="start"||s.pos==="single"?"6px":"2px",
+                    }}>
+                    {(s.pos==="start"||s.pos==="single")&&s.name}
+                    {s.pos==="end"&&<span style={{fontSize:9,opacity:0.85}}>↩ {s.name}</span>}
                   </div>
                 ))}
-                {spans.length>3&&<div style={{fontSize:9,color:"var(--text3)",paddingRight:2}}>+{spans.length-3}</div>}
+                {spans.length>3&&<div style={{fontSize:9,color:"var(--text3)"}}>+{spans.length-3}</div>}
               </div>;
             })}
           </div>
