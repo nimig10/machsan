@@ -168,7 +168,7 @@ const css = `
   .toast-info    { border-right:3px solid var(--blue); }
   .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
   .cal-day-header { text-align:center; font-size:11px; font-weight:700; color:var(--text3); padding:8px 4px; }
-  .cal-day { min-height:78px; background:var(--surface2); border-radius:var(--r-sm); padding:6px; border:1px solid var(--border); }
+  .cal-day { height:90px; background:var(--surface2); border-radius:var(--r-sm); padding:6px; border:1px solid var(--border); overflow:hidden; }
   .cal-day.is-today { border-color:var(--accent); }
   .cal-day-num { font-size:12px; font-weight:700; margin-bottom:4px; color:var(--text2); }
   .cal-event { font-size:10px; padding:2px 5px; border-radius:3px; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -227,7 +227,7 @@ const css = `
     .form-card-body { padding:20px; }
     .toast-container { left:12px; right:12px; bottom:76px; }
     .toast { min-width:0; width:100%; }
-    .cal-day { min-height:50px; }
+    .cal-day { height:56px; }
   }
   @media (max-width:400px) {
     .eq-grid { grid-template-columns:1fr; }
@@ -399,6 +399,57 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
       : <span style={{fontSize:size}}>{img}</span>;
   };
 
+  const exportPDF = (r) => {
+    const items = r.items?.map(i => `
+      <tr>
+        <td style="padding:10px 14px;border-bottom:1px solid #eee;font-size:14px">${eqName(i.equipment_id)}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #eee;font-size:14px;text-align:center">${i.quantity}</td>
+      </tr>`).join("") || "";
+    const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8">
+    <style>
+      body{font-family:Arial,sans-serif;padding:40px;color:#1a1a1a;direction:rtl}
+      h1{font-size:22px;margin-bottom:4px;color:#1a1a1a}
+      .sub{font-size:13px;color:#666;margin-bottom:32px}
+      .section{margin-bottom:24px}
+      .section-title{font-size:12px;font-weight:700;color:#f5a623;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;border-bottom:2px solid #f5a623;padding-bottom:6px}
+      .row{display:flex;gap:8px;margin-bottom:8px;font-size:14px}
+      .label{color:#666;min-width:130px}
+      table{width:100%;border-collapse:collapse;margin-top:8px}
+      th{background:#f5f5f5;padding:10px 14px;text-align:right;font-size:12px;font-weight:700;color:#666}
+      .badge{display:inline-block;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:700;background:${r.status==="מאושר"?"#d4f5e9;color:#1a7a4a":r.status==="ממתין"?"#fff8e1;color:#b8860b":r.status==="נדחה"?"#fde8e8;color:#c0392b":"#e8f4fd;color:#2471a3"}}
+      .footer{margin-top:40px;padding-top:16px;border-top:1px solid #eee;font-size:11px;color:#999;text-align:center}
+      @media print{body{padding:20px}}
+    </style></head><body>
+    <h1>📋 אישור בקשת השאלה</h1>
+    <div class="sub">המחסן של קישקתא ונמרוד — הופק ב-${new Date().toLocaleDateString("he-IL")}</div>
+    <div class="section">
+      <div class="section-title">פרטי סטודנט</div>
+      <div class="row"><span class="label">שם מלא:</span><strong>${r.student_name}</strong></div>
+      <div class="row"><span class="label">אימייל:</span>${r.email}</div>
+      ${r.phone?`<div class="row"><span class="label">טלפון:</span>${r.phone}</div>`:""}
+      <div class="row"><span class="label">קורס / כיתה:</span>${r.course}</div>
+      ${r.project_name?`<div class="row"><span class="label">שם הפרויקט:</span>${r.project_name}</div>`:""}
+      <div class="row"><span class="label">סוג השאלה:</span>${r.loan_type}</div>
+    </div>
+    <div class="section">
+      <div class="section-title">תאריכי השאלה</div>
+      <div class="row"><span class="label">תאריך השאלה:</span><strong>${formatDate(r.borrow_date)}</strong></div>
+      <div class="row"><span class="label">תאריך החזרה:</span><strong>${formatDate(r.return_date)}</strong></div>
+      <div class="row"><span class="label">סטטוס:</span><span class="badge">${r.status}</span></div>
+    </div>
+    <div class="section">
+      <div class="section-title">ציוד מבוקש</div>
+      <table><thead><tr><th>שם הציוד</th><th style="text-align:center;width:80px">כמות</th></tr></thead>
+      <tbody>${items}</tbody></table>
+    </div>
+    <div class="footer">מסמך זה הופק אוטומטית ממערכת ניהול המחסן • machsan.vercel.app</div>
+    </body></html>`;
+    const w = window.open("","_blank","width=800,height=900");
+    w.document.write(html);
+    w.document.close();
+    setTimeout(()=>w.print(), 400);
+  };
+
   const deleteReservation = async (id) => {
     const updated = reservations.filter(r => r.id !== id);
     setReservations(updated);
@@ -465,6 +516,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
                     <td>
                       <div className="flex gap-2">
                         <button className="btn btn-secondary btn-sm" onClick={()=>setSelected(r)}>👁️</button>
+                        <button className="btn btn-secondary btn-sm" title="ייצא PDF" onClick={()=>exportPDF(r)}>📄</button>
                         {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" onClick={()=>updateStatus(r.id,"מאושר")}>✅</button><button className="btn btn-danger btn-sm" onClick={()=>updateStatus(r.id,"נדחה")}>❌</button></>}
                         {r.status==="מאושר"&&<button className="btn btn-secondary btn-sm" onClick={()=>updateStatus(r.id,"הוחזר")}>🔄</button>}
                         <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${r.student_name}?`)) deleteReservation(r.id); }}>🗑️</button>
@@ -482,25 +534,45 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
           footer={<>
             {selected.status==="ממתין"&&<><button className="btn btn-success" onClick={()=>updateStatus(selected.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger" onClick={()=>updateStatus(selected.id,"נדחה")}>❌ דחה</button></>}
             {selected.status==="מאושר"&&<button className="btn btn-secondary" onClick={()=>updateStatus(selected.id,"הוחזר")}>🔄 סמן כהוחזר</button>}
+            <button className="btn btn-secondary" onClick={()=>exportPDF(selected)}>📄 ייצא PDF</button>
             <button className="btn btn-danger" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${selected.student_name}?`)) deleteReservation(selected.id); }}>🗑️ מחק</button>
             <button className="btn btn-secondary" onClick={()=>setSelected(null)}>סגור</button>
           </>}>
-          <div className="grid-2">
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
             <div>
               <div className="form-section-title">פרטי סטודנט</div>
-              {[["שם",selected.student_name],["אימייל",selected.email],["טלפון",selected.phone],["קורס",selected.course],["פרויקט",selected.project_name],["סוג השאלה",selected.loan_type]].map(([l,v])=>v?<div key={l} className="req-detail-row"><span className="req-detail-label">{l}:</span><strong>{v}</strong></div>:null)}
-              <div className="divider"/>
-              <div className="req-detail-row"><span className="req-detail-label">תאריך השאלה:</span><strong>{formatDate(selected.borrow_date)}</strong></div>
-              <div className="req-detail-row"><span className="req-detail-label">תאריך החזרה:</span><strong>{formatDate(selected.return_date)}</strong></div>
+              <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:16,border:"1px solid var(--border)"}}>
+                {[["שם",selected.student_name],["אימייל",selected.email],["טלפון",selected.phone],["קורס",selected.course],["פרויקט",selected.project_name],["סוג השאלה",selected.loan_type]].map(([l,v])=>v?
+                  <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid var(--border)",fontSize:13}}>
+                    <span style={{color:"var(--text3)"}}>{l}</span>
+                    <strong style={{textAlign:"left",maxWidth:"60%",wordBreak:"break-word"}}>{v}</strong>
+                  </div>:null)}
+              </div>
+              <div style={{marginTop:16,background:"var(--accent-glow)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:"var(--r-sm)",padding:14}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:8,fontSize:13}}>
+                  <span style={{color:"var(--text3)"}}>📅 תאריך השאלה</span>
+                  <strong>{formatDate(selected.borrow_date)}</strong>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:13}}>
+                  <span style={{color:"var(--text3)"}}>🔄 תאריך החזרה</span>
+                  <strong>{formatDate(selected.return_date)}</strong>
+                </div>
+              </div>
+              <div style={{marginTop:12,textAlign:"center"}}>{statusBadge(selected.status)}</div>
             </div>
             <div>
-              <div className="form-section-title">ציוד מבוקש</div>
-              {selected.items?.map((item,i)=>(
-                <div key={i} className="item-row">
-                  <EqImg id={item.equipment_id} size={24}/>
-                  <div style={{flex:1}}><div style={{fontWeight:600}}>{eqName(item.equipment_id)}</div><div style={{fontSize:12,color:"var(--text3)"}}>כמות: {item.quantity}</div></div>
-                </div>
-              ))}
+              <div className="form-section-title">ציוד מבוקש ({selected.items?.length||0} פריטים)</div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {selected.items?.map((item,i)=>(
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"var(--surface2)",borderRadius:"var(--r-sm)",border:"1px solid var(--border)"}}>
+                    <EqImg id={item.equipment_id} size={32}/>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,fontSize:14}}>{eqName(item.equipment_id)}</div>
+                      <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>כמות: <strong style={{color:"var(--accent)"}}>{item.quantity}</strong></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </Modal>
