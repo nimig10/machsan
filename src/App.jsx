@@ -1,12 +1,25 @@
 import { useState, useEffect, useMemo } from "react";
 
-// ─── STORAGE ──────────────────────────────────────────────────────────────────
+// ─── GOOGLE SHEETS STORAGE ────────────────────────────────────────────────────
+const GS_URL = "https://script.google.com/macros/s/AKfycbzgolfwnz7pDzuXz-FNX23yDoU50WgufLB_a48ZPBHq10TipT3v6FfnLsab5hpxL0hjaw/exec";
+
 async function storageGet(key) {
-  try { const r = await window.storage.get(key); return r ? JSON.parse(r.value) : null; }
-  catch { return null; }
+  try {
+    const action = key === "reservations" ? "getReservations" : "getEquipment";
+    const res = await fetch(`${GS_URL}?action=${action}`);
+    const json = await res.json();
+    return json.ok ? json.data : null;
+  } catch { return null; }
 }
+
 async function storageSet(key, value) {
-  try { await window.storage.set(key, JSON.stringify(value)); } catch {}
+  try {
+    const action = key === "reservations" ? "saveReservations" : "saveEquipment";
+    await fetch(GS_URL, {
+      method: "POST",
+      body: JSON.stringify({ action, payload: value }),
+    });
+  } catch {}
 }
 
 // ─── INITIAL DATA ─────────────────────────────────────────────────────────────
