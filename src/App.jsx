@@ -314,6 +314,28 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
     setReservations(updated);
     await storageSet("reservations", updated);
     showToast("success", `סטטוס עודכן ל-${status}`);
+
+    // שלח מייל לסטודנט על אישור או דחייה
+    if (status === "מאושר" || status === "נדחה") {
+      const res = reservations.find(r=>r.id===id);
+      if (res?.email) {
+        const itemsList = res.items?.map(i => `<li>${i.name} × ${i.quantity}</li>`).join("") || "";
+        fetch("/api/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to:           res.email,
+            type:         status === "מאושר" ? "approved" : "rejected",
+            student_name: res.student_name,
+            items_list:   itemsList,
+            borrow_date:  formatDate(res.borrow_date),
+            return_date:  formatDate(res.return_date),
+          }),
+        })
+        .then(() => showToast("success", `📧 מייל נשלח ל-${res.email}`))
+        .catch(() => showToast("error", "שגיאה בשליחת המייל"));
+      }
+    }
     setSelected(null);
   };
 
@@ -498,6 +520,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to:           res.email,
+          type:         "new",
           student_name: res.student_name,
           items_list:   itemsList,
           borrow_date:  formatDate(res.borrow_date),
