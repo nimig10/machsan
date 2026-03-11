@@ -648,7 +648,7 @@ function DashboardPage({ equipment, reservations }) {
         ))}
       </div>
       <div className="grid-2 mb-6">
-        <div className="card">
+        <div className="card" style={{minHeight:620}}>
           <div className="card-header">
             <span className="card-title">📅 יומן</span>
             <div className="flex gap-2">
