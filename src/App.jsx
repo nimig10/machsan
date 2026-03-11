@@ -166,9 +166,9 @@ const css = `
   .toast-success { border-right:3px solid var(--green); }
   .toast-error   { border-right:3px solid var(--red); }
   .toast-info    { border-right:3px solid var(--blue); }
-  .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+  .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(6,1fr); gap:2px; height:540px; }
   .cal-day-header { text-align:center; font-size:11px; font-weight:700; color:var(--text3); padding:8px 4px; }
-  .cal-day { height:90px; background:var(--surface2); border-radius:var(--r-sm); padding:6px; border:1px solid var(--border); overflow:hidden; }
+  .cal-day { background:var(--surface2); border-radius:var(--r-sm); padding:6px; border:1px solid var(--border); overflow:hidden; min-height:0; }
   .cal-day.is-today { border-color:var(--accent); }
   .cal-day-num { font-size:12px; font-weight:700; margin-bottom:4px; color:var(--text2); }
   .cal-event { font-size:10px; padding:2px 5px; border-radius:3px; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -227,7 +227,8 @@ const css = `
     .form-card-body { padding:20px; }
     .toast-container { left:12px; right:12px; bottom:76px; }
     .toast { min-width:0; width:100%; }
-    .cal-day { height:56px; }
+    .cal-grid { height:336px; }
+    .cal-day { min-height:0; }
   }
   @media (max-width:400px) {
     .eq-grid { grid-template-columns:1fr; }
@@ -447,6 +448,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
     const w = window.open("","_blank","width=800,height=900");
     w.document.write(html);
     w.document.close();
+    w.document.title = `השאלה - ${r.student_name} - ${formatDate(r.borrow_date)}`;
     setTimeout(()=>w.print(), 400);
   };
 
