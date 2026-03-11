@@ -351,6 +351,12 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
   const filtered = reservations.filter(r=>(statusF==="הכל"||r.status===statusF)&&(r.student_name?.includes(search)||r.email?.includes(search)));
   const eqName = id => equipment.find(e=>e.id==id)?.name||"?";
   const eqIcon = id => equipment.find(e=>e.id==id)?.image||"📦";
+  const EqImg = ({id, size=22}) => {
+    const img = equipment.find(e=>e.id==id)?.image||"📦";
+    return img.startsWith("data:")||img.startsWith("http")
+      ? <img src={img} alt="" style={{width:size,height:size,objectFit:"cover",borderRadius:4,verticalAlign:"middle"}}/>
+      : <span style={{fontSize:size}}>{img}</span>;
+  };
 
   const deleteReservation = async (id) => {
     const updated = reservations.filter(r => r.id !== id);
@@ -413,7 +419,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
                     <td><div style={{fontWeight:700}}>{r.student_name}</div><div style={{fontSize:11,color:"var(--text3)"}}>{r.email}</div></td>
                     <td><span className="chip">{r.course}</span></td>
                     <td style={{fontSize:12}}><div>📅 {formatDate(r.borrow_date)}</div><div>📅 {formatDate(r.return_date)}</div></td>
-                    <td>{r.items?.map((i,j)=><div key={j} style={{fontSize:12,marginBottom:2}}>{eqIcon(i.equipment_id)} {eqName(i.equipment_id)} × {i.quantity}</div>)}</td>
+                    <td>{r.items?.map((i,j)=><div key={j} style={{fontSize:12,marginBottom:2,display:"flex",alignItems:"center",gap:4}}><EqImg id={i.equipment_id} size={16}/> {eqName(i.equipment_id)} × {i.quantity}</div>)}</td>
                     <td>{statusBadge(r.status)}</td>
                     <td>
                       <div className="flex gap-2">
@@ -450,7 +456,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
               <div className="form-section-title">ציוד מבוקש</div>
               {selected.items?.map((item,i)=>(
                 <div key={i} className="item-row">
-                  <span style={{fontSize:24}}>{eqIcon(item.equipment_id)}</span>
+                  <EqImg id={item.equipment_id} size={24}/>
                   <div style={{flex:1}}><div style={{fontWeight:600}}>{eqName(item.equipment_id)}</div><div style={{fontSize:12,color:"var(--text3)"}}>כמות: {item.quantity}</div></div>
                 </div>
               ))}
@@ -685,7 +691,9 @@ function PublicForm({ equipment, reservations, setReservations, showToast }) {
                 {cat.map(eq=>{
                   const itm=getItem(eq.id);
                   return <div key={eq.id} className="item-row" style={{opacity:eq.avail===0?0.4:1}}>
-                    <span style={{fontSize:26}}>{eq.image||"📦"}</span>
+                    {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
+                      ? <img src={eq.image} alt="" style={{width:36,height:36,objectFit:"cover",borderRadius:6}}/>
+                      : <span style={{fontSize:26}}>{eq.image||"📦"}</span>}
                     <div style={{flex:1}}><div style={{fontWeight:600,fontSize:14}}>{eq.name}</div><div style={{fontSize:12,color:"var(--text3)"}}>זמין: <span style={{color:eq.avail===0?"var(--red)":eq.avail<=2?"var(--yellow)":"var(--green)",fontWeight:700}}>{eq.avail}</span></div></div>
                     {eq.avail>0 ? <div className="qty-ctrl"><button className="qty-btn" onClick={()=>setQty(eq.id,itm.quantity-1)}>−</button><span className="qty-num">{itm.quantity}</span><button className="qty-btn" onClick={()=>setQty(eq.id,itm.quantity+1)}>+</button></div> : <span className="badge badge-red">לא זמין</span>}
                   </div>;
