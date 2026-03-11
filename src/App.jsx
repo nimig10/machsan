@@ -166,15 +166,21 @@ const css = `
   .toast-success { border-right:3px solid var(--green); }
   .toast-error   { border-right:3px solid var(--red); }
   .toast-info    { border-right:3px solid var(--blue); }
-  .cal-headers { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; margin-bottom:2px; }
-  .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(6,1fr); gap:2px; height:480px; }
+  .cal-headers { display:grid; grid-template-columns:repeat(7,1fr); gap:1px; margin-bottom:2px; }
+  .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(6,80px); gap:1px; }
   .cal-day-header { text-align:center; font-size:11px; font-weight:700; color:var(--text3); padding:6px 4px; }
-  .cal-day { background:var(--surface2); border-radius:var(--r-sm); padding:6px; border:1px solid var(--border); overflow:hidden; min-height:0; }
+  .cal-day { background:var(--surface2); border-radius:4px; padding:4px; border:1px solid var(--border); overflow:hidden; height:80px; box-sizing:border-box; }
   .cal-day.is-today { border-color:var(--accent); }
-  .cal-day-num { font-size:12px; font-weight:700; margin-bottom:4px; color:var(--text2); }
-  .cal-event { font-size:10px; padding:2px 5px; border-radius:3px; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .cal-borrow { background:rgba(52,152,219,0.25); color:var(--blue); }
-  .cal-return  { background:rgba(46,204,113,0.25); color:var(--green); }
+  .cal-day-num { font-size:12px; font-weight:700; margin-bottom:3px; color:var(--text2); }
+  .cal-span-row { position:relative; height:18px; margin-bottom:2px; }
+  .cal-event { font-size:10px; padding:2px 6px; border-radius:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; height:16px; line-height:16px; display:block; }
+  .cal-event-start { border-radius:3px 0 0 3px; }
+  .cal-event-mid { border-radius:0; margin-left:-1px; margin-right:-1px; }
+  .cal-event-end { border-radius:0 3px 3px 0; margin-left:-1px; }
+  .cal-event-single { border-radius:3px; }
+  .cal-borrow { background:rgba(52,152,219,0.35); color:var(--blue); border-right:2px solid var(--blue); }
+  .cal-return  { background:rgba(46,204,113,0.35); color:var(--green); }
+  .cal-span { background:rgba(155,89,182,0.25); color:#c39bd3; }
   .form-page { min-height:100vh; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:40px 20px; }
   .form-card { width:100%; max-width:680px; background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
   .form-card-header { padding:32px 36px 24px; background:linear-gradient(135deg,var(--surface2),var(--surface)); border-bottom:1px solid var(--border); }
@@ -233,7 +239,8 @@ const css = `
     .form-card-body { padding:20px; }
     .toast-container { left:12px; right:12px; bottom:76px; }
     .toast { min-width:0; width:100%; }
-    .cal-grid { height:300px; }
+    .cal-grid { grid-template-rows:repeat(6,52px); }
+    .cal-day { height:52px; }
   }
   @media (max-width:400px) {
     .eq-grid { grid-template-columns:1fr; }
@@ -616,11 +623,17 @@ function DashboardPage({ equipment, reservations }) {
   const HE_M=["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
   const HE_D=["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
 
-  const eventsFor = d => {
-    if(!d) return [];
-    const ds=d.toISOString().split("T")[0]; const ev=[];
-    reservations.forEach(r=>{ if(r.status==="נדחה") return; if(r.borrow_date===ds) ev.push({t:"borrow",l:`📅 ${r.student_name}`}); if(r.return_date===ds) ev.push({t:"return",l:`🔄 ${r.student_name}`}); });
-    return ev;
+  // build span events for calendar
+  const activeRes = reservations.filter(r=>r.status!=="נדחה"&&r.borrow_date&&r.return_date);
+  const getSpans = (cellDate) => {
+    if(!cellDate) return [];
+    const ds = cellDate.toISOString().split("T")[0];
+    return activeRes.filter(r=>r.borrow_date<=ds && r.return_date>=ds).map(r=>{
+      const isStart = r.borrow_date===ds;
+      const isEnd = r.return_date===ds;
+      const pos = isStart&&isEnd?"single":isStart?"start":isEnd?"end":"mid";
+      return {id:r.id, name:r.student_name, pos, status:r.status};
+    });
   };
 
   return (
@@ -647,11 +660,17 @@ function DashboardPage({ equipment, reservations }) {
           </div>
           <div className="cal-grid">
             {days.map((d,i)=>{
-              const ev=eventsFor(d); const isT=d&&d.toISOString().split("T")[0]===todayStr;
-              return <div key={i} className={`cal-day ${isT?"is-today":""}`} style={{opacity:!d?0.2:1}}>
+              const isT=d&&d.toISOString().split("T")[0]===todayStr;
+              const spans=getSpans(d);
+              return <div key={i} className={`cal-day${isT?" is-today":""}${!d?" cal-empty":""}`}>
                 {d&&<div className="cal-day-num">{d.getDate()}</div>}
-                {ev.slice(0,2).map((e,j)=><div key={j} className={`cal-event ${e.t==="borrow"?"cal-borrow":"cal-return"}`}>{e.l}</div>)}
-                {ev.length>2&&<div style={{fontSize:10,color:"var(--text3)"}}>+{ev.length-2}</div>}
+                {spans.slice(0,3).map((s,j)=>(
+                  <div key={j} className={`cal-event cal-span cal-event-${s.pos}`}
+                    style={{fontSize:10,marginBottom:1}}>
+                    {(s.pos==="start"||s.pos==="single")&&`${s.name}`}
+                  </div>
+                ))}
+                {spans.length>3&&<div style={{fontSize:9,color:"var(--text3)",paddingRight:2}}>+{spans.length-3}</div>}
               </div>;
             })}
           </div>
