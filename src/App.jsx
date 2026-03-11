@@ -727,13 +727,47 @@ function PublicForm({ equipment, reservations, setReservations, showToast }) {
   );
 }
 
+// ─── ADMIN PASSWORD SCREEN ────────────────────────────────────────────────────
+const ADMIN_PASSWORD = "camamama2";
+
+function AdminLogin({ onSuccess }) {
+  const [pw, setPw] = useState("");
+  const [err, setErr] = useState(false);
+  const attempt = () => {
+    if (pw === ADMIN_PASSWORD) { onSuccess(); }
+    else { setErr(true); setTimeout(()=>setErr(false), 2000); }
+  };
+  return (
+    <div style={{minHeight:"100vh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"40px 48px",width:360,textAlign:"center"}}>
+        <div style={{fontSize:48,marginBottom:16}}>🔐</div>
+        <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>כניסת מנהל</div>
+        <div style={{fontSize:13,color:"var(--text3)",marginBottom:28}}>המחסן של קישקתא ונמרוד</div>
+        <input
+          className="form-input"
+          type="password"
+          placeholder="סיסמה"
+          value={pw}
+          onChange={e=>setPw(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&attempt()}
+          style={{marginBottom:12,textAlign:"center",fontSize:18,letterSpacing:4}}
+        />
+        {err && <div style={{color:"var(--red)",fontSize:13,marginBottom:8}}>❌ סיסמה שגויה</div>}
+        <button className="btn btn-primary" style={{width:"100%"}} onClick={attempt}>כניסה</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
+  const isAdmin = window.location.pathname.startsWith("/admin");
   const [page, setPage]               = useState("dashboard");
   const [equipment, setEquipment]     = useState([]);
   const [reservations, setReservations] = useState([]);
   const [loading, setLoading]         = useState(true);
   const [toasts, setToasts]           = useState([]);
+  const [authed, setAuthed]           = useState(false);
 
   const showToast = (type, msg) => {
     const id = Date.now();
@@ -741,14 +775,12 @@ export default function App() {
     setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)), 3500);
   };
 
-  // טעינה מ-storage
   useEffect(()=>{
     (async()=>{
       const eq  = await storageGet("equipment");
       const res = await storageGet("reservations");
       setEquipment(eq  || INITIAL_EQUIPMENT);
       setReservations(res || []);
-      // שמור ברירת מחדל אם ריק
       if(!eq)  await storageSet("equipment",    INITIAL_EQUIPMENT);
       if(!res) await storageSet("reservations", []);
       setLoading(false);
@@ -756,20 +788,23 @@ export default function App() {
   },[]);
 
   const pending = reservations.filter(r=>r.status==="ממתין").length;
-  const pageTitle = { dashboard:"לוח בקרה", equipment:"ניהול ציוד", reservations:"ניהול בקשות", form:"טופס השאלה" };
+  const pageTitle = { dashboard:"לוח בקרה", equipment:"ניהול ציוד", reservations:"ניהול בקשות" };
 
   return (
     <>
       <style>{css}</style>
-      {page==="form" ? (
+
+      {/* ── טופס ציבורי ── */}
+      {!isAdmin && (
         <div style={{minHeight:"100vh",background:"var(--bg)"}}>
-          <div style={{background:"var(--surface)",borderBottom:"1px solid var(--border)",padding:"10px 24px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{color:"var(--text3)",fontSize:13}}>🎬 המחסן של קישקתא ונמרוד — טופס ציבורי</span>
-            <button className="btn btn-secondary btn-sm" onClick={()=>setPage("dashboard")}>🔐 כניסת מנהל</button>
-          </div>
           {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast}/>}
         </div>
-      ) : (
+      )}
+
+      {/* ── לוח ניהול עם סיסמה ── */}
+      {isAdmin && !authed && <AdminLogin onSuccess={()=>setAuthed(true)}/>}
+
+      {isAdmin && authed && (
         <div className="app">
           <nav className="sidebar">
             <div className="sidebar-logo">
@@ -779,7 +814,7 @@ export default function App() {
             </div>
             <div className="nav">
               <div className="nav-section">ניהול</div>
-              {[{id:"dashboard",icon:"📊",label:"לוח בקרה"},{id:"equipment",icon:"📦",label:"ציוד"},{id:"reservations",icon:"📋",label:"בקשות",badge:pending||null},{id:"form",icon:"📝",label:"טופס השאלה"}].map(n=>(
+              {[{id:"dashboard",icon:"📊",label:"לוח בקרה"},{id:"equipment",icon:"📦",label:"ציוד"},{id:"reservations",icon:"📋",label:"בקשות",badge:pending||null}].map(n=>(
                 <div key={n.id} className={`nav-item ${page===n.id?"active":""}`} onClick={()=>setPage(n.id)}>
                   <span className="icon">{n.icon}</span>
                   <span style={{flex:1}}>{n.label}</span>
@@ -787,7 +822,10 @@ export default function App() {
                 </div>
               ))}
             </div>
-            <div style={{padding:"14px 20px",borderTop:"1px solid var(--border)",fontSize:11,color:"var(--text3)"}}>💾 אחסון פנימי פעיל</div>
+            <div style={{padding:"14px 20px",borderTop:"1px solid var(--border)",fontSize:11,color:"var(--text3)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span>💾 אחסון פעיל</span>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setAuthed(false)}>🚪 יציאה</button>
+            </div>
           </nav>
           <div className="main">
             <div className="topbar">
@@ -802,6 +840,7 @@ export default function App() {
           </div>
         </div>
       )}
+
       <Toast toasts={toasts}/>
     </>
   );
