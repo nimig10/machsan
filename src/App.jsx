@@ -521,7 +521,13 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"20px 24px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0"}}>
           <div>
             <div style={{fontWeight:900,fontSize:18}}>✏️ עריכת בקשה</div>
-            <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{reservation.student_name} · {formatDate(reservation.borrow_date)}</div>
+            <div style={{fontSize:14,color:"var(--text2)",marginTop:4,fontWeight:700}}>{reservation.student_name}</div>
+            <div style={{display:"flex",gap:8,marginTop:4,alignItems:"center"}}>
+              <span style={{fontSize:12,color:"var(--accent)",fontWeight:700,background:"var(--surface3)",borderRadius:20,padding:"2px 10px"}}>
+                {reservation.loan_type==="פרטית"?"👤":reservation.loan_type==="הפקה"?"🎬":"🎙️"} {reservation.loan_type==="סאונד"?"השאלת סאונד":`השאלה ${reservation.loan_type}`}
+              </span>
+              <span style={{fontSize:11,color:"var(--text3)"}}>· {formatDate(reservation.borrow_date)}</span>
+            </div>
           </div>
           <button className="btn btn-secondary btn-sm" onClick={onClose}>✕ סגור</button>
         </div>
@@ -746,6 +752,9 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
                   <span>📚 {r.course}</span>
                   <span>📅 {formatDate(r.borrow_date)} ← {formatDate(r.return_date)}{(()=>{const diff=Math.ceil((new Date(r.borrow_date)-new Date())/(1000*60*60*24));return diff>0?<span style={{marginRight:6,color:"var(--yellow)",fontWeight:700}}>({diff} ימים)</span>:diff===0?<span style={{marginRight:6,color:"var(--green)",fontWeight:700}}>(היום!)</span>:null;})()}</span>
                   <span>📦 {r.items?.length||0} פריטים</span>
+                  {r.loan_type&&<span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,color:"var(--accent)"}}>
+                    {r.loan_type==="פרטית"?"👤":r.loan_type==="הפקה"?"🎬":"🎙️"} {r.loan_type==="סאונד"?"השאלת סאונד":`השאלה ${r.loan_type}`}
+                  </span>}
                 </div>
                 <div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:4}}>
                   {r.items?.slice(0,3).map((i,j)=><span key={j} className="chip"><EqImg id={i.equipment_id} size={13}/> {eqName(i.equipment_id)} ×{i.quantity}</span>)}
@@ -1031,13 +1040,18 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
 
   const minDays = form.loan_type==="פרטית" ? 2 : form.loan_type==="סאונד" ? 0 : 7;
   const minDate = (()=>{ const d=new Date(); d.setDate(d.getDate()+minDays); return d.toISOString().split("T")[0]; })();
+  const maxDays = form.loan_type==="פרטית" ? 4 : 7;
   const tooSoon = form.loan_type!=="סאונד" && form.borrow_date && form.borrow_date < minDate;
+  const loanDays = (form.borrow_date && form.return_date)
+    ? Math.ceil((new Date(form.return_date)-new Date(form.borrow_date))/(86400000))+1
+    : 0;
+  const tooLong = loanDays > maxDays;
   const TIME_SLOTS = form.loan_type==="סאונד"
     ? ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30"]
     : ["09:00","09:30","14:30","15:00","15:30","16:00","16:30","17:00","17:30"];
   const isSoundLoan = form.loan_type==="סאונד";
   const ok1 = form.student_name && form.email && form.phone && form.course && form.loan_type;
-  const ok2 = form.borrow_date && form.return_date && form.return_date>=form.borrow_date && !tooSoon && form.borrow_time && form.return_time;
+  const ok2 = form.borrow_date && form.return_date && form.return_date>=form.borrow_date && !tooSoon && !tooLong && form.borrow_time && form.return_time;
 
   const availEq = useMemo(()=>{
     if(!form.borrow_date||!form.return_date) return [];
@@ -1196,7 +1210,8 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
               </div>
             </div>
             {tooSoon && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 {form.loan_type==="פרטית"?"השאלה פרטית דורשת התראה של 48 שעות לפחות.":"נדרשת התראה של שבוע לפחות."} תאריך מוקדם ביותר: <strong>{formatDate(minDate)}</strong></div>}
-            {ok2 && <div className="highlight-box">📅 השאלה ל-{Math.ceil((new Date(form.return_date)-new Date(form.borrow_date))/(86400000))+1} ימים · איסוף {form.borrow_time} · החזרה {form.return_time}</div>}
+            {tooLong && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 לא ניתן להשלים את התהליך כי זמן ההשאלה חורג מנהלי המכללה. משך מקסימלי: <strong>{maxDays} ימים</strong></div>}
+            {ok2 && <div className="highlight-box">📅 השאלה ל-{loanDays} ימים · איסוף {form.borrow_time} · החזרה {form.return_time}</div>}
             <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setStep(1)}>← חזור</button><button className="btn btn-primary" disabled={!ok2} onClick={()=>setStep(3)}>המשך ← ציוד</button></div>
           </>}
 
