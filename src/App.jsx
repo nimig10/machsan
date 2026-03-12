@@ -88,7 +88,14 @@ const css = `
     --green:#2ecc71; --red:#e74c3c; --blue:#3498db; --purple:#9b59b6; --yellow:#f1c40f;
     --r:12px; --r-sm:8px;
   }
-  body { font-family:'Heebo',sans-serif; background:var(--bg); color:var(--text); direction:rtl; min-height:100vh; }
+  html, body, #root { width:100%; min-height:100%; }
+  #root {
+    max-width:none !important;
+    margin:0 !important;
+    padding:0 !important;
+    text-align:initial !important;
+  }
+  body { font-family:'Heebo',sans-serif; background:var(--bg); color:var(--text); direction:rtl; min-height:100vh; overflow-x:hidden; }
   .app { display:flex; min-height:100vh; }
   .sidebar { width:240px; min-width:240px; background:var(--surface); border-left:1px solid var(--border); display:flex; flex-direction:column; position:fixed; right:0; top:0; bottom:0; z-index:100; }
   .sidebar-logo { padding:24px 20px 20px; border-bottom:1px solid var(--border); }
@@ -206,8 +213,9 @@ const css = `
   .cal-fs-event-end    { border-radius:0 4px 4px 0; margin-left:-5px; }
   .cal-fs-event-single { border-radius:4px; }
   .public-page-shell { width:100%; min-height:100vh; background:var(--bg); display:flex; justify-content:center; align-items:flex-start; }
-  .form-page { width:100%; display:flex; justify-content:center; align-items:flex-start; padding:40px 20px; }
-  .form-card { width:100%; max-width:680px; margin-left:auto; margin-right:auto; background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; direction:rtl; }
+  .public-page-shell > * { width:100%; }
+  .form-page { width:100%; min-height:100vh; display:flex; justify-content:center; align-items:flex-start; padding:40px 20px; }
+  .form-card { width:min(100%, 680px); max-width:680px; margin-inline:auto; background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; direction:rtl; }
   .form-card-header { padding:32px 36px 24px; background:linear-gradient(135deg,var(--surface2),var(--surface)); border-bottom:1px solid var(--border); }
   .form-card-body { padding:32px 36px; }
   .form-section-title { font-size:13px; font-weight:800; color:var(--accent); text-transform:uppercase; letter-spacing:1px; margin-bottom:16px; padding-bottom:8px; border-bottom:1px solid var(--border); }
@@ -259,9 +267,10 @@ const css = `
     .modal-lg { max-width:100%; }
     .search-bar { min-width:0; flex:1; }
     .flex-between { flex-wrap:wrap; gap:10px; }
+    html, body, #root { min-height:100%; }
     .public-page-shell { justify-content:stretch; }
-    .form-page { padding:16px 12px 80px; }
-    .form-card { max-width:100%; }
+    .form-page { min-height:100vh; padding:16px 12px 80px; }
+    .form-card { width:100%; max-width:100%; }
     .form-card-header { padding:20px; }
     .form-card-body { padding:20px; }
     .toast-container { left:12px; right:12px; bottom:76px; }
