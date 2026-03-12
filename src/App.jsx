@@ -167,10 +167,9 @@ const css = `
   .toast-error   { border-right:3px solid var(--red); }
   .toast-info    { border-right:3px solid var(--blue); }
   .cal-headers { display:grid; grid-template-columns:repeat(7,1fr); gap:1px; margin-bottom:2px; }
-  .cal-wrap { overflow:hidden; }
-  .cal-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:1px; }
+  .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(6,82px); gap:1px; height:492px; min-height:492px; max-height:492px; overflow:hidden; }
   .cal-day-header { text-align:center; font-size:11px; font-weight:700; color:var(--text3); padding:6px 2px; }
-  .cal-day { background:var(--surface2); border-radius:4px; padding:4px; border:1px solid var(--border); overflow:hidden; height:82px; min-height:82px; max-height:82px; box-sizing:border-box; flex-shrink:0; }
+  .cal-day { background:var(--surface2); border-radius:4px; padding:4px; border:1px solid var(--border); overflow:hidden; box-sizing:border-box; }
   .cal-day.is-today { border-color:var(--accent); }
   .cal-day.cal-empty { opacity:0.25; }
   .cal-day-num { font-size:11px; font-weight:700; margin-bottom:2px; color:var(--text2); }
@@ -233,7 +232,7 @@ const css = `
     .form-card-body { padding:20px; }
     .toast-container { left:12px; right:12px; bottom:76px; }
     .toast { min-width:0; width:100%; }
-    .cal-day { height:54px; min-height:54px; max-height:54px; }
+    .cal-grid { grid-template-rows:repeat(6,48px); height:288px; min-height:288px; max-height:288px; }
   }
   @media (max-width:400px) {
     .eq-grid { grid-template-columns:1fr; }
@@ -647,8 +646,8 @@ function DashboardPage({ equipment, reservations }) {
           </div>
         ))}
       </div>
-      <div className="grid-2 mb-6">
-        <div className="card" style={{minHeight:620}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:24,alignItems:"start"}}>
+        <div className="card" style={{minHeight:620,minWidth:0,width:"100%"}}>
           <div className="card-header">
             <span className="card-title">📅 יומן</span>
             <div className="flex gap-2">
@@ -685,7 +684,7 @@ function DashboardPage({ equipment, reservations }) {
             })}
           </div>
         </div>
-        <div className="card">
+        <div className="card" style={{alignSelf:"start"}}>
           <div className="card-header"><span className="card-title">🕒 בקשות אחרונות</span></div>
           {[...reservations].sort((a,b)=>b.id-a.id).slice(0,6).map(r=>(
             <div key={r.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
