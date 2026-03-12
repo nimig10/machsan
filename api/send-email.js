@@ -28,7 +28,7 @@ function buildEmail({ type, student_name, borrow_date, return_date, items_list, 
   <div style="max-width:560px;margin:0 auto;background:#0a0c10;color:#e8eaf0;border-radius:12px;overflow:hidden">
     <div style="background:linear-gradient(135deg,#111318,#1e232e);padding:32px;text-align:center;border-bottom:1px solid #252b38">
       <div style="font-size:48px;margin-bottom:10px">🎬</div>
-      <h1 style="color:#f5a623;font-size:22px;margin:0">המחסן של קישקתא ונמרוד</h1>
+      <h1 style="color:#f5a623;font-size:22px;margin:0">מחסן השאלת ציוד קמרה אובסקורה וסאונד</h1>
     </div>
     <div style="padding:32px">
       <div style="background:${color}1a;border:1px solid ${color};border-radius:10px;padding:20px;text-align:center;margin-bottom:24px">
@@ -81,14 +81,14 @@ export default async function handler(req, res) {
   if (!to || !type) return res.status(400).json({ error: "חסרים שדות חובה" });
 
   const subjects = {
-    new:      "⏳ קיבלנו את הבקשה שלך – המחסן של קישקתא ונמרוד",
-    approved: "✅ הבקשה שלך אושרה – המחסן של קישקתא ונמרוד",
-    rejected: "עדכון לגבי בקשת ההשאלה – המחסן של קישקתא ונמרוד",
+    new:      "⏳ קיבלנו את הבקשה שלך – מחסן השאלת ציוד קמרה אובסקורה וסאונד",
+    approved: "✅ הבקשה שלך אושרה – מחסן השאלת ציוד קמרה אובסקורה וסאונד",
+    rejected: "עדכון לגבי בקשת ההשאלה – מחסן השאלת ציוד קמרה אובסקורה וסאונד",
   };
 
   try {
     await transporter.sendMail({
-      from:    `"מחסן קישקתא ונמרוד" <${GMAIL_USER}>`,
+      from:    `"מחסן קמרה אובסקורה וסאונד" <${GMAIL_USER}>`,
       to,
       subject: subjects[type] || "עדכון מהמחסן",
       html:    buildEmail({ type, student_name, borrow_date, return_date, items_list, wa_link }),

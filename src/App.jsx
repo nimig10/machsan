@@ -604,12 +604,24 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
 
 // ─── RESERVATIONS PAGE ────────────────────────────────────────────────────────
 function ReservationsPage({ reservations, setReservations, equipment, showToast }) {
-  const [search, setSearch] = useState("");
-  const [statusF, setStatusF] = useState("הכל");
+  const [search, setSearch]     = useState("");
+  const [statusF, setStatusF]   = useState("הכל");
+  const [loanTypeF, setLoanTypeF] = useState("הכל");
+  const [sortBy, setSortBy]     = useState("received");
   const [selected, setSelected] = useState(null);
   const [editing, setEditing]   = useState(null);
 
-  const filtered = reservations.filter(r=>(statusF==="הכל"||r.status===statusF)&&(r.student_name?.includes(search)||r.email?.includes(search)));
+  const filtered = [...reservations]
+    .filter(r =>
+      (statusF==="הכל" || r.status===statusF) &&
+      (loanTypeF==="הכל" || r.loan_type===loanTypeF) &&
+      (r.student_name?.includes(search) || r.email?.includes(search))
+    )
+    .sort((a,b) => {
+      if(sortBy==="urgency")  return new Date(a.borrow_date) - new Date(b.borrow_date);
+      if(sortBy==="received") return Number(b.id) - Number(a.id);
+      return 0;
+    });
   const eqName = id => equipment.find(e=>e.id==id)?.name||"?";
   const eqIcon = id => equipment.find(e=>e.id==id)?.image||"📦";
   const EqImg = ({id, size=22}) => {
@@ -711,13 +723,20 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
 
   return (
     <div className="page">
-      <div className="flex-between mb-4">
-        <div className="flex gap-3">
-          <div className="search-bar"><span>🔍</span><input placeholder="חיפוש..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
-          <select className="form-select" style={{width:150}} value={statusF} onChange={e=>setStatusF(e.target.value)}>
-            <option>הכל</option>{["ממתין","מאושר","נדחה","הוחזר"].map(s=><option key={s}>{s}</option>)}
-          </select>
-        </div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:16,alignItems:"center"}}>
+        <div className="search-bar" style={{flex:1,minWidth:180}}><span>🔍</span><input placeholder="חיפוש..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
+        <select className="form-select" style={{width:130}} value={statusF} onChange={e=>setStatusF(e.target.value)}>
+          <option value="הכל">כל הסטטוסים</option>
+          {["ממתין","מאושר","נדחה","הוחזר"].map(s=><option key={s} value={s}>{s}</option>)}
+        </select>
+        <select className="form-select" style={{width:130}} value={loanTypeF} onChange={e=>setLoanTypeF(e.target.value)}>
+          <option value="הכל">כל הסוגים</option>
+          {["פרטית","הפקה","סאונד"].map(t=><option key={t} value={t}>{t}</option>)}
+        </select>
+        <select className="form-select" style={{width:150}} value={sortBy} onChange={e=>setSortBy(e.target.value)}>
+          <option value="received">🕐 לפי תאריך קבלה</option>
+          <option value="urgency">🔥 לפי דחיפות</option>
+        </select>
       </div>
       {filtered.length===0
         ? <div className="empty-state"><div className="emoji">📭</div><div>אין בקשות</div></div>
@@ -1095,16 +1114,6 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
         <div style={{fontSize:64,marginBottom:16}}>✅</div>
         <h2 style={{fontSize:24,fontWeight:900,color:"var(--accent)",marginBottom:8}}>הבקשה נשלחה!</h2>
         <p style={{fontSize:14,color:"var(--text2)",marginBottom:28}}>בקשתך התקבלה בהצלחה.<br/>צוות המכללה יעבור עליה לאישורה הסופי.</p>
-        <div style={{background:"rgba(37,211,102,0.1)",border:"1px solid rgba(37,211,102,0.25)",borderRadius:12,padding:20,marginBottom:24}}>
-          <p style={{fontWeight:700,marginBottom:10,fontSize:15}}>📲 שלח ווצאפ לנמרוד גרא:</p>
-          <div style={{background:"var(--surface2)",borderRadius:8,padding:12,fontStyle:"italic",fontSize:13,color:"var(--text2)",marginBottom:14}}>
-            "שלום נמרוד הגשתי בקשה להשאלה ממתין לאישורך תודה"
-          </div>
-          <a href={waLink} target="_blank" rel="noopener noreferrer"
-            style={{display:"inline-flex",alignItems:"center",gap:8,padding:"10px 24px",background:"#25d366",color:"#fff",borderRadius:25,fontWeight:700,fontSize:14,textDecoration:"none"}}>
-            💬 שלח ווצאפ עכשיו
-          </a>
-        </div>
         <button className="btn btn-secondary" onClick={reset}>🔄 שלח בקשה נוספת</button>
       </div>
     </div>
