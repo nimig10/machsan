@@ -6,11 +6,30 @@ async function storageGet(key) {
     const actionMap = { reservations:"getReservations", equipment:"getEquipment", categories:"getCategories" };
     const res = await fetch(`/api/sheets?action=${actionMap[key]||"getEquipment"}`);
     const json = await res.json();
-    return json.ok ? json.data : null;
-  } catch { return null; }
+    if(json.ok && json.data !== null && json.data !== undefined) {
+      // Cache categories locally as backup
+      if(key==="categories") { try { localStorage.setItem("categories_cache", JSON.stringify(json.data)); } catch{} }
+      return json.data;
+    }
+    // Fallback to localStorage cache for categories
+    if(key==="categories") {
+      try { const c = localStorage.getItem("categories_cache"); if(c) return JSON.parse(c); } catch{}
+    }
+    return null;
+  } catch {
+    // On network error, return localStorage cache for categories
+    if(key==="categories") {
+      try { const c = localStorage.getItem("categories_cache"); if(c) return JSON.parse(c); } catch{}
+    }
+    return null;
+  }
 }
 
 async function storageSet(key, value) {
+  // Always save categories to localStorage immediately as backup
+  if(key==="categories") {
+    try { localStorage.setItem("categories_cache", JSON.stringify(value)); } catch{}
+  }
   try {
     const actionMap = { reservations:"saveReservations", equipment:"saveEquipment", categories:"saveCategories" };
     const res = await fetch("/api/sheets", {
@@ -416,8 +435,25 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       <div className="flex gap-2 mb-6" style={{flexWrap:"wrap",alignItems:"center"}}>
         {categories.map(c=>{
           const active = selectedCats.includes(c);
-          return <button key={c} className={`btn btn-sm ${active?"btn-primary":"btn-secondary"}`}
-            onClick={()=>setSelectedCats(prev=>active?prev.filter(x=>x!==c):[...prev,c])}>{c}</button>;
+          const hasItems = equipment.some(e=>e.category===c);
+          return <div key={c} style={{display:"flex",alignItems:"center",gap:0}}>
+            <button className={`btn btn-sm ${active?"btn-primary":"btn-secondary"}`}
+              style={{borderRadius:"20px 0 0 20px",borderRight:"none"}}
+              onClick={()=>setSelectedCats(prev=>active?prev.filter(x=>x!==c):[...prev,c])}>{c}</button>
+            <button
+              title={hasItems ? "לא ניתן למחוק — יש ציוד בקטגוריה זו" : "מחק קטגוריה"}
+              disabled={hasItems}
+              style={{height:32,padding:"0 8px",borderRadius:"0 20px 20px 0",border:"1px solid var(--border)",background:hasItems?"var(--surface2)":"rgba(231,76,60,0.15)",color:hasItems?"var(--text3)":"#e74c3c",cursor:hasItems?"not-allowed":"pointer",fontSize:12,transition:"all 0.15s"}}
+              onClick={async()=>{
+                if(window.confirm(`למחוק את הקטגוריה "${c}"?`)){
+                  const updated = categories.filter(x=>x!==c);
+                  setCategories(updated);
+                  setSelectedCats(prev=>prev.filter(x=>x!==c));
+                  await storageSet("categories", updated);
+                  showToast("success", `קטגוריה "${c}" נמחקה`);
+                }
+              }}>✕</button>
+          </div>;
         })}
       </div>
       {filtered.length===0 ? <div className="empty-state"><div className="emoji">📦</div><p>לא נמצא ציוד</p></div> : (
