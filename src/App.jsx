@@ -483,21 +483,22 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
 
   // Available quantity for equipment (excluding current reservation)
+  // getAvail returns how many are free (excluding OTHER reservations, not this one)
   const getAvail = (eqId) => {
     const eq = equipment.find(e=>e.id==eqId);
     if(!eq) return 0;
-    const used = reservations
+    const usedByOthers = reservations
       .filter(r => r.id!==reservation.id && r.status!=="נדחה" && r.status!=="הוחזר")
       .filter(r => r.borrow_date<=form.return_date && r.return_date>=form.borrow_date)
       .flatMap(r=>r.items||[])
       .filter(i=>i.equipment_id==eqId)
       .reduce((s,i)=>s+i.quantity,0);
-    return eq.total_quantity - used;
+    return eq.total_quantity - usedByOthers;  // total free pool for this reservation
   };
 
   const setQty = (eqId, qty) => {
-    const avail = getAvail(eqId);
-    const q = Math.max(0, Math.min(qty, avail));
+    const totalAvail = getAvail(eqId);  // total available for this reservation
+    const q = Math.max(0, Math.min(qty, totalAvail));
     const name = equipment.find(e=>e.id==eqId)?.name||"";
     setItems(prev => q===0 ? prev.filter(i=>i.equipment_id!=eqId)
       : prev.find(i=>i.equipment_id==eqId) ? prev.map(i=>i.equipment_id==eqId?{...i,quantity:q}:i)
@@ -566,21 +567,21 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
                   <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>{cat}</div>
                   {catEq.map(eq=>{
                     const qty = getQty(eq.id);
-                    const avail = getAvail(eq.id);
-                    const maxAvail = avail + qty; // current + available
+                    const totalAvail = getAvail(eq.id);
+                    const remaining = totalAvail - qty;  // how many more can be added
                     return (
-                      <div key={eq.id} className="item-row" style={{opacity:maxAvail===0&&qty===0?0.4:1}}>
+                      <div key={eq.id} className="item-row" style={{opacity:totalAvail===0?0.4:1}}>
                         {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
                           ? <img src={eq.image} alt="" style={{width:32,height:32,objectFit:"cover",borderRadius:6}}/>
                           : <span style={{fontSize:22}}>{eq.image||"📦"}</span>}
                         <div style={{flex:1}}>
                           <div style={{fontWeight:600,fontSize:13}}>{eq.name}</div>
-                          <div style={{fontSize:11,color:"var(--text3)"}}>זמין: <span style={{color:maxAvail===0?"var(--red)":maxAvail<=2?"var(--yellow)":"var(--green)",fontWeight:700}}>{maxAvail}</span></div>
+                          <div style={{fontSize:11,color:"var(--text3)"}}>זמין: <span style={{color:remaining===0?"var(--red)":remaining<=2?"var(--yellow)":"var(--green)",fontWeight:700}}>{remaining}</span></div>
                         </div>
                         <div className="qty-ctrl">
                           <button className="qty-btn" onClick={()=>setQty(eq.id,qty-1)}>−</button>
                           <span className="qty-num">{qty}</span>
-                          <button className="qty-btn" disabled={qty>=maxAvail} onClick={()=>setQty(eq.id,qty+1)}>+</button>
+                          <button className="qty-btn" disabled={remaining<=0} onClick={()=>setQty(eq.id,qty+1)}>+</button>
                         </div>
                       </div>
                     );
@@ -688,7 +689,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
     if (status === "מאושר" || status === "נדחה") {
       const res = reservations.find(r=>r.id===id);
       if (res?.email) {
-        const itemsList = res.items?.map(i => `<li>${i.name} × ${i.quantity}</li>`).join("") || "";
+        const itemsList = res.items?.map(i => `<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${i.name}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${i.quantity}</td></tr>`).join("") || "";
         fetch("/api/send-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1055,7 +1056,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     try {
       const waText = encodeURIComponent("שלום נמרוד הגשתי בקשה להשאלה ממתין לאישורך תודה");
       const waLink = `https://wa.me/${NIMROD_PHONE}?text=${waText}`;
-      const itemsList = res.items.map(i => `<li>${i.name} × ${i.quantity}</li>`).join("");
+      const itemsList = res.items.map(i => `<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${i.name}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${i.quantity}</td></tr>`).join("");
       await fetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1130,17 +1131,19 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
 
           {step===1 && <>
             <div className="form-section-title">סוג ההשאלה</div>
-            <div style={{display:"flex",gap:12,marginBottom:24}}>
+            <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:24}}>
               {[
                 {val:"פרטית",icon:"👤",desc:"שימוש אישי / לימודי"},
                 {val:"הפקה",icon:"🎬",desc:"פרויקט הפקה מאורגן"},
                 {val:"סאונד",icon:"🎙️",desc:"לתרגול הקלטות באולפני המכללה (עבור הנדסאי סאונד בלבד)"},
               ].map(opt=>(
-                <div key={opt.val} onClick={()=>{set("loan_type",opt.val);setItems([]);}} style={{flex:1,padding:"16px",borderRadius:"var(--r)",background:form.loan_type===opt.val?"var(--accent-glow)":"var(--surface2)",border:`2px solid ${form.loan_type===opt.val?"var(--accent)":"var(--border)"}`,cursor:"pointer",textAlign:"center",transition:"all 0.15s"}}>
-                  <div style={{fontSize:28,marginBottom:6}}>{opt.icon}</div>
-                  <div style={{fontWeight:800,color:form.loan_type===opt.val?"var(--accent)":"var(--text)"}}>{opt.val==="סאונד"?"השאלת סאונד":`השאלה ${opt.val}`}</div>
-                  <div style={{fontSize:12,color:"var(--text3)",marginTop:3}}>{opt.desc}</div>
-                  {form.loan_type===opt.val&&<div style={{marginTop:6,fontSize:11,fontWeight:700,color:"var(--accent)"}}>✓ נבחר</div>}
+                <div key={opt.val} onClick={()=>{set("loan_type",opt.val);setItems([]);}} style={{width:"100%",padding:"14px 18px",borderRadius:"var(--r)",background:form.loan_type===opt.val?"var(--accent-glow)":"var(--surface2)",border:`2px solid ${form.loan_type===opt.val?"var(--accent)":"var(--border)"}`,cursor:"pointer",transition:"all 0.15s",display:"flex",alignItems:"center",gap:14}}>
+                  <div style={{fontSize:30,flexShrink:0}}>{opt.icon}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:800,fontSize:15,color:form.loan_type===opt.val?"var(--accent)":"var(--text)"}}>{opt.val==="סאונד"?"השאלת סאונד":`השאלה ${opt.val}`}</div>
+                    <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{opt.desc}</div>
+                  </div>
+                  {form.loan_type===opt.val&&<div style={{fontSize:16,color:"var(--accent)",fontWeight:900,flexShrink:0}}>✓</div>}
                 </div>
               ))}
             </div>
@@ -1160,7 +1163,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
           {step===2 && <>
             <div className="form-section-title">תאריכים ושעות</div>
             <div className="grid-2">
-              <div className="form-group"><label className="form-label">תאריך השאלה *</label><input type="date" className="form-input" min={minDate} value={form.borrow_date} onChange={e=>set("borrow_date",e.target.value)}/></div>
+              <div className="form-group"><label className="form-label">📅 תאריך השאלה *</label><input type="date" className="form-input" min={minDate} value={form.borrow_date} onChange={e=>set("borrow_date",e.target.value)}/></div>
               <div className="form-group"><label className="form-label">שעת איסוף *</label>
                 <select className="form-select" value={form.borrow_time} onChange={e=>set("borrow_time",e.target.value)}>
                   <option value="">-- בחר שעה --</option>
@@ -1169,7 +1172,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
               </div>
             </div>
             <div className="grid-2">
-              <div className="form-group"><label className="form-label">תאריך החזרה *</label><input type="date" className="form-input" min={form.borrow_date||today()} value={form.return_date} onChange={e=>set("return_date",e.target.value)}/></div>
+              <div className="form-group"><label className="form-label">📅 תאריך החזרה *</label><input type="date" className="form-input" min={form.borrow_date||today()} value={form.return_date} onChange={e=>set("return_date",e.target.value)}/></div>
               <div className="form-group"><label className="form-label">שעת החזרה *</label>
                 <select className="form-select" value={form.return_time} onChange={e=>set("return_time",e.target.value)}>
                   <option value="">-- בחר שעה --</option>
@@ -1208,7 +1211,15 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
             <div className="form-section-title">סיכום ואישור</div>
             <div className="grid-2" style={{marginBottom:20}}>
               <div>{[["שם",form.student_name],["אימייל",form.email],["קורס",form.course],["סוג השאלה",form.loan_type],["מ",formatDate(form.borrow_date)],["עד",formatDate(form.return_date)]].map(([l,v])=><div key={l} className="req-detail-row"><span className="req-detail-label">{l}:</span><strong>{v}</strong></div>)}</div>
-              <div>{items.map(i=><div key={i.equipment_id} className="req-detail-row"><span>{equipment.find(e=>e.id==i.equipment_id)?.image}</span><span>{i.name} × {i.quantity}</span></div>)}</div>
+              <div>{items.map(i=>{
+  const eq = equipment.find(e=>e.id==i.equipment_id);
+  const img = eq?.image||"📦";
+  const isFile = img.startsWith("data:")||img.startsWith("http");
+  return <div key={i.equipment_id} className="req-detail-row">
+    {isFile ? <img src={img} alt="" style={{width:20,height:20,objectFit:"cover",borderRadius:4,verticalAlign:"middle"}}/> : <span>{img}</span>}
+    <span style={{marginRight:6}}>{i.name} × {i.quantity}</span>
+  </div>;
+})}</div>
             </div>
             <div className="divider"/>
             <div className="terms-box">{TERMS}</div>
