@@ -3,8 +3,8 @@ import { useState, useEffect, useMemo } from "react";
 // ─── GOOGLE SHEETS STORAGE (דרך Vercel) ──────────────────────────────────────
 async function storageGet(key) {
   try {
-    const action = key === "reservations" ? "getReservations" : "getEquipment";
-    const res = await fetch(`/api/sheets?action=${action}`);
+    const actionMap = { reservations:"getReservations", equipment:"getEquipment", categories:"getCategories" };
+    const res = await fetch(`/api/sheets?action=${actionMap[key]||"getEquipment"}`);
     const json = await res.json();
     return json.ok ? json.data : null;
   } catch { return null; }
@@ -12,11 +12,11 @@ async function storageGet(key) {
 
 async function storageSet(key, value) {
   try {
-    const action = key === "reservations" ? "saveReservations" : "saveEquipment";
+    const actionMap = { reservations:"saveReservations", equipment:"saveEquipment", categories:"saveCategories" };
     await fetch("/api/sheets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, payload: value }),
+      body: JSON.stringify({ action: actionMap[key]||"saveEquipment", payload: value }),
     });
   } catch {}
 }
@@ -36,7 +36,8 @@ const INITIAL_EQUIPMENT = [
 ];
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
-const CATEGORIES  = ["מצלמות","עדשות","מיקרופונים","מקליטי אודיו","תאורה","חצובות","אביזרים"];
+const DEFAULT_CATEGORIES = ["מצלמות","עדשות","מיקרופונים","מקליטי אודיו","תאורה","חצובות","אביזרים"];
+const SOUND_CATEGORIES = ["מיקרופונים","מקליטי אודיו"];
 const STATUSES    = ["תקין","פגום","בתיקון","נעלם"];
 const RESEND_API_KEY = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_RESEND_KEY : "";
 const NIMROD_PHONE     = "972521234567"; // ← החלף במספר של נמרוד
@@ -204,8 +205,8 @@ const css = `
   .cal-fs-event-mid    { border-radius:0; margin-left:-5px; margin-right:-5px; }
   .cal-fs-event-end    { border-radius:0 4px 4px 0; margin-left:-5px; }
   .cal-fs-event-single { border-radius:4px; }
-  .form-page { min-height:100vh; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:40px 20px; }
-  .form-card { width:100%; max-width:680px; background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+  .form-page { min-height:100vh; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:40px 20px; direction:rtl; }
+  .form-card { width:100%; max-width:680px; margin:0 auto; background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
   .form-card-header { padding:32px 36px 24px; background:linear-gradient(135deg,var(--surface2),var(--surface)); border-bottom:1px solid var(--border); }
   .form-card-body { padding:32px 36px; }
   .form-section-title { font-size:13px; font-weight:800; color:var(--accent); text-transform:uppercase; letter-spacing:1px; margin-bottom:16px; padding-bottom:8px; border-bottom:1px solid var(--border); }
@@ -299,7 +300,7 @@ function Loading() {
 }
 
 // ─── EQUIPMENT PAGE ───────────────────────────────────────────────────────────
-function EquipmentPage({ equipment, reservations, setEquipment, showToast }) {
+function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories }) {
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("הכל");
   const [modal, setModal] = useState(null);
@@ -355,7 +356,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast }) {
       <div>
         <div className="grid-2">
           <div className="form-group"><label className="form-label">שם הציוד *</label><input className="form-input" value={f.name} onChange={e=>s("name",e.target.value)}/></div>
-          <div className="form-group"><label className="form-label">קטגוריה</label><select className="form-select" value={f.category} onChange={e=>s("category",e.target.value)}>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></div>
+          <div className="form-group"><label className="form-label">קטגוריה</label><select className="form-select" value={f.category} onChange={e=>s("category",e.target.value)}>{categories.map(c=><option key={c}>{c}</option>)}</select></div>
         </div>
         <div className="form-group"><label className="form-label">תיאור</label><textarea className="form-textarea" rows={2} value={f.description} onChange={e=>s("description",e.target.value)}/></div>
         <div className="grid-2">
@@ -395,8 +396,9 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast }) {
         <div className="search-bar"><span>🔍</span><input placeholder="חיפוש ציוד..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
         <button className="btn btn-primary" onClick={()=>setModal({type:"add"})}>➕ הוסף ציוד</button>
       </div>
-      <div className="flex gap-2 mb-6" style={{flexWrap:"wrap"}}>
-        {["הכל",...CATEGORIES].map(c=><button key={c} className={`btn btn-sm ${cat===c?"btn-primary":"btn-secondary"}`} onClick={()=>setCat(c)}>{c}</button>)}
+      <div className="flex gap-2 mb-6" style={{flexWrap:"wrap",alignItems:"center"}}>
+        {["הכל",...categories].map(c=><button key={c} className={`btn btn-sm ${cat===c?"btn-primary":"btn-secondary"}`} onClick={()=>setCat(c)}>{c}</button>)}
+        <button className="btn btn-sm btn-secondary" onClick={()=>setModal({type:"addcat"})} title="הוסף קטגוריה">＋ קטגוריה</button>
       </div>
       {filtered.length===0 ? <div className="empty-state"><div className="emoji">📦</div><p>לא נמצא ציוד</p></div> : (
         <div className="eq-grid">
@@ -423,7 +425,24 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast }) {
       )}
       {(modal?.type==="add"||modal?.type==="edit") && <Modal title={modal.type==="add"?"➕ הוספת ציוד":"✏️ עריכת ציוד"} onClose={()=>setModal(null)}><EqForm initial={modal.type==="edit"?modal.item:null}/></Modal>}
       {modal?.type==="delete" && <Modal title="🗑️ מחיקת ציוד" onClose={()=>setModal(null)} footer={<><button className="btn btn-danger" onClick={()=>del(modal.item)}>כן, מחק</button><button className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button></>}><p>האם למחוק את <strong>{modal.item.name}</strong>?</p></Modal>}
+      {modal?.type==="addcat" && <AddCategoryModal categories={categories} onSave={async(newCat)=>{ const updated=[...categories,newCat]; setCategories(updated); await storageSet("categories",updated); showToast("success",`קטגוריה "${newCat}" נוספה`); setModal(null); }} onClose={()=>setModal(null)}/>}
     </div>
+  );
+}
+
+// ─── ADD CATEGORY MODAL ──────────────────────────────────────────────────────
+function AddCategoryModal({ categories, onSave, onClose }) {
+  const [name, setName] = useState("");
+  const exists = categories.includes(name.trim());
+  return (
+    <Modal title="➕ הוספת קטגוריה" onClose={onClose}
+      footer={<><button className="btn btn-primary" disabled={!name.trim()||exists} onClick={()=>onSave(name.trim())}>הוסף</button><button className="btn btn-secondary" onClick={onClose}>ביטול</button></>}>
+      <div className="form-group">
+        <label className="form-label">שם הקטגוריה *</label>
+        <input className="form-input" value={name} onChange={e=>setName(e.target.value)} placeholder="לדוגמה: סטאביליזרים"/>
+        {exists && <div style={{color:"var(--red)",fontSize:12,marginTop:4}}>קטגוריה זו כבר קיימת</div>}
+      </div>
+    </Modal>
   );
 }
 
@@ -607,11 +626,11 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
               <div style={{marginTop:16,background:"var(--accent-glow)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:"var(--r-sm)",padding:14}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:8,fontSize:13}}>
                   <span style={{color:"var(--text3)"}}>📅 תאריך השאלה</span>
-                  <strong>{formatDate(selected.borrow_date)}</strong>
+                  <strong>{formatDate(selected.borrow_date)}{selected.borrow_time&&<span style={{marginRight:6,color:"var(--accent)"}}>{selected.borrow_time}</span>}</strong>
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:13}}>
                   <span style={{color:"var(--text3)"}}>🔄 תאריך החזרה</span>
-                  <strong>{formatDate(selected.return_date)}</strong>
+                  <strong>{formatDate(selected.return_date)}{selected.return_time&&<span style={{marginRight:6,color:"var(--accent)"}}>{selected.return_time}</span>}</strong>
                 </div>
               </div>
               <div style={{marginTop:12,textAlign:"center"}}>{statusBadge(selected.status)}</div>
@@ -722,8 +741,8 @@ function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=110, fon
                   fontSize, color:b.color, fontWeight:700,
                   zIndex:1, backdropFilter:"blur(0px)",
                 }}>
-                  {isResStart && <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{b.r.student_name}</span>}
-                  {!isResStart && isResEnd && <span style={{fontWeight:700,overflow:"hidden",textOverflow:"ellipsis"}}>↩ {b.r.student_name}</span>}
+                  {isResStart && <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{b.r.student_name}{b.r.borrow_time&&<span style={{opacity:0.8,fontSize:fontSize-1}}> {b.r.borrow_time}</span>}</span>}
+                  {!isResStart && isResEnd && <span style={{fontWeight:700,overflow:"hidden",textOverflow:"ellipsis"}}>↩ {b.r.student_name}{b.r.return_time&&<span style={{opacity:0.8,fontSize:fontSize-1}}> {b.r.return_time}</span>}</span>}
                 </div>
               );
             })}
@@ -839,19 +858,22 @@ function DashboardPage({ equipment, reservations }) {
   );
 }
 // ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
-function PublicForm({ equipment, reservations, setReservations, showToast }) {
+function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES }) {
   const [step, setStep]       = useState(1);
-  const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",return_date:"",loan_type:""});
+  const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:""});
   const [items, setItems]     = useState([]);
   const [agreed, setAgreed]   = useState(false);
   const [done, setDone]       = useState(false);
   const [submitting, setSub]  = useState(false);
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
 
-  const minDate = (()=>{ const d=new Date(); d.setDate(d.getDate()+7); return d.toISOString().split("T")[0]; })();
+  const minDays = form.loan_type==="פרטית" ? 2 : 7;
+  const minDate = (()=>{ const d=new Date(); d.setDate(d.getDate()+minDays); return d.toISOString().split("T")[0]; })();
   const tooSoon = form.borrow_date && form.borrow_date < minDate;
+  const TIME_SLOTS = ["09:00","09:30","14:30","15:00","15:30","16:00","16:30","17:00","17:30"];
+  const isSoundLoan = form.loan_type==="סאונד";
   const ok1 = form.student_name && form.email && form.phone && form.course && form.loan_type;
-  const ok2 = form.borrow_date && form.return_date && form.return_date>=form.borrow_date && !tooSoon;
+  const ok2 = form.borrow_date && form.return_date && form.return_date>=form.borrow_date && !tooSoon && form.borrow_time && form.return_time;
 
   const availEq = useMemo(()=>{
     if(!form.borrow_date||!form.return_date) return [];
@@ -904,7 +926,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast }) {
     showToast("success","הבקשה נשלחה בהצלחה!");
   };
 
-  const reset = () => { setDone(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",return_date:"",loan_type:""}); setItems([]); setAgreed(false); };
+  const reset = () => { setDone(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:""}); setItems([]); setAgreed(false); };
 
   if(done) return (
     <div className="form-page">
@@ -949,10 +971,14 @@ function PublicForm({ equipment, reservations, setReservations, showToast }) {
           {step===1 && <>
             <div className="form-section-title">סוג ההשאלה</div>
             <div style={{display:"flex",gap:12,marginBottom:24}}>
-              {[{val:"פרטית",icon:"👤",desc:"שימוש אישי / לימודי"},{val:"הפקה",icon:"🎬",desc:"פרויקט הפקה מאורגן"}].map(opt=>(
-                <div key={opt.val} onClick={()=>set("loan_type",opt.val)} style={{flex:1,padding:"16px",borderRadius:"var(--r)",background:form.loan_type===opt.val?"var(--accent-glow)":"var(--surface2)",border:`2px solid ${form.loan_type===opt.val?"var(--accent)":"var(--border)"}`,cursor:"pointer",textAlign:"center",transition:"all 0.15s"}}>
+              {[
+                {val:"פרטית",icon:"👤",desc:"שימוש אישי / לימודי"},
+                {val:"הפקה",icon:"🎬",desc:"פרויקט הפקה מאורגן"},
+                {val:"סאונד",icon:"🎙️",desc:"לתרגול הקלטות באולפני המכללה (עבור הנדסאי סאונד בלבד)"},
+              ].map(opt=>(
+                <div key={opt.val} onClick={()=>{set("loan_type",opt.val);setItems([]);}} style={{flex:1,padding:"16px",borderRadius:"var(--r)",background:form.loan_type===opt.val?"var(--accent-glow)":"var(--surface2)",border:`2px solid ${form.loan_type===opt.val?"var(--accent)":"var(--border)"}`,cursor:"pointer",textAlign:"center",transition:"all 0.15s"}}>
                   <div style={{fontSize:28,marginBottom:6}}>{opt.icon}</div>
-                  <div style={{fontWeight:800,color:form.loan_type===opt.val?"var(--accent)":"var(--text)"}}>{`השאלה ${opt.val}`}</div>
+                  <div style={{fontWeight:800,color:form.loan_type===opt.val?"var(--accent)":"var(--text)"}}>{opt.val==="סאונד"?"השאלת סאונד":`השאלה ${opt.val}`}</div>
                   <div style={{fontSize:12,color:"var(--text3)",marginTop:3}}>{opt.desc}</div>
                   {form.loan_type===opt.val&&<div style={{marginTop:6,fontSize:11,fontWeight:700,color:"var(--accent)"}}>✓ נבחר</div>}
                 </div>
@@ -972,19 +998,33 @@ function PublicForm({ equipment, reservations, setReservations, showToast }) {
           </>}
 
           {step===2 && <>
-            <div className="form-section-title">תאריכי השאלה</div>
+            <div className="form-section-title">תאריכים ושעות</div>
             <div className="grid-2">
               <div className="form-group"><label className="form-label">תאריך השאלה *</label><input type="date" className="form-input" min={minDate} value={form.borrow_date} onChange={e=>set("borrow_date",e.target.value)}/></div>
-              <div className="form-group"><label className="form-label">תאריך החזרה *</label><input type="date" className="form-input" min={form.borrow_date||today()} value={form.return_date} onChange={e=>set("return_date",e.target.value)}/></div>
+              <div className="form-group"><label className="form-label">שעת איסוף *</label>
+                <select className="form-select" value={form.borrow_time} onChange={e=>set("borrow_time",e.target.value)}>
+                  <option value="">-- בחר שעה --</option>
+                  {TIME_SLOTS.map(t=><option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
             </div>
-            {tooSoon && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 נדרשת התראה של שבוע לפחות. תאריך מוקדם ביותר: <strong>{formatDate(minDate)}</strong></div>}
-            {ok2 && <div className="highlight-box">📅 השאלה ל-{Math.ceil((new Date(form.return_date)-new Date(form.borrow_date))/(86400000))+1} ימים</div>}
+            <div className="grid-2">
+              <div className="form-group"><label className="form-label">תאריך החזרה *</label><input type="date" className="form-input" min={form.borrow_date||today()} value={form.return_date} onChange={e=>set("return_date",e.target.value)}/></div>
+              <div className="form-group"><label className="form-label">שעת החזרה *</label>
+                <select className="form-select" value={form.return_time} onChange={e=>set("return_time",e.target.value)}>
+                  <option value="">-- בחר שעה --</option>
+                  {TIME_SLOTS.map(t=><option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+            {tooSoon && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 {form.loan_type==="פרטית"?"השאלה פרטית דורשת התראה של 48 שעות לפחות.":"נדרשת התראה של שבוע לפחות."} תאריך מוקדם ביותר: <strong>{formatDate(minDate)}</strong></div>}
+            {ok2 && <div className="highlight-box">📅 השאלה ל-{Math.ceil((new Date(form.return_date)-new Date(form.borrow_date))/(86400000))+1} ימים · איסוף {form.borrow_time} · החזרה {form.return_time}</div>}
             <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setStep(1)}>← חזור</button><button className="btn btn-primary" disabled={!ok2} onClick={()=>setStep(3)}>המשך ← ציוד</button></div>
           </>}
 
           {step===3 && <>
-            <div className="form-section-title">בחירת ציוד</div>
-            {CATEGORIES.map(c=>{
+            <div className="form-section-title">בחירת ציוד{isSoundLoan&&<span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>· מיקרופונים ומקליטי אודיו בלבד</span>}</div>
+            {(isSoundLoan?SOUND_CATEGORIES:categories).map(c=>{
               const cat=availEq.filter(e=>e.category===c); if(!cat.length) return null;
               return <div key={c} style={{marginBottom:20}}>
                 <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>{c}</div>
@@ -1065,6 +1105,7 @@ export default function App() {
   const [page, setPage]               = useState("dashboard");
   const [equipment, setEquipment]     = useState([]);
   const [reservations, setReservations] = useState([]);
+  const [categories, setCategories]   = useState(DEFAULT_CATEGORIES);
   const [loading, setLoading]         = useState(true);
   const [toasts, setToasts]           = useState([]);
   const [authed, setAuthed]           = useState(false);
@@ -1079,10 +1120,13 @@ export default function App() {
     (async()=>{
       const eq  = await storageGet("equipment");
       const res = await storageGet("reservations");
+      const cats = await storageGet("categories");
       setEquipment(eq  || INITIAL_EQUIPMENT);
       setReservations(res || []);
-      if(!eq)  await storageSet("equipment",    INITIAL_EQUIPMENT);
-      if(!res) await storageSet("reservations", []);
+      setCategories(cats || DEFAULT_CATEGORIES);
+      if(!eq)   await storageSet("equipment",    INITIAL_EQUIPMENT);
+      if(!res)  await storageSet("reservations", []);
+      if(!cats) await storageSet("categories",   DEFAULT_CATEGORIES);
       setLoading(false);
     })();
   },[]);
@@ -1097,7 +1141,7 @@ export default function App() {
       {/* ── טופס ציבורי ── */}
       {!isAdmin && (
         <div style={{minHeight:"100vh",background:"var(--bg)"}}>
-          {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast}/>}
+          {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories}/>}
         </div>
       )}
 
@@ -1134,7 +1178,7 @@ export default function App() {
             </div>
             {loading ? <Loading/> : <>
               {page==="dashboard"   && <DashboardPage    equipment={equipment} reservations={reservations}/>}
-              {page==="equipment"   && <EquipmentPage    equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast}/>}
+              {page==="equipment"   && <EquipmentPage    equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories}/>}
               {page==="reservations"&& <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}/>}
             </>}
           </div>
