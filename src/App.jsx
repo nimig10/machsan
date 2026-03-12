@@ -332,7 +332,10 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast }) {
     setModal(null);
   };
 
-  const used = (id) => reservations.filter(r=>r.status==="מאושר"||r.status==="ממתין").reduce((s,r)=>s+(r.items?.find(i=>i.equipment_id==id)?.quantity||0),0);
+  const todayStr2 = today();
+  const used = (id) => reservations
+    .filter(r=>(r.status==="מאושר"||r.status==="ממתין") && r.borrow_date<=todayStr2 && r.return_date>=todayStr2)
+    .reduce((s,r)=>s+(r.items?.find(i=>i.equipment_id==id)?.quantity||0),0);
 
   const EqForm = ({ initial }) => {
     const [f, setF] = useState(initial||{name:"",category:"מצלמות",description:"",total_quantity:1,image:"📷",notes:"",status:"תקין"});
@@ -462,7 +465,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
       @media print{body{padding:20px}}
     </style></head><body>
     <h1>📋 אישור בקשת השאלה</h1>
-    <div class="sub">המחסן של קישקתא ונמרוד — הופק ב-${new Date().toLocaleDateString("he-IL")}</div>
+    <div class="sub">מחסן השאלת ציוד קמרה אובסקורה וסאונד — הופק ב-${new Date().toLocaleDateString("he-IL")}</div>
     <div class="section">
       <div class="section-title">פרטי סטודנט</div>
       <div class="row"><span class="label">שם מלא:</span><strong>${r.student_name}</strong></div>
@@ -563,7 +566,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
               <div className="res-card-mid">
                 <div style={{display:"flex",gap:16,fontSize:12,color:"var(--text2)",flexWrap:"wrap"}}>
                   <span>📚 {r.course}</span>
-                  <span>📅 {formatDate(r.borrow_date)} ← {formatDate(r.return_date)}</span>
+                  <span>📅 {formatDate(r.borrow_date)} ← {formatDate(r.return_date)}{(()=>{const diff=Math.ceil((new Date(r.borrow_date)-new Date())/(1000*60*60*24));return diff>0?<span style={{marginRight:6,color:"var(--yellow)",fontWeight:700}}>({diff} ימים)</span>:diff===0?<span style={{marginRight:6,color:"var(--green)",fontWeight:700}}>(היום!)</span>:null;})()}</span>
                   <span>📦 {r.items?.length||0} פריטים</span>
                 </div>
                 <div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:4}}>
@@ -716,11 +719,11 @@ function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=110, fon
                   display:"flex",alignItems:"center",
                   paddingRight:isResStart?8:2, paddingLeft:isResEnd?6:2,
                   overflow:"hidden",whiteSpace:"nowrap",
-                  fontSize, color:b.color, fontWeight:600,
-                  zIndex:1,
+                  fontSize, color:b.color, fontWeight:700,
+                  zIndex:1, backdropFilter:"blur(0px)",
                 }}>
                   {isResStart && <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{b.r.student_name}</span>}
-                  {!isResStart && isResEnd && <span style={{opacity:0.85,overflow:"hidden",textOverflow:"ellipsis"}}>↩ {b.r.student_name}</span>}
+                  {!isResStart && isResEnd && <span style={{fontWeight:700,overflow:"hidden",textOverflow:"ellipsis"}}>↩ {b.r.student_name}</span>}
                 </div>
               );
             })}
@@ -736,6 +739,7 @@ function DashboardPage({ equipment, reservations }) {
   const active = reservations.filter(r => r.status === "מאושר").length;
   const pending = reservations.filter(r => r.status === "ממתין").length;
   const rtToday = reservations.filter(r => r.status === "מאושר" && r.return_date === todayStr).length;
+  const todayLoans = reservations.filter(r => r.status !== "נדחה" && r.status !== "הוחזר" && r.borrow_date <= todayStr && r.return_date >= todayStr).length;
   const total = equipment.reduce((s, e) => s + Number(e.total_quantity), 0);
 
   const [calDate, setCalDate] = useState(new Date());
@@ -753,10 +757,10 @@ function DashboardPage({ equipment, reservations }) {
   while(days.length<42) days.push(null);
 
   const SPAN_COLORS = [
-    ["rgba(52,152,219,0.4)","#5dade2"],  ["rgba(46,204,113,0.4)","#58d68d"],
-    ["rgba(231,76,60,0.4)","#ec7063"],   ["rgba(155,89,182,0.4)","#c39bd3"],
-    ["rgba(241,196,15,0.4)","#c9a800"],  ["rgba(230,126,34,0.4)","#f0a27a"],
-    ["rgba(26,188,156,0.4)","#76d7c4"],  ["rgba(236,72,153,0.4)","#f472b6"],
+    ["rgba(52,152,219,0.75)","#fff"],  ["rgba(46,204,113,0.75)","#fff"],
+    ["rgba(231,76,60,0.75)","#fff"],   ["rgba(155,89,182,0.75)","#fff"],
+    ["rgba(200,160,0,0.75)","#fff"],   ["rgba(230,126,34,0.75)","#fff"],
+    ["rgba(26,188,156,0.75)","#fff"],  ["rgba(236,72,153,0.75)","#fff"],
   ];
   const activeRes = reservations.filter(r => r.status !== "נדחה" && r.borrow_date && r.return_date);
   const colorMap = {};
@@ -766,11 +770,12 @@ function DashboardPage({ equipment, reservations }) {
     <div className="page">
       <div className="stats-grid">
         {[
-          { l:"פריטי ציוד",  v:equipment.length, i:"📦", c:"var(--accent)" },
-          { l:"סך יחידות",   v:total,            i:"🗃️", c:"var(--blue)"   },
-          { l:"השאלות פעילות",v:active,          i:"✅", c:"var(--green)"  },
-          { l:"ממתין לאישור",v:pending,          i:"⏳", c:"var(--yellow)" },
-          { l:"החזרות היום", v:rtToday,          i:"🔄", c:"var(--purple)" },
+          { l:"פריטי ציוד",    v:equipment.length, i:"📦", c:"var(--accent)" },
+          { l:"סך יחידות",     v:total,            i:"🗃️", c:"var(--blue)"   },
+          { l:"השאלות פעילות", v:active,           i:"✅", c:"var(--green)"  },
+          { l:"ממתין לאישור",  v:pending,          i:"⏳", c:"var(--yellow)" },
+          { l:"השאלות היום",   v:todayLoans,       i:"📋", c:"var(--purple)" },
+          { l:"החזרות היום",   v:rtToday,          i:"🔄", c:"var(--blue)"   },
         ].map(s=>(
           <div key={s.l} className="stat-card" style={{"--ac":s.c}}>
             <div className="stat-label">{s.l}</div>
@@ -788,7 +793,7 @@ function DashboardPage({ equipment, reservations }) {
               <div style={{width:34,height:34,borderRadius:"50%",background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>{r.student_name?.[0]||"?"}</div>
               <div style={{flex:1}}>
                 <div style={{fontWeight:700,fontSize:13}}>{r.student_name}</div>
-                <div style={{fontSize:11,color:"var(--text3)"}}>{formatDate(r.borrow_date)} – {formatDate(r.return_date)}</div>
+                <div style={{fontSize:11,color:"var(--text3)"}}>{formatDate(r.borrow_date)} – {formatDate(r.return_date)}{(()=>{const diff=Math.ceil((new Date(r.borrow_date)-new Date())/(1000*60*60*24));return diff>0?<span style={{marginRight:6,color:"var(--yellow)",fontWeight:700}}>({diff} ימים)</span>:diff===0?<span style={{marginRight:6,color:"var(--green)",fontWeight:700}}>(היום!)</span>:null;})()}</div>
               </div>
               {statusBadge(r.status)}
             </div>
@@ -927,7 +932,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast }) {
       <div className="form-card">
         <div className="form-card-header">
           <div style={{fontSize:40,marginBottom:10}}>🎬</div>
-          <div style={{fontSize:24,fontWeight:900,color:"var(--accent)"}}>המחסן של קישקתא ונמרוד</div>
+          <div style={{fontSize:24,fontWeight:900,color:"var(--accent)"}}>מחסן השאלת ציוד קמרה אובסקורה וסאונד</div>
           <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>טופס השאלת ציוד</div>
           <div style={{display:"flex",gap:8,marginTop:20,alignItems:"center"}}>
             {[{n:1,l:"פרטים"},{n:2,l:"תאריכים"},{n:3,l:"ציוד"},{n:4,l:"אישור"}].map((s,i)=>(
@@ -1037,7 +1042,7 @@ function AdminLogin({ onSuccess }) {
       <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"40px 48px",width:360,textAlign:"center"}}>
         <div style={{fontSize:48,marginBottom:16}}>🔐</div>
         <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>כניסת מנהל</div>
-        <div style={{fontSize:13,color:"var(--text3)",marginBottom:28}}>המחסן של קישקתא ונמרוד</div>
+        <div style={{fontSize:13,color:"var(--text3)",marginBottom:28}}>מחסן השאלת ציוד קמרה אובסקורה וסאונד</div>
         <input
           className="form-input"
           type="password"

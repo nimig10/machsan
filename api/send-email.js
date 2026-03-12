@@ -24,11 +24,11 @@ function buildEmail({ type, student_name, borrow_date, return_date, items_list, 
 <!DOCTYPE html>
 <html dir="rtl" lang="he">
 <head><meta charset="UTF-8"/></head>
-<body style="margin:0;padding:20px;background:#f0f0f0;font-family:Arial,sans-serif">
+<body style="margin:0;padding:20px;background:#f0f0f0;font-family:Arial,sans-serif;direction:rtl;text-align:right">
   <div style="max-width:560px;margin:0 auto;background:#0a0c10;color:#e8eaf0;border-radius:12px;overflow:hidden">
     <div style="background:linear-gradient(135deg,#111318,#1e232e);padding:32px;text-align:center;border-bottom:1px solid #252b38">
       <div style="font-size:48px;margin-bottom:10px">🎬</div>
-      <h1 style="color:#f5a623;font-size:22px;margin:0">המחסן של קישקתא ונמרוד</h1>
+      <h1 style="color:#f5a623;font-size:22px;margin:0">מחסן השאלת ציוד קמרה אובסקורה וסאונד</h1>
     </div>
     <div style="padding:32px">
       <div style="background:${color}1a;border:1px solid ${color};border-radius:10px;padding:20px;text-align:center;margin-bottom:24px">
@@ -39,13 +39,13 @@ function buildEmail({ type, student_name, borrow_date, return_date, items_list, 
       <p style="font-size:14px;line-height:1.7;color:#8891a8">${body}</p>
       <div style="background:#111318;border:1px solid #252b38;border-radius:10px;padding:20px;margin:20px 0">
         <h3 style="color:#f5a623;font-size:14px;margin:0 0 12px">פרטי הבקשה</h3>
-        <table style="width:100%;font-size:13px;color:#8891a8;border-collapse:collapse">
+        <table style="width:100%;font-size:13px;color:#8891a8;border-collapse:collapse;direction:rtl;text-align:right">
           <tr><td style="padding:4px 0;width:130px">📅 תאריך השאלה:</td><td style="color:#e8eaf0;font-weight:bold">${borrow_date}</td></tr>
           <tr><td style="padding:4px 0">📅 תאריך החזרה:</td><td style="color:#e8eaf0;font-weight:bold">${return_date}</td></tr>
         </table>
         <div style="margin-top:14px">
           <div style="font-size:13px;color:#8891a8;margin-bottom:8px">🎒 ציוד מבוקש:</div>
-          <ul style="margin:0;padding-right:20px;color:#e8eaf0;font-size:13px;line-height:1.9">${items_list}</ul>
+          <ul style="margin:0;padding-right:20px;color:#e8eaf0;font-size:13px;line-height:1.9;direction:rtl;text-align:right">${items_list}</ul>
         </div>
       </div>
       ${isApproved ? `
@@ -59,7 +59,7 @@ function buildEmail({ type, student_name, borrow_date, return_date, items_list, 
       </div>` : ""}
     </div>
     <div style="padding:16px 32px;border-top:1px solid #252b38;text-align:center;font-size:11px;color:#555f72">
-      המחסן של קישקתא ונמרוד · מכללה
+      מחסן השאלת ציוד קמרה אובסקורה וסאונד · מכללה
     </div>
   </div>
 </body>
@@ -73,14 +73,14 @@ export default async function handler(req, res) {
   if (!to || !type) return res.status(400).json({ error: "חסרים שדות חובה" });
 
   const subjects = {
-    new:      "⏳ קיבלנו את הבקשה שלך – המחסן של קישקתא ונמרוד",
-    approved: "✅ הבקשה שלך אושרה – המחסן של קישקתא ונמרוד",
-    rejected: "עדכון לגבי בקשת ההשאלה – המחסן של קישקתא ונמרוד",
+    new:      "⏳ קיבלנו את הבקשה שלך – מחסן השאלת ציוד קמרה אובסקורה וסאונד",
+    approved: "✅ הבקשה שלך אושרה – מחסן השאלת ציוד קמרה אובסקורה וסאונד",
+    rejected: "עדכון לגבי בקשת ההשאלה – מחסן השאלת ציוד קמרה אובסקורה וסאונד",
   };
 
   try {
     await transporter.sendMail({
-      from:    `"מחסן קישקתא ונמרוד" <${GMAIL_USER}>`,
+      from:    `"מחסן קמרה אובסקורה וסאונד" <${GMAIL_USER}>`,
       to,
       subject: subjects[type] || "עדכון מהמחסן",
       html:    buildEmail({ type, student_name, borrow_date, return_date, items_list, wa_link }),
