@@ -465,11 +465,139 @@ function AddCategoryModal({ categories, onSave, onClose }) {
   );
 }
 
+// ─── EDIT RESERVATION MODAL ──────────────────────────────────────────────────
+function EditReservationModal({ reservation, equipment, reservations, onSave, onClose }) {
+  const TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30"];
+  const [form, setForm]   = useState({...reservation});
+  const [items, setItems] = useState(reservation.items ? [...reservation.items] : []);
+  const [saving, setSaving] = useState(false);
+  const set = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  // Available quantity for equipment (excluding current reservation)
+  const getAvail = (eqId) => {
+    const eq = equipment.find(e=>e.id==eqId);
+    if(!eq) return 0;
+    const used = reservations
+      .filter(r => r.id!==reservation.id && r.status!=="נדחה" && r.status!=="הוחזר")
+      .filter(r => r.borrow_date<=form.return_date && r.return_date>=form.borrow_date)
+      .flatMap(r=>r.items||[])
+      .filter(i=>i.equipment_id==eqId)
+      .reduce((s,i)=>s+i.quantity,0);
+    return eq.total_quantity - used;
+  };
+
+  const setQty = (eqId, qty) => {
+    const avail = getAvail(eqId);
+    const q = Math.max(0, Math.min(qty, avail));
+    const name = equipment.find(e=>e.id==eqId)?.name||"";
+    setItems(prev => q===0 ? prev.filter(i=>i.equipment_id!=eqId)
+      : prev.find(i=>i.equipment_id==eqId) ? prev.map(i=>i.equipment_id==eqId?{...i,quantity:q}:i)
+      : [...prev,{equipment_id:eqId,quantity:q,name}]);
+  };
+  const getQty = (eqId) => items.find(i=>i.equipment_id==eqId)?.quantity||0;
+
+  const categories = [...new Set(equipment.map(e=>e.category))];
+
+  const save = async () => {
+    setSaving(true);
+    await onSave({...form, items});
+    setSaving(false);
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:3000,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"24px 16px",overflowY:"auto"}}>
+      <div style={{width:"100%",maxWidth:760,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl"}}>
+        {/* Header */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"20px 24px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0"}}>
+          <div>
+            <div style={{fontWeight:900,fontSize:18}}>✏️ עריכת בקשה</div>
+            <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{reservation.student_name} · {formatDate(reservation.borrow_date)}</div>
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={onClose}>✕ סגור</button>
+        </div>
+
+        <div style={{padding:24,display:"flex",flexDirection:"column",gap:24}}>
+
+          {/* Dates & Times */}
+          <div>
+            <div className="form-section-title">תאריכים ושעות</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <div className="form-group">
+                <label className="form-label">תאריך השאלה</label>
+                <input type="date" className="form-input" value={form.borrow_date} onChange={e=>set("borrow_date",e.target.value)}/>
+              </div>
+              <div className="form-group">
+                <label className="form-label">שעת איסוף</label>
+                <select className="form-select" value={form.borrow_time||""} onChange={e=>set("borrow_time",e.target.value)}>
+                  <option value="">-- בחר שעה --</option>
+                  {TIME_SLOTS.map(t=><option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">תאריך החזרה</label>
+                <input type="date" className="form-input" value={form.return_date} min={form.borrow_date} onChange={e=>set("return_date",e.target.value)}/>
+              </div>
+              <div className="form-group">
+                <label className="form-label">שעת החזרה</label>
+                <select className="form-select" value={form.return_time||""} onChange={e=>set("return_time",e.target.value)}>
+                  <option value="">-- בחר שעה --</option>
+                  {TIME_SLOTS.map(t=><option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Equipment */}
+          <div>
+            <div className="form-section-title">ציוד ({items.reduce((s,i)=>s+i.quantity,0)} פריטים)</div>
+            {categories.map(cat=>{
+              const catEq = equipment.filter(e=>e.category===cat);
+              return (
+                <div key={cat} style={{marginBottom:16}}>
+                  <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>{cat}</div>
+                  {catEq.map(eq=>{
+                    const qty = getQty(eq.id);
+                    const avail = getAvail(eq.id);
+                    const maxAvail = avail + qty; // current + available
+                    return (
+                      <div key={eq.id} className="item-row" style={{opacity:maxAvail===0&&qty===0?0.4:1}}>
+                        {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
+                          ? <img src={eq.image} alt="" style={{width:32,height:32,objectFit:"cover",borderRadius:6}}/>
+                          : <span style={{fontSize:22}}>{eq.image||"📦"}</span>}
+                        <div style={{flex:1}}>
+                          <div style={{fontWeight:600,fontSize:13}}>{eq.name}</div>
+                          <div style={{fontSize:11,color:"var(--text3)"}}>זמין: <span style={{color:maxAvail===0?"var(--red)":maxAvail<=2?"var(--yellow)":"var(--green)",fontWeight:700}}>{maxAvail}</span></div>
+                        </div>
+                        <div className="qty-ctrl">
+                          <button className="qty-btn" onClick={()=>setQty(eq.id,qty-1)}>−</button>
+                          <span className="qty-num">{qty}</span>
+                          <button className="qty-btn" disabled={qty>=maxAvail} onClick={()=>setQty(eq.id,qty+1)}>+</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Actions */}
+          <div style={{display:"flex",gap:10,justifyContent:"flex-end",paddingTop:8,borderTop:"1px solid var(--border)"}}>
+            <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+            <button className="btn btn-primary" disabled={saving} onClick={save}>{saving?"⏳ שומר...":"💾 שמור שינויים"}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── RESERVATIONS PAGE ────────────────────────────────────────────────────────
 function ReservationsPage({ reservations, setReservations, equipment, showToast }) {
   const [search, setSearch] = useState("");
   const [statusF, setStatusF] = useState("הכל");
   const [selected, setSelected] = useState(null);
+  const [editing, setEditing]   = useState(null);
 
   const filtered = reservations.filter(r=>(statusF==="הכל"||r.status===statusF)&&(r.student_name?.includes(search)||r.email?.includes(search)));
   const eqName = id => equipment.find(e=>e.id==id)?.name||"?";
@@ -615,6 +743,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
               <div className="res-card-actions">
                 <button className="btn btn-secondary btn-sm" onClick={()=>setSelected(r)}>👁️ פרטים</button>
                 <button className="btn btn-secondary btn-sm" onClick={()=>exportPDF(r)}>📄 PDF</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}>✏️ עריכת בקשה</button>
                 {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" onClick={()=>updateStatus(r.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger btn-sm" onClick={()=>updateStatus(r.id,"נדחה")}>❌ דחה</button></>}
                 {r.status==="מאושר"&&<button className="btn btn-secondary btn-sm" onClick={()=>updateStatus(r.id,"הוחזר")}>🔄 הוחזר</button>}
                 <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${r.student_name}?`)) deleteReservation(r.id); }}>🗑️</button>
@@ -623,6 +752,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
           ))}
         </div>
       }
+      {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations} onSave={async(updated)=>{ const all=reservations.map(r=>r.id===updated.id?updated:r); setReservations(all); await storageSet("reservations",all); showToast("success","הבקשה עודכנה"); setEditing(null); }} onClose={()=>setEditing(null)}/>}
       {selected && (
         <Modal title={`📋 בקשה — ${selected.student_name}`} onClose={()=>setSelected(null)} size="modal-lg"
           footer={<>
