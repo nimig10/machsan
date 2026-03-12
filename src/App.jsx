@@ -205,7 +205,7 @@ const css = `
   .cal-fs-event-mid    { border-radius:0; margin-left:-5px; margin-right:-5px; }
   .cal-fs-event-end    { border-radius:0 4px 4px 0; margin-left:-5px; }
   .cal-fs-event-single { border-radius:4px; }
-  .form-page { min-height:100vh; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:40px 20px; direction:rtl; }
+  .form-page { width:100%; display:flex; align-items:center; justify-content:center; padding:40px 20px; direction:rtl; }
   .form-card { width:100%; max-width:680px; margin:0 auto; background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
   .form-card-header { padding:32px 36px 24px; background:linear-gradient(135deg,var(--surface2),var(--surface)); border-bottom:1px solid var(--border); }
   .form-card-body { padding:32px 36px; }
@@ -302,11 +302,11 @@ function Loading() {
 // ─── EQUIPMENT PAGE ───────────────────────────────────────────────────────────
 function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories }) {
   const [search, setSearch] = useState("");
-  const [cat, setCat] = useState("הכל");
+  const [selectedCats, setSelectedCats] = useState([]);
   const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  const filtered = equipment.filter(e => (cat==="הכל"||e.category===cat) && e.name.includes(search));
+  const filtered = equipment.filter(e => (selectedCats.length===0||selectedCats.includes(e.category)) && e.name.includes(search));
 
   const save = async (form) => {
     setSaving(true);
@@ -394,34 +394,50 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     <div className="page">
       <div className="flex-between mb-4">
         <div className="search-bar"><span>🔍</span><input placeholder="חיפוש ציוד..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
-        <button className="btn btn-primary" onClick={()=>setModal({type:"add"})}>➕ הוסף ציוד</button>
+        <div className="flex gap-2">
+          <button className="btn btn-secondary" onClick={()=>setModal({type:"addcat"})}>＋ קטגוריה</button>
+          <button className="btn btn-primary" onClick={()=>setModal({type:"add"})}>➕ הוסף ציוד</button>
+        </div>
       </div>
       <div className="flex gap-2 mb-6" style={{flexWrap:"wrap",alignItems:"center"}}>
-        {["הכל",...categories].map(c=><button key={c} className={`btn btn-sm ${cat===c?"btn-primary":"btn-secondary"}`} onClick={()=>setCat(c)}>{c}</button>)}
-        <button className="btn btn-sm btn-secondary" onClick={()=>setModal({type:"addcat"})} title="הוסף קטגוריה">＋ קטגוריה</button>
+        {categories.map(c=>{
+          const active = selectedCats.includes(c);
+          return <button key={c} className={`btn btn-sm ${active?"btn-primary":"btn-secondary"}`}
+            onClick={()=>setSelectedCats(prev=>active?prev.filter(x=>x!==c):[...prev,c])}>{c}</button>;
+        })}
       </div>
       {filtered.length===0 ? <div className="empty-state"><div className="emoji">📦</div><p>לא נמצא ציוד</p></div> : (
-        <div className="eq-grid">
-          {filtered.map(eq=>(
-            <div key={eq.id} className="eq-card">
-              <div style={{marginBottom:10,display:"flex",justifyContent:"center"}}>
-                {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
-                  ? <img src={eq.image} alt={eq.name} style={{width:72,height:72,objectFit:"cover",borderRadius:10,border:"1px solid var(--border)"}}/>
-                  : <span style={{fontSize:36}}>{eq.image||"📦"}</span>
-                }
+        <>
+          {(selectedCats.length>0?selectedCats:categories).filter(c=>filtered.some(e=>e.category===c)).map(c=>(
+            <div key={c} style={{marginBottom:32}}>
+              <div style={{fontSize:13,fontWeight:800,color:"var(--text3)",textTransform:"uppercase",letterSpacing:1,marginBottom:12,paddingBottom:8,borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:8}}>
+                <span>{c}</span>
+                <span style={{fontSize:11,color:"var(--text3)",fontWeight:400}}>({filtered.filter(e=>e.category===c).length} פריטים)</span>
               </div>
-              <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>{eq.name}</div>
-              <div style={{fontSize:11,color:"var(--text3)",marginBottom:8}}>{eq.category}</div>
-              <div style={{fontSize:13}}><strong style={{color:"var(--accent)",fontSize:20}}>{eq.total_quantity-used(eq.id)}</strong><span style={{color:"var(--text3)"}}> / {eq.total_quantity} זמין</span></div>
-              {eq.notes && <div className="chip" style={{marginTop:6}}>💬 {eq.notes}</div>}
-              <div style={{marginTop:8}}>{statusBadge(eq.status)}</div>
-              <div className="flex gap-2" style={{marginTop:12}}>
-                <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"edit",item:eq})}>✏️ עריכה</button>
-                <button className="btn btn-danger btn-sm" onClick={()=>setModal({type:"delete",item:eq})}>🗑️</button>
+              <div className="eq-grid">
+                {filtered.filter(e=>e.category===c).map(eq=>(
+                  <div key={eq.id} className="eq-card">
+                    <div style={{marginBottom:10,display:"flex",justifyContent:"center"}}>
+                      {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
+                        ? <img src={eq.image} alt={eq.name} style={{width:72,height:72,objectFit:"cover",borderRadius:10,border:"1px solid var(--border)"}}/>
+                        : <span style={{fontSize:36}}>{eq.image||"📦"}</span>
+                      }
+                    </div>
+                    <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>{eq.name}</div>
+                    <div style={{fontSize:11,color:"var(--text3)",marginBottom:8}}>{eq.category}</div>
+                    <div style={{fontSize:13}}><strong style={{color:"var(--accent)",fontSize:20}}>{eq.total_quantity-used(eq.id)}</strong><span style={{color:"var(--text3)"}}> / {eq.total_quantity} זמין</span></div>
+                    {eq.notes && <div className="chip" style={{marginTop:6}}>💬 {eq.notes}</div>}
+                    <div style={{marginTop:8}}>{statusBadge(eq.status)}</div>
+                    <div className="flex gap-2" style={{marginTop:12}}>
+                      <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"edit",item:eq})}>✏️ עריכה</button>
+                      <button className="btn btn-danger btn-sm" onClick={()=>setModal({type:"delete",item:eq})}>🗑️</button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           ))}
-        </div>
+        </>
       )}
       {(modal?.type==="add"||modal?.type==="edit") && <Modal title={modal.type==="add"?"➕ הוספת ציוד":"✏️ עריכת ציוד"} onClose={()=>setModal(null)}><EqForm initial={modal.type==="edit"?modal.item:null}/></Modal>}
       {modal?.type==="delete" && <Modal title="🗑️ מחיקת ציוד" onClose={()=>setModal(null)} footer={<><button className="btn btn-danger" onClick={()=>del(modal.item)}>כן, מחק</button><button className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button></>}><p>האם למחוק את <strong>{modal.item.name}</strong>?</p></Modal>}
@@ -867,10 +883,12 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   const [submitting, setSub]  = useState(false);
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
 
-  const minDays = form.loan_type==="פרטית" ? 2 : 7;
+  const minDays = form.loan_type==="פרטית" ? 2 : form.loan_type==="סאונד" ? 0 : 7;
   const minDate = (()=>{ const d=new Date(); d.setDate(d.getDate()+minDays); return d.toISOString().split("T")[0]; })();
-  const tooSoon = form.borrow_date && form.borrow_date < minDate;
-  const TIME_SLOTS = ["09:00","09:30","14:30","15:00","15:30","16:00","16:30","17:00","17:30"];
+  const tooSoon = form.loan_type!=="סאונד" && form.borrow_date && form.borrow_date < minDate;
+  const TIME_SLOTS = form.loan_type==="סאונד"
+    ? ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30"]
+    : ["09:00","09:30","14:30","15:00","15:30","16:00","16:30","17:00","17:30"];
   const isSoundLoan = form.loan_type==="סאונד";
   const ok1 = form.student_name && form.email && form.phone && form.course && form.loan_type;
   const ok2 = form.borrow_date && form.return_date && form.return_date>=form.borrow_date && !tooSoon && form.borrow_time && form.return_time;
@@ -1140,7 +1158,7 @@ export default function App() {
 
       {/* ── טופס ציבורי ── */}
       {!isAdmin && (
-        <div style={{minHeight:"100vh",background:"var(--bg)"}}>
+        <div style={{minHeight:"100vh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center"}}>
           {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories}/>}
         </div>
       )}
