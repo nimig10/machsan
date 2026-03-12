@@ -1086,7 +1086,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
 }
 
 // ─── ADMIN PASSWORD SCREEN ────────────────────────────────────────────────────
-const ADMIN_PASSWORD = "camamama2";
+const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || "changeme";
 
 function AdminLogin({ onSuccess }) {
   const [pw, setPw] = useState("");
