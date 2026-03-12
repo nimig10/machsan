@@ -205,10 +205,9 @@ const css = `
   .cal-fs-event-mid    { border-radius:0; margin-left:-5px; margin-right:-5px; }
   .cal-fs-event-end    { border-radius:0 4px 4px 0; margin-left:-5px; }
   .cal-fs-event-single { border-radius:4px; }
-  .form-page { min-height:100vh; background:var(--bg); width:100%; display:flex; justify-content:center; align-items:flex-start; padding:40px 20px; }
-  .form-card { width:min(100%,680px); margin-inline:auto; background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; direction:rtl; }
-  .public-page-shell { width:100%; display:flex; justify-content:center; }
-  .public-page-shell > * { width:100%; }
+  .public-page-shell { width:100%; min-height:100vh; background:var(--bg); display:flex; justify-content:center; align-items:flex-start; }
+  .form-page { width:100%; display:flex; justify-content:center; align-items:flex-start; padding:40px 20px; }
+  .form-card { width:100%; max-width:680px; margin-left:auto; margin-right:auto; background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; direction:rtl; }
   .form-card-header { padding:32px 36px 24px; background:linear-gradient(135deg,var(--surface2),var(--surface)); border-bottom:1px solid var(--border); }
   .form-card-body { padding:32px 36px; }
   .form-section-title { font-size:13px; font-weight:800; color:var(--accent); text-transform:uppercase; letter-spacing:1px; margin-bottom:16px; padding-bottom:8px; border-bottom:1px solid var(--border); }
@@ -260,8 +259,9 @@ const css = `
     .modal-lg { max-width:100%; }
     .search-bar { min-width:0; flex:1; }
     .flex-between { flex-wrap:wrap; gap:10px; }
-    .form-page { padding:16px 12px 80px; align-items:flex-start; }
-    .form-card { width:100%; max-width:100%; margin-inline:auto; }
+    .public-page-shell { justify-content:stretch; }
+    .form-page { padding:16px 12px 80px; }
+    .form-card { max-width:100%; }
     .form-card-header { padding:20px; }
     .form-card-body { padding:20px; }
     .toast-container { left:12px; right:12px; bottom:76px; }
@@ -1161,7 +1161,7 @@ export default function App() {
 
       {/* ── טופס ציבורי ── */}
       {!isAdmin && (
-        <div className="public-page-shell" style={{minHeight:"100vh",background:"var(--bg)"}}>
+        <div className="public-page-shell">
           {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories}/>}
         </div>
       )}
