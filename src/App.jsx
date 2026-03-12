@@ -13,12 +13,14 @@ async function storageGet(key) {
 async function storageSet(key, value) {
   try {
     const actionMap = { reservations:"saveReservations", equipment:"saveEquipment", categories:"saveCategories" };
-    await fetch("/api/sheets", {
+    const res = await fetch("/api/sheets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: actionMap[key]||"saveEquipment", payload: value }),
     });
-  } catch {}
+    const json = await res.json().catch(()=>({}));
+    if(!json.ok) console.error("storageSet failed for", key, json);
+  } catch(e) { console.error("storageSet error", key, e); }
 }
 
 // ─── INITIAL DATA ─────────────────────────────────────────────────────────────
@@ -1039,6 +1041,11 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
 
   const minDays = form.loan_type==="פרטית" ? 2 : form.loan_type==="סאונד" ? 0 : 7;
+  const isWeekend = (dateStr) => { if(!dateStr) return false; const d = new Date(dateStr); return d.getDay()===5||d.getDay()===6; };
+  // Advance date past weekends
+  const skipWeekend = (dateStr) => { if(!dateStr) return dateStr; const d=new Date(dateStr); while(d.getDay()===5||d.getDay()===6){d.setDate(d.getDate()+1);} return d.toISOString().split("T")[0]; };
+  const borrowWeekend = isWeekend(form.borrow_date);
+  const returnWeekend = isWeekend(form.return_date);
   const minDate = (()=>{ const d=new Date(); d.setDate(d.getDate()+minDays); return d.toISOString().split("T")[0]; })();
   const maxDays = form.loan_type==="פרטית" ? 4 : 7;
   const tooSoon = form.loan_type!=="סאונד" && form.borrow_date && form.borrow_date < minDate;
@@ -1051,7 +1058,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     : ["09:00","09:30","14:30","15:00","15:30","16:00","16:30","17:00","17:30"];
   const isSoundLoan = form.loan_type==="סאונד";
   const ok1 = form.student_name && form.email && form.phone && form.course && form.loan_type;
-  const ok2 = form.borrow_date && form.return_date && form.return_date>=form.borrow_date && !tooSoon && !tooLong && form.borrow_time && form.return_time;
+  const ok2 = form.borrow_date && form.return_date && form.return_date>=form.borrow_date && !tooSoon && !tooLong && !borrowWeekend && !returnWeekend && form.borrow_time && form.return_time;
 
   const availEq = useMemo(()=>{
     if(!form.borrow_date||!form.return_date) return [];
@@ -1092,8 +1099,16 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     }
   };
 
-  // RFC 5322 compliant email regex — works for Gmail, Outlook, Apple, academic, etc.
-  const isValidEmail = (email) => /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(email.trim());
+  // Email validation: format check + common domain typo detection
+  const KNOWN_DOMAINS = ["gmail.com","yahoo.com","outlook.com","hotmail.com","icloud.com","wizo.ac.il","bezalel.ac.il","live.com","msn.com"];
+  const TYPO_DOMAINS  = ["gmai.com","gmial.com","gmail.co","gamil.com","gmaill.com","yahooo.com","yahho.com","outlok.com","hotmai.com","outllook.com"];
+  const isValidEmail = (email) => {
+    const e = email.trim().toLowerCase();
+    if(!/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(e)) return false;
+    const domain = e.split("@")[1];
+    if(TYPO_DOMAINS.includes(domain)) return false;
+    return true;
+  };
 
   const submit = async () => {
     // Validate email format before doing anything
@@ -1120,7 +1135,8 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
         <div style={{fontSize:64,marginBottom:16}}>❌</div>
         <h2 style={{fontSize:22,fontWeight:900,color:"#e74c3c",marginBottom:12}}>כתובת המייל שגויה</h2>
         <p style={{fontSize:14,color:"var(--text2)",marginBottom:28,lineHeight:1.7}}>
-          לא הצלחנו לשלוח מייל לכתובת <strong style={{color:"var(--text)"}}>{form.email}</strong>.<br/>
+          הכתובת <strong style={{color:"var(--text)"}}>{form.email}</strong> אינה תקינה.<br/>
+          ייתכן שמדובר בשגיאת הקלדה (למשל: <em>gmai.com</em> במקום <em>gmail.com</em>).<br/>
           נא לנסות להגיש את הבקשה מחדש עם כתובת מייל תקינה.
         </p>
         <button className="btn btn-primary" onClick={reset}>🔄 חזור לטופס</button>
@@ -1209,6 +1225,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
                 </select>
               </div>
             </div>
+            {(borrowWeekend||returnWeekend) && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 המחסן אינו פעיל בימים שישי ושבת. נא לבחור ימים א׳–ה׳ בלבד.</div>}
             {tooSoon && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 {form.loan_type==="פרטית"?"השאלה פרטית דורשת התראה של 48 שעות לפחות.":"נדרשת התראה של שבוע לפחות."} תאריך מוקדם ביותר: <strong>{formatDate(minDate)}</strong></div>}
             {tooLong && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 לא ניתן להשלים את התהליך כי זמן ההשאלה חורג מנהלי המכללה. משך מקסימלי: <strong>{maxDays} ימים</strong></div>}
             {ok2 && <div className="highlight-box">📅 השאלה ל-{loanDays} ימים · איסוף {form.borrow_time} · החזרה {form.return_time}</div>}
