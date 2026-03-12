@@ -705,7 +705,7 @@ function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=110, fon
             {/* Event overlay bars */}
             {bars.map((b,bi)=>{
               const colW = 100/7;
-              const left  = b.ec > b.sc ? `calc(${b.sc*colW}% + 2px)` : `calc(${b.sc*colW}% + 2px)`;
+              const right = `calc(${b.sc*colW}% + 2px)`;
               const width = `calc(${(b.ec-b.sc+1)*colW}% - 4px)`;
               const top   = DAY_NUM_H + b.slot*(EVENT_H+EVENT_GAP);
               const isResStart = week[b.sc]&&dateToLocal(week[b.sc])===b.r.borrow_date;
@@ -713,11 +713,11 @@ function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=110, fon
               return (
                 <div key={bi} style={{
                   position:"absolute",
-                  left, top, width, height:EVENT_H,
+                  right, top, width, height:EVENT_H,
                   background:b.bg,
-                  borderRadius: isResStart&&isResEnd?"4px": isResStart?"4px 0 0 4px": isResEnd?"0 4px 4px 0":"0",
-                  display:"flex",alignItems:"center",
-                  paddingRight:isResStart?8:2, paddingLeft:isResEnd?6:2,
+                  borderRadius: isResStart&&isResEnd?"4px": isResStart?"0 4px 4px 0": isResEnd?"4px 0 0 4px":"0",
+                  display:"flex",alignItems:"center",justifyContent:"flex-end",
+                  paddingLeft:isResStart?8:2, paddingRight:isResEnd?6:2,
                   overflow:"hidden",whiteSpace:"nowrap",
                   fontSize, color:b.color, fontWeight:700,
                   zIndex:1, backdropFilter:"blur(0px)",
@@ -1109,7 +1109,7 @@ export default function App() {
           <nav className="sidebar">
             <div className="sidebar-logo">
               <span className="logo-icon">🎬</span>
-              <div className="app-name">המחסן של<br/>קישקתא ונמרוד</div>
+              <div className="app-name">מחסן השאלת ציוד<br/>קמרה אובסקורה וסאונד</div>
               <div className="app-sub">💾 נתונים נשמרים תמיד</div>
             </div>
             <div className="nav">
