@@ -603,11 +603,8 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
 }
 
 // ─── RESERVATIONS PAGE ────────────────────────────────────────────────────────
-function ReservationsPage({ reservations, setReservations, equipment, showToast }) {
-  const [search, setSearch]     = useState("");
-  const [statusF, setStatusF]   = useState("הכל");
-  const [loanTypeF, setLoanTypeF] = useState("הכל");
-  const [sortBy, setSortBy]     = useState("received");
+function ReservationsPage({ reservations, setReservations, equipment, showToast,
+    search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy }) {
   const [selected, setSelected] = useState(null);
   const [editing, setEditing]   = useState(null);
 
@@ -723,21 +720,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
 
   return (
     <div className="page">
-      <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:16,alignItems:"center"}}>
-        <div className="search-bar" style={{flex:1,minWidth:180}}><span>🔍</span><input placeholder="חיפוש..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
-        <select className="form-select" style={{width:130}} value={statusF} onChange={e=>setStatusF(e.target.value)}>
-          <option value="הכל">כל הסטטוסים</option>
-          {["ממתין","מאושר","נדחה","הוחזר"].map(s=><option key={s} value={s}>{s}</option>)}
-        </select>
-        <select className="form-select" style={{width:130}} value={loanTypeF} onChange={e=>setLoanTypeF(e.target.value)}>
-          <option value="הכל">כל הסוגים</option>
-          {["פרטית","הפקה","סאונד"].map(t=><option key={t} value={t}>{t}</option>)}
-        </select>
-        <select className="form-select" style={{width:150}} value={sortBy} onChange={e=>setSortBy(e.target.value)}>
-          <option value="received">🕐 לפי תאריך קבלה</option>
-          <option value="urgency">🔥 לפי דחיפות</option>
-        </select>
-      </div>
+
       {filtered.length===0
         ? <div className="empty-state"><div className="emoji">📭</div><div>אין בקשות</div></div>
         : <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -1042,6 +1025,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   const [items, setItems]     = useState([]);
   const [agreed, setAgreed]   = useState(false);
   const [done, setDone]       = useState(false);
+  const [emailError, setEmailError] = useState(false);
   const [submitting, setSub]  = useState(false);
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
 
@@ -1094,7 +1078,15 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     }
   };
 
+  // RFC 5322 compliant email regex — works for Gmail, Outlook, Apple, academic, etc.
+  const isValidEmail = (email) => /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(email.trim());
+
   const submit = async () => {
+    // Validate email format before doing anything
+    if(!isValidEmail(form.email)) {
+      setEmailError(true);
+      return;
+    }
     setSub(true);
     const newRes = { ...form, id:Date.now(), status:"ממתין", created_at:today(), items };
     const updated = [...reservations, newRes];
@@ -1106,7 +1098,21 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     showToast("success","הבקשה נשלחה בהצלחה!");
   };
 
-  const reset = () => { setDone(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:""}); setItems([]); setAgreed(false); };
+  const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:""}); setItems([]); setAgreed(false); };
+
+  if(emailError) return (
+    <div className="form-page">
+      <div style={{width:"100%",maxWidth:500,background:"var(--surface)",border:"1px solid rgba(231,76,60,0.4)",borderRadius:16,padding:40,textAlign:"center",direction:"rtl"}}>
+        <div style={{fontSize:64,marginBottom:16}}>❌</div>
+        <h2 style={{fontSize:22,fontWeight:900,color:"#e74c3c",marginBottom:12}}>כתובת המייל שגויה</h2>
+        <p style={{fontSize:14,color:"var(--text2)",marginBottom:28,lineHeight:1.7}}>
+          לא הצלחנו לשלוח מייל לכתובת <strong style={{color:"var(--text)"}}>{form.email}</strong>.<br/>
+          נא לנסות להגיש את הבקשה מחדש עם כתובת מייל תקינה.
+        </p>
+        <button className="btn btn-primary" onClick={reset}>🔄 חזור לטופס</button>
+      </div>
+    </div>
+  );
 
   if(done) return (
     <div className="form-page">
@@ -1354,12 +1360,31 @@ export default function App() {
           <div className="main">
             <div className="topbar">
               <span className="topbar-title">{pageTitle[page]}</span>
-              {pending>0&&<div style={{background:"rgba(241,196,15,0.12)",border:"1px solid rgba(241,196,15,0.3)",borderRadius:8,padding:"6px 12px",fontSize:12,color:"var(--yellow)"}}>⏳ {pending} בקשות ממתינות</div>}
+              <div style={{display:"flex",alignItems:"center",gap:8,flex:1,justifyContent:"flex-end",flexWrap:"wrap"}}>
+                {page==="reservations" && <>
+                  <div className="search-bar" style={{minWidth:140}}><span>🔍</span><input placeholder="חיפוש..." value={resSearch} onChange={e=>setResSearch(e.target.value)}/></div>
+                  <select className="form-select" style={{width:120,fontSize:12,padding:"6px 8px"}} value={resStatusF} onChange={e=>setResStatusF(e.target.value)}>
+                    <option value="הכל">כל הסטטוסים</option>
+                    {["ממתין","מאושר","נדחה","הוחזר"].map(s=><option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <select className="form-select" style={{width:110,fontSize:12,padding:"6px 8px"}} value={resLoanTypeF} onChange={e=>setResLoanTypeF(e.target.value)}>
+                    <option value="הכל">כל הסוגים</option>
+                    {["פרטית","הפקה","סאונד"].map(t=><option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <select className="form-select" style={{width:140,fontSize:12,padding:"6px 8px"}} value={resSortBy} onChange={e=>setResSortBy(e.target.value)}>
+                    <option value="received">🕐 קבלה</option>
+                    <option value="urgency">🔥 דחיפות</option>
+                  </select>
+                </>}
+                {pending>0&&<div style={{background:"rgba(241,196,15,0.12)",border:"1px solid rgba(241,196,15,0.3)",borderRadius:8,padding:"6px 12px",fontSize:12,color:"var(--yellow)"}}>⏳ {pending}</div>}
+              </div>
             </div>
             {loading ? <Loading/> : <>
               {page==="dashboard"   && <DashboardPage    equipment={equipment} reservations={reservations}/>}
               {page==="equipment"   && <EquipmentPage    equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories}/>}
-              {page==="reservations"&& <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}/>}
+              {page==="reservations"&& <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
+                search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
+                loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy}/>}
             </>}
           </div>
         </div>
