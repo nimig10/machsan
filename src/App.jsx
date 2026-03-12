@@ -189,6 +189,21 @@ const css = `
   .cal-event-single { border-radius:3px; }
   .calendar-nav { display:flex; align-items:center; justify-content:center; gap:10px; min-width:240px; flex-shrink:0; }
   .calendar-month-label { width:150px; text-align:center; font-weight:800; font-size:15px; flex-shrink:0; }
+  .cal-fs-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.92); z-index:2000; display:flex; flex-direction:column; }
+  .cal-fs-header { display:flex; align-items:center; gap:12px; padding:14px 20px; border-bottom:1px solid var(--border); background:var(--surface); flex-shrink:0; }
+  .cal-fs-body { flex:1; overflow:auto; padding:16px; }
+  .cal-fs-headers { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:6px; margin-bottom:4px; }
+  .cal-fs-day-header { text-align:center; font-size:13px; font-weight:700; color:var(--text3); padding:8px 4px; }
+  .cal-fs-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:6px; }
+  .cal-fs-day { background:var(--surface2); border-radius:var(--r-sm); padding:6px 5px; border:1px solid var(--border); overflow:hidden; min-height:120px; }
+  .cal-fs-day.empty { opacity:0.2; }
+  .cal-fs-day.is-today { border-color:var(--accent); }
+  .cal-fs-day-num { font-size:14px; font-weight:700; margin-bottom:5px; }
+  .cal-fs-event { font-size:11px; padding:2px 6px; height:19px; line-height:19px; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
+  .cal-fs-event-start  { border-radius:4px 0 0 4px; margin-right:-5px; }
+  .cal-fs-event-mid    { border-radius:0; margin-left:-5px; margin-right:-5px; }
+  .cal-fs-event-end    { border-radius:0 4px 4px 0; margin-left:-5px; }
+  .cal-fs-event-single { border-radius:4px; }
   .form-page { min-height:100vh; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:40px 20px; }
   .form-card { width:100%; max-width:680px; background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
   .form-card-header { padding:32px 36px 24px; background:linear-gradient(135deg,var(--surface2),var(--surface)); border-bottom:1px solid var(--border); }
@@ -628,6 +643,7 @@ function DashboardPage({ equipment, reservations }) {
   const total = equipment.reduce((s, e) => s + Number(e.total_quantity), 0);
 
   const [calDate, setCalDate] = useState(new Date());
+  const [calFS, setCalFS] = useState(false);
   const yr = calDate.getFullYear();
   const mo = calDate.getMonth();
 
@@ -711,10 +727,13 @@ function DashboardPage({ equipment, reservations }) {
         <div className="card calendar-card">
           <div className="card-header">
             <span className="card-title">📅 יומן</span>
-            <div className="calendar-nav">
-              <button className="btn btn-secondary btn-sm" onClick={() => setCalDate(new Date(yr, mo - 1, 1))}>‹</button>
-              <span className="calendar-month-label">{HE_M[mo]} {yr}</span>
-              <button className="btn btn-secondary btn-sm" onClick={() => setCalDate(new Date(yr, mo + 1, 1))}>›</button>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div className="calendar-nav">
+                <button className="btn btn-secondary btn-sm" onClick={() => setCalDate(new Date(yr, mo - 1, 1))}>‹</button>
+                <span className="calendar-month-label">{HE_M[mo]} {yr}</span>
+                <button className="btn btn-secondary btn-sm" onClick={() => setCalDate(new Date(yr, mo + 1, 1))}>›</button>
+              </div>
+              <button className="btn btn-secondary btn-sm" title="מסך מלא" onClick={()=>setCalFS(true)}>⛶</button>
             </div>
           </div>
 
@@ -743,6 +762,41 @@ function DashboardPage({ equipment, reservations }) {
           </div>
         </div>
       </div>
+
+      {calFS && (
+        <div className="cal-fs-overlay" onClick={e=>{if(e.target===e.currentTarget)setCalFS(false)}}>
+          <div className="cal-fs-header">
+            <button className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo-1,1))}>‹</button>
+            <span style={{fontWeight:800,fontSize:18}}>{HE_M[mo]} {yr}</span>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo+1,1))}>›</button>
+            <button className="btn btn-secondary btn-sm" style={{marginRight:"auto",marginLeft:16}} onClick={()=>setCalFS(false)}>✕ סגור</button>
+          </div>
+          <div className="cal-fs-body">
+            <div className="cal-fs-headers">
+              {HE_D.map(d=><div key={d} className="cal-fs-day-header">{d}</div>)}
+            </div>
+            <div className="cal-fs-grid">
+              {days.map((d,i)=>{
+                const spans=spansFor(d);
+                const isToday=d&&dateToLocal(d)===todayStr;
+                return (
+                  <div key={i} className={"cal-fs-day"+((!d)?" empty":"")+(isToday?" is-today":"")}>
+                    {d&&<div className="cal-fs-day-num" style={{color:isToday?"var(--accent)":undefined}}>{d.getDate()}</div>}
+                    {spans.slice(0,5).map((s,j)=>(
+                      <div key={j} className={"cal-fs-event cal-fs-event-"+s.pos}
+                        style={{background:s.bg,color:s.color}}>
+                        {(s.pos==="start"||s.pos==="single")&&s.name}
+                        {s.pos==="end"&&("↩ "+s.name)}
+                      </div>
+                    ))}
+                    {spans.length>5&&<div style={{fontSize:9,color:"var(--text3)",paddingRight:2}}>+{spans.length-5}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
