@@ -67,14 +67,14 @@ function getAvailable(eqId, borrowDate, returnDate, reservations, equipment, exc
   let used = 0;
   for (const res of reservations) {
     if (res.id === excludeId) continue;
-    if (res.status === "נדחה" || res.status === "הוחזר") continue;
+    if (res.status !== "מאושר") continue;  // רק מאושרות תופסות מלאי
     const rb = new Date(res.borrow_date), rr = new Date(res.return_date);
     if (b <= rr && r >= rb) {
       const item = res.items?.find(i => i.equipment_id == eqId);
       if (item) used += item.quantity;
     }
   }
-  return eq.total_quantity - used;
+  return Math.max(0, eq.total_quantity - used);
 }
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
@@ -488,12 +488,12 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
     const eq = equipment.find(e=>e.id==eqId);
     if(!eq) return 0;
     const usedByOthers = reservations
-      .filter(r => r.id!==reservation.id && r.status!=="נדחה" && r.status!=="הוחזר")
+      .filter(r => r.id!==reservation.id && r.status==="מאושר")  // רק מאושרות תופסות מלאי
       .filter(r => r.borrow_date<=form.return_date && r.return_date>=form.borrow_date)
       .flatMap(r=>r.items||[])
       .filter(i=>i.equipment_id==eqId)
       .reduce((s,i)=>s+i.quantity,0);
-    return eq.total_quantity - usedByOthers;  // total free pool for this reservation
+    return Math.max(0, eq.total_quantity - usedByOthers);
   };
 
   const setQty = (eqId, qty) => {
@@ -753,7 +753,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
               <div className="res-card-actions">
                 <button className="btn btn-secondary btn-sm" onClick={()=>setSelected(r)}>👁️ פרטים</button>
                 <button className="btn btn-secondary btn-sm" onClick={()=>exportPDF(r)}>📄 PDF</button>
-                <button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}>✏️ עריכת בקשה</button>
+                {r.status==="מאושר"&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}>✏️ עריכת בקשה</button>}
                 {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" onClick={()=>updateStatus(r.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger btn-sm" onClick={()=>updateStatus(r.id,"נדחה")}>❌ דחה</button></>}
                 {r.status==="מאושר"&&<button className="btn btn-secondary btn-sm" onClick={()=>updateStatus(r.id,"הוחזר")}>🔄 הוחזר</button>}
                 <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${r.student_name}?`)) deleteReservation(r.id); }}>🗑️</button>
