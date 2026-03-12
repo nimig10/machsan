@@ -205,8 +205,8 @@ const css = `
   .cal-fs-event-mid    { border-radius:0; margin-left:-5px; margin-right:-5px; }
   .cal-fs-event-end    { border-radius:0 4px 4px 0; margin-left:-5px; }
   .cal-fs-event-single { border-radius:4px; }
-  .form-page { width:100%; display:flex; align-items:center; justify-content:center; padding:40px 20px; direction:rtl; }
-  .form-card { width:100%; max-width:680px; margin:0 auto; background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+  .form-page { width:100%; max-width:100%; display:flex; align-items:center; justify-content:center; padding:40px 20px; box-sizing:border-box; }
+  .form-card { width:100%; max-width:680px; margin:0 auto; background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; direction:rtl; }
   .form-card-header { padding:32px 36px 24px; background:linear-gradient(135deg,var(--surface2),var(--surface)); border-bottom:1px solid var(--border); }
   .form-card-body { padding:32px 36px; }
   .form-section-title { font-size:13px; font-weight:800; color:var(--accent); text-transform:uppercase; letter-spacing:1px; margin-bottom:16px; padding-bottom:8px; border-bottom:1px solid var(--border); }
@@ -948,7 +948,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
 
   if(done) return (
     <div className="form-page">
-      <div style={{width:"100%",maxWidth:500,background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:40,textAlign:"center"}}>
+      <div style={{width:"100%",maxWidth:500,background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:40,textAlign:"center",direction:"rtl"}}>
         <div style={{fontSize:64,marginBottom:16}}>✅</div>
         <h2 style={{fontSize:24,fontWeight:900,color:"var(--accent)",marginBottom:8}}>הבקשה נשלחה!</h2>
         <p style={{fontSize:14,color:"var(--text2)",marginBottom:28}}>בקשתך התקבלה בהצלחה.<br/>צוות המכללה יעבור עליה לאישורה הסופי.</p>
@@ -1158,7 +1158,7 @@ export default function App() {
 
       {/* ── טופס ציבורי ── */}
       {!isAdmin && (
-        <div style={{minHeight:"100vh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div style={{minHeight:"100vh",width:"100%",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center",direction:"ltr"}}>
           {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories}/>}
         </div>
       )}
