@@ -1295,6 +1295,11 @@ export default function App() {
   const [loading, setLoading]         = useState(true);
   const [toasts, setToasts]           = useState([]);
   const [authed, setAuthed]           = useState(false);
+  // Reservations filter state (in AdminApp so topbar can render them)
+  const [resSearch, setResSearch]       = useState("");
+  const [resStatusF, setResStatusF]     = useState("הכל");
+  const [resLoanTypeF, setResLoanTypeF] = useState("הכל");
+  const [resSortBy, setResSortBy]       = useState("received");
 
   const showToast = (type, msg) => {
     const id = Date.now();
