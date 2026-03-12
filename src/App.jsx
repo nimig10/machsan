@@ -50,7 +50,14 @@ function formatDate(d) {
   if (!d) return "";
   return new Date(d).toLocaleDateString("he-IL", { day:"2-digit", month:"2-digit", year:"numeric" });
 }
-function today() { return new Date().toISOString().split("T")[0]; }
+function today() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function dateToLocal(d) {
+  if(!d) return null;
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
 
 function getAvailable(eqId, borrowDate, returnDate, reservations, equipment, excludeId=null) {
   const eq = equipment.find(e => e.id == eqId);
@@ -175,9 +182,11 @@ const css = `
   .cal-day.empty { opacity:0.28; }
   .cal-day.is-today { border-color:var(--accent); }
   .cal-day-num { font-size:12px; font-weight:700; margin-bottom:4px; color:var(--text2); }
-  .cal-event { font-size:10px; padding:2px 5px; border-radius:3px; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .cal-borrow { background:rgba(52,152,219,0.25); color:var(--blue); }
-  .cal-return { background:rgba(46,204,113,0.25); color:var(--green); }
+  .cal-event { font-size:10px; padding:2px 5px; height:17px; line-height:17px; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
+  .cal-event-start { border-radius:3px 0 0 3px; padding-right:2px; }
+  .cal-event-mid   { border-radius:0; padding-left:2px; padding-right:2px; margin-left:-6px; margin-right:-6px; }
+  .cal-event-end   { border-radius:0 3px 3px 0; padding-left:2px; margin-left:-6px; }
+  .cal-event-single { border-radius:3px; }
   .calendar-nav { display:flex; align-items:center; justify-content:center; gap:10px; min-width:240px; flex-shrink:0; }
   .calendar-month-label { width:150px; text-align:center; font-weight:800; font-size:15px; flex-shrink:0; }
   .form-page { min-height:100vh; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:40px 20px; }
@@ -634,16 +643,29 @@ function DashboardPage({ equipment, reservations }) {
   for (let d = 1; d <= daysInMonth; d++) days.push(new Date(yr, mo, d));
   while (days.length < 42) days.push(null);
 
-  const eventsFor = (d) => {
+  // Color palette per reservation
+  const SPAN_COLORS = [
+    ["rgba(52,152,219,0.38)","#5dade2"],["rgba(46,204,113,0.38)","#58d68d"],
+    ["rgba(231,76,60,0.38)","#ec7063"],  ["rgba(155,89,182,0.38)","#c39bd3"],
+    ["rgba(241,196,15,0.38)","#c9a800"], ["rgba(230,126,34,0.38)","#f0a27a"],
+    ["rgba(26,188,156,0.38)","#76d7c4"], ["rgba(236,72,153,0.38)","#f472b6"],
+  ];
+  const activeRes = reservations.filter(r => r.status !== "נדחה" && r.borrow_date && r.return_date);
+  const colorMap = {};
+  activeRes.forEach((r, i) => { colorMap[r.id] = SPAN_COLORS[i % SPAN_COLORS.length]; });
+
+  const spansFor = (d) => {
     if (!d) return [];
-    const ds = d.toISOString().split("T")[0];
-    const ev = [];
-    reservations.forEach((r) => {
-      if (r.status === "נדחה") return;
-      if (r.borrow_date === ds) ev.push({ t: "borrow", l: `📅 ${r.student_name}` });
-      if (r.return_date === ds) ev.push({ t: "return", l: `🔄 ${r.student_name}` });
-    });
-    return ev;
+    const ds = dateToLocal(d);
+    return activeRes
+      .filter(r => r.borrow_date <= ds && r.return_date >= ds)
+      .map(r => {
+        const isStart = r.borrow_date === ds;
+        const isEnd   = r.return_date === ds;
+        const pos = isStart && isEnd ? "single" : isStart ? "start" : isEnd ? "end" : "mid";
+        const [bg, color] = colorMap[r.id] || SPAN_COLORS[0];
+        return { id: r.id, name: r.student_name, pos, bg, color };
+      });
   };
 
   return (
@@ -701,15 +723,20 @@ function DashboardPage({ equipment, reservations }) {
               <div key={d} className="cal-day-header">{d}</div>
             ))}
             {days.map((d, i) => {
-              const ev = eventsFor(d);
-              const isToday = d && d.toISOString().split("T")[0] === todayStr;
+              const spans = spansFor(d);
+              const isToday = d && dateToLocal(d) === todayStr;
               return (
                 <div key={i} className={`cal-day ${!d ? "empty" : ""} ${isToday ? "is-today" : ""}`}>
-                  {d && <div className="cal-day-num">{d.getDate()}</div>}
-                  {ev.slice(0, 2).map((e, j) => (
-                    <div key={j} className={`cal-event ${e.t === "borrow" ? "cal-borrow" : "cal-return"}`}>{e.l}</div>
+                  {d && <div className="cal-day-num" style={{color:isToday?"var(--accent)":undefined,fontWeight:isToday?900:700}}>{d.getDate()}</div>}
+                  {spans.slice(0, 3).map((s, j) => (
+                    <div key={j}
+                      className={`cal-event cal-event-${s.pos}`}
+                      style={{ background: s.bg, color: s.color }}>
+                      {(s.pos === "start" || s.pos === "single") && s.name}
+                      {s.pos === "end" && `↩ ${s.name}`}
+                    </div>
                   ))}
-                  {ev.length > 2 && <div style={{ fontSize:10, color:"var(--text3)" }}>+{ev.length - 2}</div>}
+                  {spans.length > 3 && <div style={{ fontSize:9, color:"var(--text3)" }}>+{spans.length-3}</div>}
                 </div>
               );
             })}
