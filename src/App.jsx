@@ -635,6 +635,102 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
+function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=110, fontSize=11 }) {
+  // Split days into weeks of 7
+  const weeks = [];
+  for(let i=0;i<days.length;i+=7) weeks.push(days.slice(i,i+7));
+
+  // For each week, compute event bars with slot assignment
+  const getWeekBars = (week) => {
+    const weekStart = week.find(d=>d);
+    const weekEnd   = [...week].reverse().find(d=>d);
+    if(!weekStart||!weekEnd) return [];
+    const wsStr = dateToLocal(weekStart);
+    const weStr = dateToLocal(weekEnd);
+
+    // find all events overlapping this week
+    const evts = activeRes.filter(r => r.borrow_date<=weStr && r.return_date>=wsStr);
+
+    // assign slots (rows) - greedy
+    const slots = [];
+    const bars  = [];
+    evts.forEach(r=>{
+      const [bg,color] = colorMap[r.id]||["rgba(52,152,219,0.38)","#5dade2"];
+      // col index within this week
+      const startCol = week.findIndex(d=>d && dateToLocal(d)>=r.borrow_date);
+      const endColRaw= week.findLastIndex(d=>d && dateToLocal(d)<=r.return_date);
+      const sc = startCol<0?0:startCol;
+      const ec = endColRaw<0?6:endColRaw;
+      const showName = !week.slice(0,sc).some(d=>d && dateToLocal(d)>=r.borrow_date===false) || week[sc] && dateToLocal(week[sc])===r.borrow_date;
+      // find free slot
+      let slot=0;
+      while(slots[slot]!==undefined && slots[slot]>sc) slot++;
+      slots[slot]=ec;
+      bars.push({r,bg,color,sc,ec,slot,showName: week[sc]&&dateToLocal(week[sc])>=r.borrow_date});
+    });
+    return bars;
+  };
+
+  const DAY_NUM_H = 22;
+  const EVENT_H   = fontSize+8;
+  const EVENT_GAP = 2;
+
+  return (
+    <div style={{direction:"rtl"}}>
+      {weeks.map((week,wi)=>{
+        const bars = getWeekBars(week);
+        const maxSlot = bars.length?Math.max(...bars.map(b=>b.slot)):0;
+        const rowH = Math.max(cellHeight, DAY_NUM_H + (maxSlot+1)*(EVENT_H+EVENT_GAP)+8);
+        return (
+          <div key={wi} style={{position:"relative",height:rowH,marginBottom:4}}>
+            {/* Background cells */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,height:"100%",position:"absolute",inset:0}}>
+              {week.map((d,di)=>{
+                const isToday=d&&dateToLocal(d)===todayStr;
+                return (
+                  <div key={di} style={{
+                    background:"var(--surface2)",borderRadius:6,
+                    border:`1px solid ${isToday?"var(--accent)":"var(--border)"}`,
+                    padding:"5px 6px",overflow:"hidden",
+                    opacity:!d?0.2:1,
+                  }}>
+                    {d&&<div style={{fontSize:13,fontWeight:isToday?900:700,color:isToday?"var(--accent)":"var(--text2)"}}>{d.getDate()}</div>}
+                  </div>
+                );
+              })}
+            </div>
+            {/* Event overlay bars */}
+            {bars.map((b,bi)=>{
+              const colW = 100/7;
+              const left  = b.ec > b.sc ? `calc(${b.sc*colW}% + 2px)` : `calc(${b.sc*colW}% + 2px)`;
+              const width = `calc(${(b.ec-b.sc+1)*colW}% - 4px)`;
+              const top   = DAY_NUM_H + b.slot*(EVENT_H+EVENT_GAP);
+              const isResStart = week[b.sc]&&dateToLocal(week[b.sc])===b.r.borrow_date;
+              const isResEnd   = week[b.ec]&&dateToLocal(week[b.ec])===b.r.return_date;
+              return (
+                <div key={bi} style={{
+                  position:"absolute",
+                  left, top, width, height:EVENT_H,
+                  background:b.bg,
+                  borderRadius: isResStart&&isResEnd?"4px": isResStart?"4px 0 0 4px": isResEnd?"0 4px 4px 0":"0",
+                  display:"flex",alignItems:"center",
+                  paddingRight:isResStart?8:2, paddingLeft:isResEnd?6:2,
+                  overflow:"hidden",whiteSpace:"nowrap",
+                  fontSize, color:b.color, fontWeight:600,
+                  zIndex:1,
+                }}>
+                  {isResStart && <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{b.r.student_name}</span>}
+                  {!isResStart && isResEnd && <span style={{opacity:0.85,overflow:"hidden",textOverflow:"ellipsis"}}>↩ {b.r.student_name}</span>}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function DashboardPage({ equipment, reservations }) {
   const todayStr = today();
   const active = reservations.filter(r => r.status === "מאושר").length;
@@ -650,51 +746,33 @@ function DashboardPage({ equipment, reservations }) {
   const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
   const HE_D = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
 
-  const firstDayOfMonth = new Date(yr, mo, 1);
-  const startOffset = firstDayOfMonth.getDay();
-  const daysInMonth = new Date(yr, mo + 1, 0).getDate();
-
   const days = [];
-  for (let i = 0; i < startOffset; i++) days.push(null);
-  for (let d = 1; d <= daysInMonth; d++) days.push(new Date(yr, mo, d));
-  while (days.length < 42) days.push(null);
+  const startOffset = new Date(yr,mo,1).getDay();
+  for(let i=0;i<startOffset;i++) days.push(null);
+  for(let d=1;d<=new Date(yr,mo+1,0).getDate();d++) days.push(new Date(yr,mo,d));
+  while(days.length<42) days.push(null);
 
-  // Color palette per reservation
   const SPAN_COLORS = [
-    ["rgba(52,152,219,0.38)","#5dade2"],["rgba(46,204,113,0.38)","#58d68d"],
-    ["rgba(231,76,60,0.38)","#ec7063"],  ["rgba(155,89,182,0.38)","#c39bd3"],
-    ["rgba(241,196,15,0.38)","#c9a800"], ["rgba(230,126,34,0.38)","#f0a27a"],
-    ["rgba(26,188,156,0.38)","#76d7c4"], ["rgba(236,72,153,0.38)","#f472b6"],
+    ["rgba(52,152,219,0.4)","#5dade2"],  ["rgba(46,204,113,0.4)","#58d68d"],
+    ["rgba(231,76,60,0.4)","#ec7063"],   ["rgba(155,89,182,0.4)","#c39bd3"],
+    ["rgba(241,196,15,0.4)","#c9a800"],  ["rgba(230,126,34,0.4)","#f0a27a"],
+    ["rgba(26,188,156,0.4)","#76d7c4"],  ["rgba(236,72,153,0.4)","#f472b6"],
   ];
   const activeRes = reservations.filter(r => r.status !== "נדחה" && r.borrow_date && r.return_date);
   const colorMap = {};
-  activeRes.forEach((r, i) => { colorMap[r.id] = SPAN_COLORS[i % SPAN_COLORS.length]; });
-
-  const spansFor = (d) => {
-    if (!d) return [];
-    const ds = dateToLocal(d);
-    return activeRes
-      .filter(r => r.borrow_date <= ds && r.return_date >= ds)
-      .map(r => {
-        const isStart = r.borrow_date === ds;
-        const isEnd   = r.return_date === ds;
-        const pos = isStart && isEnd ? "single" : isStart ? "start" : isEnd ? "end" : "mid";
-        const [bg, color] = colorMap[r.id] || SPAN_COLORS[0];
-        return { id: r.id, name: r.student_name, pos, bg, color };
-      });
-  };
+  activeRes.forEach((r,i) => { colorMap[r.id] = SPAN_COLORS[i % SPAN_COLORS.length]; });
 
   return (
     <div className="page">
       <div className="stats-grid">
         {[
-          { l: "פריטי ציוד", v: equipment.length, i: "📦", c: "var(--accent)" },
-          { l: "סך יחידות", v: total, i: "🗃️", c: "var(--blue)" },
-          { l: "השאלות פעילות", v: active, i: "✅", c: "var(--green)" },
-          { l: "ממתין לאישור", v: pending, i: "⏳", c: "var(--yellow)" },
-          { l: "החזרות היום", v: rtToday, i: "🔄", c: "var(--purple)" }
-        ].map((s) => (
-          <div key={s.l} className="stat-card" style={{ "--ac": s.c }}>
+          { l:"פריטי ציוד",  v:equipment.length, i:"📦", c:"var(--accent)" },
+          { l:"סך יחידות",   v:total,            i:"🗃️", c:"var(--blue)"   },
+          { l:"השאלות פעילות",v:active,          i:"✅", c:"var(--green)"  },
+          { l:"ממתין לאישור",v:pending,          i:"⏳", c:"var(--yellow)" },
+          { l:"החזרות היום", v:rtToday,          i:"🔄", c:"var(--purple)" },
+        ].map(s=>(
+          <div key={s.l} className="stat-card" style={{"--ac":s.c}}>
             <div className="stat-label">{s.l}</div>
             <div className="stat-value">{s.v}</div>
             <div className="stat-icon">{s.i}</div>
@@ -704,96 +782,51 @@ function DashboardPage({ equipment, reservations }) {
 
       <div className="dashboard-bottom-grid mb-6">
         <div className="card">
-          <div className="card-header">
-            <span className="card-title">🕒 בקשות אחרונות</span>
-          </div>
-          {[...reservations].sort((a, b) => Number(b.id) - Number(a.id)).slice(0, 6).map((r) => (
-            <div key={r.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 0", borderBottom:"1px solid var(--border)" }}>
-              <div style={{ width:34, height:34, borderRadius:"50%", background:"var(--surface2)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, flexShrink:0 }}>
-                {r.student_name?.[0] || "?"}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight:700, fontSize:13 }}>{r.student_name}</div>
-                <div style={{ fontSize:11, color:"var(--text3)" }}>{formatDate(r.borrow_date)} – {formatDate(r.return_date)}</div>
+          <div className="card-header"><span className="card-title">🕒 בקשות אחרונות</span></div>
+          {[...reservations].sort((a,b)=>Number(b.id)-Number(a.id)).slice(0,6).map(r=>(
+            <div key={r.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
+              <div style={{width:34,height:34,borderRadius:"50%",background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>{r.student_name?.[0]||"?"}</div>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700,fontSize:13}}>{r.student_name}</div>
+                <div style={{fontSize:11,color:"var(--text3)"}}>{formatDate(r.borrow_date)} – {formatDate(r.return_date)}</div>
               </div>
               {statusBadge(r.status)}
             </div>
           ))}
-          {reservations.length === 0 && (
-            <div className="empty-state"><div className="emoji">📋</div><p>אין בקשות עדיין</p></div>
-          )}
+          {reservations.length===0&&<div className="empty-state"><div className="emoji">📋</div><p>אין בקשות עדיין</p></div>}
         </div>
 
         <div className="card calendar-card">
           <div className="card-header">
             <span className="card-title">📅 יומן</span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <div className="calendar-nav">
-                <button className="btn btn-secondary btn-sm" onClick={() => setCalDate(new Date(yr, mo - 1, 1))}>‹</button>
-                <span className="calendar-month-label">{HE_M[mo]} {yr}</span>
-                <button className="btn btn-secondary btn-sm" onClick={() => setCalDate(new Date(yr, mo + 1, 1))}>›</button>
-              </div>
-              <button className="btn btn-secondary btn-sm" title="מסך מלא" onClick={()=>setCalFS(true)}>⛶</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo-1,1))}>‹</button>
+              <span style={{fontWeight:800,minWidth:110,textAlign:"center"}}>{HE_M[mo]} {yr}</span>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo+1,1))}>›</button>
+              <button className="btn btn-secondary btn-sm" title="מסך מלא" onClick={()=>setCalFS(true)} style={{marginRight:8}}>⛶</button>
             </div>
           </div>
-
-          <div className="cal-grid">
-            {HE_D.map((d) => (
-              <div key={d} className="cal-day-header">{d}</div>
-            ))}
-            {days.map((d, i) => {
-              const spans = spansFor(d);
-              const isToday = d && dateToLocal(d) === todayStr;
-              return (
-                <div key={i} className={`cal-day ${!d ? "empty" : ""} ${isToday ? "is-today" : ""}`}>
-                  {d && <div className="cal-day-num" style={{color:isToday?"var(--accent)":undefined,fontWeight:isToday?900:700}}>{d.getDate()}</div>}
-                  {spans.slice(0, 3).map((s, j) => (
-                    <div key={j}
-                      className={`cal-event cal-event-${s.pos}`}
-                      style={{ background: s.bg, color: s.color }}>
-                      {(s.pos === "start" || s.pos === "single") && s.name}
-                      {s.pos === "end" && `↩ ${s.name}`}
-                    </div>
-                  ))}
-                  {spans.length > 3 && <div style={{ fontSize:9, color:"var(--text3)" }}>+{spans.length-3}</div>}
-                </div>
-              );
-            })}
+          {/* Day headers */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4,direction:"rtl"}}>
+            {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,color:"var(--text3)",padding:"4px 0"}}>{d}</div>)}
           </div>
+          <CalendarGrid days={days} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={90} fontSize={10}/>
         </div>
       </div>
 
-      {calFS && (
-        <div className="cal-fs-overlay" onClick={e=>{if(e.target===e.currentTarget)setCalFS(false)}}>
-          <div className="cal-fs-header">
+      {calFS&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:2000,display:"flex",flexDirection:"column"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,padding:"14px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface)",flexShrink:0}}>
             <button className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo-1,1))}>‹</button>
-            <span style={{fontWeight:800,fontSize:18}}>{HE_M[mo]} {yr}</span>
+            <span style={{fontWeight:800,fontSize:20,minWidth:140,textAlign:"center"}}>{HE_M[mo]} {yr}</span>
             <button className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo+1,1))}>›</button>
-            <button className="btn btn-secondary btn-sm" style={{marginRight:"auto",marginLeft:16}} onClick={()=>setCalFS(false)}>✕ סגור</button>
+            <button className="btn btn-secondary" style={{marginRight:"auto"}} onClick={()=>setCalFS(false)}>✕ סגור</button>
           </div>
-          <div className="cal-fs-body">
-            <div className="cal-fs-headers">
-              {HE_D.map(d=><div key={d} className="cal-fs-day-header">{d}</div>)}
+          <div style={{flex:1,overflow:"auto",padding:"16px 20px"}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4,direction:"rtl"}}>
+              {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:13,fontWeight:700,color:"var(--text3)",padding:"6px 0"}}>{d}</div>)}
             </div>
-            <div className="cal-fs-grid">
-              {days.map((d,i)=>{
-                const spans=spansFor(d);
-                const isToday=d&&dateToLocal(d)===todayStr;
-                return (
-                  <div key={i} className={"cal-fs-day"+((!d)?" empty":"")+(isToday?" is-today":"")}>
-                    {d&&<div className="cal-fs-day-num" style={{color:isToday?"var(--accent)":undefined}}>{d.getDate()}</div>}
-                    {spans.slice(0,5).map((s,j)=>(
-                      <div key={j} className={"cal-fs-event cal-fs-event-"+s.pos}
-                        style={{background:s.bg,color:s.color}}>
-                        {(s.pos==="start"||s.pos==="single")&&s.name}
-                        {s.pos==="end"&&("↩ "+s.name)}
-                      </div>
-                    ))}
-                    {spans.length>5&&<div style={{fontSize:9,color:"var(--text3)",paddingRight:2}}>+{spans.length-5}</div>}
-                  </div>
-                );
-              })}
-            </div>
+            <CalendarGrid days={days} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={130} fontSize={13}/>
           </div>
         </div>
       )}
