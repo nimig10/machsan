@@ -167,13 +167,19 @@ const css = `
   .toast-error   { border-right:3px solid var(--red); }
   .toast-info    { border-right:3px solid var(--blue); }
   .cal-headers { display:grid; grid-template-columns:repeat(7,1fr); gap:1px; margin-bottom:2px; }
-  .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(6,82px); gap:1px; height:492px; min-height:492px; max-height:492px; overflow:hidden; }
-  .cal-day-header { text-align:center; font-size:11px; font-weight:700; color:var(--text3); padding:6px 2px; }
-  .cal-day { background:var(--surface2); border-radius:4px; padding:4px; border:1px solid var(--border); overflow:hidden; box-sizing:border-box; }
+  .dashboard-bottom-grid { display:grid; grid-template-columns:minmax(320px,1fr) minmax(520px,640px); gap:16px; align-items:start; }
+  .calendar-card { width:100%; min-width:520px; }
+  .cal-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:6px; width:100%; }
+  .cal-day-header { text-align:center; font-size:11px; font-weight:700; color:var(--text3); padding:8px 4px; min-height:28px; }
+  .cal-day { min-height:88px; background:var(--surface2); border-radius:var(--r-sm); padding:6px; border:1px solid var(--border); width:100%; overflow:hidden; }
+  .cal-day.empty { opacity:0.28; }
   .cal-day.is-today { border-color:var(--accent); }
-  .cal-day.cal-empty { opacity:0.25; }
-  .cal-day-num { font-size:11px; font-weight:700; margin-bottom:2px; color:var(--text2); }
-  .cal-event { font-size:10px; padding:1px 5px; border-radius:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; height:15px; line-height:15px; display:block; margin-bottom:1px; }
+  .cal-day-num { font-size:12px; font-weight:700; margin-bottom:4px; color:var(--text2); }
+  .cal-event { font-size:10px; padding:2px 5px; border-radius:3px; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cal-borrow { background:rgba(52,152,219,0.25); color:var(--blue); }
+  .cal-return { background:rgba(46,204,113,0.25); color:var(--green); }
+  .calendar-nav { display:flex; align-items:center; justify-content:center; gap:10px; min-width:240px; flex-shrink:0; }
+  .calendar-month-label { width:150px; text-align:center; font-weight:800; font-size:15px; flex-shrink:0; }
   .form-page { min-height:100vh; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:40px 20px; }
   .form-card { width:100%; max-width:680px; background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
   .form-card-header { padding:32px 36px 24px; background:linear-gradient(135deg,var(--surface2),var(--surface)); border-bottom:1px solid var(--border); }
@@ -232,7 +238,13 @@ const css = `
     .form-card-body { padding:20px; }
     .toast-container { left:12px; right:12px; bottom:76px; }
     .toast { min-width:0; width:100%; }
-    .cal-grid { grid-template-rows:repeat(6,48px); height:288px; min-height:288px; max-height:288px; }
+    .dashboard-bottom-grid { grid-template-columns:1fr; }
+    .calendar-card { min-width:0; }
+    .cal-grid { gap:4px; }
+    .cal-day { min-height:64px; padding:4px; }
+    .cal-event { font-size:9px; padding:2px 4px; }
+    .calendar-nav { min-width:0; width:100%; justify-content:space-between; }
+    .calendar-month-label { width:auto; flex:1; }
   }
   @media (max-width:400px) {
     .eq-grid { grid-template-columns:1fr; }
@@ -601,105 +613,112 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 function DashboardPage({ equipment, reservations }) {
   const todayStr = today();
-  const active   = reservations.filter(r=>r.status==="מאושר").length;
-  const pending  = reservations.filter(r=>r.status==="ממתין").length;
-  const rtToday  = reservations.filter(r=>r.status==="מאושר"&&r.return_date===todayStr).length;
-  const total    = equipment.reduce((s,e)=>s+Number(e.total_quantity),0);
+  const active = reservations.filter(r => r.status === "מאושר").length;
+  const pending = reservations.filter(r => r.status === "ממתין").length;
+  const rtToday = reservations.filter(r => r.status === "מאושר" && r.return_date === todayStr).length;
+  const total = equipment.reduce((s, e) => s + Number(e.total_quantity), 0);
 
   const [calDate, setCalDate] = useState(new Date());
-  const yr=calDate.getFullYear(), mo=calDate.getMonth();
-  const days=[]; const sd=new Date(yr,mo,1).getDay();
-  for(let i=0;i<sd;i++) days.push(null);
-  for(let d=1;d<=new Date(yr,mo+1,0).getDate();d++) days.push(new Date(yr,mo,d));
-  while(days.length<42) days.push(null);
-  const HE_M=["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
-  const HE_D=["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
+  const yr = calDate.getFullYear();
+  const mo = calDate.getMonth();
 
-  // build span events for calendar
-  const SPAN_COLORS = [
-    ["rgba(52,152,219,0.4)","#5dade2"],["rgba(46,204,113,0.4)","#58d68d"],
-    ["rgba(231,76,60,0.4)","#ec7063"],["rgba(155,89,182,0.4)","#c39bd3"],
-    ["rgba(241,196,15,0.4)","#f7dc6f"],["rgba(230,126,34,0.4)","#f0a27a"],
-    ["rgba(26,188,156,0.4)","#76d7c4"],["rgba(236,112,99,0.4)","#f1948a"],
-  ];
-  const activeRes = reservations.filter(r=>r.status!=="נדחה"&&r.borrow_date&&r.return_date);
-  const resColorMap = {};
-  activeRes.forEach((r,i)=>{ resColorMap[r.id]=SPAN_COLORS[i%SPAN_COLORS.length]; });
-  const getSpans = (cellDate) => {
-    if(!cellDate) return [];
-    const ds = cellDate.toISOString().split("T")[0];
-    return activeRes.filter(r=>r.borrow_date<=ds && r.return_date>=ds).map(r=>{
-      const isStart = r.borrow_date===ds;
-      const isEnd = r.return_date===ds;
-      const pos = isStart&&isEnd?"single":isStart?"start":isEnd?"end":"mid";
-      const [bg,color] = resColorMap[r.id]||SPAN_COLORS[0];
-      return {id:r.id, name:r.student_name, pos, bg, color};
+  const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+  const HE_D = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
+
+  const firstDayOfMonth = new Date(yr, mo, 1);
+  const startOffset = firstDayOfMonth.getDay();
+  const daysInMonth = new Date(yr, mo + 1, 0).getDate();
+
+  const days = [];
+  for (let i = 0; i < startOffset; i++) days.push(null);
+  for (let d = 1; d <= daysInMonth; d++) days.push(new Date(yr, mo, d));
+  while (days.length < 42) days.push(null);
+
+  const eventsFor = (d) => {
+    if (!d) return [];
+    const ds = d.toISOString().split("T")[0];
+    const ev = [];
+    reservations.forEach((r) => {
+      if (r.status === "נדחה") return;
+      if (r.borrow_date === ds) ev.push({ t: "borrow", l: `📅 ${r.student_name}` });
+      if (r.return_date === ds) ev.push({ t: "return", l: `🔄 ${r.student_name}` });
     });
+    return ev;
   };
 
   return (
     <div className="page">
       <div className="stats-grid">
-        {[{l:"פריטי ציוד",v:equipment.length,i:"📦",c:"var(--accent)"},{l:"סך יחידות",v:total,i:"🗃️",c:"var(--blue)"},{l:"השאלות פעילות",v:active,i:"✅",c:"var(--green)"},{l:"ממתין לאישור",v:pending,i:"⏳",c:"var(--yellow)"},{l:"החזרות היום",v:rtToday,i:"🔄",c:"var(--purple)"}].map(s=>(
-          <div key={s.l} className="stat-card" style={{"--ac":s.c}}>
-            <div className="stat-label">{s.l}</div><div className="stat-value">{s.v}</div><div className="stat-icon">{s.i}</div>
+        {[
+          { l: "פריטי ציוד", v: equipment.length, i: "📦", c: "var(--accent)" },
+          { l: "סך יחידות", v: total, i: "🗃️", c: "var(--blue)" },
+          { l: "השאלות פעילות", v: active, i: "✅", c: "var(--green)" },
+          { l: "ממתין לאישור", v: pending, i: "⏳", c: "var(--yellow)" },
+          { l: "החזרות היום", v: rtToday, i: "🔄", c: "var(--purple)" }
+        ].map((s) => (
+          <div key={s.l} className="stat-card" style={{ "--ac": s.c }}>
+            <div className="stat-label">{s.l}</div>
+            <div className="stat-value">{s.v}</div>
+            <div className="stat-icon">{s.i}</div>
           </div>
         ))}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:24,alignItems:"start"}}>
-        <div className="card" style={{minHeight:620,minWidth:0,width:"100%"}}>
+
+      <div className="dashboard-bottom-grid mb-6">
+        <div className="card">
           <div className="card-header">
-            <span className="card-title">📅 יומן</span>
-            <div className="flex gap-2">
-              <button className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo-1,1))}>‹</button>
-              <span style={{fontWeight:700,minWidth:100,textAlign:"center"}}>{HE_M[mo]} {yr}</span>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo+1,1))}>›</button>
-            </div>
+            <span className="card-title">🕒 בקשות אחרונות</span>
           </div>
-          <div className="cal-headers">
-            {HE_D.map(d=><div key={d} className="cal-day-header">{d}</div>)}
-          </div>
-          <div className="cal-grid">
-            {days.map((d,i)=>{
-              const isT=d&&d.toISOString().split("T")[0]===todayStr;
-              const spans=getSpans(d);
-              return <div key={i} className={`cal-day${isT?" is-today":""}${!d?" cal-empty":""}`}>
-                {d&&<div className="cal-day-num" style={{color:isT?"var(--accent)":"var(--text2)",fontWeight:isT?900:700}}>{d.getDate()}</div>}
-                {spans.slice(0,3).map((s,j)=>(
-                  <div key={j} className="cal-event"
-                    style={{
-                      background:s.bg,
-                      color:s.color,
-                      borderRadius: s.pos==="start"||s.pos==="single"?"3px 0 0 3px": s.pos==="end"?"0 3px 3px 0":"0",
-                      marginLeft: s.pos==="mid"||s.pos==="end"?"-4px":"0",
-                      marginRight: s.pos==="mid"||s.pos==="start"?"-4px":"0",
-                      paddingRight: s.pos==="start"||s.pos==="single"?"6px":"2px",
-                    }}>
-                    {(s.pos==="start"||s.pos==="single")&&s.name}
-                    {s.pos==="end"&&<span style={{fontSize:9,opacity:0.85}}>↩ {s.name}</span>}
-                  </div>
-                ))}
-                {spans.length>3&&<div style={{fontSize:9,color:"var(--text3)"}}>+{spans.length-3}</div>}
-              </div>;
-            })}
-          </div>
-        </div>
-        <div className="card" style={{alignSelf:"start"}}>
-          <div className="card-header"><span className="card-title">🕒 בקשות אחרונות</span></div>
-          {[...reservations].sort((a,b)=>b.id-a.id).slice(0,6).map(r=>(
-            <div key={r.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
-              <div style={{width:34,height:34,borderRadius:"50%",background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>{r.student_name?.[0]||"?"}</div>
-              <div style={{flex:1}}><div style={{fontWeight:700,fontSize:13}}>{r.student_name}</div><div style={{fontSize:11,color:"var(--text3)"}}>{formatDate(r.borrow_date)} – {formatDate(r.return_date)}</div></div>
+          {[...reservations].sort((a, b) => Number(b.id) - Number(a.id)).slice(0, 6).map((r) => (
+            <div key={r.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 0", borderBottom:"1px solid var(--border)" }}>
+              <div style={{ width:34, height:34, borderRadius:"50%", background:"var(--surface2)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, flexShrink:0 }}>
+                {r.student_name?.[0] || "?"}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight:700, fontSize:13 }}>{r.student_name}</div>
+                <div style={{ fontSize:11, color:"var(--text3)" }}>{formatDate(r.borrow_date)} – {formatDate(r.return_date)}</div>
+              </div>
               {statusBadge(r.status)}
             </div>
           ))}
-          {reservations.length===0&&<div className="empty-state"><div className="emoji">📋</div><p>אין בקשות עדיין</p></div>}
+          {reservations.length === 0 && (
+            <div className="empty-state"><div className="emoji">📋</div><p>אין בקשות עדיין</p></div>
+          )}
+        </div>
+
+        <div className="card calendar-card">
+          <div className="card-header">
+            <span className="card-title">📅 יומן</span>
+            <div className="calendar-nav">
+              <button className="btn btn-secondary btn-sm" onClick={() => setCalDate(new Date(yr, mo - 1, 1))}>‹</button>
+              <span className="calendar-month-label">{HE_M[mo]} {yr}</span>
+              <button className="btn btn-secondary btn-sm" onClick={() => setCalDate(new Date(yr, mo + 1, 1))}>›</button>
+            </div>
+          </div>
+
+          <div className="cal-grid">
+            {HE_D.map((d) => (
+              <div key={d} className="cal-day-header">{d}</div>
+            ))}
+            {days.map((d, i) => {
+              const ev = eventsFor(d);
+              const isToday = d && d.toISOString().split("T")[0] === todayStr;
+              return (
+                <div key={i} className={`cal-day ${!d ? "empty" : ""} ${isToday ? "is-today" : ""}`}>
+                  {d && <div className="cal-day-num">{d.getDate()}</div>}
+                  {ev.slice(0, 2).map((e, j) => (
+                    <div key={j} className={`cal-event ${e.t === "borrow" ? "cal-borrow" : "cal-return"}`}>{e.l}</div>
+                  ))}
+                  {ev.length > 2 && <div style={{ fontSize:10, color:"var(--text3)" }}>+{ev.length - 2}</div>}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
   );
 }
-
 // ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
 function PublicForm({ equipment, reservations, setReservations, showToast }) {
   const [step, setStep]       = useState(1);
