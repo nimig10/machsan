@@ -50,8 +50,9 @@ async function storageSet(key, value) {
     });
     const json = await fetchRes.json().catch(() => ({}));
     if (!json.ok) {
-      console.error("storageSet Sheets error", key, json);
-      return { ok: false, error: json.error || "Sheets error" };
+      const errMsg = json.error || JSON.stringify(json);
+      console.error("storageSet Sheets error", key, errMsg);
+      return { ok: false, error: errMsg };
     }
     return { ok: true };
   } catch (e) {
