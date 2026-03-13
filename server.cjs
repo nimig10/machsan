@@ -21,15 +21,19 @@ app.use(cors());
 app.use(express.json());
 
 // ─── עזר: HTML מייל ───────────────────────────────────────────────────────────
-function buildEmail({ type, student_name, borrow_date, return_date, items_list, wa_link }) {
-  const isApproved = type === "approved";
-  const isNew      = type === "new";
+function buildEmail({ type, student_name, borrow_date, return_date, items_list, wa_link, loan_type }) {
+  const isApproved   = type === "approved";
+  const isNew        = type === "new";
+  const isTeamNotify = type === "team_notify";
+  const greetingName = isTeamNotify ? "צוות המחסן" : student_name;
 
-  const color  = isApproved ? "#2ecc71" : isNew ? "#f5a623" : "#e74c3c";
-  const icon   = isApproved ? "✅" : isNew ? "⏳" : "❌";
-  const title  = isApproved ? "הבקשה שלך אושרה!" : isNew ? "הבקשה שלך התקבלה!" : "לצערנו הבקשה נדחתה";
+  const color  = isApproved ? "#2ecc71" : (isNew || isTeamNotify) ? "#f5a623" : "#e74c3c";
+  const icon   = isApproved ? "✅" : (isNew || isTeamNotify) ? "⏳" : "❌";
+  const title  = isApproved ? "הבקשה שלך אושרה!" : isTeamNotify ? `בקשת השאלה חדשה — ${loan_type || ""}` : isNew ? "הבקשה שלך התקבלה!" : "לצערנו הבקשה נדחתה";
   const body   = isApproved
     ? `בקשת ההשאלה שלך <strong style="color:#2ecc71">אושרה</strong>. ניתן לאסוף את הציוד בתיאום עם צוות המחסן.`
+    : isTeamNotify
+    ? `<strong>${student_name}</strong> הגיש/ה בקשת השאלה חדשה (${loan_type || ""}) הממתינה לאישורך.`
     : isNew
     ? `בקשת ההשאלה שלך <strong style="color:#f5a623">התקבלה</strong> וממתינה לאישור צוות המחסן.`
     : `לצערנו בקשת ההשאלה שלך <strong style="color:#e74c3c">נדחתה</strong>. לפרטים נוספים ניתן לפנות לצוות המחסן.`;
@@ -54,7 +58,7 @@ function buildEmail({ type, student_name, borrow_date, return_date, items_list, 
         <h2 style="color:${color};margin:0;font-size:18px;font-family:Arial,sans-serif">${title}</h2>
       </div>
 
-      <p style="font-size:15px;line-height:1.7;margin-bottom:8px">שלום <strong>${student_name}</strong>,</p>
+      <p style="font-size:15px;line-height:1.7;margin-bottom:8px">שלום <strong>${greetingName}</strong>,</p>
       <p style="font-size:14px;line-height:1.7;color:#8891a8">${body}</p>
 
       <!-- Details -->
@@ -93,7 +97,7 @@ function buildEmail({ type, student_name, borrow_date, return_date, items_list, 
 
 // ─── Route: שליחת מייל ────────────────────────────────────────────────────────
 app.post("/api/send-email", async (req, res) => {
-  const { to, type, student_name, borrow_date, return_date, items_list, wa_link } = req.body;
+  const { to, type, student_name, borrow_date, return_date, items_list, wa_link, loan_type } = req.body;
 
   if (!to || !type) return res.status(400).json({ error: "חסרים שדות חובה" });
 
@@ -101,6 +105,7 @@ app.post("/api/send-email", async (req, res) => {
     new:      "⏳ קיבלנו את הבקשה שלך – המחסן של קישקתא ונמרוד",
     approved: "✅ הבקשה שלך אושרה – המחסן של קישקתא ונמרוד",
     rejected: "עדכון לגבי בקשת ההשאלה – המחסן של קישקתא ונמרוד",
+    team_notify: `📬 בקשת השאלה חדשה (${loan_type || ""}) – ${student_name || ""}`,
   };
 
   try {
@@ -108,7 +113,7 @@ app.post("/api/send-email", async (req, res) => {
       from:    `"מחסן קישקתא ונמרוד" <${GMAIL_USER}>`,
       to,
       subject: subjects[type] || "עדכון מהמחסן",
-      html:    buildEmail({ type, student_name, borrow_date, return_date, items_list, wa_link }),
+      html:    buildEmail({ type, student_name, borrow_date, return_date, items_list, wa_link, loan_type }),
     });
 
     console.log(`📧 מייל נשלח ל-${to} | סוג: ${type}`);

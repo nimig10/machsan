@@ -62,6 +62,7 @@ const SOUND_CATEGORIES = ["מיקרופונים","מקליטי אודיו"];
 const STATUSES    = ["תקין","פגום","בתיקון","נעלם"];
 const RESEND_API_KEY = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_RESEND_KEY : "";
 const NIMROD_PHONE     = "972521234567"; // ← החלף במספר של נמרוד
+const EMAIL_TYPO_DOMAINS = ["gmai.com","gmial.com","gmail.co","gamil.com","gmaill.com","yahooo.com","yahho.com","outlok.com","hotmai.com","outllook.com"];
 const TERMS = `הסטודנט מתחייב להחזיר את הציוד במועד שנקבע ובמצב תקין.
 אחריות על נזק לציוד תחול על הסטודנט.
 במקרה של אובדן, יחויב הסטודנט בעלות החלפת הציוד.
@@ -94,6 +95,45 @@ function toDateTime(dateStr, timeStr) {
   const [h, m] = String(timeStr || "00:00").split(":").map(Number);
   d.setHours(Number.isFinite(h) ? h : 0, Number.isFinite(m) ? m : 0, 0, 0);
   return d.getTime();
+}
+
+function isValidEmailAddress(email) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  if (!normalizedEmail) return false;
+  if (!/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(normalizedEmail)) {
+    return false;
+  }
+  const domain = normalizedEmail.split("@")[1];
+  return !EMAIL_TYPO_DOMAINS.includes(domain);
+}
+
+function getReservationReturnTimestamp(reservation) {
+  if (!reservation?.return_date) return null;
+  return toDateTime(reservation.return_date, reservation.return_time || "23:59");
+}
+
+function markReservationReturned(reservation, returnedAt = new Date()) {
+  const returnedAtIso = returnedAt instanceof Date ? returnedAt.toISOString() : new Date(returnedAt).toISOString();
+  return {
+    ...reservation,
+    status: "הוחזר",
+    returned_at: reservation.returned_at || returnedAtIso,
+  };
+}
+
+function normalizeReservationsForArchive(reservations, now = new Date()) {
+  const nowMs = now.getTime();
+  return (reservations || []).map((reservation) => {
+    if (!reservation) return reservation;
+    if (reservation.status === "הוחזר") {
+      return reservation.returned_at ? reservation : markReservationReturned(reservation, now);
+    }
+    const returnAt = getReservationReturnTimestamp(reservation);
+    if (reservation.status === "מאושר" && returnAt !== null && nowMs >= returnAt) {
+      return markReservationReturned(reservation, now);
+    }
+    return reservation;
+  });
 }
 
 function getAvailable(eqId, borrowDate, returnDate, reservations, equipment, excludeId=null, borrowTime="", returnTime="") {
@@ -257,6 +297,7 @@ const css = `
   @keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
   @keyframes spin { to{transform:rotate(360deg)} }
   .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .responsive-split { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   .flex { display:flex; }
   .flex-between { display:flex; justify-content:space-between; align-items:center; }
   .gap-2 { gap:8px; }
@@ -359,6 +400,7 @@ const css = `
     .stats-grid { grid-template-columns:1fr 1fr; gap:12px; }
     .stat-value { font-size:24px; }
     .grid-2 { grid-template-columns:1fr; }
+    .responsive-split { grid-template-columns:1fr; }
     .eq-grid { grid-template-columns:1fr 1fr; gap:12px; }
     .eq-card { padding:12px; }
     .modal { max-width:100%; max-height:95vh; border-radius:var(--r) var(--r) 0 0; }
@@ -962,7 +1004,10 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
       }
     }
 
-    const updated = reservations.map(r=>r.id===id?{...r,status}:r);
+    const updated = reservations.map((r) => {
+      if (r.id !== id) return r;
+      return status === "הוחזר" ? markReservationReturned(r) : { ...r, status };
+    });
     setReservations(updated);
     await storageSet("reservations", updated);
     showToast("success", `סטטוס עודכן ל-${status}`);
@@ -1039,7 +1084,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
           ))}
         </div>
       }
-      {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations} onSave={async(updated)=>{ const all=reservations.map(r=>r.id===updated.id?updated:r); setReservations(all); await storageSet("reservations",all); showToast("success","הבקשה עודכנה"); setEditing(null); }} onClose={()=>setEditing(null)}/>}
+      {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations} onSave={async(updated)=>{ const all=normalizeReservationsForArchive(reservations.map(r=>r.id===updated.id?updated:r)); setReservations(all); await storageSet("reservations",all); showToast("success","הבקשה עודכנה"); setEditing(null); }} onClose={()=>setEditing(null)}/>}
 
       {approvalConflict && (
         <Modal
@@ -1366,8 +1411,6 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
   const kitEqIds = activeKit ? new Set((activeKit.items||[]).map(i=>String(i.equipment_id))) : null;
   const baseCategories = isSoundLoan ? ["מיקרופונים","מקליטי אודיו"] : categories;
 
-  const SOUND_CATEGORIES = ["מיקרופונים","מקליטי אודיו"];
-
   return (
     <>
       <div className="form-section-title">
@@ -1535,14 +1578,19 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
         }),
       });
       // Notify team members who handle this loan type
-      const relevantTeam = (teamMembers||[]).filter(m => !m.loanTypes?.length || m.loanTypes.includes(res.loan_type));
-      for (const member of relevantTeam) {
-        if (!member.email) continue;
-        fetch("/api/send-email", {
+      const relevantTeam = (teamMembers || []).filter((member) => {
+        if (!member?.email) return false;
+        if (!Array.isArray(member.loanTypes)) return true;
+        return member.loanTypes.includes(res.loan_type);
+      });
+      await Promise.allSettled(relevantTeam.map((member) => {
+        const memberEmail = String(member.email || "").trim().toLowerCase();
+        if (!isValidEmailAddress(memberEmail)) return Promise.resolve();
+        return fetch("/api/send-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            to:           member.email,
+            to:           memberEmail,
             type:         "team_notify",
             student_name: res.student_name,
             items_list:   itemsList,
@@ -1550,27 +1598,16 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
             return_date:  formatDate(res.return_date),
             loan_type:    res.loan_type,
           }),
-        }).catch(()=>{});
-      }
+        });
+      }));
     } catch(e) {
       console.error("send email error:", e);
     }
   };
 
-  // Email validation: format check + common domain typo detection
-  const KNOWN_DOMAINS = ["gmail.com","yahoo.com","outlook.com","hotmail.com","icloud.com","wizo.ac.il","bezalel.ac.il","live.com","msn.com"];
-  const TYPO_DOMAINS  = ["gmai.com","gmial.com","gmail.co","gamil.com","gmaill.com","yahooo.com","yahho.com","outlok.com","hotmai.com","outllook.com"];
-  const isValidEmail = (email) => {
-    const e = email.trim().toLowerCase();
-    if(!/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(e)) return false;
-    const domain = e.split("@")[1];
-    if(TYPO_DOMAINS.includes(domain)) return false;
-    return true;
-  };
-
   const submit = async () => {
     // Validate email format before doing anything
-    if(!isValidEmail(form.email)) {
+    if(!isValidEmailAddress(form.email)) {
       setEmailError(true);
       return;
     }
@@ -1801,7 +1838,7 @@ function ArchivePage({ reservations, equipment }) {
       {filtered.length===0
         ? <div className="empty-state"><div className="emoji">🗄️</div><p>אין בקשות בארכיון</p></div>
         : <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {[...filtered].sort((a,b)=>new Date(b.return_date)-new Date(a.return_date)).map(r=>(
+          {[...filtered].sort((a,b)=>(new Date(b.returned_at || b.return_date).getTime()) - (new Date(a.returned_at || a.return_date).getTime())).map(r=>(
             <div key={r.id}
               onClick={()=>setViewRes(r)}
               style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 18px",cursor:"pointer",transition:"border-color 0.15s"}}
@@ -1865,7 +1902,7 @@ function ArchivePage({ reservations, equipment }) {
               {/* Dates */}
               <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"14px 16px"}}>
                 <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>תאריכים</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div className="responsive-split">
                   {[["📅 השאלה",`${formatDate(viewRes.borrow_date)}${viewRes.borrow_time?" · "+viewRes.borrow_time:""}`],["↩ החזרה",`${formatDate(viewRes.return_date)}${viewRes.return_time?" · "+viewRes.return_time:""}`]].map(([l,v])=>(
                     <div key={l} style={{background:"var(--surface3)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
                       <div style={{fontSize:11,color:"var(--text3)",marginBottom:4}}>{l}</div>
@@ -1890,6 +1927,11 @@ function ArchivePage({ reservations, equipment }) {
                 <div style={{marginTop:8,fontSize:12,color:"var(--text3)"}}>
                   סה״כ: <strong style={{color:"var(--text)"}}>{viewRes.items?.reduce((s,i)=>s+i.quantity,0)||0}</strong> יחידות
                 </div>
+                {viewRes.returned_at && (
+                  <div style={{marginTop:8,fontSize:12,color:"var(--text3)"}}>
+                    הועבר לארכיון: <strong style={{color:"var(--text)"}}>{new Date(viewRes.returned_at).toLocaleString("he-IL")}</strong>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1914,18 +1956,49 @@ function TeamPage({ teamMembers, setTeamMembers, showToast }) {
   const toggleLT = (form, setForm, lt) =>
     setForm(p=>({...p, loanTypes: p.loanTypes.includes(lt)?p.loanTypes.filter(x=>x!==lt):[...p.loanTypes,lt]}));
 
+  const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
+  const hasDuplicateEmail = (email, excludeId = null) => teamMembers.some((member) =>
+    member.id !== excludeId && normalizeEmail(member.email) === normalizeEmail(email)
+  );
+  const addEmail = normalizeEmail(addForm.email);
+  const addInvalidEmail = !!addEmail && !isValidEmailAddress(addEmail);
+  const addDuplicateEmail = !!addEmail && hasDuplicateEmail(addEmail);
+  const editEmail = normalizeEmail(editForm.email);
+  const editInvalidEmail = !!editEmail && !isValidEmailAddress(editEmail);
+  const editDuplicateEmail = !!editEmail && hasDuplicateEmail(editEmail, editMember?.id || null);
+
   const saveNew = async () => {
-    if (!addForm.name.trim() || !addForm.email.trim()) return;
-    const updated = [...teamMembers, { ...addForm, id: Date.now() }];
+    const name = addForm.name.trim();
+    const email = normalizeEmail(addForm.email);
+    if (!name || !email) return;
+    if (!isValidEmailAddress(email)) {
+      showToast("error", "כתובת המייל של איש הצוות אינה תקינה");
+      return;
+    }
+    if (hasDuplicateEmail(email)) {
+      showToast("error", "כתובת המייל הזו כבר קיימת בצוות");
+      return;
+    }
+    const updated = [...teamMembers, { ...addForm, id: Date.now(), name, email }];
     setTeamMembers(updated);
     await storageSet("teamMembers", updated);
-    showToast("success", `${addForm.name} נוסף לצוות`);
+    showToast("success", `${name} נוסף לצוות`);
     setAddForm(emptyForm);
   };
 
   const saveEdit = async () => {
-    if (!editForm.name.trim() || !editForm.email.trim()) return;
-    const updated = teamMembers.map(m => m.id===editMember.id ? {...m,...editForm} : m);
+    const name = editForm.name.trim();
+    const email = normalizeEmail(editForm.email);
+    if (!name || !email) return;
+    if (!isValidEmailAddress(email)) {
+      showToast("error", "כתובת המייל של איש הצוות אינה תקינה");
+      return;
+    }
+    if (hasDuplicateEmail(email, editMember.id)) {
+      showToast("error", "כתובת המייל הזו כבר קיימת בצוות");
+      return;
+    }
+    const updated = teamMembers.map(m => m.id===editMember.id ? {...m,...editForm,name,email} : m);
     setTeamMembers(updated);
     await storageSet("teamMembers", updated);
     showToast("success", "איש צוות עודכן");
@@ -1939,7 +2012,7 @@ function TeamPage({ teamMembers, setTeamMembers, showToast }) {
     showToast("success", "איש צוות הוסר");
   };
 
-  const LoanTypeButtons = ({form, setForm}) => (
+  const renderLoanTypeButtons = (form, setForm) => (
     <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap"}}>
       {LOAN_TYPES.map(lt=>(
         <button key={lt} type="button" onClick={()=>toggleLT(form,setForm,lt)}
@@ -1955,17 +2028,21 @@ function TeamPage({ teamMembers, setTeamMembers, showToast }) {
       {/* ── Add new member form (always visible) ── */}
       <div className="card" style={{marginBottom:24}}>
         <div className="card-header"><div className="card-title">➕ הוספת איש צוות</div></div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+        <div className="responsive-split" style={{marginBottom:14}}>
           <div className="form-group"><label className="form-label">שם מלא *</label><input className="form-input" placeholder="שם" value={addForm.name} onChange={e=>setAddForm(p=>({...p,name:e.target.value}))}/></div>
           <div className="form-group"><label className="form-label">כתובת מייל *</label><input className="form-input" type="email" placeholder="email@example.com" value={addForm.email} onChange={e=>setAddForm(p=>({...p,email:e.target.value}))}/></div>
         </div>
         <div className="form-group">
           <label className="form-label">📩 קבלת התראות עבור סוגי השאלה</label>
-          <LoanTypeButtons form={addForm} setForm={setAddForm}/>
-          <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>איש צוות יקבל מייל רק עבור בקשות מהסוגים המסומנים.</div>
+          {renderLoanTypeButtons(addForm, setAddForm)}
+          <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>
+            {addForm.loanTypes.length === 0 ? "איש הצוות לא יקבל התראות עד שייבחר לפחות סוג אחד." : "איש צוות יקבל מייל רק עבור בקשות מהסוגים המסומנים."}
+          </div>
+          {addInvalidEmail && <div style={{fontSize:12,color:"var(--red)",marginTop:6}}>כתובת המייל אינה תקינה.</div>}
+          {addDuplicateEmail && <div style={{fontSize:12,color:"var(--red)",marginTop:6}}>כתובת המייל כבר קיימת בצוות.</div>}
         </div>
         <div style={{marginTop:10}}>
-          <button className="btn btn-primary" disabled={!addForm.name||!addForm.email} onClick={saveNew}>➕ הוסף לצוות</button>
+          <button className="btn btn-primary" disabled={!addForm.name.trim()||!addEmail||addInvalidEmail||addDuplicateEmail} onClick={saveNew}>➕ הוסף לצוות</button>
         </div>
       </div>
 
@@ -1980,9 +2057,12 @@ function TeamPage({ teamMembers, setTeamMembers, showToast }) {
                 <div style={{fontWeight:700,fontSize:14}}>{m.name}</div>
                 <div style={{fontSize:12,color:"var(--text3)"}}>{m.email}</div>
                 <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap"}}>
-                  {(m.loanTypes||LOAN_TYPES).map(lt=>(
+                  {(Array.isArray(m.loanTypes) && m.loanTypes.length ? m.loanTypes : (!Array.isArray(m.loanTypes) ? LOAN_TYPES : [])).map(lt=>(
                     <span key={lt} style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>{LOAN_ICONS[lt]} {lt}</span>
                   ))}
+                  {Array.isArray(m.loanTypes) && m.loanTypes.length === 0 && (
+                    <span style={{background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.35)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"var(--red)",fontWeight:700}}>ללא התראות</span>
+                  )}
                 </div>
               </div>
               <div style={{display:"flex",gap:6}}>
@@ -2006,16 +2086,21 @@ function TeamPage({ teamMembers, setTeamMembers, showToast }) {
               <button className="btn btn-secondary btn-sm" onClick={()=>setEditMember(null)}>✕ סגור</button>
             </div>
             <div style={{padding:"22px"}}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+              <div className="responsive-split" style={{marginBottom:14}}>
                 <div className="form-group"><label className="form-label">שם מלא *</label><input className="form-input" value={editForm.name} onChange={e=>setEditForm(p=>({...p,name:e.target.value}))}/></div>
                 <div className="form-group"><label className="form-label">כתובת מייל *</label><input className="form-input" type="email" value={editForm.email} onChange={e=>setEditForm(p=>({...p,email:e.target.value}))}/></div>
               </div>
               <div className="form-group">
                 <label className="form-label">📩 קבלת התראות עבור סוגי השאלה</label>
-                <LoanTypeButtons form={editForm} setForm={setEditForm}/>
+                {renderLoanTypeButtons(editForm, setEditForm)}
+                <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>
+                  {editForm.loanTypes.length === 0 ? "איש הצוות לא יקבל התראות עד שייבחר לפחות סוג אחד." : "איש צוות יקבל מייל רק עבור בקשות מהסוגים המסומנים."}
+                </div>
+                {editInvalidEmail && <div style={{fontSize:12,color:"var(--red)",marginTop:6}}>כתובת המייל אינה תקינה.</div>}
+                {editDuplicateEmail && <div style={{fontSize:12,color:"var(--red)",marginTop:6}}>כתובת המייל כבר קיימת בצוות.</div>}
               </div>
               <div style={{display:"flex",gap:8,marginTop:16}}>
-                <button className="btn btn-primary" disabled={!editForm.name||!editForm.email} onClick={saveEdit}>💾 שמור שינויים</button>
+                <button className="btn btn-primary" disabled={!editForm.name.trim()||!editEmail||editInvalidEmail||editDuplicateEmail} onClick={saveEdit}>💾 שמור שינויים</button>
                 <button className="btn btn-secondary" onClick={()=>setEditMember(null)}>ביטול</button>
               </div>
             </div>
@@ -2032,18 +2117,24 @@ function KitsPage({ kits, setKits, equipment, categories, showToast }) {
   const [editKit, setEditKit] = useState(null);
   const LOAN_TYPES = ["פרטית","הפקה","סאונד","הכל"];
   const LOAN_ICONS = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️", "הכל":"📦" };
+  const normalizeKitName = (name) => String(name || "").trim().toLowerCase();
+  const hasDuplicateKitName = (name, excludeId = null) => kits.some((kit) =>
+    kit.id !== excludeId && normalizeKitName(kit.name) === normalizeKitName(name)
+  );
 
   const KitForm = ({ initial, onDone }) => {
     const [name, setName] = useState(initial?.name||"");
     const [loanType, setLoanType] = useState(initial?.loanType||"הכל");
     const [kitItems, setKitItems] = useState(initial?.items||[]);
     const [saving, setSaving] = useState(false);
+    const trimmedName = name.trim();
+    const duplicateName = !!trimmedName && hasDuplicateKitName(trimmedName, initial?.id || null);
 
     // Only "תקין" items count — max = total_quantity of that item
     const maxQty = eqId => {
       const eq = equipment.find(e=>e.id==eqId);
       if (!eq) return 0;
-      if (eq.condition && eq.condition !== "תקין") return 0;
+      if (eq.status && eq.status !== "תקין") return 0;
       return Number(eq.total_quantity) || 0;
     };
     const setItemQty = (eqId, qty) => {
@@ -2057,13 +2148,17 @@ function KitsPage({ kits, setKits, equipment, categories, showToast }) {
     const getQty = eqId => kitItems.find(i=>i.equipment_id==eqId)?.quantity||0;
 
     const save = async () => {
-      if (!name.trim()) return;
+      if (!trimmedName) return;
+      if (duplicateName) {
+        showToast("error", "כבר קיימת ערכה עם השם הזה");
+        return;
+      }
       setSaving(true);
-      const kit = { id: initial?.id||Date.now(), name, loanType: loanType==="הכל"?"":loanType, items: kitItems };
+      const kit = { id: initial?.id||Date.now(), name: trimmedName, loanType: loanType==="הכל"?"":loanType, items: kitItems };
       const updated = initial ? kits.map(k=>k.id===initial.id?kit:k) : [...kits, kit];
       setKits(updated);
       await storageSet("kits", updated);
-      showToast("success", initial ? "הערכה עודכנה" : `ערכה "${name}" נוצרה`);
+      showToast("success", initial ? "הערכה עודכנה" : `ערכה "${trimmedName}" נוצרה`);
       onDone();
     };
 
@@ -2073,7 +2168,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast }) {
           <div className="card-title">{initial?"✏️ עריכת ערכה":"➕ ערכה חדשה"}</div>
           <button className="btn btn-secondary btn-sm" onClick={onDone}>✕ ביטול</button>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+        <div className="responsive-split" style={{marginBottom:16}}>
           <div className="form-group"><label className="form-label">שם הערכה *</label><input className="form-input" placeholder='לדוגמה: "ערכת דוקומנטרי"' value={name} onChange={e=>setName(e.target.value)}/></div>
           <div className="form-group">
             <label className="form-label">שיוך לסוג השאלה</label>
@@ -2085,11 +2180,12 @@ function KitsPage({ kits, setKits, equipment, categories, showToast }) {
                 </button>
               ))}
             </div>
+            {duplicateName && <div style={{fontSize:12,color:"var(--red)",marginTop:6}}>כבר קיימת ערכה עם השם הזה.</div>}
           </div>
         </div>
         <div className="form-section-title">ציוד בערכה <span style={{fontWeight:400,fontSize:11,color:"var(--text3)"}}>· רק ציוד במצב תקין, עד מקסימום הכמות הקיימת</span></div>
         {categories.map(cat=>{
-          const catEq = equipment.filter(e=>e.category===cat && (!e.condition || e.condition==="תקין"));
+          const catEq = equipment.filter(e=>e.category===cat && (!e.status || e.status==="תקין"));
           if(!catEq.length) return null;
           return <div key={cat} style={{marginBottom:12}}>
             <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>{cat}</div>
@@ -2118,7 +2214,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast }) {
         })}
         {kitItems.length>0&&<div className="highlight-box" style={{marginTop:8}}>🎒 {kitItems.length} סוגי ציוד בערכה · {kitItems.reduce((s,i)=>s+i.quantity,0)} יחידות סה״כ</div>}
         <div style={{marginTop:12,display:"flex",gap:8}}>
-          <button className="btn btn-primary" disabled={!name||saving} onClick={save}>{saving?"⏳ שומר...":initial?"💾 שמור":"➕ צור ערכה"}</button>
+          <button className="btn btn-primary" disabled={!trimmedName||duplicateName||saving} onClick={save}>{saving?"⏳ שומר...":initial?"💾 שמור":"➕ צור ערכה"}</button>
         </div>
       </div>
     );
@@ -2247,26 +2343,38 @@ export default function App() {
       const cats = await storageGet("categories");
       const tm   = await storageGet("teamMembers");
       const kts  = await storageGet("kits");
+      const normalizedReservations = normalizeReservationsForArchive(res || []);
+      const reservationsChanged = JSON.stringify(normalizedReservations) !== JSON.stringify(res || []);
       setEquipment(eq  || INITIAL_EQUIPMENT);
+      setReservations(normalizedReservations);
       setCategories(cats || DEFAULT_CATEGORIES);
       setTeamMembers(tm || []);
       setKits(kts || []);
-      // Auto-archive: mark approved reservations past return date as הוחזר
-      const todayNow = today();
-      const autoArchived = (res || []).map(r =>
-        r.status === "מאושר" && r.return_date < todayNow ? { ...r, status: "הוחזר" } : r
-      );
-      const hasChanges = autoArchived.some((r,i) => r.status !== (res||[])[i]?.status);
-      setReservations(autoArchived);
       if(!eq)   await storageSet("equipment",    INITIAL_EQUIPMENT);
       if(!res)  await storageSet("reservations", []);
       if(!cats) await storageSet("categories",   DEFAULT_CATEGORIES);
       if(!tm)   await storageSet("teamMembers",  []);
       if(!kts)  await storageSet("kits",         []);
-      if(hasChanges) await storageSet("reservations", autoArchived);
+      if(res && reservationsChanged) await storageSet("reservations", normalizedReservations);
       setLoading(false);
     })();
   },[]);
+
+  useEffect(() => {
+    if (loading) return undefined;
+    const syncArchivedReservations = () => {
+      setReservations((currentReservations) => {
+        const normalizedReservations = normalizeReservationsForArchive(currentReservations);
+        if (JSON.stringify(normalizedReservations) === JSON.stringify(currentReservations)) {
+          return currentReservations;
+        }
+        void storageSet("reservations", normalizedReservations);
+        return normalizedReservations;
+      });
+    };
+    const timerId = window.setInterval(syncArchivedReservations, 60000);
+    return () => window.clearInterval(timerId);
+  }, [loading]);
 
   const pending = reservations.filter(r=>r.status==="ממתין").length;
   const pageTitle = { dashboard:"לוח בקרה", equipment:"ניהול ציוד", reservations:"ניהול בקשות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות" };
