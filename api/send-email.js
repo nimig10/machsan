@@ -8,14 +8,17 @@ const transporter = nodemailer.createTransport({
   auth: { user: GMAIL_USER, pass: GMAIL_PASS },
 });
 
-function buildEmail({ type, student_name, borrow_date, return_date, items_list, wa_link }) {
-  const isApproved = type === "approved";
-  const isNew      = type === "new";
-  const color  = isApproved ? "#2ecc71" : isNew ? "#f5a623" : "#e74c3c";
-  const icon   = isApproved ? "✅" : isNew ? "⏳" : "❌";
-  const title  = isApproved ? "הבקשה שלך אושרה!" : isNew ? "הבקשה שלך התקבלה!" : "לצערנו הבקשה נדחתה";
+function buildEmail({ type, student_name, borrow_date, return_date, items_list, wa_link, loan_type }) {
+  const isApproved   = type === "approved";
+  const isNew        = type === "new";
+  const isTeamNotify = type === "team_notify";
+  const color  = isApproved ? "#2ecc71" : (isNew||isTeamNotify) ? "#f5a623" : "#e74c3c";
+  const icon   = isApproved ? "✅" : (isNew||isTeamNotify) ? "⏳" : "❌";
+  const title  = isApproved ? "הבקשה אושרה!" : isTeamNotify ? `בקשת השאלה חדשה — ${loan_type||""}` : isNew ? "הבקשה שלך התקבלה!" : "לצערנו הבקשה נדחתה";
   const body   = isApproved
-    ? `בקשת ההשאלה שלך <strong style="color:#2ecc71">אושרה</strong>. ניתן לאסוף את הציוד בתיאום עם צוות המחסן.`
+    ? `בקשת ההשאלה של <strong>${student_name}</strong> <strong style="color:#2ecc71">אושרה</strong>.`
+    : isTeamNotify
+    ? `<strong>${student_name}</strong> הגיש/ה בקשת השאלה חדשה (${loan_type||""}) הממתינה לאישורך.`
     : isNew
     ? `בקשת ההשאלה שלך <strong style="color:#f5a623">התקבלה</strong> וממתינה לאישור צוות המחסן.`
     : `לצערנו בקשת ההשאלה שלך <strong style="color:#e74c3c">נדחתה</strong>. לפרטים נוספים ניתן לפנות לצוות המחסן.`;
@@ -72,13 +75,14 @@ function buildEmail({ type, student_name, borrow_date, return_date, items_list, 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { to, type, student_name, borrow_date, return_date, items_list, wa_link } = req.body;
+  const { to, type, student_name, borrow_date, return_date, items_list, wa_link, loan_type } = req.body;
   if (!to || !type) return res.status(400).json({ error: "חסרים שדות חובה" });
 
   const subjects = {
-    new:      "⏳ קיבלנו את הבקשה שלך – מחסן השאלת ציוד קמרה אובסקורה וסאונד",
-    approved: "✅ הבקשה שלך אושרה – מחסן השאלת ציוד קמרה אובסקורה וסאונד",
-    rejected: "עדכון לגבי בקשת ההשאלה – מחסן השאלת ציוד קמרה אובסקורה וסאונד",
+    new:          "⏳ קיבלנו את הבקשה שלך – מחסן השאלת ציוד קמרה אובסקורה וסאונד",
+    approved:     "✅ הבקשה שלך אושרה – מחסן השאלת ציוד קמרה אובסקורה וסאונד",
+    rejected:     "עדכון לגבי בקשת ההשאלה – מחסן השאלת ציוד קמרה אובסקורה וסאונד",
+    team_notify:  `📬 בקשת השאלה חדשה (${loan_type||""}) – ${student_name||""}`,
   };
 
   try {
@@ -86,7 +90,7 @@ export default async function handler(req, res) {
       from:    `"מחסן קמרה אובסקורה וסאונד" <${GMAIL_USER}>`,
       to,
       subject: subjects[type] || "עדכון מהמחסן",
-      html:    buildEmail({ type, student_name, borrow_date, return_date, items_list, wa_link }),
+      html:    buildEmail({ type, student_name, borrow_date, return_date, items_list, wa_link, loan_type }),
     });
     res.json({ ok: true });
   } catch (err) {

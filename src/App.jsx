@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 // ─── GOOGLE SHEETS STORAGE (דרך Vercel) ──────────────────────────────────────
 async function storageGet(key) {
   try {
-    const actionMap = { reservations:"getReservations", equipment:"getEquipment", categories:"getCategories" };
+    const actionMap = { reservations:"getReservations", equipment:"getEquipment", categories:"getCategories", teamMembers:"getTeamMembers", kits:"getKits" };
     const res = await fetch(`/api/sheets?action=${actionMap[key]||"getEquipment"}`);
     const json = await res.json();
     if(json.ok && json.data !== null && json.data !== undefined) {
@@ -31,7 +31,7 @@ async function storageSet(key, value) {
     try { localStorage.setItem("categories_cache", JSON.stringify(value)); } catch{}
   }
   try {
-    const actionMap = { reservations:"saveReservations", equipment:"saveEquipment", categories:"saveCategories" };
+    const actionMap = { reservations:"saveReservations", equipment:"saveEquipment", categories:"saveCategories", teamMembers:"saveTeamMembers", kits:"saveKits" };
     const res = await fetch("/api/sheets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -202,7 +202,7 @@ const css = `
   .logo-icon { font-size:32px; margin-bottom:8px; display:block; }
   .nav { flex:1; padding:12px 0; overflow-y:auto; }
   .nav-section { padding:8px 16px 4px; font-size:10px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:1px; }
-  .nav-item { display:flex; align-items:center; gap:10px; padding:10px 20px; cursor:pointer; font-size:14px; font-weight:500; color:var(--text2); transition:all 0.15s; border-right:3px solid transparent; margin:1px 0; }
+  .nav-item { display:flex; align-items:center; gap:10px; padding:10px 20px; cursor:pointer; font-size:14px; font-weight:500; color:var(--text2); transition:all 0.15s; border-right:3px solid transparent; margin:1px 0; position:relative; }
   .nav-item:hover { background:var(--surface2); color:var(--text); }
   .nav-item.active { background:var(--accent-glow); color:var(--accent); border-right-color:var(--accent); }
   .nav-item .icon { font-size:16px; width:20px; text-align:center; }
@@ -344,15 +344,16 @@ const css = `
   }
   /* ── MOBILE ── */
   @media (max-width:768px) {
-    .sidebar { position:fixed; bottom:0; top:auto; right:0; left:0; width:100%; flex-direction:row; height:64px; border-left:none; border-top:1px solid var(--border); z-index:200; }
+    .sidebar { position:fixed; bottom:0; top:auto; right:0; left:0; width:100%; flex-direction:row; height:60px; border-left:none; border-top:1px solid var(--border); z-index:200; }
     .sidebar-logo { display:none; }
-    .nav { display:flex; flex-direction:row; padding:0; flex:1; overflow:visible; }
+    .nav { display:flex; flex-direction:row; padding:0; flex:1; overflow-x:auto; }
     .nav-section { display:none; }
-    .nav-item { flex:1; flex-direction:column; gap:3px; padding:8px 4px; font-size:10px; border-right:none; border-top:3px solid transparent; justify-content:center; text-align:center; margin:0; }
+    .nav-item { flex:1; min-width:48px; flex-direction:column; gap:1px; padding:5px 2px; font-size:9px; border-right:none; border-top:3px solid transparent; justify-content:center; text-align:center; margin:0; }
+    .nav-item span[style] { display:none; }
     .nav-item.active { border-right-color:transparent; border-top-color:var(--accent); background:var(--accent-glow); }
-    .nav-item .icon { font-size:20px; width:auto; }
+    .nav-item .icon { font-size:18px; width:auto; }
     .sidebar > div:last-child { display:none; }
-    .main { margin-right:0; padding-bottom:72px; }
+    .main { margin-right:0; padding-bottom:68px; }
     .topbar { padding:0 16px; }
     .page { padding:16px; }
     .stats-grid { grid-template-columns:1fr 1fr; gap:12px; }
@@ -1332,7 +1333,7 @@ function DashboardPage({ equipment, reservations }) {
   );
 }
 // ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
-function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES }) {
+function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[] }) {
   const [step, setStep]       = useState(1);
   const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:""});
   const [items, setItems]     = useState([]);
@@ -1403,6 +1404,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
       const waText = encodeURIComponent("שלום נמרוד הגשתי בקשה להשאלה ממתין לאישורך תודה");
       const waLink = `https://wa.me/${NIMROD_PHONE}?text=${waText}`;
       const itemsList = res.items.map(i => `<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${i.name}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${i.quantity}</td></tr>`).join("");
+      // Send to student
       await fetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1416,6 +1418,24 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
           wa_link:      waLink,
         }),
       });
+      // Notify team members who handle this loan type
+      const relevantTeam = (teamMembers||[]).filter(m => !m.loanTypes?.length || m.loanTypes.includes(res.loan_type));
+      for (const member of relevantTeam) {
+        if (!member.email) continue;
+        fetch("/api/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to:           member.email,
+            type:         "team_notify",
+            student_name: res.student_name,
+            items_list:   itemsList,
+            borrow_date:  formatDate(res.borrow_date),
+            return_date:  formatDate(res.return_date),
+            loan_type:    res.loan_type,
+          }),
+        }).catch(()=>{});
+      }
     } catch(e) {
       console.error("send email error:", e);
     }
@@ -1439,8 +1459,34 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
       return;
     }
     setSub(true);
+
+    // ── Fetch the freshest reservations from the server right before saving ──
+    // This prevents two students submitting simultaneously from both "seeing" free stock
+    let freshReservations = reservations;
+    try {
+      const fresh = await storageGet("reservations");
+      if (Array.isArray(fresh)) {
+        freshReservations = fresh;
+        setReservations(fresh); // update local state too
+      }
+    } catch(e) {
+      console.warn("Could not refresh reservations before submit:", e);
+    }
+
+    // ── Re-validate availability against fresh data ──
+    const overLimit = items.filter(item => {
+      const avail = getAvailable(item.equipment_id, form.borrow_date, form.return_date, freshReservations, equipment, null, form.borrow_time, form.return_time);
+      return item.quantity > avail;
+    });
+
+    if (overLimit.length > 0) {
+      setSub(false);
+      showToast("error", `חלק מהציוד כבר לא זמין: ${overLimit.map(i=>i.name).join(", ")} — נא לעדכן את הבחירה`);
+      return;
+    }
+
     const newRes = { ...form, id:Date.now(), status:"ממתין", created_at:today(), items };
-    const updated = [...reservations, newRes];
+    const updated = [...freshReservations, newRes];
     setReservations(updated);
     await storageSet("reservations", updated);
     await sendEmail(newRes);
@@ -1558,6 +1604,32 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
 
           {step===3 && <>
             <div className="form-section-title">בחירת ציוד{isSoundLoan&&<span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>· מיקרופונים ומקליטי אודיו בלבד</span>}</div>
+            {/* ── Kits for this loan type ── */}
+            {kits.filter(k=>!k.loanType||k.loanType===form.loan_type).length>0&&(
+              <div style={{marginBottom:20}}>
+                <div style={{fontSize:11,fontWeight:800,color:"var(--accent)",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>🎒 ערכות מוכנות</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                  {kits.filter(k=>!k.loanType||k.loanType===form.loan_type).map(kit=>(
+                    <button key={kit.id} type="button"
+                      style={{padding:"8px 14px",borderRadius:"var(--r-sm)",border:"1px solid var(--accent)",background:"var(--accent-glow)",color:"var(--accent)",fontSize:13,fontWeight:700,cursor:"pointer"}}
+                      onClick={()=>{
+                        // Pre-fill items from kit, respecting current availability
+                        const newItems = [...items];
+                        for (const ki of kit.items||[]) {
+                          const avail = availEq.find(e=>e.id==ki.equipment_id)?.avail||0;
+                          if(avail<=0) continue;
+                          const qty = Math.min(ki.quantity, avail);
+                          const name = equipment.find(e=>e.id==ki.equipment_id)?.name||"";
+                          const existing = newItems.findIndex(i=>i.equipment_id==ki.equipment_id);
+                          if(existing>=0) newItems[existing]={...newItems[existing],quantity:Math.min(newItems[existing].quantity+qty,avail)};
+                          else newItems.push({equipment_id:ki.equipment_id,quantity:qty,name});
+                        }
+                        setItems(newItems);
+                      }}>🎒 {kit.name}</button>
+                  ))}
+                </div>
+              </div>
+            )}
             {(isSoundLoan?SOUND_CATEGORIES:categories).map(c=>{
               const cat=availEq.filter(e=>e.category===c); if(!cat.length) return null;
               return <div key={c} style={{marginBottom:20}}>
@@ -1609,6 +1681,299 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   );
 }
 
+// ─── ARCHIVE PAGE ─────────────────────────────────────────────────────────────
+function ArchivePage({ reservations, equipment }) {
+  const archived = reservations.filter(r => r.status === "הוחזר");
+  const [search, setSearch] = useState("");
+  const [loanTypeF, setLoanTypeF] = useState("הכל");
+  const eqName = id => equipment.find(e=>e.id==id)?.name||"?";
+  const EqImg = ({id,size=20}) => {
+    const img = equipment.find(e=>e.id==id)?.image||"📦";
+    return img.startsWith("data:")||img.startsWith("http")
+      ? <img src={img} alt="" style={{width:size,height:size,objectFit:"cover",borderRadius:4,verticalAlign:"middle"}}/>
+      : <span style={{fontSize:size*0.8}}>{img}</span>;
+  };
+  const filtered = archived.filter(r =>
+    (loanTypeF==="הכל"||r.loan_type===loanTypeF) &&
+    (!search || r.student_name?.includes(search) || r.email?.includes(search))
+  );
+  return (
+    <div className="page">
+      <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
+        <div className="search-bar" style={{flex:1,minWidth:160}}><span>🔍</span><input placeholder="חיפוש לפי שם או מייל..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
+        <select className="form-select" style={{width:130,fontSize:12}} value={loanTypeF} onChange={e=>setLoanTypeF(e.target.value)}>
+          <option value="הכל">כל הסוגים</option>
+          {["פרטית","הפקה","סאונד"].map(t=><option key={t}>{t}</option>)}
+        </select>
+        <span style={{fontSize:13,color:"var(--text3)"}}>סה״כ: <strong style={{color:"var(--text)"}}>{filtered.length}</strong> בקשות</span>
+      </div>
+      {filtered.length===0
+        ? <div className="empty-state"><div className="emoji">🗄️</div><p>אין בקשות בארכיון</p></div>
+        : <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {[...filtered].sort((a,b)=>new Date(b.return_date)-new Date(a.return_date)).map(r=>(
+            <div key={r.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 18px",opacity:0.85}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{width:34,height:34,borderRadius:"50%",background:"var(--surface3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:900,flexShrink:0}}>{r.student_name?.[0]||"?"}</div>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:14}}>{r.student_name}</div>
+                    <div style={{fontSize:11,color:"var(--text3)"}}>{r.email}</div>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                  <span style={{background:"rgba(46,204,113,0.12)",color:"var(--green)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>✅ הוחזר</span>
+                  {r.loan_type&&<span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>{r.loan_type==="פרטית"?"👤":r.loan_type==="הפקה"?"🎬":"🎙️"} {r.loan_type}</span>}
+                </div>
+              </div>
+              <div style={{marginTop:10,display:"flex",gap:16,fontSize:12,color:"var(--text2)",flexWrap:"wrap"}}>
+                <span>📅 {formatDate(r.borrow_date)}{r.borrow_time&&<strong style={{color:"var(--accent)",marginRight:4}}> {r.borrow_time}</strong>}</span>
+                <span>↩ {formatDate(r.return_date)}{r.return_time&&<strong style={{color:"var(--accent)",marginRight:4}}> {r.return_time}</strong>}</span>
+                <span>📦 {r.items?.length||0} פריטים</span>
+                <span>📚 {r.course}</span>
+              </div>
+              <div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:4}}>
+                {r.items?.map((i,j)=><span key={j} className="chip"><EqImg id={i.equipment_id}/> {eqName(i.equipment_id)} ×{i.quantity}</span>)}
+              </div>
+            </div>
+          ))}
+        </div>
+      }
+    </div>
+  );
+}
+
+// ─── TEAM PAGE ────────────────────────────────────────────────────────────────
+function TeamPage({ teamMembers, setTeamMembers, showToast }) {
+  const [form, setForm] = useState({ name:"", email:"", loanTypes:["פרטית","הפקה","סאונד"] });
+  const [editId, setEditId] = useState(null);
+  const LOAN_TYPES = ["פרטית","הפקה","סאונד"];
+  const LOAN_ICONS = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️" };
+
+  const toggleLoanType = (lt) => setForm(p => ({
+    ...p,
+    loanTypes: p.loanTypes.includes(lt) ? p.loanTypes.filter(x=>x!==lt) : [...p.loanTypes, lt]
+  }));
+
+  const save = async () => {
+    if (!form.name.trim() || !form.email.trim()) return;
+    let updated;
+    if (editId) {
+      updated = teamMembers.map(m => m.id===editId ? {...m,...form} : m);
+      showToast("success", "איש צוות עודכן");
+    } else {
+      updated = [...teamMembers, { ...form, id: Date.now() }];
+      showToast("success", `${form.name} נוסף לצוות`);
+    }
+    setTeamMembers(updated);
+    await storageSet("teamMembers", updated);
+    setForm({ name:"", email:"", loanTypes:["פרטית","הפקה","סאונד"] });
+    setEditId(null);
+  };
+
+  const del = async (id) => {
+    const updated = teamMembers.filter(m => m.id!==id);
+    setTeamMembers(updated);
+    await storageSet("teamMembers", updated);
+    showToast("success", "איש צוות הוסר");
+  };
+
+  const startEdit = (m) => { setForm({ name:m.name, email:m.email, loanTypes:m.loanTypes||LOAN_TYPES }); setEditId(m.id); };
+
+  return (
+    <div className="page">
+      {/* Add/Edit form */}
+      <div className="card" style={{marginBottom:24}}>
+        <div className="card-header"><div className="card-title">{editId ? "✏️ עריכת איש צוות" : "➕ הוספת איש צוות"}</div></div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+          <div className="form-group"><label className="form-label">שם מלא *</label><input className="form-input" placeholder="שם" value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))}/></div>
+          <div className="form-group"><label className="form-label">כתובת מייל *</label><input className="form-input" type="email" placeholder="email@example.com" value={form.email} onChange={e=>setForm(p=>({...p,email:e.target.value}))}/></div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">📩 קבלת התראות עבור סוגי השאלה</label>
+          <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap"}}>
+            {LOAN_TYPES.map(lt=>(
+              <button key={lt} type="button"
+                onClick={()=>toggleLoanType(lt)}
+                style={{padding:"6px 14px",borderRadius:20,border:`2px solid ${form.loanTypes.includes(lt)?"var(--accent)":"var(--border)"}`,background:form.loanTypes.includes(lt)?"var(--accent-glow)":"var(--surface2)",color:form.loanTypes.includes(lt)?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+                {LOAN_ICONS[lt]} {lt}
+              </button>
+            ))}
+          </div>
+          <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>איש צוות יקבל מייל רק עבור בקשות מהסוגים המסומנים.</div>
+        </div>
+        <div style={{display:"flex",gap:8,marginTop:8}}>
+          <button className="btn btn-primary" disabled={!form.name||!form.email} onClick={save}>{editId?"💾 שמור עריכה":"➕ הוסף"}</button>
+          {editId&&<button className="btn btn-secondary" onClick={()=>{setEditId(null);setForm({name:"",email:"",loanTypes:LOAN_TYPES});}}>ביטול</button>}
+        </div>
+      </div>
+
+      {/* Team list */}
+      {teamMembers.length===0
+        ? <div className="empty-state"><div className="emoji">👥</div><p>עדיין לא נוספו אנשי צוות</p></div>
+        : <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {teamMembers.map(m=>(
+            <div key={m.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 18px",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+              <div style={{width:38,height:38,borderRadius:"50%",background:"var(--surface3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,flexShrink:0}}>{m.name?.[0]||"?"}</div>
+              <div style={{flex:1,minWidth:180}}>
+                <div style={{fontWeight:700,fontSize:14}}>{m.name}</div>
+                <div style={{fontSize:12,color:"var(--text3)"}}>{m.email}</div>
+                <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap"}}>
+                  {(m.loanTypes||LOAN_TYPES).map(lt=>(
+                    <span key={lt} style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>{LOAN_ICONS[lt]} {lt}</span>
+                  ))}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:6}}>
+                <button className="btn btn-secondary btn-sm" onClick={()=>startEdit(m)}>✏️ ערוך</button>
+                <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את ${m.name}?`)) del(m.id); }}>🗑️</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      }
+    </div>
+  );
+}
+
+// ─── KITS PAGE ────────────────────────────────────────────────────────────────
+function KitsPage({ kits, setKits, equipment, categories, showToast }) {
+  const [showForm, setShowForm] = useState(false);
+  const [editKit, setEditKit] = useState(null);
+  const LOAN_TYPES = ["פרטית","הפקה","סאונד","הכל"];
+  const LOAN_ICONS = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️", "הכל":"📦" };
+
+  const KitForm = ({ initial, onDone }) => {
+    const [name, setName] = useState(initial?.name||"");
+    const [loanType, setLoanType] = useState(initial?.loanType||"הכל");
+    const [kitItems, setKitItems] = useState(initial?.items||[]);
+    const [saving, setSaving] = useState(false);
+
+    const setItemQty = (eqId, qty) => {
+      const eqName = equipment.find(e=>e.id==eqId)?.name||"";
+      setKitItems(prev => qty<=0 ? prev.filter(i=>i.equipment_id!=eqId)
+        : prev.find(i=>i.equipment_id==eqId) ? prev.map(i=>i.equipment_id==eqId?{...i,quantity:qty}:i)
+        : [...prev,{equipment_id:eqId,quantity:qty,name:eqName}]);
+    };
+    const getQty = eqId => kitItems.find(i=>i.equipment_id==eqId)?.quantity||0;
+
+    const save = async () => {
+      if (!name.trim()) return;
+      setSaving(true);
+      const kit = { id: initial?.id||Date.now(), name, loanType: loanType==="הכל"?"":loanType, items: kitItems };
+      const updated = initial ? kits.map(k=>k.id===initial.id?kit:k) : [...kits, kit];
+      setKits(updated);
+      await storageSet("kits", updated);
+      showToast("success", initial ? "הערכה עודכנה" : `ערכה "${name}" נוצרה`);
+      onDone();
+    };
+
+    return (
+      <div className="card" style={{marginBottom:20}}>
+        <div className="card-header">
+          <div className="card-title">{initial?"✏️ עריכת ערכה":"➕ ערכה חדשה"}</div>
+          <button className="btn btn-secondary btn-sm" onClick={onDone}>✕ ביטול</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+          <div className="form-group"><label className="form-label">שם הערכה *</label><input className="form-input" placeholder='לדוגמה: "ערכת דוקומנטרי"' value={name} onChange={e=>setName(e.target.value)}/></div>
+          <div className="form-group">
+            <label className="form-label">שיוך לסוג השאלה</label>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>
+              {LOAN_TYPES.map(lt=>(
+                <button key={lt} type="button" onClick={()=>setLoanType(lt)}
+                  style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${loanType===lt?"var(--accent)":"var(--border)"}`,background:loanType===lt?"var(--accent-glow)":"var(--surface2)",color:loanType===lt?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                  {LOAN_ICONS[lt]} {lt}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="form-section-title">ציוד בערכה</div>
+        {categories.map(cat=>{
+          const catEq = equipment.filter(e=>e.category===cat);
+          if(!catEq.length) return null;
+          return <div key={cat} style={{marginBottom:12}}>
+            <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>{cat}</div>
+            {catEq.map(eq=>(
+              <div key={eq.id} className="item-row" style={{marginBottom:4}}>
+                <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http") ? <img src={eq.image} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/> : eq.image||"📦"}</span>
+                <div style={{flex:1,fontSize:13,fontWeight:600}}>{eq.name}</div>
+                <div className="qty-ctrl">
+                  <button className="qty-btn" onClick={()=>setItemQty(eq.id,getQty(eq.id)-1)}>−</button>
+                  <span className="qty-num">{getQty(eq.id)}</span>
+                  <button className="qty-btn" onClick={()=>setItemQty(eq.id,getQty(eq.id)+1)}>+</button>
+                </div>
+              </div>
+            ))}
+          </div>;
+        })}
+        {kitItems.length>0&&<div className="highlight-box" style={{marginTop:8}}>🎒 {kitItems.length} סוגי ציוד בערכה · {kitItems.reduce((s,i)=>s+i.quantity,0)} יחידות סה״כ</div>}
+        <div style={{marginTop:12,display:"flex",gap:8}}>
+          <button className="btn btn-primary" disabled={!name||saving} onClick={save}>{saving?"⏳ שומר...":initial?"💾 שמור":"➕ צור ערכה"}</button>
+        </div>
+      </div>
+    );
+  };
+
+  const del = async (id, name) => {
+    if(!window.confirm(`למחוק את הערכה "${name}"?`)) return;
+    const updated = kits.filter(k=>k.id!==id);
+    setKits(updated);
+    await storageSet("kits", updated);
+    showToast("success", `ערכה "${name}" נמחקה`);
+  };
+
+  return (
+    <div className="page">
+      {!showForm&&!editKit&&(
+        <div style={{marginBottom:20}}>
+          <button className="btn btn-primary" onClick={()=>setShowForm(true)}>➕ ערכה חדשה</button>
+        </div>
+      )}
+      {showForm&&<KitForm onDone={()=>setShowForm(false)}/>}
+      {editKit&&<KitForm initial={editKit} onDone={()=>setEditKit(null)}/>}
+
+      {kits.length===0&&!showForm
+        ? <div className="empty-state"><div className="emoji">🎒</div><p>לא נוצרו ערכות עדיין</p><p style={{fontSize:13,color:"var(--text3)"}}>ערכות מוצגות לסטודנטים בטופס ההשאלה כקיצור דרך</p></div>
+        : <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {kits.map(kit=>(
+            <div key={kit.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 18px"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{fontSize:28}}>🎒</span>
+                  <div>
+                    <div style={{fontWeight:800,fontSize:15}}>{kit.name}</div>
+                    <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>
+                      {kit.loanType
+                        ? <span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"2px 8px",color:"var(--accent)",fontWeight:700}}>{LOAN_ICONS[kit.loanType]||"📦"} {kit.loanType}</span>
+                        : <span style={{color:"var(--text3)"}}>📦 כל סוגי ההשאלה</span>}
+                    </div>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:6}}>
+                  <button className="btn btn-secondary btn-sm" onClick={()=>{setEditKit(kit);setShowForm(false);}}>✏️ ערוך</button>
+                  <button className="btn btn-danger btn-sm" onClick={()=>del(kit.id,kit.name)}>🗑️</button>
+                </div>
+              </div>
+              <div style={{marginTop:10,display:"flex",flexWrap:"wrap",gap:4}}>
+                {(kit.items||[]).map((i,j)=>{
+                  const eq = equipment.find(e=>e.id==i.equipment_id);
+                  return <span key={j} className="chip">
+                    {eq?.image&&(eq.image.startsWith("data:")||eq.image.startsWith("http"))
+                      ? <img src={eq.image} alt="" style={{width:14,height:14,objectFit:"cover",borderRadius:2,verticalAlign:"middle"}}/>
+                      : <span>{eq?.image||"📦"}</span>}
+                    {' '}{eq?.name||i.name} ×{i.quantity}
+                  </span>;
+                })}
+                {!(kit.items?.length)&&<span style={{fontSize:12,color:"var(--text3)"}}>אין ציוד בערכה</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      }
+    </div>
+  );
+}
+
 // ─── ADMIN PASSWORD SCREEN ────────────────────────────────────────────────────
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || "changeme";
 
@@ -1648,6 +2013,8 @@ export default function App() {
   const [equipment, setEquipment]     = useState([]);
   const [reservations, setReservations] = useState([]);
   const [categories, setCategories]   = useState(DEFAULT_CATEGORIES);
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [kits, setKits]               = useState([]);
   const [loading, setLoading]         = useState(true);
   const [toasts, setToasts]           = useState([]);
   const [authed, setAuthed]           = useState(false);
@@ -1665,21 +2032,34 @@ export default function App() {
 
   useEffect(()=>{
     (async()=>{
-      const eq  = await storageGet("equipment");
-      const res = await storageGet("reservations");
+      const eq   = await storageGet("equipment");
+      const res  = await storageGet("reservations");
       const cats = await storageGet("categories");
+      const tm   = await storageGet("teamMembers");
+      const kts  = await storageGet("kits");
       setEquipment(eq  || INITIAL_EQUIPMENT);
-      setReservations(res || []);
       setCategories(cats || DEFAULT_CATEGORIES);
+      setTeamMembers(tm || []);
+      setKits(kts || []);
+      // Auto-archive: mark approved reservations past return date as הוחזר
+      const todayNow = today();
+      const autoArchived = (res || []).map(r =>
+        r.status === "מאושר" && r.return_date < todayNow ? { ...r, status: "הוחזר" } : r
+      );
+      const hasChanges = autoArchived.some((r,i) => r.status !== (res||[])[i]?.status);
+      setReservations(autoArchived);
       if(!eq)   await storageSet("equipment",    INITIAL_EQUIPMENT);
       if(!res)  await storageSet("reservations", []);
       if(!cats) await storageSet("categories",   DEFAULT_CATEGORIES);
+      if(!tm)   await storageSet("teamMembers",  []);
+      if(!kts)  await storageSet("kits",         []);
+      if(hasChanges) await storageSet("reservations", autoArchived);
       setLoading(false);
     })();
   },[]);
 
   const pending = reservations.filter(r=>r.status==="ממתין").length;
-  const pageTitle = { dashboard:"לוח בקרה", equipment:"ניהול ציוד", reservations:"ניהול בקשות" };
+  const pageTitle = { dashboard:"לוח בקרה", equipment:"ניהול ציוד", reservations:"ניהול בקשות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות" };
 
   return (
     <>
@@ -1688,7 +2068,7 @@ export default function App() {
       {/* ── טופס ציבורי ── */}
       {!isAdmin && (
         <div className="public-page-shell">
-          {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories}/>}
+          {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers}/>}
         </div>
       )}
 
@@ -1705,11 +2085,18 @@ export default function App() {
             </div>
             <div className="nav">
               <div className="nav-section">ניהול</div>
-              {[{id:"dashboard",icon:"📊",label:"לוח בקרה"},{id:"equipment",icon:"📦",label:"ציוד"},{id:"reservations",icon:"📋",label:"בקשות",badge:pending||null}].map(n=>(
-                <div key={n.id} className={`nav-item ${page===n.id?"active":""}`} onClick={()=>setPage(n.id)}>
+              {[
+                {id:"dashboard",icon:"📊",label:"בקרה"},
+                {id:"equipment",icon:"📦",label:"ציוד"},
+                {id:"reservations",icon:"📋",label:"בקשות",badge:pending||null},
+                {id:"kits",icon:"🎒",label:"ערכות"},
+                {id:"team",icon:"👥",label:"צוות"},
+                {id:"archive",icon:"🗄️",label:"ארכיון"},
+              ].map(n=>(
+                <div key={n.id} className={`nav-item ${page===n.id?"active":""}`} onClick={()=>setPage(n.id)} title={n.label}>
                   <span className="icon">{n.icon}</span>
-                  <span style={{flex:1}}>{n.label}</span>
-                  {n.badge&&<span style={{background:"var(--accent)",color:"#000",borderRadius:"50%",width:18,height:18,fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center"}}>{n.badge}</span>}
+                  <span style={{fontSize:page===n.id?10:9,opacity:page===n.id?1:0.7}}>{n.label}</span>
+                  {n.badge&&<span style={{background:"var(--accent)",color:"#000",borderRadius:"50%",width:16,height:16,fontSize:10,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",position:"absolute",top:4,left:"50%",transform:"translateX(-50%) translateX(10px)"}}>{n.badge}</span>}
                 </div>
               ))}
             </div>
@@ -1746,6 +2133,9 @@ export default function App() {
               {page==="reservations"&& <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy}/>}
+              {page==="archive"     && <ArchivePage      reservations={reservations} equipment={equipment}/>}
+              {page==="team"        && <TeamPage         teamMembers={teamMembers} setTeamMembers={setTeamMembers} showToast={showToast}/>}
+              {page==="kits"        && <KitsPage         kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast}/>}
             </>}
           </div>
         </div>
