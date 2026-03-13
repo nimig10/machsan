@@ -1333,6 +1333,121 @@ function DashboardPage({ equipment, reservations }) {
     </div>
   );
 }
+// ─── STEP 3 EQUIPMENT SELECTOR ───────────────────────────────────────────────
+function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equipment, items, setItems, getItem, setQty }) {
+  const [activeKit, setActiveKit] = useState(null); // null = show all
+
+  const relevantKits = (kits||[]).filter(k => !k.loanType || k.loanType === loanType);
+
+  const selectKit = (kit) => {
+    if (activeKit?.id === kit.id) {
+      // deselect — go back to full list, keep chosen quantities
+      setActiveKit(null);
+      return;
+    }
+    setActiveKit(kit);
+    // Auto-fill kit quantities (capped to available)
+    const kitEqIds = new Set((kit.items||[]).map(i=>String(i.equipment_id)));
+    // Clear items not in kit, fill kit items
+    const newItems = [];
+    for (const ki of kit.items||[]) {
+      const avail = availEq.find(e=>e.id==ki.equipment_id)?.avail||0;
+      if(avail<=0) continue;
+      const qty = Math.min(ki.quantity, avail);
+      const name = equipment.find(e=>e.id==ki.equipment_id)?.name||"";
+      newItems.push({equipment_id:ki.equipment_id,quantity:qty,name});
+    }
+    // Keep items that are not in this kit (user may have picked other things)
+    const kept = items.filter(i=>!kitEqIds.has(String(i.equipment_id)));
+    setItems([...kept, ...newItems]);
+  };
+
+  // Equipment to display: if a kit is active, only show that kit's items
+  const kitEqIds = activeKit ? new Set((activeKit.items||[]).map(i=>String(i.equipment_id))) : null;
+  const baseCategories = isSoundLoan ? ["מיקרופונים","מקליטי אודיו"] : categories;
+
+  const SOUND_CATEGORIES = ["מיקרופונים","מקליטי אודיו"];
+
+  return (
+    <>
+      <div className="form-section-title">
+        בחירת ציוד
+        {isSoundLoan&&<span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>· מיקרופונים ומקליטי אודיו בלבד</span>}
+      </div>
+
+      {/* ── Kit selector ── */}
+      {relevantKits.length>0 && (
+        <div style={{marginBottom:20,padding:"14px 16px",background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
+          <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",marginBottom:10,letterSpacing:0.5}}>🎒 ערכות מוכנות לסוג השאלה זה</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:activeKit?10:0}}>
+            {/* "All equipment" pill */}
+            <button type="button"
+              onClick={()=>setActiveKit(null)}
+              style={{padding:"7px 14px",borderRadius:20,border:`2px solid ${!activeKit?"var(--text2)":"var(--border)"}`,background:!activeKit?"var(--surface3)":"transparent",color:!activeKit?"var(--text)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",transition:"all 0.15s"}}>
+              📦 כל הציוד
+            </button>
+            {relevantKits.map(kit=>{
+              const isActive = activeKit?.id===kit.id;
+              return (
+                <button key={kit.id} type="button"
+                  onClick={()=>selectKit(kit)}
+                  style={{padding:"7px 16px",borderRadius:20,border:`2px solid ${isActive?"var(--accent)":"var(--border)"}`,background:isActive?"var(--accent)":"var(--surface3)",color:isActive?"#000":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer",transition:"all 0.15s",display:"flex",alignItems:"center",gap:6}}>
+                  🎒 {kit.name}
+                  {isActive&&<span style={{fontSize:10,opacity:0.7}}>✓ פעיל</span>}
+                </button>
+              );
+            })}
+          </div>
+          {activeKit&&(
+            <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>
+              מציג ציוד מערכת <strong style={{color:"var(--accent)"}}>{activeKit.name}</strong> בלבד · לחץ שוב לביטול הסינון
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Equipment list ── */}
+      {baseCategories.map(c=>{
+        let catEq = availEq.filter(e=>e.category===c);
+        if(kitEqIds) catEq = catEq.filter(e=>kitEqIds.has(String(e.id)));
+        if(!catEq.length) return null;
+        return (
+          <div key={c} style={{marginBottom:20}}>
+            <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>{c}</div>
+            {catEq.map(eq=>{
+              const itm=getItem(eq.id);
+              // In kit mode, show kit recommended qty as hint
+              const kitHint = activeKit ? (activeKit.items||[]).find(i=>i.equipment_id==eq.id)?.quantity : null;
+              return (
+                <div key={eq.id} className="item-row" style={{opacity:eq.avail===0?0.4:1}}>
+                  {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
+                    ? <img src={eq.image} alt="" style={{width:36,height:36,objectFit:"cover",borderRadius:6}}/>
+                    : <span style={{fontSize:26}}>{eq.image||"📦"}</span>}
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:600,fontSize:14}}>{eq.name}</div>
+                    <div style={{fontSize:12,color:"var(--text3)"}}>
+                      זמין: <span style={{color:eq.avail===0?"var(--red)":eq.avail<=2?"var(--yellow)":"var(--green)",fontWeight:700}}>{eq.avail}</span>
+                      {kitHint&&<span style={{color:"var(--accent)",marginRight:6,fontWeight:600}}>· ערכה: {kitHint}</span>}
+                    </div>
+                  </div>
+                  {eq.avail>0
+                    ? <div className="qty-ctrl">
+                        <button className="qty-btn" onClick={()=>setQty(eq.id,itm.quantity-1)}>−</button>
+                        <span className="qty-num">{itm.quantity}</span>
+                        <button className="qty-btn" onClick={()=>setQty(eq.id,itm.quantity+1)}>+</button>
+                      </div>
+                    : <span className="badge badge-red">לא זמין</span>
+                  }
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 // ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
 function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[] }) {
   const [step, setStep]       = useState(1);
@@ -1603,50 +1718,19 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
             <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setStep(1)}>← חזור</button><button className="btn btn-primary" disabled={!ok2} onClick={()=>setStep(3)}>המשך ← ציוד</button></div>
           </>}
 
+          {step===3 && <Step3Equipment
+            isSoundLoan={isSoundLoan}
+            kits={kits}
+            loanType={form.loan_type}
+            categories={categories}
+            availEq={availEq}
+            equipment={equipment}
+            items={items}
+            setItems={setItems}
+            getItem={getItem}
+            setQty={setQty}
+          />}
           {step===3 && <>
-            <div className="form-section-title">בחירת ציוד{isSoundLoan&&<span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>· מיקרופונים ומקליטי אודיו בלבד</span>}</div>
-            {/* ── Kits for this loan type ── */}
-            {kits.filter(k=>!k.loanType||k.loanType===form.loan_type).length>0&&(
-              <div style={{marginBottom:20}}>
-                <div style={{fontSize:11,fontWeight:800,color:"var(--accent)",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>🎒 ערכות מוכנות</div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                  {kits.filter(k=>!k.loanType||k.loanType===form.loan_type).map(kit=>(
-                    <button key={kit.id} type="button"
-                      style={{padding:"8px 14px",borderRadius:"var(--r-sm)",border:"1px solid var(--accent)",background:"var(--accent-glow)",color:"var(--accent)",fontSize:13,fontWeight:700,cursor:"pointer"}}
-                      onClick={()=>{
-                        // Pre-fill items from kit, respecting current availability
-                        const newItems = [...items];
-                        for (const ki of kit.items||[]) {
-                          const avail = availEq.find(e=>e.id==ki.equipment_id)?.avail||0;
-                          if(avail<=0) continue;
-                          const qty = Math.min(ki.quantity, avail);
-                          const name = equipment.find(e=>e.id==ki.equipment_id)?.name||"";
-                          const existing = newItems.findIndex(i=>i.equipment_id==ki.equipment_id);
-                          if(existing>=0) newItems[existing]={...newItems[existing],quantity:Math.min(newItems[existing].quantity+qty,avail)};
-                          else newItems.push({equipment_id:ki.equipment_id,quantity:qty,name});
-                        }
-                        setItems(newItems);
-                      }}>🎒 {kit.name}</button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {(isSoundLoan?SOUND_CATEGORIES:categories).map(c=>{
-              const cat=availEq.filter(e=>e.category===c); if(!cat.length) return null;
-              return <div key={c} style={{marginBottom:20}}>
-                <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>{c}</div>
-                {cat.map(eq=>{
-                  const itm=getItem(eq.id);
-                  return <div key={eq.id} className="item-row" style={{opacity:eq.avail===0?0.4:1}}>
-                    {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
-                      ? <img src={eq.image} alt="" style={{width:36,height:36,objectFit:"cover",borderRadius:6}}/>
-                      : <span style={{fontSize:26}}>{eq.image||"📦"}</span>}
-                    <div style={{flex:1}}><div style={{fontWeight:600,fontSize:14}}>{eq.name}</div><div style={{fontSize:12,color:"var(--text3)"}}>זמין: <span style={{color:eq.avail===0?"var(--red)":eq.avail<=2?"var(--yellow)":"var(--green)",fontWeight:700}}>{eq.avail}</span></div></div>
-                    {eq.avail>0 ? <div className="qty-ctrl"><button className="qty-btn" onClick={()=>setQty(eq.id,itm.quantity-1)}>−</button><span className="qty-num">{itm.quantity}</span><button className="qty-btn" onClick={()=>setQty(eq.id,itm.quantity+1)}>+</button></div> : <span className="badge badge-red">לא זמין</span>}
-                  </div>;
-                })}
-              </div>;
-            })}
             {items.length>0&&<div className="highlight-box">🛒 נבחרו {items.length} סוגים ({items.reduce((s,i)=>s+i.quantity,0)} יחידות)</div>}
             <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setStep(2)}>← חזור</button><button className="btn btn-primary" disabled={!items.length} onClick={()=>setStep(4)}>המשך ← אישור</button></div>
           </>}
