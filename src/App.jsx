@@ -70,27 +70,29 @@ const TERMS = `הסטודנט מתחייב להחזיר את הציוד במוע
 // ─── UTILS ────────────────────────────────────────────────────────────────────
 function formatDate(d) {
   if (!d) return "";
-  return new Date(d).toLocaleDateString("he-IL", { day:"2-digit", month:"2-digit", year:"numeric" });
+  return parseLocalDate(d).toLocaleDateString("he-IL", { day:"2-digit", month:"2-digit", year:"numeric" });
+}
+function formatLocalDateInput(date) {
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+}
+function parseLocalDate(dateStr) {
+  if (!dateStr) return null;
+  const [y, m, d] = String(dateStr).split("-").map(Number);
+  return new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0);
 }
 function today() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  return formatLocalDateInput(new Date());
 }
 function dateToLocal(d) {
   if(!d) return null;
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  return formatLocalDateInput(d);
 }
 
 function toDateTime(dateStr, timeStr) {
-  // Combine date + time into comparable number (minutes since epoch)
   if (!dateStr) return 0;
-  const d = new Date(dateStr);
-  if (timeStr) {
-    const [h, m] = timeStr.split(":").map(Number);
-    d.setHours(h, m, 0, 0);
-  } else {
-    d.setHours(0, 0, 0, 0);
-  }
+  const d = parseLocalDate(dateStr);
+  const [h, m] = String(timeStr || "00:00").split(":").map(Number);
+  d.setHours(Number.isFinite(h) ? h : 0, Number.isFinite(m) ? m : 0, 0, 0);
   return d.getTime();
 }
 
@@ -1125,76 +1127,35 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   const [done, setDone]       = useState(false);
   const [emailError, setEmailError] = useState(false);
   const [submitting, setSub]  = useState(false);
-  const [latestReservations, setLatestReservations] = useState(reservations || []);
-  const [checkingAvailability, setCheckingAvailability] = useState(false);
-  const [availabilityError, setAvailabilityError] = useState("");
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
 
-  useEffect(() => {
-    setLatestReservations(reservations || []);
-  }, [reservations]);
-
-  const refreshAvailabilitySnapshot = async () => {
-    if (!fetchLatestReservations) return reservations || [];
-    try {
-      setCheckingAvailability(true);
-      const fresh = await fetchLatestReservations();
-      if (fresh) {
-        setLatestReservations(fresh);
-        return fresh;
-      }
-    } catch (e) {
-      console.error("refreshAvailabilitySnapshot error", e);
-    } finally {
-      setCheckingAvailability(false);
-    }
-    return reservations || [];
-  };
-
-  const validateSelectionAgainst = (reservationList, selectedItems = items) => {
-    const problems = [];
-    for (const item of selectedItems) {
-      const availableNow = getAvailable(
-        item.equipment_id,
-        form.borrow_date,
-        form.return_date,
-        reservationList,
-        equipment
-      );
-      if (item.quantity > availableNow) {
-        const eqName = equipment.find(e => e.id == item.equipment_id)?.name || item.name || "פריט";
-        problems.push({ equipment_id: item.equipment_id, name: eqName, requested: item.quantity, available: availableNow });
-      }
-    }
-    return problems;
-  };
-
-  const clampItemsToAvailability = (reservationList, selectedItems = items) => {
-    return selectedItems
-      .map(item => {
-        const availableNow = getAvailable(
-          item.equipment_id,
-          form.borrow_date,
-          form.return_date,
-          reservationList,
-          equipment
-        );
-        return { ...item, quantity: Math.max(0, Math.min(item.quantity, availableNow)) };
-      })
-      .filter(item => item.quantity > 0);
-  };
-
   const minDays = form.loan_type==="פרטית" ? 2 : form.loan_type==="סאונד" ? 0 : 7;
-  const isWeekend = (dateStr) => { if(!dateStr) return false; const d = new Date(dateStr); return d.getDay()===5||d.getDay()===6; };
-  // Advance date past weekends
-  const skipWeekend = (dateStr) => { if(!dateStr) return dateStr; const d=new Date(dateStr); while(d.getDay()===5||d.getDay()===6){d.setDate(d.getDate()+1);} return d.toISOString().split("T")[0]; };
+  const isWeekend = (dateStr) => {
+    if(!dateStr) return false;
+    const d = parseLocalDate(dateStr);
+    return d.getDay()===5 || d.getDay()===6;
+  };
+  const addDaysLocal = (dateStr, days) => {
+    const d = parseLocalDate(dateStr);
+    d.setDate(d.getDate() + days);
+    return formatLocalDateInput(d);
+  };
+  const moveToNextWeekday = (dateStr) => {
+    const d = parseLocalDate(dateStr);
+    while (d.getDay() === 5 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+    return formatLocalDateInput(d);
+  };
   const borrowWeekend = isWeekend(form.borrow_date);
   const returnWeekend = isWeekend(form.return_date);
-  const minDate = (()=>{ const d=new Date(); d.setDate(d.getDate()+minDays); return d.toISOString().split("T")[0]; })();
+  const minDate = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + minDays);
+    return moveToNextWeekday(formatLocalDateInput(d));
+  })();
   const maxDays = form.loan_type==="פרטית" ? 4 : 7;
-  const tooSoon = form.loan_type!=="סאונד" && form.borrow_date && form.borrow_date < minDate;
+  const tooSoon = form.loan_type!=="סאונד" && !!form.borrow_date && form.borrow_date < minDate;
   const loanDays = (form.borrow_date && form.return_date)
-    ? Math.ceil((new Date(form.return_date)-new Date(form.borrow_date))/(86400000))+1
+    ? Math.ceil((parseLocalDate(form.return_date) - parseLocalDate(form.borrow_date)) / 86400000) + 1
     : 0;
   const tooLong = loanDays > maxDays;
   const TIME_SLOTS = form.loan_type==="סאונד"
@@ -1203,9 +1164,10 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   const isSoundLoan = form.loan_type==="סאונד";
   const ok1 = form.student_name && form.email && form.phone && form.course && form.loan_type;
   const sameDay = form.borrow_date && form.return_date && form.borrow_date === form.return_date;
-  const timeOrderError = sameDay && form.borrow_time && form.return_time && form.return_time <= form.borrow_time;
-  const returnBeforeBorrow = form.borrow_date && form.return_date && form.return_date < form.borrow_date;
-  const ok2 = form.borrow_date && form.return_date && !returnBeforeBorrow && !tooSoon && !tooLong && !borrowWeekend && !returnWeekend && form.borrow_time && form.return_time && !timeOrderError;
+  const timeOrderError = sameDay && form.borrow_time && form.return_time && toDateTime(form.return_date, form.return_time) <= toDateTime(form.borrow_date, form.borrow_time);
+  const returnBeforeBorrow = form.borrow_date && form.return_date && parseLocalDate(form.return_date) < parseLocalDate(form.borrow_date);
+  const hasTimes = !!form.borrow_time && !!form.return_time;
+  const ok2 = !!form.borrow_date && !!form.return_date && hasTimes && !returnBeforeBorrow && !tooSoon && !tooLong && !borrowWeekend && !returnWeekend && !timeOrderError;
 
   const availEq = useMemo(()=>{
     if(!form.borrow_date||!form.return_date) return [];
@@ -1258,26 +1220,15 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   };
 
   const submit = async () => {
-    setSub(true);
-    setAvailabilityError("");
-    const freshReservations = await refreshAvailabilitySnapshot();
-    const conflicts = validateSelectionAgainst(freshReservations, items);
-
-    if (conflicts.length) {
-      const adjustedItems = clampItemsToAvailability(freshReservations, items);
-      setItems(adjustedItems);
-      setStep(3);
-      const msg = conflicts.map(c => `${c.name}: ביקשת ${c.requested}, זמין עכשיו ${c.available}`).join(" | ");
-      setAvailabilityError(`המלאי השתנה בזמן שביצעת את הבקשה. ${msg}`);
-      showToast("error", "המלאי השתנה — עודכן לפי המצב הנוכחי");
-      setSub(false);
+    // Validate email format before doing anything
+    if(!isValidEmail(form.email)) {
+      setEmailError(true);
       return;
     }
-
+    setSub(true);
     const newRes = { ...form, id:Date.now(), status:"ממתין", created_at:today(), items };
-    const updated = [...freshReservations, newRes];
+    const updated = [...reservations, newRes];
     setReservations(updated);
-    setLatestReservations(updated);
     await storageSet("reservations", updated);
     await sendEmail(newRes);
     setSub(false);
@@ -1389,24 +1340,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
             {returnBeforeBorrow && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 זמנים לא נכונים — תאריך החזרה חייב להיות אחרי תאריך ההשאלה.</div>}
             {timeOrderError && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 זמנים לא נכונים — שעת החזרה חייבת להיות אחרי שעת האיסוף באותו יום.</div>}
             {ok2 && <div className="highlight-box">📅 השאלה ל-{loanDays} ימים · איסוף {form.borrow_time} · החזרה {form.return_time}</div>}
-            <div className="flex gap-2">
-              <button className="btn btn-secondary" onClick={()=>setStep(1)}>← חזור</button>
-              <button
-                className="btn btn-primary"
-                disabled={!ok2 || checkingAvailability}
-                onClick={async()=>{
-                  setAvailabilityError("");
-                  const freshReservations = await refreshAvailabilitySnapshot();
-                  const adjustedItems = clampItemsToAvailability(freshReservations, items);
-                  if (adjustedItems.length !== items.length || adjustedItems.some((item, idx) => item.quantity !== (items[idx]?.quantity || 0))) {
-                    setItems(adjustedItems);
-                  }
-                  setStep(3);
-                }}
-              >
-                {checkingAvailability ? "⏳ בודק מלאי..." : "המשך ← ציוד"}
-              </button>
-            </div>
+            <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setStep(1)}>← חזור</button><button className="btn btn-primary" disabled={!ok2} onClick={()=>setStep(3)}>המשך ← ציוד</button></div>
           </>}
 
           {step===3 && <>
@@ -1428,29 +1362,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
               </div>;
             })}
             {items.length>0&&<div className="highlight-box">🛒 נבחרו {items.length} סוגים ({items.reduce((s,i)=>s+i.quantity,0)} יחידות)</div>}
-            <div className="flex gap-2">
-              <button className="btn btn-secondary" onClick={()=>setStep(2)}>← חזור</button>
-              <button
-                className="btn btn-primary"
-                disabled={!items.length || checkingAvailability}
-                onClick={async()=>{
-                  setAvailabilityError("");
-                  const freshReservations = await refreshAvailabilitySnapshot();
-                  const conflicts = validateSelectionAgainst(freshReservations, items);
-                  if (conflicts.length) {
-                    const adjustedItems = clampItemsToAvailability(freshReservations, items);
-                    setItems(adjustedItems);
-                    const msg = conflicts.map(c => `${c.name}: זמין עכשיו ${c.available}`).join(" | ");
-                    setAvailabilityError(`חלק מהציוד כבר אינו זמין בכמות שבחרת. ${msg}`);
-                    showToast("error", "המלאי השתנה — בדוק שוב את הבחירה");
-                    return;
-                  }
-                  setStep(4);
-                }}
-              >
-                {checkingAvailability ? "⏳ בודק מלאי..." : "המשך ← אישור"}
-              </button>
-            </div>
+            <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setStep(2)}>← חזור</button><button className="btn btn-primary" disabled={!items.length} onClick={()=>setStep(4)}>המשך ← אישור</button></div>
           </>}
 
           {step===4 && <>
