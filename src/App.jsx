@@ -2,33 +2,35 @@ import { useState, useEffect, useMemo } from "react";
 
 // ─── GOOGLE SHEETS STORAGE (דרך Vercel) ──────────────────────────────────────
 async function storageGet(key) {
+  const CACHE_KEYS = { categories:"categories_cache", kits:"kits_cache", teamMembers:"team_cache" };
   try {
     const actionMap = { reservations:"getReservations", equipment:"getEquipment", categories:"getCategories", teamMembers:"getTeamMembers", kits:"getKits" };
     const res = await fetch(`/api/sheets?action=${actionMap[key]||"getEquipment"}`);
     const json = await res.json();
     if(json.ok && json.data !== null && json.data !== undefined) {
-      // Cache categories locally as backup
-      if(key==="categories") { try { localStorage.setItem("categories_cache", JSON.stringify(json.data)); } catch{} }
+      // Cache locally as backup
+      if(CACHE_KEYS[key]) { try { localStorage.setItem(CACHE_KEYS[key], JSON.stringify(json.data)); } catch{} }
       return json.data;
     }
-    // Fallback to localStorage cache for categories
-    if(key==="categories") {
-      try { const c = localStorage.getItem("categories_cache"); if(c) return JSON.parse(c); } catch{}
+    // Fallback to localStorage cache
+    if(CACHE_KEYS[key]) {
+      try { const c = localStorage.getItem(CACHE_KEYS[key]); if(c) return JSON.parse(c); } catch{}
     }
     return null;
   } catch {
-    // On network error, return localStorage cache for categories
-    if(key==="categories") {
-      try { const c = localStorage.getItem("categories_cache"); if(c) return JSON.parse(c); } catch{}
+    // On network error, return localStorage cache
+    if(CACHE_KEYS[key]) {
+      try { const c = localStorage.getItem(CACHE_KEYS[key]); if(c) return JSON.parse(c); } catch{}
     }
     return null;
   }
 }
 
 async function storageSet(key, value) {
-  // Always save categories to localStorage immediately as backup
-  if(key==="categories") {
-    try { localStorage.setItem("categories_cache", JSON.stringify(value)); } catch{}
+  // Always save to localStorage immediately as backup
+  const CACHE_KEYS = { categories:"categories_cache", kits:"kits_cache", teamMembers:"team_cache" };
+  if(CACHE_KEYS[key]) {
+    try { localStorage.setItem(CACHE_KEYS[key], JSON.stringify(value)); } catch{}
   }
   try {
     const actionMap = { reservations:"saveReservations", equipment:"saveEquipment", categories:"saveCategories", teamMembers:"saveTeamMembers", kits:"saveKits" };
