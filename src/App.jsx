@@ -1,61 +1,51 @@
 import { useState, useEffect, useMemo } from "react";
 
-// ─── GOOGLE SHEETS STORAGE (דרך Vercel) ──────────────────────────────────────
-// localStorage = cache בלבד. Google Sheets = מסד הנתונים האמיתי.
-// כל המפתחות נשמרים ב-cache, אך הנתונים האמיתיים מגיעים תמיד מ-Sheets.
-const LS_KEYS = {
-  reservations: "cache_reservations",
-  equipment:    "cache_equipment",
-  categories:   "cache_categories",
-  teamMembers:  "cache_teamMembers",
-  kits:         "cache_kits",
+// ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
+const SB_URL = "https://wxkyqgwwraojnbmyyfco.supabase.co";
+const SB_KEY = "sb_publishable_n-mkSq7xABjj58ZBBwk6BA_RbpVS2SU";
+const SB_HEADERS = {
+  "apikey":        SB_KEY,
+  "Authorization": `Bearer ${SB_KEY}`,
+  "Content-Type":  "application/json",
 };
 
 function lsGet(key) {
-  try { const v = localStorage.getItem(LS_KEYS[key]); return v ? JSON.parse(v) : null; } catch { return null; }
+  try { const v = localStorage.getItem(`cache_${key}`); return v ? JSON.parse(v) : null; } catch { return null; }
 }
 function lsSet(key, value) {
-  try { localStorage.setItem(LS_KEYS[key], JSON.stringify(value)); } catch {}
+  try { localStorage.setItem(`cache_${key}`, JSON.stringify(value)); } catch {}
 }
 
 async function storageGet(key) {
-  const actionMap = { reservations:"getReservations", equipment:"getEquipment", categories:"getCategories", teamMembers:"getTeamMembers", kits:"getKits" };
   try {
-    const res  = await fetch(`/api/sheets?action=${actionMap[key]}`);
+    const res  = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers: SB_HEADERS });
     const json = await res.json();
-    if (json.ok && json.data !== null && json.data !== undefined) {
-      lsSet(key, json.data); // refresh local cache from Sheets
-      return json.data;
+    if (Array.isArray(json) && json.length > 0) {
+      lsSet(key, json[0].data);
+      return json[0].data;
     }
-    // Sheets returned ok:false — use cache as fallback
-    console.warn(`storageGet: Sheets returned ok:false for ${key}, using cache`);
     return lsGet(key);
-  } catch (e) {
-    // Network error — use cache as fallback
-    console.warn(`storageGet: network error for ${key}, using cache`, e);
+  } catch(e) {
+    console.warn("storageGet error", key, e);
     return lsGet(key);
   }
 }
 
 async function storageSet(key, value) {
-  // 1. Save to localStorage cache immediately
-  lsSet(key, value);
-  // 2. Save to Google Sheets
-  const actionMap = { reservations:"saveReservations", equipment:"saveEquipment", categories:"saveCategories", teamMembers:"saveTeamMembers", kits:"saveKits" };
+  lsSet(key, value); // cache immediately
   try {
-    const fetchRes = await fetch("/api/sheets", {
+    const res = await fetch(`${SB_URL}/rest/v1/store`, {
       method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ action: actionMap[key], payload: value }),
+      headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates" },
+      body:    JSON.stringify({ key, data: value, updated_at: new Date().toISOString() }),
     });
-    const json = await fetchRes.json().catch(() => ({}));
-    if (!json.ok) {
-      const errMsg = json.error || JSON.stringify(json);
-      console.error("storageSet Sheets error", key, errMsg);
-      return { ok: false, error: errMsg };
+    if (!res.ok) {
+      const err = await res.text();
+      console.error("storageSet error", key, err);
+      return { ok: false, error: err };
     }
     return { ok: true };
-  } catch (e) {
+  } catch(e) {
     console.error("storageSet network error", key, e);
     return { ok: false, error: e.message };
   }
