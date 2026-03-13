@@ -1,47 +1,64 @@
 import { useState, useEffect, useMemo } from "react";
 
 // ─── GOOGLE SHEETS STORAGE (דרך Vercel) ──────────────────────────────────────
+// localStorage = cache בלבד. Google Sheets = מסד הנתונים האמיתי.
+// כל המפתחות נשמרים ב-cache, אך הנתונים האמיתיים מגיעים תמיד מ-Sheets.
+const LS_KEYS = {
+  reservations: "cache_reservations",
+  equipment:    "cache_equipment",
+  categories:   "cache_categories",
+  teamMembers:  "cache_teamMembers",
+  kits:         "cache_kits",
+};
+
+function lsGet(key) {
+  try { const v = localStorage.getItem(LS_KEYS[key]); return v ? JSON.parse(v) : null; } catch { return null; }
+}
+function lsSet(key, value) {
+  try { localStorage.setItem(LS_KEYS[key], JSON.stringify(value)); } catch {}
+}
+
 async function storageGet(key) {
-  const CACHE_KEYS = { categories:"categories_cache", kits:"kits_cache", teamMembers:"team_cache" };
+  const actionMap = { reservations:"getReservations", equipment:"getEquipment", categories:"getCategories", teamMembers:"getTeamMembers", kits:"getKits" };
   try {
-    const actionMap = { reservations:"getReservations", equipment:"getEquipment", categories:"getCategories", teamMembers:"getTeamMembers", kits:"getKits" };
-    const res = await fetch(`/api/sheets?action=${actionMap[key]||"getEquipment"}`);
+    const res  = await fetch(`/api/sheets?action=${actionMap[key]}`);
     const json = await res.json();
-    if(json.ok && json.data !== null && json.data !== undefined) {
-      // Cache locally as backup
-      if(CACHE_KEYS[key]) { try { localStorage.setItem(CACHE_KEYS[key], JSON.stringify(json.data)); } catch{} }
+    if (json.ok && json.data !== null && json.data !== undefined) {
+      lsSet(key, json.data); // refresh local cache from Sheets
       return json.data;
     }
-    // Fallback to localStorage cache
-    if(CACHE_KEYS[key]) {
-      try { const c = localStorage.getItem(CACHE_KEYS[key]); if(c) return JSON.parse(c); } catch{}
-    }
-    return null;
-  } catch {
-    // On network error, return localStorage cache
-    if(CACHE_KEYS[key]) {
-      try { const c = localStorage.getItem(CACHE_KEYS[key]); if(c) return JSON.parse(c); } catch{}
-    }
-    return null;
+    // Sheets returned ok:false — use cache as fallback
+    console.warn(`storageGet: Sheets returned ok:false for ${key}, using cache`);
+    return lsGet(key);
+  } catch (e) {
+    // Network error — use cache as fallback
+    console.warn(`storageGet: network error for ${key}, using cache`, e);
+    return lsGet(key);
   }
 }
 
+// Returns { ok: true } or { ok: false, error }
 async function storageSet(key, value) {
-  // Always save to localStorage immediately as backup
-  const CACHE_KEYS = { categories:"categories_cache", kits:"kits_cache", teamMembers:"team_cache" };
-  if(CACHE_KEYS[key]) {
-    try { localStorage.setItem(CACHE_KEYS[key], JSON.stringify(value)); } catch{}
-  }
+  // 1. Save to localStorage cache immediately (optimistic)
+  lsSet(key, value);
+  // 2. Save to Google Sheets (the real DB)
+  const actionMap = { reservations:"saveReservations", equipment:"saveEquipment", categories:"saveCategories", teamMembers:"saveTeamMembers", kits:"saveKits" };
   try {
-    const actionMap = { reservations:"saveReservations", equipment:"saveEquipment", categories:"saveCategories", teamMembers:"saveTeamMembers", kits:"saveKits" };
-    const res = await fetch("/api/sheets", {
-      method: "POST",
+    const res  = await fetch("/api/sheets", {
+      method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: actionMap[key]||"saveEquipment", payload: value }),
+      body:    JSON.stringify({ action: actionMap[key], payload: value }),
     });
-    const json = await res.json().catch(()=>({}));
-    if(!json.ok) console.error("storageSet failed for", key, json);
-  } catch(e) { console.error("storageSet error", key, e); }
+    const json = await res.json().catch(() => ({}));
+    if (!json.ok) {
+      console.error("storageSet Sheets error", key, json);
+      return { ok: false, error: json.error || "Sheets error" };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error("storageSet network error", key, e);
+    return { ok: false, error: e.message };
+  }
 }
 
 // ─── INITIAL DATA ─────────────────────────────────────────────────────────────
@@ -1995,8 +2012,9 @@ function TeamPage({ teamMembers, setTeamMembers, showToast }) {
     }
     const updated = [...teamMembers, { ...addForm, id: Date.now(), name, email }];
     setTeamMembers(updated);
-    await storageSet("teamMembers", updated);
-    showToast("success", `${name} נוסף לצוות`);
+    const _tmNew = await storageSet("teamMembers", updated);
+    if(!_tmNew.ok) showToast("error", "❌ שגיאה בשמירה ל-Google Sheets — נסה שוב");
+    else showToast("success", `${name} נוסף לצוות`);
     setAddForm(emptyForm);
   };
 
@@ -2014,16 +2032,18 @@ function TeamPage({ teamMembers, setTeamMembers, showToast }) {
     }
     const updated = teamMembers.map(m => m.id===editMember.id ? {...m,...editForm,name,email} : m);
     setTeamMembers(updated);
-    await storageSet("teamMembers", updated);
-    showToast("success", "איש צוות עודכן");
+    const _tmEditRes = await storageSet("teamMembers", updated);
+    if(!_tmEditRes.ok) showToast("error", "❌ שגיאה בשמירה ל-Google Sheets — נסה שוב");
+    else showToast("success", "איש צוות עודכן");
     setEditMember(null);
   };
 
   const del = async (id) => {
     const updated = teamMembers.filter(m => m.id!==id);
     setTeamMembers(updated);
-    await storageSet("teamMembers", updated);
-    showToast("success", "איש צוות הוסר");
+    const _tmDelRes = await storageSet("teamMembers", updated);
+    if(!_tmDelRes.ok) showToast("error", "❌ שגיאה בשמירה ל-Google Sheets");
+    else showToast("success", "איש צוות הוסר");
   };
 
   const renderLoanTypeButtons = (form, setForm) => (
@@ -2171,8 +2191,9 @@ function KitsPage({ kits, setKits, equipment, categories, showToast }) {
       const kit = { id: initial?.id||Date.now(), name: trimmedName, loanType: loanType==="הכל"?"":loanType, items: kitItems };
       const updated = initial ? kits.map(k=>k.id===initial.id?kit:k) : [...kits, kit];
       setKits(updated);
-      await storageSet("kits", updated);
-      showToast("success", initial ? "הערכה עודכנה" : `ערכה "${trimmedName}" נוצרה`);
+      const _kitRes = await storageSet("kits", updated);
+      if(!_kitRes.ok) showToast("error", "❌ שגיאה בשמירה ל-Google Sheets — נסה שוב");
+      else showToast("success", initial ? "הערכה עודכנה" : `ערכה "${trimmedName}" נוצרה`);
       onDone();
     };
 
@@ -2238,8 +2259,9 @@ function KitsPage({ kits, setKits, equipment, categories, showToast }) {
     if(!window.confirm(`למחוק את הערכה "${name}"?`)) return;
     const updated = kits.filter(k=>k.id!==id);
     setKits(updated);
-    await storageSet("kits", updated);
-    showToast("success", `ערכה "${name}" נמחקה`);
+    const _kDel = await storageSet("kits", updated);
+    if(!_kDel.ok) showToast("error", "❌ שגיאה בשמירה ל-Google Sheets");
+    else showToast("success", `ערכה "${name}" נמחקה`);
   };
 
   return (
