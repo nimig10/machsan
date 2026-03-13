@@ -347,13 +347,16 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     if (modal.type==="add") {
       const item = { ...form, id: Date.now() };
       updated = [...equipment, item];
-      showToast("success", `"${form.name}" נוסף בהצלחה`);
     } else {
       updated = equipment.map(e => e.id===modal.item.id ? {...e,...form} : e);
-      showToast("success", "הציוד עודכן בהצלחה");
     }
     setEquipment(updated);
-    await storageSet("equipment", updated);
+    try {
+      await storageSet("equipment", updated);
+      showToast("success", modal.type==="add" ? `"${form.name}" נוסף בהצלחה` : "הציוד עודכן בהצלחה");
+    } catch(e) {
+      showToast("error", "שגיאה בשמירה — ייתכן שהתמונה גדולה מדי");
+    }
     setSaving(false);
     setModal(null);
   };
@@ -374,16 +377,41 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   const EqForm = ({ initial }) => {
     const [f, setF] = useState(initial||{name:"",category:"מצלמות",description:"",total_quantity:1,image:"📷",notes:"",status:"תקין"});
     const s = (k,v) => setF(p=>({...p,[k]:v}));
+    const [imgUploading, setImgUploading] = useState(false);
+    const [imgError, setImgError]         = useState("");
 
-    const handleImageUpload = (e) => {
+    const handleImageUpload = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => s("image", reader.result);
-      reader.readAsDataURL(file);
+      setImgError("");
+      setImgUploading(true);
+      try {
+        // Read file as base64 data-URI
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload  = ev => resolve(ev.target.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        // POST to Cloudinary proxy — returns { ok, url }
+        const res  = await fetch("/api/upload-image", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ data: dataUrl }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.url) throw new Error(json.error || "שגיאת שרת");
+        s("image", json.url);          // store only the URL — no Base64 in Sheets
+      } catch (err) {
+        console.error("Image upload failed:", err);
+        setImgError("שגיאה בהעלאת התמונה — נסה שנית");
+      } finally {
+        setImgUploading(false);
+      }
     };
 
-    const isUrl = f.image?.startsWith("data:") || f.image?.startsWith("http");
+    // Legacy Base64 items (data:) still preview correctly; new items use https: URLs
+    const isImage = f.image?.startsWith("data:") || f.image?.startsWith("http");
 
     return (
       <div>
@@ -397,16 +425,19 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
           <div className="form-group">
             <label className="form-label">תמונה / אימוג׳י</label>
             <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
-              {isUrl
-                ? <img src={f.image} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:8,border:"1px solid var(--border)"}}/>
-                : <span style={{fontSize:36}}>{f.image}</span>
+              {imgUploading
+                ? <div style={{width:48,height:48,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:8,border:"1px solid var(--border)",background:"var(--surface2)",fontSize:20}}>⏳</div>
+                : isImage
+                  ? <img src={f.image} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:8,border:"1px solid var(--border)"}}/>
+                  : <span style={{fontSize:36}}>{f.image}</span>
               }
               <div style={{flex:1}}>
-                <input className="form-input" value={isUrl?"":f.image} placeholder="אימוג׳י (למשל 📷)" onChange={e=>s("image",e.target.value)} style={{marginBottom:6}}/>
-                <label style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",cursor:"pointer",fontSize:12,color:"var(--text2)"}}>
-                  🖼️ העלה תמונה מהמחשב
-                  <input type="file" accept="image/*" style={{display:"none"}} onChange={handleImageUpload}/>
+                <input className="form-input" value={isImage?"":f.image} placeholder="אימוג׳י (למשל 📷)" onChange={e=>s("image",e.target.value)} style={{marginBottom:6}} disabled={imgUploading}/>
+                <label style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",cursor:imgUploading?"not-allowed":"pointer",fontSize:12,color:"var(--text2)",opacity:imgUploading?0.6:1}}>
+                  {imgUploading ? "⏳ מעלה תמונה..." : "🖼️ העלה תמונה מהמחשב"}
+                  <input type="file" accept="image/*" style={{display:"none"}} onChange={handleImageUpload} disabled={imgUploading}/>
                 </label>
+                {imgError && <div style={{color:"#e74c3c",fontSize:11,marginTop:4}}>{imgError}</div>}
               </div>
             </div>
           </div>
@@ -416,7 +447,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
           <div className="form-group"><label className="form-label">הערות</label><input className="form-input" value={f.notes} onChange={e=>s("notes",e.target.value)}/></div>
         </div>
         <div className="flex gap-2" style={{paddingTop:8}}>
-          <button className="btn btn-primary" disabled={!f.name||saving} onClick={()=>save(f)}>{saving?"⏳ שומר...":initial?"💾 שמור":"➕ הוסף"}</button>
+          <button className="btn btn-primary" disabled={!f.name||saving||imgUploading} onClick={()=>save(f)}>{saving?"⏳ שומר...":initial?"💾 שמור":"➕ הוסף"}</button>
           <button className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button>
         </div>
       </div>
