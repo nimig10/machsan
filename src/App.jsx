@@ -116,6 +116,64 @@ function getAvailable(eqId, borrowDate, returnDate, reservations, equipment, exc
   }
   return Math.max(0, eq.total_quantity - used);
 }
+ 
+function getReservationApprovalConflicts(targetReservation, reservations, equipment) {
+  if (!targetReservation) return [];
+  const reqStart = toDateTime(targetReservation.borrow_date, targetReservation.borrow_time || "00:00");
+  const reqEnd   = toDateTime(targetReservation.return_date, targetReservation.return_time || "23:59");
+  const conflicts = [];
+
+  for (const item of targetReservation.items || []) {
+    const eq = equipment.find(e => e.id == item.equipment_id);
+    if (!eq) continue;
+
+    let used = 0;
+    const blockers = [];
+
+    for (const res of reservations) {
+      if (res.id === targetReservation.id) continue;
+      if (res.status !== "מאושר") continue;
+
+      const resStart = toDateTime(res.borrow_date, res.borrow_time || "00:00");
+      const resEnd   = toDateTime(res.return_date, res.return_time || "23:59");
+      const overlaps = reqStart < resEnd && reqEnd > resStart;
+      if (!overlaps) continue;
+
+      const blockingItem = (res.items || []).find(i => i.equipment_id == item.equipment_id);
+      if (!blockingItem || !blockingItem.quantity) continue;
+
+      const blockingQty = Number(blockingItem.quantity) || 0;
+      used += blockingQty;
+      blockers.push({
+        reservation_id: res.id,
+        student_name: res.student_name || "ללא שם",
+        quantity: blockingQty,
+        borrow_date: res.borrow_date,
+        borrow_time: res.borrow_time || "00:00",
+        return_date: res.return_date,
+        return_time: res.return_time || "23:59",
+      });
+    }
+
+    const requested = Number(item.quantity) || 0;
+    const total = Number(eq.total_quantity) || 0;
+    const available = Math.max(0, total - used);
+
+    if (requested > available) {
+      conflicts.push({
+        equipment_id: item.equipment_id,
+        equipment_name: eq.name,
+        requested,
+        available,
+        total,
+        missing: requested - available,
+        blockers,
+      });
+    }
+  }
+
+  return conflicts;
+}
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const css = `
@@ -704,6 +762,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
     search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy }) {
   const [selected, setSelected] = useState(null);
   const [editing, setEditing]   = useState(null);
+  const [approvalConflict, setApprovalConflict] = useState(null);
 
   const filtered = [...reservations]
     .filter(r =>
@@ -786,6 +845,18 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
   };
 
   const updateStatus = async (id, status) => {
+    const res = reservations.find(r=>r.id===id);
+    if (!res) return;
+
+    if (status === "מאושר") {
+      const conflicts = getReservationApprovalConflicts(res, reservations, equipment);
+      if (conflicts.length) {
+        setApprovalConflict({ reservation: res, conflicts });
+        showToast("error", "לא ניתן לאשר — אין מספיק מלאי בחפיפת הזמנים");
+        return;
+      }
+    }
+
     const updated = reservations.map(r=>r.id===id?{...r,status}:r);
     setReservations(updated);
     await storageSet("reservations", updated);
@@ -793,7 +864,6 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
 
     // שלח מייל לסטודנט על אישור או דחייה
     if (status === "מאושר" || status === "נדחה") {
-      const res = reservations.find(r=>r.id===id);
       if (res?.email) {
         const itemsList = res.items?.map(i => `<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${i.name}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${i.quantity}</td></tr>`).join("") || "";
         fetch("/api/send-email", {
@@ -865,6 +935,46 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
         </div>
       }
       {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations} onSave={async(updated)=>{ const all=reservations.map(r=>r.id===updated.id?updated:r); setReservations(all); await storageSet("reservations",all); showToast("success","הבקשה עודכנה"); setEditing(null); }} onClose={()=>setEditing(null)}/>}
+
+      {approvalConflict && (
+        <Modal
+          title={`⛔ אי אפשר לאשר את הבקשה של ${approvalConflict.reservation.student_name}`}
+          onClose={()=>setApprovalConflict(null)}
+          size="modal-lg"
+          footer={<button className="btn btn-secondary" onClick={()=>setApprovalConflict(null)}>סגור</button>}
+        >
+          <div className="highlight-box" style={{marginBottom:20}}>
+            הבקשה לא יכולה להיות מאושרת כי בחפיפת הזמנים המבוקשת אין מספיק מלאי זמין. להלן הפריטים החוסמים והבקשות שכבר אושרו לפניהם.
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:16}}>
+            {approvalConflict.conflicts.map((conflict, idx)=>(
+              <div key={idx} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:16}}>
+                <div style={{fontWeight:800,fontSize:15,marginBottom:10,color:"var(--accent)"}}>{conflict.equipment_name}</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:12,fontSize:13,marginBottom:12}}>
+                  <span>נדרש בבקשה הזאת: <strong>{conflict.requested}</strong></span>
+                  <span>זמין בפועל: <strong style={{color:"var(--red)"}}>{conflict.available}</strong></span>
+                  <span>חסר לאישור: <strong style={{color:"var(--red)"}}>{conflict.missing}</strong></span>
+                  <span>סה"כ במלאי: <strong>{conflict.total}</strong></span>
+                </div>
+                <div style={{fontSize:12,color:"var(--text3)",marginBottom:8,fontWeight:700}}>הבקשות המאושרות שחוסמות את האישור:</div>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {conflict.blockers.map((blocker, bIdx)=>(
+                    <div key={bIdx} style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:10,padding:12}}>
+                      <div style={{fontWeight:700,marginBottom:4}}>{blocker.student_name}</div>
+                      <div style={{fontSize:13,color:"var(--text2)",display:"flex",flexWrap:"wrap",gap:12}}>
+                        <span>כמות חסומה: <strong style={{color:"var(--accent)"}}>{blocker.quantity}</strong></span>
+                        <span>מ־<strong>{formatDate(blocker.borrow_date)}</strong>{blocker.borrow_time && <span style={{marginRight:6,color:"var(--accent)"}}>{blocker.borrow_time}</span>}</span>
+                        <span>עד <strong>{formatDate(blocker.return_date)}</strong>{blocker.return_time && <span style={{marginRight:6,color:"var(--accent)"}}>{blocker.return_time}</span>}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Modal>
+      )}
+
       {selected && (
         <Modal title={`📋 בקשה — ${selected.student_name}`} onClose={()=>setSelected(null)} size="modal-lg"
           footer={<>
