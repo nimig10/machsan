@@ -629,24 +629,55 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
   const [form, setForm]   = useState({...reservation});
   const [items, setItems] = useState(reservation.items ? [...reservation.items] : []);
   const [saving, setSaving] = useState(false);
+  const [editConflicts, setEditConflicts] = useState([]);
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
 
-  // Available quantity for equipment (excluding current reservation)
-  // getAvail returns how many are free (excluding OTHER reservations, not this one)
-  const getAvail = (eqId) => {
+  const getEquipmentBlockingDetails = (eqId) => {
     const eq = equipment.find(e=>e.id==eqId);
-    if(!eq) return 0;
-    const usedByOthers = reservations
-      .filter(r => r.id!==reservation.id && r.status==="מאושר")  // רק מאושרות תופסות מלאי
-      .filter(r => r.borrow_date<=form.return_date && r.return_date>=form.borrow_date)
-      .flatMap(r=>r.items||[])
-      .filter(i=>i.equipment_id==eqId)
-      .reduce((s,i)=>s+i.quantity,0);
-    return Math.max(0, eq.total_quantity - usedByOthers);
+    if(!eq) return { total: 0, usedByOthers: 0, available: 0, blockers: [] };
+
+    const reqStart = toDateTime(form.borrow_date, form.borrow_time || "00:00");
+    const reqEnd   = toDateTime(form.return_date, form.return_time || "23:59");
+    let usedByOthers = 0;
+    const blockers = [];
+
+    for (const res of reservations) {
+      if (res.id === reservation.id) continue;
+      if (res.status !== "מאושר") continue;
+
+      const resStart = toDateTime(res.borrow_date, res.borrow_time || "00:00");
+      const resEnd   = toDateTime(res.return_date, res.return_time || "23:59");
+      const overlaps = reqStart < resEnd && reqEnd > resStart;
+      if (!overlaps) continue;
+
+      const blockingItem = (res.items || []).find(i => i.equipment_id == eqId);
+      if (!blockingItem || !blockingItem.quantity) continue;
+
+      const blockingQty = Number(blockingItem.quantity) || 0;
+      usedByOthers += blockingQty;
+      blockers.push({
+        reservation_id: res.id,
+        student_name: res.student_name || "ללא שם",
+        quantity: blockingQty,
+        borrow_date: res.borrow_date,
+        borrow_time: res.borrow_time || "00:00",
+        return_date: res.return_date,
+        return_time: res.return_time || "23:59",
+      });
+    }
+
+    return {
+      total: Number(eq.total_quantity) || 0,
+      usedByOthers,
+      available: Math.max(0, (Number(eq.total_quantity) || 0) - usedByOthers),
+      blockers,
+    };
   };
 
+  const getAvail = (eqId) => getEquipmentBlockingDetails(eqId).available;
+
   const setQty = (eqId, qty) => {
-    const totalAvail = getAvail(eqId);  // total available for this reservation
+    const totalAvail = getAvail(eqId);
     const q = Math.max(0, Math.min(qty, totalAvail));
     const name = equipment.find(e=>e.id==eqId)?.name||"";
     setItems(prev => q===0 ? prev.filter(i=>i.equipment_id!=eqId)
@@ -658,20 +689,26 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
   const categories = [...new Set(equipment.map(e=>e.category))];
 
   const save = async () => {
+    const updatedReservation = { ...form, id: reservation.id, status: reservation.status, items };
+    const conflicts = getReservationApprovalConflicts(updatedReservation, reservations, equipment);
+    if (conflicts.length) {
+      setEditConflicts(conflicts);
+      return;
+    }
+
     setSaving(true);
-    await onSave({...form, items});
+    await onSave(updatedReservation);
     setSaving(false);
   };
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:3000,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"24px 16px",overflowY:"auto"}}>
       <div style={{width:"100%",maxWidth:760,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl"}}>
-        {/* Header */}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"20px 24px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0"}}>
           <div>
             <div style={{fontWeight:900,fontSize:18}}>✏️ עריכת בקשה</div>
             <div style={{fontSize:14,color:"var(--text2)",marginTop:4,fontWeight:700}}>{reservation.student_name}</div>
-            <div style={{display:"flex",gap:8,marginTop:4,alignItems:"center"}}>
+            <div style={{display:"flex",gap:8,marginTop:4,alignItems:"center",flexWrap:"wrap"}}>
               <span style={{fontSize:12,color:"var(--accent)",fontWeight:700,background:"var(--surface3)",borderRadius:20,padding:"2px 10px"}}>
                 {reservation.loan_type==="פרטית"?"👤":reservation.loan_type==="הפקה"?"🎬":"🎙️"} {reservation.loan_type==="סאונד"?"השאלת סאונד":`השאלה ${reservation.loan_type}`}
               </span>
@@ -683,7 +720,6 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
 
         <div style={{padding:24,display:"flex",flexDirection:"column",gap:24}}>
 
-          {/* Dates & Times */}
           <div>
             <div className="form-section-title">תאריכים ושעות</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
@@ -712,9 +748,11 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
             </div>
           </div>
 
-          {/* Equipment */}
           <div>
             <div className="form-section-title">ציוד ({items.reduce((s,i)=>s+i.quantity,0)} פריטים)</div>
+            <div className="highlight-box" style={{marginBottom:16}}>
+              המערכת סופרת מלאי רק מול בקשות <strong>מאושרות</strong> שחופפות בזמן לבקשה הזאת. אם ציוד חסום, יוצגו כאן שמות הסטודנטים והכמויות שחוסמות אותו כדי שתוכל לעבור לבקשות החופפות ולהפחית משם.
+            </div>
             {categories.map(cat=>{
               const catEq = equipment.filter(e=>e.category===cat);
               return (
@@ -722,22 +760,49 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
                   <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>{cat}</div>
                   {catEq.map(eq=>{
                     const qty = getQty(eq.id);
-                    const totalAvail = getAvail(eq.id);
-                    const remaining = totalAvail - qty;  // how many more can be added
+                    const details = getEquipmentBlockingDetails(eq.id);
+                    const totalAvail = details.available;
+                    const remaining = Math.max(0, totalAvail - qty);
+                    const blockedCompletely = totalAvail === 0;
                     return (
-                      <div key={eq.id} className="item-row" style={{opacity:totalAvail===0?0.4:1}}>
-                        {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
-                          ? <img src={eq.image} alt="" style={{width:32,height:32,objectFit:"cover",borderRadius:6}}/>
-                          : <span style={{fontSize:22}}>{eq.image||"📦"}</span>}
-                        <div style={{flex:1}}>
-                          <div style={{fontWeight:600,fontSize:13}}>{eq.name}</div>
-                          <div style={{fontSize:11,color:"var(--text3)"}}>זמין: <span style={{color:remaining===0?"var(--red)":remaining<=2?"var(--yellow)":"var(--green)",fontWeight:700}}>{remaining}</span></div>
+                      <div key={eq.id} style={{marginBottom:10}}>
+                        <div className="item-row" style={{opacity:blockedCompletely?0.55:1, marginBottom: details.blockers.length ? 6 : 0}}>
+                          {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
+                            ? <img src={eq.image} alt="" style={{width:32,height:32,objectFit:"cover",borderRadius:6}}/>
+                            : <span style={{fontSize:22}}>{eq.image||"📦"}</span>}
+                          <div style={{flex:1}}>
+                            <div style={{fontWeight:600,fontSize:13}}>{eq.name}</div>
+                            <div style={{fontSize:11,color:"var(--text3)",display:"flex",gap:10,flexWrap:"wrap"}}>
+                              <span>זמין: <span style={{color:remaining===0?"var(--red)":remaining<=2?"var(--yellow)":"var(--green)",fontWeight:700}}>{remaining}</span></span>
+                              {details.usedByOthers>0 && <span>חסום ע"י אחרים: <strong style={{color:"var(--red)"}}>{details.usedByOthers}</strong></span>}
+                              <span>סה"כ במלאי: <strong>{details.total}</strong></span>
+                            </div>
+                          </div>
+                          <div className="qty-ctrl">
+                            <button className="qty-btn" onClick={()=>setQty(eq.id,qty-1)}>−</button>
+                            <span className="qty-num">{qty}</span>
+                            <button className="qty-btn" disabled={remaining<=0} onClick={()=>setQty(eq.id,qty+1)}>+</button>
+                          </div>
                         </div>
-                        <div className="qty-ctrl">
-                          <button className="qty-btn" onClick={()=>setQty(eq.id,qty-1)}>−</button>
-                          <span className="qty-num">{qty}</span>
-                          <button className="qty-btn" disabled={remaining<=0} onClick={()=>setQty(eq.id,qty+1)}>+</button>
-                        </div>
+                        {details.blockers.length > 0 && (
+                          <div style={{background:"rgba(231,76,60,0.08)",border:"1px solid rgba(231,76,60,0.22)",borderRadius:10,padding:10,marginBottom:6}}>
+                            <div style={{fontSize:12,fontWeight:800,color:"var(--red)",marginBottom:8}}>הציוד הזה חסום כרגע ע"י הבקשות המאושרות הבאות:</div>
+                            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                              {details.blockers.map((blocker, idx) => (
+                                <div key={idx} style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:8,padding:"8px 10px"}}>
+                                  <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",fontSize:12}}>
+                                    <strong>{blocker.student_name}</strong>
+                                    <span>כמות שהושאלה: <strong style={{color:"var(--accent)"}}>{blocker.quantity}</strong></span>
+                                  </div>
+                                  <div style={{fontSize:11,color:"var(--text2)",marginTop:4,display:"flex",gap:10,flexWrap:"wrap"}}>
+                                    <span>מ־{formatDate(blocker.borrow_date)} {blocker.borrow_time}</span>
+                                    <span>עד {formatDate(blocker.return_date)} {blocker.return_time}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -746,13 +811,51 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
             })}
           </div>
 
-          {/* Actions */}
           <div style={{display:"flex",gap:10,justifyContent:"flex-end",paddingTop:8,borderTop:"1px solid var(--border)"}}>
             <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
             <button className="btn btn-primary" disabled={saving} onClick={save}>{saving?"⏳ שומר...":"💾 שמור שינויים"}</button>
           </div>
         </div>
       </div>
+
+      {editConflicts.length > 0 && (
+        <Modal
+          title={`⛔ אי אפשר לשמור את העריכה של ${reservation.student_name}`}
+          onClose={()=>setEditConflicts([])}
+          size="modal-lg"
+          footer={<button className="btn btn-secondary" onClick={()=>setEditConflicts([])}>סגור</button>}
+        >
+          <div className="highlight-box" style={{marginBottom:20}}>
+            העריכה הזאת תיצור חוסר במלאי ביחס לבקשות מאושרות אחרות שחופפות בזמן. כדי לשחרר ציוד לבקשה הזאת, צריך להפחית אותו קודם מהבקשות החוסמות שמפורטות למטה.
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:16}}>
+            {editConflicts.map((conflict, idx)=>(
+              <div key={idx} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:16}}>
+                <div style={{fontWeight:800,fontSize:15,marginBottom:10,color:"var(--accent)"}}>{conflict.equipment_name}</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:12,fontSize:13,marginBottom:12}}>
+                  <span>נדרש בבקשה הערוכה: <strong>{conflict.requested}</strong></span>
+                  <span>זמין בפועל: <strong style={{color:"var(--red)"}}>{conflict.available}</strong></span>
+                  <span>חסר לשמירה: <strong style={{color:"var(--red)"}}>{conflict.missing}</strong></span>
+                  <span>סה"כ במלאי: <strong>{conflict.total}</strong></span>
+                </div>
+                <div style={{fontSize:12,color:"var(--text3)",marginBottom:8,fontWeight:700}}>הבקשות המאושרות שחוסמות את השמירה:</div>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {conflict.blockers.map((blocker, bIdx)=>(
+                    <div key={bIdx} style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:10,padding:12}}>
+                      <div style={{fontWeight:700,marginBottom:4}}>{blocker.student_name}</div>
+                      <div style={{fontSize:13,color:"var(--text2)",display:"flex",flexWrap:"wrap",gap:12}}>
+                        <span>כמות חסומה: <strong style={{color:"var(--accent)"}}>{blocker.quantity}</strong></span>
+                        <span>מ־<strong>{formatDate(blocker.borrow_date)}</strong>{blocker.borrow_time && <span style={{marginRight:6,color:"var(--accent)"}}>{blocker.borrow_time}</span>}</span>
+                        <span>עד <strong>{formatDate(blocker.return_date)}</strong>{blocker.return_time && <span style={{marginRight:6,color:"var(--accent)"}}>{blocker.return_time}</span>}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
