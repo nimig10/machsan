@@ -81,16 +81,33 @@ function dateToLocal(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
 
-function getAvailable(eqId, borrowDate, returnDate, reservations, equipment, excludeId=null) {
+function toDateTime(dateStr, timeStr) {
+  // Combine date + time into comparable number (minutes since epoch)
+  if (!dateStr) return 0;
+  const d = new Date(dateStr);
+  if (timeStr) {
+    const [h, m] = timeStr.split(":").map(Number);
+    d.setHours(h, m, 0, 0);
+  } else {
+    d.setHours(0, 0, 0, 0);
+  }
+  return d.getTime();
+}
+
+function getAvailable(eqId, borrowDate, returnDate, reservations, equipment, excludeId=null, borrowTime="", returnTime="") {
   const eq = equipment.find(e => e.id == eqId);
   if (!eq) return 0;
-  const b = new Date(borrowDate), r = new Date(returnDate);
+  // Use end-of-day if no time provided so date-only reservations still block correctly
+  const bStart = toDateTime(borrowDate, borrowTime || "00:00");
+  const rEnd   = toDateTime(returnDate, returnTime || "23:59");
   let used = 0;
   for (const res of reservations) {
     if (res.id === excludeId) continue;
-    if (res.status !== "מאושר") continue;  // רק מאושרות תופסות מלאי
-    const rb = new Date(res.borrow_date), rr = new Date(res.return_date);
-    if (b <= rr && r >= rb) {
+    if (res.status !== "מאושר") continue;
+    const resStart = toDateTime(res.borrow_date, res.borrow_time || "00:00");
+    const resEnd   = toDateTime(res.return_date,  res.return_time  || "23:59");
+    // Overlap: new period starts before existing ends AND new period ends after existing starts
+    if (bStart < resEnd && rEnd > resStart) {
       const item = res.items?.find(i => i.equipment_id == eqId);
       if (item) used += item.quantity;
     }
@@ -822,7 +839,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
               <div className="res-card-mid">
                 <div style={{display:"flex",gap:16,fontSize:12,color:"var(--text2)",flexWrap:"wrap"}}>
                   <span>📚 {r.course}</span>
-                  <span>📅 {formatDate(r.borrow_date)} ← {formatDate(r.return_date)}{(()=>{const diff=Math.ceil((new Date(r.borrow_date)-new Date())/(1000*60*60*24));return diff>0?<span style={{marginRight:6,color:"var(--yellow)",fontWeight:700}}>({diff} ימים)</span>:diff===0?<span style={{marginRight:6,color:"var(--green)",fontWeight:700}}>(היום!)</span>:null;})()}</span>
+                  <span>📅 {formatDate(r.borrow_date)}{r.borrow_time&&<span style={{color:"var(--accent)",marginRight:4,fontWeight:700}}> {r.borrow_time}</span>} ← {formatDate(r.return_date)}{r.return_time&&<span style={{color:"var(--accent)",marginRight:4,fontWeight:700}}> {r.return_time}</span>}{(()=>{const diff=Math.ceil((new Date(r.borrow_date)-new Date())/(1000*60*60*24));return diff>0?<span style={{marginRight:6,color:"var(--yellow)",fontWeight:700}}>({diff} ימים)</span>:diff===0?<span style={{marginRight:6,color:"var(--green)",fontWeight:700}}>(היום!)</span>:null;})()}</span>
                   <span>📦 {r.items?.length||0} פריטים</span>
                   {r.loan_type&&<span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,color:"var(--accent)"}}>
                     {r.loan_type==="פרטית"?"👤":r.loan_type==="הפקה"?"🎬":"🎙️"} {r.loan_type==="סאונד"?"השאלת סאונד":`השאלה ${r.loan_type}`}
@@ -1128,12 +1145,15 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     : ["09:00","09:30","14:30","15:00","15:30","16:00","16:30","17:00","17:30"];
   const isSoundLoan = form.loan_type==="סאונד";
   const ok1 = form.student_name && form.email && form.phone && form.course && form.loan_type;
-  const ok2 = form.borrow_date && form.return_date && form.return_date>=form.borrow_date && !tooSoon && !tooLong && !borrowWeekend && !returnWeekend && form.borrow_time && form.return_time;
+  const sameDay = form.borrow_date && form.return_date && form.borrow_date === form.return_date;
+  const timeOrderError = sameDay && form.borrow_time && form.return_time && form.return_time <= form.borrow_time;
+  const returnBeforeBorrow = form.borrow_date && form.return_date && form.return_date < form.borrow_date;
+  const ok2 = form.borrow_date && form.return_date && !returnBeforeBorrow && !tooSoon && !tooLong && !borrowWeekend && !returnWeekend && form.borrow_time && form.return_time && !timeOrderError;
 
   const availEq = useMemo(()=>{
     if(!form.borrow_date||!form.return_date) return [];
-    return equipment.map(eq=>({...eq, avail: getAvailable(eq.id,form.borrow_date,form.return_date,reservations,equipment)}));
-  },[form.borrow_date,form.return_date,equipment,reservations]);
+    return equipment.map(eq=>({...eq, avail: getAvailable(eq.id,form.borrow_date,form.return_date,reservations,equipment,null,form.borrow_time,form.return_time)}));
+  },[form.borrow_date,form.return_date,form.borrow_time,form.return_time,equipment,reservations]);
 
   const getItem = id => items.find(i=>i.equipment_id==id)||{quantity:0};
   const setQty  = (id,qty) => {
@@ -1298,6 +1318,8 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
             {(borrowWeekend||returnWeekend) && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 המחסן אינו פעיל בימים שישי ושבת. נא לבחור ימים א׳–ה׳ בלבד.</div>}
             {tooSoon && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 {form.loan_type==="פרטית"?"השאלה פרטית דורשת התראה של 48 שעות לפחות.":"נדרשת התראה של שבוע לפחות."} תאריך מוקדם ביותר: <strong>{formatDate(minDate)}</strong></div>}
             {tooLong && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 לא ניתן להשלים את התהליך כי זמן ההשאלה חורג מנהלי המכללה. משך מקסימלי: <strong>{maxDays} ימים</strong></div>}
+            {returnBeforeBorrow && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 זמנים לא נכונים — תאריך החזרה חייב להיות אחרי תאריך ההשאלה.</div>}
+            {timeOrderError && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 זמנים לא נכונים — שעת החזרה חייבת להיות אחרי שעת האיסוף באותו יום.</div>}
             {ok2 && <div className="highlight-box">📅 השאלה ל-{loanDays} ימים · איסוף {form.borrow_time} · החזרה {form.return_time}</div>}
             <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setStep(1)}>← חזור</button><button className="btn btn-primary" disabled={!ok2} onClick={()=>setStep(3)}>המשך ← ציוד</button></div>
           </>}
