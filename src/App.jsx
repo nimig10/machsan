@@ -1027,7 +1027,9 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
             student_name: res.student_name,
             items_list:   itemsList,
             borrow_date:  formatDate(res.borrow_date),
+            borrow_time:  res.borrow_time||"",
             return_date:  formatDate(res.return_date),
+            return_time:  res.return_time||"",
           }),
         })
         .then(() => showToast("success", `📧 מייל נשלח ל-${res.email}`))
@@ -1185,7 +1187,7 @@ function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=110, fon
   const weeks = [];
   for(let i=0;i<days.length;i+=7) weeks.push(days.slice(i,i+7));
 
-  // For each week, compute event bars with slot assignment
+  // For each week, compute event bars with slot assignment (no overlaps)
   const getWeekBars = (week) => {
     const weekStart = week.find(d=>d);
     const weekEnd   = [...week].reverse().find(d=>d);
@@ -1193,24 +1195,25 @@ function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=110, fon
     const wsStr = dateToLocal(weekStart);
     const weStr = dateToLocal(weekEnd);
 
-    // find all events overlapping this week
-    const evts = activeRes.filter(r => r.borrow_date<=weStr && r.return_date>=wsStr);
+    // events overlapping this week, sorted by borrow_date then by id (insertion order)
+    const evts = activeRes
+      .filter(r => r.borrow_date<=weStr && r.return_date>=wsStr)
+      .sort((a,b) => a.borrow_date<b.borrow_date?-1:a.borrow_date>b.borrow_date?1:Number(a.id)-Number(b.id));
 
-    // assign slots (rows) - greedy
-    const slots = [];
-    const bars  = [];
+    // slot assignment: each slot tracks the last ec used
+    // A bar can go into slot S only if slotEnd[S] < sc (columns don't overlap)
+    const slotEnd = []; // slotEnd[s] = last ec used in slot s
+    const bars = [];
     evts.forEach(r=>{
       const [bg,color] = colorMap[r.id]||["rgba(52,152,219,0.38)","#5dade2"];
-      // col index within this week
       const startCol = week.findIndex(d=>d && dateToLocal(d)>=r.borrow_date);
       const endColRaw= week.findLastIndex(d=>d && dateToLocal(d)<=r.return_date);
       const sc = startCol<0?0:startCol;
       const ec = endColRaw<0?6:endColRaw;
-      const showName = !week.slice(0,sc).some(d=>d && dateToLocal(d)>=r.borrow_date===false) || week[sc] && dateToLocal(week[sc])===r.borrow_date;
-      // find free slot
+      // find lowest slot where this bar fits (no column overlap)
       let slot=0;
-      while(slots[slot]!==undefined && slots[slot]>sc) slot++;
-      slots[slot]=ec;
+      while(slotEnd[slot]!==undefined && slotEnd[slot]>=sc) slot++;
+      slotEnd[slot]=ec;
       bars.push({r,bg,color,sc,ec,slot,showName: week[sc]&&dateToLocal(week[sc])>=r.borrow_date});
     });
     return bars;
@@ -1335,7 +1338,12 @@ function DashboardPage({ equipment, reservations }) {
               <div style={{width:34,height:34,borderRadius:"50%",background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>{r.student_name?.[0]||"?"}</div>
               <div style={{flex:1}}>
                 <div style={{fontWeight:700,fontSize:13}}>{r.student_name}</div>
-                <div style={{fontSize:11,color:"var(--text3)"}}>{formatDate(r.borrow_date)} – {formatDate(r.return_date)}{(()=>{const diff=Math.ceil((new Date(r.borrow_date)-new Date())/(1000*60*60*24));return diff>0?<span style={{marginRight:6,color:"var(--yellow)",fontWeight:700}}>({diff} ימים)</span>:diff===0?<span style={{marginRight:6,color:"var(--green)",fontWeight:700}}>(היום!)</span>:null;})()}</div>
+                <div style={{fontSize:11,color:"var(--text3)"}}>
+                  📅 {formatDate(r.borrow_date)}{r.borrow_time&&<strong style={{color:"var(--accent)",marginRight:3}}> {r.borrow_time}</strong>}
+                  <span style={{margin:"0 3px"}}>–</span>
+                  ↩ {formatDate(r.return_date)}{r.return_time&&<strong style={{color:"var(--accent)",marginRight:3}}> {r.return_time}</strong>}
+                  {(()=>{const diff=Math.ceil((new Date(r.borrow_date)-new Date())/(1000*60*60*24));return diff>0?<span style={{marginRight:5,color:"var(--yellow)",fontWeight:700}}>({diff}י)</span>:diff===0?<span style={{marginRight:5,color:"var(--green)",fontWeight:700}}>(היום)</span>:null;})()}
+                </div>
               </div>
               {statusBadge(r.status)}
             </div>
@@ -1460,11 +1468,14 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
           <div key={c} style={{marginBottom:20}}>
             <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>{c}</div>
             {catEq.map(eq=>{
-              const itm=getItem(eq.id);
-              // In kit mode, show kit recommended qty as hint
-              const kitHint = activeKit ? (activeKit.items||[]).find(i=>i.equipment_id==eq.id)?.quantity : null;
+              const itm = getItem(eq.id);
+              // In kit mode: max qty is BOTH avail AND kit quantity — whichever is lower
+              const kitEntry = activeKit ? (activeKit.items||[]).find(i=>i.equipment_id==eq.id) : null;
+              const kitMax   = kitEntry ? Number(kitEntry.quantity) : Infinity;
+              const effectiveMax = activeKit ? Math.min(eq.avail, kitMax) : eq.avail;
+              const atMax = itm.quantity >= effectiveMax;
               return (
-                <div key={eq.id} className="item-row" style={{opacity:eq.avail===0?0.4:1}}>
+                <div key={eq.id} className="item-row" style={{opacity:effectiveMax===0?0.4:1}}>
                   {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
                     ? <img src={eq.image} alt="" style={{width:36,height:36,objectFit:"cover",borderRadius:6}}/>
                     : <span style={{fontSize:26}}>{eq.image||"📦"}</span>}
@@ -1472,14 +1483,15 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
                     <div style={{fontWeight:600,fontSize:14}}>{eq.name}</div>
                     <div style={{fontSize:12,color:"var(--text3)"}}>
                       זמין: <span style={{color:eq.avail===0?"var(--red)":eq.avail<=2?"var(--yellow)":"var(--green)",fontWeight:700}}>{eq.avail}</span>
-                      {kitHint&&<span style={{color:"var(--accent)",marginRight:6,fontWeight:600}}>· ערכה: {kitHint}</span>}
+                      {activeKit&&kitEntry&&<span style={{color:"var(--accent)",marginRight:6,fontWeight:700}}>· מקס׳ בערכה: {kitMax}</span>}
                     </div>
                   </div>
-                  {eq.avail>0
+                  {effectiveMax>0
                     ? <div className="qty-ctrl">
-                        <button className="qty-btn" onClick={()=>setQty(eq.id,itm.quantity-1)}>−</button>
+                        <button className="qty-btn" onClick={()=>setQty(eq.id, Math.min(itm.quantity-1, effectiveMax))}>−</button>
                         <span className="qty-num">{itm.quantity}</span>
-                        <button className="qty-btn" onClick={()=>setQty(eq.id,itm.quantity+1)}>+</button>
+                        <button className="qty-btn" disabled={atMax} style={{opacity:atMax?0.3:1}}
+                          onClick={()=>{ if(!atMax) setQty(eq.id, Math.min(itm.quantity+1, effectiveMax)); }}>+</button>
                       </div>
                     : <span className="badge badge-red">לא זמין</span>
                   }
@@ -1777,7 +1789,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
           {step===4 && <>
             <div className="form-section-title">סיכום ואישור</div>
             <div className="grid-2" style={{marginBottom:20}}>
-              <div>{[["שם",form.student_name],["אימייל",form.email],["קורס",form.course],["סוג השאלה",form.loan_type],["מ",formatDate(form.borrow_date)],["עד",formatDate(form.return_date)]].map(([l,v])=><div key={l} className="req-detail-row"><span className="req-detail-label">{l}:</span><strong>{v}</strong></div>)}</div>
+              <div>{[["שם",form.student_name],["אימייל",form.email],["קורס",form.course],["סוג השאלה",form.loan_type],["מ",`${formatDate(form.borrow_date)}${form.borrow_time?" · "+form.borrow_time:""}`],["עד",`${formatDate(form.return_date)}${form.return_time?" · "+form.return_time:""}`]].map(([l,v])=><div key={l} className="req-detail-row"><span className="req-detail-label">{l}:</span><strong>{v}</strong></div>)}</div>
               <div>{items.map(i=>{
   const eq = equipment.find(e=>e.id==i.equipment_id);
   const img = eq?.image||"📦";
