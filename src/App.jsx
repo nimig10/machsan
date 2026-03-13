@@ -37,19 +37,18 @@ async function storageGet(key) {
   }
 }
 
-// Returns { ok: true } or { ok: false, error }
 async function storageSet(key, value) {
-  // 1. Save to localStorage cache immediately (optimistic)
+  // 1. Save to localStorage cache immediately
   lsSet(key, value);
-  // 2. Save to Google Sheets (the real DB)
+  // 2. Save to Google Sheets
   const actionMap = { reservations:"saveReservations", equipment:"saveEquipment", categories:"saveCategories", teamMembers:"saveTeamMembers", kits:"saveKits" };
   try {
-    const res  = await fetch("/api/sheets", {
+    const fetchRes = await fetch("/api/sheets", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ action: actionMap[key], payload: value }),
     });
-    const json = await res.json().catch(() => ({}));
+    const json = await fetchRes.json().catch(() => ({}));
     if (!json.ok) {
       console.error("storageSet Sheets error", key, json);
       return { ok: false, error: json.error || "Sheets error" };
@@ -490,12 +489,9 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       updated = equipment.map(e => e.id===modal.item.id ? {...e,...form} : e);
     }
     setEquipment(updated);
-    try {
-      await storageSet("equipment", updated);
-      showToast("success", modal.type==="add" ? `"${form.name}" נוסף בהצלחה` : "הציוד עודכן בהצלחה");
-    } catch(e) {
-      showToast("error", "שגיאה בשמירה — ייתכן שהתמונה גדולה מדי");
-    }
+    const _saveRes = await storageSet("equipment", updated);
+    if(_saveRes.ok) showToast("success", modal.type==="add" ? `"${form.name}" נוסף בהצלחה` : "הציוד עודכן בהצלחה");
+    else showToast("error", "❌ שגיאה בשמירה ל-Google Sheets — נסה שוב");
     setSaving(false);
     setModal(null);
   };
@@ -2374,24 +2370,34 @@ export default function App() {
 
   useEffect(()=>{
     (async()=>{
-      const eq   = await storageGet("equipment");
-      const res  = await storageGet("reservations");
-      const cats = await storageGet("categories");
-      const tm   = await storageGet("teamMembers");
-      const kts  = await storageGet("kits");
-      const normalizedReservations = normalizeReservationsForArchive(res || []);
-      const reservationsChanged = JSON.stringify(normalizedReservations) !== JSON.stringify(res || []);
-      setEquipment(eq  || INITIAL_EQUIPMENT);
-      setReservations(normalizedReservations);
-      setCategories(cats || DEFAULT_CATEGORIES);
-      setTeamMembers(tm || []);
-      setKits(kts || []);
-      if(!eq)   await storageSet("equipment",    INITIAL_EQUIPMENT);
-      if(!res)  await storageSet("reservations", []);
-      if(!cats) await storageSet("categories",   DEFAULT_CATEGORIES);
-      if(!tm)   await storageSet("teamMembers",  []);
-      if(!kts)  await storageSet("kits",         []);
-      if(res && reservationsChanged) await storageSet("reservations", normalizedReservations);
+      try {
+        const [eq, res, cats, tm, kts] = await Promise.all([
+          storageGet("equipment"),
+          storageGet("reservations"),
+          storageGet("categories"),
+          storageGet("teamMembers"),
+          storageGet("kits"),
+        ]);
+        const normalizedReservations = normalizeReservationsForArchive(res || []);
+        const reservationsChanged = JSON.stringify(normalizedReservations) !== JSON.stringify(res || []);
+        setEquipment(eq  || INITIAL_EQUIPMENT);
+        setReservations(normalizedReservations);
+        setCategories(cats || DEFAULT_CATEGORIES);
+        setTeamMembers(tm || []);
+        setKits(kts || []);
+        // Init missing sheets
+        if(!eq)   await storageSet("equipment",    INITIAL_EQUIPMENT);
+        if(!res)  await storageSet("reservations", []);
+        if(!cats) await storageSet("categories",   DEFAULT_CATEGORIES);
+        if(!tm)   await storageSet("teamMembers",  []);
+        if(!kts)  await storageSet("kits",         []);
+        if(res && reservationsChanged) await storageSet("reservations", normalizedReservations);
+        // Only warn if BOTH Sheets and cache failed (truly no data)
+        if(eq===null && !lsGet("equipment")) showToast("error", "⚠️ לא ניתן לטעון ציוד — בדוק חיבור");
+      } catch(e) {
+        showToast("error", "❌ שגיאת רשת — לא ניתן לטעון נתונים");
+        console.error("load error", e);
+      }
       setLoading(false);
     })();
   },[]);
@@ -2454,8 +2460,7 @@ export default function App() {
                 </div>
               ))}
             </div>
-            <div style={{padding:"14px 20px",borderTop:"1px solid var(--border)",fontSize:11,color:"var(--text3)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span>💾 אחסון פעיל</span>
+            <div style={{padding:"10px 20px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end"}}>
               <button className="btn btn-secondary btn-sm" onClick={()=>setAuthed(false)}>🚪 יציאה</button>
             </div>
           </nav>
