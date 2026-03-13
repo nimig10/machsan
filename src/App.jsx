@@ -870,6 +870,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
 
   const filtered = [...reservations]
     .filter(r =>
+      r.status !== "הוחזר" &&          // הוחזר goes to archive only
       (statusF==="הכל" || r.status===statusF) &&
       (loanTypeF==="הכל" || r.loan_type===loanTypeF) &&
       (r.student_name?.includes(search) || r.email?.includes(search))
@@ -1686,6 +1687,8 @@ function ArchivePage({ reservations, equipment }) {
   const archived = reservations.filter(r => r.status === "הוחזר");
   const [search, setSearch] = useState("");
   const [loanTypeF, setLoanTypeF] = useState("הכל");
+  const [viewRes, setViewRes] = useState(null);
+
   const eqName = id => equipment.find(e=>e.id==id)?.name||"?";
   const EqImg = ({id,size=20}) => {
     const img = equipment.find(e=>e.id==id)?.image||"📦";
@@ -1697,6 +1700,9 @@ function ArchivePage({ reservations, equipment }) {
     (loanTypeF==="הכל"||r.loan_type===loanTypeF) &&
     (!search || r.student_name?.includes(search) || r.email?.includes(search))
   );
+
+  const LOAN_ICONS = {"פרטית":"👤","הפקה":"🎬","סאונד":"🎙️"};
+
   return (
     <div className="page">
       <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
@@ -1707,22 +1713,28 @@ function ArchivePage({ reservations, equipment }) {
         </select>
         <span style={{fontSize:13,color:"var(--text3)"}}>סה״כ: <strong style={{color:"var(--text)"}}>{filtered.length}</strong> בקשות</span>
       </div>
+
       {filtered.length===0
         ? <div className="empty-state"><div className="emoji">🗄️</div><p>אין בקשות בארכיון</p></div>
         : <div style={{display:"flex",flexDirection:"column",gap:10}}>
           {[...filtered].sort((a,b)=>new Date(b.return_date)-new Date(a.return_date)).map(r=>(
-            <div key={r.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 18px",opacity:0.85}}>
+            <div key={r.id}
+              onClick={()=>setViewRes(r)}
+              style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 18px",cursor:"pointer",transition:"border-color 0.15s"}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor="var(--blue)"}
+              onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
                 <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{width:34,height:34,borderRadius:"50%",background:"var(--surface3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:900,flexShrink:0}}>{r.student_name?.[0]||"?"}</div>
+                  <div style={{width:34,height:34,borderRadius:"50%",background:"rgba(52,152,219,0.15)",border:"2px solid var(--blue)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:900,flexShrink:0,color:"var(--blue)"}}>{r.student_name?.[0]||"?"}</div>
                   <div>
                     <div style={{fontWeight:700,fontSize:14}}>{r.student_name}</div>
                     <div style={{fontSize:11,color:"var(--text3)"}}>{r.email}</div>
                   </div>
                 </div>
                 <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-                  <span style={{background:"rgba(46,204,113,0.12)",color:"var(--green)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>✅ הוחזר</span>
-                  {r.loan_type&&<span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>{r.loan_type==="פרטית"?"👤":r.loan_type==="הפקה"?"🎬":"🎙️"} {r.loan_type}</span>}
+                  <span style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",border:"1px solid rgba(52,152,219,0.4)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🔵 הוחזר</span>
+                  {r.loan_type&&<span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>{LOAN_ICONS[r.loan_type]||"📦"} {r.loan_type}</span>}
+                  <span style={{fontSize:11,color:"var(--text3)"}}>👁 לצפייה</span>
                 </div>
               </div>
               <div style={{marginTop:10,display:"flex",gap:16,fontSize:12,color:"var(--text2)",flexWrap:"wrap"}}>
@@ -1738,36 +1750,102 @@ function ArchivePage({ reservations, equipment }) {
           ))}
         </div>
       }
+
+      {/* ── View-only details modal ── */}
+      {viewRes&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}} onClick={e=>e.target===e.currentTarget&&setViewRes(null)}>
+          <div style={{width:"100%",maxWidth:560,background:"var(--surface)",borderRadius:16,border:"1px solid rgba(52,152,219,0.4)",direction:"rtl",maxHeight:"90vh",overflowY:"auto"}}>
+            {/* Header */}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 22px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0",position:"sticky",top:0,zIndex:1}}>
+              <div>
+                <div style={{fontWeight:900,fontSize:17}}>🗄️ פרטי השאלה — ארכיון</div>
+                <div style={{fontSize:12,color:"var(--text3)",marginTop:3}}>{viewRes.student_name}</div>
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setViewRes(null)}>✕ סגור</button>
+            </div>
+            <div style={{padding:"20px 22px",display:"flex",flexDirection:"column",gap:16}}>
+              {/* Status */}
+              <div style={{display:"flex",justifyContent:"center"}}>
+                <span style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",border:"1px solid rgba(52,152,219,0.4)",borderRadius:20,padding:"4px 18px",fontSize:13,fontWeight:700}}>🔵 הוחזר</span>
+              </div>
+              {/* Student details */}
+              <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"14px 16px"}}>
+                <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>פרטי סטודנט</div>
+                {[["שם",viewRes.student_name],["מייל",viewRes.email],["טלפון",viewRes.phone||"—"],["קורס",viewRes.course],viewRes.project_name&&["שם פרויקט",viewRes.project_name]].filter(Boolean).map(([l,v])=>(
+                  <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:6,gap:12}}>
+                    <span style={{color:"var(--text3)",flexShrink:0}}>{l}:</span>
+                    <span style={{fontWeight:600,textAlign:"left",direction:"ltr"}}>{v}</span>
+                  </div>
+                ))}
+              </div>
+              {/* Dates */}
+              <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"14px 16px"}}>
+                <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>תאריכים</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                  {[["📅 השאלה",`${formatDate(viewRes.borrow_date)}${viewRes.borrow_time?" · "+viewRes.borrow_time:""}`],["↩ החזרה",`${formatDate(viewRes.return_date)}${viewRes.return_time?" · "+viewRes.return_time:""}`]].map(([l,v])=>(
+                    <div key={l} style={{background:"var(--surface3)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
+                      <div style={{fontSize:11,color:"var(--text3)",marginBottom:4}}>{l}</div>
+                      <div style={{fontWeight:700,fontSize:13,color:"var(--accent)"}}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{marginTop:8,fontSize:12,color:"var(--text3)"}}>
+                  סוג השאלה: <strong style={{color:"var(--text)"}}>{LOAN_ICONS[viewRes.loan_type]||"📦"} {viewRes.loan_type}</strong>
+                </div>
+              </div>
+              {/* Equipment */}
+              <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"14px 16px"}}>
+                <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>ציוד שהושאל</div>
+                {viewRes.items?.map((i,j)=>(
+                  <div key={j} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
+                    <EqImg id={i.equipment_id} size={28}/>
+                    <span style={{flex:1,fontSize:13,fontWeight:600}}>{eqName(i.equipment_id)}</span>
+                    <span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:6,padding:"2px 10px",fontWeight:700,fontSize:13,color:"var(--accent)"}}>×{i.quantity}</span>
+                  </div>
+                ))}
+                <div style={{marginTop:8,fontSize:12,color:"var(--text3)"}}>
+                  סה״כ: <strong style={{color:"var(--text)"}}>{viewRes.items?.reduce((s,i)=>s+i.quantity,0)||0}</strong> יחידות
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── TEAM PAGE ────────────────────────────────────────────────────────────────
 function TeamPage({ teamMembers, setTeamMembers, showToast }) {
-  const [form, setForm] = useState({ name:"", email:"", loanTypes:["פרטית","הפקה","סאונד"] });
-  const [editId, setEditId] = useState(null);
   const LOAN_TYPES = ["פרטית","הפקה","סאונד"];
   const LOAN_ICONS = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️" };
+  const emptyForm = { name:"", email:"", loanTypes:[...LOAN_TYPES] };
 
-  const toggleLoanType = (lt) => setForm(p => ({
-    ...p,
-    loanTypes: p.loanTypes.includes(lt) ? p.loanTypes.filter(x=>x!==lt) : [...p.loanTypes, lt]
-  }));
+  // Add-new form state
+  const [addForm, setAddForm] = useState(emptyForm);
+  // Edit modal state
+  const [editMember, setEditMember] = useState(null); // the member being edited
+  const [editForm, setEditForm] = useState(emptyForm);
 
-  const save = async () => {
-    if (!form.name.trim() || !form.email.trim()) return;
-    let updated;
-    if (editId) {
-      updated = teamMembers.map(m => m.id===editId ? {...m,...form} : m);
-      showToast("success", "איש צוות עודכן");
-    } else {
-      updated = [...teamMembers, { ...form, id: Date.now() }];
-      showToast("success", `${form.name} נוסף לצוות`);
-    }
+  const toggleLT = (form, setForm, lt) =>
+    setForm(p=>({...p, loanTypes: p.loanTypes.includes(lt)?p.loanTypes.filter(x=>x!==lt):[...p.loanTypes,lt]}));
+
+  const saveNew = async () => {
+    if (!addForm.name.trim() || !addForm.email.trim()) return;
+    const updated = [...teamMembers, { ...addForm, id: Date.now() }];
     setTeamMembers(updated);
     await storageSet("teamMembers", updated);
-    setForm({ name:"", email:"", loanTypes:["פרטית","הפקה","סאונד"] });
-    setEditId(null);
+    showToast("success", `${addForm.name} נוסף לצוות`);
+    setAddForm(emptyForm);
+  };
+
+  const saveEdit = async () => {
+    if (!editForm.name.trim() || !editForm.email.trim()) return;
+    const updated = teamMembers.map(m => m.id===editMember.id ? {...m,...editForm} : m);
+    setTeamMembers(updated);
+    await storageSet("teamMembers", updated);
+    showToast("success", "איש צוות עודכן");
+    setEditMember(null);
   };
 
   const del = async (id) => {
@@ -1777,37 +1855,37 @@ function TeamPage({ teamMembers, setTeamMembers, showToast }) {
     showToast("success", "איש צוות הוסר");
   };
 
-  const startEdit = (m) => { setForm({ name:m.name, email:m.email, loanTypes:m.loanTypes||LOAN_TYPES }); setEditId(m.id); };
+  const LoanTypeButtons = ({form, setForm}) => (
+    <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap"}}>
+      {LOAN_TYPES.map(lt=>(
+        <button key={lt} type="button" onClick={()=>toggleLT(form,setForm,lt)}
+          style={{padding:"6px 14px",borderRadius:20,border:`2px solid ${form.loanTypes.includes(lt)?"var(--accent)":"var(--border)"}`,background:form.loanTypes.includes(lt)?"var(--accent-glow)":"var(--surface2)",color:form.loanTypes.includes(lt)?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+          {LOAN_ICONS[lt]} {lt}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div className="page">
-      {/* Add/Edit form */}
+      {/* ── Add new member form (always visible) ── */}
       <div className="card" style={{marginBottom:24}}>
-        <div className="card-header"><div className="card-title">{editId ? "✏️ עריכת איש צוות" : "➕ הוספת איש צוות"}</div></div>
+        <div className="card-header"><div className="card-title">➕ הוספת איש צוות</div></div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
-          <div className="form-group"><label className="form-label">שם מלא *</label><input className="form-input" placeholder="שם" value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))}/></div>
-          <div className="form-group"><label className="form-label">כתובת מייל *</label><input className="form-input" type="email" placeholder="email@example.com" value={form.email} onChange={e=>setForm(p=>({...p,email:e.target.value}))}/></div>
+          <div className="form-group"><label className="form-label">שם מלא *</label><input className="form-input" placeholder="שם" value={addForm.name} onChange={e=>setAddForm(p=>({...p,name:e.target.value}))}/></div>
+          <div className="form-group"><label className="form-label">כתובת מייל *</label><input className="form-input" type="email" placeholder="email@example.com" value={addForm.email} onChange={e=>setAddForm(p=>({...p,email:e.target.value}))}/></div>
         </div>
         <div className="form-group">
           <label className="form-label">📩 קבלת התראות עבור סוגי השאלה</label>
-          <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap"}}>
-            {LOAN_TYPES.map(lt=>(
-              <button key={lt} type="button"
-                onClick={()=>toggleLoanType(lt)}
-                style={{padding:"6px 14px",borderRadius:20,border:`2px solid ${form.loanTypes.includes(lt)?"var(--accent)":"var(--border)"}`,background:form.loanTypes.includes(lt)?"var(--accent-glow)":"var(--surface2)",color:form.loanTypes.includes(lt)?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer"}}>
-                {LOAN_ICONS[lt]} {lt}
-              </button>
-            ))}
-          </div>
+          <LoanTypeButtons form={addForm} setForm={setAddForm}/>
           <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>איש צוות יקבל מייל רק עבור בקשות מהסוגים המסומנים.</div>
         </div>
-        <div style={{display:"flex",gap:8,marginTop:8}}>
-          <button className="btn btn-primary" disabled={!form.name||!form.email} onClick={save}>{editId?"💾 שמור עריכה":"➕ הוסף"}</button>
-          {editId&&<button className="btn btn-secondary" onClick={()=>{setEditId(null);setForm({name:"",email:"",loanTypes:LOAN_TYPES});}}>ביטול</button>}
+        <div style={{marginTop:10}}>
+          <button className="btn btn-primary" disabled={!addForm.name||!addForm.email} onClick={saveNew}>➕ הוסף לצוות</button>
         </div>
       </div>
 
-      {/* Team list */}
+      {/* ── Team list ── */}
       {teamMembers.length===0
         ? <div className="empty-state"><div className="emoji">👥</div><p>עדיין לא נוספו אנשי צוות</p></div>
         : <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -1824,13 +1902,42 @@ function TeamPage({ teamMembers, setTeamMembers, showToast }) {
                 </div>
               </div>
               <div style={{display:"flex",gap:6}}>
-                <button className="btn btn-secondary btn-sm" onClick={()=>startEdit(m)}>✏️ ערוך</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>{setEditMember(m);setEditForm({name:m.name,email:m.email,loanTypes:m.loanTypes||[...LOAN_TYPES]});}}>✏️ ערוך</button>
                 <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את ${m.name}?`)) del(m.id); }}>🗑️</button>
               </div>
             </div>
           ))}
         </div>
       }
+
+      {/* ── Edit modal ── */}
+      {editMember&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}} onClick={e=>e.target===e.currentTarget&&setEditMember(null)}>
+          <div style={{width:"100%",maxWidth:480,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 22px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0"}}>
+              <div>
+                <div style={{fontWeight:900,fontSize:17}}>✏️ עריכת איש צוות</div>
+                <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{editMember.name}</div>
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setEditMember(null)}>✕ סגור</button>
+            </div>
+            <div style={{padding:"22px"}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+                <div className="form-group"><label className="form-label">שם מלא *</label><input className="form-input" value={editForm.name} onChange={e=>setEditForm(p=>({...p,name:e.target.value}))}/></div>
+                <div className="form-group"><label className="form-label">כתובת מייל *</label><input className="form-input" type="email" value={editForm.email} onChange={e=>setEditForm(p=>({...p,email:e.target.value}))}/></div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">📩 קבלת התראות עבור סוגי השאלה</label>
+                <LoanTypeButtons form={editForm} setForm={setEditForm}/>
+              </div>
+              <div style={{display:"flex",gap:8,marginTop:16}}>
+                <button className="btn btn-primary" disabled={!editForm.name||!editForm.email} onClick={saveEdit}>💾 שמור שינויים</button>
+                <button className="btn btn-secondary" onClick={()=>setEditMember(null)}>ביטול</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1848,11 +1955,20 @@ function KitsPage({ kits, setKits, equipment, categories, showToast }) {
     const [kitItems, setKitItems] = useState(initial?.items||[]);
     const [saving, setSaving] = useState(false);
 
+    // Only "תקין" items count — max = total_quantity of that item
+    const maxQty = eqId => {
+      const eq = equipment.find(e=>e.id==eqId);
+      if (!eq) return 0;
+      if (eq.condition && eq.condition !== "תקין") return 0;
+      return Number(eq.total_quantity) || 0;
+    };
     const setItemQty = (eqId, qty) => {
+      const max = maxQty(eqId);
+      const bounded = Math.max(0, Math.min(qty, max));
       const eqName = equipment.find(e=>e.id==eqId)?.name||"";
-      setKitItems(prev => qty<=0 ? prev.filter(i=>i.equipment_id!=eqId)
-        : prev.find(i=>i.equipment_id==eqId) ? prev.map(i=>i.equipment_id==eqId?{...i,quantity:qty}:i)
-        : [...prev,{equipment_id:eqId,quantity:qty,name:eqName}]);
+      setKitItems(prev => bounded<=0 ? prev.filter(i=>i.equipment_id!=eqId)
+        : prev.find(i=>i.equipment_id==eqId) ? prev.map(i=>i.equipment_id==eqId?{...i,quantity:bounded}:i)
+        : [...prev,{equipment_id:eqId,quantity:bounded,name:eqName}]);
     };
     const getQty = eqId => kitItems.find(i=>i.equipment_id==eqId)?.quantity||0;
 
@@ -1887,23 +2003,33 @@ function KitsPage({ kits, setKits, equipment, categories, showToast }) {
             </div>
           </div>
         </div>
-        <div className="form-section-title">ציוד בערכה</div>
+        <div className="form-section-title">ציוד בערכה <span style={{fontWeight:400,fontSize:11,color:"var(--text3)"}}>· רק ציוד במצב תקין, עד מקסימום הכמות הקיימת</span></div>
         {categories.map(cat=>{
-          const catEq = equipment.filter(e=>e.category===cat);
+          const catEq = equipment.filter(e=>e.category===cat && (!e.condition || e.condition==="תקין"));
           if(!catEq.length) return null;
           return <div key={cat} style={{marginBottom:12}}>
             <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>{cat}</div>
-            {catEq.map(eq=>(
-              <div key={eq.id} className="item-row" style={{marginBottom:4}}>
+            {catEq.map(eq=>{
+              const max = maxQty(eq.id);
+              const qty = getQty(eq.id);
+              return (
+              <div key={eq.id} className="item-row" style={{marginBottom:4,opacity:max===0?0.4:1}}>
                 <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http") ? <img src={eq.image} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/> : eq.image||"📦"}</span>
-                <div style={{flex:1,fontSize:13,fontWeight:600}}>{eq.name}</div>
-                <div className="qty-ctrl">
-                  <button className="qty-btn" onClick={()=>setItemQty(eq.id,getQty(eq.id)-1)}>−</button>
-                  <span className="qty-num">{getQty(eq.id)}</span>
-                  <button className="qty-btn" onClick={()=>setItemQty(eq.id,getQty(eq.id)+1)}>+</button>
+                <div style={{flex:1,fontSize:13,fontWeight:600}}>
+                  {eq.name}
+                  <span style={{fontSize:11,color:"var(--text3)",marginRight:6,fontWeight:400}}>מלאי: {max}</span>
                 </div>
+                {max>0
+                  ? <div className="qty-ctrl">
+                      <button className="qty-btn" onClick={()=>setItemQty(eq.id,qty-1)}>−</button>
+                      <span className="qty-num" style={{color:qty>0?"var(--accent)":"inherit"}}>{qty}</span>
+                      <button className="qty-btn" disabled={qty>=max} onClick={()=>setItemQty(eq.id,qty+1)} style={{opacity:qty>=max?0.3:1}}>+</button>
+                    </div>
+                  : <span style={{fontSize:11,color:"var(--red)",fontWeight:700}}>אין מלאי</span>
+                }
               </div>
-            ))}
+              );
+            })}
           </div>;
         })}
         {kitItems.length>0&&<div className="highlight-box" style={{marginTop:8}}>🎒 {kitItems.length} סוגי ציוד בערכה · {kitItems.reduce((s,i)=>s+i.quantity,0)} יחידות סה״כ</div>}
@@ -2113,7 +2239,7 @@ export default function App() {
                   <div className="search-bar" style={{minWidth:140}}><span>🔍</span><input placeholder="חיפוש..." value={resSearch} onChange={e=>setResSearch(e.target.value)}/></div>
                   <select className="form-select" style={{width:120,fontSize:12,padding:"6px 8px"}} value={resStatusF} onChange={e=>setResStatusF(e.target.value)}>
                     <option value="הכל">כל הסטטוסים</option>
-                    {["ממתין","מאושר","נדחה","הוחזר"].map(s=><option key={s} value={s}>{s}</option>)}
+                    {["ממתין","מאושר","נדחה"].map(s=><option key={s} value={s}>{s}</option>)}
                   </select>
                   <select className="form-select" style={{width:110,fontSize:12,padding:"6px 8px"}} value={resLoanTypeF} onChange={e=>setResLoanTypeF(e.target.value)}>
                     <option value="הכל">כל הסוגים</option>
