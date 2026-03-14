@@ -1970,16 +1970,17 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
           <div style={{fontSize:40,marginBottom:10}}>🎬</div>
           <div style={{fontSize:24,fontWeight:900,color:"var(--accent)"}}>מחסן השאלת ציוד קמרה אובסקורה וסאונד</div>
           <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>טופס השאלת ציוד</div>
-          {/* Clickable tab navigation */}
+          {/* Clickable tab navigation — always free to navigate, validation only on submit */}
           <div style={{display:"flex",gap:4,marginTop:20,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4}}>
             {[{n:1,l:"פרטים",icon:"👤"},{n:2,l:"תאריכים",icon:"📅"},{n:3,l:"ציוד",icon:"📦"},{n:4,l:"אישור",icon:"✅"}].map(s=>{
-              const canGo = s.n===1 || (s.n===2 && ok1) || (s.n===3 && ok1 && ok2) || (s.n===4 && ok1 && ok2 && items.length>0);
+              const done = (s.n===1 && ok1) || (s.n===2 && ok2) || (s.n===3 && items.length>0) || (s.n===4 && agreed);
               return (
                 <button key={s.n} type="button"
-                  onClick={()=>canGo && setStep(s.n)}
-                  style={{flex:1,padding:"8px 4px",borderRadius:6,border:"none",background:step===s.n?"var(--accent)":"transparent",color:step===s.n?"#000":canGo?"var(--text2)":"var(--text3)",fontWeight:step===s.n?800:500,fontSize:12,cursor:canGo?"pointer":"not-allowed",opacity:canGo?1:0.4,transition:"all 0.15s",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  onClick={()=>setStep(s.n)}
+                  style={{flex:1,padding:"8px 4px",borderRadius:6,border:"none",background:step===s.n?"var(--accent)":"transparent",color:step===s.n?"#000":"var(--text2)",fontWeight:step===s.n?800:500,fontSize:12,cursor:"pointer",transition:"all 0.15s",display:"flex",flexDirection:"column",alignItems:"center",gap:2,position:"relative"}}>
                   <span style={{fontSize:14}}>{s.icon}</span>
                   <span>{s.l}</span>
+                  {done&&step!==s.n&&<span style={{position:"absolute",top:3,left:3,width:8,height:8,borderRadius:"50%",background:"var(--green)"}}/>}
                 </button>
               );
             })}
