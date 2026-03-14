@@ -31,6 +31,21 @@ async function storageGet(key) {
   }
 }
 
+// ─── SUPABASE KEEP-ALIVE PING ─────────────────────────────────────────────────
+// מונע כניסה ל-pause אחרי 7 ימי חוסר שימוש
+async function keepAlive() {
+  try {
+    const lastPing = localStorage.getItem("sb_last_ping");
+    const now = Date.now();
+    const FOUR_DAYS = 4 * 24 * 60 * 60 * 1000;
+    if (lastPing && now - Number(lastPing) < FOUR_DAYS) return;
+    await fetch(`${SB_URL}/rest/v1/store?key=eq.equipment&select=key`, { headers: SB_HEADERS });
+    localStorage.setItem("sb_last_ping", String(now));
+    console.log("Supabase keep-alive ping sent");
+  } catch(e) { /* silent */ }
+}
+setTimeout(keepAlive, 3000); // רץ 3 שניות אחרי טעינת הדף
+
 async function storageSet(key, value) {
   lsSet(key, value); // cache immediately
   try {
