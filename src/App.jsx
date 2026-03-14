@@ -1298,7 +1298,7 @@ function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=110, fon
   );
 }
 
-function DashboardPage({ equipment, reservations }) {
+function DashboardPage({ equipment, reservations, setPage }) {
   const todayStr = today();
   const active = reservations.filter(r => r.status === "מאושר").length;
   const pending = reservations.filter(r => r.status === "ממתין").length;
@@ -1308,6 +1308,7 @@ function DashboardPage({ equipment, reservations }) {
 
   const [calDate, setCalDate] = useState(new Date());
   const [calFS, setCalFS] = useState(false);
+  const [calStatusF, setCalStatusF] = useState([]); // empty = show all
   const yr = calDate.getFullYear();
   const mo = calDate.getMonth();
 
@@ -1326,7 +1327,11 @@ function DashboardPage({ equipment, reservations }) {
     ["rgba(200,160,0,0.75)","#fff"],   ["rgba(230,126,34,0.75)","#fff"],
     ["rgba(26,188,156,0.75)","#fff"],  ["rgba(236,72,153,0.75)","#fff"],
   ];
-  const activeRes = reservations.filter(r => r.status !== "נדחה" && r.borrow_date && r.return_date);
+  const ALL_CAL_STATUSES = ["ממתין","מאושר","הוחזר"];
+  const activeRes = reservations.filter(r =>
+    r.status !== "נדחה" && r.borrow_date && r.return_date &&
+    (calStatusF.length===0 || calStatusF.includes(r.status))
+  );
   const colorMap = {};
   activeRes.forEach((r,i) => { colorMap[r.id] = SPAN_COLORS[i % SPAN_COLORS.length]; });
 
@@ -1352,10 +1357,10 @@ function DashboardPage({ equipment, reservations }) {
       <div className="dashboard-bottom-grid mb-6">
         <div className="card">
           <div className="card-header"><span className="card-title">🕒 בקשות אחרונות</span></div>
-          {[...reservations].sort((a,b)=>Number(b.id)-Number(a.id)).slice(0,6).map(r=>(
-            <div key={r.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
+          {[...reservations].filter(r=>r.status!=="הוחזר").sort((a,b)=>Number(b.id)-Number(a.id)).slice(0,6).map(r=>(
+            <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
               <div style={{width:34,height:34,borderRadius:"50%",background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>{r.student_name?.[0]||"?"}</div>
-              <div style={{flex:1}}>
+              <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:13}}>{r.student_name}</div>
                 <div style={{fontSize:11,color:"var(--text3)"}}>
                   📅 {formatDate(r.borrow_date)}{r.borrow_time&&<strong style={{color:"var(--accent)",marginRight:3}}> {r.borrow_time}</strong>}
@@ -1364,7 +1369,10 @@ function DashboardPage({ equipment, reservations }) {
                   {(()=>{const diff=Math.ceil((new Date(r.borrow_date)-new Date())/(1000*60*60*24));return diff>0?<span style={{marginRight:5,color:"var(--yellow)",fontWeight:700}}>({diff}י)</span>:diff===0?<span style={{marginRight:5,color:"var(--green)",fontWeight:700}}>(היום)</span>:null;})()}
                 </div>
               </div>
-              {statusBadge(r.status)}
+              <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                {statusBadge(r.status)}
+                <button className="btn btn-secondary btn-sm" onClick={()=>setPage("reservations")} title="לצפייה בבקשה">👁️</button>
+              </div>
             </div>
           ))}
           {reservations.length===0&&<div className="empty-state"><div className="emoji">📋</div><p>אין בקשות עדיין</p></div>}
@@ -1379,6 +1387,20 @@ function DashboardPage({ equipment, reservations }) {
               <button className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo+1,1))}>›</button>
               <button className="btn btn-secondary btn-sm" title="מסך מלא" onClick={()=>setCalFS(true)} style={{marginRight:8}}>⛶</button>
             </div>
+          </div>
+          {/* Status filter chips */}
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+            {ALL_CAL_STATUSES.map(s=>{
+              const active = calStatusF.includes(s);
+              const clr = s==="מאושר"?"var(--green)":s==="ממתין"?"var(--yellow)":"var(--blue)";
+              return (
+                <button key={s} type="button" onClick={()=>setCalStatusF(p=>active?p.filter(x=>x!==s):[...p,s])}
+                  style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${active?clr:"var(--border)"}`,background:active?`color-mix(in srgb,${clr} 15%,transparent)`:"transparent",color:active?clr:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>
+                  {s==="מאושר"?"✅":s==="ממתין"?"⏳":"🔵"} {s}
+                </button>
+              );
+            })}
+            {calStatusF.length>0&&<button type="button" onClick={()=>setCalStatusF([])} style={{padding:"3px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>✕ הכל</button>}
           </div>
           {/* Day headers */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4,direction:"rtl"}}>
@@ -1407,6 +1429,67 @@ function DashboardPage({ equipment, reservations }) {
     </div>
   );
 }
+// ─── STEP 3 BUTTONS + EQUIPMENT INFO MODAL ───────────────────────────────────
+function Step3Buttons({ items, equipment, onBack, onNext }) {
+  const [showInfo, setShowInfo] = useState(false);
+  const totalQty = items.reduce((s,i)=>s+i.quantity,0);
+
+  return (
+    <>
+      {items.length>0&&<div className="highlight-box">🛒 נבחרו {items.length} סוגים ({totalQty} יחידות)</div>}
+      <div className="flex gap-2">
+        <button className="btn btn-secondary" onClick={onBack}>← חזור</button>
+        {items.length>0&&(
+          <button className="btn btn-secondary" onClick={()=>setShowInfo(true)}>
+            ℹ️ הסבר על הציוד
+          </button>
+        )}
+        <button className="btn btn-primary" disabled={!items.length} onClick={onNext}>המשך ← אישור</button>
+      </div>
+
+      {showInfo&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:4000,display:"flex",flexDirection:"column",direction:"rtl"}}>
+          {/* Header */}
+          <div style={{padding:"16px 20px",background:"var(--surface)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+            <div style={{fontWeight:900,fontSize:17}}>ℹ️ פרטי הציוד שנבחר</div>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setShowInfo(false)}>✕ סגור</button>
+          </div>
+          {/* Scrollable list */}
+          <div style={{flex:1,overflowY:"auto",padding:"20px 16px",display:"flex",flexDirection:"column",gap:16}}>
+            {items.map(itm=>{
+              const eq = equipment.find(e=>e.id==itm.equipment_id);
+              if(!eq) return null;
+              const isImg = eq.image?.startsWith("data:")||eq.image?.startsWith("http");
+              return (
+                <div key={itm.equipment_id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",overflow:"hidden"}}>
+                  {/* Image */}
+                  {isImg
+                    ? <img src={eq.image} alt={eq.name} style={{width:"100%",maxHeight:220,objectFit:"contain",background:"var(--surface2)",display:"block"}}/>
+                    : <div style={{width:"100%",height:120,background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:64}}>{eq.image||"📦"}</div>
+                  }
+                  {/* Info */}
+                  <div style={{padding:"16px"}}>
+                    <div style={{fontWeight:900,fontSize:17,marginBottom:6}}>{eq.name}</div>
+                    <div style={{fontSize:13,color:"var(--text2)",lineHeight:1.7,marginBottom:10}}>{eq.description||"אין תיאור זמין"}</div>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                      <span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"3px 12px",fontSize:12,color:"var(--accent)",fontWeight:700}}>
+                        כמות שנבחרה: {itm.quantity}
+                      </span>
+                      {eq.notes&&<span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"3px 12px",fontSize:12,color:"var(--text2)"}}>
+                        📝 {eq.notes}
+                      </span>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ─── STEP 3 EQUIPMENT SELECTOR ───────────────────────────────────────────────
 function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equipment, items, setItems, getItem, setQty }) {
   const [activeKit, setActiveKit] = useState(null); // null = show all
@@ -1889,10 +1972,10 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
             getItem={getItem}
             setQty={setQty}
           />}
-          {step===3 && <>
-            {items.length>0&&<div className="highlight-box">🛒 נבחרו {items.length} סוגים ({items.reduce((s,i)=>s+i.quantity,0)} יחידות)</div>}
-            <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setStep(2)}>← חזור</button><button className="btn btn-primary" disabled={!items.length} onClick={()=>setStep(4)}>המשך ← אישור</button></div>
-          </>}
+          {step===3 && <Step3Buttons
+            items={items} equipment={equipment}
+            onBack={()=>setStep(2)} onNext={()=>setStep(4)}
+          />}
 
           {step===4 && <Step4Confirm
             form={form} items={items} equipment={equipment}
@@ -1917,6 +2000,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
   ];
   const [draft, setDraft] = useState({ ...policies });
   const [saving, setSaving] = useState(false);
+  const [fsEdit, setFsEdit] = useState(null); // key being fullscreen-edited
 
   const save = async () => {
     setSaving(true);
@@ -1927,6 +2011,8 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
     else showToast("error", "❌ שגיאה בשמירת הנהלים");
   };
 
+  const lt_active = LOAN_TYPES.find(l=>l.key===fsEdit);
+
   return (
     <div className="page">
       <div style={{marginBottom:20,fontSize:13,color:"var(--text3)"}}>
@@ -1936,10 +2022,11 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
         <div key={lt.key} className="card" style={{marginBottom:20}}>
           <div className="card-header">
             <div className="card-title">{lt.icon} נהלי {lt.label}</div>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setFsEdit(lt.key)}>✏️ עריכה מורחבת</button>
           </div>
           <textarea
             className="form-input"
-            rows={8}
+            rows={6}
             placeholder={`כתוב כאן את נהלי ${lt.label}...`}
             value={draft[lt.key]||""}
             onChange={e=>setDraft(p=>({...p,[lt.key]:e.target.value}))}
@@ -1950,6 +2037,25 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
       <button className="btn btn-primary" disabled={saving} onClick={save}>
         {saving ? "⏳ שומר..." : "💾 שמור נהלים"}
       </button>
+
+      {/* Fullscreen editor */}
+      {fsEdit&&lt_active&&(
+        <div style={{position:"fixed",inset:0,background:"var(--bg)",zIndex:4000,display:"flex",flexDirection:"column",direction:"rtl"}}>
+          <div style={{padding:"16px 20px",background:"var(--surface)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+            <div style={{fontWeight:900,fontSize:17}}>{lt_active.icon} עריכת נהלי {lt_active.label}</div>
+            <div style={{display:"flex",gap:8}}>
+              <button className="btn btn-primary btn-sm" onClick={async()=>{ await save(); setFsEdit(null); }}>💾 שמור וסגור</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setFsEdit(null)}>✕ סגור</button>
+            </div>
+          </div>
+          <textarea
+            value={draft[fsEdit]||""}
+            onChange={e=>setDraft(p=>({...p,[fsEdit]:e.target.value}))}
+            style={{flex:1,padding:"20px",background:"var(--surface2)",border:"none",outline:"none",resize:"none",fontFamily:"inherit",fontSize:15,lineHeight:1.9,color:"var(--text)",direction:"rtl"}}
+            placeholder={`כתוב כאן את נהלי ${lt_active.label}...`}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -2000,10 +2106,7 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
         : <div style={{display:"flex",flexDirection:"column",gap:10}}>
           {[...filtered].sort((a,b)=>(new Date(b.returned_at || b.return_date).getTime()) - (new Date(a.returned_at || a.return_date).getTime())).map(r=>(
             <div key={r.id}
-              onClick={()=>setViewRes(r)}
-              style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 18px",cursor:"pointer",transition:"border-color 0.15s"}}
-              onMouseEnter={e=>e.currentTarget.style.borderColor="var(--blue)"}
-              onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
+              style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 18px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
                 <div style={{display:"flex",alignItems:"center",gap:10}}>
                   <div style={{width:34,height:34,borderRadius:"50%",background:"rgba(52,152,219,0.15)",border:"2px solid var(--blue)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:900,flexShrink:0,color:"var(--blue)"}}>{r.student_name?.[0]||"?"}</div>
@@ -2015,7 +2118,7 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
                 <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
                   <span style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",border:"1px solid rgba(52,152,219,0.4)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🔵 הוחזר</span>
                   {r.loan_type&&<span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>{LOAN_ICONS[r.loan_type]||"📦"} {r.loan_type}</span>}
-                  <span style={{fontSize:11,color:"var(--text3)"}}>👁 לצפייה</span>
+                  <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();setViewRes(r);}}>👁️ פרטים</button>
                   <button className="btn btn-danger btn-sm" onClick={e=>{e.stopPropagation();deleteRes(r.id);}}>🗑️</button>
                 </div>
               </div>
@@ -2604,29 +2707,31 @@ export default function App() {
             </div>
           </nav>
           <div className="main">
-            <div className="topbar">
-              <span className="topbar-title">{pageTitle[page]}</span>
-              <div style={{display:"flex",alignItems:"center",gap:8,flex:1,justifyContent:"flex-end",flexWrap:"wrap"}}>
-                {page==="reservations" && <>
-                  <div className="search-bar" style={{minWidth:140}}><span>🔍</span><input placeholder="חיפוש..." value={resSearch} onChange={e=>setResSearch(e.target.value)}/></div>
-                  <select className="form-select" style={{width:120,fontSize:12,padding:"6px 8px"}} value={resStatusF} onChange={e=>setResStatusF(e.target.value)}>
+            <div className="topbar" style={{flexWrap:"wrap",gap:8}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
+                <span className="topbar-title" style={{flex:1}}>{pageTitle[page]}</span>
+                {pending>0&&<div style={{background:"rgba(241,196,15,0.12)",border:"1px solid rgba(241,196,15,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--yellow)",flexShrink:0}}>⏳ {pending}</div>}
+              </div>
+              {page==="reservations" && (
+                <div style={{display:"flex",gap:6,width:"100%",flexWrap:"wrap",alignItems:"center"}}>
+                  <div className="search-bar" style={{flex:"1 1 130px",minWidth:120}}><span>🔍</span><input placeholder="חיפוש..." value={resSearch} onChange={e=>setResSearch(e.target.value)}/></div>
+                  <select className="form-select" style={{flex:"1 1 100px",minWidth:95,fontSize:12,padding:"6px 8px"}} value={resStatusF} onChange={e=>setResStatusF(e.target.value)}>
                     <option value="הכל">כל הסטטוסים</option>
                     {["ממתין","מאושר","נדחה"].map(s=><option key={s} value={s}>{s}</option>)}
                   </select>
-                  <select className="form-select" style={{width:110,fontSize:12,padding:"6px 8px"}} value={resLoanTypeF} onChange={e=>setResLoanTypeF(e.target.value)}>
+                  <select className="form-select" style={{flex:"1 1 90px",minWidth:85,fontSize:12,padding:"6px 8px"}} value={resLoanTypeF} onChange={e=>setResLoanTypeF(e.target.value)}>
                     <option value="הכל">כל הסוגים</option>
                     {["פרטית","הפקה","סאונד"].map(t=><option key={t} value={t}>{t}</option>)}
                   </select>
-                  <select className="form-select" style={{width:140,fontSize:12,padding:"6px 8px"}} value={resSortBy} onChange={e=>setResSortBy(e.target.value)}>
+                  <select className="form-select" style={{flex:"1 1 110px",minWidth:100,fontSize:12,padding:"6px 8px"}} value={resSortBy} onChange={e=>setResSortBy(e.target.value)}>
                     <option value="received">🕐 קבלה</option>
                     <option value="urgency">🔥 דחיפות</option>
                   </select>
-                </>}
-                {pending>0&&<div style={{background:"rgba(241,196,15,0.12)",border:"1px solid rgba(241,196,15,0.3)",borderRadius:8,padding:"6px 12px",fontSize:12,color:"var(--yellow)"}}>⏳ {pending}</div>}
-              </div>
+                </div>
+              )}
             </div>
             {loading ? <Loading/> : <>
-              {page==="dashboard"   && <DashboardPage    equipment={equipment} reservations={reservations}/>}
+              {page==="dashboard"   && <DashboardPage    equipment={equipment} reservations={reservations} setPage={setPage}/>}
               {page==="equipment"   && <EquipmentPage    equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories}/>}
               {page==="reservations"&& <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
