@@ -1654,27 +1654,28 @@ function Step3Buttons({ items, equipment, onBack, onNext }) {
                     border:`2px solid ${isSelected?"var(--accent)":"var(--border)"}`,
                     borderRadius:"var(--r)",overflow:"hidden",
                     display:"flex",flexDirection:"row",
-                    height:170,
+                    minHeight:188,
                     cursor:"pointer",
                     textAlign:"inherit",
                     padding:0,
+                    alignItems:"stretch",
                   }}>
                     {/* Text — right side */}
-                    <div style={{flex:1,padding:"18px 20px",display:"flex",flexDirection:"column",justifyContent:"center",minWidth:0,textAlign:"right",maxWidth:"calc(100% - 220px)"}}>
-                      <div style={{fontWeight:900,fontSize:18,marginBottom:8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{eq.name}</div>
-                      <div style={{fontSize:12,color:"var(--text2)",lineHeight:1.65,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical"}}>{eq.description||"אין תיאור זמין"}</div>
+                    <div style={{flex:1,padding:"18px 22px",display:"flex",flexDirection:"column",justifyContent:"flex-start",minWidth:0,textAlign:"right",maxWidth:"calc(100% - 240px)",gap:8}}>
+                      <div style={{fontWeight:900,fontSize:21,lineHeight:1.25,whiteSpace:"normal",overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",wordBreak:"break-word"}}>{eq.name}</div>
+                      <div style={{fontSize:13,color:"var(--text2)",lineHeight:1.8,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:4,WebkitBoxOrient:"vertical",wordBreak:"break-word",textAlign:"right"}}>{eq.description||"\u05D0\u05D9\u05DF \u05EA\u05D9\u05D0\u05D5\u05E8 \u05D6\u05DE\u05D9\u05DF"}</div>
                       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
                         {isSelected&&<span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>✓ ×{items.find(i=>i.equipment_id==itm.equipment_id)?.quantity}</span>}
-                        {eq.notes&&<span style={{fontSize:11,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:160}}>📝 {eq.notes}</span>}
+                        {eq.notes&&<span style={{fontSize:11,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:220}}>{"\uD83D\uDCDD"} {eq.notes}</span>}
                       </div>
                       {(eq.soundOnly || eq.photoOnly)&&<div style={{marginTop:8,display:"flex",gap:6,flexWrap:"wrap"}}>
                         {eq.soundOnly&&<span style={{background:"rgba(245,166,35,0.12)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>🎙️ ציוד סאונד</span>}
                         {eq.photoOnly&&<span style={{background:"rgba(39,174,96,0.12)",border:"1px solid rgba(39,174,96,0.35)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--green)",fontWeight:700}}>🎥 ציוד צילום</span>}
                       </div>}
-                      <div style={{marginTop:10,fontSize:11,color:"var(--text3)",fontWeight:700}}>לחץ לפתיחת הפריט במסך מלא</div>
+                      <div style={{marginTop:"auto",paddingTop:8,fontSize:11,color:"var(--text3)",fontWeight:700}}>{"\u05DC\u05D7\u05E5 \u05DC\u05E4\u05EA\u05D9\u05D7\u05EA \u05D4\u05E4\u05E8\u05D9\u05D8 \u05D1\u05DE\u05E1\u05DA \u05DE\u05DC\u05D0"}</div>
                     </div>
                     {/* Image — fixed left */}
-                    <div style={{width:220,flexShrink:0,background:"var(--surface2)",overflow:"hidden"}}>
+                    <div style={{width:240,flexShrink:0,background:"var(--surface2)",overflow:"hidden",borderLeft:"1px solid var(--border)"}}>
                       {isImg
                         ? <img src={eq.image} alt={eq.name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                         : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:64}}>{eq.image||"📦"}</div>
@@ -1697,27 +1698,29 @@ function Step3Buttons({ items, equipment, onBack, onNext }) {
                       {focusedEq.photoOnly && <span style={{marginRight:10,color:"var(--green)",fontWeight:700}}>• ציוד צילום</span>}
                     </div>
                   </div>
-                  <button className="btn btn-secondary" onClick={()=>setFocusedEq(null)}>✖ סגור</button>
+                  <button className="btn btn-secondary" onClick={()=>setFocusedEq(null)}>{"\u2716 \u05E1\u05D2\u05D5\u05E8"}</button>
                 </div>
-                <div style={{flex:1,overflowY:"auto",padding:"24px",display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:24,alignItems:"start"}}>
-                  <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",overflow:"hidden",minHeight:340}}>
-                    {(focusedEq.image?.startsWith("data:")||focusedEq.image?.startsWith("http"))
-                      ? <img src={focusedEq.image} alt={focusedEq.name} style={{width:"100%",height:"100%",minHeight:340,objectFit:"cover",display:"block"}}/>
-                      : <div style={{width:"100%",minHeight:340,display:"flex",alignItems:"center",justifyContent:"center",fontSize:120,background:"var(--surface2)"}}>{focusedEq.image||"📦"}</div>
-                    }
+                <div style={{flex:1,overflowY:"auto",padding:"24px",display:"grid",gridTemplateColumns:"minmax(320px,1fr) minmax(320px,420px)",gap:24,alignItems:"start",direction:"ltr"}}>
+                  <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"24px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <div style={{width:"100%",maxWidth:320,aspectRatio:"1 / 1",borderRadius:20,border:"1px solid var(--border)",background:"var(--surface2)",overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 12px 40px rgba(0,0,0,0.28)"}}>
+                      {(focusedEq.image?.startsWith("data:")||focusedEq.image?.startsWith("http"))
+                        ? <img src={focusedEq.image} alt={focusedEq.name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                        : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:120,background:"var(--surface2)"}}>{focusedEq.image||"\uD83D\uDCE6"}</div>
+                      }
+                    </div>
                   </div>
-                  <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"24px"}}>
-                    <div style={{fontSize:12,fontWeight:800,color:"var(--text3)",letterSpacing:1,textTransform:"uppercase",marginBottom:12}}>תיאור מלא</div>
-                    <div style={{fontSize:15,lineHeight:1.9,color:"var(--text)",whiteSpace:"pre-wrap"}}>{focusedEq.description || "אין תיאור זמין לפריט זה."}</div>
+                  <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"24px",direction:"rtl"}}>
+                    <div style={{fontSize:12,fontWeight:800,color:"var(--text3)",letterSpacing:1,textTransform:"uppercase",marginBottom:12}}>{"\u05EA\u05D9\u05D0\u05D5\u05E8 \u05DE\u05DC\u05D0"}</div>
+                    <div style={{fontSize:15,lineHeight:1.9,color:"var(--text)",whiteSpace:"pre-wrap"}}>{focusedEq.description || "\u05D0\u05D9\u05DF \u05EA\u05D9\u05D0\u05D5\u05E8 \u05D6\u05DE\u05D9\u05DF \u05DC\u05E4\u05E8\u05D9\u05D8 \u05D6\u05D4."}</div>
                     {focusedEq.notes && (
                       <div style={{marginTop:20,padding:"14px 16px",background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)"}}>
-                        <div style={{fontSize:12,fontWeight:800,color:"var(--text3)",marginBottom:6}}>הערות</div>
+                        <div style={{fontSize:12,fontWeight:800,color:"var(--text3)",marginBottom:6}}>{"\u05D4\u05E2\u05E8\u05D5\u05EA"}</div>
                         <div style={{fontSize:14,lineHeight:1.8}}>{focusedEq.notes}</div>
                       </div>
                     )}
+              </div>
                   </div>
                 </div>
-              </div>
             )}
 
           </div>
