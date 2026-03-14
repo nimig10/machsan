@@ -1377,9 +1377,9 @@ function DashboardPage({ equipment, reservations }) {
     ["rgba(200,160,0,0.75)","#fff"],   ["rgba(230,126,34,0.75)","#fff"],
     ["rgba(26,188,156,0.75)","#fff"],  ["rgba(236,72,153,0.75)","#fff"],
   ];
-  const ALL_CAL_STATUSES = ["ממתין","מאושר","הוחזר"];
+  const ALL_CAL_STATUSES = ["ממתין","מאושר","נדחה"];
   const activeRes = reservations.filter(r =>
-    r.status !== "נדחה" && r.borrow_date && r.return_date &&
+    r.status !== "הוחזר" && r.borrow_date && r.return_date &&
     (calStatusF.length===0 || calStatusF.includes(r.status))
   );
   const colorMap = {};
@@ -1440,16 +1440,16 @@ function DashboardPage({ equipment, reservations }) {
           </div>
           {/* Status filter chips */}
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
-            {ALL_CAL_STATUSES.map(s=>{
-              const active = calStatusF.includes(s);
-              const clr = s==="מאושר"?"var(--green)":s==="ממתין"?"var(--yellow)":"var(--blue)";
-              return (
-                <button key={s} type="button" onClick={()=>setCalStatusF(p=>active?p.filter(x=>x!==s):[...p,s])}
-                  style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${active?clr:"var(--border)"}`,background:active?`color-mix(in srgb,${clr} 15%,transparent)`:"transparent",color:active?clr:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>
-                  {s==="מאושר"?"✅":s==="ממתין"?"⏳":"🔵"} {s}
-                </button>
-              );
-            })}
+              {ALL_CAL_STATUSES.map(s=>{
+                const active = calStatusF.includes(s);
+                const clr = s==="מאושר"?"var(--green)":s==="ממתין"?"var(--yellow)":"var(--red)";
+                return (
+                  <button key={s} type="button" onClick={()=>setCalStatusF(p=>active?p.filter(x=>x!==s):[...p,s])}
+                    style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${active?clr:"var(--border)"}`,background:active?`color-mix(in srgb,${clr} 15%,transparent)`:"transparent",color:active?clr:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>
+                    {s==="מאושר"?"✅":s==="ממתין"?"⏳":"❌"} {s}
+                  </button>
+                );
+              })}
             {calStatusF.length>0&&<button type="button" onClick={()=>setCalStatusF([])} style={{padding:"3px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>✕ הכל</button>}
           </div>
           {/* Day headers */}
