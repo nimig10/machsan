@@ -688,7 +688,7 @@ function AddCategoryModal({ categories, onSave, onClose }) {
 }
 
 // ─── EDIT RESERVATION MODAL ──────────────────────────────────────────────────
-function EditReservationModal({ reservation, equipment, reservations, onSave, onSaveAndResend, onClose }) {
+function EditReservationModal({ reservation, equipment, reservations, onSave, onApprove, onClose }) {
   const TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30"];
   const [form, setForm]   = useState({...reservation});
   const [items, setItems] = useState(reservation.items ? [...reservation.items] : []);
@@ -755,10 +755,12 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
 
   const save = async () => {
     const updatedReservation = { ...form, id: reservation.id, status: reservation.status, items };
-    const conflicts = getReservationApprovalConflicts(updatedReservation, reservations, equipment);
-    if (conflicts.length) {
-      setEditConflicts(conflicts);
-      return;
+    if (reservation.status === "מאושר") {
+      const conflicts = getReservationApprovalConflicts(updatedReservation, reservations, equipment);
+      if (conflicts.length) {
+        setEditConflicts(conflicts);
+        return;
+      }
     }
 
     setSaving(true);
@@ -888,12 +890,12 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
 
           <div style={{display:"flex",gap:10,justifyContent:"flex-end",paddingTop:8,borderTop:"1px solid var(--border)",flexWrap:"wrap"}}>
             <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
-            {reservation.status==="נדחה"&&onSaveAndResend&&(
+            {reservation.status==="נדחה"&&onApprove&&(
               <button className="btn btn-success" disabled={saving} onClick={async()=>{
                 setSaving(true);
-                await onSaveAndResend({...form, items});
+                await onApprove({...form, items, status:"מאושר"});
                 setSaving(false);
-              }}>📧 שמור ושלח מייל לסטודנט</button>
+              }}>✅ שמור ואשר</button>
             )}
             <button className="btn btn-primary" disabled={saving} onClick={save}>{saving?"⏳ שומר...":"💾 שמור שינויים"}</button>
           </div>
@@ -944,18 +946,24 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
 
 // ─── RESERVATIONS PAGE ────────────────────────────────────────────────────────
 function ReservationsPage({ reservations, setReservations, equipment, showToast,
-    search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy }) {
+    search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy, mode="active" }) {
   const [selected, setSelected] = useState(null);
   const [editing, setEditing]   = useState(null);
   const [approvalConflict, setApprovalConflict] = useState(null);
+  const isRejectedPage = mode === "rejected";
+  const effectiveStatusFilter = !isRejectedPage && statusF !== "נדחה" ? statusF : "הכל";
 
   const filtered = [...reservations]
-    .filter(r =>
-      r.status !== "הוחזר" &&          // הוחזר goes to archive only
-      (statusF==="הכל" || r.status===statusF) &&
-      (loanTypeF==="הכל" || r.loan_type===loanTypeF) &&
-      (r.student_name?.includes(search) || r.email?.includes(search))
-    )
+    .filter(r => {
+      if (isRejectedPage) {
+        if (r.status !== "נדחה") return false;
+      } else {
+        if (r.status === "הוחזר" || r.status === "נדחה") return false;
+        if (effectiveStatusFilter !== "הכל" && r.status !== effectiveStatusFilter) return false;
+      }
+      return (loanTypeF==="הכל" || r.loan_type===loanTypeF) &&
+        (r.student_name?.includes(search) || r.email?.includes(search));
+    })
     .sort((a,b) => {
       if(sortBy==="urgency")  return new Date(a.borrow_date) - new Date(b.borrow_date);
       if(sortBy==="received") return Number(b.id) - Number(a.id);
@@ -1030,57 +1038,72 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
     setSelected(null);
   };
 
+  const sendStatusEmail = async (reservation, status) => {
+    if (!reservation?.email || (status !== "מאושר" && status !== "נדחה")) return;
+    const itemsList = reservation.items?.map(i => `<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${i.name || eqName(i.equipment_id)}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${i.quantity}</td></tr>`).join("") || "";
+    try {
+      await fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to:           reservation.email,
+          type:         status === "מאושר" ? "approved" : "rejected",
+          student_name: reservation.student_name,
+          items_list:   itemsList,
+          borrow_date:  formatDate(reservation.borrow_date),
+          borrow_time:  reservation.borrow_time || "",
+          return_date:  formatDate(reservation.return_date),
+          return_time:  reservation.return_time || "",
+        }),
+      });
+      showToast("success", `📧 מייל נשלח ל-${reservation.email}`);
+    } catch {
+      showToast("error", "שגיאה בשליחת המייל");
+    }
+  };
+
+  const approveReservation = async (reservationToApprove) => {
+    const conflicts = getReservationApprovalConflicts(reservationToApprove, reservations, equipment);
+    if (conflicts.length) {
+      setApprovalConflict({ reservation: reservationToApprove, conflicts });
+      showToast("error", "לא ניתן לאשר - אין מספיק מלאי בחפיפת הזמנים");
+      return false;
+    }
+
+    const updated = normalizeReservationsForArchive(reservations.map((r) =>
+      r.id === reservationToApprove.id ? { ...reservationToApprove, status: "מאושר" } : r
+    ));
+    setReservations(updated);
+    await storageSet("reservations", updated);
+    await sendStatusEmail({ ...reservationToApprove, status: "מאושר" }, "מאושר");
+    showToast("success", "הבקשה אושרה");
+    setSelected(null);
+    return true;
+  };
+
   const updateStatus = async (id, status) => {
     const res = reservations.find(r=>r.id===id);
     if (!res) return;
 
-    if (status === "מאושר") {
-      const conflicts = getReservationApprovalConflicts(res, reservations, equipment);
-      if (conflicts.length) {
-        setApprovalConflict({ reservation: res, conflicts });
-        showToast("error", "לא ניתן לאשר — אין מספיק מלאי בחפיפת הזמנים");
-        return;
-      }
-    }
+    if (status === "מאושר") return approveReservation({ ...res, status: "מאושר" });
 
-    const updated = reservations.map((r) => {
+    const updated = normalizeReservationsForArchive(reservations.map((r) => {
       if (r.id !== id) return r;
       return status === "הוחזר" ? markReservationReturned(r) : { ...r, status };
-    });
+    }));
     setReservations(updated);
     await storageSet("reservations", updated);
     showToast("success", `סטטוס עודכן ל-${status}`);
-
-    // שלח מייל לסטודנט על אישור או דחייה
-    if (status === "מאושר" || status === "נדחה") {
-      if (res?.email) {
-        const itemsList = res.items?.map(i => `<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${i.name}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${i.quantity}</td></tr>`).join("") || "";
-        fetch("/api/send-email", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            to:           res.email,
-            type:         status === "מאושר" ? "approved" : "rejected",
-            student_name: res.student_name,
-            items_list:   itemsList,
-            borrow_date:  formatDate(res.borrow_date),
-            borrow_time:  res.borrow_time||"",
-            return_date:  formatDate(res.return_date),
-            return_time:  res.return_time||"",
-          }),
-        })
-        .then(() => showToast("success", `📧 מייל נשלח ל-${res.email}`))
-        .catch(() => showToast("error", "שגיאה בשליחת המייל"));
-      }
-    }
+    if (status === "נדחה") await sendStatusEmail({ ...res, status: "נדחה" }, "נדחה");
     setSelected(null);
+    return true;
   };
 
   return (
     <div className="page">
 
       {filtered.length===0
-        ? <div className="empty-state"><div className="emoji">📭</div><div>אין בקשות</div></div>
+        ? <div className="empty-state"><div className="emoji">{isRejectedPage ? "❌" : "📭"}</div><div>{isRejectedPage ? "אין בקשות דחויות" : "אין בקשות"}</div></div>
         : <div style={{display:"flex",flexDirection:"column",gap:12}}>
           {filtered.map(r=>(
             <div key={r.id} className="res-card">
@@ -1127,16 +1150,11 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
       }
       {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations}
   onSave={async(updated)=>{ const all=normalizeReservationsForArchive(reservations.map(r=>r.id===updated.id?updated:r)); setReservations(all); await storageSet("reservations",all); showToast("success","הבקשה עודכנה"); setEditing(null); }}
-  onSaveAndResend={async(updated)=>{
-    const all=normalizeReservationsForArchive(reservations.map(r=>r.id===updated.id?updated:r));
-    setReservations(all);
-    await storageSet("reservations",all);
-    // Send updated email to student
-    const itemsList = updated.items?.map(i=>`<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${equipment.find(e=>e.id==i.equipment_id)?.name||"?"}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${i.quantity}</td></tr>`).join("")||"";
-    await fetch("/api/send-email",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:updated.email,type:"approved",student_name:updated.student_name,items_list:itemsList,borrow_date:formatDate(updated.borrow_date),borrow_time:updated.borrow_time||"",return_date:formatDate(updated.return_date),return_time:updated.return_time||""})});
-    showToast("success","הבקשה עודכנה ומייל נשלח לסטודנט ✅");
-    setEditing(null);
-  }}
+  onApprove={editing.status==="נדחה" ? async(updated)=>{
+    const approved = await approveReservation(updated);
+    if (approved) setEditing(null);
+    return approved;
+  } : null}
   onClose={()=>setEditing(null)}/>}
 
       {approvalConflict && (
@@ -1182,6 +1200,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
         <Modal title={`📋 בקשה — ${selected.student_name}`} onClose={()=>setSelected(null)} size="modal-lg"
           footer={<>
             {selected.status==="ממתין"&&<><button className="btn btn-success" onClick={()=>updateStatus(selected.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger" onClick={()=>updateStatus(selected.id,"נדחה")}>❌ דחה</button></>}
+            {selected.status==="נדחה"&&<button className="btn btn-success" onClick={()=>updateStatus(selected.id,"מאושר")}>✅ אשר בקשה</button>}
             {selected.status==="מאושר"&&<button className="btn btn-secondary" onClick={()=>updateStatus(selected.id,"הוחזר")}>🔄 סמן כהוחזר</button>}
             <button className="btn btn-secondary" onClick={()=>exportPDF(selected)}>📄 ייצא PDF</button>
             <button className="btn btn-danger" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${selected.student_name}?`)) deleteReservation(selected.id); }}>🗑️ מחק</button>
@@ -2788,7 +2807,8 @@ export default function App() {
   }, [loading]);
 
   const pending = reservations.filter(r=>r.status==="ממתין").length;
-  const pageTitle = { dashboard:"לוח בקרה", equipment:"ניהול ציוד", reservations:"ניהול בקשות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות", policies:"נהלים" };
+  const rejected = reservations.filter(r=>r.status==="נדחה").length;
+  const pageTitle = { dashboard:"לוח בקרה", equipment:"ניהול ציוד", reservations:"ניהול בקשות", rejected:"בקשות דחויות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות", policies:"נהלים" };
 
   return (
     <>
@@ -2817,6 +2837,7 @@ export default function App() {
               {[
                 {id:"equipment",icon:"📦",label:"ציוד"},
                 {id:"reservations",icon:"📋",label:"בקשות",badge:pending||null},
+                {id:"rejected",icon:"❌",label:"בקשות דחויות",badge:rejected||null},
                 {id:"kits",icon:"🎒",label:"ערכות"},
                 {id:"team",icon:"👥",label:"צוות"},
                 {id:"archive",icon:"🗄️",label:"ארכיון"},
@@ -2839,14 +2860,17 @@ export default function App() {
               <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
                 <span className="topbar-title" style={{flex:1}}>{pageTitle[page]}</span>
                 {pending>0&&<div style={{background:"rgba(241,196,15,0.12)",border:"1px solid rgba(241,196,15,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--yellow)",flexShrink:0}}>⏳ {pending}</div>}
+                {rejected>0&&<div style={{background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--red)",flexShrink:0}}>❌ {rejected}</div>}
               </div>
-              {page==="reservations" && (
+              {(page==="reservations" || page==="rejected") && (
                 <div style={{display:"flex",gap:6,width:"100%",flexWrap:"wrap",alignItems:"center"}}>
                   <div className="search-bar" style={{flex:"1 1 130px",minWidth:120}}><span>🔍</span><input placeholder="חיפוש..." value={resSearch} onChange={e=>setResSearch(e.target.value)}/></div>
-                  <select className="form-select" style={{flex:"1 1 100px",minWidth:95,fontSize:12,padding:"6px 8px"}} value={resStatusF} onChange={e=>setResStatusF(e.target.value)}>
-                    <option value="הכל">כל הסטטוסים</option>
-                    {["ממתין","מאושר","נדחה"].map(s=><option key={s} value={s}>{s}</option>)}
-                  </select>
+                  {page==="reservations" && (
+                    <select className="form-select" style={{flex:"1 1 100px",minWidth:95,fontSize:12,padding:"6px 8px"}} value={resStatusF==="נדחה" ? "הכל" : resStatusF} onChange={e=>setResStatusF(e.target.value)}>
+                      <option value="הכל">כל הסטטוסים</option>
+                      {["ממתין","מאושר"].map(s=><option key={s} value={s}>{s}</option>)}
+                    </select>
+                  )}
                   <select className="form-select" style={{flex:"1 1 90px",minWidth:85,fontSize:12,padding:"6px 8px"}} value={resLoanTypeF} onChange={e=>setResLoanTypeF(e.target.value)}>
                     <option value="הכל">כל הסוגים</option>
                     {["פרטית","הפקה","סאונד"].map(t=><option key={t} value={t}>{t}</option>)}
@@ -2864,6 +2888,9 @@ export default function App() {
               {page==="reservations"&& <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy}/>}
+              {page==="rejected"    && <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
+                search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
+                loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} mode="rejected"/>}
               {page==="archive"     && <ArchivePage      reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}/>}
               {page==="team"        && <TeamPage         teamMembers={teamMembers} setTeamMembers={setTeamMembers} showToast={showToast}/>}
               {page==="kits"        && <KitsPage         kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast}/>}
