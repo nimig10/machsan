@@ -1690,7 +1690,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
 }
 
 // ─── STEP 4 CONFIRM ───────────────────────────────────────────────────────────
-function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, submit, onBack, policies, loanType }) {
+function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, submit, onBack, policies, loanType, canSubmit }) {
   const [showPolicies, setShowPolicies] = useState(false);
   const [scrolledToBottom, setScrolledToBottom] = useState(false);
 
@@ -1739,7 +1739,7 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
 
       <div className="flex gap-2">
         <button className="btn btn-secondary" onClick={onBack}>← חזור</button>
-        <button className="btn btn-primary" disabled={!agreed||submitting} onClick={submit}>{submitting?"⏳ שולח...":"🚀 שלח בקשה"}</button>
+        <button className="btn btn-primary" disabled={!canSubmit||submitting} onClick={submit}>{submitting?"⏳ שולח...":"🚀 שלח בקשה"}</button>
       </div>
 
       {/* ── Fullscreen policies modal ── */}
@@ -1828,6 +1828,8 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   const returnBeforeBorrow = form.borrow_date && form.return_date && parseLocalDate(form.return_date) < parseLocalDate(form.borrow_date);
   const hasTimes = !!form.borrow_time && !!form.return_time;
   const ok2 = !!form.borrow_date && !!form.return_date && hasTimes && !returnBeforeBorrow && !tooSoon && !tooLong && !borrowWeekend && !returnWeekend && !timeOrderError;
+  const ok3 = items.some(item => Number(item.quantity) > 0);
+  const canSubmit = !!ok1 && !!ok2 && !!ok3 && !!agreed;
 
   const availEq = useMemo(()=>{
     if(!form.borrow_date||!form.return_date) return [];
@@ -1840,6 +1842,32 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     const q = Math.max(0,Math.min(qty,avail));
     const name = equipment.find(e=>e.id==id)?.name||"";
     setItems(prev => q===0 ? prev.filter(i=>i.equipment_id!=id) : prev.find(i=>i.equipment_id==id) ? prev.map(i=>i.equipment_id==id?{...i,quantity:q}:i) : [...prev,{equipment_id:id,quantity:q,name}]);
+  };
+
+  const canAccessStep = (targetStep) => {
+    if (targetStep <= 1) return true;
+    if (targetStep === 2) return !!ok1;
+    if (targetStep === 3) return !!ok1 && !!ok2;
+    if (targetStep === 4) return !!ok1 && !!ok2 && !!ok3;
+    return false;
+  };
+
+  const goToStep = (targetStep) => {
+    if (targetStep === step) return;
+    if (targetStep < step) {
+      setStep(targetStep);
+      return;
+    }
+    if (canAccessStep(targetStep)) {
+      setStep(targetStep);
+      return;
+    }
+    const message = targetStep === 2
+      ? "יש למלא את שלב הפרטים לפני המעבר לתאריכים."
+      : targetStep === 3
+      ? "יש להשלים תאריכים ושעות תקינים לפני המעבר לבחירת ציוד."
+      : "יש להשלים תאריכים, שעות ובחירת ציוד לפני המעבר לשלב האישור.";
+    showToast("error", message);
   };
 
   const waText = encodeURIComponent("שלום נמרוד הגשתי בקשה להשאלה ממתין לאישורך תודה");
@@ -1893,6 +1921,13 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   };
 
   const submit = async () => {
+    if (!ok1 || !ok2 || !ok3) {
+      showToast("error", "לא ניתן לשלוח בקשה לפני השלמת כל שלבי הטופס, כולל תאריכים, שעות ובחירת ציוד.");
+      if (!ok1) setStep(1);
+      else if (!ok2) setStep(2);
+      else setStep(3);
+      return;
+    }
     // Validate email format before doing anything
     if(!isValidEmailAddress(form.email)) {
       setEmailError(true);
@@ -1973,11 +2008,12 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
           {/* Clickable tab navigation — always free to navigate, validation only on submit */}
           <div style={{display:"flex",gap:4,marginTop:20,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4}}>
             {[{n:1,l:"פרטים",icon:"👤"},{n:2,l:"תאריכים",icon:"📅"},{n:3,l:"ציוד",icon:"📦"},{n:4,l:"אישור",icon:"✅"}].map(s=>{
-              const done = (s.n===1 && ok1) || (s.n===2 && ok2) || (s.n===3 && items.length>0) || (s.n===4 && agreed);
+              const done = (s.n===1 && ok1) || (s.n===2 && ok2) || (s.n===3 && ok3) || (s.n===4 && canSubmit);
+              const locked = s.n > step && !canAccessStep(s.n);
               return (
                 <button key={s.n} type="button"
-                  onClick={()=>setStep(s.n)}
-                  style={{flex:1,padding:"8px 4px",borderRadius:6,border:"none",background:step===s.n?"var(--accent)":"transparent",color:step===s.n?"#000":"var(--text2)",fontWeight:step===s.n?800:500,fontSize:12,cursor:"pointer",transition:"all 0.15s",display:"flex",flexDirection:"column",alignItems:"center",gap:2,position:"relative"}}>
+                  onClick={()=>goToStep(s.n)}
+                  style={{flex:1,padding:"8px 4px",borderRadius:6,border:"none",background:step===s.n?"var(--accent)":"transparent",color:step===s.n?"#000":"var(--text2)",fontWeight:step===s.n?800:500,fontSize:12,cursor:"pointer",transition:"all 0.15s",display:"flex",flexDirection:"column",alignItems:"center",gap:2,position:"relative",opacity:locked?0.55:1}}>
                   <span style={{fontSize:14}}>{s.icon}</span>
                   <span>{s.l}</span>
                   {done&&step!==s.n&&<span style={{position:"absolute",top:3,left:3,width:8,height:8,borderRadius:"50%",background:"var(--green)"}}/>}
@@ -2060,15 +2096,15 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
             getItem={getItem}
             setQty={setQty}
           />}
-          {step===3 && <Step3Buttons
-            items={items} equipment={equipment}
-            onBack={()=>setStep(2)} onNext={()=>setStep(4)}
-          />}
+            {step===3 && <Step3Buttons
+              items={items} equipment={equipment}
+              onBack={()=>setStep(2)} onNext={()=>goToStep(4)}
+            />}
 
           {step===4 && <Step4Confirm
             form={form} items={items} equipment={equipment}
             agreed={agreed} setAgreed={setAgreed}
-            submitting={submitting} submit={submit}
+            submitting={submitting} submit={submit} canSubmit={canSubmit}
             onBack={()=>setStep(3)}
             policies={policies}
             loanType={form.loan_type}
