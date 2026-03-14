@@ -694,6 +694,7 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
   const [items, setItems] = useState(reservation.items ? [...reservation.items] : []);
   const [saving, setSaving] = useState(false);
   const [editConflicts, setEditConflicts] = useState([]);
+  const [showLoanedOnly, setShowLoanedOnly] = useState(false);
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
 
   const getEquipmentBlockingDetails = (eqId) => {
@@ -813,12 +814,22 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
           </div>
 
           <div>
-            <div className="form-section-title">ציוד ({items.reduce((s,i)=>s+i.quantity,0)} פריטים)</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:8}}>
+              <div className="form-section-title" style={{marginBottom:0}}>ציוד ({items.reduce((s,i)=>s+i.quantity,0)} פריטים)</div>
+              <button
+                type="button"
+                className={`btn btn-sm ${showLoanedOnly ? "btn-primary" : "btn-secondary"}`}
+                onClick={()=>setShowLoanedOnly(prev=>!prev)}
+              >
+                פריטים בלבד
+              </button>
+            </div>
             <div className="highlight-box" style={{marginBottom:16}}>
               המערכת סופרת מלאי רק מול בקשות <strong>מאושרות</strong> שחופפות בזמן לבקשה הזאת. אם ציוד חסום, יוצגו כאן שמות הסטודנטים והכמויות שחוסמות אותו כדי שתוכל לעבור לבקשות החופפות ולהפחית משם.
             </div>
             {categories.map(cat=>{
-              const catEq = equipment.filter(e=>e.category===cat);
+              const catEq = equipment.filter(e=>e.category===cat && (!showLoanedOnly || getQty(e.id) > 0));
+              if(!catEq.length) return null;
               return (
                 <div key={cat} style={{marginBottom:16}}>
                   <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>{cat}</div>
