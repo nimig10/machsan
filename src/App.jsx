@@ -688,7 +688,7 @@ function AddCategoryModal({ categories, onSave, onClose }) {
 }
 
 // ─── EDIT RESERVATION MODAL ──────────────────────────────────────────────────
-function EditReservationModal({ reservation, equipment, reservations, onSave, onClose }) {
+function EditReservationModal({ reservation, equipment, reservations, onSave, onSaveAndResend, onClose }) {
   const TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30"];
   const [form, setForm]   = useState({...reservation});
   const [items, setItems] = useState(reservation.items ? [...reservation.items] : []);
@@ -875,8 +875,15 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
             })}
           </div>
 
-          <div style={{display:"flex",gap:10,justifyContent:"flex-end",paddingTop:8,borderTop:"1px solid var(--border)"}}>
+          <div style={{display:"flex",gap:10,justifyContent:"flex-end",paddingTop:8,borderTop:"1px solid var(--border)",flexWrap:"wrap"}}>
             <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+            {reservation.status==="נדחה"&&onSaveAndResend&&(
+              <button className="btn btn-success" disabled={saving} onClick={async()=>{
+                setSaving(true);
+                await onSaveAndResend({...form, items});
+                setSaving(false);
+              }}>📧 שמור ושלח מייל לסטודנט</button>
+            )}
             <button className="btn btn-primary" disabled={saving} onClick={save}>{saving?"⏳ שומר...":"💾 שמור שינויים"}</button>
           </div>
         </div>
@@ -1098,7 +1105,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
               <div className="res-card-actions">
                 <button className="btn btn-secondary btn-sm" onClick={()=>setSelected(r)}>👁️ פרטים</button>
                 <button className="btn btn-secondary btn-sm" onClick={()=>exportPDF(r)}>📄 PDF</button>
-                {r.status==="מאושר"&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}>✏️ עריכת בקשה</button>}
+                {(r.status==="מאושר"||r.status==="נדחה")&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}>✏️ עריכת בקשה</button>}
                 {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" onClick={()=>updateStatus(r.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger btn-sm" onClick={()=>updateStatus(r.id,"נדחה")}>❌ דחה</button></>}
                 {r.status==="מאושר"&&<button className="btn btn-secondary btn-sm" onClick={()=>updateStatus(r.id,"הוחזר")}>🔄 הוחזר</button>}
                 <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${r.student_name}?`)) deleteReservation(r.id); }}>🗑️</button>
@@ -1107,7 +1114,19 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
           ))}
         </div>
       }
-      {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations} onSave={async(updated)=>{ const all=normalizeReservationsForArchive(reservations.map(r=>r.id===updated.id?updated:r)); setReservations(all); await storageSet("reservations",all); showToast("success","הבקשה עודכנה"); setEditing(null); }} onClose={()=>setEditing(null)}/>}
+      {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations}
+  onSave={async(updated)=>{ const all=normalizeReservationsForArchive(reservations.map(r=>r.id===updated.id?updated:r)); setReservations(all); await storageSet("reservations",all); showToast("success","הבקשה עודכנה"); setEditing(null); }}
+  onSaveAndResend={async(updated)=>{
+    const all=normalizeReservationsForArchive(reservations.map(r=>r.id===updated.id?updated:r));
+    setReservations(all);
+    await storageSet("reservations",all);
+    // Send updated email to student
+    const itemsList = updated.items?.map(i=>`<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${equipment.find(e=>e.id==i.equipment_id)?.name||"?"}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${i.quantity}</td></tr>`).join("")||"";
+    await fetch("/api/send-email",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:updated.email,type:"approved",student_name:updated.student_name,items_list:itemsList,borrow_date:formatDate(updated.borrow_date),borrow_time:updated.borrow_time||"",return_date:formatDate(updated.return_date),return_time:updated.return_time||""})});
+    showToast("success","הבקשה עודכנה ומייל נשלח לסטודנט ✅");
+    setEditing(null);
+  }}
+  onClose={()=>setEditing(null)}/>}
 
       {approvalConflict && (
         <Modal
@@ -1298,7 +1317,7 @@ function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=110, fon
   );
 }
 
-function DashboardPage({ equipment, reservations, setPage }) {
+function DashboardPage({ equipment, reservations }) {
   const todayStr = today();
   const active = reservations.filter(r => r.status === "מאושר").length;
   const pending = reservations.filter(r => r.status === "ממתין").length;
@@ -1308,6 +1327,7 @@ function DashboardPage({ equipment, reservations, setPage }) {
 
   const [calDate, setCalDate] = useState(new Date());
   const [calFS, setCalFS] = useState(false);
+  const [dashViewRes, setDashViewRes] = useState(null);
   const [calStatusF, setCalStatusF] = useState([]); // empty = show all
   const yr = calDate.getFullYear();
   const mo = calDate.getMonth();
@@ -1371,7 +1391,7 @@ function DashboardPage({ equipment, reservations, setPage }) {
               </div>
               <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
                 {statusBadge(r.status)}
-                <button className="btn btn-secondary btn-sm" onClick={()=>setPage("reservations")} title="לצפייה בבקשה">👁️</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setDashViewRes(r)} title="לצפייה בבקשה">👁️</button>
               </div>
             </div>
           ))}
@@ -1426,6 +1446,45 @@ function DashboardPage({ equipment, reservations, setPage }) {
           </div>
         </div>
       )}
+
+      {/* Dashboard quick-view modal */}
+      {dashViewRes&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}} onClick={e=>e.target===e.currentTarget&&setDashViewRes(null)}>
+          <div style={{width:"100%",maxWidth:520,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl",maxHeight:"90vh",overflowY:"auto"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0",position:"sticky",top:0}}>
+              <div>
+                <div style={{fontWeight:900,fontSize:16}}>📋 {dashViewRes.student_name}</div>
+                <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{dashViewRes.email}</div>
+              </div>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                {statusBadge(dashViewRes.status)}
+                <button className="btn btn-secondary btn-sm" onClick={()=>setDashViewRes(null)}>✕</button>
+              </div>
+            </div>
+            <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:14}}>
+              <div style={{background:"var(--accent-glow)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:"var(--r-sm)",padding:14}}>
+                {[["📅 השאלה",`${formatDate(dashViewRes.borrow_date)}${dashViewRes.borrow_time?" · "+dashViewRes.borrow_time:""}`],["↩ החזרה",`${formatDate(dashViewRes.return_date)}${dashViewRes.return_time?" · "+dashViewRes.return_time:""}`],["📚 קורס",dashViewRes.course],["🎬 סוג",dashViewRes.loan_type]].map(([l,v])=>(
+                  <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"4px 0",borderBottom:"1px solid rgba(245,166,35,0.15)"}}>
+                    <span style={{color:"var(--text3)"}}>{l}</span>
+                    <strong>{v}</strong>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <div style={{fontWeight:700,fontSize:13,marginBottom:8}}>ציוד ({dashViewRes.items?.length||0} פריטים)</div>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {dashViewRes.items?.map((i,j)=>(
+                    <div key={j} style={{display:"flex",justifyContent:"space-between",padding:"6px 12px",background:"var(--surface2)",borderRadius:"var(--r-sm)",fontSize:13}}>
+                      <span>{equipment.find(e=>e.id==i.equipment_id)?.name||"?"}</span>
+                      <strong style={{color:"var(--accent)"}}>×{i.quantity}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1468,44 +1527,41 @@ function Step3Buttons({ items, equipment, onBack, onNext }) {
             </div>
           </div>
 
-          {/* Scrollable grid */}
-          <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:14}}>
-              {displayList.map(itm=>{
-                const eq = equipment.find(e=>e.id==itm.equipment_id);
-                if(!eq) return null;
-                const isImg = eq.image?.startsWith("data:")||eq.image?.startsWith("http");
-                const isSelected = items.some(i=>i.equipment_id==itm.equipment_id && i.quantity>0);
-                return (
-                  <div key={itm.equipment_id} style={{
-                    background:"var(--surface)",
-                    border:`1px solid ${isSelected?"var(--accent)":"var(--border)"}`,
-                    borderRadius:"var(--r)",overflow:"hidden",
-                    display:"flex",flexDirection:"row",
-                    minHeight:110,maxHeight:130,
-                  }}>
-                    {/* Image — fixed left side */}
-                    <div style={{width:110,flexShrink:0,background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
-                      {isImg
-                        ? <img src={eq.image} alt={eq.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                        : <span style={{fontSize:48}}>{eq.image||"📦"}</span>
-                      }
-                    </div>
-                    {/* Info — right side */}
-                    <div style={{flex:1,padding:"12px 14px",display:"flex",flexDirection:"column",justifyContent:"space-between",minWidth:0}}>
-                      <div>
-                        <div style={{fontWeight:800,fontSize:14,marginBottom:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{eq.name}</div>
-                        <div style={{fontSize:12,color:"var(--text3)",lineHeight:1.6,display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{eq.description||"אין תיאור"}</div>
-                      </div>
-                      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>
-                        {isSelected&&<span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"2px 10px",fontSize:11,color:"var(--accent)",fontWeight:700}}>✓ נבחר ×{items.find(i=>i.equipment_id==itm.equipment_id)?.quantity}</span>}
-                        {eq.notes&&<span style={{fontSize:11,color:"var(--text3)"}}>📝 {eq.notes}</span>}
-                      </div>
+          {/* Scrollable list — full width cards */}
+          <div style={{flex:1,overflowY:"auto",padding:"16px",display:"flex",flexDirection:"column",gap:12}}>
+            {displayList.map(itm=>{
+              const eq = equipment.find(e=>e.id==itm.equipment_id);
+              if(!eq) return null;
+              const isImg = eq.image?.startsWith("data:")||eq.image?.startsWith("http");
+              const isSelected = items.some(i=>i.equipment_id==itm.equipment_id && i.quantity>0);
+              return (
+                <div key={itm.equipment_id} style={{
+                  width:"100%",
+                  background:"var(--surface)",
+                  border:`2px solid ${isSelected?"var(--accent)":"var(--border)"}`,
+                  borderRadius:"var(--r)",overflow:"hidden",
+                  display:"flex",flexDirection:"row",
+                  height:140,
+                }}>
+                  {/* Text — right side (RTL: appears on right) */}
+                  <div style={{flex:1,padding:"16px 18px",display:"flex",flexDirection:"column",justifyContent:"center",minWidth:0,textAlign:"right"}}>
+                    <div style={{fontWeight:900,fontSize:16,marginBottom:6}}>{eq.name}</div>
+                    <div style={{fontSize:13,color:"var(--text2)",lineHeight:1.7,display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{eq.description||"אין תיאור זמין"}</div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+                      {isSelected&&<span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"2px 10px",fontSize:12,color:"var(--accent)",fontWeight:700}}>✓ נבחר ×{items.find(i=>i.equipment_id==itm.equipment_id)?.quantity}</span>}
+                      {eq.notes&&<span style={{fontSize:12,color:"var(--text3)"}}>📝 {eq.notes}</span>}
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                  {/* Image — fixed left side, large */}
+                  <div style={{width:160,flexShrink:0,background:"var(--surface2)",overflow:"hidden"}}>
+                    {isImg
+                      ? <img src={eq.image} alt={eq.name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                      : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:64}}>{eq.image||"📦"}</div>
+                    }
+                  </div>
+                </div>
+              );
+            })}
             {displayList.length===0&&<div style={{textAlign:"center",color:"var(--text3)",marginTop:40,fontSize:14}}>לא נבחר ציוד עדיין</div>}
           </div>
         </div>
@@ -2752,7 +2808,7 @@ export default function App() {
               )}
             </div>
             {loading ? <Loading/> : <>
-              {page==="dashboard"   && <DashboardPage    equipment={equipment} reservations={reservations} setPage={setPage}/>}
+              {page==="dashboard"   && <DashboardPage    equipment={equipment} reservations={reservations}/>}
               {page==="equipment"   && <EquipmentPage    equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories}/>}
               {page==="reservations"&& <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
