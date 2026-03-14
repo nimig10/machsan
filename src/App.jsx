@@ -286,7 +286,7 @@ const css = `
   .nav-item.active { background:var(--accent-glow); color:var(--accent); border-right-color:var(--accent); }
   .nav-item .icon { font-size:16px; width:20px; text-align:center; }
   .main { margin-right:240px; flex:1; min-height:100vh; }
-  .topbar { position:sticky; top:0; z-index:50; background:rgba(10,12,16,0.92); backdrop-filter:blur(12px); border-bottom:1px solid var(--border); padding:0 28px; height:60px; display:flex; align-items:center; justify-content:space-between; }
+  .topbar { position:sticky; top:0; z-index:50; background:rgba(10,12,16,0.92); backdrop-filter:blur(12px); border-bottom:1px solid var(--border); padding:0 28px; min-height:60px; height:auto; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; }
   .topbar-title { font-size:18px; font-weight:700; }
   .page { padding:28px; }
   .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:20px; }
@@ -434,7 +434,7 @@ const css = `
     .nav-item .icon { font-size:18px; width:auto; }
     .sidebar > div:last-child { display:none; }
     .main { margin-right:0; padding-bottom:68px; }
-    .topbar { padding:0 16px; }
+    .topbar { padding:6px 10px; min-height:48px; height:auto !important; flex-wrap:wrap; gap:4px; align-items:flex-start; }
     .page { padding:16px; }
     .stats-grid { grid-template-columns:1fr 1fr; gap:12px; }
     .stat-value { font-size:24px; }
