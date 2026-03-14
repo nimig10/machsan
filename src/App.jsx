@@ -1845,16 +1845,14 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   };
 
   const canAccessStep = (targetStep) => {
-    if (targetStep <= 1) return true;
-    if (targetStep === 2) return !!ok1;
-    if (targetStep === 3) return !!ok1 && !!ok2;
+    if (targetStep <= 3) return true;
     if (targetStep === 4) return !!ok1 && !!ok2 && !!ok3;
     return false;
   };
 
   const goToStep = (targetStep) => {
     if (targetStep === step) return;
-    if (targetStep < step) {
+    if (targetStep <= 3) {
       setStep(targetStep);
       return;
     }
@@ -1862,12 +1860,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
       setStep(targetStep);
       return;
     }
-    const message = targetStep === 2
-      ? "יש למלא את שלב הפרטים לפני המעבר לתאריכים."
-      : targetStep === 3
-      ? "יש להשלים תאריכים ושעות תקינים לפני המעבר לבחירת ציוד."
-      : "יש להשלים תאריכים, שעות ובחירת ציוד לפני המעבר לשלב האישור.";
-    showToast("error", message);
+    showToast("error", "יש להשלים את שלבי פרטים, תאריכים וציוד לפני המעבר לשלב האישור.");
   };
 
   const waText = encodeURIComponent("שלום נמרוד הגשתי בקשה להשאלה ממתין לאישורך תודה");
@@ -2006,10 +1999,10 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
           <div style={{fontSize:24,fontWeight:900,color:"var(--accent)"}}>מחסן השאלת ציוד קמרה אובסקורה וסאונד</div>
           <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>טופס השאלת ציוד</div>
           {/* Clickable tab navigation — always free to navigate, validation only on submit */}
-          <div style={{display:"flex",gap:4,marginTop:20,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4}}>
-            {[{n:1,l:"פרטים",icon:"👤"},{n:2,l:"תאריכים",icon:"📅"},{n:3,l:"ציוד",icon:"📦"},{n:4,l:"אישור",icon:"✅"}].map(s=>{
+            <div style={{display:"flex",gap:4,marginTop:20,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4}}>
+              {[{n:1,l:"פרטים",icon:"👤"},{n:2,l:"תאריכים",icon:"📅"},{n:3,l:"ציוד",icon:"📦"},{n:4,l:"אישור",icon:"✅"}].map(s=>{
               const done = (s.n===1 && ok1) || (s.n===2 && ok2) || (s.n===3 && ok3) || (s.n===4 && canSubmit);
-              const locked = s.n > step && !canAccessStep(s.n);
+              const locked = s.n===4 && !canAccessStep(s.n);
               return (
                 <button key={s.n} type="button"
                   onClick={()=>goToStep(s.n)}
