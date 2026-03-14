@@ -1524,8 +1524,97 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
   );
 }
 
+// ─── STEP 4 CONFIRM ───────────────────────────────────────────────────────────
+function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, submit, onBack, policies, loanType }) {
+  const [showPolicies, setShowPolicies] = useState(false);
+  const [scrolledToBottom, setScrolledToBottom] = useState(false);
+
+  const policyText = (policies && policies[loanType]) || "";
+  const hasPolicies = policyText.trim().length > 0;
+
+  const handleScroll = (e) => {
+    const el = e.target;
+    if (el.scrollHeight - el.scrollTop <= el.clientHeight + 20) {
+      setScrolledToBottom(true);
+    }
+  };
+
+  return (
+    <>
+      <div className="form-section-title">סיכום ואישור</div>
+      <div className="grid-2" style={{marginBottom:20}}>
+        <div>{[["שם",form.student_name],["אימייל",form.email],["קורס",form.course],["סוג השאלה",form.loan_type],["מ",`${formatDate(form.borrow_date)}${form.borrow_time?" · "+form.borrow_time:""}`],["עד",`${formatDate(form.return_date)}${form.return_time?" · "+form.return_time:""}`]].map(([l,v])=><div key={l} className="req-detail-row"><span className="req-detail-label">{l}:</span><strong>{v}</strong></div>)}</div>
+        <div>{items.map(i=>{
+          const eq = equipment.find(e=>e.id==i.equipment_id);
+          const img = eq?.image||"📦";
+          const isFile = img.startsWith("data:")||img.startsWith("http");
+          return <div key={i.equipment_id} className="req-detail-row">
+            {isFile ? <img src={img} alt="" style={{width:20,height:20,objectFit:"cover",borderRadius:4,verticalAlign:"middle"}}/> : <span>{img}</span>}
+            <span style={{marginRight:6}}>{i.name} × {i.quantity}</span>
+          </div>;
+        })}</div>
+      </div>
+      <div className="divider"/>
+
+      {/* ── Policies button ── */}
+      {hasPolicies && (
+        <button type="button"
+          onClick={()=>{ setShowPolicies(true); setScrolledToBottom(false); }}
+          style={{width:"100%",padding:"12px",marginBottom:16,borderRadius:"var(--r-sm)",border:"2px solid var(--accent)",background:"var(--accent-glow)",color:"var(--accent)",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+          📋 נהלי ההשאלה — חובה לקרוא לפני שליחה
+        </button>
+      )}
+
+      {/* Checkbox */}
+      <label className="checkbox-row" style={{marginBottom:20,opacity:hasPolicies&&!scrolledToBottom?0.4:1,pointerEvents:hasPolicies&&!scrolledToBottom?"none":"auto"}}>
+        <input type="checkbox" checked={agreed} onChange={e=>setAgreed(e.target.checked)} disabled={hasPolicies&&!scrolledToBottom}/>
+        <span>אני מאשר/ת שקראתי את התקנון ומתחייב/ת להחזיר את הציוד בזמן ובמצב תקין</span>
+      </label>
+      {hasPolicies&&!scrolledToBottom&&<div style={{fontSize:12,color:"var(--text3)",marginBottom:12,textAlign:"center"}}>יש לפתוח את נהלי ההשאלה ולגלול עד הסוף כדי לאשר</div>}
+
+      <div className="flex gap-2">
+        <button className="btn btn-secondary" onClick={onBack}>← חזור</button>
+        <button className="btn btn-primary" disabled={!agreed||submitting} onClick={submit}>{submitting?"⏳ שולח...":"🚀 שלח בקשה"}</button>
+      </div>
+
+      {/* ── Fullscreen policies modal ── */}
+      {showPolicies && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:4000,display:"flex",flexDirection:"column",direction:"rtl"}}>
+          {/* Header */}
+          <div style={{padding:"16px 20px",background:"var(--surface)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+            <div style={{fontWeight:900,fontSize:17}}>📋 נהלי השאלה — {loanType}</div>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setShowPolicies(false)}>✕ סגור</button>
+          </div>
+          {/* Scrollable body */}
+          <div
+            onScroll={handleScroll}
+            style={{flex:1,overflowY:"auto",padding:"24px 20px",background:"var(--surface2)",whiteSpace:"pre-wrap",fontSize:15,lineHeight:1.9,color:"var(--text)"}}>
+            {policyText}
+            {/* bottom anchor */}
+            <div style={{height:60,display:"flex",alignItems:"center",justifyContent:"center",marginTop:24}}>
+              {scrolledToBottom
+                ? <span style={{color:"var(--green)",fontWeight:700,fontSize:14}}>✅ קראת את כל הנהלים</span>
+                : <span style={{color:"var(--text3)",fontSize:13}}>↓ גלול עד הסוף</span>}
+            </div>
+          </div>
+          {/* Footer */}
+          <div style={{padding:"16px 20px",background:"var(--surface)",borderTop:"1px solid var(--border)",flexShrink:0}}>
+            <button
+              className="btn btn-primary"
+              style={{width:"100%",fontSize:15,padding:14}}
+              disabled={!scrolledToBottom}
+              onClick={()=>{ setAgreed(true); setShowPolicies(false); }}>
+              {scrolledToBottom ? "✅ אני מאשר/ת שקראתי את הנהלים — סגור" : "↓ גלול עד הסוף כדי לאשר"}
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
-function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[] }) {
+function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={} }) {
   const [step, setStep]       = useState(1);
   const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:""});
   const [items, setItems]     = useState([]);
@@ -1805,43 +1894,81 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
             <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setStep(2)}>← חזור</button><button className="btn btn-primary" disabled={!items.length} onClick={()=>setStep(4)}>המשך ← אישור</button></div>
           </>}
 
-          {step===4 && <>
-            <div className="form-section-title">סיכום ואישור</div>
-            <div className="grid-2" style={{marginBottom:20}}>
-              <div>{[["שם",form.student_name],["אימייל",form.email],["קורס",form.course],["סוג השאלה",form.loan_type],["מ",`${formatDate(form.borrow_date)}${form.borrow_time?" · "+form.borrow_time:""}`],["עד",`${formatDate(form.return_date)}${form.return_time?" · "+form.return_time:""}`]].map(([l,v])=><div key={l} className="req-detail-row"><span className="req-detail-label">{l}:</span><strong>{v}</strong></div>)}</div>
-              <div>{items.map(i=>{
-  const eq = equipment.find(e=>e.id==i.equipment_id);
-  const img = eq?.image||"📦";
-  const isFile = img.startsWith("data:")||img.startsWith("http");
-  return <div key={i.equipment_id} className="req-detail-row">
-    {isFile ? <img src={img} alt="" style={{width:20,height:20,objectFit:"cover",borderRadius:4,verticalAlign:"middle"}}/> : <span>{img}</span>}
-    <span style={{marginRight:6}}>{i.name} × {i.quantity}</span>
-  </div>;
-})}</div>
-            </div>
-            <div className="divider"/>
-            <div className="terms-box">{TERMS}</div>
-            <label className="checkbox-row" style={{marginBottom:20}}>
-              <input type="checkbox" checked={agreed} onChange={e=>setAgreed(e.target.checked)}/>
-              <label>אני מאשר/ת שקראתי את התקנון ומתחייב/ת להחזיר את הציוד בזמן ובמצב תקין</label>
-            </label>
-            <div className="flex gap-2">
-              <button className="btn btn-secondary" onClick={()=>setStep(3)}>← חזור</button>
-              <button className="btn btn-primary" disabled={!agreed||submitting} onClick={submit}>{submitting?"⏳ שולח...":"🚀 שלח בקשה"}</button>
-            </div>
-          </>}
+          {step===4 && <Step4Confirm
+            form={form} items={items} equipment={equipment}
+            agreed={agreed} setAgreed={setAgreed}
+            submitting={submitting} submit={submit}
+            onBack={()=>setStep(3)}
+            policies={policies}
+            loanType={form.loan_type}
+          />}
         </div>
       </div>
     </div>
   );
 }
 
+// ─── POLICIES PAGE ────────────────────────────────────────────────────────────
+function PoliciesPage({ policies, setPolicies, showToast }) {
+  const LOAN_TYPES = [
+    { key:"פרטית", icon:"👤", label:"השאלה פרטית" },
+    { key:"הפקה",  icon:"🎬", label:"השאלה להפקה" },
+    { key:"סאונד", icon:"🎙️", label:"השאלת סאונד" },
+  ];
+  const [draft, setDraft] = useState({ ...policies });
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    setPolicies(draft);
+    const r = await storageSet("policies", draft);
+    setSaving(false);
+    if(r.ok) showToast("success", "הנהלים נשמרו בהצלחה ✅");
+    else showToast("error", "❌ שגיאה בשמירת הנהלים");
+  };
+
+  return (
+    <div className="page">
+      <div style={{marginBottom:20,fontSize:13,color:"var(--text3)"}}>
+        הנהלים שתכתוב כאן יוצגו לסטודנטים בשלב האישור בטופס ההשאלה. הסטודנט יחויב לגלול ולקרוא לפני שיוכל לשלוח.
+      </div>
+      {LOAN_TYPES.map(lt=>(
+        <div key={lt.key} className="card" style={{marginBottom:20}}>
+          <div className="card-header">
+            <div className="card-title">{lt.icon} נהלי {lt.label}</div>
+          </div>
+          <textarea
+            className="form-input"
+            rows={8}
+            placeholder={`כתוב כאן את נהלי ${lt.label}...`}
+            value={draft[lt.key]||""}
+            onChange={e=>setDraft(p=>({...p,[lt.key]:e.target.value}))}
+            style={{resize:"vertical",fontFamily:"inherit",lineHeight:1.7,fontSize:13}}
+          />
+        </div>
+      ))}
+      <button className="btn btn-primary" disabled={saving} onClick={save}>
+        {saving ? "⏳ שומר..." : "💾 שמור נהלים"}
+      </button>
+    </div>
+  );
+}
+
 // ─── ARCHIVE PAGE ─────────────────────────────────────────────────────────────
-function ArchivePage({ reservations, equipment }) {
+function ArchivePage({ reservations, setReservations, equipment, showToast }) {
   const archived = reservations.filter(r => r.status === "הוחזר");
   const [search, setSearch] = useState("");
   const [loanTypeF, setLoanTypeF] = useState("הכל");
   const [viewRes, setViewRes] = useState(null);
+
+  const deleteRes = async (id) => {
+    if(!window.confirm("למחוק בקשה זו מהארכיון לצמיתות?")) return;
+    const updated = reservations.filter(r=>r.id!==id);
+    setReservations(updated);
+    await storageSet("reservations", updated);
+    showToast("success", "הבקשה נמחקה מהארכיון");
+    if(viewRes?.id===id) setViewRes(null);
+  };
 
   const eqName = id => equipment.find(e=>e.id==id)?.name||"?";
   const EqImg = ({id,size=20}) => {
@@ -1889,6 +2016,7 @@ function ArchivePage({ reservations, equipment }) {
                   <span style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",border:"1px solid rgba(52,152,219,0.4)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🔵 הוחזר</span>
                   {r.loan_type&&<span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>{LOAN_ICONS[r.loan_type]||"📦"} {r.loan_type}</span>}
                   <span style={{fontSize:11,color:"var(--text3)"}}>👁 לצפייה</span>
+                  <button className="btn btn-danger btn-sm" onClick={e=>{e.stopPropagation();deleteRes(r.id);}}>🗑️</button>
                 </div>
               </div>
               <div style={{marginTop:10,display:"flex",gap:16,fontSize:12,color:"var(--text2)",flexWrap:"wrap"}}>
@@ -2359,6 +2487,7 @@ export default function App() {
   const [categories, setCategories]   = useState(DEFAULT_CATEGORIES);
   const [teamMembers, setTeamMembers] = useState([]);
   const [kits, setKits]               = useState([]);
+  const [policies, setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"" });
   const [loading, setLoading]         = useState(true);
   const [toasts, setToasts]           = useState([]);
   const [authed, setAuthed]           = useState(false);
@@ -2377,12 +2506,13 @@ export default function App() {
   useEffect(()=>{
     (async()=>{
       try {
-        const [eq, res, cats, tm, kts] = await Promise.all([
+        const [eq, res, cats, tm, kts, pol] = await Promise.all([
           storageGet("equipment"),
           storageGet("reservations"),
           storageGet("categories"),
           storageGet("teamMembers"),
           storageGet("kits"),
+          storageGet("policies"),
         ]);
         const normalizedReservations = normalizeReservationsForArchive(res || []);
         const reservationsChanged = JSON.stringify(normalizedReservations) !== JSON.stringify(res || []);
@@ -2391,12 +2521,14 @@ export default function App() {
         setCategories(cats || DEFAULT_CATEGORIES);
         setTeamMembers(tm || []);
         setKits(kts || []);
-        // Init missing sheets
+        setPolicies(pol || { פרטית:"", הפקה:"", סאונד:"" });
+        // Init missing
         if(!eq)   await storageSet("equipment",    INITIAL_EQUIPMENT);
         if(!res)  await storageSet("reservations", []);
         if(!cats) await storageSet("categories",   DEFAULT_CATEGORIES);
         if(!tm)   await storageSet("teamMembers",  []);
         if(!kts)  await storageSet("kits",         []);
+        if(!pol)  await storageSet("policies",     { פרטית:"", הפקה:"", סאונד:"" });
         if(res && reservationsChanged) await storageSet("reservations", normalizedReservations);
         // Only warn if BOTH Sheets and cache failed (truly no data)
         if(eq===null && !lsGet("equipment")) showToast("error", "⚠️ לא ניתן לטעון ציוד — בדוק חיבור");
@@ -2425,7 +2557,7 @@ export default function App() {
   }, [loading]);
 
   const pending = reservations.filter(r=>r.status==="ממתין").length;
-  const pageTitle = { dashboard:"לוח בקרה", equipment:"ניהול ציוד", reservations:"ניהול בקשות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות" };
+  const pageTitle = { dashboard:"לוח בקרה", equipment:"ניהול ציוד", reservations:"ניהול בקשות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות", policies:"נהלים" };
 
   return (
     <>
@@ -2434,7 +2566,7 @@ export default function App() {
       {/* ── טופס ציבורי ── */}
       {!isAdmin && (
         <div className="public-page-shell">
-          {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers}/>}
+          {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies}/>}
         </div>
       )}
 
@@ -2452,14 +2584,15 @@ export default function App() {
             <div className="nav">
               <div className="nav-section">ניהול</div>
               {[
-                {id:"dashboard",icon:"📊",label:"בקרה"},
                 {id:"equipment",icon:"📦",label:"ציוד"},
                 {id:"reservations",icon:"📋",label:"בקשות",badge:pending||null},
                 {id:"kits",icon:"🎒",label:"ערכות"},
                 {id:"team",icon:"👥",label:"צוות"},
                 {id:"archive",icon:"🗄️",label:"ארכיון"},
+                {id:"policies",icon:"📋",label:"נהלים"},
               ].map(n=>(
-                <div key={n.id} className={`nav-item ${page===n.id?"active":""}`} onClick={()=>setPage(n.id)} title={n.label}>
+                <div key={n.id} className={`nav-item ${page===n.id?"active":""}`}
+                  onClick={()=>setPage(p=>p===n.id?"dashboard":n.id)} title={n.label}>
                   <span className="icon">{n.icon}</span>
                   <span style={{fontSize:page===n.id?10:9,opacity:page===n.id?1:0.7}}>{n.label}</span>
                   {n.badge&&<span style={{background:"var(--accent)",color:"#000",borderRadius:"50%",width:16,height:16,fontSize:10,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",position:"absolute",top:4,left:"50%",transform:"translateX(-50%) translateX(10px)"}}>{n.badge}</span>}
@@ -2498,9 +2631,10 @@ export default function App() {
               {page==="reservations"&& <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy}/>}
-              {page==="archive"     && <ArchivePage      reservations={reservations} equipment={equipment}/>}
+              {page==="archive"     && <ArchivePage      reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}/>}
               {page==="team"        && <TeamPage         teamMembers={teamMembers} setTeamMembers={setTeamMembers} showToast={showToast}/>}
               {page==="kits"        && <KitsPage         kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast}/>}
+              {page==="policies"    && <PoliciesPage     policies={policies} setPolicies={setPolicies} showToast={showToast}/>}
             </>}
           </div>
         </div>
