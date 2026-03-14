@@ -1511,58 +1511,63 @@ function Step3Buttons({ items, equipment, onBack, onNext }) {
       </div>
 
       {showInfo&&(
-        <div style={{position:"fixed",inset:0,background:"var(--bg)",zIndex:4000,display:"flex",flexDirection:"column",direction:"rtl"}}>
-          {/* Header */}
-          <div style={{padding:"14px 16px",background:"var(--surface)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:10,flexShrink:0,flexWrap:"wrap"}}>
-            <div style={{fontWeight:900,fontSize:16,flex:1}}>
-              {showAll ? "📦 כל הציוד במחסן" : `📋 פרטי הציוד שנבחר (${items.length} פריטים)`}
-            </div>
-            <div style={{display:"flex",gap:8}}>
-              <button className="btn btn-secondary btn-sm"
-                style={{background:showAll?"var(--surface3)":"transparent",border:showAll?"1px solid var(--accent)":"1px solid var(--border)",color:showAll?"var(--accent)":"var(--text2)",fontWeight:700}}
-                onClick={()=>setShowAll(p=>!p)}>
-                📦 {showAll?"חזור לנבחרים":"כל הציוד"}
-              </button>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setShowInfo(false)}>✕ סגור</button>
-            </div>
-          </div>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:4000,display:"flex",flexDirection:"column",alignItems:"center",direction:"rtl"}}>
+          {/* Inner panel — max width so text doesn't stretch too far */}
+          <div style={{width:"100%",maxWidth:700,height:"100%",display:"flex",flexDirection:"column",background:"var(--bg)"}}>
 
-          {/* Scrollable list — full width cards */}
-          <div style={{flex:1,overflowY:"auto",padding:"16px",display:"flex",flexDirection:"column",gap:12}}>
-            {displayList.map(itm=>{
-              const eq = equipment.find(e=>e.id==itm.equipment_id);
-              if(!eq) return null;
-              const isImg = eq.image?.startsWith("data:")||eq.image?.startsWith("http");
-              const isSelected = items.some(i=>i.equipment_id==itm.equipment_id && i.quantity>0);
-              return (
-                <div key={itm.equipment_id} style={{
-                  width:"100%",
-                  background:"var(--surface)",
-                  border:`2px solid ${isSelected?"var(--accent)":"var(--border)"}`,
-                  borderRadius:"var(--r)",overflow:"hidden",
-                  display:"flex",flexDirection:"row",
-                  height:140,
-                }}>
-                  {/* Text — right side (RTL: appears on right) */}
-                  <div style={{flex:1,padding:"16px 18px",display:"flex",flexDirection:"column",justifyContent:"center",minWidth:0,textAlign:"right"}}>
-                    <div style={{fontWeight:900,fontSize:16,marginBottom:6}}>{eq.name}</div>
-                    <div style={{fontSize:13,color:"var(--text2)",lineHeight:1.7,display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{eq.description||"אין תיאור זמין"}</div>
-                    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
-                      {isSelected&&<span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"2px 10px",fontSize:12,color:"var(--accent)",fontWeight:700}}>✓ נבחר ×{items.find(i=>i.equipment_id==itm.equipment_id)?.quantity}</span>}
-                      {eq.notes&&<span style={{fontSize:12,color:"var(--text3)"}}>📝 {eq.notes}</span>}
+            {/* Header */}
+            <div style={{padding:"14px 18px",background:"var(--surface)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:10,flexShrink:0,flexWrap:"wrap"}}>
+              <div style={{fontWeight:900,fontSize:16,flex:1}}>
+                {showAll ? `📦 כל הציוד במחסן (${equipment.length} פריטים)` : `📋 פרטי הציוד שנבחר (${items.length} פריטים)`}
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button className="btn btn-secondary btn-sm"
+                  style={{background:showAll?"var(--accent-glow)":"transparent",border:`1px solid ${showAll?"var(--accent)":"var(--border)"}`,color:showAll?"var(--accent)":"var(--text2)",fontWeight:700}}
+                  onClick={()=>setShowAll(p=>!p)}>
+                  📦 {showAll?"רק הנבחרים":"כל הציוד"}
+                </button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setShowInfo(false)}>✕ סגור</button>
+              </div>
+            </div>
+
+            {/* Scrollable list */}
+            <div style={{flex:1,overflowY:"auto",padding:"12px 14px",display:"flex",flexDirection:"column",gap:10}}>
+              {displayList.map(itm=>{
+                const eq = equipment.find(e=>e.id==itm.equipment_id);
+                if(!eq) return null;
+                const isImg = eq.image?.startsWith("data:")||eq.image?.startsWith("http");
+                const isSelected = items.some(i=>i.equipment_id==itm.equipment_id && i.quantity>0);
+                return (
+                  <div key={itm.equipment_id} style={{
+                    width:"100%",flexShrink:0,
+                    background:"var(--surface)",
+                    border:`2px solid ${isSelected?"var(--accent)":"var(--border)"}`,
+                    borderRadius:"var(--r)",overflow:"hidden",
+                    display:"flex",flexDirection:"row",
+                    height:130,
+                  }}>
+                    {/* Text — right side */}
+                    <div style={{flex:1,padding:"14px 16px",display:"flex",flexDirection:"column",justifyContent:"center",minWidth:0,textAlign:"right",maxWidth:"calc(100% - 140px)"}}>
+                      <div style={{fontWeight:900,fontSize:15,marginBottom:5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{eq.name}</div>
+                      <div style={{fontSize:12,color:"var(--text2)",lineHeight:1.65,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical"}}>{eq.description||"אין תיאור זמין"}</div>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:7}}>
+                        {isSelected&&<span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>✓ ×{items.find(i=>i.equipment_id==itm.equipment_id)?.quantity}</span>}
+                        {eq.notes&&<span style={{fontSize:11,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:160}}>📝 {eq.notes}</span>}
+                      </div>
+                    </div>
+                    {/* Image — fixed left */}
+                    <div style={{width:140,flexShrink:0,background:"var(--surface2)",overflow:"hidden"}}>
+                      {isImg
+                        ? <img src={eq.image} alt={eq.name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                        : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:56}}>{eq.image||"📦"}</div>
+                      }
                     </div>
                   </div>
-                  {/* Image — fixed left side, large */}
-                  <div style={{width:160,flexShrink:0,background:"var(--surface2)",overflow:"hidden"}}>
-                    {isImg
-                      ? <img src={eq.image} alt={eq.name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
-                      : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:64}}>{eq.image||"📦"}</div>
-                    }
-                  </div>
-                </div>
-              );
-            })}
-            {displayList.length===0&&<div style={{textAlign:"center",color:"var(--text3)",marginTop:40,fontSize:14}}>לא נבחר ציוד עדיין</div>}
+                );
+              })}
+              {displayList.length===0&&<div style={{textAlign:"center",color:"var(--text3)",marginTop:60,fontSize:14}}>לא נבחר ציוד עדיין</div>}
+            </div>
+
           </div>
         </div>
       )}
@@ -1965,14 +1970,19 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
           <div style={{fontSize:40,marginBottom:10}}>🎬</div>
           <div style={{fontSize:24,fontWeight:900,color:"var(--accent)"}}>מחסן השאלת ציוד קמרה אובסקורה וסאונד</div>
           <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>טופס השאלת ציוד</div>
-          <div style={{display:"flex",gap:8,marginTop:20,alignItems:"center"}}>
-            {[{n:1,l:"פרטים"},{n:2,l:"תאריכים"},{n:3,l:"ציוד"},{n:4,l:"אישור"}].map((s,i)=>(
-              <div key={s.n} style={{display:"flex",alignItems:"center",gap:6}}>
-                <div style={{width:26,height:26,borderRadius:"50%",background:step>=s.n?"var(--accent)":"var(--surface3)",color:step>=s.n?"#000":"var(--text3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700}}>{s.n}</div>
-                <span style={{fontSize:12,color:step===s.n?"var(--accent)":"var(--text3)",fontWeight:step===s.n?700:400}}>{s.l}</span>
-                {i<3&&<span style={{color:"var(--text3)"}}>›</span>}
-              </div>
-            ))}
+          {/* Clickable tab navigation */}
+          <div style={{display:"flex",gap:4,marginTop:20,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4}}>
+            {[{n:1,l:"פרטים",icon:"👤"},{n:2,l:"תאריכים",icon:"📅"},{n:3,l:"ציוד",icon:"📦"},{n:4,l:"אישור",icon:"✅"}].map(s=>{
+              const canGo = s.n===1 || (s.n===2 && ok1) || (s.n===3 && ok1 && ok2) || (s.n===4 && ok1 && ok2 && items.length>0);
+              return (
+                <button key={s.n} type="button"
+                  onClick={()=>canGo && setStep(s.n)}
+                  style={{flex:1,padding:"8px 4px",borderRadius:6,border:"none",background:step===s.n?"var(--accent)":"transparent",color:step===s.n?"#000":canGo?"var(--text2)":"var(--text3)",fontWeight:step===s.n?800:500,fontSize:12,cursor:canGo?"pointer":"not-allowed",opacity:canGo?1:0.4,transition:"all 0.15s",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  <span style={{fontSize:14}}>{s.icon}</span>
+                  <span>{s.l}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
         <div className="form-card-body">
