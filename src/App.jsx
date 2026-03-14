@@ -84,6 +84,7 @@ const INITIAL_EQUIPMENT = [
 const DEFAULT_CATEGORIES = ["מצלמות","עדשות","מיקרופונים","מקליטי אודיו","תאורה","חצובות","אביזרים"];
 const SOUND_CATEGORIES = ["מיקרופונים","מקליטי אודיו","כבלים"];
 const STATUSES    = ["תקין","פגום","בתיקון","נעלם"];
+const PHOTO_CATEGORIES = ["מצלמות","עדשות","תאורה","חצובות","אביזרים","אביזרי צילום","מייצבי מצלמה","גימבלים","רחפנים","מוניטורים"];
 const RESEND_API_KEY = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_RESEND_KEY : "";
 const NIMROD_PHONE     = "972521234567"; // ← החלף במספר של נמרוד
 const EMAIL_TYPO_DOMAINS = ["gmai.com","gmial.com","gmail.co","gamil.com","gmaill.com","yahooo.com","yahho.com","outlok.com","hotmai.com","outllook.com"];
@@ -98,11 +99,17 @@ function formatDate(d) {
   return parseLocalDate(d).toLocaleDateString("he-IL", { day:"2-digit", month:"2-digit", year:"numeric" });
 }
 
-function normalizeEquipmentSoundFlags(list = []) {
+function normalizeEquipmentTagFlags(list = []) {
   return (list || []).map((item) => {
     if (!item || typeof item !== "object") return item;
-    if (typeof item.soundOnly === "boolean") return item;
-    return { ...item, soundOnly: SOUND_CATEGORIES.includes(item.category) };
+    const normalized = { ...item };
+    if (typeof normalized.soundOnly !== "boolean") {
+      normalized.soundOnly = SOUND_CATEGORIES.includes(normalized.category);
+    }
+    if (typeof normalized.photoOnly !== "boolean") {
+      normalized.photoOnly = PHOTO_CATEGORIES.includes(normalized.category);
+    }
+    return normalized;
   });
 }
 function formatLocalDateInput(date) {
@@ -495,7 +502,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
 
   const save = async (form) => {
     setSaving(true);
-    const normalizedForm = { ...form, soundOnly: typeof form.soundOnly === "boolean" ? form.soundOnly : SOUND_CATEGORIES.includes(form.category) };
+    const normalizedForm = normalizeEquipmentTagFlags([form])[0];
     let updated;
     if (modal.type==="add") {
       const item = { ...normalizedForm, id: Date.now() };
@@ -529,6 +536,18 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     setEquipment(updated);
     await storageSet("equipment", updated);
     showToast("success", shouldEnable ? `כל הפריטים בקטגוריית "${categoryName}" סומנו כציוד סאונד` : `הוסר סימון ציוד סאונד מקטגוריית "${categoryName}"`);
+  };
+
+  const toggleCategoryPhotoOnly = async (categoryName) => {
+    const categoryItems = equipment.filter((item) => item.category === categoryName);
+    if (!categoryItems.length) return;
+    const shouldEnable = !categoryItems.every((item) => !!item.photoOnly);
+    const updated = equipment.map((item) =>
+      item.category === categoryName ? { ...item, photoOnly: shouldEnable } : item
+    );
+    setEquipment(updated);
+    await storageSet("equipment", updated);
+    showToast("success", shouldEnable ? `כל הפריטים בקטגוריית "${categoryName}" סומנו כציוד צילום` : `הוסר סימון ציוד צילום מקטגוריית "${categoryName}"`);
   };
 
   const todayStr2 = today();
@@ -661,13 +680,22 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                 <span>{c}</span>
                 <span style={{fontSize:11,color:"var(--text3)",fontWeight:400}}>({filtered.filter(e=>e.category===c).length} פריטים)</span>
                 </div>
-                <button
-                  type="button"
-                  className={`btn btn-sm ${equipment.filter(e=>e.category===c).every(e=>e.soundOnly) ? "btn-primary" : "btn-secondary"}`}
-                  onClick={()=>toggleCategorySoundOnly(c)}
-                >
-                  ציוד סאונד
-                </button>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${equipment.filter(e=>e.category===c).every(e=>e.soundOnly) ? "btn-primary" : "btn-secondary"}`}
+                    onClick={()=>toggleCategorySoundOnly(c)}
+                  >
+                    ציוד סאונד
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${equipment.filter(e=>e.category===c).every(e=>e.photoOnly) ? "btn-primary" : "btn-secondary"}`}
+                    onClick={()=>toggleCategoryPhotoOnly(c)}
+                  >
+                    ציוד צילום
+                  </button>
+                </div>
               </div>
               <div className="eq-grid">
                 {filtered.filter(e=>e.category===c).map(eq=>(
@@ -680,7 +708,10 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                     </div>
                     <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>{eq.name}</div>
                     <div style={{fontSize:11,color:"var(--text3)",marginBottom:8}}>{eq.category}</div>
-                    {eq.soundOnly && <div className="chip" style={{marginBottom:8,color:"var(--accent)",borderColor:"var(--accent)"}}>🎙️ ציוד סאונד</div>}
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+                      {eq.soundOnly && <div className="chip" style={{color:"var(--accent)",borderColor:"var(--accent)"}}>🎙️ ציוד סאונד</div>}
+                      {eq.photoOnly && <div className="chip" style={{color:"var(--green)",borderColor:"rgba(39,174,96,0.45)"}}>🎥 ציוד צילום</div>}
+                    </div>
                     <div style={{fontSize:13}}><strong style={{color:"var(--accent)",fontSize:20}}>{eq.total_quantity-used(eq.id)}</strong><span style={{color:"var(--text3)"}}> / {eq.total_quantity} זמין</span></div>
                     {eq.notes && <div className="chip" style={{marginTop:6}}>💬 {eq.notes}</div>}
                     <div style={{marginTop:8}}>{statusBadge(eq.status)}</div>
@@ -1636,7 +1667,10 @@ function Step3Buttons({ items, equipment, onBack, onNext }) {
                         {isSelected&&<span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>✓ ×{items.find(i=>i.equipment_id==itm.equipment_id)?.quantity}</span>}
                         {eq.notes&&<span style={{fontSize:11,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:160}}>📝 {eq.notes}</span>}
                       </div>
-                      {eq.soundOnly&&<div style={{marginTop:8}}><span style={{background:"rgba(245,166,35,0.12)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>🎙️ ציוד סאונד</span></div>}
+                      {(eq.soundOnly || eq.photoOnly)&&<div style={{marginTop:8,display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {eq.soundOnly&&<span style={{background:"rgba(245,166,35,0.12)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>🎙️ ציוד סאונד</span>}
+                        {eq.photoOnly&&<span style={{background:"rgba(39,174,96,0.12)",border:"1px solid rgba(39,174,96,0.35)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--green)",fontWeight:700}}>🎥 ציוד צילום</span>}
+                      </div>}
                       <div style={{marginTop:10,fontSize:11,color:"var(--text3)",fontWeight:700}}>לחץ לפתיחת הפריט במסך מלא</div>
                     </div>
                     {/* Image — fixed left */}
@@ -1660,6 +1694,7 @@ function Step3Buttons({ items, equipment, onBack, onNext }) {
                     <div style={{fontSize:13,color:"var(--text3)",marginTop:4}}>
                       {focusedEq.category}
                       {focusedEq.soundOnly && <span style={{marginRight:10,color:"var(--accent)",fontWeight:700}}>• ציוד סאונד</span>}
+                      {focusedEq.photoOnly && <span style={{marginRight:10,color:"var(--green)",fontWeight:700}}>• ציוד צילום</span>}
                     </div>
                   </div>
                   <button className="btn btn-secondary" onClick={()=>setFocusedEq(null)}>✖ סגור</button>
@@ -1693,8 +1728,9 @@ function Step3Buttons({ items, equipment, onBack, onNext }) {
 }
 
 // ─── STEP 3 EQUIPMENT SELECTOR ───────────────────────────────────────────────
-function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equipment, items, setItems, getItem, setQty }) {
+function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equipment, setItems, getItem, setQty }) {
   const [activeKit, setActiveKit] = useState(null); // null = show all
+  const [privateFilter, setPrivateFilter] = useState("all");
 
   const relevantKits = (kits||[]).filter(k => !k.loanType || k.loanType === loanType);
 
@@ -1720,15 +1756,48 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
 
   // Equipment to display: if a kit is active, only show that kit's items
   const kitEqIds = activeKit ? new Set((activeKit.items||[]).map(i=>String(i.equipment_id))) : null;
-  const visibleAvailEq = availEq.filter((eq) => isSoundLoan ? !!eq.soundOnly : !eq.soundOnly);
+  const equipmentFilter = isSoundLoan ? "sound" : loanType==="הפקה" ? "photo" : privateFilter;
+  const visibleAvailEq = availEq.filter((eq) => {
+    if (equipmentFilter === "sound") return !!eq.soundOnly;
+    if (equipmentFilter === "photo") return !!eq.photoOnly;
+    return true;
+  });
   const baseCategories = categories.filter((category) => visibleAvailEq.some((eq) => eq.category === category));
 
   return (
     <>
       <div className="form-section-title">
         בחירת ציוד
-        {isSoundLoan&&<span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>· מוצגים רק פריטים שסומנו כציוד סאונד</span>}
+        {loanType==="סאונד"&&<span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>· מוצגים רק פריטים שסומנו כציוד סאונד</span>}
+        {loanType==="הפקה"&&<span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>· מוצגים רק פריטים שסומנו כציוד צילום</span>}
+        {loanType==="פרטית"&&<span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>· בהשאלה פרטית אפשר לראות את כל ציוד המחסן או לסנן לפי תיוג</span>}
       </div>
+
+      {loanType==="פרטית" && (
+        <div style={{marginBottom:18,padding:"14px 16px",background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
+          <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",marginBottom:10,letterSpacing:0.5}}>סינון ציוד לתצוגה</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+            {[
+              { key:"all", label:"כל הציוד", icon:"📦" },
+              { key:"sound", label:"ציוד סאונד", icon:"🎙️" },
+              { key:"photo", label:"ציוד צילום", icon:"🎥" },
+            ].map((filterOption) => {
+              const isActive = privateFilter === filterOption.key;
+              return (
+                <button
+                  key={filterOption.key}
+                  type="button"
+                  onClick={()=>setPrivateFilter(filterOption.key)}
+                  style={{padding:"7px 16px",borderRadius:20,border:`2px solid ${isActive?"var(--accent)":"var(--border)"}`,background:isActive?"var(--accent)":"var(--surface3)",color:isActive?"#000":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer",transition:"all 0.15s",display:"flex",alignItems:"center",gap:6}}
+                >
+                  <span>{filterOption.icon}</span>
+                  <span>{filterOption.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Kit selector ── */}
       {relevantKits.length>0 && (
@@ -2196,13 +2265,13 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
           </>}
 
           {step===3 && <Step3Equipment
+            key={form.loan_type || "no-loan-type"}
             isSoundLoan={isSoundLoan}
             kits={kits}
             loanType={form.loan_type}
             categories={categories}
             availEq={availEq}
             equipment={equipment}
-            items={items}
             setItems={setItems}
             getItem={getItem}
             setQty={setQty}
@@ -2852,7 +2921,7 @@ export default function App() {
           storageGet("kits"),
           storageGet("policies"),
           ]);
-          const normalizedEquipment = normalizeEquipmentSoundFlags(eq || INITIAL_EQUIPMENT);
+          const normalizedEquipment = normalizeEquipmentTagFlags(eq || INITIAL_EQUIPMENT);
           const equipmentChanged = JSON.stringify(normalizedEquipment) !== JSON.stringify(eq || INITIAL_EQUIPMENT);
           const normalizedReservations = normalizeReservationsForArchive(res || []);
           const reservationsChanged = JSON.stringify(normalizedReservations) !== JSON.stringify(res || []);
