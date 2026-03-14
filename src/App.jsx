@@ -840,20 +840,37 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
                     const details = getEquipmentBlockingDetails(eq.id);
                     const totalAvail = details.available;
                     const remaining = Math.max(0, totalAvail - qty);
+                    const missingForApproval = Math.max(0, qty - totalAvail);
+                    const hasApprovalConflict = missingForApproval > 0;
                     const blockedCompletely = totalAvail === 0;
                     return (
                       <div key={eq.id} style={{marginBottom:10}}>
-                        <div className="item-row" style={{opacity:blockedCompletely?0.55:1, marginBottom: details.blockers.length ? 6 : 0}}>
+                        <div
+                          className="item-row"
+                          style={{
+                            opacity: blockedCompletely && !hasApprovalConflict ? 0.55 : 1,
+                            marginBottom: details.blockers.length ? 6 : 0,
+                            border: hasApprovalConflict ? "2px solid rgba(231,76,60,0.9)" : "1px solid var(--border)",
+                            background: hasApprovalConflict ? "rgba(231,76,60,0.18)" : "var(--surface2)",
+                            boxShadow: hasApprovalConflict ? "0 0 0 1px rgba(231,76,60,0.18)" : "none",
+                          }}
+                        >
                           {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
                             ? <img src={eq.image} alt="" style={{width:32,height:32,objectFit:"cover",borderRadius:6}}/>
                             : <span style={{fontSize:22}}>{eq.image||"📦"}</span>}
                           <div style={{flex:1}}>
-                            <div style={{fontWeight:600,fontSize:13}}>{eq.name}</div>
+                            <div style={{fontWeight:700,fontSize:13,color:hasApprovalConflict?"var(--red)":"var(--text)"}}>{eq.name}</div>
                             <div style={{fontSize:11,color:"var(--text3)",display:"flex",gap:10,flexWrap:"wrap"}}>
                               <span>זמין: <span style={{color:remaining===0?"var(--red)":remaining<=2?"var(--yellow)":"var(--green)",fontWeight:700}}>{remaining}</span></span>
                               {details.usedByOthers>0 && <span>חסום ע"י אחרים: <strong style={{color:"var(--red)"}}>{details.usedByOthers}</strong></span>}
                               <span>סה"כ במלאי: <strong>{details.total}</strong></span>
+                              {hasApprovalConflict && <span style={{color:"var(--red)",fontWeight:800}}>חסר לאישור: <strong>{missingForApproval}</strong></span>}
                             </div>
+                            {hasApprovalConflict && (
+                              <div style={{marginTop:4,fontSize:11,fontWeight:800,color:"var(--red)"}}>
+                                פריט זה חוסם את אישור הבקשה בגלל חוסר מלאי בחפיפה.
+                              </div>
+                            )}
                           </div>
                           <div className="qty-ctrl">
                             <button className="qty-btn" onClick={()=>setQty(eq.id,qty-1)}>−</button>
