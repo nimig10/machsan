@@ -1432,57 +1432,81 @@ function DashboardPage({ equipment, reservations, setPage }) {
 // ─── STEP 3 BUTTONS + EQUIPMENT INFO MODAL ───────────────────────────────────
 function Step3Buttons({ items, equipment, onBack, onNext }) {
   const [showInfo, setShowInfo] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const totalQty = items.reduce((s,i)=>s+i.quantity,0);
+
+  // In "all equipment" mode show all equipment, otherwise only selected items
+  const displayList = showAll
+    ? equipment.map(eq => ({ equipment_id: eq.id, quantity: items.find(i=>i.equipment_id==eq.id)?.quantity||0, _isAll:true }))
+    : items;
 
   return (
     <>
       {items.length>0&&<div className="highlight-box">🛒 נבחרו {items.length} סוגים ({totalQty} יחידות)</div>}
       <div className="flex gap-2">
         <button className="btn btn-secondary" onClick={onBack}>← חזור</button>
-        {items.length>0&&(
-          <button className="btn btn-secondary" onClick={()=>setShowInfo(true)}>
-            ℹ️ הסבר על הציוד
-          </button>
-        )}
+        <button className="btn btn-secondary" onClick={()=>{ setShowInfo(true); setShowAll(false); }}>
+          📋 פרטי הציוד
+        </button>
         <button className="btn btn-primary" disabled={!items.length} onClick={onNext}>המשך ← אישור</button>
       </div>
 
       {showInfo&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:4000,display:"flex",flexDirection:"column",direction:"rtl"}}>
+        <div style={{position:"fixed",inset:0,background:"var(--bg)",zIndex:4000,display:"flex",flexDirection:"column",direction:"rtl"}}>
           {/* Header */}
-          <div style={{padding:"16px 20px",background:"var(--surface)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-            <div style={{fontWeight:900,fontSize:17}}>ℹ️ פרטי הציוד שנבחר</div>
-            <button className="btn btn-secondary btn-sm" onClick={()=>setShowInfo(false)}>✕ סגור</button>
+          <div style={{padding:"14px 16px",background:"var(--surface)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:10,flexShrink:0,flexWrap:"wrap"}}>
+            <div style={{fontWeight:900,fontSize:16,flex:1}}>
+              {showAll ? "📦 כל הציוד במחסן" : `📋 פרטי הציוד שנבחר (${items.length} פריטים)`}
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button className="btn btn-secondary btn-sm"
+                style={{background:showAll?"var(--surface3)":"transparent",border:showAll?"1px solid var(--accent)":"1px solid var(--border)",color:showAll?"var(--accent)":"var(--text2)",fontWeight:700}}
+                onClick={()=>setShowAll(p=>!p)}>
+                📦 {showAll?"חזור לנבחרים":"כל הציוד"}
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setShowInfo(false)}>✕ סגור</button>
+            </div>
           </div>
-          {/* Scrollable list */}
-          <div style={{flex:1,overflowY:"auto",padding:"20px 16px",display:"flex",flexDirection:"column",gap:16}}>
-            {items.map(itm=>{
-              const eq = equipment.find(e=>e.id==itm.equipment_id);
-              if(!eq) return null;
-              const isImg = eq.image?.startsWith("data:")||eq.image?.startsWith("http");
-              return (
-                <div key={itm.equipment_id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",overflow:"hidden"}}>
-                  {/* Image */}
-                  {isImg
-                    ? <img src={eq.image} alt={eq.name} style={{width:"100%",maxHeight:220,objectFit:"contain",background:"var(--surface2)",display:"block"}}/>
-                    : <div style={{width:"100%",height:120,background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:64}}>{eq.image||"📦"}</div>
-                  }
-                  {/* Info */}
-                  <div style={{padding:"16px"}}>
-                    <div style={{fontWeight:900,fontSize:17,marginBottom:6}}>{eq.name}</div>
-                    <div style={{fontSize:13,color:"var(--text2)",lineHeight:1.7,marginBottom:10}}>{eq.description||"אין תיאור זמין"}</div>
-                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                      <span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"3px 12px",fontSize:12,color:"var(--accent)",fontWeight:700}}>
-                        כמות שנבחרה: {itm.quantity}
-                      </span>
-                      {eq.notes&&<span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"3px 12px",fontSize:12,color:"var(--text2)"}}>
-                        📝 {eq.notes}
-                      </span>}
+
+          {/* Scrollable grid */}
+          <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:14}}>
+              {displayList.map(itm=>{
+                const eq = equipment.find(e=>e.id==itm.equipment_id);
+                if(!eq) return null;
+                const isImg = eq.image?.startsWith("data:")||eq.image?.startsWith("http");
+                const isSelected = items.some(i=>i.equipment_id==itm.equipment_id && i.quantity>0);
+                return (
+                  <div key={itm.equipment_id} style={{
+                    background:"var(--surface)",
+                    border:`1px solid ${isSelected?"var(--accent)":"var(--border)"}`,
+                    borderRadius:"var(--r)",overflow:"hidden",
+                    display:"flex",flexDirection:"row",
+                    minHeight:110,maxHeight:130,
+                  }}>
+                    {/* Image — fixed left side */}
+                    <div style={{width:110,flexShrink:0,background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+                      {isImg
+                        ? <img src={eq.image} alt={eq.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                        : <span style={{fontSize:48}}>{eq.image||"📦"}</span>
+                      }
+                    </div>
+                    {/* Info — right side */}
+                    <div style={{flex:1,padding:"12px 14px",display:"flex",flexDirection:"column",justifyContent:"space-between",minWidth:0}}>
+                      <div>
+                        <div style={{fontWeight:800,fontSize:14,marginBottom:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{eq.name}</div>
+                        <div style={{fontSize:12,color:"var(--text3)",lineHeight:1.6,display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{eq.description||"אין תיאור"}</div>
+                      </div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>
+                        {isSelected&&<span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"2px 10px",fontSize:11,color:"var(--accent)",fontWeight:700}}>✓ נבחר ×{items.find(i=>i.equipment_id==itm.equipment_id)?.quantity}</span>}
+                        {eq.notes&&<span style={{fontSize:11,color:"var(--text3)"}}>📝 {eq.notes}</span>}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+            {displayList.length===0&&<div style={{textAlign:"center",color:"var(--text3)",marginTop:40,fontSize:14}}>לא נבחר ציוד עדיין</div>}
           </div>
         </div>
       )}
@@ -1498,14 +1522,13 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
 
   const selectKit = (kit) => {
     if (activeKit?.id === kit.id) {
-      // deselect — go back to full list, keep chosen quantities
+      // deselect — clear all kit items + go back to full list
       setActiveKit(null);
+      setItems([]);
       return;
     }
     setActiveKit(kit);
-    // Auto-fill kit quantities (capped to available)
-    const kitEqIds = new Set((kit.items||[]).map(i=>String(i.equipment_id)));
-    // Clear items not in kit, fill kit items
+    // CLEAR everything and fill ONLY kit items (capped to available)
     const newItems = [];
     for (const ki of kit.items||[]) {
       const avail = availEq.find(e=>e.id==ki.equipment_id)?.avail||0;
@@ -1514,9 +1537,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
       const name = equipment.find(e=>e.id==ki.equipment_id)?.name||"";
       newItems.push({equipment_id:ki.equipment_id,quantity:qty,name});
     }
-    // Keep items that are not in this kit (user may have picked other things)
-    const kept = items.filter(i=>!kitEqIds.has(String(i.equipment_id)));
-    setItems([...kept, ...newItems]);
+    setItems(newItems);
   };
 
   // Equipment to display: if a kit is active, only show that kit's items
