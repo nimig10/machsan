@@ -881,24 +881,24 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
                           style={{
                             opacity: blockedCompletely && !hasApprovalConflict ? 0.55 : 1,
                             marginBottom: details.blockers.length ? 6 : 0,
-                            border: hasApprovalConflict ? "2px solid rgba(231,76,60,0.9)" : "1px solid var(--border)",
-                            background: hasApprovalConflict ? "rgba(231,76,60,0.18)" : "var(--surface2)",
-                            boxShadow: hasApprovalConflict ? "0 0 0 1px rgba(231,76,60,0.18)" : "none",
+                            border: hasApprovalConflict ? "2px solid rgba(241,196,15,0.95)" : "1px solid var(--border)",
+                            background: hasApprovalConflict ? "rgba(241,196,15,0.22)" : "var(--surface2)",
+                            boxShadow: hasApprovalConflict ? "0 0 0 1px rgba(241,196,15,0.2)" : "none",
                           }}
                         >
                           {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
                             ? <img src={eq.image} alt="" style={{width:32,height:32,objectFit:"cover",borderRadius:6}}/>
                             : <span style={{fontSize:22}}>{eq.image||"📦"}</span>}
                           <div style={{flex:1}}>
-                            <div style={{fontWeight:700,fontSize:13,color:hasApprovalConflict?"var(--red)":"var(--text)"}}>{eq.name}</div>
+                            <div style={{fontWeight:700,fontSize:13,color:hasApprovalConflict?"var(--yellow)":"var(--text)"}}>{eq.name}</div>
                             <div style={{fontSize:11,color:"var(--text3)",display:"flex",gap:10,flexWrap:"wrap"}}>
                               <span>זמין: <span style={{color:remaining===0?"var(--red)":remaining<=2?"var(--yellow)":"var(--green)",fontWeight:700}}>{remaining}</span></span>
                               {details.usedByOthers>0 && <span>חסום ע"י אחרים: <strong style={{color:"var(--red)"}}>{details.usedByOthers}</strong></span>}
                               <span>סה"כ במלאי: <strong>{details.total}</strong></span>
-                              {hasApprovalConflict && <span style={{color:"var(--red)",fontWeight:800}}>חסר לאישור: <strong>{missingForApproval}</strong></span>}
+                              {hasApprovalConflict && <span style={{color:"var(--yellow)",fontWeight:800}}>חסר לאישור: <strong>{missingForApproval}</strong></span>}
                             </div>
                             {hasApprovalConflict && (
-                              <div style={{marginTop:4,fontSize:11,fontWeight:800,color:"var(--red)"}}>
+                              <div style={{marginTop:4,fontSize:11,fontWeight:800,color:"var(--yellow)"}}>
                                 פריט זה חוסם את אישור הבקשה בגלל חוסר מלאי בחפיפה.
                               </div>
                             )}
@@ -910,8 +910,8 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
                           </div>
                         </div>
                         {details.blockers.length > 0 && (
-                          <div style={{background:"rgba(231,76,60,0.08)",border:"1px solid rgba(231,76,60,0.22)",borderRadius:10,padding:10,marginBottom:6}}>
-                            <div style={{fontSize:12,fontWeight:800,color:"var(--red)",marginBottom:8}}>הציוד הזה חסום כרגע ע"י הבקשות המאושרות הבאות:</div>
+                          <div style={{background:"rgba(241,196,15,0.1)",border:"1px solid rgba(241,196,15,0.28)",borderRadius:10,padding:10,marginBottom:6}}>
+                            <div style={{fontSize:12,fontWeight:800,color:"var(--yellow)",marginBottom:8}}>הציוד הזה חסום כרגע ע"י הבקשות המאושרות הבאות:</div>
                             <div style={{display:"flex",flexDirection:"column",gap:6}}>
                               {details.blockers.map((blocker, idx) => (
                                 <div key={idx} style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:8,padding:"8px 10px"}}>
