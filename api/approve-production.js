@@ -1,6 +1,6 @@
 // api/approve-production.js
 // Called when dept head clicks "אשר הפקה" button in email
-// Updates reservation status from "ממתין לאישור ראש המחלקה" → "ממתין"
+// Updates reservation status from "אישור ראש מחלקה" → "ממתין"
 
 const SB_URL = process.env.VITE_SUPABASE_URL || "https://wxkyqgwwraojnbmyyfco.supabase.co";
 const SB_KEY = process.env.VITE_SUPABASE_KEY || "sb_publishable_n-mkSq7xABjj58ZBBwk6BA_RbpVS2SU";
@@ -34,8 +34,10 @@ export default async function handler(req, res) {
       return res.status(404).send(buildPage("❌ לא נמצא", "הבקשה לא נמצאה במערכת", "#e74c3c"));
     }
 
-    if (reservation.status !== "ממתין לאישור ראש המחלקה") {
-      const msg = reservation.status === "מאושר"
+    if (reservation.status !== "אישור ראש מחלקה") {
+      const msg = reservation.status === "ממתין"
+        ? "הבקשה כבר אושרה על ידי אחד מראשי המחלקות והועברה לטיפול צוות המחסן"
+        : reservation.status === "מאושר"
         ? "הבקשה כבר אושרה קודם"
         : reservation.status === "נדחה"
         ? "הבקשה נדחתה"

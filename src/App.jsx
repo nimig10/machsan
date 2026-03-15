@@ -534,7 +534,7 @@ const css = `
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 function statusBadge(s) {
-  const m = { "מאושר":"badge-green","ממתין":"badge-yellow","נדחה":"badge-red","הוחזר":"badge-blue","ממתין לאישור ראש המחלקה":"badge-purple","תקין":"badge-green","פגום":"badge-red","בתיקון":"badge-yellow","נעלם":"badge-red" };
+  const m = { "מאושר":"badge-green","ממתין":"badge-yellow","נדחה":"badge-red","הוחזר":"badge-blue","אישור ראש מחלקה":"badge-purple","תקין":"badge-green","פגום":"badge-red","בתיקון":"badge-yellow","נעלם":"badge-red" };
   return <span className={`badge ${m[s]||"badge-gray"}`}>{s}</span>;
 }
 function Toast({ toasts }) {
@@ -1528,6 +1528,8 @@ function DashboardPage({ equipment, reservations }) {
   const todayStr = today();
   const active = reservations.filter(r => r.status === "מאושר").length;
   const pending = reservations.filter(r => r.status === "ממתין").length;
+  const deptHeadPending = reservations.filter(r => r.status === "אישור ראש מחלקה").length;
+  const rejected = reservations.filter(r => r.status === "נדחה").length;
   const rtToday = reservations.filter(r => r.status === "מאושר" && r.return_date === todayStr).length;
   const todayLoans = reservations.filter(r => r.status !== "נדחה" && r.status !== "הוחזר" && r.borrow_date <= todayStr && r.return_date >= todayStr).length;
   const total = equipment.reduce((s, e) => s + Number(e.total_quantity), 0);
@@ -1561,7 +1563,7 @@ function DashboardPage({ equipment, reservations }) {
     (calStatusF.length===0 || calStatusF.includes(r.status)) &&
     (calLoanTypeF==="הכל" || r.loan_type===calLoanTypeF)
   );
-  const DASHBOARD_CAL_STATUSES = [...ALL_CAL_STATUSES, "ממתין לאישור ראש המחלקה"];
+  const DASHBOARD_CAL_STATUSES = [...ALL_CAL_STATUSES, "אישור ראש מחלקה"];
   const CAL_LOAN_TYPES = [
     { key:"הכל", label:"הכל", icon:"📦" },
     { key:"פרטית", label:"פרטית", icon:"👤" },
@@ -1579,6 +1581,8 @@ function DashboardPage({ equipment, reservations }) {
           { l:"סך יחידות",     v:total,            i:"🗃️", c:"var(--blue)"   },
           { l:"השאלות פעילות", v:active,           i:"✅", c:"var(--green)"  },
           { l:"ממתין לאישור",  v:pending,          i:"⏳", c:"var(--yellow)" },
+          { l:"אישור ראש מחלקה", v:deptHeadPending, i:"🟣", c:"var(--purple)" },
+          { l:"בקשות דחויות",  v:rejected,         i:"❌", c:"var(--red)"    },
           { l:"השאלות היום",   v:todayLoans,       i:"📋", c:"var(--purple)" },
           { l:"החזרות היום",   v:rtToday,          i:"🔄", c:"var(--blue)"   },
         ].map(s=>(
@@ -1628,11 +1632,11 @@ function DashboardPage({ equipment, reservations }) {
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
               {DASHBOARD_CAL_STATUSES.map(s=>{
                 const active = calStatusF.includes(s);
-                const clr = s==="מאושר" ? "var(--green)" : s==="ממתין" ? "var(--yellow)" : s==="ממתין לאישור ראש המחלקה" ? "var(--purple)" : "var(--red)";
+                const clr = s==="מאושר" ? "var(--green)" : s==="ממתין" ? "var(--yellow)" : s==="אישור ראש מחלקה" ? "var(--purple)" : "var(--red)";
                 return (
                   <button key={s} type="button" onClick={()=>setCalStatusF(p=>active?p.filter(x=>x!==s):[...p,s])}
                     style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${active?clr:"var(--border)"}`,background:active?`color-mix(in srgb,${clr} 15%,transparent)`:"transparent",color:active?clr:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>
-                    {s==="מאושר" ? "✅" : s==="ממתין" ? "⏳" : s==="ממתין לאישור ראש המחלקה" ? "🟣" : "❌"} {s}
+                    {s==="מאושר" ? "✅" : s==="ממתין" ? "⏳" : s==="אישור ראש מחלקה" ? "🟣" : "❌"} {s}
                   </button>
                 );
               })}
@@ -2459,7 +2463,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
       dh?.email && isValidEmailAddress(dh.email) &&
       Array.isArray(dh.loanTypes) && dh.loanTypes.includes(form.loan_type)
     );
-    const initStatus = relevantDH ? "ממתין לאישור ראש המחלקה" : "ממתין";
+    const initStatus = relevantDH ? "אישור ראש מחלקה" : "ממתין";
     const newRes = { ...form, id:Date.now(), status:initStatus, created_at:today(), items };
     const updated = [...freshReservations, newRes];
     setReservations(updated);
@@ -2560,10 +2564,10 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
               </div>
             )}
             <div className="grid-2">
-              <div className="form-group"><label className="form-label">{isProductionLoan?"שם במאי ההפקה *":"שם מלא *"}</label><input className="form-input" value={form.student_name} onChange={e=>set("student_name",e.target.value)}/></div>
-              <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" value={form.phone} onChange={e=>set("phone",e.target.value)}/></div>
+              <div className="form-group"><label className="form-label">{isProductionLoan?"שם במאי ההפקה *":"שם מלא *"}</label><input className="form-input" name="student_name" autoComplete="name" value={form.student_name} onChange={e=>set("student_name",e.target.value)}/></div>
+              <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" name="phone" autoComplete="tel" value={form.phone} onChange={e=>set("phone",e.target.value)}/></div>
             </div>
-            <div className="form-group"><label className="form-label">אימייל *</label><input type="email" className="form-input" value={form.email} onChange={e=>set("email",e.target.value)}/></div>
+            <div className="form-group"><label className="form-label">אימייל *</label><input type="email" className="form-input" name="email" autoComplete="email" value={form.email} onChange={e=>set("email",e.target.value)}/></div>
             <div className="grid-2">
               <div className="form-group"><label className="form-label">קורס / כיתה *</label><input className="form-input" value={form.course} onChange={e=>set("course",e.target.value)}/></div>
               <div className="form-group"><label className="form-label">שם הפרויקט</label><input className="form-input" value={form.project_name} onChange={e=>set("project_name",e.target.value)}/></div>
@@ -2574,15 +2578,15 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
               <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"16px",marginBottom:16}}>
                 <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>🎥 צלם ההפקה <span style={{color:"var(--red)",fontSize:11}}>* חובה</span></div>
                 <div className="grid-2">
-                  <div className="form-group"><label className="form-label">שם מלא *</label><input className="form-input" placeholder="שם הצלם" value={form.crew_photographer_name} onChange={e=>set("crew_photographer_name",e.target.value)}/></div>
-                  <div className="form-group"><label className="form-label">טלפון</label><input className="form-input" placeholder="05x-xxxxxxx" value={form.crew_photographer_phone} onChange={e=>set("crew_photographer_phone",e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label">שם מלא *</label><input className="form-input" placeholder="שם הצלם" name="crew_photographer_name" autoComplete="name" value={form.crew_photographer_name} onChange={e=>set("crew_photographer_name",e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label">טלפון</label><input className="form-input" placeholder="05x-xxxxxxx" name="crew_photographer_phone" autoComplete="tel" value={form.crew_photographer_phone} onChange={e=>set("crew_photographer_phone",e.target.value)}/></div>
                 </div>
               </div>
               <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"16px",marginBottom:16}}>
                 <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>🎙️ איש הסאונד <span style={{color:"var(--text3)",fontSize:11}}>רשות</span></div>
                 <div className="grid-2">
-                  <div className="form-group"><label className="form-label">שם מלא</label><input className="form-input" placeholder="שם איש הסאונד" value={form.crew_sound_name} onChange={e=>set("crew_sound_name",e.target.value)}/></div>
-                  <div className="form-group"><label className="form-label">טלפון</label><input className="form-input" placeholder="05x-xxxxxxx" value={form.crew_sound_phone} onChange={e=>set("crew_sound_phone",e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label">שם מלא</label><input className="form-input" placeholder="שם איש הסאונד" name="crew_sound_name" autoComplete="name" value={form.crew_sound_name} onChange={e=>set("crew_sound_name",e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label">טלפון</label><input className="form-input" placeholder="05x-xxxxxxx" name="crew_sound_phone" autoComplete="tel" value={form.crew_sound_phone} onChange={e=>set("crew_sound_phone",e.target.value)}/></div>
                 </div>
               </div>
             </>)}
@@ -3878,6 +3882,7 @@ export default function App() {
   }, [loading]);
 
   const pending = reservations.filter(r=>r.status==="ממתין").length;
+  const deptHeadPending = reservations.filter(r=>r.status==="אישור ראש מחלקה").length;
   const rejected = reservations.filter(r=>r.status==="נדחה").length;
   const pageTitle = { dashboard:"לוח בקרה", equipment:"ניהול ציוד", reservations:"ניהול בקשות", rejected:"בקשות דחויות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות", policies:"נהלים", certifications:"הסמכות" };
 
@@ -3932,6 +3937,7 @@ export default function App() {
               <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
                 <span className="topbar-title" style={{flex:1}}>{pageTitle[page]}</span>
                 {pending>0&&<div style={{background:"rgba(241,196,15,0.12)",border:"1px solid rgba(241,196,15,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--yellow)",flexShrink:0}}>⏳ {pending}</div>}
+                {deptHeadPending>0&&<div style={{background:"rgba(155,89,182,0.12)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--purple)",flexShrink:0}}>🟣 {deptHeadPending}</div>}
                 {rejected>0&&<div style={{background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--red)",flexShrink:0}}>❌ {rejected}</div>}
               </div>
               {(page==="reservations" || page==="rejected") && (
@@ -3940,7 +3946,7 @@ export default function App() {
                   {page==="reservations" && (
                     <select className="form-select" style={{flex:"1 1 100px",minWidth:95,fontSize:12,padding:"6px 8px"}} value={resStatusF==="נדחה" ? "הכל" : resStatusF} onChange={e=>setResStatusF(e.target.value)}>
                       <option value="הכל">כל הסטטוסים</option>
-                      {["ממתין","מאושר"].map(s=><option key={s} value={s}>{s}</option>)}
+                      {["ממתין","אישור ראש מחלקה","מאושר"].map(s=><option key={s} value={s}>{s}</option>)}
                     </select>
                   )}
                   <select className="form-select" style={{flex:"1 1 90px",minWidth:85,fontSize:12,padding:"6px 8px"}} value={resLoanTypeF} onChange={e=>setResLoanTypeF(e.target.value)}>
