@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
+// v3.1
 const SB_URL = "https://wxkyqgwwraojnbmyyfco.supabase.co";
 const SB_KEY = "sb_publishable_n-mkSq7xABjj58ZBBwk6BA_RbpVS2SU";
 const SB_HEADERS = {
@@ -2967,9 +2968,7 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
       reader.onload = async (ev) => {
         try {
           const text = ev.target.result;
-          const lines = text.split(/
-?
-/).filter(l=>l.trim());
+          const lines = text.split(/[\r\n]+/).filter(l=>l.trim());
           if(!lines.length) { showToast("error","הקובץ ריק"); setXlImporting(false); return; }
           // Detect separator
           const sep = lines[0].includes("	") ? "	" : ",";
