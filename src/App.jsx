@@ -1741,7 +1741,7 @@ function Step3Buttons({ items, equipment, onBack, onNext }) {
 }
 
 // ─── STEP 3 EQUIPMENT SELECTOR ───────────────────────────────────────────────
-function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equipment, setItems, getItem, setQty }) {
+function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equipment, setItems, getItem, setQty, canBorrowEq=()=>true, studentRecord, certificationTypes=[] }) {
   const [activeKit, setActiveKit] = useState(null); // null = show all
   const [privateFilter, setPrivateFilter] = useState("all");
 
