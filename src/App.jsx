@@ -3053,10 +3053,24 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, sho
             {addingDh?"✕ ביטול":"➕ הוסף ראש מחלקה"}
           </button>
         </div>
-        <div style={{fontSize:12,color:"var(--text3)",marginBottom:14}}>
+        <div style={{fontSize:12,color:"var(--text3)",marginBottom:10}}>
           ראש מחלקה מקבל מייל על השאלות מהסוגים שסומנו ויכול לאשר אותן לפני שהצוות רואה אותן.
-          אם לא מוגדר ראש מחלקה לסוג השאלה — הבקשה תעבור ישירות לסטטוס <strong style={{color:"var(--text)"}}>ממתין</strong>.
+          אם לא מוגדר ראש מחלקה לסוג ההשאלה — הבקשה תעבור ישירות לסטטוס <strong style={{color:"var(--text)"}}>ממתין</strong>.
         </div>
+        {calendarToken && (
+          <div style={{background:"rgba(155,89,182,0.08)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:14,fontSize:12}}>
+            <div style={{fontWeight:700,marginBottom:6,color:"#9b59b6"}}>🔗 קישור לוח שנה לראשי מחלקות</div>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+              <code style={{fontSize:11,background:"var(--surface3)",padding:"3px 8px",borderRadius:4,flex:1,wordBreak:"break-all",color:"var(--text2)"}}>
+                {window.location.origin}/calendar?token={calendarToken}
+              </code>
+              <button className="btn btn-secondary btn-sm" onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/calendar?token=${calendarToken}`);showToast("success","הקישור הועתק!");}}>
+                📋 העתק
+              </button>
+            </div>
+            <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>שלח קישור זה לראשי המחלקות — הם יוכלו לצפות בכל הבקשות ללא גישה לניהול</div>
+          </div>
+        )}
 
         {/* Add form */}
         {addingDh && (
@@ -3781,6 +3795,146 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
   );
 }
 
+// ─── DEPT HEAD CALENDAR PAGE ─────────────────────────────────────────────────
+function DeptHeadCalendarPage({ reservations }) {
+  const [calDate, setCalDate]     = useState(new Date());
+  const [statusF, setStatusF]     = useState([]);   // empty = all
+  const [loanTypeF, setLoanTypeF] = useState("הכל");
+  const [selected, setSelected]   = useState(null);
+  const yr = calDate.getFullYear();
+  const mo = calDate.getMonth();
+  const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+  const HE_D = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
+  const todayStr = today();
+
+  const days = [];
+  const startOffset = new Date(yr,mo,1).getDay();
+  for(let i=0;i<startOffset;i++) days.push(null);
+  for(let d=1;d<=new Date(yr,mo+1,0).getDate();d++) days.push(new Date(yr,mo,d));
+  while(days.length<42) days.push(null);
+
+  const SPAN_COLORS = [
+    ["rgba(52,152,219,0.75)","#fff"],["rgba(46,204,113,0.75)","#fff"],
+    ["rgba(155,89,182,0.75)","#fff"],["rgba(230,126,34,0.75)","#fff"],
+    ["rgba(26,188,156,0.75)","#fff"],["rgba(236,72,153,0.75)","#fff"],
+    ["rgba(200,160,0,0.75)","#fff"], ["rgba(231,76,60,0.75)","#fff"],
+  ];
+
+  const STATUS_OPTIONS = ["ממתין","אישור ראש מחלקה","מאושר","נדחה"];
+  const STATUS_COLORS  = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","אישור ראש מחלקה":"#9b59b6" };
+  const LOAN_ICONS     = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️" };
+
+  const activeRes = reservations.filter(r =>
+    r.status !== "הוחזר" && r.borrow_date && r.return_date &&
+    (statusF.length===0 || statusF.includes(r.status)) &&
+    (loanTypeF==="הכל" || r.loan_type===loanTypeF)
+  );
+  const colorMap = {};
+  activeRes.forEach((r,i) => { colorMap[r.id] = SPAN_COLORS[i % SPAN_COLORS.length]; });
+
+  // Month reservations for list
+  const monthStart = `${yr}-${String(mo+1).padStart(2,"0")}-01`;
+  const monthEnd   = `${yr}-${String(mo+1).padStart(2,"0")}-${String(new Date(yr,mo+1,0).getDate()).padStart(2,"0")}`;
+  const monthRes = activeRes.filter(r => r.borrow_date <= monthEnd && r.return_date >= monthStart)
+    .sort((a,b)=>a.borrow_date<b.borrow_date?-1:1);
+
+  return (
+    <div style={{maxWidth:1100,margin:"0 auto",padding:"24px 16px",direction:"rtl"}}>
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24,flexWrap:"wrap"}}>
+        <div style={{fontSize:32}}>🎬</div>
+        <div>
+          <div style={{fontWeight:900,fontSize:20,color:"var(--accent)"}}>לוח השאלות — מבט ראש מחלקה</div>
+          <div style={{fontSize:12,color:"var(--text3)"}}>קריאה בלבד · כל הסטטוסים</div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"14px 16px",marginBottom:16,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+        <span style={{fontSize:12,fontWeight:700,color:"var(--text3)"}}>סינון:</span>
+        {/* Status filters */}
+        {STATUS_OPTIONS.map(s=>{
+          const active = statusF.includes(s);
+          return (
+            <button key={s} type="button" onClick={()=>setStatusF(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s])}
+              style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?(STATUS_COLORS[s]||"var(--accent)"):"var(--border)"}`,background:active?"rgba(255,255,255,0.06)":"transparent",color:active?(STATUS_COLORS[s]||"var(--accent)"):"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+              {s}
+            </button>
+          );
+        })}
+        <span style={{fontSize:12,color:"var(--border)"}}>|</span>
+        {/* Loan type */}
+        {["הכל","פרטית","הפקה","סאונד"].map(lt=>{
+          const active=loanTypeF===lt;
+          return <button key={lt} type="button" onClick={()=>setLoanTypeF(lt)}
+            style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+            {LOAN_ICONS[lt]||"📦"} {lt}
+          </button>;
+        })}
+        {(statusF.length>0||loanTypeF!=="הכל")&&(
+          <button type="button" onClick={()=>{setStatusF([]);setLoanTypeF("הכל");}}
+            style={{marginRight:"auto",padding:"4px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>
+            ✕ נקה סינון
+          </button>
+        )}
+      </div>
+
+      {/* Calendar */}
+      <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"12px",marginBottom:20}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo-1,1))}>‹</button>
+            <span style={{fontWeight:800,fontSize:15,minWidth:130,textAlign:"center"}}>{HE_M[mo]} {yr}</span>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo+1,1))}>›</button>
+          </div>
+          <span style={{fontSize:12,color:"var(--text3)"}}>{monthRes.length} בקשות בחודש</span>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
+          {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,color:"var(--text3)",padding:"4px 0"}}>{d}</div>)}
+        </div>
+        <CalendarGrid days={days} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={90} fontSize={10}/>
+      </div>
+
+      {/* Reservations list */}
+      <div style={{fontWeight:800,fontSize:15,marginBottom:10}}>📋 בקשות {HE_M[mo]} {yr}</div>
+      {monthRes.length===0
+        ? <div style={{textAlign:"center",color:"var(--text3)",padding:"24px",fontSize:14}}>אין בקשות בחודש זה</div>
+        : <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {monthRes.map(r=>(
+            <div key={r.id} onClick={()=>setSelected(r===selected?null:r)}
+              style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"12px 16px",cursor:"pointer",transition:"border-color 0.15s"}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor="var(--accent)"}
+              onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}
+            >
+              <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                <span style={{fontWeight:800,fontSize:14}}>{r.student_name}</span>
+                <span style={{fontSize:12,color:"var(--text3)"}}>{LOAN_ICONS[r.loan_type]||"📦"} {r.loan_type}</span>
+                <span style={{fontSize:11,color:"var(--text3)"}}>📅 {formatDate(r.borrow_date)} → {formatDate(r.return_date)}</span>
+                <span className={`badge badge-${r.status==="מאושר"?"green":r.status==="ממתין"?"yellow":r.status==="נדחה"?"red":"purple"}`} style={{marginRight:"auto"}}>
+                  {r.status}
+                </span>
+              </div>
+              {selected===r&&(
+                <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid var(--border)",display:"flex",flexDirection:"column",gap:4}}>
+                  {r.email&&<div style={{fontSize:12,color:"var(--text3)"}}>📧 {r.email}</div>}
+                  {r.phone&&<div style={{fontSize:12,color:"var(--text3)"}}>📞 {r.phone}</div>}
+                  {r.course&&<div style={{fontSize:12,color:"var(--text3)"}}>📚 {r.course}</div>}
+                  {r.project_name&&<div style={{fontSize:12,color:"var(--text3)"}}>📽️ {r.project_name}</div>}
+                  {r.items?.length>0&&(
+                    <div style={{fontSize:12,color:"var(--text3)",marginTop:4}}>
+                      🎒 {r.items.map(i=>`${i.name} ×${i.quantity}`).join(" · ")}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      }
+    </div>
+  );
+}
+
 // ─── ADMIN PASSWORD SCREEN ────────────────────────────────────────────────────
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || "changeme";
 
@@ -3816,12 +3970,15 @@ function AdminLogin({ onSuccess }) {
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const isAdmin = window.location.pathname.startsWith("/admin");
+  const isCalendarView = window.location.pathname.startsWith("/calendar");
+  const urlToken = new URLSearchParams(window.location.search).get("token")||"";
   const [page, setPage]               = useState("dashboard");
   const [equipment, setEquipment]     = useState([]);
   const [reservations, setReservations] = useState([]);
   const [categories, setCategories]   = useState(DEFAULT_CATEGORIES);
   const [teamMembers, setTeamMembers] = useState([]);
   const [deptHeads, setDeptHeads]       = useState([]);
+  const [calendarToken, setCalendarToken] = useState("");
   const [kits, setKits]               = useState([]);
   const [policies, setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"" });
   const [certifications, setCertifications] = useState({ types:[], students:[] });
@@ -3843,7 +4000,7 @@ export default function App() {
   useEffect(()=>{
     (async()=>{
         try {
-          const [eq, res, cats, tm, kts, pol, certs, dhs] = await Promise.all([
+          const [eq, res, cats, tm, kts, pol, certs, dhs, calTok] = await Promise.all([
             storageGet("equipment"),
           storageGet("reservations"),
           storageGet("categories"),
@@ -3852,6 +4009,7 @@ export default function App() {
           storageGet("policies"),
           storageGet("certifications"),
           storageGet("deptHeads"),
+          storageGet("calendarToken"),
           ]);
           const normalizedEquipment = normalizeEquipmentTagFlags(eq || INITIAL_EQUIPMENT);
           const equipmentChanged = JSON.stringify(normalizedEquipment) !== JSON.stringify(eq || INITIAL_EQUIPMENT);
@@ -3865,6 +4023,7 @@ export default function App() {
         setPolicies(pol || { פרטית:"", הפקה:"", סאונד:"" });
         setCertifications(certs || { types:[], students:[] });
         setDeptHeads(Array.isArray(dhs) ? dhs : []);
+        setCalendarToken(calTok || "");
         // Init missing
           if(!eq || equipmentChanged) await storageSet("equipment", normalizedEquipment);
         if(!res)  await storageSet("reservations", []);
@@ -3873,7 +4032,12 @@ export default function App() {
         if(!kts)  await storageSet("kits",         []);
         if(!pol)   await storageSet("policies",        { פרטית:"", הפקה:"", סאונד:"" });
         if(!certs) await storageSet("certifications", { types:[], students:[] });
-        if(!dhs)   await storageSet("deptHeads",       []);
+        if(!dhs)     await storageSet("deptHeads",       []);
+        if(!calTok) {
+          const tok = Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10);
+          await storageSet("calendarToken", tok);
+          setCalendarToken(tok);
+        }
         if(res && reservationsChanged) await storageSet("reservations", normalizedReservations);
         // Only warn if BOTH Sheets and cache failed (truly no data)
         if(eq===null && !lsGet("equipment")) showToast("error", "⚠️ לא ניתן לטעון ציוד — בדוק חיבור");
@@ -3911,7 +4075,19 @@ export default function App() {
       <style>{css}</style>
 
       {/* ── טופס ציבורי ── */}
-      {!isAdmin && (
+      {isCalendarView ? (
+        <div style={{minHeight:"100vh",background:"var(--bg)",direction:"rtl"}}>
+          {loading ? <Loading/> : (
+            calendarToken && urlToken === calendarToken
+              ? <DeptHeadCalendarPage reservations={reservations} calendarToken={calendarToken}/>
+              : <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",flexDirection:"column",gap:16,color:"var(--text2)"}}>
+                  <div style={{fontSize:48}}>🔒</div>
+                  <div style={{fontSize:18,fontWeight:700}}>קישור לא תקין</div>
+                  <div style={{fontSize:13}}>הקישור שבידך אינו תקין או פג תוקפו</div>
+                </div>
+          )}
+        </div>
+      ) : !isAdmin && (
         <div className="public-page-shell">
           {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads}/>}
         </div>
