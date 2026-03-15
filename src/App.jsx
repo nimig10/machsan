@@ -3796,11 +3796,31 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
 }
 
 // ─── DEPT HEAD CALENDAR PAGE ─────────────────────────────────────────────────
-function DeptHeadCalendarPage({ reservations }) {
+function DeptHeadCalendarPage({ reservations: initialReservations }) {
+  const [localRes, setLocalRes]   = useState(initialReservations);
   const [calDate, setCalDate]     = useState(new Date());
   const [statusF, setStatusF]     = useState([]);   // empty = all
   const [loanTypeF, setLoanTypeF] = useState("הכל");
   const [selected, setSelected]   = useState(null);
+  const [approving, setApproving] = useState(null); // reservation id being approved
+
+  const approveReservation = async (r) => {
+    setApproving(r.id);
+    try {
+      const approveUrl = `/api/approve-production?id=${r.id}`;
+      const res = await fetch(approveUrl);
+      if (res.ok) {
+        // Update local state immediately
+        setLocalRes(prev => prev.map(x => x.id===r.id ? {...x, status:"ממתין"} : x));
+        setSelected(null);
+      }
+    } catch(e) {
+      console.error("approve error", e);
+    }
+    setApproving(null);
+  };
+
+  const reservations = localRes;
   const yr = calDate.getFullYear();
   const mo = calDate.getMonth();
   const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
@@ -3915,14 +3935,26 @@ function DeptHeadCalendarPage({ reservations }) {
                 </span>
               </div>
               {selected===r&&(
-                <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid var(--border)",display:"flex",flexDirection:"column",gap:4}}>
+                <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid var(--border)",display:"flex",flexDirection:"column",gap:6}}>
                   {r.email&&<div style={{fontSize:12,color:"var(--text3)"}}>📧 {r.email}</div>}
                   {r.phone&&<div style={{fontSize:12,color:"var(--text3)"}}>📞 {r.phone}</div>}
                   {r.course&&<div style={{fontSize:12,color:"var(--text3)"}}>📚 {r.course}</div>}
                   {r.project_name&&<div style={{fontSize:12,color:"var(--text3)"}}>📽️ {r.project_name}</div>}
+                  {r.crew_photographer_name&&<div style={{fontSize:12,color:"var(--text3)"}}>🎥 צלם: {r.crew_photographer_name}</div>}
+                  {r.crew_sound_name&&<div style={{fontSize:12,color:"var(--text3)"}}>🎙️ סאונד: {r.crew_sound_name}</div>}
                   {r.items?.length>0&&(
-                    <div style={{fontSize:12,color:"var(--text3)",marginTop:4}}>
+                    <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>
                       🎒 {r.items.map(i=>`${i.name} ×${i.quantity}`).join(" · ")}
+                    </div>
+                  )}
+                  {(r.status==="אישור ראש מחלקה"||r.status==="ממתין לאישור ראש המחלקה")&&(
+                    <div style={{marginTop:8}}>
+                      <button
+                        onClick={e=>{e.stopPropagation();approveReservation(r);}}
+                        disabled={approving===r.id}
+                        style={{padding:"10px 24px",borderRadius:"var(--r-sm)",border:"none",background:"#9b59b6",color:"#fff",fontWeight:900,fontSize:14,cursor:"pointer",opacity:approving===r.id?0.6:1,display:"flex",alignItems:"center",gap:8}}>
+                        {approving===r.id ? "⏳ מאשר..." : "✅ אשר הפקה — העבר לממתין"}
+                      </button>
                     </div>
                   )}
                 </div>
