@@ -417,8 +417,6 @@ const css = `
   .res-card-mid { padding:12px 0; border-top:1px solid var(--border); border-bottom:1px solid var(--border); margin-bottom:12px; }
   .res-card-actions { display:flex; gap:6px; flex-wrap:wrap; }
   /* ── DESKTOP WIDE ── */
-  .cert-table-desktop { display:block; }
-  .cert-table-mobile  { display:none; }
   @media (min-width:1400px) {
     .sidebar { width:280px; min-width:280px; }
     .main { margin-right:280px; }
@@ -438,8 +436,6 @@ const css = `
     .nav-item .icon { font-size:18px; width:auto; }
     .sidebar > div:last-child { display:none; }
     .main { margin-right:0; padding-bottom:68px; }
-    .cert-table-desktop { display:none !important; }
-    .cert-table-mobile  { display:flex !important; }
     .topbar { padding:6px 10px; min-height:48px; height:auto !important; flex-wrap:wrap; gap:4px; align-items:flex-start; }
     .page { padding:16px; }
     .stats-grid { grid-template-columns:1fr 1fr; gap:12px; }
@@ -2225,19 +2221,20 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              to:           dh.email,
-              type:         "dept_head_notify",
-              student_name: res.student_name,
-              items_list:   itemsList,
-              borrow_date:  formatDate(res.borrow_date),
-              borrow_time:  res.borrow_time||"",
-              return_date:  formatDate(res.return_date),
-              return_time:  res.return_time||"",
-              loan_type:    res.loan_type,
-              project_name: res.project_name||"",
+              to:             dh.email,
+              type:           "dept_head_notify",
+              recipient_name: dh.name||"",
+              student_name:   res.student_name,
+              items_list:     itemsList,
+              borrow_date:    formatDate(res.borrow_date),
+              borrow_time:    res.borrow_time||"",
+              return_date:    formatDate(res.return_date),
+              return_time:    res.return_time||"",
+              loan_type:      res.loan_type,
+              project_name:   res.project_name||"",
               crew_photographer: res.crew_photographer_name||"",
-              crew_sound:   res.crew_sound_name||"",
-              approve_url:  approveUrl,
+              crew_sound:     res.crew_sound_name||"",
+              approve_url:    approveUrl,
               reservation_id: String(res.id),
             }),
           })
@@ -3449,35 +3446,35 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
         <div className="empty-state"><div className="emoji">🎓</div><p>{search?"לא נמצאו סטודנטים":"לא נוספו סטודנטים עדיין"}</p></div>
       ) : (
         <>
-          {/* Desktop table */}
-          <div className="cert-table-desktop" style={{overflowX:"auto",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",direction:"rtl"}}>
+          {/* Single table for all screen sizes */}
+          <div style={{overflowX:"auto",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",minWidth:480,direction:"rtl"}}>
               <thead>
                 <tr style={{background:"var(--surface2)",borderBottom:"2px solid var(--border)"}}>
                   <th style={{padding:"10px 14px",textAlign:"right",fontWeight:800,fontSize:13,color:"var(--text2)",whiteSpace:"nowrap"}}>שם סטודנט</th>
                   <th style={{padding:"10px 14px",textAlign:"right",fontWeight:800,fontSize:13,color:"var(--text2)"}}>מייל</th>
                   {types.map(t=>(
-                    <th key={t.id} style={{padding:"10px 12px",textAlign:"center",fontWeight:800,fontSize:12,color:"var(--accent)",whiteSpace:"nowrap",minWidth:90}}>🎓 {t.name}</th>
+                    <th key={t.id} style={{padding:"10px 12px",textAlign:"center",fontWeight:800,fontSize:12,color:"var(--accent)",whiteSpace:"nowrap",minWidth:110}}>🎓 {t.name}</th>
                   ))}
-                  <th style={{padding:"10px 12px",textAlign:"center",width:60}}></th>
+                  <th style={{padding:"10px 12px",textAlign:"center",width:70}}></th>
                 </tr>
               </thead>
               <tbody>
                 {filteredStudents.map((s,i)=>(
                   <tr key={s.id} style={{borderBottom:"1px solid var(--border)",background:i%2===0?"var(--surface)":"var(--surface2)"}}>
-                    <td style={{padding:"10px 14px"}}>
+                    <td style={{padding:"10px 14px",whiteSpace:"nowrap"}}>
                       <div style={{fontWeight:700,fontSize:14}}>{s.name}</div>
                       {s.phone&&<div style={{fontSize:11,color:"var(--text3)"}}>{s.phone}</div>}
                     </td>
-                    <td style={{padding:"10px 14px",fontSize:12,color:"var(--text3)"}}>{s.email}</td>
+                    <td style={{padding:"10px 14px",fontSize:12,color:"var(--text3)",whiteSpace:"nowrap"}}>{s.email}</td>
                     {types.map(t=>{
                       const status = (s.certs||{})[t.id];
                       const passed = status==="עבר";
                       return (
                         <td key={t.id} style={{padding:"8px 12px",textAlign:"center"}}>
                           <button onClick={()=>toggleCert(s.id,t.id)} disabled={saving}
-                            style={{padding:"5px 10px",borderRadius:20,border:`2px solid ${passed?"var(--green)":"var(--border)"}`,background:passed?"rgba(46,204,113,0.15)":"transparent",color:passed?"var(--green)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",transition:"all 0.15s",whiteSpace:"nowrap"}}>
-                            {passed?"✅ עבר/ה":"⬜"}
+                            style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${passed?"var(--green)":"var(--border)"}`,background:passed?"rgba(46,204,113,0.15)":"transparent",color:passed?"var(--green)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",transition:"all 0.15s",whiteSpace:"nowrap",minWidth:100}}>
+                            {passed?"✅ עבר/ה":"⬜ לא עבר/ה"}
                           </button>
                         </td>
                       );
@@ -3492,41 +3489,6 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
                 ))}
               </tbody>
             </table>
-          </div>
-
-          {/* Mobile cards */}
-          <div className="cert-table-mobile" style={{display:"flex",flexDirection:"column",gap:10}}>
-            {filteredStudents.map(s=>(
-              <div key={s.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 16px"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-                  <div>
-                    <div style={{fontWeight:800,fontSize:15}}>{s.name}</div>
-                    <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{s.email}</div>
-                    {s.phone&&<div style={{fontSize:11,color:"var(--text3)"}}>{s.phone}</div>}
-                  </div>
-                  <div style={{display:"flex",gap:6}}>
-                    <button className="btn btn-secondary btn-sm" onClick={()=>{setEditStudent(s);setEditForm({name:s.name,email:s.email,phone:s.phone||""});}}>✏️</button>
-                    <button className="btn btn-danger btn-sm" onClick={()=>deleteStudent(s.id)}>🗑️</button>
-                  </div>
-                </div>
-                {types.length>0&&(
-                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                    {types.map(t=>{
-                      const passed=(s.certs||{})[t.id]==="עבר";
-                      return (
-                        <div key={t.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                          <span style={{fontSize:13,fontWeight:600}}>🎓 {t.name}</span>
-                          <button onClick={()=>toggleCert(s.id,t.id)} disabled={saving}
-                            style={{padding:"5px 14px",borderRadius:20,border:`2px solid ${passed?"var(--green)":"var(--border)"}`,background:passed?"rgba(46,204,113,0.15)":"transparent",color:passed?"var(--green)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",minWidth:110,textAlign:"center"}}>
-                            {passed?"✅ עבר/ה":"⬜ לא עבר/ה"}
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            ))}
           </div>
         </>
       )}
