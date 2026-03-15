@@ -325,6 +325,8 @@ const css = `
   .badge-yellow { background:rgba(241,196,15,0.15); color:var(--yellow); border:1px solid rgba(241,196,15,0.25); }
   .badge-red { background:rgba(231,76,60,0.15); color:var(--red); border:1px solid rgba(231,76,60,0.3); }
   .badge-blue   { background:rgba(52,152,219,0.15); color:var(--blue); border:1px solid rgba(52,152,219,0.25); }
+  .cert-desktop { display:block; }
+  .cert-mobile  { display:none; }
   .badge-purple { background:rgba(155,89,182,0.15); color:#9b59b6; border:1px solid rgba(155,89,182,0.3); }
   .badge-gray { background:var(--surface2); color:var(--text2); border:1px solid var(--border); }
   .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; z-index:1000; padding:20px; backdrop-filter:blur(4px); animation:fadeIn 0.15s; }
@@ -436,6 +438,8 @@ const css = `
     .nav-item .icon { font-size:18px; width:auto; }
     .sidebar > div:last-child { display:none; }
     .main { margin-right:0; padding-bottom:68px; }
+    .cert-desktop { display:none !important; }
+    .cert-mobile  { display:flex !important; }
     .topbar { padding:6px 10px; min-height:48px; height:auto !important; flex-wrap:wrap; gap:4px; align-items:flex-start; }
     .page { padding:16px; }
     .stats-grid { grid-template-columns:1fr 1fr; gap:12px; }
@@ -3446,8 +3450,8 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
         <div className="empty-state"><div className="emoji">🎓</div><p>{search?"לא נמצאו סטודנטים":"לא נוספו סטודנטים עדיין"}</p></div>
       ) : (
         <>
-          {/* Single table for all screen sizes */}
-          <div style={{overflowX:"auto",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
+          {/* Desktop — table */}
+          <div className="cert-desktop" style={{overflowX:"auto",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
             <table style={{width:"100%",borderCollapse:"collapse",minWidth:480,direction:"rtl"}}>
               <thead>
                 <tr style={{background:"var(--surface2)",borderBottom:"2px solid var(--border)"}}>
@@ -3489,6 +3493,41 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile — cards with vertical scroll */}
+          <div className="cert-mobile" style={{flexDirection:"column",gap:10}}>
+            {filteredStudents.map(s=>(
+              <div key={s.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 16px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+                  <div>
+                    <div style={{fontWeight:800,fontSize:15}}>{s.name}</div>
+                    <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{s.email}</div>
+                    {s.phone&&<div style={{fontSize:11,color:"var(--text3)"}}>{s.phone}</div>}
+                  </div>
+                  <div style={{display:"flex",gap:6}}>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>{setEditStudent(s);setEditForm({name:s.name,email:s.email,phone:s.phone||""});}}>✏️</button>
+                    <button className="btn btn-danger btn-sm" onClick={()=>deleteStudent(s.id)}>🗑️</button>
+                  </div>
+                </div>
+                {types.length>0&&(
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    {types.map(t=>{
+                      const passed=(s.certs||{})[t.id]==="עבר";
+                      return (
+                        <div key={t.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <span style={{fontSize:13,fontWeight:600}}>🎓 {t.name}</span>
+                          <button onClick={()=>toggleCert(s.id,t.id)} disabled={saving}
+                            style={{padding:"5px 14px",borderRadius:20,border:`2px solid ${passed?"var(--green)":"var(--border)"}`,background:passed?"rgba(46,204,113,0.15)":"transparent",color:passed?"var(--green)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",minWidth:110,textAlign:"center"}}>
+                            {passed?"✅ עבר/ה":"⬜ לא עבר/ה"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </>
       )}
