@@ -1608,6 +1608,113 @@ function DashboardPage({ equipment, reservations }) {
     </div>
   );
 }
+// ─── PUBLIC MINI CALENDAR ────────────────────────────────────────────────────
+function PublicMiniCalendar({ reservations }) {
+  const [calDate, setCalDate] = useState(new Date());
+  const yr = calDate.getFullYear();
+  const mo = calDate.getMonth();
+  const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+  const HE_D = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
+
+  const days = [];
+  const startOffset = new Date(yr,mo,1).getDay();
+  for(let i=0;i<startOffset;i++) days.push(null);
+  for(let d=1;d<=new Date(yr,mo+1,0).getDate();d++) days.push(new Date(yr,mo,d));
+  while(days.length<42) days.push(null);
+
+  const todayStr = today();
+  const approved = reservations.filter(r=>r.status==="מאושר" && r.borrow_date && r.return_date);
+
+  const COLORS = [
+    "rgba(52,152,219,0.7)","rgba(46,204,113,0.7)","rgba(155,89,182,0.7)",
+    "rgba(230,126,34,0.7)","rgba(26,188,156,0.7)","rgba(236,72,153,0.7)",
+    "rgba(200,160,0,0.7)","rgba(231,76,60,0.7)",
+  ];
+  const colorMap = {};
+  approved.forEach((r,i)=>{ colorMap[r.id]=COLORS[i%COLORS.length]; });
+
+  const weeks = [];
+  for(let i=0;i<days.length;i+=7) weeks.push(days.slice(i,i+7));
+
+  return (
+    <div style={{marginBottom:16,marginTop:8}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <div style={{fontWeight:800,fontSize:13,color:"var(--text2)"}}>📅 השאלות מאושרות בחודש</div>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo-1,1))}>‹</button>
+          <span style={{fontWeight:700,fontSize:12,minWidth:90,textAlign:"center"}}>{HE_M[mo]} {yr}</span>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo+1,1))}>›</button>
+        </div>
+      </div>
+      <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"10px",direction:"rtl"}}>
+        {/* Day headers */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
+          {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:10,fontWeight:700,color:"var(--text3)",padding:"2px 0"}}>{d}</div>)}
+        </div>
+        {/* Weeks */}
+        {weeks.map((week,wi)=>{
+          // Find reservations overlapping this week
+          const wsStr = dateToLocal(week.find(d=>d));
+          const weStr = dateToLocal([...week].reverse().find(d=>d));
+          if(!wsStr||!weStr) return null;
+          const weekRes = approved.filter(r=>r.borrow_date<=weStr && r.return_date>=wsStr);
+
+          return (
+            <div key={wi} style={{position:"relative",marginBottom:2}}>
+              {/* Day cells */}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
+                {week.map((d,di)=>{
+                  const isToday = d && dateToLocal(d)===todayStr;
+                  return (
+                    <div key={di} style={{
+                      background:isToday?"var(--accent-glow)":"var(--surface)",
+                      border:`1px solid ${isToday?"var(--accent)":"var(--border)"}`,
+                      borderRadius:4,
+                      padding:"2px",
+                      minHeight:28,
+                      opacity:!d?0.2:1,
+                    }}>
+                      {d&&<div style={{fontSize:10,fontWeight:isToday?900:600,color:isToday?"var(--accent)":"var(--text3)",textAlign:"center"}}>{d.getDate()}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Event bars */}
+              {weekRes.map((r,ri)=>{
+                const sc = week.findIndex(d=>d && dateToLocal(d)>=r.borrow_date);
+                const ecRaw = week.findLastIndex(d=>d && dateToLocal(d)<=r.return_date);
+                const sc2 = sc<0?0:sc;
+                const ec = ecRaw<0?6:ecRaw;
+                const colW = 100/7;
+                return (
+                  <div key={r.id} style={{
+                    position:"absolute",
+                    top: 18 + ri*14,
+                    right:`calc(${sc2*colW}% + 1px)`,
+                    width:`calc(${(ec-sc2+1)*colW}% - 2px)`,
+                    height:12,
+                    background:colorMap[r.id]||"rgba(52,152,219,0.7)",
+                    borderRadius:3,
+                    display:"flex",alignItems:"center",
+                    paddingRight:4,
+                    overflow:"hidden",
+                    whiteSpace:"nowrap",
+                  }}>
+                    <span style={{fontSize:9,color:"#fff",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis"}}>{r.student_name}</span>
+                  </div>
+                );
+              })}
+              {/* Spacer for bars */}
+              {weekRes.length>0&&<div style={{height:weekRes.length*14}}/>}
+            </div>
+          );
+        })}
+        {approved.length===0&&<div style={{textAlign:"center",fontSize:12,color:"var(--text3)",padding:"10px 0"}}>אין השאלות מאושרות החודש</div>}
+      </div>
+    </div>
+  );
+}
+
 // ─── STEP 3 BUTTONS + EQUIPMENT INFO MODAL ───────────────────────────────────
 function Step3Buttons({ items, equipment, onBack, onNext }) {
   const [showInfo, setShowInfo] = useState(false);
@@ -1634,7 +1741,7 @@ function Step3Buttons({ items, equipment, onBack, onNext }) {
       {showInfo&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:4000,display:"flex",flexDirection:"column",alignItems:"center",direction:"rtl"}}>
           {/* Inner panel — max width so text doesn't stretch too far */}
-          <div style={{width:"100%",maxWidth:980,height:"100%",display:"flex",flexDirection:"column",background:"var(--bg)"}}>
+          <div style={{width:"100%",maxWidth:"min(900px,100vw)",height:"100%",display:"flex",flexDirection:"column",background:"var(--bg)"}}>
 
             {/* Header */}
             <div style={{padding:"14px 18px",background:"var(--surface)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:10,flexShrink:0,flexWrap:"wrap"}}>
@@ -1665,15 +1772,15 @@ function Step3Buttons({ items, equipment, onBack, onNext }) {
                     border:`2px solid ${isSelected?"var(--accent)":"var(--border)"}`,
                     borderRadius:"var(--r)",overflow:"hidden",
                     display:"flex",flexDirection:"row",
-                    minHeight:188,
+                    minHeight:"clamp(100px,28vw,188px)",
                     cursor:"pointer",
                     textAlign:"inherit",
                     padding:0,
                     alignItems:"stretch",
                   }}>
                     {/* Text — right side */}
-                    <div style={{flex:1,padding:"18px 22px",display:"flex",flexDirection:"column",justifyContent:"flex-start",minWidth:0,textAlign:"right",maxWidth:"calc(100% - 240px)",gap:8}}>
-                      <div style={{fontWeight:900,fontSize:21,lineHeight:1.25,whiteSpace:"normal",overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",wordBreak:"break-word"}}>{eq.name}</div>
+                    <div style={{flex:1,padding:"clamp(10px,3vw,18px) clamp(12px,4vw,22px)",display:"flex",flexDirection:"column",justifyContent:"flex-start",minWidth:0,textAlign:"right",maxWidth:"calc(100% - clamp(100px,28vw,240px))",gap:"clamp(4px,1.5vw,8px)"}}>
+                      <div style={{fontWeight:900,fontSize:"clamp(13px,4vw,21px)",lineHeight:1.25,whiteSpace:"normal",overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",wordBreak:"break-word"}}>{eq.name}</div>
                       <div style={{fontSize:13,color:"var(--text2)",lineHeight:1.8,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:4,WebkitBoxOrient:"vertical",wordBreak:"break-word",textAlign:"right"}}>{eq.description||"\u05D0\u05D9\u05DF \u05EA\u05D9\u05D0\u05D5\u05E8 \u05D6\u05DE\u05D9\u05DF"}</div>
                       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
                         {isSelected&&<span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>✓ ×{items.find(i=>i.equipment_id==itm.equipment_id)?.quantity}</span>}
@@ -1686,7 +1793,7 @@ function Step3Buttons({ items, equipment, onBack, onNext }) {
                       <div style={{marginTop:"auto",paddingTop:8,fontSize:11,color:"var(--text3)",fontWeight:700}}>{"\u05DC\u05D7\u05E5 \u05DC\u05E4\u05EA\u05D9\u05D7\u05EA \u05D4\u05E4\u05E8\u05D9\u05D8 \u05D1\u05DE\u05E1\u05DA \u05DE\u05DC\u05D0"}</div>
                     </div>
                     {/* Image — fixed left */}
-                    <div style={{width:240,flexShrink:0,background:"var(--surface2)",overflow:"hidden",borderLeft:"1px solid var(--border)"}}>
+                    <div style={{width:"clamp(100px,28vw,240px)",flexShrink:0,background:"var(--surface2)",overflow:"hidden",borderLeft:"1px solid var(--border)"}}>
                       {isImg
                         ? <img src={eq.image} alt={eq.name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                         : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:64}}>{eq.image||"📦"}</div>
@@ -1789,7 +1896,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
 
       {loanType==="פרטית" && (
         <div style={{marginBottom:18,padding:"14px 16px",background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
-          <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",marginBottom:10,letterSpacing:0.5}}>סינון ציוד לתצוגה</div>
+          <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",marginBottom:10,letterSpacing:0.5}}>סינון ציוד לפי מסלול לימודים</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
             {[
               { key:"all", label:"כל הציוד", icon:"📦" },
@@ -2292,6 +2399,10 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
             {returnBeforeBorrow && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 זמנים לא נכונים — תאריך החזרה חייב להיות אחרי תאריך ההשאלה.</div>}
             {timeOrderError && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 זמנים לא נכונים — שעת החזרה חייבת להיות אחרי שעת האיסוף באותו יום.</div>}
             {ok2 && <div className="highlight-box">📅 השאלה ל-{loanDays} ימים · איסוף {form.borrow_time} · החזרה {form.return_time}</div>}
+
+            {/* Mini calendar — approved reservations */}
+            <PublicMiniCalendar reservations={reservations}/>
+
             <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setStep(1)}>← חזור</button><button className="btn btn-primary" disabled={!ok2} onClick={()=>setStep(3)}>המשך ← ציוד</button></div>
           </>}
 
