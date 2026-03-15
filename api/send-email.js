@@ -8,7 +8,7 @@ const transporter = nodemailer.createTransport({
   auth: { user: GMAIL_USER, pass: GMAIL_PASS },
 });
 
-function buildEmail({ type, recipient_name, student_name, borrow_date, borrow_time, return_date, return_time, items_list, wa_link, loan_type, project_name, crew_photographer, crew_sound, approve_url, reservation_id }) {
+function buildEmail({ type, recipient_name, student_name, borrow_date, borrow_time, return_date, return_time, items_list, loan_type, project_name, crew_photographer, crew_sound, approve_url, calendar_url }) {
   const isApproved   = type === "approved";
   const isNew        = type === "new";
   const isTeamNotify = type === "team_notify";
@@ -56,6 +56,16 @@ function buildEmail({ type, recipient_name, student_name, borrow_date, borrow_ti
       </div>
     </div>` : "";
 
+  const calendarButton = isDeptHead && calendar_url ? `
+    <div style="text-align:center;margin:0 0 24px">
+      <a href="${calendar_url}" style="display:inline-block;padding:12px 26px;background:#111318;color:#e8eaf0;font-weight:800;font-size:14px;border-radius:10px;text-decoration:none;border:1px solid #2d3244">
+        📅 לצפייה בלוח השנה וזמינות ההשאלות
+      </a>
+      <div style="font-size:12px;color:#555f72;margin-top:8px;line-height:1.6">
+        הקישור פותח ישירות את שלב התאריכים בטופס עם לוח השנה והסינונים.
+      </div>
+    </div>` : "";
+
   return `
 <!DOCTYPE html>
 <html lang="he">
@@ -95,6 +105,7 @@ function buildEmail({ type, recipient_name, student_name, borrow_date, borrow_ti
         </div>
       </div>
       ${approveButton}
+      ${calendarButton}
       ${isApproved ? `
       <div style="background:rgba(46,204,113,0.08);border:1px solid rgba(46,204,113,0.2);border-radius:8px;padding:16px;font-size:13px;color:#8891a8;margin-bottom:20px;direction:rtl;text-align:right">
         📌 <strong style="color:#e8eaf0">תזכורת:</strong> יש להחזיר את הציוד עד <strong style="color:#f5a623">${return_date}${return_time?" בשעה "+return_time:""}</strong> במצב תקין.
@@ -111,7 +122,7 @@ function buildEmail({ type, recipient_name, student_name, borrow_date, borrow_ti
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { to, type, recipient_name, student_name, borrow_date, borrow_time, return_date, return_time, items_list, wa_link, loan_type, project_name, crew_photographer, crew_sound, approve_url, reservation_id } = req.body;
+  const { to, type, recipient_name, student_name, borrow_date, borrow_time, return_date, return_time, items_list, loan_type, project_name, crew_photographer, crew_sound, approve_url, calendar_url } = req.body;
   if (!to || !type) return res.status(400).json({ error: "חסרים שדות חובה" });
 
   const subjects = {
@@ -127,7 +138,7 @@ export default async function handler(req, res) {
       from:    `"מחסן קמרה אובסקורה וסאונד" <${GMAIL_USER}>`,
       to,
       subject: subjects[type] || "עדכון מהמחסן",
-      html:    buildEmail({ type, recipient_name, student_name, borrow_date, borrow_time, return_date, return_time, items_list, wa_link, loan_type, project_name, crew_photographer, crew_sound, approve_url, reservation_id }),
+      html:    buildEmail({ type, recipient_name, student_name, borrow_date, borrow_time, return_date, return_time, items_list, loan_type, project_name, crew_photographer, crew_sound, approve_url, calendar_url }),
     });
     res.json({ ok: true });
   } catch (err) {

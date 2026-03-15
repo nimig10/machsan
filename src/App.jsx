@@ -111,6 +111,14 @@ function getLoanDurationDays(borrowDate, returnDate) {
   return Math.max(0, Math.ceil((end - start) / 86400000) + 1);
 }
 
+function getPrivateLoanLimitedQty(items = [], equipment = []) {
+  return (items || []).reduce((sum, item) => {
+    const eq = (equipment || []).find((entry) => entry.id == item.equipment_id);
+    if (eq?.privateLoanUnlimited) return sum;
+    return sum + (Number(item.quantity) || 0);
+  }, 0);
+}
+
 function normalizeEquipmentTagFlags(list = []) {
   return (list || []).map((item) => {
     if (!item || typeof item !== "object") return item;
@@ -120,6 +128,9 @@ function normalizeEquipmentTagFlags(list = []) {
     }
     if (typeof normalized.photoOnly !== "boolean") {
       normalized.photoOnly = PHOTO_CATEGORIES.includes(normalized.category);
+    }
+    if (typeof normalized.privateLoanUnlimited !== "boolean") {
+      normalized.privateLoanUnlimited = false;
     }
     return normalized;
   });
@@ -568,6 +579,18 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     showToast("success", shouldEnable ? `כל הפריטים בקטגוריית "${categoryName}" סומנו כציוד צילום` : `הוסר סימון ציוד צילום מקטגוריית "${categoryName}"`);
   };
 
+  const toggleCategoryPrivateLoanUnlimited = async (categoryName) => {
+    const categoryItems = equipment.filter((item) => item.category === categoryName);
+    if (!categoryItems.length) return;
+    const shouldEnable = !categoryItems.every((item) => !!item.privateLoanUnlimited);
+    const updated = equipment.map((item) =>
+      item.category === categoryName ? { ...item, privateLoanUnlimited: shouldEnable } : item
+    );
+    setEquipment(updated);
+    await storageSet("equipment", updated);
+    showToast("success", shouldEnable ? `הקטגוריה "${categoryName}" הוחרגה ממגבלת השאלה פרטית` : `הוחזרה מגבלת השאלה פרטית לקטגוריה "${categoryName}"`);
+  };
+
   const todayStr2 = today();
   const used = (id) => reservations
     .filter(r=>(r.status==="מאושר"||r.status==="ממתין") && r.borrow_date<=todayStr2 && r.return_date>=todayStr2)
@@ -722,6 +745,13 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                     onClick={()=>toggleCategoryPhotoOnly(c)}
                   >
                     ציוד צילום
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${equipment.filter(e=>e.category===c).every(e=>e.privateLoanUnlimited) ? "btn-primary" : "btn-secondary"}`}
+                    onClick={()=>toggleCategoryPrivateLoanUnlimited(c)}
+                  >
+                    לא מוגבל בהשאלה פרטית
                   </button>
                 </div>
               </div>
@@ -1660,9 +1690,9 @@ function DashboardPage({ equipment, reservations }) {
   );
 }
 // ─── PUBLIC MINI CALENDAR ────────────────────────────────────────────────────
-function PublicMiniCalendar({ reservations }) {
+function PublicMiniCalendar({ reservations, initialLoanType="הכל" }) {
   const [calDate, setCalDate] = useState(new Date());
-  const [loanTypeF, setLoanTypeF] = useState("הכל");
+  const [loanTypeF, setLoanTypeF] = useState(["פרטית","הפקה","סאונד"].includes(initialLoanType) ? initialLoanType : "הכל");
   const yr = calDate.getFullYear();
   const mo = calDate.getMonth();
   const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
@@ -1723,7 +1753,7 @@ function PublicMiniCalendar({ reservations }) {
 }
 
 // ─── STEP 3 BUTTONS + EQUIPMENT INFO MODAL ───────────────────────────────────
-function Step3Buttons({ items, equipment, onBack, onNext }) {
+function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceeded=false }) {
   const [showInfo, setShowInfo] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [focusedEq, setFocusedEq] = useState(null);
@@ -1737,6 +1767,12 @@ function Step3Buttons({ items, equipment, onBack, onNext }) {
   return (
     <>
       {items.length>0&&<div className="highlight-box">🛒 נבחרו {items.length} סוגים ({totalQty} יחידות)</div>}
+      {privateLoanLimitExceeded && (
+        <div className="toast toast-error" style={{marginBottom:12,position:"static",minWidth:0,width:"100%"}}>
+          <span>❌</span>
+          <span>שים לב אין לחרוג מ-4 פריטים בהשאלה פרטית</span>
+        </div>
+      )}
       <div className="flex gap-2">
         <button className="btn btn-secondary" onClick={onBack}>← חזור</button>
         <button className="btn btn-secondary" onClick={()=>{ setShowInfo(true); setShowAll(false); setFocusedEq(null); }}>
@@ -2099,8 +2135,15 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
 
 // ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
 function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[] }) {
-  const [step, setStep]       = useState(1);
-  const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""});
+  const initialParams = new URLSearchParams(window.location.search);
+  const initialLoanTypeParam = initialParams.get("loan_type");
+  const initialStepParam = Number(initialParams.get("step"));
+  const initialLoanType = ["פרטית","הפקה","סאונד"].includes(initialLoanTypeParam || "") ? initialLoanTypeParam : "";
+  const initialStep = initialParams.get("calendar")==="1"
+    ? 2
+    : (Number.isInteger(initialStepParam) && initialStepParam >= 1 && initialStepParam <= 4 ? initialStepParam : 1);
+  const [step, setStep]       = useState(initialStep);
+  const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""});
   const [items, setItems]     = useState([]);
   const [agreed, setAgreed]   = useState(false);
   const [done, setDone]       = useState(false);
@@ -2181,13 +2224,15 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     }
     return studentCerts[certId] === "עבר";
   };
+  const privateLoanLimitedQty = form.loan_type==="פרטית" ? getPrivateLoanLimitedQty(items, equipment) : 0;
+  const privateLoanLimitExceeded = form.loan_type==="פרטית" && privateLoanLimitedQty > 4;
   const sameDay = form.borrow_date && form.return_date && form.borrow_date === form.return_date;
   const timeOrderError = sameDay && form.borrow_time && form.return_time && toDateTime(form.return_date, form.return_time) <= toDateTime(form.borrow_date, form.borrow_time);
   const returnBeforeBorrow = form.borrow_date && form.return_date && parseLocalDate(form.return_date) < parseLocalDate(form.borrow_date);
   const hasTimes = !!form.borrow_time && !!form.return_time;
   const ok2 = !!form.borrow_date && !!form.return_date && hasTimes && !returnBeforeBorrow && !tooSoon && !tooLong && !borrowWeekend && !returnWeekend && !timeOrderError;
   const ok3 = items.some(item => Number(item.quantity) > 0);
-  const canSubmit = !!ok1 && !!ok2 && !!ok3 && !!agreed;
+  const canSubmit = !!ok1 && !!ok2 && !!ok3 && !privateLoanLimitExceeded && !!agreed;
 
   const availEq = useMemo(()=>{
     if(!form.borrow_date||!form.return_date) return [];
@@ -2204,7 +2249,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
 
   const canAccessStep = (targetStep) => {
     if (targetStep <= 3) return true;
-    if (targetStep === 4) return !!ok1 && !!ok2 && !!ok3;
+    if (targetStep === 4) return !!ok1 && !!ok2 && !!ok3 && !privateLoanLimitExceeded;
     return false;
   };
 
@@ -2216,6 +2261,10 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     }
     if (canAccessStep(targetStep)) {
       setStep(targetStep);
+      return;
+    }
+    if (privateLoanLimitExceeded) {
+      showToast("error", "שים לב אין לחרוג מ-4 פריטים בהשאלה פרטית");
       return;
     }
     showToast("error", "יש להשלים את שלבי פרטים, תאריכים וציוד לפני המעבר לשלב האישור.");
@@ -2273,6 +2322,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
       );
       if (relevantDeptHeads.length > 0) {
         const approveUrl = `${window.location.origin}/api/approve-production?id=${res.id}`;
+        const calendarUrl = `${window.location.origin}/?loan_type=${encodeURIComponent(res.loan_type || "")}&step=2&calendar=1`;
         await Promise.allSettled(relevantDeptHeads.map(dh =>
           fetch("/api/send-email", {
             method: "POST",
@@ -2292,6 +2342,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
               crew_photographer: res.crew_photographer_name||"",
               crew_sound:     res.crew_sound_name||"",
               approve_url:    approveUrl,
+              calendar_url:   calendarUrl,
               reservation_id: String(res.id),
             }),
           })
@@ -2303,7 +2354,12 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   };
 
   const submit = async () => {
-    if (!ok1 || !ok2 || !ok3) {
+    if (!ok1 || !ok2 || !ok3 || privateLoanLimitExceeded) {
+      if (privateLoanLimitExceeded) {
+        showToast("error", "שים לב אין לחרוג מ-4 פריטים בהשאלה פרטית");
+        setStep(3);
+        return;
+      }
       showToast("error", "לא ניתן לשלוח בקשה לפני השלמת כל שלבי הטופס, כולל תאריכים, שעות ובחירת ציוד.");
       if (!ok1) setStep(1);
       else if (!ok2) setStep(2);
@@ -2494,7 +2550,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
             {ok2 && <div className="highlight-box">📅 השאלה ל-{loanDays} ימים · איסוף {form.borrow_time} · החזרה {form.return_time}</div>}
 
             {/* Mini calendar — approved reservations */}
-            <PublicMiniCalendar reservations={reservations}/>
+            <PublicMiniCalendar key={form.loan_type || "הכל"} reservations={reservations} initialLoanType={form.loan_type || "הכל"}/>
 
             <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setStep(1)}>← חזור</button><button className="btn btn-primary" disabled={!ok2} onClick={()=>setStep(3)}>המשך ← ציוד</button></div>
           </>}
@@ -2516,6 +2572,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
           />}
             {step===3 && <Step3Buttons
               items={items} equipment={equipment}
+              privateLoanLimitExceeded={privateLoanLimitExceeded}
               onBack={()=>setStep(2)} onNext={()=>goToStep(4)}
             />}
 
