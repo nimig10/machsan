@@ -2392,7 +2392,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
       );
       if (relevantDeptHeads.length > 0) {
         const approveUrl = `${window.location.origin}/api/approve-production?id=${res.id}`;
-        const calendarUrl = `${window.location.origin}/?loan_type=${encodeURIComponent(res.loan_type || "")}&step=2&calendar=1`;
+        const calendarUrl = calendarToken ? `${window.location.origin}/calendar?token=${calendarToken}` : "";
         for (let i = 0; i < relevantDeptHeads.length; i++) {
           const dh = relevantDeptHeads[i];
           // delay between emails to avoid Gmail rate limiting
