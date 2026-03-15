@@ -2963,40 +2963,67 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
     const file = e.target.files[0];
     if(!file) return;
     setXlImporting(true);
+    e.target.value = "";
     try {
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
-        try {
-          const text = ev.target.result;
-          const lines = text.split(/[\r\n]+/).filter(l=>l.trim());
-          if(!lines.length) { showToast("error","הקובץ ריק"); setXlImporting(false); return; }
-          // Detect separator
-          const sep = lines[0].includes("	") ? "	" : ",";
-          const headers = lines[0].split(sep).map(h=>h.trim().toLowerCase().replace(/"/g,""));
-          const nameIdx  = headers.findIndex(h=>h.includes("שם")||h.includes("name"));
-          const emailIdx = headers.findIndex(h=>h.includes("מייל")||h.includes("אימייל")||h.includes("email"));
-          const phoneIdx = headers.findIndex(h=>h.includes("טלפון")||h.includes("phone")||h.includes("tel"));
-          if(emailIdx===-1) { showToast("error","לא נמצאה עמודת מייל בקובץ"); setXlImporting(false); return; }
-          let added=0, skipped=0;
-          const newStudents = [...students];
-          for(let i=1;i<lines.length;i++) {
-            const cols = lines[i].split(sep).map(c=>c.trim().replace(/^"|"$/g,""));
-            const email = cols[emailIdx]?.toLowerCase().trim();
-            const name  = nameIdx>=0 ? cols[nameIdx]?.trim() : "";
-            const phone = phoneIdx>=0 ? cols[phoneIdx]?.trim() : "";
-            if(!email) { skipped++; continue; }
-            if(newStudents.find(s=>s.email===email)) { skipped++; continue; }
-            newStudents.push({ id:`stu_${Date.now()}_${i}`, name:name||email, email, phone:phone||"", certs:{} });
-            added++;
-          }
-          const updated = { types, students: newStudents };
-          if(await save(updated)) showToast("success", `יובאו ${added} סטודנטים. ${skipped>0?`${skipped} כבר קיימים.`:""}`);
-        } catch(err) { showToast("error","שגיאה בקריאת הקובץ"); }
+      const isXlsx = /\.xlsx?$/i.test(file.name);
+
+      const processRows = async (rows) => {
+        if(!rows.length) { showToast("error","הקובץ ריק"); setXlImporting(false); return; }
+        const headers = rows[0].map(h=>String(h||"").trim().toLowerCase());
+        const nameIdx  = headers.findIndex(h=>h.includes("שם")||h.includes("name"));
+        const emailIdx = headers.findIndex(h=>h.includes("מייל")||h.includes("אימייל")||h.includes("email")||h.includes("mail"));
+        const phoneIdx = headers.findIndex(h=>h.includes("טלפון")||h.includes("phone")||h.includes("tel")||h.includes("נייד"));
+        if(emailIdx===-1) { showToast("error","לא נמצאה עמודת מייל — ודא שיש עמודה בשם 'מייל' או 'email'"); setXlImporting(false); return; }
+        let added=0, skipped=0;
+        const newStudents = [...students];
+        for(let i=1;i<rows.length;i++) {
+          const row = rows[i];
+          const email = String(row[emailIdx]||"").toLowerCase().trim();
+          const name  = nameIdx>=0 ? String(row[nameIdx]||"").trim() : "";
+          const phone = phoneIdx>=0 ? String(row[phoneIdx]||"").trim() : "";
+          if(!email||!email.includes("@")) { skipped++; continue; }
+          if(newStudents.find(s=>s.email===email)) { skipped++; continue; }
+          newStudents.push({ id:`stu_${Date.now()}_${i}`, name:name||email, email, phone, certs:{} });
+          added++;
+        }
+        const updated = { types, students: newStudents };
+        if(await save(updated)) showToast("success", `✅ יובאו ${added} סטודנטים${skipped>0?` · ${skipped} דולגו`:""}`);
         setXlImporting(false);
       };
-      reader.readAsText(file, "UTF-8");
-    } catch(err) { showToast("error","שגיאה"); setXlImporting(false); }
-    e.target.value="";
+
+      if(isXlsx) {
+        if(!window.XLSX) {
+          await new Promise((resolve, reject) => {
+            const s = document.createElement("script");
+            s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+            s.onload = resolve; s.onerror = reject;
+            document.head.appendChild(s);
+          });
+        }
+        const buf = await file.arrayBuffer();
+        const wb  = window.XLSX.read(buf, { type:"array" });
+        const ws  = wb.Sheets[wb.SheetNames[0]];
+        const rows = window.XLSX.utils.sheet_to_json(ws, { header:1, defval:"" });
+        await processRows(rows);
+      } else {
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+          try {
+            const text = ev.target.result;
+            const lines = text.split(/?
+/).filter(l=>l.trim());
+            const sep = lines[0]?.includes("	") ? "	" : ",";
+            const rows = lines.map(l=>l.split(sep).map(c=>c.trim().replace(/^"|"$/g,"")));
+            await processRows(rows);
+          } catch(err) { showToast("error","שגיאה בקריאת הקובץ"); setXlImporting(false); }
+        };
+        reader.readAsText(file, "UTF-8");
+      }
+    } catch(err) {
+      console.error("importXL error:", err);
+      showToast("error","שגיאה בייבוא הקובץ");
+      setXlImporting(false);
+    }
   };
 
   const toggleCert = async (stuId, typeId) => {
