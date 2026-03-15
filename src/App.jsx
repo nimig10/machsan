@@ -1615,6 +1615,7 @@ function PublicMiniCalendar({ reservations }) {
   const mo = calDate.getMonth();
   const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
   const HE_D = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
+  const todayStr = today();
 
   const days = [];
   const startOffset = new Date(yr,mo,1).getDay();
@@ -1622,24 +1623,20 @@ function PublicMiniCalendar({ reservations }) {
   for(let d=1;d<=new Date(yr,mo+1,0).getDate();d++) days.push(new Date(yr,mo,d));
   while(days.length<42) days.push(null);
 
-  const todayStr = today();
-  const approved = reservations.filter(r=>r.status==="מאושר" && r.borrow_date && r.return_date);
-
-  const COLORS = [
-    "rgba(52,152,219,0.7)","rgba(46,204,113,0.7)","rgba(155,89,182,0.7)",
-    "rgba(230,126,34,0.7)","rgba(26,188,156,0.7)","rgba(236,72,153,0.7)",
-    "rgba(200,160,0,0.7)","rgba(231,76,60,0.7)",
+  const SPAN_COLORS = [
+    ["rgba(52,152,219,0.75)","#fff"],["rgba(46,204,113,0.75)","#fff"],
+    ["rgba(155,89,182,0.75)","#fff"],["rgba(230,126,34,0.75)","#fff"],
+    ["rgba(26,188,156,0.75)","#fff"],["rgba(236,72,153,0.75)","#fff"],
+    ["rgba(200,160,0,0.75)","#fff"], ["rgba(231,76,60,0.75)","#fff"],
   ];
+  const activeRes = reservations.filter(r=>r.status==="מאושר" && r.borrow_date && r.return_date);
   const colorMap = {};
-  approved.forEach((r,i)=>{ colorMap[r.id]=COLORS[i%COLORS.length]; });
-
-  const weeks = [];
-  for(let i=0;i<days.length;i+=7) weeks.push(days.slice(i,i+7));
+  activeRes.forEach((r,i)=>{ colorMap[r.id]=SPAN_COLORS[i%SPAN_COLORS.length]; });
 
   return (
     <div style={{marginBottom:16,marginTop:8}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-        <div style={{fontWeight:800,fontSize:13,color:"var(--text2)"}}>📅 השאלות מאושרות בחודש</div>
+        <div style={{fontWeight:800,fontSize:13,color:"var(--text2)"}}>📅 השאלות מאושרות</div>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo-1,1))}>‹</button>
           <span style={{fontWeight:700,fontSize:12,minWidth:90,textAlign:"center"}}>{HE_M[mo]} {yr}</span>
@@ -1647,69 +1644,11 @@ function PublicMiniCalendar({ reservations }) {
         </div>
       </div>
       <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"10px",direction:"rtl"}}>
-        {/* Day headers */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
-          {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:10,fontWeight:700,color:"var(--text3)",padding:"2px 0"}}>{d}</div>)}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
+          {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,color:"var(--text3)",padding:"4px 0"}}>{d}</div>)}
         </div>
-        {/* Weeks */}
-        {weeks.map((week,wi)=>{
-          // Find reservations overlapping this week
-          const wsStr = dateToLocal(week.find(d=>d));
-          const weStr = dateToLocal([...week].reverse().find(d=>d));
-          if(!wsStr||!weStr) return null;
-          const weekRes = approved.filter(r=>r.borrow_date<=weStr && r.return_date>=wsStr);
-
-          return (
-            <div key={wi} style={{position:"relative",marginBottom:2}}>
-              {/* Day cells */}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
-                {week.map((d,di)=>{
-                  const isToday = d && dateToLocal(d)===todayStr;
-                  return (
-                    <div key={di} style={{
-                      background:isToday?"var(--accent-glow)":"var(--surface)",
-                      border:`1px solid ${isToday?"var(--accent)":"var(--border)"}`,
-                      borderRadius:4,
-                      padding:"2px",
-                      minHeight:28,
-                      opacity:!d?0.2:1,
-                    }}>
-                      {d&&<div style={{fontSize:10,fontWeight:isToday?900:600,color:isToday?"var(--accent)":"var(--text3)",textAlign:"center"}}>{d.getDate()}</div>}
-                    </div>
-                  );
-                })}
-              </div>
-              {/* Event bars */}
-              {weekRes.map((r,ri)=>{
-                const sc = week.findIndex(d=>d && dateToLocal(d)>=r.borrow_date);
-                const ecRaw = week.findLastIndex(d=>d && dateToLocal(d)<=r.return_date);
-                const sc2 = sc<0?0:sc;
-                const ec = ecRaw<0?6:ecRaw;
-                const colW = 100/7;
-                return (
-                  <div key={r.id} style={{
-                    position:"absolute",
-                    top: 18 + ri*14,
-                    right:`calc(${sc2*colW}% + 1px)`,
-                    width:`calc(${(ec-sc2+1)*colW}% - 2px)`,
-                    height:12,
-                    background:colorMap[r.id]||"rgba(52,152,219,0.7)",
-                    borderRadius:3,
-                    display:"flex",alignItems:"center",
-                    paddingRight:4,
-                    overflow:"hidden",
-                    whiteSpace:"nowrap",
-                  }}>
-                    <span style={{fontSize:9,color:"#fff",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis"}}>{r.student_name}</span>
-                  </div>
-                );
-              })}
-              {/* Spacer for bars */}
-              {weekRes.length>0&&<div style={{height:weekRes.length*14}}/>}
-            </div>
-          );
-        })}
-        {approved.length===0&&<div style={{textAlign:"center",fontSize:12,color:"var(--text3)",padding:"10px 0"}}>אין השאלות מאושרות החודש</div>}
+        <CalendarGrid days={days} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={80} fontSize={10}/>
+        {activeRes.length===0&&<div style={{textAlign:"center",fontSize:12,color:"var(--text3)",padding:"8px 0"}}>אין השאלות מאושרות</div>}
       </div>
     </div>
   );
