@@ -1738,7 +1738,7 @@ function Step3Buttons({ items, equipment, onBack, onNext }) {
                     {/* Image — fixed left */}
                     <div style={{width:"clamp(100px,28vw,240px)",flexShrink:0,background:"var(--surface2)",overflow:"hidden",borderLeft:"1px solid var(--border)"}}>
                       {isImg
-                        ? <img src={eq.image} alt={eq.name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                        ? <img src={eq.image} alt={eq.name} style={{width:"100%",height:"100%",objectFit:"contain",display:"block",background:"var(--surface2)"}}/>
                         : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:64}}>{eq.image||"📦"}</div>
                       }
                     </div>
