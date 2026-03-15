@@ -3311,7 +3311,7 @@ export default function App() {
                 {id:"reservations",icon:"📋",label:"בקשות",badge:pending||null},
                 {id:"equipment",icon:"📦",label:"ציוד"},
                 {id:"certifications",icon:"🎓",label:"הסמכות"},
-                {id:"rejected",icon:"❌",label:"בקשות דחויות",badge:rejected||null},
+                {id:"rejected",icon:"❌",label:"דחויות",badge:rejected||null},
                 {id:"kits",icon:"🎒",label:"ערכות"},
                 {id:"team",icon:"👥",label:"צוות"},
                 {id:"archive",icon:"🗄️",label:"ארכיון"},
