@@ -2969,11 +2969,11 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
 
       const processRows = async (rows) => {
         if(!rows.length) { showToast("error","הקובץ ריק"); setXlImporting(false); return; }
-        const headers = rows[0].map(h=>String(h||"").trim().toLowerCase());
+        const headers = rows[0].map(h=>String(h||"").trim().toLowerCase().replace(/^\uFEFF/,"").replace(/[\u200B-\u200D\uFEFF]/g,""));
         const nameIdx  = headers.findIndex(h=>h.includes("שם")||h.includes("name"));
-        const emailIdx = headers.findIndex(h=>h.includes("מייל")||h.includes("אימייל")||h.includes("email")||h.includes("mail"));
+        const emailIdx = headers.findIndex(h=>h.includes("מייל")||h.includes("אימייל")||h.includes("email")||h.includes("mail")||h.includes("e-mail"));
         const phoneIdx = headers.findIndex(h=>h.includes("טלפון")||h.includes("phone")||h.includes("tel")||h.includes("נייד"));
-        if(emailIdx===-1) { showToast("error","לא נמצאה עמודת מייל — ודא שיש עמודה בשם 'מייל' או 'email'"); setXlImporting(false); return; }
+        if(emailIdx===-1) { showToast("error",`לא נמצאה עמודת מייל. כותרות שנמצאו: ${headers.join(", ")}`); setXlImporting(false); return; }
         let added=0, skipped=0;
         const newStudents = [...students];
         for(let i=1;i<rows.length;i++) {
@@ -3010,7 +3010,8 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
         reader.onload = async (ev) => {
           try {
             const text = ev.target.result;
-            const lines = text.split(/?
+            const lines = text.split(/
+?
 /).filter(l=>l.trim());
             const sep = lines[0]?.includes("	") ? "	" : ",";
             const rows = lines.map(l=>l.split(sep).map(c=>c.trim().replace(/^"|"$/g,"")));
