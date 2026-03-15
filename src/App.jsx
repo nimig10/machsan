@@ -492,7 +492,7 @@ function Loading() {
 }
 
 // ─── EQUIPMENT PAGE ───────────────────────────────────────────────────────────
-function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories }) {
+function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories, certifications={types:[],students:[]} }) {
   const [search, setSearch] = useState("");
   const [selectedCats, setSelectedCats] = useState([]);
   const [modal, setModal] = useState(null);
@@ -3266,7 +3266,7 @@ export default function App() {
             </div>
             {loading ? <Loading/> : <>
               {page==="dashboard"   && <DashboardPage    equipment={equipment} reservations={reservations}/>}
-              {page==="equipment"   && <EquipmentPage    equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories}/>}
+              {page==="equipment"   && <EquipmentPage    equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} certifications={certifications}/>}
               {page==="reservations"&& <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy}/>}
