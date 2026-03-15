@@ -416,6 +416,8 @@ const css = `
   .res-card-mid { padding:12px 0; border-top:1px solid var(--border); border-bottom:1px solid var(--border); margin-bottom:12px; }
   .res-card-actions { display:flex; gap:6px; flex-wrap:wrap; }
   /* ── DESKTOP WIDE ── */
+  .cert-table-desktop { display:block; }
+  .cert-table-mobile  { display:none; }
   @media (min-width:1400px) {
     .sidebar { width:280px; min-width:280px; }
     .main { margin-right:280px; }
@@ -435,6 +437,8 @@ const css = `
     .nav-item .icon { font-size:18px; width:auto; }
     .sidebar > div:last-child { display:none; }
     .main { margin-right:0; padding-bottom:68px; }
+    .cert-table-desktop { display:none !important; }
+    .cert-table-mobile  { display:flex !important; }
     .topbar { padding:6px 10px; min-height:48px; height:auto !important; flex-wrap:wrap; gap:4px; align-items:flex-start; }
     .page { padding:16px; }
     .stats-grid { grid-template-columns:1fr 1fr; gap:12px; }
@@ -1757,16 +1761,16 @@ function Step3Buttons({ items, equipment, onBack, onNext }) {
                   </div>
                   <button className="btn btn-secondary" onClick={()=>setFocusedEq(null)}>{"\u2716 \u05E1\u05D2\u05D5\u05E8"}</button>
                 </div>
-                <div style={{flex:1,overflowY:"auto",padding:"24px",display:"grid",gridTemplateColumns:"minmax(320px,1fr) minmax(320px,420px)",gap:24,alignItems:"start",direction:"ltr"}}>
-                  <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"24px",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                    <div style={{width:"100%",maxWidth:320,aspectRatio:"1 / 1",borderRadius:20,border:"1px solid var(--border)",background:"var(--surface2)",overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 12px 40px rgba(0,0,0,0.28)"}}>
+                <div style={{flex:1,overflowY:"auto",padding:"16px",display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(300px,100%),1fr))",gap:16,alignItems:"start",direction:"ltr"}}>
+                  <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"16px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <div style={{width:"100%",maxWidth:"min(320px,80vw)",aspectRatio:"1 / 1",borderRadius:12,border:"1px solid var(--border)",background:"var(--surface2)",overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 8px 24px rgba(0,0,0,0.28)"}}>
                       {(focusedEq.image?.startsWith("data:")||focusedEq.image?.startsWith("http"))
                         ? <img src={focusedEq.image} alt={focusedEq.name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                         : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:120,background:"var(--surface2)"}}>{focusedEq.image||"\uD83D\uDCE6"}</div>
                       }
                     </div>
                   </div>
-                  <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"24px",direction:"rtl"}}>
+                  <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"20px",direction:"rtl",minWidth:0}}>
                     <div style={{fontSize:12,fontWeight:800,color:"var(--text3)",letterSpacing:1,textTransform:"uppercase",marginBottom:12}}>{"\u05EA\u05D9\u05D0\u05D5\u05E8 \u05DE\u05DC\u05D0"}</div>
                     <div style={{fontSize:15,lineHeight:1.9,color:"var(--text)",whiteSpace:"pre-wrap"}}>{focusedEq.description || "\u05D0\u05D9\u05DF \u05EA\u05D9\u05D0\u05D5\u05E8 \u05D6\u05DE\u05D9\u05DF \u05DC\u05E4\u05E8\u05D9\u05D8 \u05D6\u05D4."}</div>
                     {focusedEq.notes && (
@@ -3186,49 +3190,87 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
       {filteredStudents.length===0 && !addingStudent ? (
         <div className="empty-state"><div className="emoji">🎓</div><p>{search?"לא נמצאו סטודנטים":"לא נוספו סטודנטים עדיין"}</p></div>
       ) : (
-        <div style={{overflowX:"auto",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",minWidth:400,direction:"rtl"}}>
-            <thead>
-              <tr style={{background:"var(--surface2)",borderBottom:"2px solid var(--border)"}}>
-                <th style={{padding:"10px 14px",textAlign:"right",fontWeight:800,fontSize:13,color:"var(--text2)",whiteSpace:"nowrap"}}>שם סטודנט</th>
-                <th style={{padding:"10px 14px",textAlign:"right",fontWeight:800,fontSize:13,color:"var(--text2)"}}>מייל</th>
-                {types.map(t=>(
-                  <th key={t.id} style={{padding:"10px 12px",textAlign:"center",fontWeight:800,fontSize:12,color:"var(--accent)",whiteSpace:"nowrap",minWidth:90}}>🎓 {t.name}</th>
-                ))}
-                <th style={{padding:"10px 12px",textAlign:"center",width:50}}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredStudents.map((s,i)=>(
-                <tr key={s.id} style={{borderBottom:"1px solid var(--border)",background:i%2===0?"var(--surface)":"var(--surface2)"}}>
-                  <td style={{padding:"10px 14px"}}>
-                    <div style={{fontWeight:700,fontSize:14}}>{s.name}</div>
-                    {s.phone&&<div style={{fontSize:11,color:"var(--text3)"}}>{s.phone}</div>}
-                  </td>
-                  <td style={{padding:"10px 14px",fontSize:12,color:"var(--text3)"}}>{s.email}</td>
-                  {types.map(t=>{
-                    const status = (s.certs||{})[t.id];
-                    const passed = status==="עבר";
-                    return (
-                      <td key={t.id} style={{padding:"8px 12px",textAlign:"center"}}>
-                        <button onClick={()=>toggleCert(s.id,t.id)} disabled={saving}
-                          style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${passed?"var(--green)":"var(--border)"}`,background:passed?"rgba(46,204,113,0.15)":"transparent",color:passed?"var(--green)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",transition:"all 0.15s",whiteSpace:"nowrap"}}>
-                          {passed?"✅ עבר/ה":"⬜ לא עבר/ה"}
-                        </button>
-                      </td>
-                    );
-                  })}
-                  <td style={{padding:"8px 12px",textAlign:"center"}}>
-                    <div style={{display:"flex",gap:6,justifyContent:"center"}}>
-                      <button className="btn btn-secondary btn-sm" onClick={()=>{setEditStudent(s);setEditForm({name:s.name,email:s.email,phone:s.phone||""});}}>✏️</button>
-                      <button className="btn btn-danger btn-sm" onClick={()=>deleteStudent(s.id)}>🗑️</button>
-                    </div>
-                  </td>
+        <>
+          {/* Desktop table */}
+          <div className="cert-table-desktop" style={{overflowX:"auto",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",direction:"rtl"}}>
+              <thead>
+                <tr style={{background:"var(--surface2)",borderBottom:"2px solid var(--border)"}}>
+                  <th style={{padding:"10px 14px",textAlign:"right",fontWeight:800,fontSize:13,color:"var(--text2)",whiteSpace:"nowrap"}}>שם סטודנט</th>
+                  <th style={{padding:"10px 14px",textAlign:"right",fontWeight:800,fontSize:13,color:"var(--text2)"}}>מייל</th>
+                  {types.map(t=>(
+                    <th key={t.id} style={{padding:"10px 12px",textAlign:"center",fontWeight:800,fontSize:12,color:"var(--accent)",whiteSpace:"nowrap",minWidth:90}}>🎓 {t.name}</th>
+                  ))}
+                  <th style={{padding:"10px 12px",textAlign:"center",width:60}}></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filteredStudents.map((s,i)=>(
+                  <tr key={s.id} style={{borderBottom:"1px solid var(--border)",background:i%2===0?"var(--surface)":"var(--surface2)"}}>
+                    <td style={{padding:"10px 14px"}}>
+                      <div style={{fontWeight:700,fontSize:14}}>{s.name}</div>
+                      {s.phone&&<div style={{fontSize:11,color:"var(--text3)"}}>{s.phone}</div>}
+                    </td>
+                    <td style={{padding:"10px 14px",fontSize:12,color:"var(--text3)"}}>{s.email}</td>
+                    {types.map(t=>{
+                      const status = (s.certs||{})[t.id];
+                      const passed = status==="עבר";
+                      return (
+                        <td key={t.id} style={{padding:"8px 12px",textAlign:"center"}}>
+                          <button onClick={()=>toggleCert(s.id,t.id)} disabled={saving}
+                            style={{padding:"5px 10px",borderRadius:20,border:`2px solid ${passed?"var(--green)":"var(--border)"}`,background:passed?"rgba(46,204,113,0.15)":"transparent",color:passed?"var(--green)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",transition:"all 0.15s",whiteSpace:"nowrap"}}>
+                            {passed?"✅ עבר/ה":"⬜"}
+                          </button>
+                        </td>
+                      );
+                    })}
+                    <td style={{padding:"8px 12px",textAlign:"center"}}>
+                      <div style={{display:"flex",gap:4,justifyContent:"center"}}>
+                        <button className="btn btn-secondary btn-sm" onClick={()=>{setEditStudent(s);setEditForm({name:s.name,email:s.email,phone:s.phone||""});}}>✏️</button>
+                        <button className="btn btn-danger btn-sm" onClick={()=>deleteStudent(s.id)}>🗑️</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="cert-table-mobile" style={{display:"flex",flexDirection:"column",gap:10}}>
+            {filteredStudents.map(s=>(
+              <div key={s.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 16px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+                  <div>
+                    <div style={{fontWeight:800,fontSize:15}}>{s.name}</div>
+                    <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{s.email}</div>
+                    {s.phone&&<div style={{fontSize:11,color:"var(--text3)"}}>{s.phone}</div>}
+                  </div>
+                  <div style={{display:"flex",gap:6}}>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>{setEditStudent(s);setEditForm({name:s.name,email:s.email,phone:s.phone||""});}}>✏️</button>
+                    <button className="btn btn-danger btn-sm" onClick={()=>deleteStudent(s.id)}>🗑️</button>
+                  </div>
+                </div>
+                {types.length>0&&(
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    {types.map(t=>{
+                      const passed=(s.certs||{})[t.id]==="עבר";
+                      return (
+                        <div key={t.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <span style={{fontSize:13,fontWeight:600}}>🎓 {t.name}</span>
+                          <button onClick={()=>toggleCert(s.id,t.id)} disabled={saving}
+                            style={{padding:"5px 14px",borderRadius:20,border:`2px solid ${passed?"var(--green)":"var(--border)"}`,background:passed?"rgba(46,204,113,0.15)":"transparent",color:passed?"var(--green)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",minWidth:110,textAlign:"center"}}>
+                            {passed?"✅ עבר/ה":"⬜ לא עבר/ה"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
       )}
       {/* ── Edit student modal ── */}
       {editStudent&&(
