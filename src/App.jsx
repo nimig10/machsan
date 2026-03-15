@@ -2892,8 +2892,11 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
   const [newTypeName, setNewTypeName] = useState("");
   const [addingStudent, setAddingStudent] = useState(false);
   const [studentForm, setStudentForm] = useState({ name:"", email:"", phone:"" });
+  const [editStudent, setEditStudent] = useState(null); // student being edited
+  const [editForm, setEditForm] = useState({ name:"", email:"", phone:"" });
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
+  const [xlImporting, setXlImporting] = useState(false);
 
   const save = async (updated) => {
     setSaving(true);
@@ -2943,6 +2946,58 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
     if(!window.confirm("למחוק סטודנט זה?")) return;
     const updated = { types, students: students.filter(s=>s.id!==stuId) };
     if(await save(updated)) showToast("success","הסטודנט הוסר");
+  };
+
+  const saveEdit = async () => {
+    const name = editForm.name.trim();
+    const email = editForm.email.toLowerCase().trim();
+    if(!name||!email) return;
+    const dup = students.find(s=>s.email===email && s.id!==editStudent.id);
+    if(dup) { showToast("error","מייל זה כבר קיים לסטודנט אחר"); return; }
+    const updated = { types, students: students.map(s=>s.id===editStudent.id ? {...s,name,email,phone:editForm.phone.trim()} : s) };
+    if(await save(updated)) { showToast("success","פרטי הסטודנט עודכנו"); setEditStudent(null); }
+  };
+
+  const importXL = async (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    setXlImporting(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        try {
+          const text = ev.target.result;
+          const lines = text.split(/
+?
+/).filter(l=>l.trim());
+          if(!lines.length) { showToast("error","הקובץ ריק"); setXlImporting(false); return; }
+          // Detect separator
+          const sep = lines[0].includes("	") ? "	" : ",";
+          const headers = lines[0].split(sep).map(h=>h.trim().toLowerCase().replace(/"/g,""));
+          const nameIdx  = headers.findIndex(h=>h.includes("שם")||h.includes("name"));
+          const emailIdx = headers.findIndex(h=>h.includes("מייל")||h.includes("אימייל")||h.includes("email"));
+          const phoneIdx = headers.findIndex(h=>h.includes("טלפון")||h.includes("phone")||h.includes("tel"));
+          if(emailIdx===-1) { showToast("error","לא נמצאה עמודת מייל בקובץ"); setXlImporting(false); return; }
+          let added=0, skipped=0;
+          const newStudents = [...students];
+          for(let i=1;i<lines.length;i++) {
+            const cols = lines[i].split(sep).map(c=>c.trim().replace(/^"|"$/g,""));
+            const email = cols[emailIdx]?.toLowerCase().trim();
+            const name  = nameIdx>=0 ? cols[nameIdx]?.trim() : "";
+            const phone = phoneIdx>=0 ? cols[phoneIdx]?.trim() : "";
+            if(!email) { skipped++; continue; }
+            if(newStudents.find(s=>s.email===email)) { skipped++; continue; }
+            newStudents.push({ id:`stu_${Date.now()}_${i}`, name:name||email, email, phone:phone||"", certs:{} });
+            added++;
+          }
+          const updated = { types, students: newStudents };
+          if(await save(updated)) showToast("success", `יובאו ${added} סטודנטים. ${skipped>0?`${skipped} כבר קיימים.`:""}`);
+        } catch(err) { showToast("error","שגיאה בקריאת הקובץ"); }
+        setXlImporting(false);
+      };
+      reader.readAsText(file, "UTF-8");
+    } catch(err) { showToast("error","שגיאה"); setXlImporting(false); }
+    e.target.value="";
   };
 
   const toggleCert = async (stuId, typeId) => {
@@ -3010,6 +3065,12 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
       ) : (
         <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
           <button className="btn btn-primary" onClick={()=>setAddingStudent(true)}>➕ הוספת סטודנט</button>
+          <label style={{cursor:"pointer"}}>
+            <input type="file" accept=".csv,.tsv,.txt,.xls,.xlsx" style={{display:"none"}} onChange={importXL} disabled={xlImporting}/>
+            <span className="btn btn-secondary" style={{pointerEvents:"none"}}>
+              {xlImporting ? "⏳ מייבא..." : "📊 טבלת XL"}
+            </span>
+          </label>
           <div className="search-bar" style={{flex:1,minWidth:180}}><span>🔍</span>
             <input placeholder="חיפוש לפי שם, מייל או טלפון..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
           <span style={{fontSize:13,color:"var(--text3)"}}>סה״כ: <strong style={{color:"var(--text)"}}>{students.length}</strong> סטודנטים</span>
@@ -3059,12 +3120,43 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
                     );
                   })}
                   <td style={{padding:"8px 12px",textAlign:"center"}}>
-                    <button className="btn btn-danger btn-sm" onClick={()=>deleteStudent(s.id)}>🗑️</button>
+                    <div style={{display:"flex",gap:6,justifyContent:"center"}}>
+                      <button className="btn btn-secondary btn-sm" onClick={()=>{setEditStudent(s);setEditForm({name:s.name,email:s.email,phone:s.phone||""});}}>✏️</button>
+                      <button className="btn btn-danger btn-sm" onClick={()=>deleteStudent(s.id)}>🗑️</button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+      {/* ── Edit student modal ── */}
+      {editStudent&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}
+          onClick={e=>e.target===e.currentTarget&&setEditStudent(null)}>
+          <div style={{width:"100%",maxWidth:460,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0"}}>
+              <div style={{fontWeight:900,fontSize:16}}>✏️ עריכת סטודנט</div>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setEditStudent(null)}>✕</button>
+            </div>
+            <div style={{padding:"20px"}}>
+              <div className="grid-2" style={{marginBottom:12}}>
+                <div className="form-group"><label className="form-label">שם מלא *</label>
+                  <input className="form-input" value={editForm.name} onChange={e=>setEditForm(p=>({...p,name:e.target.value}))}/></div>
+                <div className="form-group"><label className="form-label">אימייל *</label>
+                  <input className="form-input" type="email" value={editForm.email} onChange={e=>setEditForm(p=>({...p,email:e.target.value}))}/></div>
+              </div>
+              <div className="form-group"><label className="form-label">טלפון</label>
+                <input className="form-input" value={editForm.phone} onChange={e=>setEditForm(p=>({...p,phone:e.target.value}))}/></div>
+              <div style={{display:"flex",gap:8,marginTop:16}}>
+                <button className="btn btn-primary" disabled={!editForm.name.trim()||!editForm.email.trim()||saving} onClick={saveEdit}>
+                  {saving?"⏳ שומר...":"💾 שמור שינויים"}
+                </button>
+                <button className="btn btn-secondary" onClick={()=>setEditStudent(null)}>ביטול</button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -3216,14 +3308,14 @@ export default function App() {
             <div className="nav">
               <div className="nav-section">ניהול</div>
               {[
-                {id:"equipment",icon:"📦",label:"ציוד"},
                 {id:"reservations",icon:"📋",label:"בקשות",badge:pending||null},
+                {id:"equipment",icon:"📦",label:"ציוד"},
+                {id:"certifications",icon:"🎓",label:"הסמכות"},
                 {id:"rejected",icon:"❌",label:"בקשות דחויות",badge:rejected||null},
                 {id:"kits",icon:"🎒",label:"ערכות"},
                 {id:"team",icon:"👥",label:"צוות"},
                 {id:"archive",icon:"🗄️",label:"ארכיון"},
                 {id:"policies",icon:"📋",label:"נהלים"},
-                {id:"certifications",icon:"🎓",label:"הסמכות"},
               ].map(n=>(
                 <div key={n.id} className={`nav-item ${page===n.id?"active":""}`}
                   onClick={()=>setPage(p=>p===n.id?"dashboard":n.id)} title={n.label}>
