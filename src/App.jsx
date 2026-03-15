@@ -2393,32 +2393,39 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
       if (relevantDeptHeads.length > 0) {
         const approveUrl = `${window.location.origin}/api/approve-production?id=${res.id}`;
         const calendarUrl = `${window.location.origin}/?loan_type=${encodeURIComponent(res.loan_type || "")}&step=2&calendar=1`;
-        for (const dh of relevantDeptHeads) {
-          const response = await fetch("/api/send-email", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              to:             dh.email,
-              type:           "dept_head_notify",
-              recipient_name: dh.name||"",
-              student_name:   res.student_name,
-              items_list:     itemsList,
-              borrow_date:    formatDate(res.borrow_date),
-              borrow_time:    res.borrow_time||"",
-              return_date:    formatDate(res.return_date),
-              return_time:    res.return_time||"",
-              loan_type:      res.loan_type,
-              project_name:   res.project_name||"",
-              crew_photographer: res.crew_photographer_name||"",
-              crew_sound:     res.crew_sound_name||"",
-              approve_url:    approveUrl,
-              calendar_url:   calendarUrl,
-              reservation_id: String(res.id),
-            }),
-          });
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error("dept head notify failed", dh.email, errorText);
+        for (let i = 0; i < relevantDeptHeads.length; i++) {
+          const dh = relevantDeptHeads[i];
+          // delay between emails to avoid Gmail rate limiting
+          if (i > 0) await new Promise(r => setTimeout(r, 1500));
+          try {
+            const response = await fetch("/api/send-email", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                to:             dh.email,
+                type:           "dept_head_notify",
+                recipient_name: dh.name||"",
+                student_name:   res.student_name,
+                items_list:     itemsList,
+                borrow_date:    formatDate(res.borrow_date),
+                borrow_time:    res.borrow_time||"",
+                return_date:    formatDate(res.return_date),
+                return_time:    res.return_time||"",
+                loan_type:      res.loan_type,
+                project_name:   res.project_name||"",
+                crew_photographer: res.crew_photographer_name||"",
+                crew_sound:     res.crew_sound_name||"",
+                approve_url:    approveUrl,
+                calendar_url:   calendarUrl,
+                reservation_id: String(res.id),
+              }),
+            });
+            if (!response.ok) {
+              const errorText = await response.text();
+              console.error("dept head notify failed", dh.email, errorText);
+            }
+          } catch(dhErr) {
+            console.error("dept head email error", dh.email, dhErr);
           }
         }
       }
