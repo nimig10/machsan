@@ -100,6 +100,17 @@ function formatDate(d) {
   return parseLocalDate(d).toLocaleDateString("he-IL", { day:"2-digit", month:"2-digit", year:"numeric" });
 }
 
+function normalizeName(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function getLoanDurationDays(borrowDate, returnDate) {
+  const start = parseLocalDate(borrowDate);
+  const end = parseLocalDate(returnDate);
+  if (!start || !end) return 0;
+  return Math.max(0, Math.ceil((end - start) / 86400000) + 1);
+}
+
 function normalizeEquipmentTagFlags(list = []) {
   return (list || []).map((item) => {
     if (!item || typeof item !== "object") return item;
@@ -281,14 +292,15 @@ const css = `
   .sidebar-logo .app-sub { font-size:11px; color:var(--text3); margin-top:3px; }
   .logo-icon { font-size:32px; margin-bottom:8px; display:block; }
   .nav { flex:1; padding:12px 0; overflow-y:auto; }
-  .nav-section { padding:8px 16px 4px; font-size:10px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:1px; }
-  .nav-item { display:flex; align-items:center; gap:10px; padding:10px 20px; cursor:pointer; font-size:14px; font-weight:500; color:var(--text2); transition:all 0.15s; border-right:3px solid transparent; margin:1px 0; position:relative; }
-  .nav-item:hover { background:var(--surface2); color:var(--text); }
-  .nav-item.active { background:var(--accent-glow); color:var(--accent); border-right-color:var(--accent); }
-  .nav-item .icon { font-size:16px; width:20px; text-align:center; }
+  .nav-section { padding:10px 18px 6px; font-size:12px; font-weight:900; color:var(--text2); text-transform:uppercase; letter-spacing:1px; }
+  .nav-item { display:flex; align-items:center; gap:12px; padding:12px 20px; cursor:pointer; font-size:16px; font-weight:800; color:#f3f6fb; transition:all 0.15s; border-right:3px solid transparent; margin:1px 0; position:relative; }
+  .nav-item:hover { background:var(--surface2); color:#ffffff; }
+  .nav-item.active { background:var(--accent-glow); color:#ffffff; border-right-color:var(--accent); }
+  .nav-item .icon { font-size:21px; width:24px; text-align:center; }
+  .nav-label { font-size:15px; font-weight:800; color:inherit; line-height:1.1; }
   .main { margin-right:240px; flex:1; min-height:100vh; }
   .topbar { position:sticky; top:0; z-index:50; background:rgba(10,12,16,0.92); backdrop-filter:blur(12px); border-bottom:1px solid var(--border); padding:0 28px; min-height:60px; height:auto; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; }
-  .topbar-title { font-size:18px; font-weight:700; }
+  .topbar-title { font-size:20px; font-weight:800; color:#ffffff; }
   .page { padding:28px; }
   .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:20px; }
   .card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
@@ -433,7 +445,7 @@ const css = `
     .nav { display:flex; flex-direction:row; padding:0; flex:1; overflow-x:auto; }
     .nav-section { display:none; }
     .nav-item { flex:1; min-width:48px; flex-direction:column; gap:1px; padding:5px 2px; font-size:9px; border-right:none; border-top:3px solid transparent; justify-content:center; text-align:center; margin:0; }
-    .nav-item span[style] { display:none; }
+    .nav-label { display:none; }
     .nav-item.active { border-right-color:transparent; border-top-color:var(--accent); background:var(--accent-glow); }
     .nav-item .icon { font-size:18px; width:auto; }
     .sidebar > div:last-child { display:none; }
@@ -1219,6 +1231,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
               </div>
               <div className="res-card-mid">
                 <div style={{display:"flex",gap:16,fontSize:12,color:"var(--text2)",flexWrap:"wrap"}}>
+                  <span>⏱️ {getLoanDurationDays(r.borrow_date, r.return_date)} ימים</span>
                   <span>📚 {r.course}</span>
                   <span>📅 {formatDate(r.borrow_date)}{r.borrow_time&&<span style={{color:"var(--accent)",marginRight:4,fontWeight:700}}> {r.borrow_time}</span>} ← {formatDate(r.return_date)}{r.return_time&&<span style={{color:"var(--accent)",marginRight:4,fontWeight:700}}> {r.return_time}</span>}{(()=>{const diff=Math.ceil((new Date(r.borrow_date)-new Date())/(1000*60*60*24));return diff>0?<span style={{marginRight:6,color:"var(--yellow)",fontWeight:700}}>({diff} ימים)</span>:diff===0?<span style={{marginRight:6,color:"var(--green)",fontWeight:700}}>(היום!)</span>:null;})()}</span>
                   <span>📦 {r.items?.length||0} פריטים</span>
@@ -1319,6 +1332,10 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:13}}>
                   <span style={{color:"var(--text3)"}}>🔄 תאריך החזרה</span>
                   <strong>{formatDate(selected.return_date)}{selected.return_time&&<span style={{marginRight:6,color:"var(--accent)"}}>{selected.return_time}</span>}</strong>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginTop:8,paddingTop:8,borderTop:"1px solid rgba(245,166,35,0.15)"}}>
+                  <span style={{color:"var(--text3)"}}>⏱️ משך ההשאלה</span>
+                  <strong>{getLoanDurationDays(selected.borrow_date, selected.return_date)} ימים</strong>
                 </div>
               </div>
               <div style={{marginTop:12,textAlign:"center"}}>{statusBadge(selected.status)}</div>
@@ -1454,6 +1471,7 @@ function DashboardPage({ equipment, reservations }) {
   const [calFS, setCalFS] = useState(false);
   const [dashViewRes, setDashViewRes] = useState(null);
   const [calStatusF, setCalStatusF] = useState([]); // empty = show all
+  const [calLoanTypeF, setCalLoanTypeF] = useState("הכל");
   const yr = calDate.getFullYear();
   const mo = calDate.getMonth();
 
@@ -1475,8 +1493,16 @@ function DashboardPage({ equipment, reservations }) {
   const ALL_CAL_STATUSES = ["ממתין","מאושר","נדחה"];
   const activeRes = reservations.filter(r =>
     r.status !== "הוחזר" && r.borrow_date && r.return_date &&
-    (calStatusF.length===0 || calStatusF.includes(r.status))
+    (calStatusF.length===0 || calStatusF.includes(r.status)) &&
+    (calLoanTypeF==="הכל" || r.loan_type===calLoanTypeF)
   );
+  const DASHBOARD_CAL_STATUSES = [...ALL_CAL_STATUSES, "ממתין לאישור ראש המחלקה"];
+  const CAL_LOAN_TYPES = [
+    { key:"הכל", label:"הכל", icon:"📦" },
+    { key:"פרטית", label:"פרטית", icon:"👤" },
+    { key:"הפקה", label:"הפקה", icon:"🎬" },
+    { key:"סאונד", label:"סאונד", icon:"🎙️" },
+  ];
   const colorMap = {};
   activeRes.forEach((r,i) => { colorMap[r.id] = SPAN_COLORS[i % SPAN_COLORS.length]; });
 
@@ -1508,6 +1534,7 @@ function DashboardPage({ equipment, reservations }) {
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:13}}>{r.student_name}</div>
                 <div style={{fontSize:11,color:"var(--text3)"}}>
+                  <span style={{display:"inline-block",marginLeft:8,fontWeight:800,color:"var(--text)"}}>משך: {getLoanDurationDays(r.borrow_date, r.return_date)} ימים</span>
                   📅 {formatDate(r.borrow_date)}{r.borrow_time&&<strong style={{color:"var(--accent)",marginRight:3}}> {r.borrow_time}</strong>}
                   <span style={{margin:"0 3px"}}>–</span>
                   ↩ {formatDate(r.return_date)}{r.return_time&&<strong style={{color:"var(--accent)",marginRight:3}}> {r.return_time}</strong>}
@@ -1535,17 +1562,32 @@ function DashboardPage({ equipment, reservations }) {
           </div>
           {/* Status filter chips */}
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
-              {ALL_CAL_STATUSES.map(s=>{
+              {DASHBOARD_CAL_STATUSES.map(s=>{
                 const active = calStatusF.includes(s);
-                const clr = s==="מאושר"?"var(--green)":s==="ממתין"?"var(--yellow)":"var(--red)";
+                const clr = s==="מאושר" ? "var(--green)" : s==="ממתין" ? "var(--yellow)" : s==="ממתין לאישור ראש המחלקה" ? "var(--purple)" : "var(--red)";
                 return (
                   <button key={s} type="button" onClick={()=>setCalStatusF(p=>active?p.filter(x=>x!==s):[...p,s])}
                     style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${active?clr:"var(--border)"}`,background:active?`color-mix(in srgb,${clr} 15%,transparent)`:"transparent",color:active?clr:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>
-                    {s==="מאושר"?"✅":s==="ממתין"?"⏳":"❌"} {s}
+                    {s==="מאושר" ? "✅" : s==="ממתין" ? "⏳" : s==="ממתין לאישור ראש המחלקה" ? "🟣" : "❌"} {s}
                   </button>
                 );
               })}
             {calStatusF.length>0&&<button type="button" onClick={()=>setCalStatusF([])} style={{padding:"3px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>✕ הכל</button>}
+          </div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+            {CAL_LOAN_TYPES.map((filterOption) => {
+              const active = calLoanTypeF === filterOption.key;
+              return (
+                <button
+                  key={filterOption.key}
+                  type="button"
+                  onClick={()=>setCalLoanTypeF(filterOption.key)}
+                  style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}
+                >
+                  {filterOption.icon} {filterOption.label}
+                </button>
+              );
+            })}
           </div>
           {/* Day headers */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4,direction:"rtl"}}>
@@ -1594,6 +1636,10 @@ function DashboardPage({ equipment, reservations }) {
                     <strong>{v}</strong>
                   </div>
                 ))}
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:13,paddingTop:8,marginTop:8,borderTop:"1px solid rgba(245,166,35,0.15)"}}>
+                <span style={{color:"var(--text3)"}}>⏱️ משך ההשאלה</span>
+                <strong>{getLoanDurationDays(dashViewRes.borrow_date, dashViewRes.return_date)} ימים</strong>
               </div>
               <div>
                 <div style={{fontWeight:700,fontSize:13,marginBottom:8}}>ציוד ({dashViewRes.items?.length||0} פריטים)</div>
@@ -2101,20 +2147,27 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
 
   // ── Certification lookup ──
   const normalizePhone = (p) => (p||"").replace(/[^0-9]/g,"");
+  const matchCertificationStudentByNamePhone = (name, phone) => {
+    const normalizedName = normalizeName(name);
+    const normalizedPhone = normalizePhone(phone);
+    if (!normalizedName || !normalizedPhone) return null;
+    return (certifications.students||[]).find(s =>
+      normalizeName(s.name) === normalizedName &&
+      normalizePhone(s.phone) === normalizedPhone
+    ) || null;
+  };
   const studentRecord = (certifications.students||[]).find(s =>
     s.email?.toLowerCase().trim() === form.email?.toLowerCase().trim() &&
     normalizePhone(s.phone) === normalizePhone(form.phone)
   );
   const studentCerts = studentRecord?.certs || {};
   // For production: also check photographer and sound person certs
-  const crewPhotographerRecord = isProductionLoan ? (certifications.students||[]).find(s =>
-    s.name?.trim() === form.crew_photographer_name?.trim() ||
-    normalizePhone(s.phone) === normalizePhone(form.crew_photographer_phone)
-  ) : null;
-  const crewSoundRecord = isProductionLoan && form.crew_sound_name ? (certifications.students||[]).find(s =>
-    s.name?.trim() === form.crew_sound_name?.trim() ||
-    normalizePhone(s.phone) === normalizePhone(form.crew_sound_phone)
-  ) : null;
+  const crewPhotographerRecord = isProductionLoan
+    ? matchCertificationStudentByNamePhone(form.crew_photographer_name, form.crew_photographer_phone)
+    : null;
+  const crewSoundRecord = isProductionLoan && form.crew_sound_name
+    ? matchCertificationStudentByNamePhone(form.crew_sound_name, form.crew_sound_phone)
+    : null;
   const crewPhotographerCerts = crewPhotographerRecord?.certs || {};
   const crewSoundCerts = crewSoundRecord?.certs || {};
 
@@ -3351,7 +3404,7 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
             const sep = lines[0]?.includes("\t") ? "\t" : ",";
             const rows = lines.map(l=>l.split(sep).map(c=>c.trim().replace(/^"|"$/g,"")));
             await processRows(rows);
-          } catch(err) { showToast("error","שגיאה בקריאת הקובץ"); setXlImporting(false); }
+          } catch { showToast("error","שגיאה בקריאת הקובץ"); setXlImporting(false); }
         };
         reader.readAsText(file, "UTF-8");
       }
@@ -3724,7 +3777,7 @@ export default function App() {
                 <div key={n.id} className={`nav-item ${page===n.id?"active":""}`}
                   onClick={()=>setPage(p=>p===n.id?"dashboard":n.id)} title={n.label}>
                   <span className="icon">{n.icon}</span>
-                  <span style={{fontSize:page===n.id?10:9,opacity:page===n.id?1:0.7}}>{n.label}</span>
+                  <span className="nav-label">{n.label}</span>
                   {n.badge&&<span style={{background:"var(--accent)",color:"#000",borderRadius:"50%",width:16,height:16,fontSize:10,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",position:"absolute",top:4,left:"50%",transform:"translateX(-50%) translateX(10px)"}}>{n.badge}</span>}
                 </div>
               ))}
