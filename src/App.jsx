@@ -2393,8 +2393,8 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
       if (relevantDeptHeads.length > 0) {
         const approveUrl = `${window.location.origin}/api/approve-production?id=${res.id}`;
         const calendarUrl = `${window.location.origin}/?loan_type=${encodeURIComponent(res.loan_type || "")}&step=2&calendar=1`;
-        await Promise.allSettled(relevantDeptHeads.map(dh =>
-          fetch("/api/send-email", {
+        for (const dh of relevantDeptHeads) {
+          const response = await fetch("/api/send-email", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -2415,8 +2415,12 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
               calendar_url:   calendarUrl,
               reservation_id: String(res.id),
             }),
-          })
-        ));
+          });
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error("dept head notify failed", dh.email, errorText);
+          }
+        }
       }
     } catch(e) {
       console.error("send email error:", e);
