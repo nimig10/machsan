@@ -13,6 +13,7 @@ const SB_HEADERS = {
 
 export default async function handler(req, res) {
   const { id } = req.query;
+  const DEPT_HEAD_PENDING_STATUSES = ["אישור ראש מחלקה", "ממתין לאישור ראש המחלקה"];
 
   if (!id) {
     return res.status(400).send(buildPage("❌ שגיאה", "מזהה בקשה חסר", "#e74c3c"));
@@ -34,7 +35,7 @@ export default async function handler(req, res) {
       return res.status(404).send(buildPage("❌ לא נמצא", "הבקשה לא נמצאה במערכת", "#e74c3c"));
     }
 
-    if (reservation.status !== "אישור ראש מחלקה") {
+    if (!DEPT_HEAD_PENDING_STATUSES.includes(reservation.status)) {
       const msg = reservation.status === "ממתין"
         ? "הבקשה כבר אושרה על ידי אחד מראשי המחלקות והועברה לטיפול צוות המחסן"
         : reservation.status === "מאושר"

@@ -119,6 +119,10 @@ function getPrivateLoanLimitedQty(items = [], equipment = []) {
   }, 0);
 }
 
+function normalizeReservationStatus(status) {
+  return status === "ממתין לאישור ראש המחלקה" ? "אישור ראש מחלקה" : status;
+}
+
 function getNextSoundDayLoanDate(slots = []) {
   const now = new Date();
   const hasFutureSlotToday = slots.some((slot) => {
@@ -218,14 +222,18 @@ function normalizeReservationsForArchive(reservations, now = new Date()) {
   const nowMs = now.getTime();
   return (reservations || []).map((reservation) => {
     if (!reservation) return reservation;
-    if (reservation.status === "הוחזר") {
-      return reservation.returned_at ? reservation : markReservationReturned(reservation, now);
+    const normalizedReservation = {
+      ...reservation,
+      status: normalizeReservationStatus(reservation.status),
+    };
+    if (normalizedReservation.status === "הוחזר") {
+      return normalizedReservation.returned_at ? normalizedReservation : markReservationReturned(normalizedReservation, now);
     }
-    const returnAt = getReservationReturnTimestamp(reservation);
-    if (reservation.status === "מאושר" && returnAt !== null && nowMs >= returnAt) {
-      return markReservationReturned(reservation, now);
+    const returnAt = getReservationReturnTimestamp(normalizedReservation);
+    if (normalizedReservation.status === "מאושר" && returnAt !== null && nowMs >= returnAt) {
+      return markReservationReturned(normalizedReservation, now);
     }
-    return reservation;
+    return normalizedReservation;
   });
 }
 
@@ -534,8 +542,9 @@ const css = `
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 function statusBadge(s) {
+  const normalizedStatus = normalizeReservationStatus(s);
   const m = { "מאושר":"badge-green","ממתין":"badge-yellow","נדחה":"badge-red","הוחזר":"badge-blue","אישור ראש מחלקה":"badge-purple","תקין":"badge-green","פגום":"badge-red","בתיקון":"badge-yellow","נעלם":"badge-red" };
-  return <span className={`badge ${m[s]||"badge-gray"}`}>{s}</span>;
+  return <span className={`badge ${m[normalizedStatus]||"badge-gray"}`}>{normalizedStatus}</span>;
 }
 function Toast({ toasts }) {
   return <div className="toast-container">{toasts.map(t=><div key={t.id} className={`toast toast-${t.type}`}><span>{t.type==="success"?"✅":t.type==="error"?"❌":"ℹ️"}</span>{t.msg}</div>)}</div>;
