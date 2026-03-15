@@ -1615,6 +1615,7 @@ function DashboardPage({ equipment, reservations }) {
 // ─── PUBLIC MINI CALENDAR ────────────────────────────────────────────────────
 function PublicMiniCalendar({ reservations }) {
   const [calDate, setCalDate] = useState(new Date());
+  const [loanTypeF, setLoanTypeF] = useState("הכל");
   const yr = calDate.getFullYear();
   const mo = calDate.getMonth();
   const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
@@ -1633,19 +1634,35 @@ function PublicMiniCalendar({ reservations }) {
     ["rgba(26,188,156,0.75)","#fff"],["rgba(236,72,153,0.75)","#fff"],
     ["rgba(200,160,0,0.75)","#fff"], ["rgba(231,76,60,0.75)","#fff"],
   ];
-  const activeRes = reservations.filter(r=>r.status==="מאושר" && r.borrow_date && r.return_date);
+  const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:"📦"},{key:"פרטית",label:"פרטית",icon:"👤"},{key:"הפקה",label:"הפקה",icon:"🎬"},{key:"סאונד",label:"סאונד",icon:"🎙️"}];
+  const activeRes = reservations.filter(r=>
+    r.status==="מאושר" && r.borrow_date && r.return_date &&
+    (loanTypeF==="הכל" || r.loan_type===loanTypeF)
+  );
   const colorMap = {};
   activeRes.forEach((r,i)=>{ colorMap[r.id]=SPAN_COLORS[i%SPAN_COLORS.length]; });
 
   return (
     <div style={{marginBottom:16,marginTop:8}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,flexWrap:"wrap",gap:6}}>
         <div style={{fontWeight:800,fontSize:13,color:"var(--text2)"}}>📅 השאלות מאושרות</div>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo-1,1))}>‹</button>
           <span style={{fontWeight:700,fontSize:12,minWidth:90,textAlign:"center"}}>{HE_M[mo]} {yr}</span>
           <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo+1,1))}>›</button>
         </div>
+      </div>
+      {/* Loan type filter chips */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+        {LOAN_FILTERS.map(f=>{
+          const isActive = loanTypeF===f.key;
+          return (
+            <button key={f.key} type="button" onClick={()=>setLoanTypeF(f.key)}
+              style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${isActive?"var(--accent)":"var(--border)"}`,background:isActive?"var(--accent-glow)":"transparent",color:isActive?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>
+              {f.icon} {f.label}
+            </button>
+          );
+        })}
       </div>
       <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"10px",direction:"rtl"}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
@@ -2036,7 +2053,7 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
 // ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
 function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]} }) {
   const [step, setStep]       = useState(1);
-  const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:""});
+  const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""});
   const [items, setItems]     = useState([]);
   const [agreed, setAgreed]   = useState(false);
   const [done, setDone]       = useState(false);
@@ -2077,7 +2094,9 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     ? ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30"]
     : ["09:00","09:30","14:30","15:00","15:30","16:00","16:30","17:00","17:30"];
   const isSoundLoan = form.loan_type==="סאונד";
-  const ok1 = form.student_name && form.email && form.phone && form.course && form.loan_type;
+  const isProductionLoan = form.loan_type==="הפקה";
+  const ok1 = form.student_name && form.email && form.phone && form.course && form.loan_type &&
+    (!isProductionLoan || form.crew_photographer_name);
 
   // ── Certification lookup ──
   const normalizePhone = (p) => (p||"").replace(/[^0-9]/g,"");
@@ -2086,10 +2105,27 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     normalizePhone(s.phone) === normalizePhone(form.phone)
   );
   const studentCerts = studentRecord?.certs || {};
-  // Returns true if student is allowed to borrow this equipment
+  // For production: also check photographer and sound person certs
+  const crewPhotographerRecord = isProductionLoan ? (certifications.students||[]).find(s =>
+    s.name?.trim() === form.crew_photographer_name?.trim() ||
+    normalizePhone(s.phone) === normalizePhone(form.crew_photographer_phone)
+  ) : null;
+  const crewSoundRecord = isProductionLoan && form.crew_sound_name ? (certifications.students||[]).find(s =>
+    s.name?.trim() === form.crew_sound_name?.trim() ||
+    normalizePhone(s.phone) === normalizePhone(form.crew_sound_phone)
+  ) : null;
+  const crewPhotographerCerts = crewPhotographerRecord?.certs || {};
+  const crewSoundCerts = crewSoundRecord?.certs || {};
+
+  // Returns true if student/crew is allowed to borrow this equipment
   const canBorrowEq = (eq) => {
     if (!eq.certification_id) return true; // ללא הסמכה
-    return studentCerts[eq.certification_id] === "עבר";
+    const certId = eq.certification_id;
+    // For production: pass if photographer OR sound person has cert
+    if (isProductionLoan) {
+      return crewPhotographerCerts[certId]==="עבר" || crewSoundCerts[certId]==="עבר";
+    }
+    return studentCerts[certId] === "עבר";
   };
   const sameDay = form.borrow_date && form.return_date && form.borrow_date === form.return_date;
   const timeOrderError = sameDay && form.borrow_time && form.return_time && toDateTime(form.return_date, form.return_time) <= toDateTime(form.borrow_date, form.borrow_time);
@@ -2231,7 +2267,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     showToast("success","הבקשה נשלחה בהצלחה!");
   };
 
-  const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:""}); setItems([]); setAgreed(false); };
+  const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""}); setItems([]); setAgreed(false); };
 
   if(emailError) return (
     <div className="form-page">
@@ -2296,16 +2332,21 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
                 <div key={opt.val} onClick={()=>{set("loan_type",opt.val);setItems([]);}} style={{width:"100%",padding:"14px 18px",borderRadius:"var(--r)",background:form.loan_type===opt.val?"var(--accent-glow)":"var(--surface2)",border:`2px solid ${form.loan_type===opt.val?"var(--accent)":"var(--border)"}`,cursor:"pointer",transition:"all 0.15s",display:"flex",alignItems:"center",gap:14}}>
                   <div style={{fontSize:30,flexShrink:0}}>{opt.icon}</div>
                   <div style={{flex:1}}>
-                    <div style={{fontWeight:800,fontSize:15,color:form.loan_type===opt.val?"var(--accent)":"var(--text)"}}>{opt.val==="סאונד"?"השאלת סאונד":`השאלה ${opt.val}`}</div>
+                    <div style={{fontWeight:800,fontSize:15,color:form.loan_type===opt.val?"var(--accent)":"var(--text)"}}>{opt.val==="סאונד"?"השאלת סאונד":opt.val==="הפקה"?"השאלת הפקה":`השאלה ${opt.val}`}</div>
                     <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{opt.desc}</div>
                   </div>
                   {form.loan_type===opt.val&&<div style={{fontSize:16,color:"var(--accent)",fontWeight:900,flexShrink:0}}>✓</div>}
                 </div>
               ))}
             </div>
-            <div className="form-section-title">פרטי הסטודנט</div>
+            <div className="form-section-title">{isProductionLoan ? "פרטי ההפקה" : "פרטי הסטודנט"}</div>
+            {isProductionLoan && (
+              <div style={{background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.25)",borderRadius:"var(--r-sm)",padding:"10px 14px",fontSize:12,color:"var(--text2)",marginBottom:14}}>
+                💡 <strong>במאי ההפקה</strong> הוא האחראי הראשי על קבלתו והחזרתו התקינה של הציוד
+              </div>
+            )}
             <div className="grid-2">
-              <div className="form-group"><label className="form-label">שם מלא *</label><input className="form-input" value={form.student_name} onChange={e=>set("student_name",e.target.value)}/></div>
+              <div className="form-group"><label className="form-label">{isProductionLoan?"שם במאי ההפקה *":"שם מלא *"}</label><input className="form-input" value={form.student_name} onChange={e=>set("student_name",e.target.value)}/></div>
               <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" value={form.phone} onChange={e=>set("phone",e.target.value)}/></div>
             </div>
             <div className="form-group"><label className="form-label">אימייל *</label><input type="email" className="form-input" value={form.email} onChange={e=>set("email",e.target.value)}/></div>
@@ -2313,6 +2354,25 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
               <div className="form-group"><label className="form-label">קורס / כיתה *</label><input className="form-input" value={form.course} onChange={e=>set("course",e.target.value)}/></div>
               <div className="form-group"><label className="form-label">שם הפרויקט</label><input className="form-input" value={form.project_name} onChange={e=>set("project_name",e.target.value)}/></div>
             </div>
+
+            {isProductionLoan && (<>
+              <div className="form-section-title" style={{marginTop:20}}>פרטי צוות ההפקה</div>
+              <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"16px",marginBottom:16}}>
+                <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>🎥 צלם ההפקה <span style={{color:"var(--red)",fontSize:11}}>* חובה</span></div>
+                <div className="grid-2">
+                  <div className="form-group"><label className="form-label">שם מלא *</label><input className="form-input" placeholder="שם הצלם" value={form.crew_photographer_name} onChange={e=>set("crew_photographer_name",e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label">טלפון</label><input className="form-input" placeholder="05x-xxxxxxx" value={form.crew_photographer_phone} onChange={e=>set("crew_photographer_phone",e.target.value)}/></div>
+                </div>
+              </div>
+              <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"16px",marginBottom:16}}>
+                <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>🎙️ איש הסאונד <span style={{color:"var(--text3)",fontSize:11}}>רשות</span></div>
+                <div className="grid-2">
+                  <div className="form-group"><label className="form-label">שם מלא</label><input className="form-input" placeholder="שם איש הסאונד" value={form.crew_sound_name} onChange={e=>set("crew_sound_name",e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label">טלפון</label><input className="form-input" placeholder="05x-xxxxxxx" value={form.crew_sound_phone} onChange={e=>set("crew_sound_phone",e.target.value)}/></div>
+                </div>
+              </div>
+            </>)}
+
             <button className="btn btn-primary" disabled={!ok1} onClick={()=>setStep(2)}>המשך ← תאריכים</button>
           </>}
 
