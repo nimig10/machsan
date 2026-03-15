@@ -556,7 +556,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     .reduce((s,r)=>s+(r.items?.find(i=>i.equipment_id==id)?.quantity||0),0);
 
   const EqForm = ({ initial }) => {
-    const [f, setF] = useState(initial||{name:"",category:"מצלמות",description:"",total_quantity:1,image:"📷",notes:"",status:"תקין"});
+    const [f, setF] = useState(initial||{name:"",category:"מצלמות",description:"",total_quantity:1,image:"📷",notes:"",status:"תקין",certification_id:""});
     const s = (k,v) => setF(p=>({...p,[k]:v}));
     const [imgUploading, setImgUploading] = useState(false);
     const [imgError, setImgError]         = useState("");
@@ -629,6 +629,16 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
         <div className="grid-2">
           <div className="form-group"><label className="form-label">מצב</label><select className="form-select" value={f.status} onChange={e=>s("status",e.target.value)}>{STATUSES.map(st=><option key={st}>{st}</option>)}</select></div>
           <div className="form-group"><label className="form-label">הערות</label><input className="form-input" value={f.notes} onChange={e=>s("notes",e.target.value)}/></div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">🎓 הסמכה נדרשת</label>
+          <select className="form-select" value={f.certification_id||""} onChange={e=>s("certification_id",e.target.value)}>
+            <option value="">ללא הסמכה (כולם רשאים)</option>
+            {(certifications?.types||[]).map(ct=>(
+              <option key={ct.id} value={ct.id}>{ct.name}</option>
+            ))}
+          </select>
+          <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>רק סטודנטים שעברו הסמכה זו יוכלו להשאיל פריט זה</div>
         </div>
         <div className="flex gap-2" style={{paddingTop:8}}>
           <button className="btn btn-primary" disabled={!f.name||saving||imgUploading} onClick={()=>save(f)}>{saving?"⏳ שומר...":initial?"💾 שמור":"➕ הוסף"}</button>
@@ -1860,7 +1870,11 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
                       {activeKit&&kitEntry&&<span style={{color:"var(--accent)",marginRight:6,fontWeight:700}}>· מקס׳ בערכה: {kitMax}</span>}
                     </div>
                   </div>
-                  {effectiveMax>0
+                  {!canBorrowEq(eq)
+                    ? <div style={{fontSize:11,color:"var(--yellow)",fontWeight:700,textAlign:"center",maxWidth:120,lineHeight:1.3,padding:"4px 6px",background:"rgba(241,196,15,0.12)",borderRadius:6,border:"1px solid rgba(241,196,15,0.3)"}}>
+                        🔒 טרם עבר/ה הסמכה
+                      </div>
+                    : effectiveMax>0
                     ? <div className="qty-ctrl">
                         <button className="qty-btn" onClick={()=>setQty(eq.id, Math.min(itm.quantity-1, effectiveMax))}>−</button>
                         <span className="qty-num">{itm.quantity}</span>
@@ -1969,7 +1983,7 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
 }
 
 // ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
-function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={} }) {
+function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]} }) {
   const [step, setStep]       = useState(1);
   const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:""});
   const [items, setItems]     = useState([]);
@@ -2013,6 +2027,19 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     : ["09:00","09:30","14:30","15:00","15:30","16:00","16:30","17:00","17:30"];
   const isSoundLoan = form.loan_type==="סאונד";
   const ok1 = form.student_name && form.email && form.phone && form.course && form.loan_type;
+
+  // ── Certification lookup ──
+  const normalizePhone = (p) => (p||"").replace(/[^0-9]/g,"");
+  const studentRecord = (certifications.students||[]).find(s =>
+    s.email?.toLowerCase().trim() === form.email?.toLowerCase().trim() &&
+    normalizePhone(s.phone) === normalizePhone(form.phone)
+  );
+  const studentCerts = studentRecord?.certs || {};
+  // Returns true if student is allowed to borrow this equipment
+  const canBorrowEq = (eq) => {
+    if (!eq.certification_id) return true; // ללא הסמכה
+    return studentCerts[eq.certification_id] === "עבר";
+  };
   const sameDay = form.borrow_date && form.return_date && form.borrow_date === form.return_date;
   const timeOrderError = sameDay && form.borrow_time && form.return_time && toDateTime(form.return_date, form.return_time) <= toDateTime(form.borrow_date, form.borrow_time);
   const returnBeforeBorrow = form.borrow_date && form.return_date && parseLocalDate(form.return_date) < parseLocalDate(form.borrow_date);
@@ -2278,6 +2305,9 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
             setItems={setItems}
             getItem={getItem}
             setQty={setQty}
+            canBorrowEq={canBorrowEq}
+            studentRecord={studentRecord}
+            certificationTypes={certifications.types||[]}
           />}
             {step===3 && <Step3Buttons
               items={items} equipment={equipment}
@@ -2856,6 +2886,191 @@ function KitsPage({ kits, setKits, equipment, categories, showToast }) {
   );
 }
 
+// ─── CERTIFICATIONS PAGE ──────────────────────────────────────────────────────
+function CertificationsPage({ certifications, setCertifications, showToast }) {
+  const { types=[], students=[] } = certifications;
+  const [newTypeName, setNewTypeName] = useState("");
+  const [addingStudent, setAddingStudent] = useState(false);
+  const [studentForm, setStudentForm] = useState({ name:"", email:"", phone:"" });
+  const [search, setSearch] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const save = async (updated) => {
+    setSaving(true);
+    setCertifications(updated);
+    const r = await storageSet("certifications", updated);
+    setSaving(false);
+    if(!r.ok) showToast("error","❌ שגיאה בשמירה");
+    return r.ok;
+  };
+
+  // ── Certification types ──
+  const addType = async () => {
+    const name = newTypeName.trim();
+    if(!name) return;
+    if(types.find(t=>t.name===name)) { showToast("error","הסמכה בשם זה כבר קיימת"); return; }
+    const id = `cert_${Date.now()}`;
+    const updated = { types:[...types,{id,name}], students };
+    if(await save(updated)) { showToast("success",`הסמכה "${name}" נוספה`); setNewTypeName(""); }
+  };
+
+  const deleteType = async (typeId) => {
+    if(!window.confirm("למחוק הסמכה זו? היא תוסר מכל הסטודנטים.")) return;
+    const updated = {
+      types: types.filter(t=>t.id!==typeId),
+      students: students.map(s=>{ const c={...s.certs}; delete c[typeId]; return {...s,certs:c}; })
+    };
+    if(await save(updated)) showToast("success","ההסמכה נמחקה");
+  };
+
+  // ── Students ──
+  const addStudent = async () => {
+    const { name, email, phone } = studentForm;
+    if(!name.trim()||!email.trim()) return;
+    if(students.find(s=>s.email?.toLowerCase()===email.toLowerCase().trim())) {
+      showToast("error","סטודנט עם מייל זה כבר קיים"); return;
+    }
+    const id = `stu_${Date.now()}`;
+    const updated = { types, students:[...students,{id,name:name.trim(),email:email.toLowerCase().trim(),phone:phone.trim(),certs:{}}] };
+    if(await save(updated)) {
+      showToast("success",`${name} נוסף/ה`);
+      setStudentForm({name:"",email:"",phone:""});
+      setAddingStudent(false);
+    }
+  };
+
+  const deleteStudent = async (stuId) => {
+    if(!window.confirm("למחוק סטודנט זה?")) return;
+    const updated = { types, students: students.filter(s=>s.id!==stuId) };
+    if(await save(updated)) showToast("success","הסטודנט הוסר");
+  };
+
+  const toggleCert = async (stuId, typeId) => {
+    const updated = {
+      types,
+      students: students.map(s => {
+        if(s.id!==stuId) return s;
+        const current = (s.certs||{})[typeId];
+        const next = current==="עבר" ? "לא עבר" : "עבר";
+        return {...s, certs:{...s.certs,[typeId]:next}};
+      })
+    };
+    await save(updated);
+  };
+
+  const filteredStudents = students.filter(s=>
+    !search || s.name?.includes(search) || s.email?.includes(search) || s.phone?.includes(search)
+  );
+
+  return (
+    <div className="page" style={{direction:"rtl"}}>
+      {/* ── Certification types management ── */}
+      <div className="card" style={{marginBottom:20}}>
+        <div className="card-header">
+          <div className="card-title">🎓 ניהול הסמכות</div>
+        </div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
+          {types.map(t=>(
+            <span key={t.id} style={{display:"flex",alignItems:"center",gap:6,background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:20,padding:"4px 14px",fontSize:13,fontWeight:700}}>
+              🎓 {t.name}
+              <button onClick={()=>deleteType(t.id)} style={{background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
+            </span>
+          ))}
+          {types.length===0&&<span style={{fontSize:13,color:"var(--text3)"}}>אין הסמכות עדיין</span>}
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <input className="form-input" style={{flex:1}} placeholder="שם הסמכה חדשה (למשל: מצלמות DSLR)"
+            value={newTypeName} onChange={e=>setNewTypeName(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&addType()}/>
+          <button className="btn btn-primary" onClick={addType} disabled={!newTypeName.trim()||saving}>➕ הוסף הסמכה</button>
+        </div>
+      </div>
+
+      {/* ── Add student form ── */}
+      {addingStudent ? (
+        <div className="card" style={{marginBottom:20}}>
+          <div className="card-header">
+            <div className="card-title">➕ הוספת סטודנט</div>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setAddingStudent(false)}>✕ ביטול</button>
+          </div>
+          <div className="grid-2" style={{marginBottom:12}}>
+            <div className="form-group"><label className="form-label">שם מלא *</label>
+              <input className="form-input" value={studentForm.name} onChange={e=>setStudentForm(p=>({...p,name:e.target.value}))} placeholder="שם מלא"/></div>
+            <div className="form-group"><label className="form-label">אימייל *</label>
+              <input className="form-input" type="email" value={studentForm.email} onChange={e=>setStudentForm(p=>({...p,email:e.target.value}))} placeholder="email@example.com"/></div>
+          </div>
+          <div className="form-group"><label className="form-label">טלפון</label>
+            <input className="form-input" value={studentForm.phone} onChange={e=>setStudentForm(p=>({...p,phone:e.target.value}))} placeholder="05x-xxxxxxx"/></div>
+          <div style={{marginTop:12,display:"flex",gap:8}}>
+            <button className="btn btn-primary" disabled={!studentForm.name.trim()||!studentForm.email.trim()||saving} onClick={addStudent}>
+              {saving?"⏳ שומר...":"✅ הוסף סטודנט"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+          <button className="btn btn-primary" onClick={()=>setAddingStudent(true)}>➕ הוספת סטודנט</button>
+          <div className="search-bar" style={{flex:1,minWidth:180}}><span>🔍</span>
+            <input placeholder="חיפוש לפי שם, מייל או טלפון..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
+          <span style={{fontSize:13,color:"var(--text3)"}}>סה״כ: <strong style={{color:"var(--text)"}}>{students.length}</strong> סטודנטים</span>
+        </div>
+      )}
+
+      {/* ── Students table ── */}
+      {types.length===0 && (
+        <div className="info" style={{padding:"12px 16px",background:"rgba(52,152,219,0.08)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",fontSize:13,color:"var(--text2)",marginBottom:16}}>
+          💡 הוסף תחילה סוגי הסמכות (למעלה), לאחר מכן הוסף סטודנטים וסמן מי עבר כל הסמכה.
+        </div>
+      )}
+
+      {filteredStudents.length===0 && !addingStudent ? (
+        <div className="empty-state"><div className="emoji">🎓</div><p>{search?"לא נמצאו סטודנטים":"לא נוספו סטודנטים עדיין"}</p></div>
+      ) : (
+        <div style={{overflowX:"auto",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",minWidth:400,direction:"rtl"}}>
+            <thead>
+              <tr style={{background:"var(--surface2)",borderBottom:"2px solid var(--border)"}}>
+                <th style={{padding:"10px 14px",textAlign:"right",fontWeight:800,fontSize:13,color:"var(--text2)",whiteSpace:"nowrap"}}>שם סטודנט</th>
+                <th style={{padding:"10px 14px",textAlign:"right",fontWeight:800,fontSize:13,color:"var(--text2)"}}>מייל</th>
+                {types.map(t=>(
+                  <th key={t.id} style={{padding:"10px 12px",textAlign:"center",fontWeight:800,fontSize:12,color:"var(--accent)",whiteSpace:"nowrap",minWidth:90}}>🎓 {t.name}</th>
+                ))}
+                <th style={{padding:"10px 12px",textAlign:"center",width:50}}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredStudents.map((s,i)=>(
+                <tr key={s.id} style={{borderBottom:"1px solid var(--border)",background:i%2===0?"var(--surface)":"var(--surface2)"}}>
+                  <td style={{padding:"10px 14px"}}>
+                    <div style={{fontWeight:700,fontSize:14}}>{s.name}</div>
+                    {s.phone&&<div style={{fontSize:11,color:"var(--text3)"}}>{s.phone}</div>}
+                  </td>
+                  <td style={{padding:"10px 14px",fontSize:12,color:"var(--text3)"}}>{s.email}</td>
+                  {types.map(t=>{
+                    const status = (s.certs||{})[t.id];
+                    const passed = status==="עבר";
+                    return (
+                      <td key={t.id} style={{padding:"8px 12px",textAlign:"center"}}>
+                        <button onClick={()=>toggleCert(s.id,t.id)} disabled={saving}
+                          style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${passed?"var(--green)":"var(--border)"}`,background:passed?"rgba(46,204,113,0.15)":"transparent",color:passed?"var(--green)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",transition:"all 0.15s",whiteSpace:"nowrap"}}>
+                          {passed?"✅ עבר/ה":"⬜ לא עבר/ה"}
+                        </button>
+                      </td>
+                    );
+                  })}
+                  <td style={{padding:"8px 12px",textAlign:"center"}}>
+                    <button className="btn btn-danger btn-sm" onClick={()=>deleteStudent(s.id)}>🗑️</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── ADMIN PASSWORD SCREEN ────────────────────────────────────────────────────
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || "changeme";
 
@@ -2898,6 +3113,7 @@ export default function App() {
   const [teamMembers, setTeamMembers] = useState([]);
   const [kits, setKits]               = useState([]);
   const [policies, setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"" });
+  const [certifications, setCertifications] = useState({ types:[], students:[] });
   const [loading, setLoading]         = useState(true);
   const [toasts, setToasts]           = useState([]);
   const [authed, setAuthed]           = useState(false);
@@ -2916,13 +3132,14 @@ export default function App() {
   useEffect(()=>{
     (async()=>{
         try {
-          const [eq, res, cats, tm, kts, pol] = await Promise.all([
+          const [eq, res, cats, tm, kts, pol, certs] = await Promise.all([
             storageGet("equipment"),
           storageGet("reservations"),
           storageGet("categories"),
           storageGet("teamMembers"),
           storageGet("kits"),
           storageGet("policies"),
+          storageGet("certifications"),
           ]);
           const normalizedEquipment = normalizeEquipmentTagFlags(eq || INITIAL_EQUIPMENT);
           const equipmentChanged = JSON.stringify(normalizedEquipment) !== JSON.stringify(eq || INITIAL_EQUIPMENT);
@@ -2934,13 +3151,15 @@ export default function App() {
         setTeamMembers(tm || []);
         setKits(kts || []);
         setPolicies(pol || { פרטית:"", הפקה:"", סאונד:"" });
+        setCertifications(certs || { types:[], students:[] });
         // Init missing
           if(!eq || equipmentChanged) await storageSet("equipment", normalizedEquipment);
         if(!res)  await storageSet("reservations", []);
         if(!cats) await storageSet("categories",   DEFAULT_CATEGORIES);
         if(!tm)   await storageSet("teamMembers",  []);
         if(!kts)  await storageSet("kits",         []);
-        if(!pol)  await storageSet("policies",     { פרטית:"", הפקה:"", סאונד:"" });
+        if(!pol)   await storageSet("policies",        { פרטית:"", הפקה:"", סאונד:"" });
+        if(!certs) await storageSet("certifications", { types:[], students:[] });
         if(res && reservationsChanged) await storageSet("reservations", normalizedReservations);
         // Only warn if BOTH Sheets and cache failed (truly no data)
         if(eq===null && !lsGet("equipment")) showToast("error", "⚠️ לא ניתן לטעון ציוד — בדוק חיבור");
@@ -2970,7 +3189,7 @@ export default function App() {
 
   const pending = reservations.filter(r=>r.status==="ממתין").length;
   const rejected = reservations.filter(r=>r.status==="נדחה").length;
-  const pageTitle = { dashboard:"לוח בקרה", equipment:"ניהול ציוד", reservations:"ניהול בקשות", rejected:"בקשות דחויות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות", policies:"נהלים" };
+  const pageTitle = { dashboard:"לוח בקרה", equipment:"ניהול ציוד", reservations:"ניהול בקשות", rejected:"בקשות דחויות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות", policies:"נהלים", certifications:"הסמכות" };
 
   return (
     <>
@@ -2979,7 +3198,7 @@ export default function App() {
       {/* ── טופס ציבורי ── */}
       {!isAdmin && (
         <div className="public-page-shell">
-          {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies}/>}
+          {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications}/>}
         </div>
       )}
 
@@ -3004,6 +3223,7 @@ export default function App() {
                 {id:"team",icon:"👥",label:"צוות"},
                 {id:"archive",icon:"🗄️",label:"ארכיון"},
                 {id:"policies",icon:"📋",label:"נהלים"},
+                {id:"certifications",icon:"🎓",label:"הסמכות"},
               ].map(n=>(
                 <div key={n.id} className={`nav-item ${page===n.id?"active":""}`}
                   onClick={()=>setPage(p=>p===n.id?"dashboard":n.id)} title={n.label}>
@@ -3057,6 +3277,7 @@ export default function App() {
               {page==="team"        && <TeamPage         teamMembers={teamMembers} setTeamMembers={setTeamMembers} showToast={showToast}/>}
               {page==="kits"        && <KitsPage         kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast}/>}
               {page==="policies"    && <PoliciesPage     policies={policies} setPolicies={setPolicies} showToast={showToast}/>}
+              {page==="certifications" && <CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/>}
             </>}
           </div>
         </div>
