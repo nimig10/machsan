@@ -2052,7 +2052,7 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
 }
 
 // ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
-function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHead={} }) {
+function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[] }) {
   const [step, setStep]       = useState(1);
   const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""});
   const [items, setItems]     = useState([]);
@@ -2213,29 +2213,35 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
           }),
         });
       }));
-      // Notify dept head for production loans
-      if (res.loan_type === "הפקה" && deptHead?.email && isValidEmailAddress(deptHead.email)) {
+      // Notify dept heads for this loan type
+      const relevantDeptHeads = (deptHeads||[]).filter(dh =>
+        dh?.email && isValidEmailAddress(dh.email) &&
+        Array.isArray(dh.loanTypes) && dh.loanTypes.includes(res.loan_type)
+      );
+      if (relevantDeptHeads.length > 0) {
         const approveUrl = `${window.location.origin}/api/approve-production?id=${res.id}`;
-        await fetch("/api/send-email", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            to:           deptHead.email,
-            type:         "dept_head_notify",
-            student_name: res.student_name,
-            items_list:   itemsList,
-            borrow_date:  formatDate(res.borrow_date),
-            borrow_time:  res.borrow_time||"",
-            return_date:  formatDate(res.return_date),
-            return_time:  res.return_time||"",
-            loan_type:    res.loan_type,
-            project_name: res.project_name||"",
-            crew_photographer: res.crew_photographer_name||"",
-            crew_sound:   res.crew_sound_name||"",
-            approve_url:  approveUrl,
-            reservation_id: String(res.id),
-          }),
-        });
+        await Promise.allSettled(relevantDeptHeads.map(dh =>
+          fetch("/api/send-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              to:           dh.email,
+              type:         "dept_head_notify",
+              student_name: res.student_name,
+              items_list:   itemsList,
+              borrow_date:  formatDate(res.borrow_date),
+              borrow_time:  res.borrow_time||"",
+              return_date:  formatDate(res.return_date),
+              return_time:  res.return_time||"",
+              loan_type:    res.loan_type,
+              project_name: res.project_name||"",
+              crew_photographer: res.crew_photographer_name||"",
+              crew_sound:   res.crew_sound_name||"",
+              approve_url:  approveUrl,
+              reservation_id: String(res.id),
+            }),
+          })
+        ));
       }
     } catch(e) {
       console.error("send email error:", e);
@@ -2282,8 +2288,11 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
       return;
     }
 
-    const isProduction = form.loan_type === "הפקה";
-    const initStatus = isProduction ? "ממתין לאישור ראש המחלקה" : "ממתין";
+    const relevantDH = (deptHeads||[]).find(dh =>
+      dh?.email && isValidEmailAddress(dh.email) &&
+      Array.isArray(dh.loanTypes) && dh.loanTypes.includes(form.loan_type)
+    );
+    const initStatus = relevantDH ? "ממתין לאישור ראש המחלקה" : "ממתין";
     const newRes = { ...form, id:Date.now(), status:initStatus, created_at:today(), items };
     const updated = [...freshReservations, newRes];
     setReservations(updated);
@@ -2685,21 +2694,55 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
 }
 
 // ─── TEAM PAGE ────────────────────────────────────────────────────────────────
-function TeamPage({ teamMembers, setTeamMembers, deptHead={}, setDeptHead, showToast }) {
+function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, showToast }) {
   const LOAN_TYPES = ["פרטית","הפקה","סאונד"];
   const LOAN_ICONS = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️" };
   const emptyForm = { name:"", email:"", loanTypes:[...LOAN_TYPES] };
-  const [dhForm, setDhForm] = useState({ name: deptHead.name||"", email: deptHead.email||"" });
+  const DH_LOAN_TYPES = ["הפקה","סאונד"];
+  const DH_LOAN_ICONS = { "הפקה":"🎬", "סאונד":"🎙️" };
+  const emptyDhForm = { name:"", email:"", role:"", loanTypes:[] };
+  const [dhForm, setDhForm]     = useState(emptyDhForm);
+  const [addingDh, setAddingDh] = useState(false);
+  const [editDh, setEditDh]     = useState(null);
+  const [editDhForm, setEditDhForm] = useState(emptyDhForm);
   const [dhSaving, setDhSaving] = useState(false);
 
+  const toggleDhLT = (form, setForm, lt) =>
+    setForm(p=>({...p, loanTypes: p.loanTypes.includes(lt)?p.loanTypes.filter(x=>x!==lt):[...p.loanTypes,lt]}));
+
   const saveDeptHead = async () => {
+    const name = dhForm.name.trim();
+    const email = dhForm.email.toLowerCase().trim();
+    if(!name||!email||!isValidEmailAddress(email)) { showToast("error","שם ומייל תקני חובה"); return; }
+    if(dhForm.loanTypes.length===0) { showToast("error","יש לסמן לפחות סוג השאלה אחד"); return; }
     setDhSaving(true);
-    const updated = { name: dhForm.name.trim(), email: dhForm.email.toLowerCase().trim() };
-    setDeptHead(updated);
-    const r = await storageSet("deptHead", updated);
+    const updated = [...deptHeads, { id:`dh_${Date.now()}`, name, email, role:dhForm.role.trim(), loanTypes:dhForm.loanTypes }];
+    setDeptHeads(updated);
+    const r = await storageSet("deptHeads", updated);
     setDhSaving(false);
-    if(r.ok) showToast("success", "פרטי ראש המחלקה נשמרו");
-    else showToast("error", "❌ שגיאה בשמירה");
+    if(r.ok) { showToast("success", `${name} נוסף/ה כראש מחלקה`); setDhForm(emptyDhForm); setAddingDh(false); }
+    else showToast("error","❌ שגיאה בשמירה");
+  };
+
+  const saveEditDh = async () => {
+    const name = editDhForm.name.trim();
+    const email = editDhForm.email.toLowerCase().trim();
+    if(!name||!email||!isValidEmailAddress(email)) { showToast("error","שם ומייל תקני חובה"); return; }
+    setDhSaving(true);
+    const updated = deptHeads.map(dh=>dh.id===editDh.id ? {...dh,name,email,role:editDhForm.role.trim(),loanTypes:editDhForm.loanTypes} : dh);
+    setDeptHeads(updated);
+    const r = await storageSet("deptHeads", updated);
+    setDhSaving(false);
+    if(r.ok) { showToast("success","פרטי ראש המחלקה עודכנו"); setEditDh(null); }
+    else showToast("error","❌ שגיאה בשמירה");
+  };
+
+  const delDh = async (id) => {
+    if(!window.confirm("למחוק ראש מחלקה זה?")) return;
+    const updated = deptHeads.filter(dh=>dh.id!==id);
+    setDeptHeads(updated);
+    await storageSet("deptHeads", updated);
+    showToast("success","ראש המחלקה הוסר");
   };
 
   // Add-new form state
@@ -2783,27 +2826,121 @@ function TeamPage({ teamMembers, setTeamMembers, deptHead={}, setDeptHead, showT
 
   return (
     <div className="page">
-      {/* ── Dept head section ── */}
+      {/* ── Dept heads section ── */}
       <div className="card" style={{marginBottom:24,border:"2px solid rgba(155,89,182,0.3)",background:"rgba(155,89,182,0.04)"}}>
         <div className="card-header">
-          <div className="card-title">🎓 ראש מחלקת קולנוע ומדיה</div>
+          <div className="card-title">🎓 ראשי מחלקות</div>
+          <button className="btn btn-primary btn-sm" onClick={()=>setAddingDh(p=>!p)}>
+            {addingDh?"✕ ביטול":"➕ הוסף ראש מחלקה"}
+          </button>
         </div>
         <div style={{fontSize:12,color:"var(--text3)",marginBottom:14}}>
-          ראש המחלקה מקבל מיילים על כל <strong style={{color:"var(--text)"}}>השאלת הפקה</strong> ויכול לאשר אותה לפני שהצוות רואה אותה.
+          ראש מחלקה מקבל מייל על השאלות מהסוגים שסומנו ויכול לאשר אותן לפני שהצוות רואה אותן.
+          אם לא מוגדר ראש מחלקה לסוג השאלה — הבקשה תעבור ישירות לסטטוס <strong style={{color:"var(--text)"}}>ממתין</strong>.
         </div>
-        <div className="grid-2" style={{marginBottom:14}}>
-          <div className="form-group"><label className="form-label">שם מלא</label>
-            <input className="form-input" placeholder="שם ראש המחלקה" value={dhForm.name} onChange={e=>setDhForm(p=>({...p,name:e.target.value}))}/></div>
-          <div className="form-group"><label className="form-label">כתובת מייל</label>
-            <input className="form-input" type="email" placeholder="head@college.ac.il" value={dhForm.email} onChange={e=>setDhForm(p=>({...p,email:e.target.value}))}/></div>
-        </div>
-        {deptHead.email && (
-          <div style={{fontSize:12,color:"var(--green)",marginBottom:10}}>✅ מוגדר כעת: <strong>{deptHead.name}</strong> ({deptHead.email})</div>
+
+        {/* Add form */}
+        {addingDh && (
+          <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"16px",marginBottom:16,border:"1px solid var(--border)"}}>
+            <div style={{fontWeight:800,fontSize:14,marginBottom:12}}>➕ הוספת ראש מחלקה</div>
+            <div className="grid-2" style={{marginBottom:10}}>
+              <div className="form-group"><label className="form-label">שם מלא *</label>
+                <input className="form-input" placeholder="רפי כהן" value={dhForm.name} onChange={e=>setDhForm(p=>({...p,name:e.target.value}))}/></div>
+              <div className="form-group"><label className="form-label">כתובת מייל *</label>
+                <input className="form-input" type="email" placeholder="rafi@college.ac.il" value={dhForm.email} onChange={e=>setDhForm(p=>({...p,email:e.target.value}))}/></div>
+            </div>
+            <div className="form-group" style={{marginBottom:10}}>
+              <label className="form-label">שם התפקיד</label>
+              <input className="form-input" placeholder="למשל: ראש מחלקת קולנוע, ראש מחלקת דוקו" value={dhForm.role} onChange={e=>setDhForm(p=>({...p,role:e.target.value}))}/>
+            </div>
+            <div className="form-group" style={{marginBottom:12}}>
+              <label className="form-label">📩 סוגי השאלה לאישור *</label>
+              <div style={{display:"flex",gap:8,marginTop:6}}>
+                {DH_LOAN_TYPES.map(lt=>{
+                  const active=dhForm.loanTypes.includes(lt);
+                  return <button key={lt} type="button" onClick={()=>toggleDhLT(dhForm,setDhForm,lt)}
+                    style={{padding:"7px 16px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"var(--surface2)",color:active?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+                    {DH_LOAN_ICONS[lt]} {lt}
+                  </button>;
+                })}
+              </div>
+            </div>
+            <button className="btn btn-primary" disabled={!dhForm.name.trim()||!dhForm.email.trim()||dhForm.loanTypes.length===0||dhSaving} onClick={saveDeptHead}>
+              {dhSaving?"⏳ שומר...":"✅ הוסף ראש מחלקה"}
+            </button>
+          </div>
         )}
-        <button className="btn btn-primary" disabled={!dhForm.name.trim()||!dhForm.email.trim()||dhSaving} onClick={saveDeptHead}>
-          {dhSaving?"⏳ שומר...":"💾 שמור פרטי ראש מחלקה"}
-        </button>
+
+        {/* Dept heads list */}
+        {deptHeads.length===0
+          ? <div style={{textAlign:"center",color:"var(--text3)",fontSize:13,padding:"12px 0"}}>לא נוספו ראשי מחלקות עדיין</div>
+          : <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {deptHeads.map(dh=>(
+              <div key={dh.id} style={{background:"var(--surface)",border:"1px solid rgba(155,89,182,0.2)",borderRadius:"var(--r-sm)",padding:"12px 16px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                <div style={{width:36,height:36,borderRadius:"50%",background:"rgba(155,89,182,0.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>🎓</div>
+                <div style={{flex:1,minWidth:150}}>
+                  <div style={{fontWeight:800,fontSize:14}}>{dh.name}</div>
+                  {dh.role&&<div style={{fontSize:11,color:"#9b59b6",fontWeight:700,marginTop:1}}>{dh.role}</div>}
+                  <div style={{fontSize:11,color:"var(--text3)"}}>{dh.email}</div>
+                  <div style={{display:"flex",gap:4,marginTop:5,flexWrap:"wrap"}}>
+                    {(dh.loanTypes||[]).map(lt=>(
+                      <span key={lt} style={{background:"rgba(155,89,182,0.12)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"#9b59b6",fontWeight:700}}>
+                        {DH_LOAN_ICONS[lt]||"📦"} {lt}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:6}}>
+                  <button className="btn btn-secondary btn-sm" onClick={()=>{setEditDh(dh);setEditDhForm({name:dh.name,email:dh.email,role:dh.role||"",loanTypes:dh.loanTypes||[]});}}>✏️</button>
+                  <button className="btn btn-danger btn-sm" onClick={()=>delDh(dh.id)}>🗑️</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        }
       </div>
+
+      {/* Edit dept head modal */}
+      {editDh&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}} onClick={e=>e.target===e.currentTarget&&setEditDh(null)}>
+          <div style={{width:"100%",maxWidth:480,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0"}}>
+              <div style={{fontWeight:900,fontSize:16}}>✏️ עריכת ראש מחלקה</div>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setEditDh(null)}>✕</button>
+            </div>
+            <div style={{padding:"20px"}}>
+              <div className="grid-2" style={{marginBottom:10}}>
+                <div className="form-group"><label className="form-label">שם מלא *</label>
+                  <input className="form-input" value={editDhForm.name} onChange={e=>setEditDhForm(p=>({...p,name:e.target.value}))}/></div>
+                <div className="form-group"><label className="form-label">כתובת מייל *</label>
+                  <input className="form-input" type="email" value={editDhForm.email} onChange={e=>setEditDhForm(p=>({...p,email:e.target.value}))}/></div>
+              </div>
+              <div className="form-group" style={{marginBottom:10}}>
+                <label className="form-label">שם התפקיד</label>
+                <input className="form-input" value={editDhForm.role} onChange={e=>setEditDhForm(p=>({...p,role:e.target.value}))}/>
+              </div>
+              <div className="form-group" style={{marginBottom:16}}>
+                <label className="form-label">📩 סוגי השאלה לאישור</label>
+                <div style={{display:"flex",gap:8,marginTop:6}}>
+                  {DH_LOAN_TYPES.map(lt=>{
+                    const active=editDhForm.loanTypes.includes(lt);
+                    return <button key={lt} type="button" onClick={()=>toggleDhLT(editDhForm,setEditDhForm,lt)}
+                      style={{padding:"7px 16px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"var(--surface2)",color:active?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+                      {DH_LOAN_ICONS[lt]} {lt}
+                    </button>;
+                  })}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button className="btn btn-primary" disabled={!editDhForm.name.trim()||!editDhForm.email.trim()||editDhForm.loanTypes.length===0||dhSaving} onClick={saveEditDh}>
+                  {dhSaving?"⏳ שומר...":"💾 שמור"}
+                </button>
+                <button className="btn btn-secondary" onClick={()=>setEditDh(null)}>ביטול</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Add new member form (always visible) ── */}
       <div className="card" style={{marginBottom:24}}>
@@ -3465,7 +3602,7 @@ export default function App() {
   const [reservations, setReservations] = useState([]);
   const [categories, setCategories]   = useState(DEFAULT_CATEGORIES);
   const [teamMembers, setTeamMembers] = useState([]);
-  const [deptHead, setDeptHead]         = useState({ name:"", email:"" });
+  const [deptHeads, setDeptHeads]       = useState([]);
   const [kits, setKits]               = useState([]);
   const [policies, setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"" });
   const [certifications, setCertifications] = useState({ types:[], students:[] });
@@ -3487,7 +3624,7 @@ export default function App() {
   useEffect(()=>{
     (async()=>{
         try {
-          const [eq, res, cats, tm, kts, pol, certs, dh] = await Promise.all([
+          const [eq, res, cats, tm, kts, pol, certs, dhs] = await Promise.all([
             storageGet("equipment"),
           storageGet("reservations"),
           storageGet("categories"),
@@ -3495,7 +3632,7 @@ export default function App() {
           storageGet("kits"),
           storageGet("policies"),
           storageGet("certifications"),
-          storageGet("deptHead"),
+          storageGet("deptHeads"),
           ]);
           const normalizedEquipment = normalizeEquipmentTagFlags(eq || INITIAL_EQUIPMENT);
           const equipmentChanged = JSON.stringify(normalizedEquipment) !== JSON.stringify(eq || INITIAL_EQUIPMENT);
@@ -3508,7 +3645,7 @@ export default function App() {
         setKits(kts || []);
         setPolicies(pol || { פרטית:"", הפקה:"", סאונד:"" });
         setCertifications(certs || { types:[], students:[] });
-        setDeptHead(dh || { name:"", email:"" });
+        setDeptHeads(Array.isArray(dhs) ? dhs : []);
         // Init missing
           if(!eq || equipmentChanged) await storageSet("equipment", normalizedEquipment);
         if(!res)  await storageSet("reservations", []);
@@ -3517,7 +3654,7 @@ export default function App() {
         if(!kts)  await storageSet("kits",         []);
         if(!pol)   await storageSet("policies",        { פרטית:"", הפקה:"", סאונד:"" });
         if(!certs) await storageSet("certifications", { types:[], students:[] });
-        if(!dh)    await storageSet("deptHead",        { name:"", email:"" });
+        if(!dhs)   await storageSet("deptHeads",       []);
         if(res && reservationsChanged) await storageSet("reservations", normalizedReservations);
         // Only warn if BOTH Sheets and cache failed (truly no data)
         if(eq===null && !lsGet("equipment")) showToast("error", "⚠️ לא ניתן לטעון ציוד — בדוק חיבור");
@@ -3556,7 +3693,7 @@ export default function App() {
       {/* ── טופס ציבורי ── */}
       {!isAdmin && (
         <div className="public-page-shell">
-          {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHead={deptHead}/>}
+          {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads}/>}
         </div>
       )}
 
@@ -3632,7 +3769,7 @@ export default function App() {
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} mode="rejected"/>}
               {page==="archive"     && <ArchivePage      reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}/>}
-              {page==="team"        && <TeamPage         teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHead={deptHead} setDeptHead={setDeptHead} showToast={showToast}/>}
+              {page==="team"        && <TeamPage         teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} showToast={showToast}/>}
               {page==="kits"        && <KitsPage         kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast}/>}
               {page==="policies"    && <PoliciesPage     policies={policies} setPolicies={setPolicies} showToast={showToast}/>}
               {page==="certifications" && <CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/>}
