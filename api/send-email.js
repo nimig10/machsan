@@ -8,20 +8,45 @@ const transporter = nodemailer.createTransport({
   auth: { user: GMAIL_USER, pass: GMAIL_PASS },
 });
 
-function buildEmail({ type, student_name, borrow_date, borrow_time, return_date, return_time, items_list, wa_link, loan_type }) {
+function buildEmail({ type, student_name, borrow_date, borrow_time, return_date, return_time, items_list, wa_link, loan_type, project_name, crew_photographer, crew_sound, approve_url, reservation_id }) {
   const isApproved   = type === "approved";
   const isNew        = type === "new";
   const isTeamNotify = type === "team_notify";
-  const color  = isApproved ? "#2ecc71" : (isNew||isTeamNotify) ? "#f5a623" : "#e74c3c";
-  const icon   = isApproved ? "✅" : (isNew||isTeamNotify) ? "⏳" : "❌";
-  const title  = isApproved ? "הבקשה אושרה!" : isTeamNotify ? `בקשת השאלה חדשה — ${loan_type||""}` : isNew ? "הבקשה שלך התקבלה!" : "לצערנו הבקשה נדחתה";
-  const body   = isApproved
+  const isDeptHead   = type === "dept_head_notify";
+
+  const color = isApproved ? "#2ecc71" : (isNew||isTeamNotify) ? "#f5a623" : isDeptHead ? "#9b59b6" : "#e74c3c";
+  const icon  = isApproved ? "✅" : isDeptHead ? "🎓" : (isNew||isTeamNotify) ? "⏳" : "❌";
+  const title = isApproved ? "הבקשה אושרה!"
+    : isDeptHead ? `בקשת השאלת הפקה לאישורך — ${student_name||""}`
+    : isTeamNotify ? `בקשת השאלה חדשה — ${loan_type||""}`
+    : isNew ? "הבקשה שלך התקבלה!"
+    : "לצערנו הבקשה נדחתה";
+
+  const body = isApproved
     ? `בקשת ההשאלה של <strong>${student_name}</strong> <strong style="color:#2ecc71">אושרה</strong>.`
+    : isDeptHead
+    ? `הוגשה בקשת השאלת הפקה הממתינה לאישורך לפני שתועבר לצוות המחסן.`
     : isTeamNotify
     ? `<strong>${student_name}</strong> הגיש/ה בקשת השאלה חדשה (${loan_type||""}) הממתינה לאישורך.`
     : isNew
-    ? `בקשת ההשאלה שלך <strong style="color:#f5a623">התקבלה</strong> וממתינה לאישור צוות המחסן.`
-    : `לצערנו בקשת ההשאלה שלך <strong style="color:#e74c3c">נדחתה</strong>. לפרטים נוספים ניתן לפנות לצוות המחסן.`;
+    ? `בקשת ההשאלה שלך <strong style="color:#f5a623">התקבלה</strong> וממתינה לאישור.`
+    : `לצערנו בקשת ההשאלה שלך <strong style="color:#e74c3c">נדחתה</strong>.`;
+
+  const crewSection = isDeptHead ? `
+    <div style="background:#1a1d26;border:1px solid #2d3244;border-radius:8px;padding:16px;margin:16px 0;direction:rtl">
+      <div style="font-size:13px;color:#f5a623;font-weight:700;margin-bottom:10px">פרטי צוות ההפקה</div>
+      ${project_name ? `<div style="font-size:13px;color:#8891a8;margin-bottom:6px">📽️ פרויקט: <strong style="color:#e8eaf0">${project_name}</strong></div>` : ""}
+      <div style="font-size:13px;color:#8891a8;margin-bottom:6px">🎥 צלם: <strong style="color:#e8eaf0">${crew_photographer||"—"}</strong></div>
+      <div style="font-size:13px;color:#8891a8">🎙️ איש סאונד: <strong style="color:#e8eaf0">${crew_sound||"—"}</strong></div>
+    </div>` : "";
+
+  const approveButton = isDeptHead && approve_url ? `
+    <div style="text-align:center;margin:24px 0">
+      <a href="${approve_url}" style="display:inline-block;padding:16px 36px;background:#9b59b6;color:#fff;font-weight:900;font-size:16px;border-radius:10px;text-decoration:none;letter-spacing:0.5px">
+        ✅ אשר הפקה — העבר לממתין
+      </a>
+      <div style="font-size:11px;color:#555f72;margin-top:10px">לחיצה תעביר את הבקשה לסטטוס "ממתין" לטיפול צוות המחסן</div>
+    </div>` : "";
 
   return `
 <!DOCTYPE html>
@@ -40,6 +65,7 @@ function buildEmail({ type, student_name, borrow_date, borrow_time, return_date,
       </div>
       <p style="font-size:15px;line-height:1.7;direction:rtl;text-align:right">שלום <strong>${student_name}</strong>,</p>
       <p style="font-size:14px;line-height:1.7;color:#8891a8;direction:rtl;text-align:right">${body}</p>
+      ${crewSection}
       <div style="background:#111318;border:1px solid #252b38;border-radius:10px;padding:20px;margin:20px 0;direction:rtl">
         <h3 style="color:#f5a623;font-size:14px;margin:0 0 12px;text-align:right">פרטי הבקשה</h3>
         <table style="width:100%;font-size:13px;color:#8891a8;border-collapse:collapse;direction:rtl">
@@ -59,6 +85,7 @@ function buildEmail({ type, student_name, borrow_date, borrow_time, return_date,
           </table>
         </div>
       </div>
+      ${approveButton}
       ${isApproved ? `
       <div style="background:rgba(46,204,113,0.08);border:1px solid rgba(46,204,113,0.2);border-radius:8px;padding:16px;font-size:13px;color:#8891a8;margin-bottom:20px;direction:rtl;text-align:right">
         📌 <strong style="color:#e8eaf0">תזכורת:</strong> יש להחזיר את הציוד עד <strong style="color:#f5a623">${return_date}${return_time?" בשעה "+return_time:""}</strong> במצב תקין.
@@ -75,14 +102,15 @@ function buildEmail({ type, student_name, borrow_date, borrow_time, return_date,
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { to, type, student_name, borrow_date, borrow_time, return_date, return_time, items_list, wa_link, loan_type } = req.body;
+  const { to, type, student_name, borrow_date, borrow_time, return_date, return_time, items_list, wa_link, loan_type, project_name, crew_photographer, crew_sound, approve_url, reservation_id } = req.body;
   if (!to || !type) return res.status(400).json({ error: "חסרים שדות חובה" });
 
   const subjects = {
-    new:          "⏳ קיבלנו את הבקשה שלך – מחסן השאלת ציוד קמרה אובסקורה וסאונד",
-    approved:     "✅ הבקשה שלך אושרה – מחסן השאלת ציוד קמרה אובסקורה וסאונד",
-    rejected:     "עדכון לגבי בקשת ההשאלה – מחסן השאלת ציוד קמרה אובסקורה וסאונד",
-    team_notify:  `📬 בקשת השאלה חדשה (${loan_type||""}) – ${student_name||""}`,
+    new:               "⏳ קיבלנו את הבקשה שלך – מחסן השאלת ציוד קמרה אובסקורה וסאונד",
+    approved:          "✅ הבקשה שלך אושרה – מחסן השאלת ציוד קמרה אובסקורה וסאונד",
+    rejected:          "עדכון לגבי בקשת ההשאלה – מחסן השאלת ציוד קמרה אובסקורה וסאונד",
+    team_notify:       `📬 בקשת השאלה חדשה (${loan_type||""}) – ${student_name||""}`,
+    dept_head_notify:  `🎓 השאלת הפקה לאישורך — ${student_name||""}`,
   };
 
   try {
@@ -90,7 +118,7 @@ export default async function handler(req, res) {
       from:    `"מחסן קמרה אובסקורה וסאונד" <${GMAIL_USER}>`,
       to,
       subject: subjects[type] || "עדכון מהמחסן",
-      html:    buildEmail({ type, student_name, borrow_date, borrow_time, return_date, return_time, items_list, wa_link, loan_type }),
+      html:    buildEmail({ type, student_name, borrow_date, borrow_time, return_date, return_time, items_list, wa_link, loan_type, project_name, crew_photographer, crew_sound, approve_url, reservation_id }),
     });
     res.json({ ok: true });
   } catch (err) {

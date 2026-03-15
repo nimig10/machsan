@@ -1,0 +1,98 @@
+// api/approve-production.js
+// Called when dept head clicks "אשר הפקה" button in email
+// Updates reservation status from "ממתין לאישור ראש המחלקה" → "ממתין"
+
+const SB_URL = process.env.VITE_SUPABASE_URL || "https://wxkyqgwwraojnbmyyfco.supabase.co";
+const SB_KEY = process.env.VITE_SUPABASE_KEY || "sb_publishable_n-mkSq7xABjj58ZBBwk6BA_RbpVS2SU";
+
+const SB_HEADERS = {
+  "apikey":        SB_KEY,
+  "Authorization": `Bearer ${SB_KEY}`,
+  "Content-Type":  "application/json",
+};
+
+export default async function handler(req, res) {
+  const { id } = req.query;
+
+  if (!id) {
+    return res.status(400).send(buildPage("❌ שגיאה", "מזהה בקשה חסר", "#e74c3c"));
+  }
+
+  try {
+    // Fetch current reservations from Supabase
+    const getRes = await fetch(`${SB_URL}/rest/v1/store?key=eq.reservations&select=data`, { headers: SB_HEADERS });
+    const getJson = await getRes.json();
+
+    if (!Array.isArray(getJson) || !getJson.length || !getJson[0].data) {
+      return res.status(500).send(buildPage("❌ שגיאה", "לא ניתן לטעון בקשות", "#e74c3c"));
+    }
+
+    const reservations = getJson[0].data;
+    const reservation = reservations.find(r => String(r.id) === String(id));
+
+    if (!reservation) {
+      return res.status(404).send(buildPage("❌ לא נמצא", "הבקשה לא נמצאה במערכת", "#e74c3c"));
+    }
+
+    if (reservation.status !== "ממתין לאישור ראש המחלקה") {
+      const msg = reservation.status === "מאושר"
+        ? "הבקשה כבר אושרה קודם"
+        : reservation.status === "נדחה"
+        ? "הבקשה נדחתה"
+        : `סטטוס נוכחי: ${reservation.status}`;
+      return res.status(200).send(buildPage("ℹ️ עדכון", msg, "#3498db"));
+    }
+
+    // Update status to "ממתין"
+    const updated = reservations.map(r =>
+      String(r.id) === String(id) ? { ...r, status: "ממתין" } : r
+    );
+
+    const saveRes = await fetch(`${SB_URL}/rest/v1/store`, {
+      method: "POST",
+      headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates" },
+      body: JSON.stringify({ key: "reservations", data: updated, updated_at: new Date().toISOString() }),
+    });
+
+    if (!saveRes.ok) {
+      return res.status(500).send(buildPage("❌ שגיאה", "לא ניתן לעדכן את הסטטוס", "#e74c3c"));
+    }
+
+    return res.status(200).send(buildPage(
+      "✅ ההפקה אושרה!",
+      `בקשת ההפקה של <strong>${reservation.student_name}</strong> עברה לסטטוס "ממתין" וצוות המחסן יטפל בה.`,
+      "#2ecc71"
+    ));
+
+  } catch (err) {
+    console.error("approve-production error:", err);
+    return res.status(500).send(buildPage("❌ שגיאת שרת", err.message, "#e74c3c"));
+  }
+}
+
+function buildPage(title, message, color) {
+  return `<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>${title}</title>
+<style>
+  body { font-family: Arial, sans-serif; background: #0a0c10; color: #e8eaf0; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; direction: rtl; }
+  .box { background: #111318; border: 1px solid #252b38; border-radius: 16px; padding: 48px; text-align: center; max-width: 480px; width: 90%; }
+  .icon { font-size: 64px; margin-bottom: 20px; }
+  h1 { color: ${color}; font-size: 24px; margin-bottom: 16px; }
+  p { color: #8891a8; font-size: 15px; line-height: 1.7; }
+  .btn { display: inline-block; margin-top: 28px; padding: 12px 28px; background: ${color}; color: #000; font-weight: 700; border-radius: 8px; text-decoration: none; font-size: 14px; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <div class="icon">🎬</div>
+    <h1>${title}</h1>
+    <p>${message}</p>
+    <a href="javascript:window.close()" class="btn">סגור חלון</a>
+  </div>
+</body>
+</html>`;
+}
