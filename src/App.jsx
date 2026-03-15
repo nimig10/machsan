@@ -2967,13 +2967,37 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
     try {
       const isXlsx = /\.xlsx?$/i.test(file.name);
 
+      const processRowsWithIdx = async (rows, nameIdx, emailIdx, phoneIdx) => {
+        await processRowsWithIdx(rows, nameIdx, emailIdx, phoneIdx);
+      };
+
       const processRows = async (rows) => {
         if(!rows.length) { showToast("error","הקובץ ריק"); setXlImporting(false); return; }
-        const headers = rows[0].map(h=>String(h||"").trim().toLowerCase().replace(/^\uFEFF/,"").replace(/[\u200B-\u200D\uFEFF]/g,""));
+        // Clean headers - remove BOM, invisible chars, normalize Hebrew
+        const headers = rows[0].map(h=>{
+          let s = String(h||"").trim();
+          s = s.replace(/[\uFEFF\u200B-\u200D\u00A0]/g,"");
+          return s.toLowerCase();
+        });
+        console.log("XL headers detected:", headers);
         const nameIdx  = headers.findIndex(h=>h.includes("שם")||h.includes("name"));
-        const emailIdx = headers.findIndex(h=>h.includes("מייל")||h.includes("אימייל")||h.includes("email")||h.includes("mail")||h.includes("e-mail"));
-        const phoneIdx = headers.findIndex(h=>h.includes("טלפון")||h.includes("phone")||h.includes("tel")||h.includes("נייד"));
-        if(emailIdx===-1) { showToast("error",`לא נמצאה עמודת מייל. כותרות שנמצאו: ${headers.join(", ")}`); setXlImporting(false); return; }
+        // Very broad email detection
+        const emailIdx = headers.findIndex(h=>
+          h.includes("מייל")||h.includes("mail")||h.includes("email")||
+          h.includes("אימייל")||h.includes("e-mail")||h.includes("@")
+        );
+        const phoneIdx = headers.findIndex(h=>h.includes("טלפון")||h.includes("phone")||h.includes("tel")||h.includes("נייד")||h.includes("מספר"));
+        if(emailIdx===-1) {
+          // Last resort: try to auto-detect by scanning first data row for @ sign
+          const autoEmailIdx = rows[1] ? rows[1].findIndex(c=>String(c||"").includes("@")) : -1;
+          if(autoEmailIdx>=0) {
+            // Use auto-detected column
+            return await processRowsWithIdx(rows, nameIdx, autoEmailIdx, phoneIdx);
+          }
+          showToast("error",`לא נמצאה עמודת מייל. כותרות: "${headers.join('", "')}"`);
+          setXlImporting(false);
+          return;
+        }
         let added=0, skipped=0;
         const newStudents = [...students];
         for(let i=1;i<rows.length;i++) {
@@ -3010,10 +3034,8 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
         reader.onload = async (ev) => {
           try {
             const text = ev.target.result;
-            const lines = text.split(/
-?
-/).filter(l=>l.trim());
-            const sep = lines[0]?.includes("	") ? "	" : ",";
+            const lines = text.split(/\r?\n/).filter(l=>l.trim());
+            const sep = lines[0]?.includes("\t") ? "\t" : ",";
             const rows = lines.map(l=>l.split(sep).map(c=>c.trim().replace(/^"|"$/g,"")));
             await processRows(rows);
           } catch(err) { showToast("error","שגיאה בקריאת הקובץ"); setXlImporting(false); }
