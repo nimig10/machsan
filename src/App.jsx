@@ -3853,6 +3853,12 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     const [saving, setSaving]               = useState(false);
     const [xlImporting, setXlImporting]     = useState(false);
 
+    // Equipment filter state
+    const [lessonEqTypeF, setLessonEqTypeF]       = useState("all"); // "all"|"sound"|"photo"
+    const [lessonCatF, setLessonCatF]             = useState([]);    // multi-select categories
+    const [lessonEqSearch, setLessonEqSearch]     = useState("");
+    const [lessonShowSelected, setLessonShowSelected] = useState(false);
+
     // Manual schedule builder
     const [manDay, setManDay]         = useState("2"); // 0=Sun..6=Sat
     const [manStartDate, setManStartDate] = useState("");
@@ -4014,7 +4020,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     return (
       <div className="card" style={{marginBottom:20}}>
         <div className="card-header">
-          <div className="card-title">📚 {initial?"עריכת ערכת שיעור":"ערכת שיעור חדשה"}</div>
+          <div className="card-title">🎬 {initial?"עריכת ערכת שיעור":"ערכת שיעור חדשה"}</div>
           <button className="btn btn-secondary btn-sm" onClick={onDone}>✕ ביטול</button>
         </div>
 
@@ -4046,31 +4052,86 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         {/* Equipment picker */}
         <div style={{marginBottom:16}}>
           <div className="form-section-title">🎒 ציוד נדרש לשיעור <span style={{fontWeight:400,fontSize:11,color:"var(--text3)"}}>· כמות מלאי המחסן המלא</span></div>
-          {categories.map(cat=>{
-            const catEq = equipment.filter(e=>e.category===cat);
-            if(!catEq.length) return null;
-            return (
-              <div key={cat} style={{marginBottom:10}}>
-                <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:5,textTransform:"uppercase",letterSpacing:1}}>{cat}</div>
-                {catEq.map(eq=>{
-                  const max=maxQty(eq.id); const qty=getQty(eq.id);
-                  return (
-                    <div key={eq.id} className="item-row" style={{marginBottom:4,opacity:max===0?0.4:1}}>
-                      <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={eq.image} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||"📦"}</span>
-                      <div style={{flex:1,fontSize:13,fontWeight:600}}>{eq.name}<span style={{fontSize:11,color:"var(--text3)",marginRight:6,fontWeight:400}}>מלאי: {max}</span></div>
-                      {max>0
-                        ? <div className="qty-ctrl">
-                            <button className="qty-btn" onClick={()=>setItemQty(eq.id,qty-1)}>−</button>
-                            <span className="qty-num" style={{color:qty>0?"var(--accent)":"inherit"}}>{qty}</span>
-                            <button className="qty-btn" disabled={qty>=max} onClick={()=>setItemQty(eq.id,qty+1)} style={{opacity:qty>=max?0.3:1}}>+</button>
-                          </div>
-                        : <span style={{fontSize:11,color:"var(--red)",fontWeight:700}}>אין מלאי</span>}
-                    </div>
-                  );
-                })}
-              </div>
+
+          {/* Filters */}
+          <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"12px 14px",marginBottom:12}}>
+            {/* Type filter */}
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
+              <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סינון:</span>
+              {[{k:"all",l:"📦 הכל"},{k:"sound",l:"🎙️ סאונד"},{k:"photo",l:"🎥 צילום"}].map(({k,l})=>{
+                const active=lessonEqTypeF===k;
+                return <button key={k} type="button" onClick={()=>setLessonEqTypeF(k)}
+                  style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                  {l}
+                </button>;
+              })}
+              <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
+              {/* Category multi-select */}
+              {categories.map(cat=>{
+                const active=lessonCatF.includes(cat);
+                return <button key={cat} type="button" onClick={()=>setLessonCatF(p=>active?p.filter(c=>c!==cat):[...p,cat])}
+                  style={{padding:"4px 10px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>
+                  {cat}
+                </button>;
+              })}
+              {lessonCatF.length>0&&<button type="button" onClick={()=>setLessonCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>✕ נקה</button>}
+            </div>
+            {/* Search + selected toggle */}
+            <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+              <div className="search-bar" style={{flex:1,minWidth:150}}><span>🔍</span>
+                <input placeholder="חיפוש ציוד..." value={lessonEqSearch} onChange={e=>setLessonEqSearch(e.target.value)}/></div>
+              <button type="button" onClick={()=>setLessonShowSelected(p=>!p)}
+                style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${lessonShowSelected?"var(--green)":"var(--border)"}`,background:lessonShowSelected?"rgba(46,204,113,0.12)":"transparent",color:lessonShowSelected?"var(--green)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>
+                {lessonShowSelected?"✅ נבחרים":"⬜ נבחרים בלבד"}
+              </button>
+            </div>
+          </div>
+
+          {/* Equipment list with filters applied */}
+          {(()=>{
+            const visibleCats = (lessonCatF.length>0 ? lessonCatF : categories).filter(cat=>
+              equipment.some(e=>e.category===cat &&
+                (lessonEqTypeF==="all"||(lessonEqTypeF==="sound"&&e.soundOnly)||(lessonEqTypeF==="photo"&&e.photoOnly)) &&
+                (!lessonEqSearch||e.name.includes(lessonEqSearch)) &&
+                (!lessonShowSelected||getQty(e.id)>0)
+              )
             );
-          })}
+            if(visibleCats.length===0) return <div style={{textAlign:"center",color:"var(--text3)",padding:"16px",fontSize:13}}>לא נמצא ציוד תואם</div>;
+            return visibleCats.map(cat=>{
+              const catEq = equipment.filter(e=>e.category===cat &&
+                (lessonEqTypeF==="all"||(lessonEqTypeF==="sound"&&e.soundOnly)||(lessonEqTypeF==="photo"&&e.photoOnly)) &&
+                (!lessonEqSearch||e.name.includes(lessonEqSearch)) &&
+                (!lessonShowSelected||getQty(e.id)>0)
+              );
+              if(!catEq.length) return null;
+              return (
+                <div key={cat} style={{marginBottom:10}}>
+                  <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:5,textTransform:"uppercase",letterSpacing:1}}>{cat}</div>
+                  {catEq.map(eq=>{
+                    const max=maxQty(eq.id); const qty=getQty(eq.id);
+                    return (
+                      <div key={eq.id} className="item-row" style={{marginBottom:4,opacity:max===0?0.4:1,background:qty>0?"rgba(245,166,35,0.05)":"",border:qty>0?"1px solid rgba(245,166,35,0.2)":""}}>
+                        <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={eq.image} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||"📦"}</span>
+                        <div style={{flex:1,fontSize:13,fontWeight:600}}>
+                          {eq.name}
+                          <span style={{fontSize:11,color:"var(--text3)",marginRight:6,fontWeight:400}}>מלאי: {max}</span>
+                          {eq.soundOnly&&<span style={{fontSize:10,color:"var(--accent)",fontWeight:700,marginRight:4}}>🎙️</span>}
+                          {eq.photoOnly&&<span style={{fontSize:10,color:"var(--green)",fontWeight:700,marginRight:4}}>🎥</span>}
+                        </div>
+                        {max>0
+                          ? <div className="qty-ctrl">
+                              <button className="qty-btn" onClick={()=>setItemQty(eq.id,qty-1)}>−</button>
+                              <span className="qty-num" style={{color:qty>0?"var(--accent)":"inherit"}}>{qty}</span>
+                              <button className="qty-btn" disabled={qty>=max} onClick={()=>setItemQty(eq.id,qty+1)} style={{opacity:qty>=max?0.3:1}}>+</button>
+                            </div>
+                          : <span style={{fontSize:11,color:"var(--red)",fontWeight:700}}>אין מלאי</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            });
+          })()}
           {kitItems.length>0&&<div className="highlight-box" style={{marginTop:8}}>🎒 {kitItems.length} סוגי ציוד · {kitItems.reduce((s,i)=>s+i.quantity,0)} יחידות</div>}
         </div>
 
@@ -4145,7 +4206,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
 
         <div style={{display:"flex",gap:8}}>
           <button className="btn btn-primary" disabled={!name.trim()||schedule.length===0||saving} onClick={save}>
-            {saving?"⏳ שומר...":initial?"💾 שמור שינויים":"📚 צור ערכת שיעור"}
+            {saving?"⏳ שומר...":initial?"💾 שמור שינויים":"🎬 צור ערכת שיעור"}
           </button>
         </div>
       </div>
@@ -4157,7 +4218,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     <div className="page">
       {/* Tab header */}
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
-        {[{k:"student",l:"🎒 ערכות לסטודנטים"},{k:"lesson",l:"📚 ערכות שיעור"}].map(({k,l})=>(
+        {[{k:"student",l:"🎒 ערכות לסטודנטים"},{k:"lesson",l:"🎬 ערכות שיעור"}].map(({k,l})=>(
           <button key={k} type="button" onClick={()=>setTabView(k)}
             style={{padding:"8px 20px",borderRadius:"var(--r-sm)",border:`2px solid ${tabView===k?"var(--accent)":"var(--border)"}`,background:tabView===k?"var(--accent-glow)":"transparent",color:tabView===k?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:14,cursor:"pointer"}}>
             {l}
@@ -4168,7 +4229,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         ))}
         <div style={{marginRight:"auto",display:"flex",gap:8}}>
           {mode===null&&tabView==="student"&&<button className="btn btn-primary" onClick={()=>{setMode("student");setEditTarget(null);}}>➕ ערכה לסטודנט</button>}
-          {mode===null&&tabView==="lesson"&&<button className="btn btn-primary" style={{background:"#9b59b6",borderColor:"#9b59b6"}} onClick={()=>{setMode("lesson");setEditTarget(null);}}>📚 ערכת שיעור חדשה</button>}
+          {mode===null&&tabView==="lesson"&&<button className="btn btn-primary" style={{background:"#9b59b6",borderColor:"#9b59b6"}} onClick={()=>{setMode("lesson");setEditTarget(null);}}>🎬 ערכת שיעור חדשה</button>}
         </div>
       </div>
 
@@ -4221,7 +4282,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       {/* Lesson kits list */}
       {tabView==="lesson"&&mode===null&&(
         lessonKits.length===0
-          ? <div className="empty-state"><div className="emoji">📚</div><p>אין ערכות שיעור</p><p style={{fontSize:13,color:"var(--text3)"}}>ערכות שיעור משריינות ציוד לפי לוח שיעורים קבוע</p></div>
+          ? <div className="empty-state"><div className="emoji">🎬</div><p>אין ערכות שיעור</p><p style={{fontSize:13,color:"var(--text3)"}}>ערכות שיעור משריינות ציוד לפי לוח שיעורים קבוע</p></div>
           : <div style={{display:"flex",flexDirection:"column",gap:12}}>
             {lessonKits.map(kit=>{
               const nextSession = (kit.schedule||[]).find(s=>s.date>=today());
@@ -4229,7 +4290,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                 <div key={kit.id} style={{background:"var(--surface)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:"var(--r)",padding:"16px 18px"}}>
                   <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
                     <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
-                      <span style={{fontSize:28}}>📚</span>
+                      <span style={{fontSize:28}}>🎬</span>
                       <div>
                         <div style={{fontWeight:800,fontSize:15}}>{kit.name}</div>
                         {kit.courseName&&<div style={{fontSize:12,color:"var(--text3)"}}>📖 {kit.courseName}</div>}
