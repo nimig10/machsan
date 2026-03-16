@@ -567,6 +567,7 @@ function Loading() {
 // ─── EQUIPMENT PAGE ───────────────────────────────────────────────────────────
 function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories, certifications={types:[],students:[]} }) {
   const [search, setSearch] = useState("");
+  const [trackFilter, setTrackFilter] = useState("הכל");
   const [selectedCats, setSelectedCats] = useState([]);
   const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -1436,7 +1437,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=110, fontSize=11 }) {
+function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=110, fontSize=11, previewId="" }) {
   // Split days into weeks of 7
   const weeks = [];
   for(let i=0;i<days.length;i+=7) weeks.push(days.slice(i,i+7));
@@ -1519,7 +1520,9 @@ function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=110, fon
                   paddingLeft:isResStart?8:2, paddingRight:isResEnd?6:2,
                   overflow:"hidden",whiteSpace:"nowrap",
                   fontSize, color:b.color, fontWeight:700,
-                  zIndex:1, backdropFilter:"blur(0px)",
+                  zIndex:previewId&&b.r.id===previewId?0:1,
+                  outline:previewId&&b.r.id===previewId?"2px dashed rgba(245,166,35,0.7)":"none",
+                  outlineOffset:"-2px",
                 }}>
                   {isResStart && <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{b.r.student_name}{b.r.borrow_time&&<span style={{opacity:0.8,fontSize:fontSize-1}}> {b.r.borrow_time}</span>}</span>}
                   {!isResStart && isResEnd && <span style={{fontWeight:700,overflow:"hidden",textOverflow:"ellipsis"}}>↩ {b.r.student_name}{b.r.return_time&&<span style={{opacity:0.8,fontSize:fontSize-1}}> {b.r.return_time}</span>}</span>}
@@ -1737,7 +1740,7 @@ function DashboardPage({ equipment, reservations }) {
   );
 }
 // ─── PUBLIC MINI CALENDAR ────────────────────────────────────────────────────
-function PublicMiniCalendar({ reservations, initialLoanType="הכל" }) {
+function PublicMiniCalendar({ reservations, initialLoanType="הכל", previewStart="", previewEnd="", previewName="" }) {
   const [calDate, setCalDate] = useState(new Date());
   const [loanTypeF, setLoanTypeF] = useState(["פרטית","הפקה","סאונד"].includes(initialLoanType) ? initialLoanType : "הכל");
   const yr = calDate.getFullYear();
@@ -1763,8 +1766,15 @@ function PublicMiniCalendar({ reservations, initialLoanType="הכל" }) {
     r.status==="מאושר" && r.borrow_date && r.return_date &&
     (loanTypeF==="הכל" || r.loan_type===loanTypeF)
   );
+  // Add preview entry for user's selected dates
+  const previewRes = previewStart && previewEnd ? [{
+    id:"__preview__", student_name:previewName, borrow_date:previewStart,
+    return_date:previewEnd, status:"preview", loan_type:""
+  }] : [];
+  const allRes = [...activeRes, ...previewRes];
   const colorMap = {};
   activeRes.forEach((r,i)=>{ colorMap[r.id]=SPAN_COLORS[i%SPAN_COLORS.length]; });
+  colorMap["__preview__"] = ["rgba(245,166,35,0.45)","#f5a623"]; // dashed yellow
 
   return (
     <div style={{marginBottom:16,marginTop:8}}>
@@ -1792,7 +1802,7 @@ function PublicMiniCalendar({ reservations, initialLoanType="הכל" }) {
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
           {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,color:"var(--text3)",padding:"4px 0"}}>{d}</div>)}
         </div>
-        <CalendarGrid days={days} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={80} fontSize={10}/>
+        <CalendarGrid days={days} activeRes={allRes} colorMap={colorMap} todayStr={todayStr} cellHeight={80} fontSize={10} previewId="__preview__"/>
         {activeRes.length===0&&<div style={{textAlign:"center",fontSize:12,color:"var(--text3)",padding:"8px 0"}}>אין השאלות מאושרות</div>}
       </div>
     </div>
@@ -1822,9 +1832,7 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
       )}
       <div className="flex gap-2">
         <button className="btn btn-secondary" onClick={onBack}>← חזור</button>
-        <button className="btn btn-secondary" onClick={()=>{ setShowInfo(true); setShowAll(false); setFocusedEq(null); }}>
-          📋 פרטי הציוד
-        </button>
+
         <button className="btn btn-primary" disabled={!items.length} onClick={onNext}>המשך ← אישור</button>
       </div>
 
@@ -1940,8 +1948,10 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
 
 // ─── STEP 3 EQUIPMENT SELECTOR ───────────────────────────────────────────────
 function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equipment, setItems, getItem, setQty, canBorrowEq=()=>true, studentRecord, certificationTypes=[] }) {
-  const [activeKit, setActiveKit] = useState(null); // null = show all
+  const [activeKit, setActiveKit] = useState(null);
   const [privateFilter, setPrivateFilter] = useState("all");
+  const [catFilter, setCatFilter] = useState("הכל"); // category filter
+  const [showSelectedOnly, setShowSelectedOnly] = useState(false);
 
   const relevantKits = (kits||[]).filter(k => !k.loanType || k.loanType === loanType);
 
@@ -2010,6 +2020,25 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
         </div>
       )}
 
+      {/* ── Category filter + selected toggle ── */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12,alignItems:"center"}}>
+        <button type="button" onClick={()=>setShowSelectedOnly(p=>!p)}
+          style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${showSelectedOnly?"var(--green)":"var(--border)"}`,background:showSelectedOnly?"rgba(46,204,113,0.12)":"transparent",color:showSelectedOnly?"var(--green)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>
+          {showSelectedOnly?"✅ נבחרו":"⬜"} {showSelectedOnly?"הצג הכל":"הצג נבחרים בלבד"}
+        </button>
+        <div style={{width:1,height:20,background:"var(--border)",flexShrink:0}}/>
+        <button type="button" onClick={()=>setCatFilter("הכל")}
+          style={{padding:"4px 10px",borderRadius:20,border:`2px solid ${catFilter==="הכל"?"var(--accent)":"var(--border)"}`,background:catFilter==="הכל"?"var(--accent-glow)":"transparent",color:catFilter==="הכל"?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>
+          📦 הכל
+        </button>
+        {baseCategories.map(cat=>(
+          <button key={cat} type="button" onClick={()=>setCatFilter(cat)}
+            style={{padding:"4px 10px",borderRadius:20,border:`2px solid ${catFilter===cat?"var(--accent)":"var(--border)"}`,background:catFilter===cat?"var(--accent-glow)":"transparent",color:catFilter===cat?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>
+            {cat}
+          </button>
+        ))}
+      </div>
+
       {/* ── Kit selector ── */}
       {relevantKits.length>0 && (
         <div style={{marginBottom:20,padding:"14px 16px",background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
@@ -2042,9 +2071,10 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
       )}
 
       {/* ── Equipment list ── */}
-      {baseCategories.map(c=>{
+      {filteredCategories.map(c=>{
         let catEq = visibleAvailEq.filter(e=>e.category===c);
         if(kitEqIds) catEq = catEq.filter(e=>kitEqIds.has(String(e.id)));
+        if(showSelectedOnly) catEq = catEq.filter(e=>getItem(e.id).quantity>0);
         if(!catEq.length) return null;
         return (
           <div key={c} style={{marginBottom:20}}>
@@ -2184,9 +2214,10 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
 function InfoPanel({ policies, kits, equipment, teamMembers, onClose }) {
   const [tab, setTab] = useState("policies");
   const tabs = [
-    { id:"policies", label:"📋 נהלים" },
-    { id:"kits",     label:"🎒 ערכות" },
-    { id:"contact",  label:"📞 צוות" },
+    { id:"equipment", label:"📦 ציוד" },
+    { id:"policies",  label:"📋 נהלים" },
+    { id:"kits",      label:"🎒 ערכות" },
+    { id:"contact",   label:"📞 צוות" },
   ];
   const LOAN_ICONS = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️" };
 
@@ -2212,6 +2243,30 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose }) {
         </div>
         {/* Content */}
         <div style={{flex:1,overflowY:"auto",padding:"20px"}}>
+
+          {tab==="equipment" && (
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {(equipment||[]).length===0
+                ? <div style={{textAlign:"center",color:"var(--text3)",fontSize:13,padding:"24px 0"}}>אין ציוד במחסן</div>
+                : (equipment||[]).map(eq=>{
+                    const isImg = eq.image?.startsWith("data:")||eq.image?.startsWith("http");
+                    return (
+                      <div key={eq.id} style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",border:"1px solid var(--border)",padding:"12px",display:"flex",gap:12,alignItems:"flex-start"}}>
+                        <div style={{width:56,height:56,flexShrink:0,borderRadius:8,overflow:"hidden",background:"var(--surface3)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                          {isImg ? <img src={eq.image} alt={eq.name} style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{fontSize:32}}>{eq.image||"📦"}</span>}
+                        </div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontWeight:800,fontSize:14}}>{eq.name}</div>
+                          <div style={{fontSize:11,color:"var(--accent)",marginBottom:4}}>{eq.category}</div>
+                          {eq.description&&<div style={{fontSize:12,color:"var(--text2)",lineHeight:1.6}}>{eq.description}</div>}
+                          {eq.notes&&<div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>📝 {eq.notes}</div>}
+                        </div>
+                      </div>
+                    );
+                  })
+              }
+            </div>
+          )}
 
           {tab==="policies" && (
             <div>
@@ -2768,7 +2823,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
             {ok2 && <div className="highlight-box">📅 השאלה ל-{loanDays} ימים · איסוף {form.borrow_time} · החזרה {form.return_time}</div>}
 
             {/* Mini calendar — approved reservations */}
-            <PublicMiniCalendar key={form.loan_type || "הכל"} reservations={reservations} initialLoanType={form.loan_type || "הכל"}/>
+            <PublicMiniCalendar key={form.loan_type || "הכל"} reservations={reservations} initialLoanType={form.loan_type || "הכל"} previewStart={form.borrow_date} previewEnd={form.return_date} previewName={form.student_name||"הבקשה שלך"}/>
 
             <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setStep(1)}>← חזור</button><button className="btn btn-primary" disabled={!ok2} onClick={()=>setStep(3)}>המשך ← ציוד</button></div>
           </>}
@@ -2883,6 +2938,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
 function ArchivePage({ reservations, setReservations, equipment, showToast }) {
   const archived = reservations.filter(r => r.status === "הוחזר");
   const [search, setSearch] = useState("");
+  const [trackFilter, setTrackFilter] = useState("הכל");
   const [loanTypeF, setLoanTypeF] = useState("הכל");
   const [viewRes, setViewRes] = useState(null);
 
@@ -3554,10 +3610,11 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
   const { types=[], students=[] } = certifications;
   const [newTypeName, setNewTypeName] = useState("");
   const [addingStudent, setAddingStudent] = useState(false);
-  const [studentForm, setStudentForm] = useState({ name:"", email:"", phone:"" });
+  const [studentForm, setStudentForm] = useState({ name:"", email:"", phone:"", track:"" });
   const [editStudent, setEditStudent] = useState(null); // student being edited
-  const [editForm, setEditForm] = useState({ name:"", email:"", phone:"" });
+  const [editForm, setEditForm] = useState({ name:"", email:"", phone:"", track:"" });
   const [search, setSearch] = useState("");
+  const [trackFilter, setTrackFilter] = useState("הכל");
   const [saving, setSaving] = useState(false);
   const [xlImporting, setXlImporting] = useState(false);
 
@@ -3597,10 +3654,10 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
       showToast("error","סטודנט עם מייל זה כבר קיים"); return;
     }
     const id = `stu_${Date.now()}`;
-    const updated = { types, students:[...students,{id,name:name.trim(),email:email.toLowerCase().trim(),phone:phone.trim(),certs:{}}] };
+    const updated = { types, students:[...students,{id,name:name.trim(),email:email.toLowerCase().trim(),phone:phone.trim(),track:studentForm.track.trim(),certs:{}}] };
     if(await save(updated)) {
       showToast("success",`${name} נוסף/ה`);
-      setStudentForm({name:"",email:"",phone:""});
+      setStudentForm({name:"",email:"",phone:"",track:""});
       setAddingStudent(false);
     }
   };
@@ -3617,7 +3674,7 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
     if(!name||!email) return;
     const dup = students.find(s=>s.email===email && s.id!==editStudent.id);
     if(dup) { showToast("error","מייל זה כבר קיים לסטודנט אחר"); return; }
-    const updated = { types, students: students.map(s=>s.id===editStudent.id ? {...s,name,email,phone:editForm.phone.trim()} : s) };
+    const updated = { types, students: students.map(s=>s.id===editStudent.id ? {...s,name,email,phone:editForm.phone.trim(),track:editForm.track?.trim()||""} : s) };
     if(await save(updated)) { showToast("success","פרטי הסטודנט עודכנו"); setEditStudent(null); }
   };
 
@@ -3649,6 +3706,7 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
           h.includes("אימייל")||h.includes("e-mail")||h.includes("@")
         );
         const phoneIdx = headers.findIndex(h=>h.includes("טלפון")||h.includes("phone")||h.includes("tel")||h.includes("נייד")||h.includes("מספר"));
+        const trackIdx = headers.findIndex(h=>h.includes("מסלול")||h.includes("קבוצה")||h.includes("כיתה")||h.includes("track")||h.includes("group")||h.includes("class"));
         if(emailIdx===-1) {
           // Last resort: try to auto-detect by scanning first data row for @ sign
           const autoEmailIdx = rows[1] ? rows[1].findIndex(c=>String(c||"").includes("@")) : -1;
@@ -3669,7 +3727,8 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
           const phone = phoneIdx>=0 ? String(row[phoneIdx]||"").trim() : "";
           if(!email||!email.includes("@")) { skipped++; continue; }
           if(newStudents.find(s=>s.email===email)) { skipped++; continue; }
-          newStudents.push({ id:`stu_${Date.now()}_${i}`, name:name||email, email, phone, certs:{} });
+          const track = trackIdx>=0 ? String(rows[i][trackIdx]||"").trim() : "";
+          newStudents.push({ id:`stu_${Date.now()}_${i}`, name:name||email, email, phone, track, certs:{} });
           added++;
         }
         const updated = { types, students: newStudents };
@@ -3724,8 +3783,11 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
     await save(updated);
   };
 
+  // Get all unique tracks
+  const allTracks = ["הכל", ...new Set(students.map(s=>s.track||"").filter(Boolean))];
   const filteredStudents = students.filter(s=>
-    !search || s.name?.includes(search) || s.email?.includes(search) || s.phone?.includes(search)
+    (trackFilter==="הכל" || (s.track||"")=== trackFilter) &&
+    (!search || s.name?.includes(search) || s.email?.includes(search) || s.phone?.includes(search))
   );
 
   return (
@@ -3767,6 +3829,8 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
           </div>
           <div className="form-group"><label className="form-label">טלפון</label>
             <input className="form-input" value={studentForm.phone} onChange={e=>setStudentForm(p=>({...p,phone:e.target.value}))} placeholder="05x-xxxxxxx"/></div>
+          <div className="form-group"><label className="form-label">מסלול לימודים</label>
+            <input className="form-input" value={studentForm.track||""} onChange={e=>setStudentForm(p=>({...p,track:e.target.value}))} placeholder='למשל: "הנדסאי קולנוע ב"'/></div>
           <div style={{marginTop:12,display:"flex",gap:8}}>
             <button className="btn btn-primary" disabled={!studentForm.name.trim()||!studentForm.email.trim()||saving} onClick={addStudent}>
               {saving?"⏳ שומר...":"✅ הוסף סטודנט"}
@@ -3784,9 +3848,19 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
           </label>
           <div className="search-bar" style={{flex:1,minWidth:180}}><span>🔍</span>
             <input placeholder="חיפוש לפי שם, מייל או טלפון..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
-          <span style={{fontSize:13,color:"var(--text3)"}}>סה״כ: <strong style={{color:"var(--text)"}}>{students.length}</strong> סטודנטים</span>
+          <span style={{fontSize:13,color:"var(--text3)"}}>סה״כ: <strong style={{color:"var(--text)"}}>{filteredStudents.length}</strong> / {students.length}</span>
         </div>
-      )}
+        {/* Track filter */}
+        {allTracks.length>1&&(
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+            {allTracks.map(t=>(
+              <button key={t} type="button" onClick={()=>setTrackFilter(t)}
+                style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${trackFilter===t?"var(--accent)":"var(--border)"}`,background:trackFilter===t?"var(--accent-glow)":"transparent",color:trackFilter===t?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                {t==="הכל"?"📦 כל המסלולים":"🎓 "+t}
+              </button>
+            ))}
+          </div>
+        )}
 
       {/* ── Students table ── */}
       {types.length===0 && (
@@ -3813,11 +3887,19 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
                 </tr>
               </thead>
               <tbody>
-                {filteredStudents.map((s,i)=>(
-                  <tr key={s.id} style={{borderBottom:"1px solid var(--border)",background:i%2===0?"var(--surface)":"var(--surface2)"}}>
+                {(()=>{
+                  const rows=[]; let lastTrack=undefined;
+                  filteredStudents.forEach((s,i)=>{
+                    const t=s.track||"";
+                    if(t!==lastTrack){
+                      rows.push(<tr key={`grp_${i}`}><td colSpan={types.length+3} style={{background:"rgba(245,166,35,0.06)",padding:"5px 14px",fontWeight:800,fontSize:11,color:"var(--accent)",borderBottom:"1px solid var(--border)",letterSpacing:0.5}}>{t?"🎓 "+t:"📋 ללא מסלול"}</td></tr>);
+                      lastTrack=t;
+                    }
+                    rows.push(<tr key={s.id} style={{borderBottom:"1px solid var(--border)",background:i%2===0?"var(--surface)":"var(--surface2)"}}>
                     <td style={{padding:"10px 14px",whiteSpace:"nowrap"}}>
                       <div style={{fontWeight:700,fontSize:14}}>{s.name}</div>
                       {s.phone&&<div style={{fontSize:11,color:"var(--text3)"}}>{s.phone}</div>}
+                      {s.track&&<div style={{fontSize:10,color:"var(--accent)",fontWeight:700,marginTop:2}}>🎓 {s.track}</div>}
                     </td>
                     <td style={{padding:"10px 14px",fontSize:12,color:"var(--text3)",whiteSpace:"nowrap"}}>{s.email}</td>
                     {types.map(t=>{
@@ -3834,12 +3916,14 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
                     })}
                     <td style={{padding:"8px 12px",textAlign:"center"}}>
                       <div style={{display:"flex",gap:4,justifyContent:"center"}}>
-                        <button className="btn btn-secondary btn-sm" onClick={()=>{setEditStudent(s);setEditForm({name:s.name,email:s.email,phone:s.phone||""});}}>✏️</button>
+                        <button className="btn btn-secondary btn-sm" onClick={()=>{setEditStudent(s);setEditForm({name:s.name,email:s.email,phone:s.phone||"",track:s.track||""});}}>✏️</button>
                         <button className="btn btn-danger btn-sm" onClick={()=>deleteStudent(s.id)}>🗑️</button>
                       </div>
                     </td>
-                  </tr>
-                ))}
+                  </tr>);
+                  });
+                  return rows;
+                })()}
               </tbody>
             </table>
           </div>
@@ -3851,11 +3935,12 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
                   <div>
                     <div style={{fontWeight:800,fontSize:15}}>{s.name}</div>
+                    {s.track&&<div style={{fontSize:11,color:"var(--accent)",fontWeight:700}}>🎓 {s.track}</div>}
                     <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{s.email}</div>
                     {s.phone&&<div style={{fontSize:11,color:"var(--text3)"}}>{s.phone}</div>}
                   </div>
                   <div style={{display:"flex",gap:6}}>
-                    <button className="btn btn-secondary btn-sm" onClick={()=>{setEditStudent(s);setEditForm({name:s.name,email:s.email,phone:s.phone||""});}}>✏️</button>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>{setEditStudent(s);setEditForm({name:s.name,email:s.email,phone:s.phone||"",track:s.track||""});}}>✏️</button>
                     <button className="btn btn-danger btn-sm" onClick={()=>deleteStudent(s.id)}>🗑️</button>
                   </div>
                 </div>
@@ -3898,6 +3983,8 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
               </div>
               <div className="form-group"><label className="form-label">טלפון</label>
                 <input className="form-input" value={editForm.phone} onChange={e=>setEditForm(p=>({...p,phone:e.target.value}))}/></div>
+              <div className="form-group"><label className="form-label">מסלול לימודים</label>
+                <input className="form-input" value={editForm.track||""} onChange={e=>setEditForm(p=>({...p,track:e.target.value}))} placeholder='למשל: "הנדסאי קולנוע ב"'/></div>
               <div style={{display:"flex",gap:8,marginTop:16}}>
                 <button className="btn btn-primary" disabled={!editForm.name.trim()||!editForm.email.trim()||saving} onClick={saveEdit}>
                   {saving?"⏳ שומר...":"💾 שמור שינויים"}
