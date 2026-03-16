@@ -2180,6 +2180,109 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
   );
 }
 
+// ─── INFO PANEL ───────────────────────────────────────────────────────────────
+function InfoPanel({ policies, kits, equipment, teamMembers, onClose }) {
+  const [tab, setTab] = useState("policies");
+  const tabs = [
+    { id:"policies", label:"📋 נהלים" },
+    { id:"kits",     label:"🎒 ערכות" },
+    { id:"contact",  label:"📞 צוות" },
+  ];
+  const LOAN_ICONS = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️" };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:5000,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px",direction:"rtl"}}>
+      <div style={{width:"100%",maxWidth:600,maxHeight:"90vh",background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        {/* Header */}
+        <div style={{padding:"16px 20px",background:"var(--surface2)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:900,fontSize:17,color:"var(--accent)"}}>ℹ️ מידע כללי — מחסן ציוד</div>
+            <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>קמרה אובסקורה וסאונד</div>
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={onClose}>✕ סגור</button>
+        </div>
+        {/* Tabs */}
+        <div style={{display:"flex",gap:0,borderBottom:"1px solid var(--border)",flexShrink:0}}>
+          {tabs.map(t=>(
+            <button key={t.id} type="button" onClick={()=>setTab(t.id)}
+              style={{flex:1,padding:"10px 8px",border:"none",borderBottom:`3px solid ${tab===t.id?"var(--accent)":"transparent"}`,background:"transparent",color:tab===t.id?"var(--accent)":"var(--text2)",fontWeight:tab===t.id?800:500,fontSize:13,cursor:"pointer"}}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+        {/* Content */}
+        <div style={{flex:1,overflowY:"auto",padding:"20px"}}>
+
+          {tab==="policies" && (
+            <div>
+              {["פרטית","הפקה","סאונד"].map(lt=>{
+                const text = policies[lt];
+                if(!text) return null;
+                return (
+                  <div key={lt} style={{marginBottom:24}}>
+                    <div style={{fontWeight:800,fontSize:14,color:"var(--accent)",marginBottom:8}}>{LOAN_ICONS[lt]} נהלי השאלה {lt}</div>
+                    <div style={{fontSize:13,lineHeight:1.9,color:"var(--text2)",whiteSpace:"pre-wrap",background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"14px 16px",border:"1px solid var(--border)"}}>{text}</div>
+                  </div>
+                );
+              })}
+              {!policies?.פרטית && !policies?.הפקה && !policies?.סאונד &&
+                <div style={{textAlign:"center",color:"var(--text3)",fontSize:13,padding:"24px 0"}}>לא הוגדרו נהלים עדיין</div>}
+            </div>
+          )}
+
+          {tab==="kits" && (
+            <div style={{display:"flex",flexDirection:"column",gap:16}}>
+              {(kits||[]).length===0
+                ? <div style={{textAlign:"center",color:"var(--text3)",fontSize:13,padding:"24px 0"}}>אין ערכות מוגדרות עדיין</div>
+                : (kits||[]).map(kit=>(
+                  <div key={kit.id} style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"16px"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                      <span style={{fontWeight:900,fontSize:15}}>🎒 {kit.name}</span>
+                      {kit.loanType&&<span style={{fontSize:11,background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"1px 8px",color:"var(--accent)",fontWeight:700}}>{LOAN_ICONS[kit.loanType]||"📦"} {kit.loanType}</span>}
+                    </div>
+                    {kit.description&&<div style={{fontSize:13,color:"var(--text2)",marginBottom:10,lineHeight:1.7}}>{kit.description}</div>}
+                    <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                      {(kit.items||[]).map((item,j)=>{
+                        const eq = equipment.find(e=>e.id==item.equipment_id);
+                        const isImg = eq?.image?.startsWith("data:")||eq?.image?.startsWith("http");
+                        return (
+                          <div key={j} style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"var(--text2)"}}>
+                            {isImg ? <img src={eq.image} alt="" style={{width:24,height:24,objectFit:"contain",borderRadius:4}}/> : <span style={{fontSize:16}}>{eq?.image||"📦"}</span>}
+                            <span>{item.name}</span>
+                            <span style={{marginRight:"auto",background:"var(--surface3)",borderRadius:6,padding:"1px 8px",fontWeight:700,color:"var(--accent)",fontSize:12}}>×{item.quantity}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))
+              }
+            </div>
+          )}
+
+          {tab==="contact" && (
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {(teamMembers||[]).length===0
+                ? <div style={{textAlign:"center",color:"var(--text3)",fontSize:13,padding:"24px 0"}}>אין אנשי צוות מוגדרים</div>
+                : (teamMembers||[]).map(m=>(
+                  <div key={m.id} style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",border:"1px solid var(--border)",padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{width:40,height:40,borderRadius:"50%",background:"var(--surface3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:900,flexShrink:0}}>{m.name?.[0]||"?"}</div>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:14}}>{m.name}</div>
+                      <div style={{fontSize:12,color:"var(--text3)"}}>{m.email}</div>
+                    </div>
+                  </div>
+                ))
+              }
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
 function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], calendarToken="" }) {
   const initialParams = new URLSearchParams(window.location.search);
@@ -2695,6 +2798,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
         </div>
       </div>
     </div>
+    {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)}/>}
   );
 }
 
@@ -2913,7 +3017,7 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
 }
 
 // ─── TEAM PAGE ────────────────────────────────────────────────────────────────
-function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, showToast }) {
+function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, calendarToken="", showToast }) {
   const LOAN_TYPES = ["פרטית","הפקה","סאונד"];
   const LOAN_ICONS = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️" };
   const emptyForm = { name:"", email:"", loanTypes:[...LOAN_TYPES] };
@@ -3274,6 +3378,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast }) {
 
   const KitForm = ({ initial, onDone }) => {
     const [name, setName] = useState(initial?.name||"");
+    const [description, setDescription] = useState(initial?.description||"");
     const [loanType, setLoanType] = useState(initial?.loanType||"הכל");
     const [kitItems, setKitItems] = useState(initial?.items||[]);
     const [saving, setSaving] = useState(false);
@@ -3304,7 +3409,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast }) {
         return;
       }
       setSaving(true);
-      const kit = { id: initial?.id||Date.now(), name: trimmedName, loanType: loanType==="הכל"?"":loanType, items: kitItems };
+      const kit = { id: initial?.id||Date.now(), name: trimmedName, description: description.trim(), loanType: loanType==="הכל"?"":loanType, items: kitItems };
       const updated = initial ? kits.map(k=>k.id===initial.id?kit:k) : [...kits, kit];
       setKits(updated);
       const _kitRes = await storageSet("kits", updated);
@@ -3319,7 +3424,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast }) {
           <div className="card-title">{initial?"✏️ עריכת ערכה":"➕ ערכה חדשה"}</div>
           <button className="btn btn-secondary btn-sm" onClick={onDone}>✕ ביטול</button>
         </div>
-        <div className="responsive-split" style={{marginBottom:16}}>
+        <div className="responsive-split" style={{marginBottom:12}}>
           <div className="form-group"><label className="form-label">שם הערכה *</label><input className="form-input" placeholder='לדוגמה: "ערכת דוקומנטרי"' value={name} onChange={e=>setName(e.target.value)}/></div>
           <div className="form-group">
             <label className="form-label">שיוך לסוג השאלה</label>
@@ -3333,6 +3438,10 @@ function KitsPage({ kits, setKits, equipment, categories, showToast }) {
             </div>
             {duplicateName && <div style={{fontSize:12,color:"var(--red)",marginTop:6}}>כבר קיימת ערכה עם השם הזה.</div>}
           </div>
+        </div>
+        <div className="form-group" style={{marginBottom:16}}>
+          <label className="form-label">תיאור הערכה</label>
+          <textarea className="form-textarea" rows={2} placeholder="תיאור קצר של הערכה ומה היא מיועדת ל..." value={description} onChange={e=>setDescription(e.target.value)}/>
         </div>
         <div className="form-section-title">ציוד בערכה <span style={{fontWeight:400,fontSize:11,color:"var(--text3)"}}>· רק ציוד במצב תקין, עד מקסימום הכמות הקיימת</span></div>
         {categories.map(cat=>{
@@ -4198,7 +4307,7 @@ export default function App() {
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} mode="rejected"/>}
               {page==="archive"     && <ArchivePage      reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}/>}
-              {page==="team"        && <TeamPage         teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} showToast={showToast}/>}
+              {page==="team"        && <TeamPage         teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} showToast={showToast}/>}
               {page==="kits"        && <KitsPage         kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast}/>}
               {page==="policies"    && <PoliciesPage     policies={policies} setPolicies={setPolicies} showToast={showToast}/>}
               {page==="certifications" && <CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/>}
