@@ -1672,20 +1672,44 @@ function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=110, fon
 
 function DashboardPage({ equipment, reservations }) {
   const todayStr = today();
-  const active = reservations.filter(r => r.status === "מאושר").length;
-  const pending = reservations.filter(r => r.status === "ממתין").length;
-  const deptHeadPending = reservations.filter(r => r.status === "אישור ראש מחלקה").length;
-  const rejected = reservations.filter(r => r.status === "נדחה").length;
-  const rtToday = reservations.filter(r => r.status === "מאושר" && r.return_date === todayStr).length;
-  const todayLoans = reservations.filter(r => r.status !== "נדחה" && r.status !== "הוחזר" && r.borrow_date <= todayStr && r.return_date >= todayStr).length;
-  const total = equipment.reduce((s, e) => s + workingUnits(e), 0);
+  const nowMs = Date.now();
+
+  // ── מלאי ──
+  const totalItems   = equipment.length;
+  const totalUnits   = equipment.reduce((s, e) => s + workingUnits(e), 0);
   const totalDamaged = equipment.reduce((s, e) => s + (Array.isArray(e.units)?e.units.filter(u=>u.status!=="תקין").length:0), 0);
 
-  const [calDate, setCalDate] = useState(new Date());
-  const [calFS, setCalFS] = useState(false);
+  // ── בקשות פעילות עכשיו ──
+  const activeNow = reservations.filter(r =>
+    r.status === "מאושר" && r.borrow_date <= todayStr && r.return_date >= todayStr
+  );
+  // ── כל בקשות מאושרות (כולל עתידיות) ──
+  const allApproved = reservations.filter(r => r.status === "מאושר");
+
+  // ── פריטים ויחידות שנמצאים כרגע בהשאלה ──
+  const onLoanItems = activeNow.reduce((s,r) => s + (r.items?.length||0), 0);
+  const onLoanUnits = activeNow.reduce((s,r) =>
+    s + (r.items||[]).reduce((ss,i) => ss + (Number(i.quantity)||0), 0), 0);
+
+  // ── תורים ──
+  const pending         = reservations.filter(r => r.status === "ממתין").length;
+  const deptHeadPending = reservations.filter(r => r.status === "אישור ראש מחלקה").length;
+  const rejected        = reservations.filter(r => r.status === "נדחה").length;
+
+  // ── היום ──
+  const rtToday    = allApproved.filter(r => r.return_date === todayStr).length;
+  const todayLoans = reservations.filter(r =>
+    r.status !== "נדחה" && r.status !== "הוחזר" &&
+    r.borrow_date <= todayStr && r.return_date >= todayStr
+  ).length;
+
+  const [calDate, setCalDate]       = useState(new Date());
+  const [calFS, setCalFS]           = useState(false);
   const [dashViewRes, setDashViewRes] = useState(null);
-  const [calStatusF, setCalStatusF] = useState([]); // empty = show all
+  const [calStatusF, setCalStatusF] = useState([]);
   const [calLoanTypeF, setCalLoanTypeF] = useState("הכל");
+  const [onLoanModal, setOnLoanModal] = useState(null); // "units" | "items" | null
+
   const yr = calDate.getFullYear();
   const mo = calDate.getMonth();
 
@@ -1704,13 +1728,7 @@ function DashboardPage({ equipment, reservations }) {
     ["rgba(200,160,0,0.75)","#fff"],   ["rgba(230,126,34,0.75)","#fff"],
     ["rgba(26,188,156,0.75)","#fff"],  ["rgba(236,72,153,0.75)","#fff"],
   ];
-  const ALL_CAL_STATUSES = ["ממתין","מאושר","נדחה"];
-  const activeRes = reservations.filter(r =>
-    r.status !== "הוחזר" && r.borrow_date && r.return_date &&
-    (calStatusF.length===0 || calStatusF.includes(r.status)) &&
-    (calLoanTypeF==="הכל" || r.loan_type===calLoanTypeF)
-  );
-  const DASHBOARD_CAL_STATUSES = [...ALL_CAL_STATUSES, "אישור ראש מחלקה"];
+  const DASHBOARD_CAL_STATUSES = ["ממתין","מאושר","נדחה","אישור ראש מחלקה"];
   const CAL_LOAN_TYPES = [
     { key:"הכל", label:"הכל", icon:"📦" },
     { key:"פרטית", label:"פרטית", icon:"👤" },
@@ -1718,22 +1736,85 @@ function DashboardPage({ equipment, reservations }) {
     { key:"סאונד", label:"סאונד", icon:"🎙️" },
     { key:"שיעור", label:"שיעור", icon:"📽️" },
   ];
+  const LOAN_TYPE_ICON = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","שיעור":"📽️" };
+
+  const activeRes = reservations.filter(r =>
+    r.status !== "הוחזר" && r.borrow_date && r.return_date &&
+    (calStatusF.length===0 || calStatusF.includes(r.status)) &&
+    (calLoanTypeF==="הכל" || r.loan_type===calLoanTypeF)
+  );
   const colorMap = {};
   activeRes.forEach((r,i) => { colorMap[r.id] = SPAN_COLORS[i % SPAN_COLORS.length]; });
 
+  // For on-loan modal: aggregate by equipment
+  const onLoanDetails = (() => {
+    const map = {};
+    activeNow.forEach(r => {
+      (r.items||[]).forEach(item => {
+        const key = item.equipment_id;
+        if(!map[key]) map[key] = { name:item.name||"?", qty:0, reservations:[] };
+        map[key].qty += Number(item.quantity)||0;
+        map[key].reservations.push({
+          student: r.student_name||"",
+          loan_type: r.loan_type||"",
+          borrow_date: r.borrow_date,
+          return_date: r.return_date,
+          borrow_time: r.borrow_time||"",
+          return_time: r.return_time||"",
+          qty: Number(item.quantity)||0,
+        });
+      });
+    });
+    return Object.values(map).sort((a,b)=>b.qty-a.qty);
+  })();
+
+  const groupLabel = s => ({ c:"var(--text3)", fontWeight:800, fontSize:11,
+    textTransform:"uppercase", letterSpacing:1, marginBottom:8, marginTop:16 });
+
   return (
     <div className="page">
-      <div className="stats-grid">
+
+      {/* ── Group 1: מלאי ── */}
+      <div style={groupLabel()}>📦 מלאי</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginBottom:4}}>
         {[
-          { l:"פריטי ציוד",    v:equipment.length, i:"📦", c:"var(--accent)" },
-          { l:"ציוד בדיקה",    v:totalDamaged,     i:"🔧", c:"var(--red)"    },
-          { l:"סך יחידות",     v:total,            i:"🗃️", c:"var(--blue)"   },
-          { l:"השאלות פעילות", v:active,           i:"✅", c:"var(--green)"  },
-          { l:"ממתין לאישור",  v:pending,          i:"⏳", c:"var(--yellow)" },
-          { l:"אישור ראש מחלקה", v:deptHeadPending, i:"🟣", c:"var(--purple)" },
-          { l:"בקשות דחויות",  v:rejected,         i:"❌", c:"var(--red)"    },
-          { l:"השאלות היום",   v:todayLoans,       i:"📋", c:"var(--purple)" },
-          { l:"החזרות היום",   v:rtToday,          i:"🔄", c:"var(--blue)"   },
+          { l:"פריטי ציוד",  v:totalItems,   i:"📦", c:"var(--accent)" },
+          { l:"סך יחידות",  v:totalUnits,   i:"🗃️", c:"var(--blue)"   },
+          { l:"יחידות בדיקה",v:totalDamaged, i:"🔧", c:"var(--red)"    },
+        ].map(s=>(
+          <div key={s.l} className="stat-card" style={{"--ac":s.c}}>
+            <div className="stat-label">{s.l}</div>
+            <div className="stat-value">{s.v}</div>
+            <div className="stat-icon">{s.i}</div>
+          </div>
+        ))}
+        {/* Clickable on-loan cards */}
+        <div className="stat-card" style={{"--ac":"var(--orange,#e67e22)",cursor:"pointer",border:"1px solid rgba(230,126,34,0.35)"}}
+          onClick={()=>setOnLoanModal("items")}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(230,126,34,0.7)";}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(230,126,34,0.35)";}}>
+          <div className="stat-label">סוגי פריטים בהשאלה <span style={{fontSize:10,color:"var(--text3)"}}>← לחץ לפרטים</span></div>
+          <div className="stat-value" style={{color:"#e67e22"}}>{onLoanItems}</div>
+          <div className="stat-icon">📤</div>
+        </div>
+        <div className="stat-card" style={{"--ac":"var(--orange,#e67e22)",cursor:"pointer",border:"1px solid rgba(230,126,34,0.35)"}}
+          onClick={()=>setOnLoanModal("units")}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(230,126,34,0.7)";}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(230,126,34,0.35)";}}>
+          <div className="stat-label">יחידות בהשאלה <span style={{fontSize:10,color:"var(--text3)"}}>← לחץ לפרטים</span></div>
+          <div className="stat-value" style={{color:"#e67e22"}}>{onLoanUnits}</div>
+          <div className="stat-icon">📤</div>
+        </div>
+      </div>
+
+      {/* ── Group 2: בקשות ── */}
+      <div style={{...groupLabel(),marginTop:20}}>📋 בקשות</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginBottom:4}}>
+        {[
+          { l:"השאלות פעילות", v:allApproved.length,  i:"✅", c:"var(--green)"  },
+          { l:"ממתין לאישור",  v:pending,              i:"⏳", c:"var(--yellow)" },
+          { l:"אישור ראש מחלקה",v:deptHeadPending,    i:"🟣", c:"var(--purple)" },
+          { l:"בקשות דחויות",  v:rejected,             i:"❌", c:"var(--red)"    },
         ].map(s=>(
           <div key={s.l} className="stat-card" style={{"--ac":s.c}}>
             <div className="stat-label">{s.l}</div>
@@ -1742,6 +1823,94 @@ function DashboardPage({ equipment, reservations }) {
           </div>
         ))}
       </div>
+
+      {/* ── Group 3: היום ── */}
+      <div style={{...groupLabel(),marginTop:20}}>📅 היום</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginBottom:24}}>
+        {[
+          { l:"השאלות פעילות היום", v:todayLoans, i:"📋", c:"var(--purple)" },
+          { l:"החזרות היום",        v:rtToday,    i:"🔄", c:"var(--blue)"   },
+        ].map(s=>(
+          <div key={s.l} className="stat-card" style={{"--ac":s.c}}>
+            <div className="stat-label">{s.l}</div>
+            <div className="stat-value">{s.v}</div>
+            <div className="stat-icon">{s.i}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── On-loan modal ── */}
+      {onLoanModal&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px",direction:"rtl"}}
+          onClick={e=>e.target===e.currentTarget&&setOnLoanModal(null)}>
+          <div style={{width:"100%",maxWidth:680,maxHeight:"85vh",background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column"}}>
+            <div style={{padding:"16px 20px",background:"var(--surface2)",borderBottom:"1px solid var(--border)",borderRadius:"16px 16px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+              <div>
+                <div style={{fontWeight:900,fontSize:17,color:"#e67e22"}}>
+                  📤 {onLoanModal==="units" ? "יחידות בהשאלה" : "פריטים בהשאלה"} — עכשיו
+                </div>
+                <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>
+                  {onLoanModal==="units"
+                    ? `${onLoanUnits} יחידות מחוץ למחסן בהשאלות פעילות`
+                    : `${onLoanItems} סוגי פריטים בהשאלות פעילות`}
+                </div>
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setOnLoanModal(null)}>✕</button>
+            </div>
+            <div style={{flex:1,overflowY:"auto",padding:"16px 20px",display:"flex",flexDirection:"column",gap:10}}>
+              {activeNow.length===0
+                ? <div style={{textAlign:"center",color:"var(--text3)",padding:"32px",fontSize:14}}>אין השאלות פעילות כרגע</div>
+                : onLoanModal==="items"
+                ? /* Per equipment type */
+                  onLoanDetails.map((d,i)=>(
+                    <div key={i} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"12px 16px"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                        <div style={{fontWeight:800,fontSize:14}}>{d.name}</div>
+                        <span style={{background:"rgba(230,126,34,0.15)",border:"1px solid rgba(230,126,34,0.4)",borderRadius:20,padding:"2px 10px",fontSize:13,fontWeight:900,color:"#e67e22"}}>
+                          ×{d.qty} בהשאלה
+                        </span>
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                        {d.reservations.map((rv,j)=>(
+                          <div key={j} style={{display:"flex",gap:8,alignItems:"center",fontSize:12,color:"var(--text3)",flexWrap:"wrap"}}>
+                            <span style={{background:"var(--surface3)",borderRadius:6,padding:"1px 8px",fontWeight:700,color:"var(--text2)"}}>{LOAN_TYPE_ICON[rv.loan_type]||"📦"} {rv.loan_type||"?"}</span>
+                            <span style={{fontWeight:600,color:"var(--text)"}}>{rv.student}</span>
+                            <span>📅 {formatDate(rv.borrow_date)}{rv.borrow_time&&` ${rv.borrow_time}`} → {formatDate(rv.return_date)}{rv.return_time&&` ${rv.return_time}`}</span>
+                            <span style={{color:"#e67e22",fontWeight:700}}>×{rv.qty}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                : /* Per reservation */
+                  activeNow.sort((a,b)=>a.return_date<b.return_date?-1:1).map(r=>(
+                    <div key={r.id} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"12px 16px"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,flexWrap:"wrap",marginBottom:8}}>
+                        <div>
+                          <div style={{fontWeight:800,fontSize:14}}>{r.student_name}</div>
+                          <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>
+                            <span style={{background:"var(--surface3)",borderRadius:6,padding:"1px 8px",fontWeight:700,color:"var(--text2)",marginLeft:6}}>{LOAN_TYPE_ICON[r.loan_type]||"📦"} {r.loan_type}</span>
+                            📅 {formatDate(r.borrow_date)}{r.borrow_time&&` ${r.borrow_time}`} → {formatDate(r.return_date)}{r.return_time&&` ${r.return_time}`}
+                          </div>
+                        </div>
+                        <span style={{background:"rgba(230,126,34,0.15)",border:"1px solid rgba(230,126,34,0.3)",borderRadius:20,padding:"2px 10px",fontSize:12,fontWeight:900,color:"#e67e22",flexShrink:0}}>
+                          {(r.items||[]).reduce((s,i)=>s+(Number(i.quantity)||0),0)} יחידות
+                        </span>
+                      </div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                        {(r.items||[]).map((item,j)=>(
+                          <span key={j} style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:6,padding:"3px 9px",fontSize:11,color:"var(--text2)"}}>
+                            {item.name} <strong style={{color:"var(--accent)"}}>×{item.quantity}</strong>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+              }
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="dashboard-bottom-grid mb-6">
         <div className="card">
@@ -3860,13 +4029,15 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     const [lessonShowSelected, setLessonShowSelected] = useState(false);
 
     // Manual schedule builder
-    const [manDay, setManDay]         = useState("2"); // 0=Sun..6=Sat
     const [manStartDate, setManStartDate] = useState("");
     const [manStartTime, setManStartTime] = useState("10:00");
     const [manEndTime, setManEndTime]   = useState("13:00");
     const [manCount, setManCount]       = useState(1);
 
-    const HE_DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
+    const LESSON_TIMES = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30",
+      "13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30",
+      "17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30",
+      "21:00","21:30","22:00"];
 
     const buildManualSchedule = () => {
       if(!manStartDate) { showToast("error","יש לבחור תאריך התחלה"); return; }
@@ -3980,10 +4151,8 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       if(scheduleMode==="manual" && schedule.length===0) {
         if(!manStartDate) { showToast("error","יש לבחור תאריך שיעור ראשון"); return; }
         const count = Math.max(1, Math.min(52, Number(manCount)||1));
-        const day = Number(manDay);
         const sessions = [];
         let d = parseLocalDate(manStartDate);
-        while(d.getDay()!==day) d.setDate(d.getDate()+1);
         for(let i=0;i<count;i++) {
           sessions.push({ date: formatLocalDateInput(d), startTime: manStartTime, endTime: manEndTime });
           d.setDate(d.getDate()+7);
@@ -4171,26 +4340,28 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
 
           {scheduleMode==="manual"&&(
             <div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:10}}>
-                <div className="form-group"><label className="form-label">יום בשבוע</label>
-                  <select className="form-select" value={manDay} onChange={e=>setManDay(e.target.value)}>
-                    {HE_DAYS.map((d,i)=><option key={i} value={i}>{d}</option>)}
-                  </select>
-                </div>
-                <div className="form-group"><label className="form-label">תאריך שיעור ראשון</label>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:10}}>
+                <div className="form-group"><label className="form-label">תאריך שיעור ראשון *</label>
                   <input type="date" className="form-input" value={manStartDate} onChange={e=>setManStartDate(e.target.value)}/>
                 </div>
                 <div className="form-group"><label className="form-label">שעת התחלה</label>
-                  <input type="time" className="form-input" value={manStartTime} onChange={e=>setManStartTime(e.target.value)}/>
+                  <select className="form-select" value={manStartTime} onChange={e=>setManStartTime(e.target.value)}>
+                    {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+                  </select>
                 </div>
                 <div className="form-group"><label className="form-label">שעת סיום</label>
-                  <input type="time" className="form-input" value={manEndTime} onChange={e=>setManEndTime(e.target.value)}/>
+                  <select className="form-select" value={manEndTime} onChange={e=>setManEndTime(e.target.value)}>
+                    {LESSON_TIMES.filter(t=>t>manStartTime).map(t=><option key={t} value={t}>{t}</option>)}
+                  </select>
                 </div>
-                <div className="form-group"><label className="form-label">מספר שיעורים</label>
+                <div className="form-group"><label className="form-label">מספר שיעורים (שבועי)</label>
                   <input type="number" min={1} max={52} className="form-input" value={manCount} onChange={e=>setManCount(e.target.value)}/>
                 </div>
               </div>
-              {/* Preview only if already built */}
+              {manStartDate&&<div style={{fontSize:12,color:"var(--text3)",marginBottom:8}}>
+                📅 שיעור 1: {formatDate(manStartDate)} {manStartTime}–{manEndTime}
+                {Number(manCount)>1&&` · עד שיעור ${manCount}: ${(()=>{const d=parseLocalDate(manStartDate);d.setDate(d.getDate()+7*(Number(manCount)-1));return formatDate(formatLocalDateInput(d));})()}`}
+              </div>}
               {schedule.length>0&&(
                 <div style={{fontSize:12,color:"#9b59b6",fontWeight:700,marginBottom:4}}>
                   ✅ {schedule.length} שיעורים מוכנים לפריסה
