@@ -4532,6 +4532,7 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
   const monthEnd   = `${yr}-${String(mo+1).padStart(2,"0")}-${String(new Date(yr,mo+1,0).getDate()).padStart(2,"0")}`;
   const monthRes = activeRes.filter(r => r.borrow_date<=monthEnd && r.return_date>=monthStart)
     .sort((a,b)=>a.borrow_date<b.borrow_date?-1:1);
+  const totalUnitsForReservation = (reservation) => (reservation?.items || []).reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
 
   return (
     <div style={{maxWidth:1100,margin:"0 auto",padding:"24px 16px",direction:"rtl"}}>
