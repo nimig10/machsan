@@ -70,7 +70,7 @@ function buildEmail({ type, recipient_name, student_name, borrow_date, borrow_ti
       </div>
     </div>` : "";
 
-  const calendarButton = isDeptHead && calendar_url ? `
+  const calendarButton = (isDeptHead || isManagerReport) && calendar_url ? `
     <div style="text-align:center;margin:0 0 24px">
       <a href="${calendar_url}" style="display:inline-block;padding:12px 26px;background:#111318;color:#e8eaf0;font-weight:800;font-size:14px;border-radius:10px;text-decoration:none;border:1px solid #2d3244">
         📅 לצפייה בלוח השנה

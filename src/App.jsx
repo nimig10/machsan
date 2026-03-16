@@ -879,7 +879,7 @@ function AddCategoryModal({ categories, onSave, onClose }) {
 }
 
 // ─── EDIT RESERVATION MODAL ──────────────────────────────────────────────────
-function EditReservationModal({ reservation, equipment, reservations, onSave, onApprove, onClose, collegeManager={} }) {
+function EditReservationModal({ reservation, equipment, reservations, onSave, onApprove, onClose, collegeManager={}, managerToken="" }) {
   const TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30"];
   const [form, setForm]   = useState({...reservation});
   const [items, setItems] = useState(reservation.items ? [...reservation.items] : []);
@@ -906,6 +906,7 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
           return_date: formatDate(form.return_date||reservation.return_date),
           items_list: eqList,
           report_note: reportNote,
+          calendar_url: managerToken ? `${window.location.origin}/manager-calendar?token=${managerToken}` : "",
         }),
       });
       setReportNote("");
@@ -1190,7 +1191,7 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
 
 // ─── RESERVATIONS PAGE ────────────────────────────────────────────────────────
 function ReservationsPage({ reservations, setReservations, equipment, showToast,
-    search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy, mode="active", collegeManager={} }) {
+    search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy, mode="active", collegeManager={}, managerToken="" }) {
   const [selected, setSelected] = useState(null);
   const [editing, setEditing]   = useState(null);
   const [approvalConflict, setApprovalConflict] = useState(null);
@@ -1393,7 +1394,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
           ))}
         </div>
       }
-      {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations} collegeManager={collegeManager}
+      {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations} collegeManager={collegeManager} managerToken={managerToken}
   onSave={async(updated)=>{ const all=normalizeReservationsForArchive(reservations.map(r=>r.id===updated.id?updated:r)); setReservations(all); await storageSet("reservations",all); showToast("success","הבקשה עודכנה"); setEditing(null); }}
   onApprove={editing.status==="נדחה" ? async(updated)=>{
     const approved = await approveReservation(updated);
@@ -3146,7 +3147,7 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
 }
 
 // ─── TEAM PAGE ────────────────────────────────────────────────────────────────
-function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, calendarToken="", collegeManager={}, setCollegeManager, showToast }) {
+function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, calendarToken="", collegeManager={}, setCollegeManager, showToast, managerToken="" }) {
   const LOAN_TYPES = ["פרטית","הפקה","סאונד"];
   const LOAN_ICONS = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️" };
   const emptyForm = { name:"", email:"", loanTypes:[...LOAN_TYPES] };
@@ -3310,6 +3311,20 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, cal
         <button className="btn btn-primary" disabled={!mgrForm.name.trim()||!mgrForm.email.trim()||mgrSaving} onClick={saveMgr}>
           {mgrSaving?"⏳ שומר...":"💾 שמור פרטי מנהל"}
         </button>
+        {managerToken&&(
+          <div style={{marginTop:14,background:"rgba(52,152,219,0.08)",border:"1px solid rgba(52,152,219,0.25)",borderRadius:"var(--r-sm)",padding:"10px 14px",fontSize:12}}>
+            <div style={{fontWeight:700,marginBottom:6,color:"#3498db"}}>🔗 קישור לוח שנה למנהל המכללה</div>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+              <code style={{fontSize:11,background:"var(--surface3)",padding:"3px 8px",borderRadius:4,flex:1,wordBreak:"break-all",color:"var(--text2)"}}>
+                {window.location.origin}/manager-calendar?token={managerToken}
+              </code>
+              <button className="btn btn-secondary btn-sm" onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/manager-calendar?token=${managerToken}`);showToast("success","הקישור הועתק!");}}>
+                📋 העתק
+              </button>
+            </div>
+            <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>שלח קישור זה למנהל — הוא יוכל לצפות ולשנות סטטוסים של כל הבקשות</div>
+          </div>
+        )}
       </div>
 
       {/* ── Dept heads section ── */}
@@ -4292,6 +4307,175 @@ function DeptHeadCalendarPage({ reservations: initialReservations }) {
   );
 }
 
+// ─── MANAGER CALENDAR PAGE ───────────────────────────────────────────────────
+function ManagerCalendarPage({ reservations: initialReservations, setReservations, collegeManager }) {
+  const [localRes, setLocalRes]   = useState(initialReservations);
+  const [calDate, setCalDate]     = useState(new Date());
+  const [statusF, setStatusF]     = useState([]);
+  const [loanTypeF, setLoanTypeF] = useState("הכל");
+  const [selected, setSelected]   = useState(null);
+  const [changingStatus, setChangingStatus] = useState(null);
+
+  const ALL_STATUSES  = ["ממתין","אישור ראש מחלקה","מאושר","נדחה"];
+  const STATUS_COLORS = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","אישור ראש מחלקה":"#9b59b6" };
+  const STATUS_BADGE  = { "מאושר":"green","ממתין":"yellow","נדחה":"red","אישור ראש מחלקה":"purple" };
+  const LOAN_ICONS    = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️" };
+  const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+  const HE_D = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
+  const SPAN_COLORS = [
+    ["rgba(52,152,219,0.75)","#fff"],["rgba(46,204,113,0.75)","#fff"],
+    ["rgba(155,89,182,0.75)","#fff"],["rgba(230,126,34,0.75)","#fff"],
+    ["rgba(26,188,156,0.75)","#fff"],["rgba(236,72,153,0.75)","#fff"],
+    ["rgba(200,160,0,0.75)","#fff"], ["rgba(231,76,60,0.75)","#fff"],
+  ];
+
+  const changeStatus = async (r, newStatus) => {
+    setChangingStatus(r.id);
+    try {
+      const allRes = await storageGet("reservations");
+      const updated = (allRes||[]).map(x => x.id===r.id ? {...x, status:newStatus} : x);
+      const ok = await storageSet("reservations", updated);
+      if(ok.ok) {
+        setLocalRes(prev => prev.map(x => x.id===r.id ? {...x, status:newStatus} : x));
+        if(setReservations) setReservations(updated);
+        setSelected(null);
+      }
+    } catch(e) { console.error("changeStatus error", e); }
+    setChangingStatus(null);
+  };
+
+  const yr = calDate.getFullYear();
+  const mo = calDate.getMonth();
+  const todayStr = today();
+
+  const days = [];
+  const startOffset = new Date(yr,mo,1).getDay();
+  for(let i=0;i<startOffset;i++) days.push(null);
+  for(let d=1;d<=new Date(yr,mo+1,0).getDate();d++) days.push(new Date(yr,mo,d));
+  while(days.length<42) days.push(null);
+
+  const activeRes = localRes.filter(r =>
+    r.status !== "הוחזר" && r.borrow_date && r.return_date &&
+    (statusF.length===0 || statusF.includes(r.status)) &&
+    (loanTypeF==="הכל" || r.loan_type===loanTypeF)
+  );
+  const colorMap = {};
+  activeRes.forEach((r,i) => { colorMap[r.id] = SPAN_COLORS[i % SPAN_COLORS.length]; });
+
+  const monthStart = `${yr}-${String(mo+1).padStart(2,"0")}-01`;
+  const monthEnd   = `${yr}-${String(mo+1).padStart(2,"0")}-${String(new Date(yr,mo+1,0).getDate()).padStart(2,"0")}`;
+  const monthRes = activeRes.filter(r => r.borrow_date<=monthEnd && r.return_date>=monthStart)
+    .sort((a,b)=>a.borrow_date<b.borrow_date?-1:1);
+
+  return (
+    <div style={{maxWidth:1100,margin:"0 auto",padding:"24px 16px",direction:"rtl"}}>
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24,flexWrap:"wrap"}}>
+        <div style={{fontSize:32}}>🏫</div>
+        <div>
+          <div style={{fontWeight:900,fontSize:20,color:"var(--accent)"}}>לוח השאלות — מנהל המכללה</div>
+          <div style={{fontSize:12,color:"var(--text3)"}}>שינוי סטטוסים · כל הבקשות{collegeManager?.name?` · שלום ${collegeManager.name}`:""}</div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"14px 16px",marginBottom:16,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+        <span style={{fontSize:12,fontWeight:700,color:"var(--text3)"}}>סינון:</span>
+        {ALL_STATUSES.map(s=>{
+          const active=statusF.includes(s);
+          return (
+            <button key={s} type="button" onClick={()=>setStatusF(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s])}
+              style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?(STATUS_COLORS[s]||"var(--accent)"):"var(--border)"}`,background:active?"rgba(255,255,255,0.06)":"transparent",color:active?(STATUS_COLORS[s]||"var(--accent)"):"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+              {s}
+            </button>
+          );
+        })}
+        <span style={{fontSize:12,color:"var(--border)"}}>|</span>
+        {["הכל","פרטית","הפקה","סאונד"].map(lt=>{
+          const active=loanTypeF===lt;
+          return <button key={lt} type="button" onClick={()=>setLoanTypeF(lt)}
+            style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+            {LOAN_ICONS[lt]||"📦"} {lt}
+          </button>;
+        })}
+        {(statusF.length>0||loanTypeF!=="הכל")&&(
+          <button type="button" onClick={()=>{setStatusF([]);setLoanTypeF("הכל");}}
+            style={{marginRight:"auto",padding:"4px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>
+            ✕ נקה סינון
+          </button>
+        )}
+      </div>
+
+      {/* Calendar */}
+      <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"12px",marginBottom:20}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo-1,1))}>‹</button>
+            <span style={{fontWeight:800,fontSize:15,minWidth:130,textAlign:"center"}}>{HE_M[mo]} {yr}</span>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo+1,1))}>›</button>
+          </div>
+          <span style={{fontSize:12,color:"var(--text3)"}}>{monthRes.length} בקשות בחודש</span>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
+          {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,color:"var(--text3)",padding:"4px 0"}}>{d}</div>)}
+        </div>
+        <CalendarGrid days={days} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={90} fontSize={10}/>
+      </div>
+
+      {/* Reservations list */}
+      <div style={{fontWeight:800,fontSize:15,marginBottom:10}}>📋 בקשות {HE_M[mo]} {yr}</div>
+      {monthRes.length===0
+        ? <div style={{textAlign:"center",color:"var(--text3)",padding:"24px",fontSize:14}}>אין בקשות בחודש זה</div>
+        : <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {monthRes.map(r=>(
+            <div key={r.id} onClick={()=>setSelected(r===selected?null:r)}
+              style={{background:"var(--surface)",border:`1px solid ${selected===r?"var(--accent)":"var(--border)"}`,borderRadius:"var(--r)",padding:"12px 16px",cursor:"pointer",transition:"border-color 0.15s"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                <span style={{fontWeight:800,fontSize:14}}>{r.student_name}</span>
+                <span style={{fontSize:12,color:"var(--text3)"}}>{LOAN_ICONS[r.loan_type]||"📦"} {r.loan_type}</span>
+                <span style={{fontSize:11,color:"var(--text3)"}}>📅 {formatDate(r.borrow_date)} → {formatDate(r.return_date)}</span>
+                <span className={`badge badge-${STATUS_BADGE[r.status]||"yellow"}`} style={{marginRight:"auto"}}>{r.status}</span>
+              </div>
+              {selected===r&&(
+                <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid var(--border)",display:"flex",flexDirection:"column",gap:8}} onClick={e=>e.stopPropagation()}>
+                  {r.email&&<div style={{fontSize:12,color:"var(--text3)"}}>📧 {r.email}</div>}
+                  {r.phone&&<div style={{fontSize:12,color:"var(--text3)"}}>📞 {r.phone}</div>}
+                  {r.course&&<div style={{fontSize:12,color:"var(--text3)"}}>📚 {r.course}</div>}
+                  {r.project_name&&<div style={{fontSize:12,color:"var(--text3)"}}>📽️ {r.project_name}</div>}
+                  {r.crew_photographer_name&&<div style={{fontSize:12,color:"var(--text3)"}}>🎥 צלם: {r.crew_photographer_name}</div>}
+                  {r.crew_sound_name&&<div style={{fontSize:12,color:"var(--text3)"}}>🎙️ סאונד: {r.crew_sound_name}</div>}
+                  {r.items?.length>0&&(
+                    <div style={{fontSize:12,color:"var(--text3)"}}>🎒 {r.items.map(i=>`${i.name} ×${i.quantity}`).join(" · ")}</div>
+                  )}
+                  {/* ── Status change ── */}
+                  <div style={{marginTop:4,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"10px 12px",border:"1px solid var(--border)"}}>
+                    <div style={{fontSize:12,fontWeight:700,color:"var(--text2)",marginBottom:8}}>🔄 שינוי סטטוס</div>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                      {ALL_STATUSES.map(s=>{
+                        const isCurrent = r.status===s;
+                        const col = STATUS_COLORS[s]||"var(--accent)";
+                        return (
+                          <button key={s} type="button"
+                            disabled={isCurrent||changingStatus===r.id}
+                            onClick={()=>changeStatus(r,s)}
+                            style={{padding:"8px 16px",borderRadius:"var(--r-sm)",border:`2px solid ${isCurrent?col:"var(--border)"}`,background:isCurrent?`${col}22`:"var(--surface)",color:isCurrent?col:"var(--text2)",fontWeight:isCurrent?900:700,fontSize:13,cursor:isCurrent?"default":"pointer",opacity:changingStatus===r.id&&!isCurrent?0.5:1,transition:"all 0.15s"}}>
+                            {changingStatus===r.id&&!isCurrent?"⏳ ":isCurrent?"✓ ":""}{s}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {changingStatus===r.id&&<div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>⏳ מעדכן סטטוס...</div>}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      }
+    </div>
+  );
+}
+
 // ─── UNITS MODAL ─────────────────────────────────────────────────────────────
 function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
   const [units, setUnits] = useState(eq.units || []);
@@ -4363,7 +4547,7 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
 }
 
 // ─── DAMAGED EQUIPMENT PAGE ──────────────────────────────────────────────────
-function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[], collegeManager={} }) {
+function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[], collegeManager={}, managerToken="" }) {
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("הכל");
   const [editUnit, setEditUnit] = useState(null); // {eq, unit}
@@ -4387,6 +4571,7 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
           return_date: "",
           items_list: `${editUnit.eq.name} — יחידה #${editUnit.unit.id?.split("_")[1]||"?"}`,
           report_note: `סטטוס: ${editForm.status}\nתקלה: ${editForm.fault||"—"}\nתיקון שבוצע: ${editForm.repair||"—"}`,
+          calendar_url: managerToken ? `${window.location.origin}/manager-calendar?token=${managerToken}` : "",
         }),
       });
       alert("✅ הדיווח נשלח למנהל המכללה");
@@ -4569,6 +4754,7 @@ function AdminLogin({ onSuccess }) {
 export default function App() {
   const isAdmin = window.location.pathname.startsWith("/admin");
   const isCalendarView = window.location.pathname.startsWith("/calendar");
+  const isManagerCalendarView = window.location.pathname.startsWith("/manager-calendar");
   const urlToken = new URLSearchParams(window.location.search).get("token")||"";
   const [page, setPage]               = useState("dashboard");
   const [equipment, setEquipment]     = useState([]);
@@ -4578,6 +4764,7 @@ export default function App() {
   const [deptHeads, setDeptHeads]       = useState([]);
   const [collegeManager, setCollegeManager] = useState({ name:"", email:"" });
   const [calendarToken, setCalendarToken] = useState("");
+  const [managerToken, setManagerToken]   = useState("");
   const [kits, setKits]               = useState([]);
   const [policies, setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"" });
   const [certifications, setCertifications] = useState({ types:[], students:[] });
@@ -4599,7 +4786,7 @@ export default function App() {
   useEffect(()=>{
     (async()=>{
         try {
-          const [eq, res, cats, tm, kts, pol, certs, dhs, calTok, mgr] = await Promise.all([
+          const [eq, res, cats, tm, kts, pol, certs, dhs, calTok, mgr, mgrTok] = await Promise.all([
             storageGet("equipment"),
           storageGet("reservations"),
           storageGet("categories"),
@@ -4610,6 +4797,7 @@ export default function App() {
           storageGet("deptHeads"),
           storageGet("calendarToken"),
           storageGet("collegeManager"),
+          storageGet("managerToken"),
           ]);
           const rawEquipment = normalizeEquipmentTagFlags(eq || INITIAL_EQUIPMENT);
           const normalizedEquipment = rawEquipment.map(ensureUnits);
@@ -4626,6 +4814,7 @@ export default function App() {
         setDeptHeads(Array.isArray(dhs) ? dhs : []);
         setCalendarToken(calTok || "");
         setCollegeManager(mgr || { name:"", email:"" });
+        setManagerToken(mgrTok || "");
         // Init missing
           if(!eq || equipmentChanged) await storageSet("equipment", normalizedEquipment);
         if(!res)  await storageSet("reservations", []);
@@ -4639,6 +4828,11 @@ export default function App() {
           const tok = Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10);
           await storageSet("calendarToken", tok);
           setCalendarToken(tok);
+        }
+        if(!mgrTok) {
+          const tok = "mgr_"+Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10);
+          await storageSet("managerToken", tok);
+          setManagerToken(tok);
         }
         if(!mgr) await storageSet("collegeManager", { name:"", email:"" });
         if(res && reservationsChanged) await storageSet("reservations", normalizedReservations);
@@ -4680,7 +4874,19 @@ export default function App() {
       <style>{css}</style>
 
       {/* ── טופס ציבורי ── */}
-      {isCalendarView ? (
+      {isManagerCalendarView ? (
+        <div style={{minHeight:"100vh",background:"var(--bg)",direction:"rtl"}}>
+          {loading ? <Loading/> : (
+            managerToken && urlToken === managerToken
+              ? <ManagerCalendarPage reservations={reservations} setReservations={setReservations} collegeManager={collegeManager}/>
+              : <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",flexDirection:"column",gap:16,color:"var(--text2)"}}>
+                  <div style={{fontSize:48}}>🔒</div>
+                  <div style={{fontSize:18,fontWeight:700}}>קישור לא תקין</div>
+                  <div style={{fontSize:13}}>הקישור שבידך אינו תקין או פג תוקפו</div>
+                </div>
+          )}
+        </div>
+      ) : isCalendarView ? (
         <div style={{minHeight:"100vh",background:"var(--bg)",direction:"rtl"}}>
           {loading ? <Loading/> : (
             calendarToken && urlToken === calendarToken
@@ -4767,16 +4973,16 @@ export default function App() {
               {page==="equipment"   && <EquipmentPage    equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} certifications={certifications}/>}
               {page==="reservations"&& <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
-                loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager}/>}
+                loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}/>}
               {page==="rejected"    && <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
-                loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} mode="rejected" collegeManager={collegeManager}/>}
+                loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} mode="rejected" collegeManager={collegeManager} managerToken={managerToken}/>}
               {page==="archive"     && <ArchivePage      reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}/>}
-              {page==="team"        && <TeamPage         teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast}/>}
+              {page==="team"        && <TeamPage         teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/>}
               {page==="kits"        && <KitsPage         kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast}/>}
               {page==="policies"    && <PoliciesPage     policies={policies} setPolicies={setPolicies} showToast={showToast}/>}
               {page==="certifications" && <CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/>}
-              {page==="damaged"       && <DamagedEquipmentPage equipment={equipment} setEquipment={setEquipment} showToast={showToast} categories={categories} collegeManager={collegeManager}/>}
+              {page==="damaged"       && <DamagedEquipmentPage equipment={equipment} setEquipment={setEquipment} showToast={showToast} categories={categories} collegeManager={collegeManager} managerToken={managerToken}/>}
             </>}
           </div>
         </div>
