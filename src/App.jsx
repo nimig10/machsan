@@ -230,7 +230,7 @@ function normalizeReservationsForArchive(reservations, now = new Date()) {
       return normalizedReservation.returned_at ? normalizedReservation : markReservationReturned(normalizedReservation, now);
     }
     const returnAt = getReservationReturnTimestamp(normalizedReservation);
-    if (normalizedReservation.status === "מאושר" && returnAt !== null && nowMs >= returnAt) {
+    if (normalizedReservation.status === "מאושר" && normalizedReservation.loan_type !== "שיעור" && returnAt !== null && nowMs >= returnAt) {
       return markReservationReturned(normalizedReservation, now);
     }
     return normalizedReservation;
@@ -1716,6 +1716,7 @@ function DashboardPage({ equipment, reservations }) {
     { key:"פרטית", label:"פרטית", icon:"👤" },
     { key:"הפקה", label:"הפקה", icon:"🎬" },
     { key:"סאונד", label:"סאונד", icon:"🎙️" },
+    { key:"שיעור", label:"שיעור", icon:"📽️" },
   ];
   const colorMap = {};
   activeRes.forEach((r,i) => { colorMap[r.id] = SPAN_COLORS[i % SPAN_COLORS.length]; });
@@ -3841,8 +3842,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
 
   // ── Lesson Kit Form ───────────────────────────────────────────────────────
   const LessonKitForm = ({ initial, onDone }) => {
-    const [name, setName]                   = useState(initial?.name||"");
-    const [courseName, setCourseName]       = useState(initial?.courseName||"");
+    const [name, setName]                   = useState(initial?.name||initial?.courseName||"");
     const [instructorName, setInstructorName] = useState(initial?.instructorName||"");
     const [instructorPhone, setInstructorPhone] = useState(initial?.instructorPhone||"");
     const [instructorEmail, setInstructorEmail] = useState(initial?.instructorEmail||"");
@@ -3894,10 +3894,16 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         const processRows = (rows) => {
           if(!rows.length) { showToast("error","קובץ ריק"); return; }
           const headers = rows[0].map(h=>String(h||"").trim().replace(/[\uFEFF]/g,"").toLowerCase());
-          const dateIdx  = headers.findIndex(h=>h.includes("תאריך")||h.includes("date"));
-          const startIdx = headers.findIndex(h=>h.includes("התחלה")||h.includes("start")||h.includes("שעת התחלה"));
-          const endIdx   = headers.findIndex(h=>h.includes("סיום")||h.includes("end")||h.includes("שעת סיום"));
+          const dateIdx    = headers.findIndex(h=>h.includes("תאריך")||h.includes("date"));
+          const startIdx   = headers.findIndex(h=>h.includes("התחלה")||h.includes("start")||h.includes("שעת התחלה"));
+          const endIdx     = headers.findIndex(h=>h.includes("סיום")||h.includes("end")||h.includes("שעת סיום"));
+          const courseIdx  = headers.findIndex(h=>h.includes("קורס")||h.includes("course")||h.includes("שם"));
           if(dateIdx===-1) { showToast("error",'לא נמצאה עמודת "תאריך"'); setXlImporting(false); return; }
+          // Auto-fill kit name from course column if name is empty
+          if(courseIdx>=0 && !name.trim()) {
+            const firstCourseName = String(rows[1]?.[courseIdx]||"").trim();
+            if(firstCourseName) setName(firstCourseName);
+          }
           const sessions = [];
           for(let i=1;i<rows.length;i++) {
             const row = rows[i];
@@ -3974,7 +3980,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       const kitId = initial?.id||`lk_${Date.now()}`;
       const kit = {
         id: kitId, kitType:"lesson",
-        name: name.trim(), courseName: courseName.trim(),
+        name: name.trim(),
         instructorName: instructorName.trim(),
         instructorPhone: instructorPhone.trim(),
         instructorEmail: instructorEmail.trim(),
@@ -3994,14 +4000,14 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         student_name: instructorName.trim()||name.trim(),
         email: instructorEmail.trim(),
         phone: instructorPhone.trim(),
-        course: courseName.trim()||name.trim(),
+        course: name.trim(),
         borrow_date: s.date,
         borrow_time: s.startTime,
         return_date: s.date,
         return_time: s.endTime,
         items: kitItems,
         created_at: new Date().toISOString(),
-        overdue_notified: true, // don't send overdue alerts for lesson kits
+        overdue_notified: true,
       }));
       const updatedRes = [...baseRes, ...newRes];
       if(setReservations) setReservations(updatedRes);
@@ -4027,11 +4033,9 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         {/* Instructor details */}
         <div style={{background:"rgba(52,152,219,0.06)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
           <div style={{fontWeight:800,fontSize:13,color:"#3498db",marginBottom:12}}>👨‍🏫 פרטי הקורס והמרצה</div>
-          <div className="grid-2" style={{marginBottom:10}}>
-            <div className="form-group"><label className="form-label">שם הערכה / קורס *</label>
-              <input className="form-input" placeholder='לדוגמה: "אולפן טלוויזיה א"' value={name} onChange={e=>setName(e.target.value)}/></div>
-            <div className="form-group"><label className="form-label">שם הקורס הרשמי</label>
-              <input className="form-input" placeholder='שם הקורס במערכת' value={courseName} onChange={e=>setCourseName(e.target.value)}/></div>
+          <div className="form-group" style={{marginBottom:10}}>
+            <label className="form-label">שם הערכה / קורס *</label>
+            <input className="form-input" placeholder='לדוגמה: "אולפן טלוויזיה א"' value={name} onChange={e=>setName(e.target.value)}/>
           </div>
           <div className="grid-2" style={{marginBottom:10}}>
             <div className="form-group"><label className="form-label">שם המרצה</label>
@@ -4293,8 +4297,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                       <span style={{fontSize:28}}>🎬</span>
                       <div>
                         <div style={{fontWeight:800,fontSize:15}}>{kit.name}</div>
-                        {kit.courseName&&<div style={{fontSize:12,color:"var(--text3)"}}>📖 {kit.courseName}</div>}
-                        {kit.instructorName&&<div style={{fontSize:12,color:"var(--text2)",marginTop:2}}>👨‍🏫 {kit.instructorName}{kit.instructorPhone?` · 📞 ${kit.instructorPhone}`:""}</div>}
+                      {kit.instructorName&&<div style={{fontSize:12,color:"var(--text2)",marginTop:2}}>👨‍🏫 {kit.instructorName}{kit.instructorPhone?` · 📞 ${kit.instructorPhone}`:""}</div>}
                         {kit.instructorEmail&&<div style={{fontSize:11,color:"var(--text3)"}}>✉️ {kit.instructorEmail}</div>}
                         <div style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap"}}>
                           <span style={{background:"rgba(155,89,182,0.15)",border:"1px solid rgba(155,89,182,0.35)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"#9b59b6",fontWeight:700}}>
