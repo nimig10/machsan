@@ -2626,6 +2626,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   );
 
   return (
+    <>
     <div className="form-page">
       <div className="form-card">
         <div className="form-card-header">
@@ -2799,6 +2800,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
       </div>
     </div>
     {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)}/>}
+    </>
   );
 }
 
