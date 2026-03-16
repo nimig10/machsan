@@ -2299,6 +2299,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   const [done, setDone]       = useState(false);
   const [emailError, setEmailError] = useState(false);
   const [submitting, setSub]  = useState(false);
+  const [showInfoPanel, setShowInfoPanel] = useState(false);
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const setSoundDayLoan = (enabled) => {
     if (!enabled) {
@@ -2629,7 +2630,12 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     <>
     <div className="form-page">
       <div className="form-card">
-        <div className="form-card-header">
+        <div className="form-card-header" style={{position:"relative"}}>
+          <button type="button" onClick={()=>setShowInfoPanel(true)}
+            title="מידע כללי, נהלים וערכות"
+            style={{position:"absolute",top:12,left:12,width:32,height:32,borderRadius:"50%",border:"2px solid var(--border)",background:"var(--surface2)",color:"var(--text3)",fontSize:15,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1}}>
+            ℹ
+          </button>
           <div style={{fontSize:40,marginBottom:10}}>🎬</div>
           <div style={{fontSize:24,fontWeight:900,color:"var(--accent)"}}>מחסן השאלת ציוד קמרה אובסקורה וסאונד</div>
           <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>טופס השאלת ציוד</div>
