@@ -3974,7 +3974,25 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
 
     const save = async () => {
       if(!name.trim()) { showToast("error","חובה למלא שם ערכה"); return; }
-      if(schedule.length===0) { showToast("error","יש להוסיף לפחות שיעור אחד"); return; }
+
+      // Build schedule from manual inputs if needed
+      let finalSchedule = schedule;
+      if(scheduleMode==="manual" && schedule.length===0) {
+        if(!manStartDate) { showToast("error","יש לבחור תאריך שיעור ראשון"); return; }
+        const count = Math.max(1, Math.min(52, Number(manCount)||1));
+        const day = Number(manDay);
+        const sessions = [];
+        let d = parseLocalDate(manStartDate);
+        while(d.getDay()!==day) d.setDate(d.getDate()+1);
+        for(let i=0;i<count;i++) {
+          sessions.push({ date: formatLocalDateInput(d), startTime: manStartTime, endTime: manEndTime });
+          d.setDate(d.getDate()+7);
+        }
+        finalSchedule = sessions;
+        setSchedule(sessions);
+      }
+
+      if(finalSchedule.length===0) { showToast("error","יש להוסיף לפחות שיעור אחד"); return; }
       setSaving(true);
 
       const kitId = initial?.id||`lk_${Date.now()}`;
@@ -3985,14 +4003,14 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         instructorPhone: instructorPhone.trim(),
         instructorEmail: instructorEmail.trim(),
         description: description.trim(),
-        items: kitItems, schedule,
+        items: kitItems, schedule: finalSchedule,
       };
       const updatedKits = initial ? kits.map(k=>k.id===initial.id?kit:k) : [...kits, kit];
       setKits(updatedKits);
 
       // Create/replace associated reservations (one per session)
       const baseRes = (reservations||[]).filter(r=>r.lesson_kit_id!==kitId);
-      const newRes = schedule.map((s,i)=>({
+      const newRes = finalSchedule.map((s,i)=>({
         id: `${kitId}_s${i}`,
         lesson_kit_id: kitId,
         status: "מאושר",
@@ -4172,7 +4190,13 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                   <input type="number" min={1} max={52} className="form-input" value={manCount} onChange={e=>setManCount(e.target.value)}/>
                 </div>
               </div>
-              <button type="button" className="btn btn-secondary" onClick={buildManualSchedule}>⚡ פרוס לוח שיעורים</button>
+              {/* Preview only if already built */}
+              {schedule.length>0&&(
+                <div style={{fontSize:12,color:"#9b59b6",fontWeight:700,marginBottom:4}}>
+                  ✅ {schedule.length} שיעורים מוכנים לפריסה
+                  <button type="button" onClick={()=>setSchedule([])} style={{marginRight:8,fontSize:11,color:"var(--red)",background:"none",border:"none",cursor:"pointer"}}>× נקה</button>
+                </div>
+              )}
             </div>
           )}
 
@@ -4208,10 +4232,24 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
           )}
         </div>
 
-        <div style={{display:"flex",gap:8}}>
-          <button className="btn btn-primary" disabled={!name.trim()||schedule.length===0||saving} onClick={save}>
-            {saving?"⏳ שומר...":initial?"💾 שמור שינויים":"🎬 צור ערכת שיעור"}
+        {/* Single CTA */}
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <button className="btn btn-primary"
+            disabled={saving || !name.trim() || (scheduleMode==="manual" && !manStartDate) || (scheduleMode==="xl" && schedule.length===0)}
+            onClick={save}
+            style={{fontSize:15,padding:"12px 28px"}}>
+            {saving ? "⏳ שומר ומשריין..." : initial ? "💾 שמור שינויים" : "🎬 צור ערכת שיעור"}
           </button>
+          {scheduleMode==="manual" && manStartDate && schedule.length===0 && (
+            <span style={{fontSize:12,color:"var(--text3)"}}>
+              יפרוס {manCount} שיעורים ויקים אוטומטית
+            </span>
+          )}
+          {schedule.length>0 && (
+            <span style={{fontSize:12,color:"#9b59b6",fontWeight:700}}>
+              📅 {schedule.length} שיעורים מוכנים
+            </span>
+          )}
         </div>
       </div>
     );
