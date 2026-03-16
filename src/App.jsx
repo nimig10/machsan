@@ -3861,7 +3861,8 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
             ))}
           </div>
         )}
-        </>
+      </>
+      )}
 
       {/* ── Students table ── */}
       {types.length===0 && (
