@@ -170,22 +170,6 @@ function normalizeEquipmentTagFlags(list = []) {
     return normalized;
   });
 }
-
-function buildUnitsForEquipment(eqId, existingUnits = [], count = 1) {
-  const boundedCount = Math.max(1, Math.min(20, Number(count) || 1));
-  const existingNumbers = (existingUnits || []).map((unit) => {
-    const parsed = parseInt(String(unit?.id || "").split("_")[1] || "0", 10);
-    return Number.isNaN(parsed) ? 0 : parsed;
-  });
-  let nextNum = (existingNumbers.length ? Math.max(...existingNumbers) : 0) + 1;
-  return Array.from({ length: boundedCount }, () => ({
-    id: `${eqId}_${nextNum++}`,
-    status: "תקין",
-    fault: "",
-    repair: "",
-  }));
-}
-
 function formatLocalDateInput(date) {
   return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
 }
@@ -220,6 +204,11 @@ function isValidEmailAddress(email) {
   return !EMAIL_TYPO_DOMAINS.includes(domain);
 }
 
+function getReservationReturnTimestamp(reservation) {
+  if (!reservation?.return_date) return null;
+  return toDateTime(reservation.return_date, reservation.return_time || "23:59");
+}
+
 function markReservationReturned(reservation, returnedAt = new Date()) {
   const returnedAtIso = returnedAt instanceof Date ? returnedAt.toISOString() : new Date(returnedAt).toISOString();
   return {
@@ -230,6 +219,7 @@ function markReservationReturned(reservation, returnedAt = new Date()) {
 }
 
 function normalizeReservationsForArchive(reservations, now = new Date()) {
+  const nowMs = now.getTime();
   return (reservations || []).map((reservation) => {
     if (!reservation) return reservation;
     const normalizedReservation = {
@@ -238,6 +228,10 @@ function normalizeReservationsForArchive(reservations, now = new Date()) {
     };
     if (normalizedReservation.status === "הוחזר") {
       return normalizedReservation.returned_at ? normalizedReservation : markReservationReturned(normalizedReservation, now);
+    }
+    const returnAt = getReservationReturnTimestamp(normalizedReservation);
+    if (normalizedReservation.status === "מאושר" && returnAt !== null && nowMs >= returnAt) {
+      return markReservationReturned(normalizedReservation, now);
     }
     return normalizedReservation;
   });
@@ -597,7 +591,6 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   const [typeFilter, setTypeFilter] = useState("הכל"); // "הכל" | "סאונד" | "צילום"
   const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [quickAddEqId, setQuickAddEqId] = useState(null);
   const [renamingCat, setRenamingCat] = useState(null); // category name being renamed
   const [renameVal, setRenameVal]     = useState("");
 
@@ -682,23 +675,6 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     setEquipment(updated);
     await storageSet("equipment", updated);
     showToast("success", shouldEnable ? `הקטגוריה "${categoryName}" הוחרגה ממגבלת השאלה פרטית` : `הוחזרה מגבלת השאלה פרטית לקטגוריה "${categoryName}"`);
-  };
-
-  const addUnitsDirect = async (eq, count = 1) => {
-    setQuickAddEqId(eq.id);
-    const normalizedEq = ensureUnits(eq);
-    const newUnits = buildUnitsForEquipment(eq.id, normalizedEq.units, count);
-    const updatedEq = {
-      ...normalizedEq,
-      units: [...normalizedEq.units, ...newUnits],
-      total_quantity: normalizedEq.units.length + newUnits.length,
-    };
-    const updatedEquipment = equipment.map((item) => item.id === eq.id ? updatedEq : item);
-    setEquipment(updatedEquipment);
-    const result = await storageSet("equipment", updatedEquipment);
-    setQuickAddEqId(null);
-    if (result.ok) showToast("success", `נוספה יחידה חדשה ל-${eq.name}`);
-    else showToast("error", "❌ שגיאה בהוספת יחידה");
   };
 
   const todayStr2 = today();
@@ -938,9 +914,6 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                     {eq.notes && <div className="chip" style={{marginTop:6}}>💬 {eq.notes}</div>}
                     <div style={{marginTop:8}}>{statusBadge(eq.status)}</div>
                     <div className="flex gap-2" style={{marginTop:12,flexWrap:"wrap"}}>
-                      <button className="btn btn-primary btn-sm" disabled={quickAddEqId===eq.id} onClick={()=>addUnitsDirect(eq)}>
-                        {quickAddEqId===eq.id ? "⏳ מוסיף..." : "➕ יחידה"}
-                      </button>
                       <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"edit",item:eq})}>✏️ עריכה</button>
                       <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"units",item:eq})}>🔧 יחידות</button>
                       <button className="btn btn-danger btn-sm" onClick={()=>setModal({type:"delete",item:eq})}>🗑️</button>
@@ -4591,7 +4564,18 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
   };
 
   const addUnits = () => {
-    const newUnits = buildUnitsForEquipment(eq.id, units, addCount);
+    const count = Math.max(1, Math.min(20, Number(addCount)||1));
+    const existing = units.map(u => {
+      const n = parseInt(u.id?.split("_")[1] || "0", 10);
+      return isNaN(n) ? 0 : n;
+    });
+    let nextNum = (existing.length ? Math.max(...existing) : 0) + 1;
+    const newUnits = Array.from({length: count}, () => ({
+      id: `${eq.id}_${nextNum++}`,
+      status: "תקין",
+      fault: "",
+      repair: "",
+    }));
     setUnits(prev => [...prev, ...newUnits]);
   };
 
