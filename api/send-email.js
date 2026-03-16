@@ -14,23 +14,32 @@ function buildEmail({ type, recipient_name, student_name, borrow_date, borrow_ti
   const isTeamNotify    = type === "team_notify";
   const isDeptHead      = type === "dept_head_notify";
   const isManagerReport = type === "manager_report";
+  const isOverdue       = type === "overdue";
+  const isOverdueTeam   = type === "overdue_team";
 
   const color = isApproved ? "#2ecc71"
     : isDeptHead ? "#9b59b6"
     : isManagerReport ? "#e67e22"
+    : (isOverdue||isOverdueTeam) ? "#e74c3c"
     : (isNew||isTeamNotify) ? "#f5a623"
     : "#e74c3c";
 
-  const icon  = isApproved ? "✅" : isDeptHead ? "🎓" : isManagerReport ? "📋" : (isNew||isTeamNotify) ? "⏳" : "❌";
+  const icon  = isApproved ? "✅" : isDeptHead ? "🎓" : isManagerReport ? "📋"
+    : (isOverdue||isOverdueTeam) ? "🚨"
+    : (isNew||isTeamNotify) ? "⏳" : "❌";
 
   const title = isApproved ? "הבקשה אושרה!"
     : isDeptHead ? "בקשת השאלת הפקה ממתינה לאישורך"
     : isManagerReport ? `דיווח מצוות המחסן`
+    : isOverdue ? "⚠️ הציוד לא הוחזר — נדרשת פעולה מיידית"
+    : isOverdueTeam ? `🚨 ציוד לא הוחזר — ${student_name||""}`
     : isTeamNotify ? `בקשת השאלה חדשה — ${loan_type||""}`
     : isNew ? "הבקשה שלך התקבלה!"
     : "לצערנו הבקשה נדחתה";
 
-  const greetingName = (isDeptHead || isManagerReport) ? (recipient_name || student_name) : student_name;
+  const greetingName = (isDeptHead || isManagerReport) ? (recipient_name || student_name)
+    : (isOverdueTeam) ? (recipient_name || "צוות המחסן")
+    : student_name;
 
   const body = isApproved
     ? `בקשת ההשאלה של <strong>${student_name}</strong> <strong style="color:#2ecc71">אושרה</strong>.`
@@ -39,6 +48,15 @@ function buildEmail({ type, recipient_name, student_name, borrow_date, borrow_ti
        רק לאחר אישורך תועבר הבקשה לצוות המחסן לטיפול סופי.`
     : isManagerReport
     ? `צוות המחסן שלח דיווח בנוגע ל<strong style="color:#e8eaf0">${student_name === "צוות המחסן" ? loan_type : `בקשת ${student_name}`}</strong>.`
+    : isOverdue
+    ? `<strong style="color:#e74c3c">שימ/י לב — הציוד שהשאלת לא הוחזר עד המועד הנקבע.</strong><br/><br/>
+       מועד ההחזרה שנקבע היה <strong style="color:#e8eaf0">${return_date}${return_time ? " בשעה " + return_time : ""}</strong> והציוד <strong style="color:#e74c3c">טרם הוחזר למחסן</strong>.<br/><br/>
+       <strong style="color:#f5a623">הנהלת המכללה מתייחסת לאיחור בהחזרת ציוד בחומרה רבה.</strong> כל עיכוב נוסף עלול לגרור סנקציות אקדמיות ומניעת גישה לציוד בעתיד.<br/><br/>
+       יש להחזיר את הציוד למחסן <strong style="color:#e74c3c">באופן מיידי</strong> וליצור קשר עם צוות המחסן.`
+    : isOverdueTeam
+    ? `הסטודנט/ית <strong style="color:#e8eaf0">${student_name}</strong> לא החזיר/ה את הציוד במועד הנקבע.<br/><br/>
+       מועד ההחזרה היה <strong style="color:#e8eaf0">${return_date}${return_time ? " בשעה " + return_time : ""}</strong> — <strong style="color:#e74c3c">הציוד טרם הוחזר.</strong><br/><br/>
+       מומלץ ליצור קשר עם הסטודנט בהקדם האפשרי.`
     : isTeamNotify
     ? `<strong>${student_name}</strong> הגיש/ה בקשת השאלה חדשה (${loan_type||""}) הממתינה לאישורך.`
     : isNew
@@ -145,6 +163,8 @@ export default async function handler(req, res) {
     team_notify:       `📬 בקשת השאלה חדשה (${loan_type||""}) – ${student_name||""}`,
     dept_head_notify:  `🎓 בקשת השאלת הפקה לאישורך — ${student_name||""}`,
     manager_report:    `📋 דיווח מצוות המחסן — ${student_name||""}`,
+    overdue:           `🚨 החזרת ציוד באיחור — נדרשת פעולה מיידית`,
+    overdue_team:      `🚨 ציוד לא הוחזר במועד — ${student_name||""}`,
   };
 
   try {
