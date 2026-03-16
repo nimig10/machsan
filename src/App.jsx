@@ -3838,7 +3838,8 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
           </div>
         </div>
       ) : (
-        <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+        <>
+        <div style={{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap",alignItems:"center"}}>
           <button className="btn btn-primary" onClick={()=>setAddingStudent(true)}>➕ הוספת סטודנט</button>
           <label style={{cursor:"pointer"}}>
             <input type="file" accept=".csv,.tsv,.txt,.xls,.xlsx" style={{display:"none"}} onChange={importXL} disabled={xlImporting}/>
@@ -3850,7 +3851,6 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
             <input placeholder="חיפוש לפי שם, מייל או טלפון..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
           <span style={{fontSize:13,color:"var(--text3)"}}>סה״כ: <strong style={{color:"var(--text)"}}>{filteredStudents.length}</strong> / {students.length}</span>
         </div>
-        {/* Track filter */}
         {allTracks.length>1&&(
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
             {allTracks.map(t=>(
@@ -3861,6 +3861,7 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
             ))}
           </div>
         )}
+        </>
 
       {/* ── Students table ── */}
       {types.length===0 && (
