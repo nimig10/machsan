@@ -588,10 +588,31 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState("הכל");
   const [selectedCats, setSelectedCats] = useState([]);
+  const [typeFilter, setTypeFilter] = useState("הכל"); // "הכל" | "סאונד" | "צילום"
   const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [renamingCat, setRenamingCat] = useState(null); // category name being renamed
+  const [renameVal, setRenameVal]     = useState("");
 
-  const filtered = equipment.filter(e => (selectedCats.length===0||selectedCats.includes(e.category)) && e.name.includes(search));
+  const filtered = equipment.filter(e =>
+    (selectedCats.length===0||selectedCats.includes(e.category)) &&
+    e.name.includes(search) &&
+    (typeFilter==="הכל" || (typeFilter==="סאונד" && e.soundOnly) || (typeFilter==="צילום" && e.photoOnly))
+  );
+
+  const renameCategory = async (oldName, newName) => {
+    newName = newName.trim();
+    if(!newName || newName===oldName) { setRenamingCat(null); return; }
+    if(categories.includes(newName)) { showToast("error","קטגוריה בשם זה כבר קיימת"); return; }
+    const updatedCats = categories.map(c=>c===oldName?newName:c);
+    const updatedEq   = equipment.map(e=>e.category===oldName?{...e,category:newName}:e);
+    setCategories(updatedCats);
+    setEquipment(updatedEq);
+    setSelectedCats(prev=>prev.map(c=>c===oldName?newName:c));
+    await Promise.all([storageSet("categories",updatedCats), storageSet("equipment",updatedEq)]);
+    showToast("success",`קטגוריה "${oldName}" שונתה ל-"${newName}"`);
+    setRenamingCat(null);
+  };
 
   const save = async (form) => {
     setSaving(true);
@@ -763,30 +784,72 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
           <button className="btn btn-primary" onClick={()=>setModal({type:"add"})}>➕ הוסף ציוד</button>
         </div>
       </div>
+
+      {/* ── Type filter (sound / photo) ── */}
+      <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
+        {[{k:"הכל",label:"📦 הכל"},{k:"סאונד",label:"🎙️ סאונד"},{k:"צילום",label:"🎥 צילום"}].map(({k,label})=>{
+          const active=typeFilter===k;
+          return <button key={k} type="button" onClick={()=>setTypeFilter(k)}
+            style={{padding:"5px 14px",borderRadius:8,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+            {label}
+          </button>;
+        })}
+        {typeFilter!=="הכל"&&<span style={{fontSize:11,color:"var(--text3)"}}>מציג {filtered.length} פריטים</span>}
+      </div>
+
+      {/* ── Category pills ── */}
       <div className="flex gap-2 mb-6" style={{flexWrap:"wrap",alignItems:"center"}}>
         {categories.map(c=>{
           const active = selectedCats.includes(c);
           const hasItems = equipment.some(e=>e.category===c);
-          return <div key={c} style={{display:"flex",alignItems:"center",gap:0}}>
-            <button className={`btn btn-sm ${active?"btn-primary":"btn-secondary"}`}
-              style={{borderRadius:"20px 0 0 20px",borderRight:"none"}}
-              onClick={()=>setSelectedCats(prev=>active?prev.filter(x=>x!==c):[...prev,c])}>{c}</button>
-            <button
-              title={hasItems ? "לא ניתן למחוק — יש ציוד בקטגוריה זו" : "מחק קטגוריה"}
-              disabled={hasItems}
-              style={{height:32,padding:"0 8px",borderRadius:"0 20px 20px 0",border:"1px solid var(--border)",background:hasItems?"var(--surface2)":"rgba(231,76,60,0.15)",color:hasItems?"var(--text3)":"#e74c3c",cursor:hasItems?"not-allowed":"pointer",fontSize:12,transition:"all 0.15s"}}
-              onClick={async()=>{
-                if(window.confirm(`למחוק את הקטגוריה "${c}"?`)){
-                  const updated = categories.filter(x=>x!==c);
-                  setCategories(updated);
-                  setSelectedCats(prev=>prev.filter(x=>x!==c));
-                  await storageSet("categories", updated);
-                  showToast("success", `קטגוריה "${c}" נמחקה`);
-                }
-              }}>✕</button>
-          </div>;
+          return (
+            <div key={c} style={{display:"flex",alignItems:"center",gap:0,borderRadius:8,overflow:"hidden",border:`1px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"var(--surface2)"}}>
+              {/* rename input or label */}
+              {renamingCat===c ? (
+                <input
+                  autoFocus
+                  value={renameVal}
+                  onChange={e=>setRenameVal(e.target.value)}
+                  onKeyDown={e=>{if(e.key==="Enter")renameCategory(c,renameVal);if(e.key==="Escape")setRenamingCat(null);}}
+                  onBlur={()=>renameCategory(c,renameVal)}
+                  style={{padding:"4px 8px",background:"var(--surface)",border:"none",outline:"none",fontSize:12,fontWeight:700,color:"var(--text)",width:Math.max(80,renameVal.length*9)+"px",minWidth:60}}
+                />
+              ) : (
+                <button
+                  className="btn btn-sm"
+                  style={{borderRadius:0,border:"none",background:"transparent",color:active?"var(--accent)":"var(--text2)",fontWeight:700,padding:"5px 10px"}}
+                  onClick={()=>setSelectedCats(prev=>active?prev.filter(x=>x!==c):[...prev,c])}>
+                  {c}
+                </button>
+              )}
+              {/* rename button ✏️ */}
+              <button
+                title="שנה שם"
+                onClick={()=>{setRenamingCat(c);setRenameVal(c);}}
+                style={{padding:"5px 6px",border:"none",borderRight:"1px solid var(--border)",background:"transparent",color:"var(--text3)",cursor:"pointer",fontSize:11}}>
+                ✏️
+              </button>
+              {/* delete button ✕ */}
+              <button
+                title={hasItems?"לא ניתן למחוק — יש ציוד":"מחק קטגוריה"}
+                disabled={hasItems}
+                onClick={async()=>{
+                  if(window.confirm(`למחוק את הקטגוריה "${c}"?`)){
+                    const updated=categories.filter(x=>x!==c);
+                    setCategories(updated);
+                    setSelectedCats(prev=>prev.filter(x=>x!==c));
+                    await storageSet("categories",updated);
+                    showToast("success",`קטגוריה "${c}" נמחקה`);
+                  }
+                }}
+                style={{padding:"5px 8px",border:"none",background:"transparent",color:hasItems?"var(--border)":"var(--red)",cursor:hasItems?"not-allowed":"pointer",fontSize:12,fontWeight:900}}>
+                ✕
+              </button>
+            </div>
+          );
         })}
       </div>
+
       {filtered.length===0 ? <div className="empty-state"><div className="emoji">📦</div><p>לא נמצא ציוד</p></div> : (
         <>
           {(selectedCats.length>0?selectedCats:categories).filter(c=>filtered.some(e=>e.category===c)).map(c=>(
@@ -822,7 +885,15 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
               </div>
               <div className="eq-grid">
                 {filtered.filter(e=>e.category===c).map(eq=>(
-                  <div key={eq.id} className="eq-card">
+                  <div key={eq.id} className="eq-card" style={{position:"relative"}}>
+                    {/* ── Cert badge ── */}
+                    {eq.certification_id&&(
+                      <div title={`דורש הסמכה: ${certifications?.types?.find(t=>t.id===eq.certification_id)?.name||"הסמכה"}`}
+                        style={{position:"absolute",top:8,left:8,background:"rgba(245,166,35,0.18)",border:"2px solid var(--accent)",borderRadius:8,padding:"3px 7px",display:"flex",alignItems:"center",gap:3,zIndex:2}}>
+                        <span style={{fontSize:14}}>🎓</span>
+                        <span style={{fontSize:10,fontWeight:900,color:"var(--accent)"}}>הסמכה</span>
+                      </div>
+                    )}
                     <div style={{marginBottom:10,display:"flex",justifyContent:"center"}}>
                       {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
                         ? <img src={eq.image} alt={eq.name} style={{width:72,height:72,objectFit:"cover",borderRadius:10,border:"1px solid var(--border)"}}/>
@@ -4480,6 +4551,7 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
 function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
   const [units, setUnits] = useState(eq.units || []);
   const [saving, setSaving] = useState(false);
+  const [addCount, setAddCount] = useState(1);
 
   const STATUS_COLORS = {"תקין":"var(--green)","פגום":"var(--red)","בתיקון":"var(--yellow)","נעלם":"#9b59b6"};
 
@@ -4487,14 +4559,34 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
     setUnits(prev => prev.map(u => u.id===unitId ? {...u, status} : u));
   };
 
+  const removeUnit = (unitId) => {
+    setUnits(prev => prev.filter(u => u.id !== unitId));
+  };
+
+  const addUnits = () => {
+    const count = Math.max(1, Math.min(20, Number(addCount)||1));
+    const existing = units.map(u => {
+      const n = parseInt(u.id?.split("_")[1] || "0", 10);
+      return isNaN(n) ? 0 : n;
+    });
+    let nextNum = (existing.length ? Math.max(...existing) : 0) + 1;
+    const newUnits = Array.from({length: count}, () => ({
+      id: `${eq.id}_${nextNum++}`,
+      status: "תקין",
+      fault: "",
+      repair: "",
+    }));
+    setUnits(prev => [...prev, ...newUnits]);
+  };
+
   const saveAll = async () => {
     setSaving(true);
-    const updatedEq = {...eq, units};
+    const updatedEq = {...eq, units, total_quantity: units.length};
     const updatedEquipment = equipment.map(e => e.id===eq.id ? updatedEq : e);
     setEquipment(updatedEquipment);
     const r = await storageSet("equipment", updatedEquipment);
     setSaving(false);
-    if(r.ok) { showToast("success", "סטטוס היחידות עודכן"); onClose(); }
+    if(r.ok) { showToast("success", "היחידות עודכנו"); onClose(); }
     else showToast("error","❌ שגיאה בשמירה");
   };
 
@@ -4503,24 +4595,38 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{width:"100%",maxWidth:520,maxHeight:"85vh",background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl",display:"flex",flexDirection:"column"}}>
+      <div style={{width:"100%",maxWidth:520,maxHeight:"90vh",background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl",display:"flex",flexDirection:"column"}}>
         <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
           <div>
             <div style={{fontWeight:900,fontSize:16}}>🔧 ניהול יחידות — {eq.name}</div>
             <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>
               <span style={{color:"var(--green)",fontWeight:700}}>{working} תקין</span>
               {damaged>0&&<span style={{color:"var(--red)",fontWeight:700,marginRight:8}}> · {damaged} בדיקה</span>}
+              <span style={{color:"var(--text3)",marginRight:8}}> · סה"כ {units.length} יחידות</span>
             </div>
           </div>
           <button className="btn btn-secondary btn-sm" onClick={onClose}>✕</button>
         </div>
+
+        {/* ── Add units row ── */}
+        <div style={{padding:"10px 20px",borderBottom:"1px solid var(--border)",background:"rgba(245,166,35,0.04)",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          <span style={{fontSize:12,fontWeight:700,color:"var(--text2)"}}>➕ הוספת יחידות:</span>
+          <input type="number" min={1} max={20} value={addCount} onChange={e=>setAddCount(e.target.value)}
+            style={{width:56,padding:"4px 8px",borderRadius:"var(--r-sm)",border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",fontSize:13,textAlign:"center"}}/>
+          <button className="btn btn-primary btn-sm" onClick={addUnits}>הוסף</button>
+          <span style={{fontSize:11,color:"var(--text3)"}}>יחידות חדשות יתווספו כ"תקין"</span>
+        </div>
+
         <div style={{flex:1,overflowY:"auto",padding:"16px 20px",display:"flex",flexDirection:"column",gap:8}}>
+          {units.length===0 && (
+            <div style={{textAlign:"center",color:"var(--text3)",padding:24,fontSize:13}}>אין יחידות — הוסף יחידות למעלה</div>
+          )}
           {units.map((u,i)=>{
             const unitNum = u.id?.split("_")[1]||String(i+1);
             return (
-              <div key={u.id} style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"12px 14px",border:`1px solid ${STATUS_COLORS[u.status]||"var(--border)"}44`}}>
+              <div key={u.id} style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"10px 14px",border:`1px solid ${STATUS_COLORS[u.status]||"var(--border)"}44`}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                  <span style={{fontWeight:700,fontSize:13,minWidth:80}}>יחידה #{unitNum}</span>
+                  <span style={{fontWeight:700,fontSize:13,minWidth:72}}>יחידה #{unitNum}</span>
                   <div style={{display:"flex",gap:6,flex:1,flexWrap:"wrap"}}>
                     {["תקין","פגום","בתיקון","נעלם"].map(s=>{
                       const active = u.status===s;
@@ -4532,6 +4638,11 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
                       );
                     })}
                   </div>
+                  <button type="button" onClick={()=>removeUnit(u.id)}
+                    title="הסר יחידה"
+                    style={{padding:"3px 7px",borderRadius:"var(--r-sm)",border:"1px solid rgba(231,76,60,0.3)",background:"rgba(231,76,60,0.08)",color:"var(--red)",fontSize:12,cursor:"pointer",flexShrink:0}}>
+                    🗑️
+                  </button>
                 </div>
               </div>
             );
