@@ -255,7 +255,8 @@ function getAvailable(eqId, borrowDate, returnDate, reservations, equipment, exc
       if (item) used += item.quantity;
     }
   }
-  return Math.max(0, eq.total_quantity - used);
+  const working = workingUnits(eq);
+  return Math.max(0, working - used);
 }
  
 function getReservationApprovalConflicts(targetReservation, reservations, equipment) {
@@ -541,6 +542,24 @@ const css = `
 `;
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
+// Ensure each equipment item has a units array
+function ensureUnits(eq) {
+  if (Array.isArray(eq.units) && eq.units.length === eq.total_quantity) return eq;
+  const existing = Array.isArray(eq.units) ? eq.units : [];
+  const units = [];
+  for (let i = 0; i < (eq.total_quantity || 0); i++) {
+    units.push(existing[i] || { id: `${eq.id}_${i+1}`, status: "תקין", fault: "", repair: "" });
+  }
+  return { ...eq, units };
+}
+
+// Count working (תקין) units
+function workingUnits(eq) {
+  if (!Array.isArray(eq.units)) return Number(eq.total_quantity) || 0;
+  return eq.units.filter(u => u.status === "תקין").length;
+}
+
+
 function statusBadge(s) {
   const normalizedStatus = normalizeReservationStatus(s);
   const m = { "מאושר":"badge-green","ממתין":"badge-yellow","נדחה":"badge-red","הוחזר":"badge-blue","אישור ראש מחלקה":"badge-purple","תקין":"badge-green","פגום":"badge-red","בתיקון":"badge-yellow","נעלם":"badge-red" };
@@ -579,10 +598,11 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     const normalizedForm = normalizeEquipmentTagFlags([form])[0];
     let updated;
     if (modal.type==="add") {
-      const item = { ...normalizedForm, id: Date.now() };
+      const item = ensureUnits({ ...normalizedForm, id: Date.now() });
       updated = [...equipment, item];
     } else {
-      updated = equipment.map(e => e.id===modal.item.id ? {...e,...normalizedForm} : e);
+      const merged = ensureUnits({...equipment.find(e=>e.id===modal.item.id)||{}, ...normalizedForm});
+      updated = equipment.map(e => e.id===modal.item.id ? merged : e);
     }
     setEquipment(updated);
     const _saveRes = await storageSet("equipment", updated);
@@ -815,11 +835,16 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                       {eq.soundOnly && <div className="chip" style={{color:"var(--accent)",borderColor:"var(--accent)"}}>🎙️ ציוד סאונד</div>}
                       {eq.photoOnly && <div className="chip" style={{color:"var(--green)",borderColor:"rgba(39,174,96,0.45)"}}>🎥 ציוד צילום</div>}
                     </div>
-                    <div style={{fontSize:13}}><strong style={{color:"var(--accent)",fontSize:20}}>{eq.total_quantity-used(eq.id)}</strong><span style={{color:"var(--text3)"}}> / {eq.total_quantity} זמין</span></div>
+                    <div style={{fontSize:13}}>
+                      <strong style={{color:"var(--accent)",fontSize:20}}>{workingUnits(eq)-used(eq.id)}</strong>
+                      <span style={{color:"var(--text3)"}}> / {workingUnits(eq)} זמין</span>
+                      {workingUnits(eq)<eq.total_quantity&&<span style={{color:"var(--red)",fontSize:11,fontWeight:700,marginRight:6}}> · {eq.total_quantity-workingUnits(eq)} בדיקה 🔧</span>}
+                    </div>
                     {eq.notes && <div className="chip" style={{marginTop:6}}>💬 {eq.notes}</div>}
                     <div style={{marginTop:8}}>{statusBadge(eq.status)}</div>
-                    <div className="flex gap-2" style={{marginTop:12}}>
+                    <div className="flex gap-2" style={{marginTop:12,flexWrap:"wrap"}}>
                       <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"edit",item:eq})}>✏️ עריכה</button>
+                      <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"units",item:eq})}>🔧 יחידות</button>
                       <button className="btn btn-danger btn-sm" onClick={()=>setModal({type:"delete",item:eq})}>🗑️</button>
                     </div>
                   </div>
@@ -830,6 +855,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
         </>
       )}
       {(modal?.type==="add"||modal?.type==="edit") && <Modal title={modal.type==="add"?"➕ הוספת ציוד":"✏️ עריכת ציוד"} onClose={()=>setModal(null)}><EqForm initial={modal.type==="edit"?modal.item:null}/></Modal>}
+      {modal?.type==="units" && <UnitsModal eq={modal.item} equipment={equipment} setEquipment={setEquipment} showToast={showToast} onClose={()=>setModal(null)}/>}
       {modal?.type==="delete" && <Modal title="🗑️ מחיקת ציוד" onClose={()=>setModal(null)} footer={<><button className="btn btn-danger" onClick={()=>del(modal.item)}>כן, מחק</button><button className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button></>}><p>האם למחוק את <strong>{modal.item.name}</strong>?</p></Modal>}
       {modal?.type==="addcat" && <AddCategoryModal categories={categories} onSave={async(newCat)=>{ const updated=[...categories,newCat]; setCategories(updated); await storageSet("categories",updated); showToast("success",`קטגוריה "${newCat}" נוספה`); setModal(null); }} onClose={()=>setModal(null)}/>}
     </div>
@@ -1544,7 +1570,8 @@ function DashboardPage({ equipment, reservations }) {
   const rejected = reservations.filter(r => r.status === "נדחה").length;
   const rtToday = reservations.filter(r => r.status === "מאושר" && r.return_date === todayStr).length;
   const todayLoans = reservations.filter(r => r.status !== "נדחה" && r.status !== "הוחזר" && r.borrow_date <= todayStr && r.return_date >= todayStr).length;
-  const total = equipment.reduce((s, e) => s + Number(e.total_quantity), 0);
+  const total = equipment.reduce((s, e) => s + workingUnits(e), 0);
+  const totalDamaged = equipment.reduce((s, e) => s + (Array.isArray(e.units)?e.units.filter(u=>u.status!=="תקין").length:0), 0);
 
   const [calDate, setCalDate] = useState(new Date());
   const [calFS, setCalFS] = useState(false);
@@ -1590,6 +1617,7 @@ function DashboardPage({ equipment, reservations }) {
       <div className="stats-grid">
         {[
           { l:"פריטי ציוד",    v:equipment.length, i:"📦", c:"var(--accent)" },
+          { l:"ציוד בדיקה",    v:totalDamaged,     i:"🔧", c:"var(--red)"    },
           { l:"סך יחידות",     v:total,            i:"🗃️", c:"var(--blue)"   },
           { l:"השאלות פעילות", v:active,           i:"✅", c:"var(--green)"  },
           { l:"ממתין לאישור",  v:pending,          i:"⏳", c:"var(--yellow)" },
@@ -4174,6 +4202,214 @@ function DeptHeadCalendarPage({ reservations: initialReservations }) {
   );
 }
 
+// ─── UNITS MODAL ─────────────────────────────────────────────────────────────
+function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
+  const [units, setUnits] = useState(eq.units || []);
+  const [saving, setSaving] = useState(false);
+
+  const STATUS_COLORS = {"תקין":"var(--green)","פגום":"var(--red)","בתיקון":"var(--yellow)","נעלם":"#9b59b6"};
+
+  const setUnitStatus = (unitId, status) => {
+    setUnits(prev => prev.map(u => u.id===unitId ? {...u, status} : u));
+  };
+
+  const saveAll = async () => {
+    setSaving(true);
+    const updatedEq = {...eq, units};
+    const updatedEquipment = equipment.map(e => e.id===eq.id ? updatedEq : e);
+    setEquipment(updatedEquipment);
+    const r = await storageSet("equipment", updatedEquipment);
+    setSaving(false);
+    if(r.ok) { showToast("success", "סטטוס היחידות עודכן"); onClose(); }
+    else showToast("error","❌ שגיאה בשמירה");
+  };
+
+  const working = units.filter(u=>u.status==="תקין").length;
+  const damaged = units.length - working;
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{width:"100%",maxWidth:520,maxHeight:"85vh",background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+          <div>
+            <div style={{fontWeight:900,fontSize:16}}>🔧 ניהול יחידות — {eq.name}</div>
+            <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>
+              <span style={{color:"var(--green)",fontWeight:700}}>{working} תקין</span>
+              {damaged>0&&<span style={{color:"var(--red)",fontWeight:700,marginRight:8}}> · {damaged} בדיקה</span>}
+            </div>
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={onClose}>✕</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"16px 20px",display:"flex",flexDirection:"column",gap:8}}>
+          {units.map((u,i)=>{
+            const unitNum = u.id?.split("_")[1]||String(i+1);
+            return (
+              <div key={u.id} style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"12px 14px",border:`1px solid ${STATUS_COLORS[u.status]||"var(--border)"}44`}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  <span style={{fontWeight:700,fontSize:13,minWidth:80}}>יחידה #{unitNum}</span>
+                  <div style={{display:"flex",gap:6,flex:1,flexWrap:"wrap"}}>
+                    {["תקין","פגום","בתיקון","נעלם"].map(s=>{
+                      const active = u.status===s;
+                      return (
+                        <button key={s} type="button" onClick={()=>setUnitStatus(u.id,s)}
+                          style={{padding:"4px 10px",borderRadius:20,border:`2px solid ${active?STATUS_COLORS[s]:"var(--border)"}`,background:active?`${STATUS_COLORS[s]}22`:"transparent",color:active?STATUS_COLORS[s]:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>
+                          {s}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{padding:"14px 20px",borderTop:"1px solid var(--border)",flexShrink:0,display:"flex",gap:8}}>
+          <button className="btn btn-primary" disabled={saving} onClick={saveAll}>{saving?"⏳ שומר...":"💾 שמור שינויים"}</button>
+          <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── DAMAGED EQUIPMENT PAGE ──────────────────────────────────────────────────
+function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[] }) {
+  const [search, setSearch] = useState("");
+  const [catFilter, setCatFilter] = useState("הכל");
+  const [editUnit, setEditUnit] = useState(null); // {eq, unit}
+  const [editForm, setEditForm] = useState({ status:"פגום", fault:"", repair:"" });
+  const [saving, setSaving] = useState(false);
+
+  // Collect all non-תקין units
+  const damagedItems = [];
+  equipment.forEach(eq => {
+    (eq.units||[]).forEach(u => {
+      if (u.status !== "תקין") {
+        damagedItems.push({ eq, unit: u });
+      }
+    });
+  });
+
+  const filtered = damagedItems.filter(({eq, unit}) => {
+    const matchCat = catFilter==="הכל" || eq.category===catFilter;
+    const matchSearch = !search || eq.name.includes(search) || unit.status.includes(search) || (unit.fault||"").includes(search);
+    return matchCat && matchSearch;
+  });
+
+  const saveUnit = async () => {
+    if(!editUnit) return;
+    setSaving(true);
+    const { eq, unit } = editUnit;
+    const updatedUnits = eq.units.map(u => u.id===unit.id ? {...u, ...editForm} : u);
+    const updatedEq = ensureUnits({...eq, units: updatedUnits});
+    const updatedEquipment = equipment.map(e => e.id===eq.id ? updatedEq : e);
+    setEquipment(updatedEquipment);
+    const r = await storageSet("equipment", updatedEquipment);
+    setSaving(false);
+    if(r.ok) {
+      if(editForm.status==="תקין") showToast("success", `✅ ${eq.name} #${unit.id.split("_")[1]} חזר לציוד פעיל`);
+      else showToast("success","הסטטוס עודכן");
+      setEditUnit(null);
+    } else showToast("error","❌ שגיאה בשמירה");
+  };
+
+  const STATUS_COLORS = { "פגום":"var(--red)","בתיקון":"var(--yellow)","נעלם":"#9b59b6" };
+  const STATUS_ICONS  = { "פגום":"⚠️","בתיקון":"🔧","נעלם":"❓" };
+
+  return (
+    <div className="page">
+      {/* Filters */}
+      <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+        <div className="search-bar" style={{flex:1,minWidth:180}}><span>🔍</span>
+          <input placeholder="חיפוש ציוד..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
+        <span style={{fontSize:13,color:"var(--text3)"}}>סה״כ: <strong style={{color:"var(--red)"}}>{damagedItems.length}</strong> יחידות</span>
+      </div>
+      {/* Category filter */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
+        {["הכל",...categories].map(c=>(
+          <button key={c} type="button" onClick={()=>setCatFilter(c)}
+            style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${catFilter===c?"var(--accent)":"var(--border)"}`,background:catFilter===c?"var(--accent-glow)":"transparent",color:catFilter===c?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+            {c==="הכל"?"📦 הכל":c}
+          </button>
+        ))}
+      </div>
+
+      {filtered.length===0
+        ? <div className="empty-state"><div className="emoji">✅</div><p>{search||catFilter!=="הכל"?"לא נמצאו פריטים":"אין ציוד בדיקה — כל הציוד תקין!"}</p></div>
+        : <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {filtered.map(({eq, unit},i)=>{
+            const isImg = eq.image?.startsWith("data:")||eq.image?.startsWith("http");
+            const unitNum = unit.id?.split("_")[1]||"?";
+            return (
+              <div key={unit.id} style={{background:"var(--surface)",border:`2px solid ${STATUS_COLORS[unit.status]||"var(--border)"}22`,borderRight:`4px solid ${STATUS_COLORS[unit.status]||"var(--border)"}`,borderRadius:"var(--r)",padding:"14px 16px",display:"flex",gap:12,alignItems:"flex-start"}}>
+                <div style={{width:48,height:48,flexShrink:0,borderRadius:8,overflow:"hidden",background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {isImg ? <img src={eq.image} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{fontSize:28}}>{eq.image||"📦"}</span>}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:4}}>
+                    <span style={{fontWeight:800,fontSize:14}}>{eq.name}</span>
+                    <span style={{fontSize:11,color:"var(--text3)"}}>יחידה #{unitNum}</span>
+                    <span style={{fontSize:11,background:`${STATUS_COLORS[unit.status]||"var(--border)"}22`,border:`1px solid ${STATUS_COLORS[unit.status]||"var(--border)"}`,borderRadius:20,padding:"1px 8px",color:STATUS_COLORS[unit.status]||"var(--text3)",fontWeight:700}}>
+                      {STATUS_ICONS[unit.status]||""} {unit.status}
+                    </span>
+                    <span style={{fontSize:11,color:"var(--text3)",marginRight:"auto"}}>{eq.category}</span>
+                  </div>
+                  {unit.fault&&<div style={{fontSize:12,color:"var(--text2)",marginBottom:2}}>⚠️ <strong>תקלה:</strong> {unit.fault}</div>}
+                  {unit.repair&&<div style={{fontSize:12,color:"var(--green)"}}>🔧 <strong>תיקון:</strong> {unit.repair}</div>}
+                </div>
+                <button className="btn btn-secondary btn-sm" onClick={()=>{setEditUnit({eq,unit});setEditForm({status:unit.status,fault:unit.fault||"",repair:unit.repair||""});}}>✏️ עריכה</button>
+              </div>
+            );
+          })}
+        </div>
+      }
+
+      {/* Edit modal */}
+      {editUnit&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}} onClick={e=>e.target===e.currentTarget&&setEditUnit(null)}>
+          <div style={{width:"100%",maxWidth:500,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl"}}>
+            <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontWeight:900,fontSize:16}}>✏️ עריכת יחידה — {editUnit.eq.name}</div>
+                <div style={{fontSize:12,color:"var(--text3)"}}>יחידה #{editUnit.unit.id?.split("_")[1]}</div>
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setEditUnit(null)}>✕</button>
+            </div>
+            <div style={{padding:"20px",display:"flex",flexDirection:"column",gap:14}}>
+              <div className="form-group">
+                <label className="form-label">סטטוס יחידה</label>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:6}}>
+                  {["תקין","פגום","בתיקון","נעלם"].map(s=>{
+                    const colors = {"תקין":"var(--green)","פגום":"var(--red)","בתיקון":"var(--yellow)","נעלם":"#9b59b6"};
+                    const active = editForm.status===s;
+                    return <button key={s} type="button" onClick={()=>setEditForm(p=>({...p,status:s}))}
+                      style={{padding:"6px 14px",borderRadius:20,border:`2px solid ${active?colors[s]:"var(--border)"}`,background:active?`${colors[s]}22`:"transparent",color:active?colors[s]:"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+                      {s}
+                    </button>;
+                  })}
+                </div>
+                {editForm.status==="תקין"&&<div style={{fontSize:12,color:"var(--green)",marginTop:6,fontWeight:700}}>✅ היחידה תחזור אוטומטית לציוד פעיל!</div>}
+              </div>
+              <div className="form-group">
+                <label className="form-label">תיאור התקלה</label>
+                <textarea className="form-textarea" rows={2} placeholder="תאר את התקלה שנמצאה..." value={editForm.fault} onChange={e=>setEditForm(p=>({...p,fault:e.target.value}))}/>
+              </div>
+              <div className="form-group">
+                <label className="form-label">תיקונים שבוצעו</label>
+                <textarea className="form-textarea" rows={2} placeholder="רשום אילו תיקונים בוצעו..." value={editForm.repair} onChange={e=>setEditForm(p=>({...p,repair:e.target.value}))}/>
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button className="btn btn-primary" disabled={saving} onClick={saveUnit}>{saving?"⏳ שומר...":"💾 שמור"}</button>
+                <button className="btn btn-secondary" onClick={()=>setEditUnit(null)}>ביטול</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── ADMIN PASSWORD SCREEN ────────────────────────────────────────────────────
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || "changeme";
 
@@ -4250,7 +4486,8 @@ export default function App() {
           storageGet("deptHeads"),
           storageGet("calendarToken"),
           ]);
-          const normalizedEquipment = normalizeEquipmentTagFlags(eq || INITIAL_EQUIPMENT);
+          const rawEquipment = normalizeEquipmentTagFlags(eq || INITIAL_EQUIPMENT);
+          const normalizedEquipment = rawEquipment.map(ensureUnits);
           const equipmentChanged = JSON.stringify(normalizedEquipment) !== JSON.stringify(eq || INITIAL_EQUIPMENT);
           const normalizedReservations = normalizeReservationsForArchive(res || []);
           const reservationsChanged = JSON.stringify(normalizedReservations) !== JSON.stringify(res || []);
@@ -4305,9 +4542,11 @@ export default function App() {
   }, [loading]);
 
   const pending = reservations.filter(r=>r.status==="ממתין").length;
+  const damagedCount = equipment.reduce((sum, eq) =>
+    sum + (Array.isArray(eq.units) ? eq.units.filter(u=>u.status!=="תקין").length : 0), 0);
   const deptHeadPending = reservations.filter(r=>r.status==="אישור ראש מחלקה").length;
   const rejected = reservations.filter(r=>r.status==="נדחה").length;
-  const pageTitle = { dashboard:"לוח בקרה", equipment:"ניהול ציוד", reservations:"ניהול בקשות", rejected:"בקשות דחויות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות", policies:"נהלים", certifications:"הסמכות" };
+  const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד פעיל", damaged:"ציוד בדיקה", reservations:"ניהול בקשות", rejected:"בקשות דחויות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות", policies:"נהלים", certifications:"הסמכות" };
 
   return (
     <>
@@ -4347,7 +4586,8 @@ export default function App() {
               <div className="nav-section">ניהול</div>
               {[
                 {id:"reservations",icon:"📋",label:"בקשות",badge:pending||null},
-                {id:"equipment",icon:"📦",label:"ציוד"},
+                {id:"equipment",icon:"📦",label:"ציוד פעיל"},
+                {id:"damaged",icon:"🔧",label:"ציוד בדיקה",badge:damagedCount||null},
                 {id:"certifications",icon:"🎓",label:"הסמכות"},
                 {id:"rejected",icon:"❌",label:"דחויות",badge:rejected||null},
                 {id:"kits",icon:"🎒",label:"ערכות"},
@@ -4409,6 +4649,7 @@ export default function App() {
               {page==="kits"        && <KitsPage         kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast}/>}
               {page==="policies"    && <PoliciesPage     policies={policies} setPolicies={setPolicies} showToast={showToast}/>}
               {page==="certifications" && <CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/>}
+              {page==="damaged"       && <DamagedEquipmentPage equipment={equipment} setEquipment={setEquipment} showToast={showToast} categories={categories}/>}
             </>}
           </div>
         </div>
