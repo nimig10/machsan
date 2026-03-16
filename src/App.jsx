@@ -906,27 +906,55 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                       {eq.soundOnly && <div className="chip" style={{color:"var(--accent)",borderColor:"var(--accent)"}}>🎙️ ציוד סאונד</div>}
                       {eq.photoOnly && <div className="chip" style={{color:"var(--green)",borderColor:"rgba(39,174,96,0.45)"}}>🎥 ציוד צילום</div>}
                     </div>
-                    <div style={{fontSize:13}}>
-                      <strong style={{color:"var(--accent)",fontSize:20}}>{workingUnits(eq)-used(eq.id)}</strong>
-                      <span style={{color:"var(--text3)"}}> / {workingUnits(eq)} זמין</span>
-                      {workingUnits(eq)<eq.total_quantity&&<span style={{color:"var(--red)",fontSize:11,fontWeight:700,marginRight:6}}> · {eq.total_quantity-workingUnits(eq)} בדיקה 🔧</span>}
+                    <div style={{fontSize:13,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                      {/* ── Inline quantity stepper ── */}
+                      <button
+                        title="הסר יחידה תקינה"
+                        onClick={async e=>{
+                          e.stopPropagation();
+                          const working = (eq.units||[]).filter(u=>u.status==="תקין");
+                          if(working.length===0) return;
+                          // Remove last working unit
+                          const removeId = working[working.length-1].id;
+                          const newUnits = (eq.units||[]).filter(u=>u.id!==removeId);
+                          const updatedEq = ensureUnits({...eq, units:newUnits, total_quantity:newUnits.length});
+                          const updatedEquipment = equipment.map(e=>e.id===eq.id?updatedEq:e);
+                          setEquipment(updatedEquipment);
+                          const r = await storageSet("equipment",updatedEquipment);
+                          if(!r.ok) showToast("error","❌ שגיאה בשמירה");
+                        }}
+                        style={{width:26,height:26,borderRadius:6,border:"1px solid var(--border)",background:"var(--surface3)",color:"var(--text2)",fontSize:16,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,flexShrink:0}}>
+                        −
+                      </button>
+                      <div style={{textAlign:"center",minWidth:36}}>
+                        <strong style={{color:"var(--accent)",fontSize:20}}>{workingUnits(eq)-used(eq.id)}</strong>
+                        <span style={{color:"var(--text3)",fontSize:12}}> / {workingUnits(eq)}</span>
+                      </div>
+                      <button
+                        title="הוסף יחידה תקינה"
+                        onClick={async e=>{
+                          e.stopPropagation();
+                          const existing = (eq.units||[]).map(u=>parseInt(u.id?.split("_")[1]||"0",10)).filter(n=>!isNaN(n));
+                          const nextNum = existing.length ? Math.max(...existing)+1 : 1;
+                          const newUnit = {id:`${eq.id}_${nextNum}`,status:"תקין",fault:"",repair:""};
+                          const newUnits = [...(eq.units||[]),newUnit];
+                          const updatedEq = ensureUnits({...eq, units:newUnits, total_quantity:newUnits.length});
+                          const updatedEquipment = equipment.map(e=>e.id===eq.id?updatedEq:e);
+                          setEquipment(updatedEquipment);
+                          const r = await storageSet("equipment",updatedEquipment);
+                          if(!r.ok) showToast("error","❌ שגיאה בשמירה");
+                        }}
+                        style={{width:26,height:26,borderRadius:6,border:"1px solid var(--border)",background:"var(--surface3)",color:"var(--accent)",fontSize:16,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,flexShrink:0}}>
+                        +
+                      </button>
+                      <span style={{color:"var(--text3)",fontSize:11}}>זמין</span>
+                      {workingUnits(eq)<eq.total_quantity&&<span style={{color:"var(--red)",fontSize:11,fontWeight:700}}> · {eq.total_quantity-workingUnits(eq)} בדיקה 🔧</span>}
                     </div>
                     {eq.notes && <div className="chip" style={{marginTop:6}}>💬 {eq.notes}</div>}
                     <div style={{marginTop:8}}>{statusBadge(eq.status)}</div>
                     <div className="flex gap-2" style={{marginTop:12,flexWrap:"wrap"}}>
                       <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"edit",item:eq})}>✏️ עריכה</button>
                       <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"units",item:eq})}>🔧 יחידות</button>
-                      <button className="btn btn-secondary btn-sm" title="הוסף יחידה תקינה" onClick={async()=>{
-                        const existing = (eq.units||[]).map(u=>parseInt(u.id?.split("_")[1]||"0",10)).filter(n=>!isNaN(n));
-                        const nextNum = existing.length ? Math.max(...existing)+1 : 1;
-                        const newUnit = {id:`${eq.id}_${nextNum}`,status:"תקין",fault:"",repair:""};
-                        const updatedEq = ensureUnits({...eq, units:[...(eq.units||[]),newUnit], total_quantity:(eq.total_quantity||0)+1});
-                        const updatedEquipment = equipment.map(e=>e.id===eq.id?updatedEq:e);
-                        setEquipment(updatedEquipment);
-                        const r = await storageSet("equipment",updatedEquipment);
-                        if(r.ok) showToast("success",`יחידה #${nextNum} נוספה ל"${eq.name}"`);
-                        else showToast("error","❌ שגיאה בשמירה");
-                      }}>➕</button>
                       <button className="btn btn-danger btn-sm" onClick={()=>setModal({type:"delete",item:eq})}>🗑️</button>
                     </div>
                   </div>
@@ -1398,7 +1426,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
     }
 
     const updated = normalizeReservationsForArchive(reservations.map((r) =>
-      r.id === reservationToApprove.id ? { ...reservationToApprove, status: "מאושר", overdue_notified: false } : r
+      r.id === reservationToApprove.id ? { ...reservationToApprove, status: "מאושר" } : r
     ));
     setReservations(updated);
     await storageSet("reservations", updated);
@@ -4982,86 +5010,6 @@ export default function App() {
     };
     const timerId = window.setInterval(syncArchivedReservations, 60000);
     return () => window.clearInterval(timerId);
-  }, [loading]);
-
-  // ── Overdue notifications ─────────────────────────────────────────────────
-  // בודק כל 5 דקות — שולח מייל שעה אחרי מועד ההחזרה אם ציוד טרם הוחזר
-  useEffect(() => {
-    if (loading) return undefined;
-
-    const checkOverdue = async () => {
-      const nowMs = Date.now();
-      const ONE_HOUR = 3600000;
-
-      // טען נתונים עדכניים מ-Supabase (לא מה-state שאולי ישן)
-      let currentReservations;
-      let currentTeamMembers;
-      try {
-        [currentReservations, currentTeamMembers] = await Promise.all([
-          storageGet("reservations"),
-          storageGet("teamMembers"),
-        ]);
-      } catch { return; }
-
-      if (!Array.isArray(currentReservations)) return;
-
-      const toNotify = currentReservations.filter(r =>
-        r.status === "מאושר" &&
-        !r.overdue_notified &&
-        r.return_date &&
-        (toDateTime(r.return_date, r.return_time || "23:59") + ONE_HOUR) <= nowMs
-      );
-
-      if (!toNotify.length) return;
-
-      const sendEmail = (payload) => fetch("/api/send-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }).catch(e => console.warn("overdue email failed", e));
-
-      for (const r of toNotify) {
-        const shared = {
-          student_name: r.student_name || "",
-          borrow_date:  formatDate(r.borrow_date),
-          return_date:  formatDate(r.return_date),
-          return_time:  r.return_time || "",
-          loan_type:    r.loan_type || "",
-          items_list:   (r.items || []).map(i => `${i.name} ×${i.quantity}`).join(", "),
-        };
-
-        // מייל לסטודנט
-        if (r.email) {
-          await sendEmail({ to: r.email, type: "overdue", ...shared });
-        }
-
-        // מייל לכל חברי הצוות
-        if (Array.isArray(currentTeamMembers)) {
-          for (const member of currentTeamMembers) {
-            if (member.email) {
-              await sendEmail({
-                to: member.email,
-                type: "overdue_team",
-                recipient_name: member.name || "",
-                ...shared,
-              });
-            }
-          }
-        }
-      }
-
-      // סמן overdue_notified: true כדי שלא ישלח שוב
-      const updated = currentReservations.map(r =>
-        toNotify.find(x => x.id === r.id) ? { ...r, overdue_notified: true } : r
-      );
-      await storageSet("reservations", updated);
-      setReservations(updated);
-    };
-
-    // בדיקה ראשונה אחרי 60 שניות (לא מיידית), אח"כ כל 5 דקות
-    const firstCheck = setTimeout(checkOverdue, 60000);
-    const intervalId = setInterval(checkOverdue, 300000);
-    return () => { clearTimeout(firstCheck); clearInterval(intervalId); };
   }, [loading]);
 
   const pending = reservations.filter(r=>r.status==="ממתין").length;
