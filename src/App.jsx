@@ -3884,10 +3884,19 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
 
   // Get all unique tracks
   const allTracks = ["הכל", ...new Set(students.map(s=>s.track||"").filter(Boolean))];
-  const filteredStudents = students.filter(s=>
-    (trackFilter==="הכל" || (s.track||"")=== trackFilter) &&
-    (!search || s.name?.includes(search) || s.email?.includes(search) || s.phone?.includes(search))
-  );
+  const filteredStudents = students
+    .filter(s=>
+      (trackFilter==="הכל" || (s.track||"")=== trackFilter) &&
+      (!search || s.name?.includes(search) || s.email?.includes(search) || s.phone?.includes(search))
+    )
+    .sort((a, b) => {
+      const ta = a.track || "";
+      const tb = b.track || "";
+      if (ta === tb) return 0;
+      if (!ta) return 1;   // ללא מסלול — תמיד אחרון
+      if (!tb) return -1;
+      return ta.localeCompare(tb, "he");
+    });
 
   return (
     <div className="page" style={{direction:"rtl"}}>
@@ -3929,7 +3938,10 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
           <div className="form-group"><label className="form-label">טלפון</label>
             <input className="form-input" value={studentForm.phone} onChange={e=>setStudentForm(p=>({...p,phone:e.target.value}))} placeholder="05x-xxxxxxx"/></div>
           <div className="form-group"><label className="form-label">מסלול לימודים</label>
-            <input className="form-input" value={studentForm.track||""} onChange={e=>setStudentForm(p=>({...p,track:e.target.value}))} placeholder='למשל: "הנדסאי קולנוע ב"'/></div>
+            <datalist id="track-list-add">
+              {[...new Set(students.map(s=>s.track||"").filter(Boolean))].map(t=><option key={t} value={t}/>)}
+            </datalist>
+            <input className="form-input" list="track-list-add" value={studentForm.track||""} onChange={e=>setStudentForm(p=>({...p,track:e.target.value}))} placeholder='למשל: "הנדסאי קולנוע ב"'/></div>
           <div style={{marginTop:12,display:"flex",gap:8}}>
             <button className="btn btn-primary" disabled={!studentForm.name.trim()||!studentForm.email.trim()||saving} onClick={addStudent}>
               {saving?"⏳ שומר...":"✅ הוסף סטודנט"}
@@ -3981,6 +3993,7 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
                 <tr style={{background:"var(--surface2)",borderBottom:"2px solid var(--border)"}}>
                   <th style={{padding:"10px 14px",textAlign:"right",fontWeight:800,fontSize:13,color:"var(--text2)",whiteSpace:"nowrap"}}>שם סטודנט</th>
                   <th style={{padding:"10px 14px",textAlign:"right",fontWeight:800,fontSize:13,color:"var(--text2)"}}>מייל</th>
+                  <th style={{padding:"10px 14px",textAlign:"right",fontWeight:800,fontSize:13,color:"var(--text2)",whiteSpace:"nowrap"}}>מסלול לימודים</th>
                   {types.map(t=>(
                     <th key={t.id} style={{padding:"10px 12px",textAlign:"center",fontWeight:800,fontSize:12,color:"var(--accent)",whiteSpace:"nowrap",minWidth:110}}>🎓 {t.name}</th>
                   ))}
@@ -3993,16 +4006,20 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
                   filteredStudents.forEach((s,i)=>{
                     const t=s.track||"";
                     if(t!==lastTrack){
-                      rows.push(<tr key={`grp_${i}`}><td colSpan={types.length+3} style={{background:"rgba(245,166,35,0.06)",padding:"5px 14px",fontWeight:800,fontSize:11,color:"var(--accent)",borderBottom:"1px solid var(--border)",letterSpacing:0.5}}>{t?"🎓 "+t:"📋 ללא מסלול"}</td></tr>);
+                      rows.push(<tr key={`grp_${i}`}><td colSpan={types.length+4} style={{background:"rgba(245,166,35,0.06)",padding:"5px 14px",fontWeight:800,fontSize:11,color:"var(--accent)",borderBottom:"1px solid var(--border)",letterSpacing:0.5}}>{t?"🎓 "+t:"📋 ללא מסלול"}</td></tr>);
                       lastTrack=t;
                     }
                     rows.push(<tr key={s.id} style={{borderBottom:"1px solid var(--border)",background:i%2===0?"var(--surface)":"var(--surface2)"}}>
                     <td style={{padding:"10px 14px",whiteSpace:"nowrap"}}>
                       <div style={{fontWeight:700,fontSize:14}}>{s.name}</div>
                       {s.phone&&<div style={{fontSize:11,color:"var(--text3)"}}>{s.phone}</div>}
-                      {s.track&&<div style={{fontSize:10,color:"var(--accent)",fontWeight:700,marginTop:2}}>🎓 {s.track}</div>}
                     </td>
                     <td style={{padding:"10px 14px",fontSize:12,color:"var(--text3)",whiteSpace:"nowrap"}}>{s.email}</td>
+                    <td style={{padding:"10px 14px",whiteSpace:"nowrap"}}>
+                      {s.track
+                        ? <span style={{background:"rgba(245,166,35,0.1)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:20,padding:"3px 10px",fontSize:11,color:"var(--accent)",fontWeight:700}}>🎓 {s.track}</span>
+                        : <span style={{fontSize:11,color:"var(--text3)"}}>—</span>}
+                    </td>
                     {types.map(t=>{
                       const status = (s.certs||{})[t.id];
                       const passed = status==="עבר";
@@ -4085,7 +4102,10 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
               <div className="form-group"><label className="form-label">טלפון</label>
                 <input className="form-input" value={editForm.phone} onChange={e=>setEditForm(p=>({...p,phone:e.target.value}))}/></div>
               <div className="form-group"><label className="form-label">מסלול לימודים</label>
-                <input className="form-input" value={editForm.track||""} onChange={e=>setEditForm(p=>({...p,track:e.target.value}))} placeholder='למשל: "הנדסאי קולנוע ב"'/></div>
+                <datalist id="track-list-edit">
+                  {[...new Set(students.map(s=>s.track||"").filter(Boolean))].map(t=><option key={t} value={t}/>)}
+                </datalist>
+                <input className="form-input" list="track-list-edit" value={editForm.track||""} onChange={e=>setEditForm(p=>({...p,track:e.target.value}))} placeholder='למשל: "הנדסאי קולנוע ב"'/></div>
               <div style={{display:"flex",gap:8,marginTop:16}}>
                 <button className="btn btn-primary" disabled={!editForm.name.trim()||!editForm.email.trim()||saving} onClick={saveEdit}>
                   {saving?"⏳ שומר...":"💾 שמור שינויים"}
