@@ -1984,6 +1984,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
     return true;
   });
   const baseCategories = categories.filter((category) => visibleAvailEq.some((eq) => eq.category === category));
+  const filteredCategories = catFilter==="הכל" ? baseCategories : baseCategories.filter(c=>c===catFilter);
 
   return (
     <>
