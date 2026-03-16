@@ -879,13 +879,40 @@ function AddCategoryModal({ categories, onSave, onClose }) {
 }
 
 // ─── EDIT RESERVATION MODAL ──────────────────────────────────────────────────
-function EditReservationModal({ reservation, equipment, reservations, onSave, onApprove, onClose }) {
+function EditReservationModal({ reservation, equipment, reservations, onSave, onApprove, onClose, collegeManager={} }) {
   const TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30"];
   const [form, setForm]   = useState({...reservation});
   const [items, setItems] = useState(reservation.items ? [...reservation.items] : []);
   const [saving, setSaving] = useState(false);
   const [editConflicts, setEditConflicts] = useState([]);
   const [showLoanedOnly, setShowLoanedOnly] = useState(false);
+  const [reportNote, setReportNote] = useState("");
+  const [reportSending, setReportSending] = useState(false);
+
+  const sendManagerReport = async () => {
+    if(!collegeManager.email) return;
+    setReportSending(true);
+    try {
+      const eqList = items.map(i=>`${i.name} ×${i.quantity}`).join(", ");
+      await fetch("/api/send-email", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          to: collegeManager.email,
+          type: "manager_report",
+          student_name: form.student_name||reservation.student_name,
+          reservation_id: String(reservation.id),
+          loan_type: form.loan_type||reservation.loan_type,
+          borrow_date: formatDate(form.borrow_date||reservation.borrow_date),
+          return_date: formatDate(form.return_date||reservation.return_date),
+          items_list: eqList,
+          report_note: reportNote,
+        }),
+      });
+      setReportNote("");
+      alert("✅ הדיווח נשלח למנהל המכללה");
+    } catch(e) { console.error(e); }
+    setReportSending(false);
+  };
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
 
   const getEquipmentBlockingDetails = (eqId) => {
@@ -1097,7 +1124,16 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
           </div>
 
           <div style={{display:"flex",gap:10,justifyContent:"flex-end",paddingTop:8,borderTop:"1px solid var(--border)",flexWrap:"wrap"}}>
-            <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+            {collegeManager.email&&(
+            <div style={{width:"100%",background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"12px",marginBottom:8,border:"1px solid var(--border)"}}>
+              <div style={{fontWeight:700,fontSize:12,marginBottom:6,color:"var(--text2)"}}>📧 דיווח למנהל המכללה</div>
+              <textarea className="form-textarea" rows={2} style={{marginBottom:6}} placeholder="פרט את הבעיה בבקשה..." value={reportNote} onChange={e=>setReportNote(e.target.value)}/>
+              <button className="btn btn-secondary btn-sm" disabled={!reportNote.trim()||reportSending} onClick={sendManagerReport}>
+                {reportSending?"⏳ שולח...":"📧 שלח דיווח למנהל"}
+              </button>
+            </div>
+          )}
+          <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
             {reservation.status==="נדחה"&&onApprove&&(
               <button className="btn btn-success" disabled={saving} onClick={async()=>{
                 setSaving(true);
@@ -1154,7 +1190,7 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
 
 // ─── RESERVATIONS PAGE ────────────────────────────────────────────────────────
 function ReservationsPage({ reservations, setReservations, equipment, showToast,
-    search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy, mode="active" }) {
+    search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy, mode="active", collegeManager={} }) {
   const [selected, setSelected] = useState(null);
   const [editing, setEditing]   = useState(null);
   const [approvalConflict, setApprovalConflict] = useState(null);
@@ -1357,7 +1393,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
           ))}
         </div>
       }
-      {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations}
+      {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations} collegeManager={collegeManager}
   onSave={async(updated)=>{ const all=normalizeReservationsForArchive(reservations.map(r=>r.id===updated.id?updated:r)); setReservations(all); await storageSet("reservations",all); showToast("success","הבקשה עודכנה"); setEditing(null); }}
   onApprove={editing.status==="נדחה" ? async(updated)=>{
     const approved = await approveReservation(updated);
@@ -3110,7 +3146,7 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
 }
 
 // ─── TEAM PAGE ────────────────────────────────────────────────────────────────
-function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, calendarToken="", showToast }) {
+function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, calendarToken="", collegeManager={}, setCollegeManager, showToast }) {
   const LOAN_TYPES = ["פרטית","הפקה","סאונד"];
   const LOAN_ICONS = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️" };
   const emptyForm = { name:"", email:"", loanTypes:[...LOAN_TYPES] };
@@ -3122,6 +3158,18 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, cal
   const [editDh, setEditDh]     = useState(null);
   const [editDhForm, setEditDhForm] = useState(emptyDhForm);
   const [dhSaving, setDhSaving] = useState(false);
+  const [mgrForm, setMgrForm] = useState({ name: collegeManager.name||"", email: collegeManager.email||"" });
+  const [mgrSaving, setMgrSaving] = useState(false);
+
+  const saveMgr = async () => {
+    setMgrSaving(true);
+    const updated = { name: mgrForm.name.trim(), email: mgrForm.email.toLowerCase().trim() };
+    setCollegeManager(updated);
+    const r = await storageSet("collegeManager", updated);
+    setMgrSaving(false);
+    if(r.ok) showToast("success","פרטי מנהל המכללה נשמרו");
+    else showToast("error","❌ שגיאה בשמירה");
+  };
 
   const toggleDhLT = (form, setForm, lt) =>
     setForm(p=>({...p, loanTypes: p.loanTypes.includes(lt)?p.loanTypes.filter(x=>x!==lt):[...p.loanTypes,lt]}));
@@ -3242,6 +3290,28 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, cal
 
   return (
     <div className="page">
+      {/* ── College manager section ── */}
+      <div className="card" style={{marginBottom:24,border:"2px solid rgba(52,152,219,0.3)",background:"rgba(52,152,219,0.04)"}}>
+        <div className="card-header">
+          <div className="card-title">🏫 מנהל המכללה</div>
+        </div>
+        <div style={{fontSize:12,color:"var(--text3)",marginBottom:14}}>
+          מנהל המכללה יכול לקבל דיווחים על בקשות בעייתיות ועל ציוד פגום מצוות המחסן.
+        </div>
+        <div className="grid-2" style={{marginBottom:14}}>
+          <div className="form-group"><label className="form-label">שם מלא</label>
+            <input className="form-input" placeholder="שם מנהל המכללה" value={mgrForm.name} onChange={e=>setMgrForm(p=>({...p,name:e.target.value}))}/></div>
+          <div className="form-group"><label className="form-label">כתובת מייל</label>
+            <input className="form-input" type="email" placeholder="manager@college.ac.il" value={mgrForm.email} onChange={e=>setMgrForm(p=>({...p,email:e.target.value}))}/></div>
+        </div>
+        {collegeManager.email&&(
+          <div style={{fontSize:12,color:"var(--green)",marginBottom:10}}>✅ מוגדר: <strong>{collegeManager.name}</strong> ({collegeManager.email})</div>
+        )}
+        <button className="btn btn-primary" disabled={!mgrForm.name.trim()||!mgrForm.email.trim()||mgrSaving} onClick={saveMgr}>
+          {mgrSaving?"⏳ שומר...":"💾 שמור פרטי מנהל"}
+        </button>
+      </div>
+
       {/* ── Dept heads section ── */}
       <div className="card" style={{marginBottom:24,border:"2px solid rgba(155,89,182,0.3)",background:"rgba(155,89,182,0.04)"}}>
         <div className="card-header">
@@ -4273,12 +4343,36 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
 }
 
 // ─── DAMAGED EQUIPMENT PAGE ──────────────────────────────────────────────────
-function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[] }) {
+function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[], collegeManager={} }) {
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("הכל");
   const [editUnit, setEditUnit] = useState(null); // {eq, unit}
   const [editForm, setEditForm] = useState({ status:"פגום", fault:"", repair:"" });
   const [saving, setSaving] = useState(false);
+  const [reportSending, setReportSending] = useState(false);
+
+  const sendDamageReport = async () => {
+    if(!editUnit||!collegeManager.email) return;
+    setReportSending(true);
+    try {
+      await fetch("/api/send-email", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          to: collegeManager.email,
+          type: "manager_report",
+          student_name: "צוות המחסן",
+          reservation_id: "ציוד",
+          loan_type: "ציוד בדיקה",
+          borrow_date: new Date().toLocaleDateString("he-IL"),
+          return_date: "",
+          items_list: `${editUnit.eq.name} — יחידה #${editUnit.unit.id?.split("_")[1]||"?"}`,
+          report_note: `סטטוס: ${editForm.status}\nתקלה: ${editForm.fault||"—"}\nתיקון שבוצע: ${editForm.repair||"—"}`,
+        }),
+      });
+      alert("✅ הדיווח נשלח למנהל המכללה");
+    } catch(e) { console.error(e); }
+    setReportSending(false);
+  };
 
   // Collect all non-תקין units
   const damagedItems = [];
@@ -4398,6 +4492,15 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
                 <label className="form-label">תיקונים שבוצעו</label>
                 <textarea className="form-textarea" rows={2} placeholder="רשום אילו תיקונים בוצעו..." value={editForm.repair} onChange={e=>setEditForm(p=>({...p,repair:e.target.value}))}/>
               </div>
+              {collegeManager.email&&(
+                <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"10px",marginBottom:8}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"var(--text2)",marginBottom:6}}>📧 דיווח למנהל המכללה</div>
+                  <div style={{fontSize:11,color:"var(--text3)",marginBottom:6}}>פרטי התקלה והתיקון ישלחו אוטומטית</div>
+                  <button className="btn btn-secondary btn-sm" disabled={reportSending} onClick={sendDamageReport}>
+                    {reportSending?"⏳ שולח...":"📧 שלח דיווח למנהל"}
+                  </button>
+                </div>
+              )}
               <div style={{display:"flex",gap:8}}>
                 <button className="btn btn-primary" disabled={saving} onClick={saveUnit}>{saving?"⏳ שומר...":"💾 שמור"}</button>
                 <button className="btn btn-secondary" onClick={()=>setEditUnit(null)}>ביטול</button>
@@ -4453,6 +4556,7 @@ export default function App() {
   const [categories, setCategories]   = useState(DEFAULT_CATEGORIES);
   const [teamMembers, setTeamMembers] = useState([]);
   const [deptHeads, setDeptHeads]       = useState([]);
+  const [collegeManager, setCollegeManager] = useState({ name:"", email:"" });
   const [calendarToken, setCalendarToken] = useState("");
   const [kits, setKits]               = useState([]);
   const [policies, setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"" });
@@ -4475,7 +4579,7 @@ export default function App() {
   useEffect(()=>{
     (async()=>{
         try {
-          const [eq, res, cats, tm, kts, pol, certs, dhs, calTok] = await Promise.all([
+          const [eq, res, cats, tm, kts, pol, certs, dhs, calTok, mgr] = await Promise.all([
             storageGet("equipment"),
           storageGet("reservations"),
           storageGet("categories"),
@@ -4485,6 +4589,7 @@ export default function App() {
           storageGet("certifications"),
           storageGet("deptHeads"),
           storageGet("calendarToken"),
+          storageGet("collegeManager"),
           ]);
           const rawEquipment = normalizeEquipmentTagFlags(eq || INITIAL_EQUIPMENT);
           const normalizedEquipment = rawEquipment.map(ensureUnits);
@@ -4500,6 +4605,7 @@ export default function App() {
         setCertifications(certs || { types:[], students:[] });
         setDeptHeads(Array.isArray(dhs) ? dhs : []);
         setCalendarToken(calTok || "");
+        setCollegeManager(mgr || { name:"", email:"" });
         // Init missing
           if(!eq || equipmentChanged) await storageSet("equipment", normalizedEquipment);
         if(!res)  await storageSet("reservations", []);
@@ -4514,6 +4620,7 @@ export default function App() {
           await storageSet("calendarToken", tok);
           setCalendarToken(tok);
         }
+        if(!mgr) await storageSet("collegeManager", { name:"", email:"" });
         if(res && reservationsChanged) await storageSet("reservations", normalizedReservations);
         // Only warn if BOTH Sheets and cache failed (truly no data)
         if(eq===null && !lsGet("equipment")) showToast("error", "⚠️ לא ניתן לטעון ציוד — בדוק חיבור");
@@ -4640,16 +4747,16 @@ export default function App() {
               {page==="equipment"   && <EquipmentPage    equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} certifications={certifications}/>}
               {page==="reservations"&& <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
-                loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy}/>}
+                loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager}/>}
               {page==="rejected"    && <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
-                loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} mode="rejected"/>}
+                loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} mode="rejected" collegeManager={collegeManager}/>}
               {page==="archive"     && <ArchivePage      reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}/>}
-              {page==="team"        && <TeamPage         teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} showToast={showToast}/>}
+              {page==="team"        && <TeamPage         teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast}/>}
               {page==="kits"        && <KitsPage         kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast}/>}
               {page==="policies"    && <PoliciesPage     policies={policies} setPolicies={setPolicies} showToast={showToast}/>}
               {page==="certifications" && <CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/>}
-              {page==="damaged"       && <DamagedEquipmentPage equipment={equipment} setEquipment={setEquipment} showToast={showToast} categories={categories}/>}
+              {page==="damaged"       && <DamagedEquipmentPage equipment={equipment} setEquipment={setEquipment} showToast={showToast} categories={categories} collegeManager={collegeManager}/>}
             </>}
           </div>
         </div>
