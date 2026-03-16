@@ -4192,22 +4192,25 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     const save = async () => {
       if(!name.trim()) { showToast("error","חובה למלא שם ערכה"); return; }
 
-      // Build from manual inputs only if no sessions exist yet (new kit)
-      let finalSchedule = schedule;
-      if(finalSchedule.length===0 && scheduleMode==="manual") {
-        if(!manStartDate) { showToast("error","יש לבחור תאריך שיעור ראשון"); return; }
-        const count = Math.max(1, Math.min(52, Number(manCount)||1));
-        const sessions = [];
-        let d = parseLocalDate(manStartDate);
-        for(let i=0;i<count;i++) {
-          sessions.push({ date: formatLocalDateInput(d), startTime: manStartTime, endTime: manEndTime });
-          d.setDate(d.getDate()+7);
+      // Always rebuild from current schedule state + manual inputs if needed
+      let finalSchedule = [...schedule]; // copy current state
+
+      if(scheduleMode==="manual" && manStartDate) {
+        // If schedule is empty OR user wants to add more — build from inputs
+        if(finalSchedule.length===0) {
+          const count = Math.max(1, Math.min(52, Number(manCount)||1));
+          let d = parseLocalDate(manStartDate);
+          for(let i=0;i<count;i++) {
+            finalSchedule.push({ date: formatLocalDateInput(d), startTime: manStartTime, endTime: manEndTime });
+            d.setDate(d.getDate()+7);
+          }
         }
-        finalSchedule = sessions;
-        setSchedule(sessions);
       }
 
-      if(finalSchedule.length===0) { showToast("error","יש להוסיף לפחות שיעור אחד"); return; }
+      if(finalSchedule.length===0) {
+        showToast("error","יש להוסיף לפחות שיעור אחד — בחר תאריך ושעות");
+        return;
+      }
       setSaving(true);
 
       const kitId = initial?.id||`lk_${Date.now()}`;
@@ -4411,9 +4414,18 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                 שיעור 1: {formatDate(manStartDate)} {manStartTime}–{manEndTime}
                 {Number(manCount)>1&&` · עד שיעור ${manCount}: ${(()=>{const d=parseLocalDate(manStartDate);d.setDate(d.getDate()+7*(Number(manCount)-1));return formatDate(formatLocalDateInput(d));})()}`}
               </div>}
-              <button type="button" className="btn btn-secondary btn-sm" onClick={buildAndAppendSchedule} disabled={!manStartDate}>
-                ⚡ {schedule.length>0?"הוסף שיעורים":"פרוס לוח שיעורים"}
-              </button>
+              {manStartDate&&schedule.length===0&&(()=>{
+                const cnt=Math.max(1,Math.min(52,Number(manCount)||1));
+                const prev=[];let d=parseLocalDate(manStartDate);
+                for(let i=0;i<cnt;i++){prev.push({date:formatLocalDateInput(d),startTime:manStartTime,endTime:manEndTime});d.setDate(d.getDate()+7);}
+                return(
+                  <div style={{background:"rgba(155,89,182,0.08)",border:"1px dashed rgba(155,89,182,0.4)",borderRadius:"var(--r-sm)",padding:"8px 12px",fontSize:11}}>
+                    <div style={{fontWeight:700,color:"#9b59b6",marginBottom:4}}>תצוגה מקדימה — {cnt} שיעורים שייווצרו:</div>
+                    {prev.slice(0,3).map((s,i)=><div key={i} style={{color:"var(--text3)",marginBottom:1}}>#{i+1} · {formatDate(s.date)} · {s.startTime}–{s.endTime}</div>)}
+                    {cnt>3&&<div style={{color:"var(--text3)"}}>...ועוד {cnt-3} שיעורים נוספים</div>}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -4465,20 +4477,25 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
             </div>
           )}
           {!schedule.length&&scheduleMode==="manual"&&!manStartDate&&(
-            <div style={{textAlign:"center",color:"var(--text3)",fontSize:12,padding:"8px 0"}}>בחר תאריך ולחץ "פרוס לוח שיעורים"</div>
+            <div style={{textAlign:"center",color:"var(--text3)",fontSize:12,padding:"8px 0"}}>בחר תאריך וזמנים למעלה — השיעורים ייווצרו אוטומטית בלחיצה על הכפתור</div>
           )}
         </div>
 
         {/* Single CTA */}
-        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",paddingTop:4}}>
           <button className="btn btn-primary"
-            disabled={saving || !name.trim() || (schedule.length===0 && !(scheduleMode==="manual" && manStartDate))}
+            disabled={saving || !name.trim() || (scheduleMode==="xl" && schedule.length===0)}
             onClick={save}
             style={{fontSize:15,padding:"12px 28px"}}>
             {saving ? "⏳ שומר ומשריין..." : initial ? "💾 שמור שינויים" : "🎬 צור ערכת שיעור"}
           </button>
+          {scheduleMode==="manual" && manStartDate && schedule.length===0 && (
+            <span style={{fontSize:12,color:"var(--text3)"}}>
+              יפרוס {manCount} שיעורים ב-{formatDate(manStartDate)}
+            </span>
+          )}
           {schedule.length>0 && (
-            <span style={{fontSize:12,color:"#9b59b6",fontWeight:700}}>📅 {schedule.length} שיעורים מוכנים</span>
+            <span style={{fontSize:12,color:"#9b59b6",fontWeight:700}}>📅 {schedule.length} שיעורים בלוח</span>
           )}
         </div>
       </div>
