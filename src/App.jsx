@@ -4604,15 +4604,95 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
                 <span className={`badge badge-${STATUS_BADGE[r.status]||"yellow"}`} style={{marginRight:"auto"}}>{r.status}</span>
               </div>
               {selected===r&&(
-                <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid var(--border)",display:"flex",flexDirection:"column",gap:8}} onClick={e=>e.stopPropagation()}>
-                  {r.email&&<div style={{fontSize:12,color:"var(--text3)"}}>📧 {r.email}</div>}
-                  {r.phone&&<div style={{fontSize:12,color:"var(--text3)"}}>📞 {r.phone}</div>}
-                  {r.course&&<div style={{fontSize:12,color:"var(--text3)"}}>📚 {r.course}</div>}
-                  {r.project_name&&<div style={{fontSize:12,color:"var(--text3)"}}>📽️ {r.project_name}</div>}
-                  {r.crew_photographer_name&&<div style={{fontSize:12,color:"var(--text3)"}}>🎥 צלם: {r.crew_photographer_name}</div>}
-                  {r.crew_sound_name&&<div style={{fontSize:12,color:"var(--text3)"}}>🎙️ סאונד: {r.crew_sound_name}</div>}
+                <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid var(--border)",display:"flex",flexDirection:"column",gap:12}} onClick={e=>e.stopPropagation()}>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}}>
+                    {r.email&&(
+                      <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
+                        <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:4}}>??????</div>
+                        <div style={{fontSize:13,fontWeight:700,color:"var(--text1)",wordBreak:"break-word"}}>{r.email}</div>
+                      </div>
+                    )}
+                    {r.phone&&(
+                      <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
+                        <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:4}}>?????</div>
+                        <div style={{fontSize:13,fontWeight:700,color:"var(--text1)"}}>{r.phone}</div>
+                      </div>
+                    )}
+                    {r.course&&(
+                      <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
+                        <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:4}}>???? / ????</div>
+                        <div style={{fontSize:13,fontWeight:700,color:"var(--text1)"}}>{r.course}</div>
+                      </div>
+                    )}
+                    {r.project_name&&(
+                      <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
+                        <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:4}}>?? ???????</div>
+                        <div style={{fontSize:13,fontWeight:700,color:"var(--text1)"}}>{r.project_name}</div>
+                      </div>
+                    )}
+                    <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
+                      <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:4}}>???? ??????</div>
+                      <div style={{fontSize:13,fontWeight:900,color:"var(--accent)"}}>{r.items?.length || 0}</div>
+                    </div>
+                    <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
+                      <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:4}}>?? ??????</div>
+                      <div style={{fontSize:13,fontWeight:900,color:"var(--accent)"}}>{totalUnitsForReservation(r)}</div>
+                    </div>
+                  </div>
+
+                  {(r.crew_photographer_name || r.crew_sound_name) && (
+                    <div style={{background:"linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"12px 14px"}}>
+                      <div style={{fontSize:12,fontWeight:900,color:"var(--text1)",marginBottom:8}}>???? ?????</div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:8}}>
+                        {r.crew_photographer_name&&(
+                          <div style={{fontSize:13,color:"var(--text2)"}}>
+                            <span style={{fontWeight:800,color:"var(--accent)"}}>???:</span> {r.crew_photographer_name}
+                          </div>
+                        )}
+                        {r.crew_sound_name&&(
+                          <div style={{fontSize:13,color:"var(--text2)"}}>
+                            <span style={{fontWeight:800,color:"var(--accent)"}}>??? ?????:</span> {r.crew_sound_name}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {r.items?.length>0&&(
-                    <div style={{fontSize:12,color:"var(--text3)"}}>🎒 {r.items.map(i=>`${i.name} ×${i.quantity}`).join(" · ")}</div>
+                    <div style={{background:"linear-gradient(180deg, rgba(255,170,0,0.08), rgba(255,170,0,0.03))",border:"1px solid rgba(255,170,0,0.24)",borderRadius:"var(--r)",padding:"14px"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:12}}>
+                        <div>
+                          <div style={{fontSize:14,fontWeight:900,color:"var(--text1)"}}>????? ??????</div>
+                          <div style={{fontSize:12,color:"var(--text3)"}}>????? ???? ?? ?? ????? ????? ?????</div>
+                        </div>
+                        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                          <span className="badge badge-yellow">{r.items.length} ?????</span>
+                          <span className="badge badge-green">{totalUnitsForReservation(r)} ??????</span>
+                        </div>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:10}}>
+                        {r.items.map((item, idx)=>(
+                          <div key={r.id + "-" + (item.equipment_id || item.name || idx)} style={{background:"rgba(10,12,18,0.55)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:"var(--r-sm)",padding:"12px",display:"flex",flexDirection:"column",gap:10,minHeight:120}}>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:15,fontWeight:900,color:"var(--text1)",lineHeight:1.35,wordBreak:"break-word"}}>{item.name || ("???? " + (idx+1))}</div>
+                                {item.equipment_id&&<div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>???? ????: {item.equipment_id}</div>}
+                              </div>
+                              <div style={{minWidth:64,alignSelf:"stretch",display:"flex",alignItems:"center",justifyContent:"center",padding:"8px 10px",borderRadius:"12px",background:"var(--accent-glow)",border:"1px solid rgba(255,170,0,0.3)"}}>
+                                <div style={{textAlign:"center"}}>
+                                  <div style={{fontSize:10,fontWeight:800,color:"var(--text3)",marginBottom:2}}>????</div>
+                                  <div style={{fontSize:22,fontWeight:900,color:"var(--accent)",lineHeight:1}}>{item.quantity || 0}</div>
+                                </div>
+                              </div>
+                            </div>
+                            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:"auto"}}>
+                              <span style={{padding:"4px 8px",borderRadius:999,border:"1px solid var(--border)",background:"var(--surface2)",fontSize:11,color:"var(--text3)"}}>???? #{idx+1}</span>
+                              <span style={{padding:"4px 8px",borderRadius:999,border:"1px solid rgba(255,170,0,0.24)",background:"rgba(255,170,0,0.08)",fontSize:11,color:"var(--accent)"}}>??????</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
                   {/* ── Status change ── */}
                   <div style={{marginTop:4,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"10px 12px",border:"1px solid var(--border)"}}>
