@@ -906,10 +906,47 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                       {eq.soundOnly && <div className="chip" style={{color:"var(--accent)",borderColor:"var(--accent)"}}>🎙️ ציוד סאונד</div>}
                       {eq.photoOnly && <div className="chip" style={{color:"var(--green)",borderColor:"rgba(39,174,96,0.45)"}}>🎥 ציוד צילום</div>}
                     </div>
-                    <div style={{fontSize:13}}>
-                      <strong style={{color:"var(--accent)",fontSize:20}}>{workingUnits(eq)-used(eq.id)}</strong>
-                      <span style={{color:"var(--text3)"}}> / {workingUnits(eq)} זמין</span>
-                      {workingUnits(eq)<eq.total_quantity&&<span style={{color:"var(--red)",fontSize:11,fontWeight:700,marginRight:6}}> · {eq.total_quantity-workingUnits(eq)} בדיקה 🔧</span>}
+                    <div style={{fontSize:13,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:4}}>
+                      <button
+                        title="הסר יחידה תקינה"
+                        onClick={async e=>{
+                          e.stopPropagation();
+                          const working=(eq.units||[]).filter(u=>u.status==="תקין");
+                          if(working.length===0) return;
+                          const removeId=working[working.length-1].id;
+                          const newUnits=(eq.units||[]).filter(u=>u.id!==removeId);
+                          const updatedEq=ensureUnits({...eq,units:newUnits,total_quantity:newUnits.length});
+                          const updatedEquipment=equipment.map(e=>e.id===eq.id?updatedEq:e);
+                          setEquipment(updatedEquipment);
+                          const r=await storageSet("equipment",updatedEquipment);
+                          if(!r.ok) showToast("error","❌ שגיאה בשמירה");
+                        }}
+                        style={{width:26,height:26,borderRadius:6,border:"1px solid var(--border)",background:"var(--surface3)",color:"var(--text2)",fontSize:16,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,flexShrink:0}}>
+                        −
+                      </button>
+                      <div style={{textAlign:"center",minWidth:40}}>
+                        <strong style={{color:"var(--accent)",fontSize:20}}>{workingUnits(eq)-used(eq.id)}</strong>
+                        <span style={{color:"var(--text3)",fontSize:12}}> / {workingUnits(eq)}</span>
+                      </div>
+                      <button
+                        title="הוסף יחידה תקינה"
+                        onClick={async e=>{
+                          e.stopPropagation();
+                          const existing=(eq.units||[]).map(u=>parseInt(u.id?.split("_")[1]||"0",10)).filter(n=>!isNaN(n));
+                          const nextNum=existing.length?Math.max(...existing)+1:1;
+                          const newUnit={id:`${eq.id}_${nextNum}`,status:"תקין",fault:"",repair:""};
+                          const newUnits=[...(eq.units||[]),newUnit];
+                          const updatedEq=ensureUnits({...eq,units:newUnits,total_quantity:newUnits.length});
+                          const updatedEquipment=equipment.map(e=>e.id===eq.id?updatedEq:e);
+                          setEquipment(updatedEquipment);
+                          const r=await storageSet("equipment",updatedEquipment);
+                          if(!r.ok) showToast("error","❌ שגיאה בשמירה");
+                        }}
+                        style={{width:26,height:26,borderRadius:6,border:"1px solid var(--border)",background:"var(--surface3)",color:"var(--accent)",fontSize:16,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,flexShrink:0}}>
+                        +
+                      </button>
+                      <span style={{color:"var(--text3)",fontSize:11}}>זמין</span>
+                      {workingUnits(eq)<eq.total_quantity&&<span style={{color:"var(--red)",fontSize:11,fontWeight:700}}> · {eq.total_quantity-workingUnits(eq)} בדיקה 🔧</span>}
                     </div>
                     {eq.notes && <div className="chip" style={{marginTop:6}}>💬 {eq.notes}</div>}
                     <div style={{marginTop:8}}>{statusBadge(eq.status)}</div>
@@ -4422,51 +4459,108 @@ function DeptHeadCalendarPage({ reservations: initialReservations }) {
       </div>
 
       {/* Reservations list */}
-      <div style={{fontWeight:800,fontSize:15,marginBottom:10}}>📋 בקשות {HE_M[mo]} {yr}</div>
+      <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>📋 בקשות {HE_M[mo]} {yr}</div>
       {monthRes.length===0
         ? <div style={{textAlign:"center",color:"var(--text3)",padding:"24px",fontSize:14}}>אין בקשות בחודש זה</div>
-        : <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {monthRes.map(r=>(
-            <div key={r.id} onClick={()=>setSelected(r===selected?null:r)}
-              style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"12px 16px",cursor:"pointer",transition:"border-color 0.15s"}}
-              onMouseEnter={e=>e.currentTarget.style.borderColor="var(--accent)"}
-              onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}
-            >
-              <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                <span style={{fontWeight:800,fontSize:14}}>{r.student_name}</span>
-                <span style={{fontSize:12,color:"var(--text3)"}}>{LOAN_ICONS[r.loan_type]||"📦"} {r.loan_type}</span>
-                <span style={{fontSize:11,color:"var(--text3)"}}>📅 {formatDate(r.borrow_date)} → {formatDate(r.return_date)}</span>
-                <span className={`badge badge-${r.status==="מאושר"?"green":r.status==="ממתין"?"yellow":r.status==="נדחה"?"red":"purple"}`} style={{marginRight:"auto"}}>
-                  {r.status}
-                </span>
-              </div>
-              {selected===r&&(
-                <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid var(--border)",display:"flex",flexDirection:"column",gap:6}}>
-                  {r.email&&<div style={{fontSize:12,color:"var(--text3)"}}>📧 {r.email}</div>}
-                  {r.phone&&<div style={{fontSize:12,color:"var(--text3)"}}>📞 {r.phone}</div>}
-                  {r.course&&<div style={{fontSize:12,color:"var(--text3)"}}>📚 {r.course}</div>}
-                  {r.project_name&&<div style={{fontSize:12,color:"var(--text3)"}}>📽️ {r.project_name}</div>}
-                  {r.crew_photographer_name&&<div style={{fontSize:12,color:"var(--text3)"}}>🎥 צלם: {r.crew_photographer_name}</div>}
-                  {r.crew_sound_name&&<div style={{fontSize:12,color:"var(--text3)"}}>🎙️ סאונד: {r.crew_sound_name}</div>}
-                  {r.items?.length>0&&(
+        : <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {monthRes.map(r=>{
+            const isOpen = selected===r;
+            const statusColor = STATUS_COLORS[r.status]||"var(--yellow)";
+            const totalUnits = (r.items||[]).reduce((s,i)=>s+(Number(i.quantity)||0),0);
+            return (
+              <div key={r.id} onClick={()=>setSelected(isOpen?null:r)}
+                style={{background:"var(--surface)",border:`2px solid ${isOpen?statusColor:"var(--border)"}`,borderRadius:"var(--r)",overflow:"hidden",cursor:"pointer",transition:"border-color 0.15s,box-shadow 0.15s",boxShadow:isOpen?`0 0 0 1px ${statusColor}33`:"none"}}
+                onMouseEnter={e=>{if(!isOpen){e.currentTarget.style.borderColor=statusColor;e.currentTarget.style.boxShadow=`0 2px 8px rgba(0,0,0,0.2)`;}}}
+                onMouseLeave={e=>{if(!isOpen){e.currentTarget.style.borderColor="var(--border)";e.currentTarget.style.boxShadow="none";}}}
+              >
+                {/* ── Row header ── */}
+                <div style={{padding:"14px 18px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                  <div style={{width:36,height:36,borderRadius:8,background:`${statusColor}22`,border:`1px solid ${statusColor}66`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>
+                    {LOAN_ICONS[r.loan_type]||"📦"}
+                  </div>
+                  <div style={{flex:1,minWidth:120}}>
+                    <div style={{fontWeight:900,fontSize:15,color:"var(--text)"}}>{r.student_name}</div>
                     <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>
-                      🎒 {r.items.map(i=>`${i.name} ×${i.quantity}`).join(" · ")}
+                      {r.course&&<span style={{marginLeft:8}}>📚 {r.course}</span>}
+                      <span>{r.loan_type}</span>
                     </div>
-                  )}
-                  {(r.status==="אישור ראש מחלקה"||r.status==="ממתין לאישור ראש המחלקה")&&(
-                    <div style={{marginTop:8}}>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
+                    <span style={{background:`${statusColor}22`,border:`1px solid ${statusColor}`,borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:800,color:statusColor}}>{r.status}</span>
+                    <span style={{fontSize:11,color:"var(--text3)"}}>📅 {formatDate(r.borrow_date)} → {formatDate(r.return_date)}</span>
+                  </div>
+                  <div style={{fontSize:11,color:isOpen?"var(--accent)":"var(--text3)",flexShrink:0,transition:"color 0.15s"}}>{isOpen?"▲":"▼"}</div>
+                </div>
+
+                {/* ── Expanded detail ── */}
+                {isOpen&&(
+                  <div style={{borderTop:`1px solid var(--border)`,padding:"16px 18px",display:"flex",flexDirection:"column",gap:14}} onClick={e=>e.stopPropagation()}>
+
+                    {/* Contact + meta grid */}
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(170px,1fr))",gap:8}}>
+                      {r.email&&(
+                        <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
+                          <div style={{fontSize:10,fontWeight:800,color:"var(--text3)",marginBottom:3,textTransform:"uppercase",letterSpacing:0.5}}>מייל</div>
+                          <div style={{fontSize:12,fontWeight:700,color:"var(--text)",wordBreak:"break-all"}}>✉️ {r.email}</div>
+                        </div>
+                      )}
+                      {r.phone&&(
+                        <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
+                          <div style={{fontSize:10,fontWeight:800,color:"var(--text3)",marginBottom:3,textTransform:"uppercase",letterSpacing:0.5}}>טלפון</div>
+                          <div style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>📞 {r.phone}</div>
+                        </div>
+                      )}
+                      {r.project_name&&(
+                        <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
+                          <div style={{fontSize:10,fontWeight:800,color:"var(--text3)",marginBottom:3,textTransform:"uppercase",letterSpacing:0.5}}>פרויקט</div>
+                          <div style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>📽️ {r.project_name}</div>
+                        </div>
+                      )}
+                      {(r.crew_photographer_name||r.crew_sound_name)&&(
+                        <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
+                          <div style={{fontSize:10,fontWeight:800,color:"var(--text3)",marginBottom:3,textTransform:"uppercase",letterSpacing:0.5}}>צוות</div>
+                          {r.crew_photographer_name&&<div style={{fontSize:12,color:"var(--text)"}}>🎥 {r.crew_photographer_name}</div>}
+                          {r.crew_sound_name&&<div style={{fontSize:12,color:"var(--text)",marginTop:2}}>🎙️ {r.crew_sound_name}</div>}
+                        </div>
+                      )}
+                      <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
+                        <div style={{fontSize:10,fontWeight:800,color:"var(--text3)",marginBottom:3,textTransform:"uppercase",letterSpacing:0.5}}>ציוד</div>
+                        <div style={{fontSize:13,fontWeight:900,color:"var(--accent)"}}>{r.items?.length||0} סוגים · {totalUnits} יחידות</div>
+                      </div>
+                    </div>
+
+                    {/* Items list */}
+                    {r.items?.length>0&&(
+                      <div style={{background:"rgba(245,166,35,0.06)",border:"1px solid rgba(245,166,35,0.2)",borderRadius:"var(--r)",padding:"14px"}}>
+                        <div style={{fontSize:13,fontWeight:800,color:"var(--accent)",marginBottom:10}}>🎒 פריטי ההשאלה</div>
+                        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                          {r.items.map((item,idx)=>(
+                            <div key={idx} style={{display:"flex",alignItems:"center",gap:12,background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 14px"}}>
+                              <span style={{fontSize:22,flexShrink:0}}>
+                                {(()=>{const eq=(window.__equipmentRef||[]).find(e=>e.id==item.equipment_id);return eq?.image?.startsWith("http")||eq?.image?.startsWith("data:")?<img src={eq.image} alt="" style={{width:32,height:32,objectFit:"contain",borderRadius:4}}/>:eq?.image||"📦";})()}
+                              </span>
+                              <div style={{flex:1,fontWeight:700,fontSize:14,color:"var(--text)"}}>{item.name||`פריט ${idx+1}`}</div>
+                              <div style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:8,padding:"4px 12px",fontSize:15,fontWeight:900,color:"var(--accent)",flexShrink:0}}>×{item.quantity}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Approve button */}
+                    {(r.status==="אישור ראש מחלקה"||r.status==="ממתין לאישור ראש המחלקה")&&(
                       <button
                         onClick={e=>{e.stopPropagation();approveReservation(r);}}
                         disabled={approving===r.id}
-                        style={{padding:"10px 24px",borderRadius:"var(--r-sm)",border:"none",background:"#9b59b6",color:"#fff",fontWeight:900,fontSize:14,cursor:"pointer",opacity:approving===r.id?0.6:1,display:"flex",alignItems:"center",gap:8}}>
-                        {approving===r.id ? "⏳ מאשר..." : "✅ אשר הפקה — העבר לממתין"}
+                        style={{padding:"12px 28px",borderRadius:"var(--r-sm)",border:"none",background:"#9b59b6",color:"#fff",fontWeight:900,fontSize:15,cursor:"pointer",opacity:approving===r.id?0.6:1,display:"flex",alignItems:"center",gap:8,alignSelf:"flex-start"}}>
+                        {approving===r.id?"⏳ מאשר...":"✅ אשר הפקה — העבר לממתין"}
                       </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       }
     </div>
