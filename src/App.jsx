@@ -4474,7 +4474,7 @@ function DeptHeadCalendarPage({ reservations: initialReservations }) {
 }
 
 // ─── MANAGER CALENDAR PAGE ───────────────────────────────────────────────────
-function ManagerCalendarPage({ reservations: initialReservations, setReservations, collegeManager }) {
+function ManagerCalendarPage({ reservations: initialReservations, setReservations, collegeManager, equipment=[] }) {
   const [localRes, setLocalRes]   = useState(initialReservations);
   const [calDate, setCalDate]     = useState(new Date());
   const [statusF, setStatusF]     = useState([]);
@@ -4533,6 +4533,15 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
   const monthRes = activeRes.filter(r => r.borrow_date<=monthEnd && r.return_date>=monthStart)
     .sort((a,b)=>a.borrow_date<b.borrow_date?-1:1);
   const totalUnitsForReservation = (reservation) => (reservation?.items || []).reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+  const getEquipmentRecord = (item) => equipment.find(eq => String(eq.id)===String(item.equipment_id)) || equipment.find(eq => eq.name===item.name) || null;
+  const renderEquipmentThumb = (item) => {
+    const eq = getEquipmentRecord(item);
+    const img = eq?.image || "📦";
+    const isImg = typeof img === "string" && (img.startsWith("data:") || img.startsWith("http"));
+    return isImg
+      ? <img src={img} alt={item.name || ""} style={{width:56,height:56,objectFit:"contain",borderRadius:10,border:"1px solid var(--border)",background:"var(--surface2)",padding:4}}/>
+      : <div style={{width:56,height:56,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,borderRadius:10,border:"1px solid var(--border)",background:"var(--surface2)"}}>{img}</div>;
+  };
 
   return (
     <div style={{maxWidth:1100,margin:"0 auto",padding:"24px 16px",direction:"rtl"}}>
@@ -4608,50 +4617,50 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}}>
                     {r.email&&(
                       <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
-                        <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:4}}>??????</div>
+                        <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:4}}>{"אימייל"}</div>
                         <div style={{fontSize:13,fontWeight:700,color:"var(--text1)",wordBreak:"break-word"}}>{r.email}</div>
                       </div>
                     )}
                     {r.phone&&(
                       <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
-                        <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:4}}>?????</div>
+                        <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:4}}>{"טלפון"}</div>
                         <div style={{fontSize:13,fontWeight:700,color:"var(--text1)"}}>{r.phone}</div>
                       </div>
                     )}
                     {r.course&&(
                       <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
-                        <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:4}}>???? / ????</div>
+                        <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:4}}>{"קורס / כיתה"}</div>
                         <div style={{fontSize:13,fontWeight:700,color:"var(--text1)"}}>{r.course}</div>
                       </div>
                     )}
                     {r.project_name&&(
                       <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
-                        <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:4}}>?? ???????</div>
+                        <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:4}}>{"שם הפרויקט"}</div>
                         <div style={{fontSize:13,fontWeight:700,color:"var(--text1)"}}>{r.project_name}</div>
                       </div>
                     )}
                     <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
-                      <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:4}}>???? ??????</div>
+                      <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:4}}>{"סוגי פריטים"}</div>
                       <div style={{fontSize:13,fontWeight:900,color:"var(--accent)"}}>{r.items?.length || 0}</div>
                     </div>
                     <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
-                      <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:4}}>?? ??????</div>
+                      <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:4}}>{"סך יחידות"}</div>
                       <div style={{fontSize:13,fontWeight:900,color:"var(--accent)"}}>{totalUnitsForReservation(r)}</div>
                     </div>
                   </div>
 
                   {(r.crew_photographer_name || r.crew_sound_name) && (
                     <div style={{background:"linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"12px 14px"}}>
-                      <div style={{fontSize:12,fontWeight:900,color:"var(--text1)",marginBottom:8}}>???? ?????</div>
+                      <div style={{fontSize:12,fontWeight:900,color:"var(--text1)",marginBottom:8}}>{"צוות ההפקה"}</div>
                       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:8}}>
                         {r.crew_photographer_name&&(
                           <div style={{fontSize:13,color:"var(--text2)"}}>
-                            <span style={{fontWeight:800,color:"var(--accent)"}}>???:</span> {r.crew_photographer_name}
+                            <span style={{fontWeight:800,color:"var(--accent)"}}>{"צלם:"}</span> {r.crew_photographer_name}
                           </div>
                         )}
                         {r.crew_sound_name&&(
                           <div style={{fontSize:13,color:"var(--text2)"}}>
-                            <span style={{fontWeight:800,color:"var(--accent)"}}>??? ?????:</span> {r.crew_sound_name}
+                            <span style={{fontWeight:800,color:"var(--accent)"}}>{"איש סאונד:"}</span> {r.crew_sound_name}
                           </div>
                         )}
                       </div>
@@ -4662,32 +4671,35 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
                     <div style={{background:"linear-gradient(180deg, rgba(255,170,0,0.08), rgba(255,170,0,0.03))",border:"1px solid rgba(255,170,0,0.24)",borderRadius:"var(--r)",padding:"14px"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:12}}>
                         <div>
-                          <div style={{fontSize:14,fontWeight:900,color:"var(--text1)"}}>????? ??????</div>
-                          <div style={{fontSize:12,color:"var(--text3)"}}>????? ???? ?? ?? ????? ????? ?????</div>
+                          <div style={{fontSize:14,fontWeight:900,color:"var(--text1)"}}>{"פריטי ההשאלה"}</div>
+                          <div style={{fontSize:12,color:"var(--text3)"}}>{"פירוט ברור של כל הציוד שנכלל בבקשה"}</div>
                         </div>
                         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                          <span className="badge badge-yellow">{r.items.length} ?????</span>
-                          <span className="badge badge-green">{totalUnitsForReservation(r)} ??????</span>
+                          <span className="badge badge-yellow">{r.items.length} {"סוגים"}</span>
+                          <span className="badge badge-green">{totalUnitsForReservation(r)} {"יחידות"}</span>
                         </div>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:10}}>
                         {r.items.map((item, idx)=>(
                           <div key={r.id + "-" + (item.equipment_id || item.name || idx)} style={{background:"rgba(10,12,18,0.55)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:"var(--r-sm)",padding:"12px",display:"flex",flexDirection:"column",gap:10,minHeight:120}}>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
-                              <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontSize:15,fontWeight:900,color:"var(--text1)",lineHeight:1.35,wordBreak:"break-word"}}>{item.name || ("???? " + (idx+1))}</div>
-                                {item.equipment_id&&<div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>???? ????: {item.equipment_id}</div>}
+                              <div style={{display:"flex",alignItems:"flex-start",gap:12,flex:1,minWidth:0}}>
+                                {renderEquipmentThumb(item)}
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:15,fontWeight:900,color:"var(--text1)",lineHeight:1.35,wordBreak:"break-word"}}>{item.name || ("פריט " + (idx+1))}</div>
+                                  {item.equipment_id&&<div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>{"מזהה ציוד: "}{item.equipment_id}</div>}
+                                </div>
                               </div>
                               <div style={{minWidth:64,alignSelf:"stretch",display:"flex",alignItems:"center",justifyContent:"center",padding:"8px 10px",borderRadius:"12px",background:"var(--accent-glow)",border:"1px solid rgba(255,170,0,0.3)"}}>
                                 <div style={{textAlign:"center"}}>
-                                  <div style={{fontSize:10,fontWeight:800,color:"var(--text3)",marginBottom:2}}>????</div>
+                                  <div style={{fontSize:10,fontWeight:800,color:"var(--text3)",marginBottom:2}}>{"כמות"}</div>
                                   <div style={{fontSize:22,fontWeight:900,color:"var(--accent)",lineHeight:1}}>{item.quantity || 0}</div>
                                 </div>
                               </div>
                             </div>
                             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:"auto"}}>
-                              <span style={{padding:"4px 8px",borderRadius:999,border:"1px solid var(--border)",background:"var(--surface2)",fontSize:11,color:"var(--text3)"}}>???? #{idx+1}</span>
-                              <span style={{padding:"4px 8px",borderRadius:999,border:"1px solid rgba(255,170,0,0.24)",background:"rgba(255,170,0,0.08)",fontSize:11,color:"var(--accent)"}}>??????</span>
+                              <span style={{padding:"4px 8px",borderRadius:999,border:"1px solid var(--border)",background:"var(--surface2)",fontSize:11,color:"var(--text3)"}}>{"פריט #"}{idx+1}</span>
+                              <span style={{padding:"4px 8px",borderRadius:999,border:"1px solid rgba(255,170,0,0.24)",background:"rgba(255,170,0,0.08)",fontSize:11,color:"var(--accent)"}}>{"להשאלה"}</span>
                             </div>
                           </div>
                         ))}
@@ -5165,7 +5177,7 @@ export default function App() {
         <div style={{minHeight:"100vh",background:"var(--bg)",direction:"rtl"}}>
           {loading ? <Loading/> : (
             managerToken && urlToken === managerToken
-              ? <ManagerCalendarPage reservations={reservations} setReservations={setReservations} collegeManager={collegeManager}/>
+              ? <ManagerCalendarPage reservations={reservations} setReservations={setReservations} collegeManager={collegeManager} equipment={equipment}/>
               : <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",flexDirection:"column",gap:16,color:"var(--text2)"}}>
                   <div style={{fontSize:48}}>🔒</div>
                   <div style={{fontSize:18,fontWeight:700}}>קישור לא תקין</div>
