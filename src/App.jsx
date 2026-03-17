@@ -4120,6 +4120,32 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       showToast("success", `נוספו ${sessions.length} שיעורים`);
     };
 
+    const appendLessonFromExisting = (sourceIndex = null) => {
+      const source = sourceIndex !== null && schedule[sourceIndex]
+        ? schedule[sourceIndex]
+        : schedule[schedule.length - 1];
+      if (!source) {
+        showToast("error", "אין עדיין שיעורים קיימים לשכפול");
+        return;
+      }
+      const nextDateObj = parseLocalDate(source.date || today());
+      nextDateObj.setDate(nextDateObj.getDate() + 7);
+      const nextLesson = {
+        date: formatLocalDateInput(nextDateObj),
+        startTime: source.startTime || "09:00",
+        endTime: source.endTime || "12:00",
+      };
+      setSchedule(prev => {
+        if (sourceIndex === null || sourceIndex < 0 || sourceIndex >= prev.length) {
+          return [...prev, nextLesson];
+        }
+        const updated = [...prev];
+        updated.splice(sourceIndex + 1, 0, nextLesson);
+        return updated;
+      });
+      showToast("success", "נוסף שיעור חדש לפי טווח השעות הקיים");
+    };
+
     // XL import for schedule
     const importScheduleXL = async (e) => {
       const file = e.target.files[0];
@@ -4517,7 +4543,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
 
           {isEditMode && (
             <div className="highlight-box" style={{marginBottom:12}}>
-              במצב עריכה ניתן לעדכן רק תאריכים ושעות של שיעורים קיימים. האפשרות להוסיף פריסת שיעורים חדשה הוסרה כדי למנוע חוסר סנכרון מול מערכת ההשאלות הכללית והיומן.
+              במצב עריכה ניתן לעדכן תאריכים ושעות של שיעורים קיימים, וגם להוסיף או להסיר שיעורים בודדים לפי טווחי השעות הקיימים. האפשרות להוסיף פריסת שיעורים חדשה לגמרי עדיין מוסרת כדי למנוע חוסר סנכרון מול מערכת ההשאלות הכללית והיומן.
             </div>
           )}
 
@@ -4548,11 +4574,33 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                       style={{padding:"2px 6px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface3)",color:"var(--text)",fontSize:11}}>
                       {LESSON_TIMES.filter(t=>t>s.startTime).map(t=><option key={t} value={t}>{t}</option>)}
                     </select>
-                    {!isEditMode && <button type="button" onClick={()=>setSchedule(prev=>prev.filter((_,j)=>j!==i))}
-                      style={{marginRight:"auto",background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:15,padding:"0 2px",flexShrink:0}}>×</button>}
+                    <div style={{marginRight:"auto",display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                      {isEditMode && (
+                        <button
+                          type="button"
+                          onClick={()=>appendLessonFromExisting(i)}
+                          className="btn btn-secondary btn-sm"
+                          style={{padding:"4px 10px"}}
+                        >
+                          ➕ שכפל שיעור
+                        </button>
+                      )}
+                      <button type="button" onClick={()=>setSchedule(prev=>prev.filter((_,j)=>j!==i))}
+                        style={{background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:15,padding:"0 2px",flexShrink:0}}>×</button>
+                    </div>
                   </div>
                 ))}
               </div>
+              {isEditMode && schedule.length>0 && (
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
+                  <button type="button" className="btn btn-secondary" onClick={()=>appendLessonFromExisting()}>
+                    ➕ הוסף שיעור חדש לפי הטווח הקיים
+                  </button>
+                  <span style={{fontSize:12,color:"var(--text3)",alignSelf:"center"}}>
+                    השיעור החדש יתווסף שבוע אחרי השיעור האחרון ויקבל את אותן שעות.
+                  </span>
+                </div>
+              )}
             </div>
           )}
           {!schedule.length&&scheduleMode==="manual"&&!manStartDate&&(

@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 
-const GMAIL_USER = "camera.obscura.media@gmail.com";
-const GMAIL_PASS = "ajwj isti gmel oabo";
+const GMAIL_USER = process.env.GMAIL_USER;
+const GMAIL_PASS = process.env.GMAIL_PASS;
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
