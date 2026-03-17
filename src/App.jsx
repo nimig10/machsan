@@ -1760,7 +1760,8 @@ function DashboardPage({ equipment, reservations }) {
   activeRes.forEach(r => {
     if(r.loan_type==="שיעור") colorMap[r.id] = ["rgba(155,89,182,0.7)","#fff"];
     else { colorMap[r.id] = SPAN_COLORS[nonLessonIdx % SPAN_COLORS.length]; nonLessonIdx++; }
-  });: aggregate by equipment
+  });
+  // aggregate by equipment
   const onLoanDetails = (() => {
     const map = {};
     activeNow.forEach(r => {
