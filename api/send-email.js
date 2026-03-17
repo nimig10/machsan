@@ -19,6 +19,7 @@ function buildEmail({
   items_list,
   loan_type,
   project_name,
+  production_reason,
   crew_photographer,
   crew_sound,
   approve_url,
@@ -118,6 +119,12 @@ function buildEmail({
       <div style="font-size:13px;color:#8891a8">🎙️ איש סאונד: <strong style="color:#e8eaf0">${crew_sound || "—"}</strong></div>
     </div>` : "";
 
+  const productionReasonSection = isDeptHead && production_reason ? `
+    <div style="background:#1a1d26;border:1px solid #2d3244;border-radius:8px;padding:16px;margin:16px 0;direction:rtl">
+      <div style="font-size:13px;color:#f5a623;font-weight:700;margin-bottom:10px">הסבר לראש המחלקה את סיבת ההשאלה</div>
+      <div style="font-size:13px;color:#e8eaf0;white-space:pre-wrap;line-height:1.8">${production_reason}</div>
+    </div>` : "";
+
   const approveButton = isDeptHead && approve_url ? `
     <div style="text-align:center;margin:28px 0 16px">
       <a href="${approve_url}" style="display:inline-block;padding:18px 40px;background:#9b59b6;color:#fff;font-weight:900;font-size:16px;border-radius:10px;text-decoration:none;letter-spacing:0.5px;box-shadow:0 4px 18px rgba(155,89,182,0.4)">
@@ -156,6 +163,7 @@ function buildEmail({
       <p style="font-size:15px;line-height:1.7;direction:rtl;text-align:right">שלום <strong>${greetingName}</strong>,</p>
       <p style="font-size:14px;line-height:1.9;color:#8891a8;direction:rtl;text-align:right">${body}</p>
       ${crewSection}
+      ${productionReasonSection}
       ${reportSection}
       ${lessonKitSection}
       <div style="background:#111318;border:1px solid #252b38;border-radius:10px;padding:20px;margin:20px 0;direction:rtl">
@@ -209,6 +217,7 @@ export default async function handler(req, res) {
     items_list,
     loan_type,
     project_name,
+    production_reason,
     crew_photographer,
     crew_sound,
     approve_url,
@@ -251,6 +260,7 @@ export default async function handler(req, res) {
         items_list,
         loan_type,
         project_name,
+        production_reason,
         crew_photographer,
         crew_sound,
         approve_url,

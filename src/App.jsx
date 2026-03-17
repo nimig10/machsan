@@ -2963,7 +2963,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     ? 2
     : (Number.isInteger(initialStepParam) && initialStepParam >= 1 && initialStepParam <= 4 ? initialStepParam : 1);
   const [step, setStep]       = useState(initialStep);
-  const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""});
+  const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",production_reason:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""});
   const [items, setItems]     = useState([]);
   const [agreed, setAgreed]   = useState(false);
   const [done, setDone]       = useState(false);
@@ -3211,6 +3211,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
                 project_name:   res.project_name||"",
                 crew_photographer: res.crew_photographer_name||"",
                 crew_sound:     res.crew_sound_name||"",
+                production_reason: res.production_reason||"",
                 approve_url:    approveUrl,
                 calendar_url:   calendarUrl,
                 reservation_id: String(res.id),
@@ -3290,7 +3291,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     showToast("success","הבקשה נשלחה בהצלחה!");
   };
 
-  const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""}); setItems([]); setAgreed(false); };
+  const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",production_reason:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""}); setItems([]); setAgreed(false); };
 
   if(emailError) return (
     <div className="form-page">
@@ -3410,6 +3411,19 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
                 <div className="grid-2">
                   <div className="form-group"><label className="form-label">שם מלא</label><input className="form-input" placeholder="שם איש הסאונד" name="crew_sound_name" autoComplete="name" value={form.crew_sound_name} onChange={e=>set("crew_sound_name",e.target.value)}/></div>
                   <div className="form-group"><label className="form-label">טלפון</label><input className="form-input" placeholder="05x-xxxxxxx" name="crew_sound_phone" autoComplete="tel" value={form.crew_sound_phone} onChange={e=>set("crew_sound_phone",e.target.value)}/></div>
+                </div>
+              </div>
+              <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"16px",marginBottom:16}}>
+                <div className="form-group" style={{marginBottom:0}}>
+                  <label className="form-label">הסבר לראש המחלקה את סיבת ההשאלה</label>
+                  <textarea
+                    className="form-input"
+                    rows={5}
+                    placeholder="כתוב/כתבי בקצרה מהי ההפקה, למה דרוש הציוד, ואיך זה קשור לחומר הנלמד ולדרישות הקורס."
+                    value={form.production_reason}
+                    onChange={e=>set("production_reason",e.target.value)}
+                    style={{resize:"vertical",minHeight:120,lineHeight:1.7}}
+                  />
                 </div>
               </div>
             </>)}
