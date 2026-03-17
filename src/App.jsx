@@ -4120,66 +4120,24 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       showToast("success", `נוספו ${sessions.length} שיעורים`);
     };
 
-    const appendLessonFromExisting = (sourceIndex = null) => {
-      const source = sourceIndex !== null && schedule[sourceIndex]
-        ? schedule[sourceIndex]
-        : schedule[schedule.length - 1];
-      if (!source) {
+    const appendLessonFromExisting = () => {
+      if (!schedule.length) {
         showToast("error", "אין עדיין שיעורים קיימים לשכפול");
         return;
       }
-
-      const sourceDate = parseLocalDate(source.date || today());
-      const sourceWeekday = sourceDate.getDay();
-      const sourceStartTime = source.startTime || "09:00";
-      const sourceEndTime = source.endTime || "12:00";
-
-      const matchingSessions = [...schedule]
-        .filter((session) => {
-          const d = parseLocalDate(session.date || today());
-          return (
-            d.getDay() === sourceWeekday &&
-            (session.startTime || "") === sourceStartTime &&
-            (session.endTime || "") === sourceEndTime
-          );
-        })
-        .sort((a, b) => parseLocalDate(a.date).getTime() - parseLocalDate(b.date).getTime());
-
-      const anchorSession = matchingSessions.length
-        ? matchingSessions[matchingSessions.length - 1]
-        : source;
-
-      const nextDateObj = parseLocalDate(anchorSession.date || source.date || today());
+      // Always use the FIRST lesson's time range
+      const firstLesson = schedule[0];
+      // Always add 1 week after the LAST lesson's date
+      const lastLesson = schedule[schedule.length - 1];
+      const nextDateObj = parseLocalDate(lastLesson.date || today());
       nextDateObj.setDate(nextDateObj.getDate() + 7);
-
       const nextLesson = {
         date: formatLocalDateInput(nextDateObj),
-        startTime: sourceStartTime,
-        endTime: sourceEndTime,
+        startTime: firstLesson.startTime || "09:00",
+        endTime: firstLesson.endTime || "12:00",
       };
-
-      setSchedule((prev) => {
-        const exists = prev.some(
-          (session) =>
-            session.date === nextLesson.date &&
-            (session.startTime || "") === nextLesson.startTime &&
-            (session.endTime || "") === nextLesson.endTime
-        );
-        if (exists) {
-          showToast("error", "כבר קיים שיעור זהה שבוע קדימה בטווח השעות הזה");
-          return prev;
-        }
-
-        const updated = [...prev, nextLesson];
-        updated.sort((a, b) => {
-          const aKey = `${a.date || ""}T${a.startTime || "00:00"}`;
-          const bKey = `${b.date || ""}T${b.startTime || "00:00"}`;
-          return aKey.localeCompare(bKey);
-        });
-        return updated;
-      });
-
-      showToast("success", `נוסף שיעור חדש ל-${formatDate(formatLocalDateInput(nextDateObj))}`);
+      setSchedule(prev => [...prev, nextLesson]);
+      showToast("success", `שיעור חדש נוסף — ${formatDate(nextLesson.date)}`);
     };
 
     // XL import for schedule
@@ -4524,7 +4482,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
               {scheduleMode==="manual"&&(
                 <div className="responsive-split" style={{marginBottom:12,alignItems:"end"}}>
                   <div style={{gridColumn:"1 / -1",fontSize:12,color:"var(--text3)",marginBottom:2}}>
-                    {schedule.length>0 ? "➕ הוסף עוד שיעורים (יתווספו לקיימים)" : "📅 פרוס שיעורים"}
+                    📅 הגדר פריסת שיעורים — ייווצרו אוטומטית בשמירה
                   </div>
                   <div className="form-group"><label className="form-label">תאריך שיעור ראשון *</label>
                     <input type="date" className="form-input" value={manStartDate} onChange={e=>setManStartDate(e.target.value)}/></div>
@@ -4539,11 +4497,6 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                     </select></div>
                   <div className="form-group"><label className="form-label">מספר שיעורים</label>
                     <input type="number" min="1" max="52" className="form-input" value={manCount} onChange={e=>setManCount(Math.max(1,Math.min(52,Number(e.target.value)||1)))}/></div>
-                  <div className="form-group" style={{display:"flex",alignItems:"end"}}>
-                    <div style={{fontSize:12,color:"var(--text3)",lineHeight:1.6}}>
-                      השיעורים ייווצרו אוטומטית בלחיצה על <strong>"🎬 צור ערכת שיעור"</strong>.
-                    </div>
-                  </div>
                   {manStartDate&&<div className="highlight-box" style={{gridColumn:"1 / -1",marginTop:-4,marginBottom:0}}>
                     שיעור 1: {formatDate(manStartDate)} {manStartTime}–{manEndTime}
                     {Number(manCount)>1&&` · עד שיעור ${manCount}: ${(()=>{const d=parseLocalDate(manStartDate);d.setDate(d.getDate()+7*(Number(manCount)-1));return formatDate(formatLocalDateInput(d));})()}`}
@@ -4581,7 +4534,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
 
           {isEditMode && (
             <div className="highlight-box" style={{marginBottom:12}}>
-              במצב עריכה ניתן לעדכן תאריכים ושעות של שיעורים קיימים, להסיר שיעורים, ולשכפל שיעור שבוע אחד קדימה לפי אותו יום ושעות. האפשרות להוסיף פריסת שיעורים חדשה לגמרי הוסרה כדי לא ליצור חוסר סנכרון מול מערכת ההשאלות הכללית והיומן.
+              במצב עריכה ניתן לעדכן תאריכים ושעות של שיעורים קיימים, להסיר שיעורים, ולשכפל שיעור נוסף שבוע אחרי האחרון.
             </div>
           )}
 
@@ -4613,16 +4566,6 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                       {LESSON_TIMES.filter(t=>t>s.startTime).map(t=><option key={t} value={t}>{t}</option>)}
                     </select>
                     <div style={{marginRight:"auto",display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-                      {isEditMode && (
-                        <button
-                          type="button"
-                          onClick={()=>appendLessonFromExisting(i)}
-                          className="btn btn-secondary btn-sm"
-                          style={{padding:"4px 10px"}}
-                        >
-                          ➕ שכפל שיעור שבוע קדימה
-                        </button>
-                      )}
                       <button type="button" onClick={()=>setSchedule(prev=>prev.filter((_,j)=>j!==i))}
                         style={{background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:15,padding:"0 2px",flexShrink:0}}>×</button>
                     </div>
@@ -4631,15 +4574,18 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
               </div>
               {isEditMode && schedule.length>0 && (
                 <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
+                  <button type="button" className="btn btn-secondary" onClick={()=>appendLessonFromExisting()}>
+                    ➕ שכפל שיעור
+                  </button>
                   <span style={{fontSize:12,color:"var(--text3)",alignSelf:"center"}}>
-                    ליצירת שיעור נוסף השתמש בלחצן <strong>"➕ שכפל שיעור שבוע קדימה"</strong> ליד אחת השורות. הוא יוסיף אוטומטית שיעור שבוע קדימה לפי אותו יום ואותן שעות.
+                    שיעור חדש יתווסף שבוע אחרי השיעור האחרון עם אותן שעות.
                   </span>
                 </div>
               )}
             </div>
           )}
           {!schedule.length&&scheduleMode==="manual"&&!manStartDate&&(
-            <div style={{textAlign:"center",color:"var(--text3)",fontSize:12,padding:"8px 0"}}>בחר תאריך, טווח שעות ומספר שיעורים — השיעורים ייווצרו אוטומטית בלחיצה על "🎬 צור ערכת שיעור"</div>
+            <div style={{textAlign:"center",color:"var(--text3)",fontSize:12,padding:"8px 0"}}>בחר תאריך וזמנים למעלה — השיעורים ייווצרו אוטומטית בלחיצה על \"צור ערכת שיעור\"</div>
           )}
         </div>
 
