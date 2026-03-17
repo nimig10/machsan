@@ -2477,6 +2477,8 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
   const [privateFilter, setPrivateFilter] = useState("all");
   const [selectedCats, setSelectedCats] = useState([]); // multi-select, empty = all
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
+  const isCinemaLoan = loanType==="קולנוע יומית";
+  const isPhotoOnlyLoan = loanType==="הפקה" || isCinemaLoan;
 
   const relevantKits = (kits||[]).filter(k => k.kitType!=="lesson" && (!k.loanType || k.loanType === loanType));
 
@@ -2504,7 +2506,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
 
   // Equipment to display: if a kit is active, only show that kit's items
   const kitEqIds = activeKit ? new Set((activeKit.items||[]).map(i=>String(i.equipment_id))) : null;
-  const equipmentFilter = isSoundLoan ? "sound" : loanType==="הפקה" ? "photo" : privateFilter;
+  const equipmentFilter = isSoundLoan ? "sound" : isPhotoOnlyLoan ? "photo" : privateFilter;
   const visibleAvailEq = availEq.filter((eq) => {
     if (equipmentFilter === "sound") return !!eq.soundOnly;
     if (equipmentFilter === "photo") return !!eq.photoOnly;
@@ -2519,6 +2521,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
         בחירת ציוד
         {loanType==="סאונד"&&<span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>· מוצגים רק פריטים שסומנו כציוד סאונד</span>}
         {loanType==="הפקה"&&<span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>· מוצגים רק פריטים שסומנו כציוד צילום</span>}
+        {isCinemaLoan&&<span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>· מוצגים רק פריטים שסומנו כציוד צילום</span>}
         {loanType==="פרטית"&&<span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>· בהשאלה פרטית אפשר לראות את כל ציוד המחסן או לסנן לפי תיוג</span>}
       </div>
 
@@ -3322,7 +3325,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
         <div className="form-card-header" style={{position:"relative"}}>
           <button type="button" onClick={()=>setShowInfoPanel(true)}
             title="מידע כללי, נהלים וערכות"
-            style={{position:"absolute",top:12,left:12,width:32,height:32,borderRadius:"50%",border:"2px solid var(--border)",background:"var(--surface2)",color:"var(--text3)",fontSize:15,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1}}>
+            style={{position:"absolute",top:12,left:12,width:36,height:36,borderRadius:"50%",border:"2px solid #ffd34d",background:"linear-gradient(180deg, rgba(255,211,77,0.22), rgba(255,186,0,0.14))",color:"#ffd34d",fontSize:17,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1,boxShadow:"0 0 0 1px rgba(255,211,77,0.14), 0 8px 18px rgba(255,186,0,0.15)"}}>
             ℹ
           </button>
           <div style={{fontSize:40,marginBottom:10}}>🎬</div>
