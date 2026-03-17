@@ -4089,6 +4089,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     const [teacherMessage, setTeacherMessage] = useState("");
     const [teacherEmailSending, setTeacherEmailSending] = useState(false);
     const isEditMode = !!initial;
+    const [localMsg, setLocalMsg] = useState(null); // {type:"success"|"error", text:""}
 
     // Equipment filter state
     const [lessonEqTypeF, setLessonEqTypeF]       = useState("all"); // "all"|"sound"|"photo"
@@ -4108,7 +4109,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       "21:00","21:30","22:00"];
 
     const buildAndAppendSchedule = () => {
-      if(!manStartDate) { showToast("error","יש לבחור תאריך"); return; }
+      if(!manStartDate) { setLocalMsg({type:"error",text:"יש לבחור תאריך"}); return; }
       const count = Math.max(1, Math.min(52, Number(manCount)||1));
       const sessions = [];
       let d = parseLocalDate(manStartDate);
@@ -4117,7 +4118,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         d.setDate(d.getDate()+7);
       }
       setSchedule(prev => [...prev, ...sessions]);
-      showToast("success", `נוספו ${sessions.length} שיעורים`);
+      setLocalMsg({type:"success",text:`נוספו ${sessions.length} שיעורים`});
     };
 
     const appendLessonFromExisting = () => {
@@ -4144,13 +4145,13 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       setXlImporting(true);
       try {
         const processRows = (rows) => {
-          if(!rows.length) { showToast("error","קובץ ריק"); return; }
+          if(!rows.length) { setLocalMsg({type:"error",text:"קובץ ריק"}); return; }
           const headers = rows[0].map(h=>String(h||"").trim().replace(/[\uFEFF]/g,"").toLowerCase());
           const dateIdx    = headers.findIndex(h=>h.includes("תאריך")||h.includes("date"));
           const startIdx   = headers.findIndex(h=>h.includes("התחלה")||h.includes("start")||h.includes("שעת התחלה"));
           const endIdx     = headers.findIndex(h=>h.includes("סיום")||h.includes("end")||h.includes("שעת סיום"));
           const courseIdx  = headers.findIndex(h=>h.includes("קורס")||h.includes("course")||h.includes("שם"));
-          if(dateIdx===-1) { showToast("error",'לא נמצאה עמודת "תאריך"'); setXlImporting(false); return; }
+          if(dateIdx===-1) { setLocalMsg({type:"error",text:'לא נמצאה עמודת "תאריך"'}); setXlImporting(false); return; }
           // Auto-fill kit name from course column if name is empty
           if(courseIdx>=0 && !name.trim()) {
             const firstCourseName = String(rows[1]?.[courseIdx]||"").trim();
@@ -4180,7 +4181,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
             });
           }
           setSchedule(prev => [...prev, ...sessions]);
-           showToast("success", `יובאו ${sessions.length} שיעורים`);
+           setLocalMsg({type:"success",text:`יובאו ${sessions.length} שיעורים`});
           setXlImporting(false);
         };
 
@@ -4208,7 +4209,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         }
       } catch(err) {
         console.error("XL import error",err);
-        showToast("error","שגיאה בייבוא הקובץ");
+        setLocalMsg({type:"error",text:"שגיאה בייבוא הקובץ"});
         setXlImporting(false);
       }
     };
@@ -4216,16 +4217,16 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     const sendTeacherKitEmail = async () => {
       const recipient = String(instructorEmail || "").trim();
       if (!recipient) {
-        showToast("error", "יש להזין מייל למורה לפני השליחה");
+        setLocalMsg({type:"error",text:"יש להזין מייל למורה לפני השליחה"});
         return;
       }
       const message = String(teacherMessage || "").trim();
       if (!message) {
-        showToast("error", "יש למלא נוסח לשליחת הערכה למורה");
+        setLocalMsg({type:"error",text:"יש למלא נוסח לשליחת הערכה למורה"});
         return;
       }
       if (!kitItems.length) {
-        showToast("error", "לא ניתן לשלוח ערכה למורה ללא ציוד בערכה");
+        setLocalMsg({type:"error",text:"לא ניתן לשלוח ערכה למורה ללא ציוד בערכה"});
         return;
       }
       setTeacherEmailSending(true);
@@ -4254,10 +4255,10 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
             lesson_schedule: scheduleList,
           }),
         });
-        showToast("success", `המייל נשלח אל ${recipient}`);
+        setLocalMsg({type:"success",text:`המייל נשלח אל ${recipient}`});
       } catch (err) {
         console.error("lesson kit teacher email error", err);
-        showToast("error", "שגיאה בשליחת הערכה למורה");
+        setLocalMsg({type:"error",text:"שגיאה בשליחת הערכה למורה"});
       } finally {
         setTeacherEmailSending(false);
       }
@@ -4275,7 +4276,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     const getQty = eqId => kitItems.find(i=>i.equipment_id==eqId)?.quantity||0;
 
     const save = async () => {
-      if(!name.trim()) { showToast("error","חובה למלא שם ערכה"); return; }
+      if(!name.trim()) { setLocalMsg({type:"error",text:"חובה למלא שם ערכה"}); return; }
 
       // Always rebuild from current schedule state + manual inputs if needed
       let finalSchedule = [...schedule]; // copy current state
@@ -4293,7 +4294,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       }
 
       if(finalSchedule.length===0) {
-        showToast("error","יש להוסיף לפחות שיעור אחד — בחר תאריך ושעות");
+        setLocalMsg({type:"error",text:"יש להוסיף לפחות שיעור אחד — בחר תאריך ושעות"});
         return;
       }
       setSaving(true);
@@ -4339,9 +4340,9 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       ]);
       setSaving(false);
       if(r1.ok&&r2.ok) {
-        showToast("success", `ערכת שיעור "${name.trim()}" נשמרה · ${finalSchedule.length} שיעורים שוריינו`);
         onDone();
-      } else showToast("error","❌ שגיאה בשמירה");
+        showToast("success", `ערכת שיעור "${name.trim()}" נשמרה · ${finalSchedule.length} שיעורים שוריינו`);
+      } else setLocalMsg({type:"error",text:"❌ שגיאה בשמירה"});
     };
 
     return (
@@ -4350,6 +4351,17 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
           <div className="card-title">🎬 {initial?"עריכת ערכת שיעור":"ערכת שיעור חדשה"}</div>
           <button className="btn btn-secondary btn-sm" onClick={onDone}>✕ ביטול</button>
         </div>
+
+        {localMsg && (
+          <div style={{padding:"10px 16px",marginBottom:12,borderRadius:"var(--r-sm)",fontSize:13,fontWeight:700,
+            background:localMsg.type==="error"?"rgba(231,76,60,0.12)":"rgba(46,204,113,0.12)",
+            border:`1px solid ${localMsg.type==="error"?"rgba(231,76,60,0.3)":"rgba(46,204,113,0.3)"}`,
+            color:localMsg.type==="error"?"#e74c3c":"#2ecc71",
+            display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span>{localMsg.type==="error"?"❌":"✅"} {localMsg.text}</span>
+            <button onClick={()=>setLocalMsg(null)} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:16,padding:"0 4px"}}>×</button>
+          </div>
+        )}
 
         {/* Instructor details */}
         <div style={{background:"rgba(52,152,219,0.06)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
