@@ -1421,12 +1421,22 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
       {filtered.length===0
         ? <div className="empty-state"><div className="emoji">{isRejectedPage ? "❌" : "📭"}</div><div>{isRejectedPage ? "אין בקשות דחויות" : "אין בקשות"}</div></div>
         : <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          {filtered.map(r=>(
-            <div key={r.id} className="res-card">
+          {filtered.map(r=>{
+            const isLesson = r.loan_type==="שיעור";
+            const loanColor = isLesson?"rgba(155,89,182,0.12)":r.loan_type==="הפקה"?"rgba(52,152,219,0.06)":r.loan_type==="סאונד"?"rgba(245,166,35,0.06)":"var(--surface)";
+            const loanBorder = isLesson?"1px solid rgba(155,89,182,0.35)":r.loan_type==="הפקה"?"1px solid rgba(52,152,219,0.2)":"1px solid var(--border)";
+            const loanIcon = isLesson?"📽️":r.loan_type==="פרטית"?"👤":r.loan_type==="הפקה"?"🎬":"🎙️";
+            const loanLabel = isLesson?"השאלת שיעור":r.loan_type==="סאונד"?"השאלת סאונד":`השאלה ${r.loan_type}`;
+            return (
+            <div key={r.id} className="res-card"
+              style={{background:loanColor,border:loanBorder,cursor:"pointer"}}
+              onClick={()=>setSelected(selected?.id===r.id?null:r)}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=isLesson?"rgba(155,89,182,0.7)":"var(--accent)"}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=isLesson?"rgba(155,89,182,0.35)":"var(--border)"}>
               <div className="res-card-top">
                 <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{width:38,height:38,borderRadius:"50%",background:"var(--surface3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,flexShrink:0}}>
-                    {r.student_name?.[0]||"?"}
+                  <div style={{width:38,height:38,borderRadius:"50%",background:isLesson?"rgba(155,89,182,0.2)":"var(--surface3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,flexShrink:0,color:isLesson?"#9b59b6":"inherit"}}>
+                    {isLesson?"🎬":r.student_name?.[0]||"?"}
                   </div>
                   <div>
                     <div style={{fontWeight:700,fontSize:15}}>{r.student_name}</div>
@@ -1444,8 +1454,8 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
                   <span>📚 {r.course}</span>
                   <span>📅 {formatDate(r.borrow_date)}{r.borrow_time&&<span style={{color:"var(--accent)",marginRight:4,fontWeight:700}}> {r.borrow_time}</span>} ← {formatDate(r.return_date)}{r.return_time&&<span style={{color:"var(--accent)",marginRight:4,fontWeight:700}}> {r.return_time}</span>}{(()=>{const diff=Math.ceil((new Date(r.borrow_date)-new Date())/(1000*60*60*24));return diff>0?<span style={{marginRight:6,color:"var(--yellow)",fontWeight:700}}>({diff} ימים)</span>:diff===0?<span style={{marginRight:6,color:"var(--green)",fontWeight:700}}>(היום!)</span>:null;})()}</span>
                   <span>📦 {r.items?.length||0} פריטים</span>
-                  {r.loan_type&&<span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,color:"var(--accent)"}}>
-                    {r.loan_type==="פרטית"?"👤":r.loan_type==="הפקה"?"🎬":"🎙️"} {r.loan_type==="סאונד"?"השאלת סאונד":`השאלה ${r.loan_type}`}
+                  {r.loan_type&&<span style={{background:isLesson?"rgba(155,89,182,0.2)":"var(--surface3)",border:isLesson?"1px solid rgba(155,89,182,0.4)":"1px solid var(--border)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,color:isLesson?"#9b59b6":"var(--accent)"}}>
+                    {loanIcon} {loanLabel}
                   </span>}
                 </div>
                 <div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:4}}>
@@ -1453,8 +1463,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
                   {(r.items?.length||0)>3&&<span className="chip">+{r.items.length-3} נוספים</span>}
                 </div>
               </div>
-              <div className="res-card-actions">
-                <button className="btn btn-secondary btn-sm" onClick={()=>setSelected(r)}>👁️ פרטים</button>
+              <div className="res-card-actions" onClick={e=>e.stopPropagation()}>
                 <button className="btn btn-secondary btn-sm" onClick={()=>exportPDF(r)}>📄 PDF</button>
                 {(r.status==="מאושר"||r.status==="נדחה")&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}>✏️ עריכת בקשה</button>}
                 {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" onClick={()=>updateStatus(r.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger btn-sm" onClick={()=>updateStatus(r.id,"נדחה")}>❌ דחה</button></>}
@@ -1462,7 +1471,8 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
                 <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${r.student_name}?`)) deleteReservation(r.id); }}>🗑️</button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       }
       {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations} collegeManager={collegeManager} managerToken={managerToken}
@@ -1571,7 +1581,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=110, fontSize=11, previewId="" }) {
+function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=110, fontSize=11, previewId="", lessonIds=null }) {
   // Split days into weeks of 7
   const weeks = [];
   for(let i=0;i<days.length;i+=7) weeks.push(days.slice(i,i+7));
@@ -1655,7 +1665,8 @@ function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=110, fon
                   overflow:"hidden",whiteSpace:"nowrap",
                   fontSize, color:b.color, fontWeight:700,
                   zIndex:previewId&&b.r.id===previewId?0:1,
-                  outline:previewId&&b.r.id===previewId?"2px dashed rgba(245,166,35,0.7)":"none",
+                  outline:previewId&&b.r.id===previewId?"2px dashed rgba(245,166,35,0.7)":
+                    (lessonIds&&lessonIds.has(b.r.id))||b.r.loan_type==="שיעור"?"2px dashed rgba(155,89,182,0.8)":"none",
                   outlineOffset:"-2px",
                 }}>
                   {isResStart && <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{b.r.student_name}{b.r.borrow_time&&<span style={{opacity:0.8,fontSize:fontSize-1}}> {b.r.borrow_time}</span>}</span>}
@@ -1744,9 +1755,12 @@ function DashboardPage({ equipment, reservations }) {
     (calLoanTypeF==="הכל" || r.loan_type===calLoanTypeF)
   );
   const colorMap = {};
-  activeRes.forEach((r,i) => { colorMap[r.id] = SPAN_COLORS[i % SPAN_COLORS.length]; });
-
-  // For on-loan modal: aggregate by equipment
+  const lessonResIds = new Set(activeRes.filter(r=>r.loan_type==="שיעור").map(r=>r.id));
+  let nonLessonIdx = 0;
+  activeRes.forEach(r => {
+    if(r.loan_type==="שיעור") colorMap[r.id] = ["rgba(155,89,182,0.7)","#fff"];
+    else { colorMap[r.id] = SPAN_COLORS[nonLessonIdx % SPAN_COLORS.length]; nonLessonIdx++; }
+  });: aggregate by equipment
   const onLoanDetails = (() => {
     const map = {};
     activeNow.forEach(r => {
@@ -2028,7 +2042,7 @@ function DashboardPage({ equipment, reservations }) {
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4,direction:"rtl"}}>
             {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,color:"var(--text3)",padding:"4px 0"}}>{d}</div>)}
           </div>
-          <CalendarGrid days={days} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={90} fontSize={10}/>
+          <CalendarGrid days={days} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={90} fontSize={10} lessonIds={lessonResIds}/>
         </div>
       </div>
 
@@ -2044,7 +2058,7 @@ function DashboardPage({ equipment, reservations }) {
             <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4,direction:"rtl"}}>
               {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:13,fontWeight:700,color:"var(--text3)",padding:"6px 0"}}>{d}</div>)}
             </div>
-            <CalendarGrid days={days} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={130} fontSize={13}/>
+            <CalendarGrid days={days} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={130} fontSize={13} lessonIds={lessonResIds}/>
           </div>
         </div>
       )}
@@ -2119,6 +2133,7 @@ function PublicMiniCalendar({ reservations, initialLoanType="הכל", previewSta
   const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:"📦"},{key:"פרטית",label:"פרטית",icon:"👤"},{key:"הפקה",label:"הפקה",icon:"🎬"},{key:"סאונד",label:"סאונד",icon:"🎙️"}];
   const activeRes = reservations.filter(r=>
     r.status==="מאושר" && r.borrow_date && r.return_date &&
+    r.loan_type !== "שיעור" &&
     (loanTypeF==="הכל" || r.loan_type===loanTypeF)
   );
   // Add preview entry for user's selected dates
@@ -6179,7 +6194,7 @@ export default function App() {
                   )}
                   <select className="form-select" style={{flex:"1 1 90px",minWidth:85,fontSize:12,padding:"6px 8px"}} value={resLoanTypeF} onChange={e=>setResLoanTypeF(e.target.value)}>
                     <option value="הכל">כל הסוגים</option>
-                    {["פרטית","הפקה","סאונד"].map(t=><option key={t} value={t}>{t}</option>)}
+                    {["פרטית","הפקה","סאונד","שיעור"].map(t=><option key={t} value={t}>{t==="שיעור"?"השאלת שיעור":t}</option>)}
                   </select>
                   <select className="form-select" style={{flex:"1 1 110px",minWidth:100,fontSize:12,padding:"6px 8px"}} value={resSortBy} onChange={e=>setResSortBy(e.target.value)}>
                     <option value="received">🕐 קבלה</option>
