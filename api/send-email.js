@@ -8,37 +8,69 @@ const transporter = nodemailer.createTransport({
   auth: { user: GMAIL_USER, pass: GMAIL_PASS },
 });
 
-function buildEmail({ type, recipient_name, student_name, borrow_date, borrow_time, return_date, return_time, items_list, loan_type, project_name, crew_photographer, crew_sound, approve_url, calendar_url, report_note, reservation_id }) {
-  const isApproved      = type === "approved";
-  const isNew           = type === "new";
-  const isTeamNotify    = type === "team_notify";
-  const isDeptHead      = type === "dept_head_notify";
-  const isManagerReport = type === "manager_report";
-  const isOverdue       = type === "overdue";
-  const isOverdueTeam   = type === "overdue_team";
+function buildEmail({
+  type,
+  recipient_name,
+  student_name,
+  borrow_date,
+  borrow_time,
+  return_date,
+  return_time,
+  items_list,
+  loan_type,
+  project_name,
+  crew_photographer,
+  crew_sound,
+  approve_url,
+  calendar_url,
+  report_note,
+  reservation_id,
+  custom_message,
+  teacher_message,
+  lesson_message,
+  lesson_kit_name,
+}) {
+  const isApproved       = type === "approved";
+  const isNew            = type === "new";
+  const isTeamNotify     = type === "team_notify";
+  const isDeptHead       = type === "dept_head_notify";
+  const isManagerReport  = type === "manager_report";
+  const isOverdue        = type === "overdue";
+  const isOverdueTeam    = type === "overdue_team";
+  const isLessonKitReady = type === "lesson_kit_ready";
+
+  const finalTeacherMessage =
+    teacher_message || custom_message || lesson_message || report_note || "";
 
   const color = isApproved ? "#2ecc71"
     : isDeptHead ? "#9b59b6"
     : isManagerReport ? "#e67e22"
-    : (isOverdue||isOverdueTeam) ? "#e74c3c"
-    : (isNew||isTeamNotify) ? "#f5a623"
+    : isLessonKitReady ? "#3498db"
+    : (isOverdue || isOverdueTeam) ? "#e74c3c"
+    : (isNew || isTeamNotify) ? "#f5a623"
     : "#e74c3c";
 
-  const icon  = isApproved ? "✅" : isDeptHead ? "🎓" : isManagerReport ? "📋"
-    : (isOverdue||isOverdueTeam) ? "🚨"
-    : (isNew||isTeamNotify) ? "⏳" : "❌";
+  const icon = isApproved ? "✅"
+    : isDeptHead ? "🎓"
+    : isManagerReport ? "📋"
+    : isLessonKitReady ? "📚"
+    : (isOverdue || isOverdueTeam) ? "🚨"
+    : (isNew || isTeamNotify) ? "⏳"
+    : "❌";
 
   const title = isApproved ? "הבקשה אושרה!"
     : isDeptHead ? "בקשת השאלת הפקה ממתינה לאישורך"
-    : isManagerReport ? `דיווח מצוות המחסן`
+    : isManagerReport ? "דיווח מצוות המחסן"
+    : isLessonKitReady ? "ערכת השיעור מוכנה לבדיקה"
     : isOverdue ? "⚠️ הציוד לא הוחזר — נדרשת פעולה מיידית"
-    : isOverdueTeam ? `🚨 ציוד לא הוחזר — ${student_name||""}`
-    : isTeamNotify ? `בקשת השאלה חדשה — ${loan_type||""}`
+    : isOverdueTeam ? `🚨 ציוד לא הוחזר — ${student_name || ""}`
+    : isTeamNotify ? `בקשת השאלה חדשה — ${loan_type || ""}`
     : isNew ? "הבקשה שלך התקבלה!"
     : "לצערנו הבקשה נדחתה";
 
   const greetingName = (isDeptHead || isManagerReport) ? (recipient_name || student_name)
-    : (isOverdueTeam) ? (recipient_name || "צוות המחסן")
+    : isOverdueTeam ? (recipient_name || "צוות המחסן")
+    : isLessonKitReady ? (recipient_name || student_name || "המורה")
     : student_name;
 
   const body = isApproved
@@ -48,6 +80,9 @@ function buildEmail({ type, recipient_name, student_name, borrow_date, borrow_ti
        רק לאחר אישורך תועבר הבקשה לצוות המחסן לטיפול סופי.`
     : isManagerReport
     ? `צוות המחסן שלח דיווח בנוגע ל<strong style="color:#e8eaf0">${student_name === "צוות המחסן" ? loan_type : `בקשת ${student_name}`}</strong>.`
+    : isLessonKitReady
+    ? `ערכת השיעור <strong style="color:#e8eaf0">${lesson_kit_name || project_name || loan_type || "המבוקשת"}</strong> הורכבה על ידי צוות המחסן ומוכנה כעת לבדיקה שלך.<br/><br/>
+       אפשר לעבור על פרטי הערכה שמופיעים מטה ולוודא שהכול תקין.`
     : isOverdue
     ? `<strong style="color:#e74c3c">שימ/י לב — הציוד שהשאלת לא הוחזר עד המועד הנקבע.</strong><br/><br/>
        מועד ההחזרה שנקבע היה <strong style="color:#e8eaf0">${return_date}${return_time ? " בשעה " + return_time : ""}</strong> והציוד <strong style="color:#e74c3c">טרם הוחזר למחסן</strong>.<br/><br/>
@@ -58,7 +93,7 @@ function buildEmail({ type, recipient_name, student_name, borrow_date, borrow_ti
        מועד ההחזרה היה <strong style="color:#e8eaf0">${return_date}${return_time ? " בשעה " + return_time : ""}</strong> — <strong style="color:#e74c3c">הציוד טרם הוחזר.</strong><br/><br/>
        מומלץ ליצור קשר עם הסטודנט בהקדם האפשרי.`
     : isTeamNotify
-    ? `<strong>${student_name}</strong> הגיש/ה בקשת השאלה חדשה (${loan_type||""}) הממתינה לאישורך.`
+    ? `<strong>${student_name}</strong> הגיש/ה בקשת השאלה חדשה (${loan_type || ""}) הממתינה לאישורך.`
     : isNew
     ? `בקשת ההשאלה שלך <strong style="color:#f5a623">התקבלה</strong> וממתינה לאישור.`
     : `לצערנו בקשת ההשאלה שלך <strong style="color:#e74c3c">נדחתה</strong>.`;
@@ -69,12 +104,18 @@ function buildEmail({ type, recipient_name, student_name, borrow_date, borrow_ti
       <div style="font-size:13px;color:#e8eaf0;white-space:pre-wrap;line-height:1.7">${report_note}</div>
     </div>` : "";
 
+  const lessonKitSection = isLessonKitReady && finalTeacherMessage ? `
+    <div style="background:#1a1d26;border:1px solid #2d3244;border-radius:8px;padding:16px;margin:16px 0;direction:rtl">
+      <div style="font-size:13px;color:#3498db;font-weight:700;margin-bottom:10px">📩 הודעה מצוות המחסן</div>
+      <div style="font-size:13px;color:#e8eaf0;white-space:pre-wrap;line-height:1.7">${finalTeacherMessage}</div>
+    </div>` : "";
+
   const crewSection = isDeptHead ? `
     <div style="background:#1a1d26;border:1px solid #2d3244;border-radius:8px;padding:16px;margin:16px 0;direction:rtl">
       <div style="font-size:13px;color:#f5a623;font-weight:700;margin-bottom:10px">פרטי צוות ההפקה</div>
       ${project_name ? `<div style="font-size:13px;color:#8891a8;margin-bottom:6px">📽️ פרויקט: <strong style="color:#e8eaf0">${project_name}</strong></div>` : ""}
-      <div style="font-size:13px;color:#8891a8;margin-bottom:6px">🎥 צלם: <strong style="color:#e8eaf0">${crew_photographer||"—"}</strong></div>
-      <div style="font-size:13px;color:#8891a8">🎙️ איש סאונד: <strong style="color:#e8eaf0">${crew_sound||"—"}</strong></div>
+      <div style="font-size:13px;color:#8891a8;margin-bottom:6px">🎥 צלם: <strong style="color:#e8eaf0">${crew_photographer || "—"}</strong></div>
+      <div style="font-size:13px;color:#8891a8">🎙️ איש סאונד: <strong style="color:#e8eaf0">${crew_sound || "—"}</strong></div>
     </div>` : "";
 
   const approveButton = isDeptHead && approve_url ? `
@@ -104,7 +145,7 @@ function buildEmail({ type, recipient_name, student_name, borrow_date, borrow_ti
 <body style="margin:0;padding:20px;background:#f0f0f0;font-family:Arial,sans-serif;direction:rtl;text-align:right">
   <div style="max-width:580px;margin:0 auto;background:#0a0c10;color:#e8eaf0;border-radius:12px;overflow:hidden;direction:rtl;text-align:right">
     <div style="background:linear-gradient(135deg,#111318,#1e232e);padding:32px;text-align:center;border-bottom:1px solid #252b38">
-      <div style="font-size:48px;margin-bottom:10px">🎬</div>
+      <div style="font-size:48px;margin-bottom:10px">${isLessonKitReady ? "📚" : "🎬"}</div>
       <h1 style="color:#f5a623;font-size:22px;margin:0;text-align:center">מחסן השאלת ציוד קמרה אובסקורה וסאונד</h1>
     </div>
     <div style="padding:32px;direction:rtl;text-align:right">
@@ -116,12 +157,15 @@ function buildEmail({ type, recipient_name, student_name, borrow_date, borrow_ti
       <p style="font-size:14px;line-height:1.9;color:#8891a8;direction:rtl;text-align:right">${body}</p>
       ${crewSection}
       ${reportSection}
+      ${lessonKitSection}
       <div style="background:#111318;border:1px solid #252b38;border-radius:10px;padding:20px;margin:20px 0;direction:rtl">
         <h3 style="color:#f5a623;font-size:14px;margin:0 0 12px;text-align:right">פרטי הבקשה</h3>
         <table style="width:100%;font-size:13px;color:#8891a8;border-collapse:collapse;direction:rtl">
           ${showDetails ? `<tr><td style="padding:4px 0;width:130px;text-align:right">👤 שם:</td><td style="color:#e8eaf0;font-weight:bold;text-align:right">${student_name}</td></tr>` : ""}
-          ${borrow_date ? `<tr><td style="padding:4px 0;text-align:right">📅 תאריך השאלה:</td><td style="color:#e8eaf0;font-weight:bold;text-align:right">${borrow_date}${borrow_time?" 🕐 "+borrow_time:""}</td></tr>` : ""}
-          ${return_date ? `<tr><td style="padding:4px 0;text-align:right">↩ תאריך החזרה:</td><td style="color:#e8eaf0;font-weight:bold;text-align:right">${return_date}${return_time?" 🕐 "+return_time:""}</td></tr>` : ""}
+          ${(lesson_kit_name || (isLessonKitReady && project_name)) ? `<tr><td style="padding:4px 0;text-align:right">📚 ערכה:</td><td style="color:#e8eaf0;font-weight:bold;text-align:right">${lesson_kit_name || project_name}</td></tr>` : ""}
+          ${loan_type ? `<tr><td style="padding:4px 0;text-align:right">🏷️ סוג:</td><td style="color:#e8eaf0;font-weight:bold;text-align:right">${loan_type}</td></tr>` : ""}
+          ${borrow_date ? `<tr><td style="padding:4px 0;text-align:right">📅 תאריך השאלה:</td><td style="color:#e8eaf0;font-weight:bold;text-align:right">${borrow_date}${borrow_time ? " 🕐 " + borrow_time : ""}</td></tr>` : ""}
+          ${return_date ? `<tr><td style="padding:4px 0;text-align:right">↩ תאריך החזרה:</td><td style="color:#e8eaf0;font-weight:bold;text-align:right">${return_date}${return_time ? " 🕐 " + return_time : ""}</td></tr>` : ""}
         </table>
         ${items_list ? `
         <div style="margin-top:14px">
@@ -139,7 +183,7 @@ function buildEmail({ type, recipient_name, student_name, borrow_date, borrow_ti
       ${calendarButton}
       ${isApproved ? `
       <div style="background:rgba(46,204,113,0.08);border:1px solid rgba(46,204,113,0.2);border-radius:8px;padding:16px;font-size:13px;color:#8891a8;margin-bottom:20px;direction:rtl;text-align:right">
-        📌 <strong style="color:#e8eaf0">תזכורת:</strong> יש להחזיר את הציוד עד <strong style="color:#f5a623">${return_date}${return_time?" בשעה "+return_time:""}</strong> במצב תקין.
+        📌 <strong style="color:#e8eaf0">תזכורת:</strong> יש להחזיר את הציוד עד <strong style="color:#f5a623">${return_date}${return_time ? " בשעה " + return_time : ""}</strong> במצב תקין.
       </div>` : ""}
     </div>
     <div style="padding:16px 32px;border-top:1px solid #252b38;text-align:center;font-size:11px;color:#555f72">
@@ -153,18 +197,42 @@ function buildEmail({ type, recipient_name, student_name, borrow_date, borrow_ti
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { to, type, recipient_name, student_name, borrow_date, borrow_time, return_date, return_time, items_list, loan_type, project_name, crew_photographer, crew_sound, approve_url, calendar_url, report_note, reservation_id } = req.body;
+  const {
+    to,
+    type,
+    recipient_name,
+    student_name,
+    borrow_date,
+    borrow_time,
+    return_date,
+    return_time,
+    items_list,
+    loan_type,
+    project_name,
+    crew_photographer,
+    crew_sound,
+    approve_url,
+    calendar_url,
+    report_note,
+    reservation_id,
+    custom_message,
+    teacher_message,
+    lesson_message,
+    lesson_kit_name,
+  } = req.body;
+
   if (!to || !type) return res.status(400).json({ error: "חסרים שדות חובה" });
 
   const subjects = {
     new:               "⏳ קיבלנו את הבקשה שלך – מחסן ציוד קמרה אובסקורה וסאונד",
     approved:          "✅ הבקשה שלך אושרה – מחסן ציוד קמרה אובסקורה וסאונד",
     rejected:          "עדכון לגבי בקשת ההשאלה – מחסן ציוד קמרה אובסקורה וסאונד",
-    team_notify:       `📬 בקשת השאלה חדשה (${loan_type||""}) – ${student_name||""}`,
-    dept_head_notify:  `🎓 בקשת השאלת הפקה לאישורך — ${student_name||""}`,
-    manager_report:    `📋 דיווח מצוות המחסן — ${student_name||""}`,
-    overdue:           `🚨 החזרת ציוד באיחור — נדרשת פעולה מיידית`,
-    overdue_team:      `🚨 ציוד לא הוחזר במועד — ${student_name||""}`,
+    team_notify:       `📬 בקשת השאלה חדשה (${loan_type || ""}) – ${student_name || ""}`,
+    dept_head_notify:  `🎓 בקשת השאלת הפקה לאישורך — ${student_name || ""}`,
+    manager_report:    `📋 דיווח מצוות המחסן — ${student_name || ""}`,
+    overdue:           "🚨 החזרת ציוד באיחור — נדרשת פעולה מיידית",
+    overdue_team:      `🚨 ציוד לא הוחזר במועד — ${student_name || ""}`,
+    lesson_kit_ready:  `📚 ערכת שיעור מוכנה לבדיקה — ${lesson_kit_name || project_name || student_name || ""}`,
   };
 
   try {
@@ -172,7 +240,28 @@ export default async function handler(req, res) {
       from:    `"מחסן קמרה אובסקורה וסאונד" <${GMAIL_USER}>`,
       to,
       subject: subjects[type] || "עדכון מהמחסן",
-      html:    buildEmail({ type, recipient_name, student_name, borrow_date, borrow_time, return_date, return_time, items_list, loan_type, project_name, crew_photographer, crew_sound, approve_url, calendar_url, report_note, reservation_id }),
+      html:    buildEmail({
+        type,
+        recipient_name,
+        student_name,
+        borrow_date,
+        borrow_time,
+        return_date,
+        return_time,
+        items_list,
+        loan_type,
+        project_name,
+        crew_photographer,
+        crew_sound,
+        approve_url,
+        calendar_url,
+        report_note,
+        reservation_id,
+        custom_message,
+        teacher_message,
+        lesson_message,
+        lesson_kit_name,
+      }),
     });
     res.json({ ok: true });
   } catch (err) {

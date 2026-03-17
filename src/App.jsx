@@ -4086,6 +4086,9 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     const [scheduleMode, setScheduleMode]   = useState("manual"); // "manual" | "xl"
     const [saving, setSaving]               = useState(false);
     const [xlImporting, setXlImporting]     = useState(false);
+    const [teacherMessage, setTeacherMessage] = useState("");
+    const [teacherEmailSending, setTeacherEmailSending] = useState(false);
+    const isEditMode = !!initial;
 
     // Equipment filter state
     const [lessonEqTypeF, setLessonEqTypeF]       = useState("all"); // "all"|"sound"|"photo"
@@ -4194,6 +4197,56 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       }
     };
 
+    const sendTeacherKitEmail = async () => {
+      const recipient = String(instructorEmail || "").trim();
+      if (!recipient) {
+        showToast("error", "יש להזין מייל למורה לפני השליחה");
+        return;
+      }
+      const message = String(teacherMessage || "").trim();
+      if (!message) {
+        showToast("error", "יש למלא נוסח לשליחת הערכה למורה");
+        return;
+      }
+      if (!kitItems.length) {
+        showToast("error", "לא ניתן לשלוח ערכה למורה ללא ציוד בערכה");
+        return;
+      }
+      setTeacherEmailSending(true);
+      try {
+        const itemsList = (kitItems || []).map((item) => {
+          const eq = equipment.find((entry) => entry.id == item.equipment_id);
+          const itemName = eq?.name || item.name || "פריט";
+          return `<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${itemName}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${item.quantity}</td></tr>`;
+        }).join("");
+        const scheduleList = (schedule || []).map((session, index) => {
+          const start = session?.startTime || "";
+          const end = session?.endTime || "";
+          return `<div style="margin-bottom:6px;color:#c7cedf">שיעור ${index + 1}: ${formatDate(session.date)} ${start}${end ? `–${end}` : ""}</div>`;
+        }).join("");
+        await fetch("/api/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: recipient,
+            type: "lesson_kit_ready",
+            student_name: instructorName.trim() || name.trim() || "מורה",
+            recipient_name: instructorName.trim() || name.trim() || "",
+            lesson_kit_name: name.trim(),
+            custom_message: message,
+            items_list: itemsList,
+            lesson_schedule: scheduleList,
+          }),
+        });
+        showToast("success", `המייל נשלח אל ${recipient}`);
+      } catch (err) {
+        console.error("lesson kit teacher email error", err);
+        showToast("error", "שגיאה בשליחת הערכה למורה");
+      } finally {
+        setTeacherEmailSending(false);
+      }
+    };
+
     const maxQty = eqId => Number(equipment.find(e=>e.id==eqId)?.total_quantity)||0;
     const setItemQty = (eqId, qty) => {
       const max = maxQty(eqId);
@@ -4270,7 +4323,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       ]);
       setSaving(false);
       if(r1.ok&&r2.ok) {
-        showToast("success", `ערכת שיעור "${name.trim()}" נשמרה · ${schedule.length} שיעורים שוריינו`);
+        showToast("success", `ערכת שיעור "${name.trim()}" נשמרה · ${finalSchedule.length} שיעורים שוריינו`);
         onDone();
       } else showToast("error","❌ שגיאה בשמירה");
     };
@@ -4392,69 +4445,79 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         </div>
 
         {/* Schedule builder */}
-        <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
+        <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:"var(--r)",padding:16,marginBottom:18}}>
           <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:12}}>📅 לוח שיעורים</div>
-          <div style={{display:"flex",gap:8,marginBottom:12}}>
-            {[{k:"manual",l:"📅 פריסה ידנית"},{k:"xl",l:"📊 ייבוא מ-XL"}].map(({k,l})=>(
-              <button key={k} type="button" onClick={()=>setScheduleMode(k)}
-                style={{padding:"7px 16px",borderRadius:20,border:`2px solid ${scheduleMode===k?"#9b59b6":"var(--border)"}`,background:scheduleMode===k?"rgba(155,89,182,0.15)":"transparent",color:scheduleMode===k?"#9b59b6":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer"}}>
-                {l}
-              </button>
-            ))}
-          </div>
 
-          {scheduleMode==="manual"&&(
-            <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"12px",marginBottom:12,border:"1px solid var(--border)"}}>
-              <div style={{fontSize:12,fontWeight:700,color:"var(--text3)",marginBottom:8}}>
-                {schedule.length>0 ? "➕ הוסף עוד שיעורים (יתווספו לקיימים)" : "📅 פרוס שיעורים"}
+          {!isEditMode && (
+            <>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
+                {[{k:"manual",l:"📅 פריסה ידנית"},{k:"xl",l:"📊 ייבוא מ-XL"}].map(({k,l})=>(
+                  <button key={k} type="button" onClick={()=>setScheduleMode(k)}
+                    style={{padding:"7px 16px",borderRadius:20,border:`2px solid ${scheduleMode===k?"#9b59b6":"var(--border)"}`,background:scheduleMode===k?"rgba(155,89,182,0.15)":"transparent",color:scheduleMode===k?"#9b59b6":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+                    {l}
+                  </button>
+                ))}
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:10}}>
-                <div className="form-group"><label className="form-label">תאריך שיעור ראשון *</label>
-                  <input type="date" className="form-input" value={manStartDate} onChange={e=>setManStartDate(e.target.value)}/>
-                </div>
-                <div className="form-group"><label className="form-label">שעת התחלה</label>
-                  <select className="form-select" value={manStartTime} onChange={e=>setManStartTime(e.target.value)}>
-                    {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div className="form-group"><label className="form-label">שעת סיום</label>
-                  <select className="form-select" value={manEndTime} onChange={e=>setManEndTime(e.target.value)}>
-                    {LESSON_TIMES.filter(t=>t>manStartTime).map(t=><option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div className="form-group"><label className="form-label">מספר שיעורים</label>
-                  <input type="number" min={1} max={52} className="form-input" value={manCount} onChange={e=>setManCount(e.target.value)}/>
-                </div>
-              </div>
-              {manStartDate&&<div style={{fontSize:11,color:"var(--text3)",marginBottom:8}}>
-                שיעור 1: {formatDate(manStartDate)} {manStartTime}–{manEndTime}
-                {Number(manCount)>1&&` · עד שיעור ${manCount}: ${(()=>{const d=parseLocalDate(manStartDate);d.setDate(d.getDate()+7*(Number(manCount)-1));return formatDate(formatLocalDateInput(d));})()}`}
-              </div>}
-              {manStartDate&&schedule.length===0&&(()=>{
-                const cnt=Math.max(1,Math.min(52,Number(manCount)||1));
-                const prev=[];let d=parseLocalDate(manStartDate);
-                for(let i=0;i<cnt;i++){prev.push({date:formatLocalDateInput(d),startTime:manStartTime,endTime:manEndTime});d.setDate(d.getDate()+7);}
-                return(
-                  <div style={{background:"rgba(155,89,182,0.08)",border:"1px dashed rgba(155,89,182,0.4)",borderRadius:"var(--r-sm)",padding:"8px 12px",fontSize:11}}>
-                    <div style={{fontWeight:700,color:"#9b59b6",marginBottom:4}}>תצוגה מקדימה — {cnt} שיעורים שייווצרו:</div>
-                    {prev.slice(0,3).map((s,i)=><div key={i} style={{color:"var(--text3)",marginBottom:1}}>#{i+1} · {formatDate(s.date)} · {s.startTime}–{s.endTime}</div>)}
-                    {cnt>3&&<div style={{color:"var(--text3)"}}>...ועוד {cnt-3} שיעורים נוספים</div>}
+
+              {scheduleMode==="manual"&&(
+                <div className="responsive-split" style={{marginBottom:12,alignItems:"end"}}>
+                  <div style={{gridColumn:"1 / -1",fontSize:12,color:"var(--text3)",marginBottom:2}}>
+                    {schedule.length>0 ? "➕ הוסף עוד שיעורים (יתווספו לקיימים)" : "📅 פרוס שיעורים"}
                   </div>
-                );
-              })()}
-            </div>
+                  <div className="form-group"><label className="form-label">תאריך שיעור ראשון *</label>
+                    <input type="date" className="form-input" value={manStartDate} onChange={e=>setManStartDate(e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label">שעת התחלה</label>
+                    <select className="form-select" value={manStartTime} onChange={e=>setManStartTime(e.target.value)}>
+                      {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+                    </select></div>
+                  <div className="form-group"><label className="form-label">שעת סיום</label>
+                    <select className="form-select" value={manEndTime} onChange={e=>setManEndTime(e.target.value)}>
+                      <option value="">ללא</option>
+                      {LESSON_TIMES.filter(t=>t>manStartTime).map(t=><option key={t} value={t}>{t}</option>)}
+                    </select></div>
+                  <div className="form-group"><label className="form-label">מספר שיעורים</label>
+                    <input type="number" min="1" max="52" className="form-input" value={manCount} onChange={e=>setManCount(Math.max(1,Math.min(52,Number(e.target.value)||1)))}/></div>
+                  <div className="form-group" style={{display:"flex",alignItems:"end"}}>
+                    <button type="button" className="btn btn-primary" onClick={buildAndAppendSchedule} disabled={!manStartDate}>➕ צור / הוסף שיעורים</button>
+                  </div>
+                  {manStartDate&&<div className="highlight-box" style={{gridColumn:"1 / -1",marginTop:-4,marginBottom:0}}>
+                    שיעור 1: {formatDate(manStartDate)} {manStartTime}–{manEndTime}
+                    {Number(manCount)>1&&` · עד שיעור ${manCount}: ${(()=>{const d=parseLocalDate(manStartDate);d.setDate(d.getDate()+7*(Number(manCount)-1));return formatDate(formatLocalDateInput(d));})()}`}
+                  </div>}
+                  {manStartDate&&schedule.length===0&&(()=>{
+                    const cnt = Math.max(1, Math.min(52, Number(manCount)||1));
+                    const preview = [];
+                    const d = parseLocalDate(manStartDate);
+                    for(let i=0;i<Math.min(cnt,3);i++) {
+                      const x = new Date(d); x.setDate(d.getDate()+7*i); preview.push(formatDate(formatLocalDateInput(x)));
+                    }
+                    return <div style={{gridColumn:"1 / -1",fontSize:12,color:"var(--text2)",lineHeight:1.7,marginTop:-6}}>
+                        <div style={{fontWeight:700,color:"#9b59b6",marginBottom:4}}>תצוגה מקדימה — {cnt} שיעורים שייווצרו:</div>
+                        <div>{preview.join(" · ")}</div>
+                        {cnt>3&&<div style={{color:"var(--text3)"}}>...ועוד {cnt-3} שיעורים נוספים</div>}
+                      </div>;
+                  })()}
+                </div>
+              )}
+
+              {scheduleMode==="xl"&&(
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:12,color:"var(--text3)",marginBottom:8}}>
+                    העלה קובץ CSV / TSV / XLS / XLSX עם עמודות תאריך ושעות.
+                    {schedule.length>0&&<span style={{color:"#9b59b6"}}> · השיעורים יתווספו לקיימים</span>}
+                  </div>
+                  <label className="btn btn-secondary" style={{cursor:xlImporting?"not-allowed":"pointer",opacity:xlImporting?0.6:1}}>
+                    {xlImporting?"⏳ מייבא...":"📊 ייבוא לוח שיעורים מקובץ"}
+                    <input type="file" accept=".csv,.tsv,.xls,.xlsx" style={{display:"none"}} onChange={importScheduleXL} disabled={xlImporting}/>
+                  </label>
+                </div>
+              )}
+            </>
           )}
 
-          {scheduleMode==="xl"&&(
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:12,color:"var(--text3)",marginBottom:10,lineHeight:1.7}}>
-                העלה קובץ XL עם עמודות: <strong>תאריך</strong>, <strong>שעת התחלה</strong>, <strong>שעת סיום</strong>
-                {schedule.length>0&&<span style={{color:"#9b59b6"}}> · השיעורים יתווספו לקיימים</span>}
-              </div>
-              <label style={{cursor:"pointer"}}>
-                <input type="file" accept=".csv,.tsv,.xls,.xlsx" style={{display:"none"}} onChange={importScheduleXL} disabled={xlImporting}/>
-                <span className="btn btn-secondary" style={{pointerEvents:"none"}}>{xlImporting?"⏳ מייבא...":"📊 בחר קובץ XL"}</span>
-              </label>
+          {isEditMode && (
+            <div className="highlight-box" style={{marginBottom:12}}>
+              במצב עריכה ניתן לעדכן רק תאריכים ושעות של שיעורים קיימים. האפשרות להוסיף פריסת שיעורים חדשה הוסרה כדי למנוע חוסר סנכרון מול מערכת ההשאלות הכללית והיומן.
             </div>
           )}
 
@@ -4463,7 +4526,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
             <div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                 <div style={{fontWeight:700,fontSize:12,color:"#9b59b6"}}>📅 {schedule.length} שיעורים בלוח:</div>
-                <button type="button" onClick={()=>setSchedule([])} style={{fontSize:11,color:"var(--red)",background:"none",border:"none",cursor:"pointer"}}>🗑️ נקה הכל</button>
+                {!isEditMode && <button type="button" onClick={()=>setSchedule([])} style={{fontSize:11,color:"var(--red)",background:"none",border:"none",cursor:"pointer"}}>🗑️ נקה הכל</button>}
               </div>
               <div style={{maxHeight:280,overflowY:"auto",display:"flex",flexDirection:"column",gap:4}}>
                 {schedule.map((s,i)=>(
@@ -4485,8 +4548,8 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                       style={{padding:"2px 6px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface3)",color:"var(--text)",fontSize:11}}>
                       {LESSON_TIMES.filter(t=>t>s.startTime).map(t=><option key={t} value={t}>{t}</option>)}
                     </select>
-                    <button type="button" onClick={()=>setSchedule(prev=>prev.filter((_,j)=>j!==i))}
-                      style={{marginRight:"auto",background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:15,padding:"0 2px",flexShrink:0}}>×</button>
+                    {!isEditMode && <button type="button" onClick={()=>setSchedule(prev=>prev.filter((_,j)=>j!==i))}
+                      style={{marginRight:"auto",background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:15,padding:"0 2px",flexShrink:0}}>×</button>}
                   </div>
                 ))}
               </div>
@@ -4495,6 +4558,36 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
           {!schedule.length&&scheduleMode==="manual"&&!manStartDate&&(
             <div style={{textAlign:"center",color:"var(--text3)",fontSize:12,padding:"8px 0"}}>בחר תאריך וזמנים למעלה — השיעורים ייווצרו אוטומטית בלחיצה על הכפתור</div>
           )}
+        </div>
+
+        <div style={{background:"rgba(46,204,113,0.08)",border:"1px solid rgba(46,204,113,0.25)",borderRadius:"var(--r)",padding:16,marginBottom:18}}>
+          <div style={{fontWeight:800,fontSize:13,color:"var(--green)",marginBottom:12}}>📧 שליחת ערכה למורה</div>
+          <div style={{fontSize:12,color:"var(--text2)",marginBottom:10}}>
+            לאחר שצוות המחסן סיים להרכיב את הערכה, ניתן לשלוח למורה את נוסח ההודעה שלך יחד עם רשימת הציוד והמפגשים, כדי שיוכל לעבור ולבדוק את הערכה.
+          </div>
+          <div className="form-group" style={{marginBottom:12}}>
+            <label className="form-label">נוסח ההודעה למורה</label>
+            <textarea
+              className="form-textarea"
+              rows={4}
+              placeholder="לדוגמה: שלום, הערכה מוכנה לבדיקה ומצורפת אליך רשימת הציוד והמפגשים."
+              value={teacherMessage}
+              onChange={e=>setTeacherMessage(e.target.value)}
+            />
+          </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+            <button
+              type="button"
+              className="btn btn-success"
+              onClick={sendTeacherKitEmail}
+              disabled={teacherEmailSending || !String(instructorEmail||"").trim()}
+            >
+              {teacherEmailSending ? "⏳ שולח למורה..." : "📤 שליחת ערכה למורה"}
+            </button>
+            <span style={{fontSize:12,color:"var(--text3)"}}>
+              {String(instructorEmail||"").trim() ? `המייל יישלח אל ${instructorEmail.trim()}` : "יש להזין קודם כתובת מייל למורה"}
+            </span>
+          </div>
         </div>
 
         {/* Single CTA */}
