@@ -4121,10 +4121,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     };
 
     const appendLessonFromExisting = () => {
-      if (!schedule.length) {
-        showToast("error", "אין עדיין שיעורים קיימים לשכפול");
-        return;
-      }
+      if (!schedule.length) return;
       // Always use the FIRST lesson's time range
       const firstLesson = schedule[0];
       // Always add 1 week after the LAST lesson's date
@@ -4137,7 +4134,6 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         endTime: firstLesson.endTime || "12:00",
       };
       setSchedule(prev => [...prev, nextLesson]);
-      showToast("success", `שיעור חדש נוסף — ${formatDate(nextLesson.date)}`);
     };
 
     // XL import for schedule
