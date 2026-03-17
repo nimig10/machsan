@@ -1067,7 +1067,7 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
             <div style={{fontSize:14,color:"var(--text2)",marginTop:4,fontWeight:700}}>{reservation.student_name}</div>
             <div style={{display:"flex",gap:8,marginTop:4,alignItems:"center",flexWrap:"wrap"}}>
               <span style={{fontSize:12,color:"var(--accent)",fontWeight:700,background:"var(--surface3)",borderRadius:20,padding:"2px 10px"}}>
-                {reservation.loan_type==="פרטית"?"👤":reservation.loan_type==="הפקה"?"🎬":"🎙️"} {reservation.loan_type==="סאונד"?"השאלת סאונד":`השאלה ${reservation.loan_type}`}
+                {reservation.loan_type==="פרטית"?"👤":reservation.loan_type==="הפקה"?"🎬":reservation.loan_type==="קולנוע יומית"?"🎥":"🎙️"} {reservation.loan_type==="סאונד"?"השאלת סאונד":reservation.loan_type==="קולנוע יומית"?"קולנוע יומית":`השאלה ${reservation.loan_type}`}
               </span>
               <span style={{fontSize:11,color:"var(--text3)"}}>· {formatDate(reservation.borrow_date)}</span>
             </div>
@@ -1262,10 +1262,12 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
 
 // ─── RESERVATIONS PAGE ────────────────────────────────────────────────────────
 function ReservationsPage({ reservations, setReservations, equipment, showToast,
-    search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy, mode="active", collegeManager={}, managerToken="" }) {
+    search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy, mode="active", collegeManager={}, managerToken="",
+    categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], calendarToken="" }) {
   const [selected, setSelected] = useState(null);
   const [editing, setEditing]   = useState(null);
   const [approvalConflict, setApprovalConflict] = useState(null);
+  const [showManualForm, setShowManualForm] = useState(false);
   const isRejectedPage = mode === "rejected";
   const effectiveStatusFilter = !isRejectedPage && statusF !== "נדחה" ? statusF : "הכל";
 
@@ -1415,18 +1417,169 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
     return true;
   };
 
+  // ── Admin Manual Reservation Form (inner component) ──
+  const AdminManualForm = () => {
+    const ALL_TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
+    const ADMIN_LOAN_TYPES = [{val:"פרטית",icon:"👤"},{val:"הפקה",icon:"🎬"},{val:"סאונד",icon:"🎙️"},{val:"קולנוע יומית",icon:"🎥"}];
+    const [mf, setMf] = useState({student_name:"",email:"",phone:"",course:"",project_name:"",loan_type:"פרטית",borrow_date:"",borrow_time:"",return_date:"",return_time:"",status:"ממתין",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""});
+    const [mItems, setMItems] = useState([]);
+    const [mSaving, setMSaving] = useState(false);
+    const [mStep, setMStep] = useState(1);
+    const mSet = (k,v) => setMf(p=>({...p,[k]:v}));
+    const mIsCinema = mf.loan_type==="קולנוע יומית";
+    const mIsProductionLoan = mf.loan_type==="הפקה";
+    const mTimeSlots = (mf.loan_type==="סאונד"||mIsCinema) ? ALL_TIME_SLOTS : ["09:00","09:30","14:30","15:00","15:30","16:00","16:30","17:00","17:30"];
+    const mSameDay = mf.borrow_date && mf.return_date && mf.borrow_date === mf.return_date;
+    const mTimeOrderError = mSameDay && mf.borrow_time && mf.return_time && toDateTime(mf.return_date, mf.return_time) <= toDateTime(mf.borrow_date, mf.borrow_time);
+    const mReturnBeforeBorrow = mf.borrow_date && mf.return_date && parseLocalDate(mf.return_date) < parseLocalDate(mf.borrow_date);
+    const handleCinemaBorrowDate = (val) => setMf(p=>({...p, borrow_date:val, return_date:val, borrow_time:"", return_time:""}));
+    const mOk1 = mf.student_name && mf.email && mf.phone && mf.course && mf.loan_type;
+    const mOk2 = !!mf.borrow_date && !!mf.return_date && !!mf.borrow_time && !!mf.return_time && !mReturnBeforeBorrow && !mTimeOrderError;
+    const mOk3 = mItems.some(i=>Number(i.quantity)>0);
+    // Certification — same logic as PublicForm
+    const normalizePhoneM = (p) => (p||"").replace(/[^0-9]/g,"");
+    const studentRecordM = (certifications.students||[]).find(s => s.email?.toLowerCase().trim()===mf.email?.toLowerCase().trim() && normalizePhoneM(s.phone)===normalizePhoneM(mf.phone));
+    const studentCertsM = studentRecordM?.certs || {};
+    const matchCertM = (name, phone) => { const nn=normalizeName(name), np=normalizePhoneM(phone); if(!nn||!np)return null; return (certifications.students||[]).find(s=>normalizeName(s.name)===nn&&normalizePhoneM(s.phone)===np)||null; };
+    const crewPhotoRecM = mIsProductionLoan ? matchCertM(mf.crew_photographer_name, mf.crew_photographer_phone) : null;
+    const crewSoundRecM = mIsProductionLoan&&mf.crew_sound_name ? matchCertM(mf.crew_sound_name, mf.crew_sound_phone) : null;
+    const canBorrowEqM = (eq) => { if(!eq.certification_id)return true; const cid=eq.certification_id; if(mIsProductionLoan)return (crewPhotoRecM?.certs||{})[cid]==="עבר"||(crewSoundRecM?.certs||{})[cid]==="עבר"; return studentCertsM[cid]==="עבר"; };
+    const mAvailEq = (mf.borrow_date&&mf.return_date) ? equipment.map(eq=>({...eq, avail: getAvailable(eq.id,mf.borrow_date,mf.return_date,reservations,equipment,null,mf.borrow_time,mf.return_time)})) : [];
+    const mGetItem = id => mItems.find(i=>i.equipment_id==id)||{quantity:0};
+    const mSetQty = (id,qty) => { const av=mAvailEq.find(e=>e.id==id)?.avail||0; const q=Math.max(0,Math.min(qty,av)); const nm=equipment.find(e=>e.id==id)?.name||""; setMItems(prev=>q===0?prev.filter(i=>i.equipment_id!=id):prev.find(i=>i.equipment_id==id)?prev.map(i=>i.equipment_id==id?{...i,quantity:q}:i):[...prev,{equipment_id:id,quantity:q,name:nm}]); };
+    const mPLLE = mf.loan_type==="פרטית" && getPrivateLoanLimitedQty(mItems, equipment)>4;
+    const [meqTypeF, setMeqTypeF] = useState("all");
+    const [meqCatF, setMeqCatF] = useState([]);
+    const [meqSearch, setMeqSearch] = useState("");
+    const mSave = async () => {
+      if(!mOk1||!mOk2||!mOk3){showToast("error","יש להשלים את כל השדות");return;}
+      setMSaving(true);
+      let freshRes=reservations;
+      try{const fr=await storageGet("reservations");if(Array.isArray(fr)){freshRes=fr;setReservations(fr);}}catch(e){}
+      const newRes={...mf,id:Date.now(),status:mf.status,created_at:today(),items:mItems,manual_by_admin:true};
+      const updated=[...freshRes,newRes];
+      setReservations(updated);
+      await storageSet("reservations",updated);
+      setMSaving(false);
+      showToast("success",`בקשה ידנית נוצרה · ${mf.student_name}`);
+      setShowManualForm(false);
+    };
+    return (
+      <div className="card" style={{marginBottom:20}}>
+        <div className="card-header"><div className="card-title">➕ הקמת בקשה ידנית</div><button className="btn btn-secondary btn-sm" onClick={()=>setShowManualForm(false)}>✕ ביטול</button></div>
+        <div style={{display:"flex",gap:4,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4,marginBottom:16}}>
+          {[{n:1,l:"פרטים ותאריכים",i:"👤"},{n:2,l:"ציוד",i:"📦"},{n:3,l:"סיכום",i:"✅"}].map(s=>(
+            <button key={s.n} type="button" onClick={()=>setMStep(s.n)} style={{flex:1,padding:"8px 4px",borderRadius:6,border:"none",background:mStep===s.n?"var(--accent)":"transparent",color:mStep===s.n?"#000":"var(--text2)",fontWeight:mStep===s.n?800:500,fontSize:12,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+              <span style={{fontSize:14}}>{s.i}</span><span>{s.l}</span></button>))}
+        </div>
+        {mStep===1&&<>
+          <div className="form-section-title">סוג ההשאלה</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
+            {ADMIN_LOAN_TYPES.map(lt=>(<button key={lt.val} type="button" onClick={()=>{setMf(p=>({...p,loan_type:lt.val,borrow_date:"",return_date:"",borrow_time:"",return_time:""}));setMItems([]);}} style={{padding:"8px 16px",borderRadius:"var(--r-sm)",border:`2px solid ${mf.loan_type===lt.val?"var(--accent)":"var(--border)"}`,background:mf.loan_type===lt.val?"var(--accent-glow)":"transparent",color:mf.loan_type===lt.val?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>{lt.icon} {lt.val}</button>))}
+          </div>
+          <div className="form-section-title">פרטי הסטודנט</div>
+          <div className="grid-2">
+            <div className="form-group"><label className="form-label">שם מלא *</label><input className="form-input" value={mf.student_name} onChange={e=>mSet("student_name",e.target.value)}/></div>
+            <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" value={mf.phone} onChange={e=>mSet("phone",e.target.value)}/></div>
+          </div>
+          <div className="form-group"><label className="form-label">אימייל *</label><input type="email" className="form-input" value={mf.email} onChange={e=>mSet("email",e.target.value)}/></div>
+          <div className="grid-2">
+            <div className="form-group"><label className="form-label">קורס / כיתה *</label><input className="form-input" value={mf.course} onChange={e=>mSet("course",e.target.value)}/></div>
+            <div className="form-group"><label className="form-label">שם הפרויקט</label><input className="form-input" value={mf.project_name} onChange={e=>mSet("project_name",e.target.value)}/></div>
+          </div>
+          {mIsProductionLoan&&<><div className="form-section-title" style={{marginTop:16}}>צוות הפקה</div>
+            <div className="grid-2"><div className="form-group"><label className="form-label">שם צלם *</label><input className="form-input" value={mf.crew_photographer_name} onChange={e=>mSet("crew_photographer_name",e.target.value)}/></div>
+            <div className="form-group"><label className="form-label">טלפון צלם</label><input className="form-input" value={mf.crew_photographer_phone} onChange={e=>mSet("crew_photographer_phone",e.target.value)}/></div></div>
+            <div className="grid-2"><div className="form-group"><label className="form-label">שם איש סאונד</label><input className="form-input" value={mf.crew_sound_name} onChange={e=>mSet("crew_sound_name",e.target.value)}/></div>
+            <div className="form-group"><label className="form-label">טלפון איש סאונד</label><input className="form-input" value={mf.crew_sound_phone} onChange={e=>mSet("crew_sound_phone",e.target.value)}/></div></div></>}
+          <div className="form-section-title" style={{marginTop:16}}>תאריכים ושעות <span style={{fontSize:11,color:"var(--text3)",fontWeight:400}}>· ללא מגבלות</span></div>
+          {mIsCinema?(<div className="grid-2">
+            <div className="form-group"><label className="form-label">📅 תאריך *</label><input type="date" className="form-input" value={mf.borrow_date} onChange={e=>handleCinemaBorrowDate(e.target.value)}/></div>
+            <div className="form-group"><label className="form-label">שעת התחלה *</label><select className="form-select" value={mf.borrow_time} onChange={e=>setMf(p=>({...p,borrow_time:e.target.value,return_time:""}))}><option value="">-- בחר --</option>{mTimeSlots.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+            <div/><div className="form-group"><label className="form-label">שעת סיום *</label><select className="form-select" value={mf.return_time} onChange={e=>mSet("return_time",e.target.value)} disabled={!mf.borrow_time}><option value="">-- בחר --</option>{mTimeSlots.filter(t=>t>mf.borrow_time).map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+          </div>):(<><div className="grid-2">
+            <div className="form-group"><label className="form-label">📅 תאריך השאלה *</label><input type="date" className="form-input" value={mf.borrow_date} onChange={e=>mSet("borrow_date",e.target.value)}/></div>
+            <div className="form-group"><label className="form-label">שעת איסוף *</label><select className="form-select" value={mf.borrow_time} onChange={e=>mSet("borrow_time",e.target.value)}><option value="">-- בחר --</option>{mTimeSlots.map(t=><option key={t} value={t}>{t}</option>)}</select></div></div>
+            <div className="grid-2"><div className="form-group"><label className="form-label">📅 תאריך החזרה *</label><input type="date" className="form-input" value={mf.return_date} onChange={e=>mSet("return_date",e.target.value)}/></div>
+            <div className="form-group"><label className="form-label">שעת החזרה *</label><select className="form-select" value={mf.return_time} onChange={e=>mSet("return_time",e.target.value)}><option value="">-- בחר --</option>{mTimeSlots.map(t=><option key={t} value={t}>{t}</option>)}</select></div></div></>)}
+          {mTimeOrderError&&<div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:12,fontSize:12}}>🚫 שעת החזרה חייבת להיות אחרי שעת האיסוף.</div>}
+          {mReturnBeforeBorrow&&<div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:12,fontSize:12}}>🚫 תאריך החזרה חייב להיות אחרי תאריך ההשאלה.</div>}
+          <div className="form-section-title" style={{marginTop:16}}>סטטוס בקשה</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
+            {["ממתין","מאושר"].map(s=>(<button key={s} type="button" onClick={()=>mSet("status",s)} style={{padding:"8px 16px",borderRadius:"var(--r-sm)",border:`2px solid ${mf.status===s?(s==="מאושר"?"var(--green)":"var(--accent)"):"var(--border)"}`,background:mf.status===s?(s==="מאושר"?"rgba(46,204,113,0.12)":"var(--accent-glow)"):"transparent",color:mf.status===s?(s==="מאושר"?"var(--green)":"var(--accent)"):"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer"}}>{s==="מאושר"?"✅ מאושר":"⏳ ממתין"}</button>))}
+          </div>
+          <button className="btn btn-primary" disabled={!mOk1||!mOk2} onClick={()=>setMStep(2)}>המשך ← ציוד</button>
+        </>}
+        {mStep===2&&<>
+          <div className="form-section-title">בחירת ציוד</div>
+          <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px",marginBottom:12}}>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
+              <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סינון:</span>
+              {[{k:"all",l:"📦 הכל"},{k:"sound",l:"🎙️ סאונד"},{k:"photo",l:"🎥 צילום"}].map(({k,l})=>(<button key={k} type="button" onClick={()=>setMeqTypeF(k)} style={{padding:"4px 10px",borderRadius:20,border:`2px solid ${meqTypeF===k?"var(--accent)":"var(--border)"}`,background:meqTypeF===k?"var(--accent-glow)":"transparent",color:meqTypeF===k?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>{l}</button>))}
+              <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
+              {(categories||[]).map(cat=>(<button key={cat} type="button" onClick={()=>setMeqCatF(p=>p.includes(cat)?p.filter(c=>c!==cat):[...p,cat])} style={{padding:"4px 8px",borderRadius:20,border:`2px solid ${meqCatF.includes(cat)?"var(--accent)":"var(--border)"}`,background:meqCatF.includes(cat)?"var(--accent-glow)":"transparent",color:meqCatF.includes(cat)?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>{cat}</button>))}
+              {meqCatF.length>0&&<button type="button" onClick={()=>setMeqCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>✕ נקה</button>}
+            </div>
+            <div className="search-bar" style={{minWidth:150}}><span>🔍</span><input placeholder="חיפוש ציוד..." value={meqSearch} onChange={e=>setMeqSearch(e.target.value)}/></div>
+          </div>
+          {(()=>{
+            const visCats=(meqCatF.length>0?meqCatF:(categories||[])).filter(cat=>mAvailEq.some(e=>e.category===cat&&(meqTypeF==="all"||(meqTypeF==="sound"&&e.soundOnly)||(meqTypeF==="photo"&&e.photoOnly))&&(!meqSearch||e.name.includes(meqSearch))));
+            if(!visCats.length)return <div style={{textAlign:"center",color:"var(--text3)",padding:16,fontSize:13}}>לא נמצא ציוד תואם</div>;
+            return visCats.map(cat=>{
+              const catEq=mAvailEq.filter(e=>e.category===cat&&(meqTypeF==="all"||(meqTypeF==="sound"&&e.soundOnly)||(meqTypeF==="photo"&&e.photoOnly))&&(!meqSearch||e.name.includes(meqSearch)));
+              if(!catEq.length)return null;
+              return (<div key={cat} style={{marginBottom:10}}>
+                <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:5,textTransform:"uppercase",letterSpacing:1}}>{cat}</div>
+                {catEq.map(eq=>{const av=eq.avail,qty=mGetItem(eq.id)?.quantity||0,cb=!canBorrowEqM(eq),ct=(certifications.types||[]).find(c=>c.id===eq.certification_id);
+                  return (<div key={eq.id} className="item-row" style={{marginBottom:4,opacity:av===0||cb?0.4:1,background:qty>0?"rgba(245,166,35,0.05)":"",border:qty>0?"1px solid rgba(245,166,35,0.2)":""}}>
+                    <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={eq.image} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||"📦"}</span>
+                    <div style={{flex:1,fontSize:13,fontWeight:600}}>{eq.name}<span style={{fontSize:11,color:"var(--text3)",marginRight:6,fontWeight:400}}>זמין: {av}</span>{cb&&<span style={{fontSize:10,color:"var(--red)",fontWeight:700,marginRight:4}}>🔒 {ct?.name||"הסמכה חסרה"}</span>}</div>
+                    {av>0&&!cb?<div className="qty-ctrl"><button className="qty-btn" onClick={()=>mSetQty(eq.id,qty-1)}>−</button><span className="qty-num" style={{color:qty>0?"var(--accent)":"inherit"}}>{qty}</span><button className="qty-btn" disabled={qty>=av} onClick={()=>mSetQty(eq.id,qty+1)} style={{opacity:qty>=av?0.3:1}}>+</button></div>
+                    :<span style={{fontSize:11,color:"var(--red)",fontWeight:700}}>{cb?"חסרה הסמכה":"אין מלאי"}</span>}
+                  </div>);})}
+              </div>);});
+          })()}
+          {mItems.length>0&&<div className="highlight-box" style={{marginTop:8}}>🎒 {mItems.length} סוגי ציוד · {mItems.reduce((s,i)=>s+i.quantity,0)} יחידות</div>}
+          {mPLLE&&<div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginTop:8,fontSize:12}}>🚫 חריגה ממגבלת 4 פריטים בהשאלה פרטית</div>}
+          <div className="flex gap-2" style={{marginTop:16}}><button className="btn btn-secondary" onClick={()=>setMStep(1)}>← חזור</button><button className="btn btn-primary" disabled={!mOk3||mPLLE} onClick={()=>setMStep(3)}>המשך ← סיכום</button></div>
+        </>}
+        {mStep===3&&<>
+          <div className="form-section-title">סיכום הבקשה</div>
+          <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
+            {[["שם",mf.student_name],["אימייל",mf.email],["טלפון",mf.phone],["קורס",mf.course],["סוג",mf.loan_type],["תאריך השאלה",mf.borrow_date?formatDate(mf.borrow_date)+" · "+mf.borrow_time:""],["תאריך החזרה",mf.return_date?formatDate(mf.return_date)+" · "+mf.return_time:""],["סטטוס",mf.status]].filter(([,v])=>v).map(([l,v])=>(
+              <div key={l} style={{display:"flex",gap:8,marginBottom:6,fontSize:13}}><span style={{color:"var(--text3)",minWidth:100}}>{l}:</span><strong>{v}</strong></div>))}
+            <div style={{marginTop:10,fontWeight:700,fontSize:13}}>ציוד ({mItems.reduce((s,i)=>s+i.quantity,0)} יחידות):</div>
+            {mItems.map(i=><div key={i.equipment_id} style={{fontSize:12,color:"var(--text2)",marginTop:4}}>• {i.name} ×{i.quantity}</div>)}
+          </div>
+          <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setMStep(2)}>← חזור</button>
+            <button className="btn btn-primary" disabled={mSaving||!mOk1||!mOk2||!mOk3} onClick={mSave} style={{fontSize:15,padding:"12px 28px"}}>{mSaving?"⏳ שומר...":"💾 צור בקשה"}</button></div>
+        </>}
+      </div>
+    );
+  };
+
   return (
     <div className="page">
+      {/* Manual reservation button */}
+      {!isRejectedPage && (
+        <div style={{marginBottom:16,display:"flex",justifyContent:"flex-end"}}>
+          <button className="btn btn-primary" onClick={()=>setShowManualForm(p=>!p)} style={{fontSize:13}}>
+            {showManualForm?"✕ סגור טופס":"➕ הקם בקשה ידנית"}
+          </button>
+        </div>
+      )}
+      {showManualForm && <AdminManualForm/>}
 
       {filtered.length===0
         ? <div className="empty-state"><div className="emoji">{isRejectedPage ? "❌" : "📭"}</div><div>{isRejectedPage ? "אין בקשות דחויות" : "אין בקשות"}</div></div>
         : <div style={{display:"flex",flexDirection:"column",gap:12}}>
           {filtered.map(r=>{
             const isLesson = r.loan_type==="שיעור";
-            const loanColor = isLesson?"rgba(155,89,182,0.12)":r.loan_type==="הפקה"?"rgba(52,152,219,0.06)":r.loan_type==="סאונד"?"rgba(245,166,35,0.06)":"var(--surface)";
-            const loanBorder = isLesson?"1px solid rgba(155,89,182,0.35)":r.loan_type==="הפקה"?"1px solid rgba(52,152,219,0.2)":"1px solid var(--border)";
-            const loanIcon = isLesson?"📽️":r.loan_type==="פרטית"?"👤":r.loan_type==="הפקה"?"🎬":"🎙️";
-            const loanLabel = isLesson?"השאלת שיעור":r.loan_type==="סאונד"?"השאלת סאונד":`השאלה ${r.loan_type}`;
+            const isCinema = r.loan_type==="קולנוע יומית";
+            const loanColor = isLesson?"rgba(155,89,182,0.12)":isCinema?"rgba(52,152,219,0.08)":r.loan_type==="הפקה"?"rgba(52,152,219,0.06)":r.loan_type==="סאונד"?"rgba(245,166,35,0.06)":"var(--surface)";
+            const loanBorder = isLesson?"1px solid rgba(155,89,182,0.35)":isCinema?"1px solid rgba(52,152,219,0.3)":r.loan_type==="הפקה"?"1px solid rgba(52,152,219,0.2)":"1px solid var(--border)";
+            const loanIcon = isLesson?"📽️":isCinema?"🎥":r.loan_type==="פרטית"?"👤":r.loan_type==="הפקה"?"🎬":"🎙️";
+            const loanLabel = isLesson?"השאלת שיעור":isCinema?"קולנוע יומית":r.loan_type==="סאונד"?"השאלת סאונד":`השאלה ${r.loan_type}`;
             return (
             <div key={r.id} className="res-card"
               style={{background:loanColor,border:loanBorder,cursor:"pointer"}}
@@ -1745,9 +1898,10 @@ function DashboardPage({ equipment, reservations }) {
     { key:"פרטית", label:"פרטית", icon:"👤" },
     { key:"הפקה", label:"הפקה", icon:"🎬" },
     { key:"סאונד", label:"סאונד", icon:"🎙️" },
+    { key:"קולנוע יומית", label:"קולנוע יומית", icon:"🎥" },
     { key:"שיעור", label:"שיעור", icon:"📽️" },
   ];
-  const LOAN_TYPE_ICON = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","שיעור":"📽️" };
+  const LOAN_TYPE_ICON = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","שיעור":"📽️","קולנוע יומית":"🎥" };
 
   const activeRes = reservations.filter(r =>
     r.status !== "הוחזר" && r.borrow_date && r.return_date &&
@@ -2112,7 +2266,7 @@ function DashboardPage({ equipment, reservations }) {
 // ─── PUBLIC MINI CALENDAR ────────────────────────────────────────────────────
 function PublicMiniCalendar({ reservations, initialLoanType="הכל", previewStart="", previewEnd="", previewName="" }) {
   const [calDate, setCalDate] = useState(new Date());
-  const [loanTypeF, setLoanTypeF] = useState(["פרטית","הפקה","סאונד"].includes(initialLoanType) ? initialLoanType : "הכל");
+  const [loanTypeF, setLoanTypeF] = useState(["פרטית","הפקה","סאונד","קולנוע יומית"].includes(initialLoanType) ? initialLoanType : "הכל");
   const yr = calDate.getFullYear();
   const mo = calDate.getMonth();
   const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
@@ -2131,7 +2285,7 @@ function PublicMiniCalendar({ reservations, initialLoanType="הכל", previewSta
     ["rgba(26,188,156,0.75)","#fff"],["rgba(236,72,153,0.75)","#fff"],
     ["rgba(200,160,0,0.75)","#fff"], ["rgba(231,76,60,0.75)","#fff"],
   ];
-  const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:"📦"},{key:"פרטית",label:"פרטית",icon:"👤"},{key:"הפקה",label:"הפקה",icon:"🎬"},{key:"סאונד",label:"סאונד",icon:"🎙️"}];
+  const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:"📦"},{key:"פרטית",label:"פרטית",icon:"👤"},{key:"הפקה",label:"הפקה",icon:"🎬"},{key:"סאונד",label:"סאונד",icon:"🎙️"},{key:"קולנוע יומית",label:"קולנוע יומית",icon:"🎥"}];
   const activeRes = reservations.filter(r=>
     r.status==="מאושר" && r.borrow_date && r.return_date &&
     r.loan_type !== "שיעור" &&
@@ -2600,7 +2754,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose }) {
     { id:"kits",      label:"🎒 ערכות" },
     { id:"contact",   label:"📞 צוות" },
   ];
-  const LOAN_ICONS = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️" };
+  const LOAN_ICONS = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥" };
   const allCats = [...new Set((equipment||[]).map(e=>e.category).filter(Boolean))];
   const visibleEq = infoCatFilter.length===0
     ? (equipment||[])
@@ -2716,7 +2870,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose }) {
           {/* ── POLICIES TAB ── */}
           {tab==="policies" && (
             <div style={{maxWidth:720,margin:"0 auto"}}>
-              {["פרטית","הפקה","סאונד"].map(lt=>{
+              {["פרטית","הפקה","סאונד","קולנוע יומית"].map(lt=>{
                 const text = policies[lt];
                 if(!text) return null;
                 return (
@@ -2801,7 +2955,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   const initialParams = new URLSearchParams(window.location.search);
   const initialLoanTypeParam = initialParams.get("loan_type");
   const initialStepParam = Number(initialParams.get("step"));
-  const initialLoanType = ["פרטית","הפקה","סאונד"].includes(initialLoanTypeParam || "") ? initialLoanTypeParam : "";
+  const initialLoanType = ["פרטית","הפקה","סאונד","קולנוע יומית"].includes(initialLoanTypeParam || "") ? initialLoanTypeParam : "";
   const initialStep = initialParams.get("calendar")==="1"
     ? 2
     : (Number.isInteger(initialStepParam) && initialStepParam >= 1 && initialStepParam <= 4 ? initialStepParam : 1);
@@ -2832,7 +2986,8 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     }));
   };
 
-  const minDays = form.loan_type==="פרטית" ? 2 : form.loan_type==="סאונד" ? 0 : 7;
+  const minDays = form.loan_type==="פרטית" ? 2 : form.loan_type==="סאונד" ? 0 : form.loan_type==="קולנוע יומית" ? 0 : 7;
+  const isCinemaLoan = form.loan_type==="קולנוע יומית";
   const isWeekend = (dateStr) => {
     if(!dateStr) return false;
     const d = parseLocalDate(dateStr);
@@ -2851,27 +3006,48 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   const borrowWeekend = isWeekend(form.borrow_date);
   const returnWeekend = isWeekend(form.return_date);
   const minDate = (() => {
+    if (isCinemaLoan) {
+      // Cinema: 24h ahead minimum
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      return moveToNextWeekday(formatLocalDateInput(d));
+    }
     const d = new Date();
     d.setDate(d.getDate() + minDays);
     return moveToNextWeekday(formatLocalDateInput(d));
   })();
-  const maxDays = form.loan_type==="פרטית" ? 4 : 7;
-  const tooSoon = form.loan_type!=="סאונד" && !!form.borrow_date && form.borrow_date < minDate;
+  const maxDays = form.loan_type==="פרטית" ? 4 : isCinemaLoan ? 1 : 7;
+  const tooSoon = form.loan_type!=="סאונד" && !isCinemaLoan && !!form.borrow_date && form.borrow_date < minDate;
+  const cinemaTooSoon = isCinemaLoan && !!form.borrow_date && form.borrow_date < minDate;
   const loanDays = (form.borrow_date && form.return_date)
     ? Math.ceil((parseLocalDate(form.return_date) - parseLocalDate(form.borrow_date)) / 86400000) + 1
     : 0;
   const tooLong = loanDays > maxDays;
-  const TIME_SLOTS = form.loan_type==="סאונד"
-    ? ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30"]
+  const CINEMA_TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
+  const TIME_SLOTS = (form.loan_type==="סאונד" || isCinemaLoan)
+    ? CINEMA_TIME_SLOTS
     : ["09:00","09:30","14:30","15:00","15:30","16:00","16:30","17:00","17:30"];
   const isSoundLoan = form.loan_type==="סאונד";
   const isProductionLoan = form.loan_type==="הפקה";
   const isSoundDayLoan = isSoundLoan && !!form.sound_day_loan;
   const soundDayLoanDate = isSoundDayLoan ? getNextSoundDayLoanDate(TIME_SLOTS) : "";
   const availableBorrowSlots = isSoundDayLoan ? getFutureTimeSlotsForDate(soundDayLoanDate, TIME_SLOTS) : TIME_SLOTS;
-  const availableReturnSlots = isSoundDayLoan
-    ? availableBorrowSlots.filter((slot) => !form.borrow_time || toDateTime(soundDayLoanDate, slot) > toDateTime(soundDayLoanDate, form.borrow_time))
-    : TIME_SLOTS;
+  // Cinema: limit return time to max 6 hours after borrow time
+  const cinemaMaxReturnSlots = (() => {
+    if (!isCinemaLoan || !form.borrow_time) return TIME_SLOTS;
+    const [bh, bm] = form.borrow_time.split(":").map(Number);
+    const maxMinutes = (bh * 60 + bm) + 360; // +6 hours
+    return TIME_SLOTS.filter(t => {
+      const [h, m] = t.split(":").map(Number);
+      const mins = h * 60 + m;
+      return mins > (bh * 60 + bm) && mins <= maxMinutes;
+    });
+  })();
+  const availableReturnSlots = isCinemaLoan
+    ? cinemaMaxReturnSlots
+    : isSoundDayLoan
+      ? availableBorrowSlots.filter((slot) => !form.borrow_time || toDateTime(soundDayLoanDate, slot) > toDateTime(soundDayLoanDate, form.borrow_time))
+      : TIME_SLOTS;
   const ok1 = form.student_name && form.email && form.phone && form.course && form.loan_type &&
     (!isProductionLoan || form.crew_photographer_name);
 
@@ -2917,7 +3093,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   const timeOrderError = sameDay && form.borrow_time && form.return_time && toDateTime(form.return_date, form.return_time) <= toDateTime(form.borrow_date, form.borrow_time);
   const returnBeforeBorrow = form.borrow_date && form.return_date && parseLocalDate(form.return_date) < parseLocalDate(form.borrow_date);
   const hasTimes = !!form.borrow_time && !!form.return_time;
-  const ok2 = !!form.borrow_date && !!form.return_date && hasTimes && !returnBeforeBorrow && !tooSoon && !tooLong && !borrowWeekend && !returnWeekend && !timeOrderError;
+  const ok2 = !!form.borrow_date && !!form.return_date && hasTimes && !returnBeforeBorrow && !tooSoon && !cinemaTooSoon && !tooLong && !borrowWeekend && !returnWeekend && !timeOrderError;
   const ok3 = items.some(item => Number(item.quantity) > 0);
   const canSubmit = !!ok1 && !!ok2 && !!ok3 && !privateLoanLimitExceeded && !!agreed;
 
@@ -3178,6 +3354,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
                 {val:"פרטית",icon:"👤",desc:"שימוש אישי / לימודי"},
                 {val:"הפקה",icon:"🎬",desc:"פרויקט הפקה מאורגן"},
                 {val:"סאונד",icon:"🎙️",desc:"לתרגול הקלטות באולפני המכללה (עבור הנדסאי סאונד בלבד)"},
+                {val:"קולנוע יומית",icon:"🎥",desc:"תרגול חופשי עם ציוד קולנוע למספר שעות — יש להזמין 24 שעות מראש"},
               ].map(opt=>(
                 <div key={opt.val} onClick={()=>{
                   setForm((prev) => ({
@@ -3193,7 +3370,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
                 }} style={{width:"100%",padding:"14px 18px",borderRadius:"var(--r)",background:form.loan_type===opt.val?"var(--accent-glow)":"var(--surface2)",border:`2px solid ${form.loan_type===opt.val?"var(--accent)":"var(--border)"}`,cursor:"pointer",transition:"all 0.15s",display:"flex",alignItems:"center",gap:14}}>
                   <div style={{fontSize:30,flexShrink:0}}>{opt.icon}</div>
                   <div style={{flex:1}}>
-                    <div style={{fontWeight:800,fontSize:15,color:form.loan_type===opt.val?"var(--accent)":"var(--text)"}}>{opt.val==="סאונד"?"השאלת סאונד":opt.val==="הפקה"?"השאלת הפקה":`השאלה ${opt.val}`}</div>
+                    <div style={{fontWeight:800,fontSize:15,color:form.loan_type===opt.val?"var(--accent)":"var(--text)"}}>{opt.val==="סאונד"?"השאלת סאונד":opt.val==="הפקה"?"השאלת הפקה":opt.val==="קולנוע יומית"?"השאלת קולנוע יומית":`השאלה ${opt.val}`}</div>
                     <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{opt.desc}</div>
                   </div>
                   {form.loan_type===opt.val&&<div style={{fontSize:16,color:"var(--accent)",fontWeight:900,flexShrink:0}}>✓</div>}
@@ -3255,30 +3432,65 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
                 השאלת יום פעילה. התאריך חושב אוטומטית ל־{formatDate(soundDayLoanDate)} וניתן לבחור רק שעות עתידיות זמינות.
               </div>
             )}
-            <div className="grid-2">
-              <div className="form-group"><label className="form-label">📅 תאריך השאלה *</label>{isSoundDayLoan ? <div className="form-input" style={{display:"flex",alignItems:"center",fontWeight:700}}>{formatDate(soundDayLoanDate)}</div> : <input type="date" className="form-input" min={minDate} value={form.borrow_date} onChange={e=>set("borrow_date",e.target.value)}/>}</div>
-              <div className="form-group"><label className="form-label">שעת איסוף *</label>
-                <select className="form-select" value={form.borrow_time} onChange={e=>setForm(prev=>({...prev,borrow_time:e.target.value,return_time:isSoundDayLoan && prev.return_time && toDateTime(soundDayLoanDate, prev.return_time) <= toDateTime(soundDayLoanDate, e.target.value) ? "" : prev.return_time}))}>
-                  <option value="">-- בחר שעה --</option>
-                  {availableBorrowSlots.map(t=><option key={t} value={t}>{t}</option>)}
-                </select>
+            {isCinemaLoan && (
+              <div className="highlight-box" style={{marginBottom:16,background:"rgba(52,152,219,0.08)",border:"1px solid rgba(52,152,219,0.25)"}}>
+                🎥 השאלת קולנוע יומית — יש לבחור תאריך לפחות 24 שעות קדימה. ההשאלה מוגבלת ל-6 שעות באותו יום.
               </div>
-            </div>
-            <div className="grid-2">
-              <div className="form-group"><label className="form-label">📅 תאריך החזרה *</label>{isSoundDayLoan ? <div className="form-input" style={{display:"flex",alignItems:"center",fontWeight:700}}>{formatDate(soundDayLoanDate)}</div> : <input type="date" className="form-input" min={form.borrow_date||today()} value={form.return_date} onChange={e=>set("return_date",e.target.value)}/>}</div>
-              <div className="form-group"><label className="form-label">שעת החזרה *</label>
-                <select className="form-select" value={form.return_time} onChange={e=>set("return_time",e.target.value)}>
-                  <option value="">-- בחר שעה --</option>
-                  {availableReturnSlots.map(t=><option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-            </div>
-            {(borrowWeekend||returnWeekend) && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 המחסן אינו פעיל בימים שישי ושבת. נא לבחור ימים א׳–ה׳ בלבד.</div>}
+            )}
+            {isCinemaLoan ? (
+              <>
+                <div className="grid-2">
+                  <div className="form-group"><label className="form-label">📅 תאריך *</label>
+                    <input type="date" className="form-input" min={minDate} value={form.borrow_date} onChange={e=>{
+                      setForm(prev=>({...prev, borrow_date:e.target.value, return_date:e.target.value, borrow_time:"", return_time:""}));
+                    }}/>
+                  </div>
+                  <div className="form-group"><label className="form-label">שעת התחלה *</label>
+                    <select className="form-select" value={form.borrow_time} onChange={e=>setForm(prev=>({...prev, borrow_time:e.target.value, return_time:""}))}>
+                      <option value="">-- בחר שעה --</option>
+                      {TIME_SLOTS.map(t=><option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid-2">
+                  <div/>
+                  <div className="form-group"><label className="form-label">שעת סיום * <span style={{fontSize:11,color:"var(--text3)",fontWeight:400}}>(עד 6 שעות)</span></label>
+                    <select className="form-select" value={form.return_time} onChange={e=>set("return_time",e.target.value)} disabled={!form.borrow_time}>
+                      <option value="">-- בחר שעה --</option>
+                      {availableReturnSlots.map(t=><option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="grid-2">
+                  <div className="form-group"><label className="form-label">📅 תאריך השאלה *</label>{isSoundDayLoan ? <div className="form-input" style={{display:"flex",alignItems:"center",fontWeight:700}}>{formatDate(soundDayLoanDate)}</div> : <input type="date" className="form-input" min={minDate} value={form.borrow_date} onChange={e=>set("borrow_date",e.target.value)}/>}</div>
+                  <div className="form-group"><label className="form-label">שעת איסוף *</label>
+                    <select className="form-select" value={form.borrow_time} onChange={e=>setForm(prev=>({...prev,borrow_time:e.target.value,return_time:isSoundDayLoan && prev.return_time && toDateTime(soundDayLoanDate, prev.return_time) <= toDateTime(soundDayLoanDate, e.target.value) ? "" : prev.return_time}))}>
+                      <option value="">-- בחר שעה --</option>
+                      {availableBorrowSlots.map(t=><option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid-2">
+                  <div className="form-group"><label className="form-label">📅 תאריך החזרה *</label>{isSoundDayLoan ? <div className="form-input" style={{display:"flex",alignItems:"center",fontWeight:700}}>{formatDate(soundDayLoanDate)}</div> : <input type="date" className="form-input" min={form.borrow_date||today()} value={form.return_date} onChange={e=>set("return_date",e.target.value)}/>}</div>
+                  <div className="form-group"><label className="form-label">שעת החזרה *</label>
+                    <select className="form-select" value={form.return_time} onChange={e=>set("return_time",e.target.value)}>
+                      <option value="">-- בחר שעה --</option>
+                      {availableReturnSlots.map(t=><option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </>
+            )}
+            {(borrowWeekend||(returnWeekend&&!isCinemaLoan)) && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 המחסן אינו פעיל בימים שישי ושבת. נא לבחור ימים א׳–ה׳ בלבד.</div>}
             {tooSoon && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 {form.loan_type==="פרטית"?"השאלה פרטית דורשת התראה של 48 שעות לפחות.":"נדרשת התראה של שבוע לפחות."} תאריך מוקדם ביותר: <strong>{formatDate(minDate)}</strong></div>}
-            {tooLong && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 לא ניתן להשלים את התהליך כי זמן ההשאלה חורג מנהלי המכללה. משך מקסימלי: <strong>{maxDays} ימים</strong></div>}
-            {returnBeforeBorrow && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 זמנים לא נכונים — תאריך החזרה חייב להיות אחרי תאריך ההשאלה.</div>}
+            {cinemaTooSoon && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 השאלת קולנוע יומית דורשת הזמנה של 24 שעות מראש. תאריך מוקדם ביותר: <strong>{formatDate(minDate)}</strong></div>}
+            {tooLong && !isCinemaLoan && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 לא ניתן להשלים את התהליך כי זמן ההשאלה חורג מנהלי המכללה. משך מקסימלי: <strong>{maxDays} ימים</strong></div>}
+            {returnBeforeBorrow && !isCinemaLoan && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 זמנים לא נכונים — תאריך החזרה חייב להיות אחרי תאריך ההשאלה.</div>}
             {timeOrderError && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 זמנים לא נכונים — שעת החזרה חייבת להיות אחרי שעת האיסוף באותו יום.</div>}
-            {ok2 && <div className="highlight-box">📅 השאלה ל-{loanDays} ימים · איסוף {form.borrow_time} · החזרה {form.return_time}</div>}
+            {ok2 && <div className="highlight-box">{isCinemaLoan ? `🎥 השאלת קולנוע יומית · ${formatDate(form.borrow_date)} · ${form.borrow_time}–${form.return_time}` : `📅 השאלה ל-${loanDays} ימים · איסוף ${form.borrow_time} · החזרה ${form.return_time}`}</div>}
 
             {/* Mini calendar — approved reservations */}
             <PublicMiniCalendar key={form.loan_type || "הכל"} reservations={reservations} initialLoanType={form.loan_type || "הכל"} previewStart={form.borrow_date} previewEnd={form.return_date} previewName={form.student_name||"הבקשה שלך"}/>
@@ -3329,6 +3541,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
     { key:"פרטית", icon:"👤", label:"השאלה פרטית" },
     { key:"הפקה",  icon:"🎬", label:"השאלה להפקה" },
     { key:"סאונד", icon:"🎙️", label:"השאלת סאונד" },
+    { key:"קולנוע יומית", icon:"🎥", label:"השאלת קולנוע יומית" },
   ];
   const [draft, setDraft] = useState({ ...policies });
   const [saving, setSaving] = useState(false);
@@ -3421,7 +3634,7 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
     (!search || r.student_name?.includes(search) || r.email?.includes(search))
   );
 
-  const LOAN_ICONS = {"פרטית":"👤","הפקה":"🎬","סאונד":"🎙️"};
+  const LOAN_ICONS = {"פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥"};
 
   return (
     <div className="page">
@@ -3429,7 +3642,7 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
         <div className="search-bar" style={{flex:1,minWidth:160}}><span>🔍</span><input placeholder="חיפוש לפי שם או מייל..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
         <select className="form-select" style={{width:130,fontSize:12}} value={loanTypeF} onChange={e=>setLoanTypeF(e.target.value)}>
           <option value="הכל">כל הסוגים</option>
-          {["פרטית","הפקה","סאונד"].map(t=><option key={t}>{t}</option>)}
+          {["פרטית","הפקה","סאונד","קולנוע יומית"].map(t=><option key={t}>{t}</option>)}
         </select>
         <span style={{fontSize:13,color:"var(--text3)"}}>סה״כ: <strong style={{color:"var(--text)"}}>{filtered.length}</strong> בקשות</span>
       </div>
@@ -3540,11 +3753,11 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
 
 // ─── TEAM PAGE ────────────────────────────────────────────────────────────────
 function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, calendarToken="", collegeManager={}, setCollegeManager, showToast, managerToken="" }) {
-  const LOAN_TYPES = ["פרטית","הפקה","סאונד"];
-  const LOAN_ICONS = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️" };
+  const LOAN_TYPES = ["פרטית","הפקה","סאונד","קולנוע יומית"];
+  const LOAN_ICONS = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️", "קולנוע יומית":"🎥" };
   const emptyForm = { name:"", email:"", phone:"", loanTypes:[...LOAN_TYPES] };
-  const DH_LOAN_TYPES = ["הפקה","סאונד"];
-  const DH_LOAN_ICONS = { "הפקה":"🎬", "סאונד":"🎙️" };
+  const DH_LOAN_TYPES = ["הפקה","סאונד","קולנוע יומית"];
+  const DH_LOAN_ICONS = { "הפקה":"🎬", "סאונד":"🎙️", "קולנוע יומית":"🎥" };
   const emptyDhForm = { name:"", email:"", role:"", loanTypes:[] };
   const [dhForm, setDhForm]     = useState(emptyDhForm);
   const [addingDh, setAddingDh] = useState(false);
@@ -3949,8 +4162,8 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
   const [mode, setMode] = useState(null); // null | "student" | "lesson" | "editStudent" | "editLesson"
   const [editTarget, setEditTarget] = useState(null);
   const [tabView, setTabView] = useState("student"); // "student" | "lesson"
-  const LOAN_TYPES = ["פרטית","הפקה","סאונד","הכל"];
-  const LOAN_ICONS = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️", "הכל":"📦" };
+  const LOAN_TYPES = ["פרטית","הפקה","סאונד","קולנוע יומית","הכל"];
+  const LOAN_ICONS = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️", "קולנוע יומית":"🎥", "הכל":"📦" };
 
   const studentKits = kits.filter(k=>k.kitType!=="lesson");
   const lessonKits  = kits.filter(k=>k.kitType==="lesson");
@@ -5330,7 +5543,7 @@ function DeptHeadCalendarPage({ reservations: initialReservations, kits=[] }) {
 
   const STATUS_OPTIONS = ["ממתין","אישור ראש מחלקה","מאושר","נדחה"];
   const STATUS_COLORS  = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","אישור ראש מחלקה":"#9b59b6" };
-  const LOAN_ICONS     = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️" };
+  const LOAN_ICONS     = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥" };
 
   const activeRes = reservations.filter(r =>
     r.status !== "הוחזר" && r.borrow_date && r.return_date &&
@@ -5372,7 +5585,7 @@ function DeptHeadCalendarPage({ reservations: initialReservations, kits=[] }) {
         })}
         <span style={{fontSize:12,color:"var(--border)"}}>|</span>
         {/* Loan type */}
-        {["הכל","פרטית","הפקה","סאונד"].map(lt=>{
+        {["הכל","פרטית","הפקה","סאונד","קולנוע יומית"].map(lt=>{
           const active=loanTypeF===lt;
           return <button key={lt} type="button" onClick={()=>setLoanTypeF(lt)}
             style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
@@ -5509,7 +5722,7 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
   const ALL_STATUSES  = ["ממתין","אישור ראש מחלקה","מאושר","נדחה"];
   const STATUS_COLORS = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","אישור ראש מחלקה":"#9b59b6" };
   const STATUS_BADGE  = { "מאושר":"green","ממתין":"yellow","נדחה":"red","אישור ראש מחלקה":"purple" };
-  const LOAN_ICONS    = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️" };
+  const LOAN_ICONS    = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥" };
   const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
   const HE_D = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
   const SPAN_COLORS = [
@@ -5591,7 +5804,7 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
           );
         })}
         <span style={{fontSize:12,color:"var(--border)"}}>|</span>
-        {["הכל","פרטית","הפקה","סאונד"].map(lt=>{
+        {["הכל","פרטית","הפקה","סאונד","קולנוע יומית"].map(lt=>{
           const active=loanTypeF===lt;
           return <button key={lt} type="button" onClick={()=>setLoanTypeF(lt)}
             style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
@@ -6325,7 +6538,7 @@ export default function App() {
                   )}
                   <select className="form-select" style={{flex:"1 1 90px",minWidth:85,fontSize:12,padding:"6px 8px"}} value={resLoanTypeF} onChange={e=>setResLoanTypeF(e.target.value)}>
                     <option value="הכל">כל הסוגים</option>
-                    {["פרטית","הפקה","סאונד","שיעור"].map(t=><option key={t} value={t}>{t==="שיעור"?"השאלת שיעור":t}</option>)}
+                    {["פרטית","הפקה","סאונד","קולנוע יומית","שיעור"].map(t=><option key={t} value={t}>{t==="שיעור"?"השאלת שיעור":t==="קולנוע יומית"?"קולנוע יומית":t}</option>)}
                   </select>
                   <select className="form-select" style={{flex:"1 1 110px",minWidth:100,fontSize:12,padding:"6px 8px"}} value={resSortBy} onChange={e=>setResSortBy(e.target.value)}>
                     <option value="received">🕐 קבלה</option>
@@ -6339,10 +6552,12 @@ export default function App() {
               {page==="equipment"   && <EquipmentPage    equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} certifications={certifications}/>}
               {page==="reservations"&& <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
-                loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}/>}
+                loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}
+                categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken}/>}
               {page==="rejected"    && <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
-                loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} mode="rejected" collegeManager={collegeManager} managerToken={managerToken}/>}
+                loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} mode="rejected" collegeManager={collegeManager} managerToken={managerToken}
+                categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken}/>}
               {page==="archive"     && <ArchivePage      reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}/>}
               {page==="team"        && <TeamPage         teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/>}
               {page==="kits"        && <KitsPage         kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations}/>}
