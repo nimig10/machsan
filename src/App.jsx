@@ -209,6 +209,15 @@ function getReservationReturnTimestamp(reservation) {
   return toDateTime(reservation.return_date, reservation.return_time || "23:59");
 }
 
+function markReservationOverdue(reservation, overdueAt = new Date()) {
+  const overdueAtIso = overdueAt instanceof Date ? overdueAt.toISOString() : new Date(overdueAt).toISOString();
+  return {
+    ...reservation,
+    status: "באיחור",
+    overdue_at: reservation.overdue_at || overdueAtIso,
+  };
+}
+
 function markReservationReturned(reservation, returnedAt = new Date()) {
   const returnedAtIso = returnedAt instanceof Date ? returnedAt.toISOString() : new Date(returnedAt).toISOString();
   return {
@@ -219,6 +228,7 @@ function markReservationReturned(reservation, returnedAt = new Date()) {
 }
 
 function normalizeReservationsForArchive(reservations, now = new Date()) {
+  const nowMs = now.getTime();
   return (reservations || []).map((reservation) => {
     if (!reservation) return reservation;
     const normalizedReservation = {
@@ -227,6 +237,18 @@ function normalizeReservationsForArchive(reservations, now = new Date()) {
     };
     if (normalizedReservation.status === "הוחזר") {
       return normalizedReservation.returned_at ? normalizedReservation : markReservationReturned(normalizedReservation, now);
+    }
+    const returnAt = getReservationReturnTimestamp(normalizedReservation);
+    if (
+      normalizedReservation.status === "מאושר" &&
+      normalizedReservation.loan_type !== "שיעור" &&
+      returnAt !== null &&
+      nowMs > returnAt
+    ) {
+      return markReservationOverdue(normalizedReservation, now);
+    }
+    if (normalizedReservation.status === "באיחור" && normalizedReservation.overdue_at) {
+      return normalizedReservation;
     }
     return normalizedReservation;
   });
@@ -241,7 +263,7 @@ function getAvailable(eqId, borrowDate, returnDate, reservations, equipment, exc
   let used = 0;
   for (const res of reservations) {
     if (res.id === excludeId) continue;
-    if (res.status !== "מאושר") continue;
+    if (res.status !== "מאושר" && res.status !== "באיחור") continue;
     const resStart = toDateTime(res.borrow_date, res.borrow_time || "00:00");
     const resEnd   = toDateTime(res.return_date,  res.return_time  || "23:59");
     // Overlap: new period starts before existing ends AND new period ends after existing starts
@@ -269,7 +291,7 @@ function getReservationApprovalConflicts(targetReservation, reservations, equipm
 
     for (const res of reservations) {
       if (res.id === targetReservation.id) continue;
-      if (res.status !== "מאושר") continue;
+      if (res.status !== "מאושר" && res.status !== "באיחור") continue;
 
       const resStart = toDateTime(res.borrow_date, res.borrow_time || "00:00");
       const resEnd   = toDateTime(res.return_date, res.return_time || "23:59");
@@ -386,6 +408,7 @@ const css = `
   .cert-desktop { display:block; }
   .cert-mobile  { display:none; }
   .badge-purple { background:rgba(155,89,182,0.15); color:#9b59b6; border:1px solid rgba(155,89,182,0.3); }
+  .badge-orange { background:rgba(245,166,35,0.16); color:#f5a623; border:1px solid rgba(245,166,35,0.38); }
   .badge-gray { background:var(--surface2); color:var(--text2); border:1px solid var(--border); }
   .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; z-index:1000; padding:20px; backdrop-filter:blur(4px); animation:fadeIn 0.15s; }
   .modal { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); width:100%; max-width:580px; max-height:90vh; overflow-y:auto; animation:slideUp 0.2s; }
@@ -557,7 +580,7 @@ function workingUnits(eq) {
 
 function statusBadge(s) {
   const normalizedStatus = normalizeReservationStatus(s);
-  const m = { "מאושר":"badge-green","ממתין":"badge-yellow","נדחה":"badge-red","הוחזר":"badge-blue","אישור ראש מחלקה":"badge-purple","תקין":"badge-green","פגום":"badge-red","בתיקון":"badge-yellow","נעלם":"badge-red" };
+  const m = { "מאושר":"badge-green","ממתין":"badge-yellow","נדחה":"badge-red","באיחור":"badge-orange","הוחזר":"badge-blue","אישור ראש מחלקה":"badge-purple","תקין":"badge-green","פגום":"badge-red","בתיקון":"badge-yellow","נעלם":"badge-red" };
   return <span className={`badge ${m[normalizedStatus]||"badge-gray"}`}>{normalizedStatus}</span>;
 }
 function Toast({ toasts }) {
@@ -674,7 +697,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
 
   const todayStr2 = today();
   const used = (id) => reservations
-    .filter(r=>(r.status==="מאושר"||r.status==="ממתין") && r.borrow_date<=todayStr2 && r.return_date>=todayStr2)
+    .filter(r=>(r.status==="מאושר"||r.status==="ממתין"||r.status==="באיחור") && r.borrow_date<=todayStr2 && (r.return_date>=todayStr2 || r.status==="באיחור"))
     .reduce((s,r)=>s+(r.items?.find(i=>i.equipment_id==id)?.quantity||0),0);
 
   const EqForm = ({ initial }) => {
@@ -948,7 +971,7 @@ function AddCategoryModal({ categories, onSave, onClose }) {
 }
 
 // ─── EDIT RESERVATION MODAL ──────────────────────────────────────────────────
-function EditReservationModal({ reservation, equipment, reservations, onSave, onApprove, onClose, collegeManager={}, managerToken="" }) {
+function EditReservationModal({ reservation, equipment, reservations, onSave, onApprove, onSendOverdueMail, onClose, collegeManager={}, managerToken="" }) {
   const TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30"];
   const [form, setForm]   = useState({...reservation});
   const [items, setItems] = useState(reservation.items ? [...reservation.items] : []);
@@ -960,7 +983,9 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
   const [eqSearch, setEqSearch] = useState("");
   const [reportNote, setReportNote] = useState("");
   const [studentApprovalNote, setStudentApprovalNote] = useState(reservation.student_approval_note || "");
+  const [overdueStudentNote, setOverdueStudentNote] = useState(reservation.overdue_student_note || "");
   const [reportSending, setReportSending] = useState(false);
+  const [overdueMailSending, setOverdueMailSending] = useState(false);
 
   const sendManagerReport = async () => {
     if(!collegeManager.email) return;
@@ -1000,7 +1025,7 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
 
     for (const res of reservations) {
       if (res.id === reservation.id) continue;
-      if (res.status !== "מאושר") continue;
+      if (res.status !== "מאושר" && res.status !== "באיחור") continue;
 
       const resStart = toDateTime(res.borrow_date, res.borrow_time || "00:00");
       const resEnd   = toDateTime(res.return_date, res.return_time || "23:59");
@@ -1284,6 +1309,20 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
               <div style={{fontSize:11,color:"var(--text3)"}}>הטקסט יצורף למייל האישור שיישלח לסטודנט לאחר לחיצה על &quot;שמור ואשר&quot;.</div>
             </div>
           )}
+          {reservation.status==="באיחור"&&onSendOverdueMail&&(
+            <div style={{width:"100%",background:"rgba(245,166,35,0.08)",borderRadius:"var(--r-sm)",padding:"12px",marginBottom:8,border:"1px solid rgba(245,166,35,0.28)"}}>
+              <div style={{fontWeight:700,fontSize:12,marginBottom:6,color:"var(--accent)"}}>דיווח לסטודנט המאחר</div>
+              <textarea className="form-textarea" rows={3} style={{marginBottom:6}} placeholder="כתוב לסטודנט פרטים נוספים על האיחור או הנחיות להחזרת הציוד..." value={overdueStudentNote} onChange={e=>setOverdueStudentNote(e.target.value)}/>
+              <div style={{fontSize:11,color:"var(--text3)",marginBottom:8}}>אפשר לשלוח מכאן מייל ידני מפורט יותר בנוסף להתראת האיחור האוטומטית.</div>
+              <button className="btn btn-secondary btn-sm" disabled={overdueMailSending||!overdueStudentNote.trim()} onClick={async()=>{
+                setOverdueMailSending(true);
+                await onSendOverdueMail({ ...form, items, overdue_student_note: overdueStudentNote }, overdueStudentNote);
+                setOverdueMailSending(false);
+              }}>
+                {overdueMailSending?"⏳ שולח...":"📧 שלח מייל לסטודנט"}
+              </button>
+            </div>
+          )}
           <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
             {reservation.status==="נדחה"&&onApprove&&(
               <button className="btn btn-success" disabled={saving} onClick={async()=>{
@@ -1350,14 +1389,14 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
   const [rejectReason, setRejectReason] = useState("");
   const [showManualForm, setShowManualForm] = useState(false);
   const isRejectedPage = mode === "rejected";
-  const effectiveStatusFilter = !isRejectedPage && statusF !== "נדחה" ? statusF : "הכל";
+  const effectiveStatusFilter = !isRejectedPage && !["נדחה","באיחור"].includes(statusF) ? statusF : "הכל";
 
   const filtered = [...reservations]
     .filter(r => {
       if (isRejectedPage) {
-        if (r.status !== "נדחה") return false;
+        if (!["נדחה","באיחור"].includes(r.status)) return false;
       } else {
-        if (r.status === "הוחזר" || r.status === "נדחה") return false;
+        if (r.status === "הוחזר" || r.status === "נדחה" || r.status === "באיחור") return false;
         if (effectiveStatusFilter !== "הכל" && r.status !== effectiveStatusFilter) return false;
       }
       return (loanTypeF==="הכל" || r.loan_type===loanTypeF) &&
@@ -1399,7 +1438,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
       .label{color:#666;min-width:130px}
       table{width:100%;border-collapse:collapse;margin-top:8px}
       th{background:#f5f5f5;padding:10px 14px;text-align:right;font-size:12px;font-weight:700;color:#666}
-      .badge{display:inline-block;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:700;background:${r.status==="מאושר"?"#d4f5e9;color:#1a7a4a":r.status==="ממתין"?"#fff8e1;color:#b8860b":r.status==="נדחה"?"#fde8e8;color:#c0392b":"#e8f4fd;color:#2471a3"}}
+      .badge{display:inline-block;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:700;background:${r.status==="מאושר"?"#d4f5e9;color:#1a7a4a":r.status==="ממתין"?"#fff8e1;color:#b8860b":r.status==="נדחה"?"#fde8e8;color:#c0392b":r.status==="באיחור"?"#fff1de;color:#d97706":"#e8f4fd;color:#2471a3"}}
       .footer{margin-top:40px;padding-top:16px;border-top:1px solid #eee;font-size:11px;color:#999;text-align:center}
       @media print{body{padding:20px}}
     </style></head><body>
@@ -1464,6 +1503,38 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
       showToast("success", `📧 מייל נשלח ל-${reservation.email}`);
     } catch {
       showToast("error", "שגיאה בשליחת המייל");
+    }
+  };
+
+  const sendOverdueStudentEmail = async (reservation, customMessage="", markNotified=false) => {
+    if (!reservation?.email) return false;
+    const itemsList = reservation.items?.map(i => `<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${i.name || eqName(i.equipment_id)}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${i.quantity}</td></tr>`).join("") || "";
+    try {
+      await fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: reservation.email,
+          type: "overdue",
+          student_name: reservation.student_name,
+          items_list: itemsList,
+          borrow_date: formatDate(reservation.borrow_date),
+          borrow_time: reservation.borrow_time || "",
+          return_date: formatDate(reservation.return_date),
+          return_time: reservation.return_time || "",
+          custom_message: customMessage || reservation.overdue_student_note || "",
+        }),
+      });
+      if (markNotified) {
+        const updatedReservations = reservations.map((r) => r.id === reservation.id ? { ...r, overdue_notified: true, overdue_notified_at: new Date().toISOString() } : r);
+        setReservations(updatedReservations);
+        await storageSet("reservations", updatedReservations);
+      }
+      showToast("success", `מייל איחור נשלח ל-${reservation.email}`);
+      return true;
+    } catch {
+      showToast("error", "שגיאה בשליחת מייל האיחור");
+      return false;
     }
   };
 
@@ -1721,7 +1792,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
       {showManualForm && <AdminManualForm/>}
 
       {filtered.length===0
-        ? <div className="empty-state"><div className="emoji">{isRejectedPage ? "❌" : "📭"}</div><div>{isRejectedPage ? "אין בקשות דחויות" : "אין בקשות"}</div></div>
+        ? <div className="empty-state"><div className="emoji">{isRejectedPage ? "🟠" : "📭"}</div><div>{isRejectedPage ? "אין בקשות דחויות/מאחרות" : "אין בקשות"}</div></div>
         : <div style={{display:"flex",flexDirection:"column",gap:12}}>
           {filtered.map(r=>{
             const isLesson = r.loan_type==="שיעור";
@@ -1768,9 +1839,9 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
               </div>
               <div className="res-card-actions" onClick={e=>e.stopPropagation()}>
                 <button className="btn btn-secondary btn-sm" onClick={()=>exportPDF(r)}>📄 PDF</button>
-                {(r.status==="מאושר"||r.status==="נדחה"||r.status==="ממתין")&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}>✏️ עריכת בקשה</button>}
+                {(r.status==="מאושר"||r.status==="נדחה"||r.status==="ממתין"||r.status==="באיחור")&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}>✏️ עריכת בקשה</button>}
                 {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" onClick={()=>updateStatus(r.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger btn-sm" onClick={()=>openRejectModal(r)}>❌ דחה</button></>}
-                {r.status==="מאושר"&&<button className="btn btn-secondary btn-sm" onClick={()=>updateStatus(r.id,"הוחזר")}>🔄 הוחזר</button>}
+                {(r.status==="מאושר"||r.status==="באיחור")&&<button className="btn btn-secondary btn-sm" onClick={()=>updateStatus(r.id,"הוחזר")}>🔄 הוחזר</button>}
                 <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${r.student_name}?`)) deleteReservation(r.id); }}>🗑️</button>
               </div>
             </div>
@@ -1807,6 +1878,12 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
     const approved = await approveReservation(updated);
     if (approved) setEditing(null);
     return approved;
+  } : null}
+  onSendOverdueMail={editing.status==="באיחור" ? async(updated, message)=>{
+    const updatedReservations = reservations.map((r)=>r.id===updated.id ? { ...r, overdue_student_note: message } : r);
+    setReservations(updatedReservations);
+    await storageSet("reservations", updatedReservations);
+    await sendOverdueStudentEmail(updated, message, false);
   } : null}
   onClose={()=>setEditing(null)}/>}
 
@@ -1861,10 +1938,10 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
       {selected && (
         <Modal title={`📋 בקשה — ${selected.student_name}`} onClose={()=>setSelected(null)} size="modal-lg"
           footer={<>
-            {(selected.status==="ממתין"||selected.status==="מאושר"||selected.status==="נדחה")&&<button className="btn btn-secondary" onClick={()=>{ setEditing(selected); setSelected(null); }}>✏️ עריכת בקשה</button>}
+            {(selected.status==="ממתין"||selected.status==="מאושר"||selected.status==="נדחה"||selected.status==="באיחור")&&<button className="btn btn-secondary" onClick={()=>{ setEditing(selected); setSelected(null); }}>✏️ עריכת בקשה</button>}
             {selected.status==="ממתין"&&<><button className="btn btn-success" onClick={()=>updateStatus(selected.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger" onClick={()=>openRejectModal(selected)}>❌ דחה</button></>}
             {selected.status==="נדחה"&&<button className="btn btn-success" onClick={()=>updateStatus(selected.id,"מאושר")}>✅ אשר בקשה</button>}
-            {selected.status==="מאושר"&&<button className="btn btn-secondary" onClick={()=>updateStatus(selected.id,"הוחזר")}>🔄 סמן כהוחזר</button>}
+            {(selected.status==="מאושר"||selected.status==="באיחור")&&<button className="btn btn-secondary" onClick={()=>updateStatus(selected.id,"הוחזר")}>🔄 סמן כהוחזר</button>}
             <button className="btn btn-secondary" onClick={()=>exportPDF(selected)}>📄 ייצא PDF</button>
             <button className="btn btn-danger" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${selected.student_name}?`)) deleteReservation(selected.id); }}>🗑️ מחק</button>
             <button className="btn btn-secondary" onClick={()=>setSelected(null)}>סגור</button>
@@ -2029,10 +2106,11 @@ function DashboardPage({ equipment, reservations }) {
 
   // ── בקשות פעילות עכשיו ──
   const activeNow = reservations.filter(r =>
-    r.status === "מאושר" && r.borrow_date <= todayStr && r.return_date >= todayStr
+    ((r.status === "מאושר" && r.borrow_date <= todayStr && r.return_date >= todayStr) ||
+     (r.status === "באיחור" && r.borrow_date <= todayStr))
   );
   // ── כל בקשות מאושרות (כולל עתידיות) ──
-  const allApproved = reservations.filter(r => r.status === "מאושר");
+  const allApproved = reservations.filter(r => r.status === "מאושר" || r.status === "באיחור");
 
   // ── פריטים ויחידות שנמצאים כרגע בהשאלה ──
   const onLoanItems = activeNow.reduce((s,r) => s + (r.items?.length||0), 0);
@@ -5858,8 +5936,8 @@ function DeptHeadCalendarPage({ reservations: initialReservations, kits=[] }) {
     ["rgba(200,160,0,0.75)","#fff"], ["rgba(231,76,60,0.75)","#fff"],
   ];
 
-  const STATUS_OPTIONS = ["ממתין","אישור ראש מחלקה","מאושר","נדחה"];
-  const STATUS_COLORS  = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","אישור ראש מחלקה":"#9b59b6" };
+  const STATUS_OPTIONS = ["ממתין","אישור ראש מחלקה","מאושר","נדחה","באיחור"];
+  const STATUS_COLORS  = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","באיחור":"var(--accent)","אישור ראש מחלקה":"#9b59b6" };
   const LOAN_ICONS     = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥" };
 
   const activeRes = reservations.filter(r =>
@@ -5948,7 +6026,7 @@ function DeptHeadCalendarPage({ reservations: initialReservations, kits=[] }) {
                 <span style={{fontWeight:800,fontSize:14}}>{r.student_name}</span>
                 <span style={{fontSize:12,color:"var(--text3)"}}>{LOAN_ICONS[r.loan_type]||"📦"} {r.loan_type}</span>
                 <span style={{fontSize:11,color:"var(--text3)"}}>📅 {formatDate(r.borrow_date)} → {formatDate(r.return_date)}</span>
-                <span className={`badge badge-${r.status==="מאושר"?"green":r.status==="ממתין"?"yellow":r.status==="נדחה"?"red":"purple"}`} style={{marginRight:"auto"}}>
+                <span className={`badge badge-${r.status==="מאושר"?"green":r.status==="ממתין"?"yellow":r.status==="נדחה"?"red":r.status==="באיחור"?"orange":"purple"}`} style={{marginRight:"auto"}}>
                   {r.status}
                 </span>
               </div>
@@ -6036,9 +6114,10 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
   const [selected, setSelected]   = useState(null);
   const [changingStatus, setChangingStatus] = useState(null);
 
-  const ALL_STATUSES  = ["ממתין","אישור ראש מחלקה","מאושר","נדחה"];
-  const STATUS_COLORS = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","אישור ראש מחלקה":"#9b59b6" };
-  const STATUS_BADGE  = { "מאושר":"green","ממתין":"yellow","נדחה":"red","אישור ראש מחלקה":"purple" };
+  const FILTER_STATUSES  = ["ממתין","אישור ראש מחלקה","מאושר","נדחה","באיחור"];
+  const CHANGE_STATUSES  = ["ממתין","אישור ראש מחלקה","מאושר","נדחה"];
+  const STATUS_COLORS = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","באיחור":"var(--accent)","אישור ראש מחלקה":"#9b59b6" };
+  const STATUS_BADGE  = { "מאושר":"green","ממתין":"yellow","נדחה":"red","באיחור":"orange","אישור ראש מחלקה":"purple" };
   const LOAN_ICONS    = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥" };
   const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
   const HE_D = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
@@ -6111,7 +6190,7 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
       {/* Filters */}
       <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"14px 16px",marginBottom:16,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
         <span style={{fontSize:12,fontWeight:700,color:"var(--text3)"}}>סינון:</span>
-        {ALL_STATUSES.map(s=>{
+        {FILTER_STATUSES.map(s=>{
           const active=statusF.includes(s);
           return (
             <button key={s} type="button" onClick={()=>setStatusF(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s])}
@@ -6264,7 +6343,7 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
                   <div style={{marginTop:4,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"10px 12px",border:"1px solid var(--border)"}}>
                     <div style={{fontSize:12,fontWeight:700,color:"var(--text2)",marginBottom:8}}>🔄 שינוי סטטוס</div>
                     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                      {ALL_STATUSES.map(s=>{
+                      {CHANGE_STATUSES.map(s=>{
                         const isCurrent = r.status===s;
                         const col = STATUS_COLORS[s]||"var(--accent)";
                         return (
@@ -6744,7 +6823,7 @@ export default function App() {
 
   useEffect(() => {
     if (loading) return undefined;
-    const syncArchivedReservations = () => {
+    const syncReservationStatuses = () => {
       setReservations((currentReservations) => {
         const normalizedReservations = normalizeReservationsForArchive(currentReservations);
         if (JSON.stringify(normalizedReservations) === JSON.stringify(currentReservations)) {
@@ -6754,16 +6833,71 @@ export default function App() {
         return normalizedReservations;
       });
     };
-    const timerId = window.setInterval(syncArchivedReservations, 60000);
+    syncReservationStatuses();
+    const timerId = window.setInterval(syncReservationStatuses, 60000);
     return () => window.clearInterval(timerId);
   }, [loading]);
+
+  useEffect(() => {
+    if (loading) return undefined;
+    let busy = false;
+    const syncOverdueNotifications = async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        const now = Date.now();
+        const overdueCandidates = reservations.filter((reservation) => {
+          if (normalizeReservationStatus(reservation.status) !== "באיחור") return false;
+          if (reservation.overdue_notified || !reservation.email) return false;
+          const returnAt = getReservationReturnTimestamp(reservation);
+          return returnAt !== null && now >= returnAt + (30 * 60 * 1000);
+        });
+        if (!overdueCandidates.length) return;
+        let updatedReservations = reservations;
+        for (const reservation of overdueCandidates) {
+          const itemsList = reservation.items?.map((item) => `<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${item.name || "פריט"}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${item.quantity}</td></tr>`).join("") || "";
+          try {
+            await fetch("/api/send-email", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                to: reservation.email,
+                type: "overdue",
+                student_name: reservation.student_name,
+                items_list: itemsList,
+                borrow_date: formatDate(reservation.borrow_date),
+                borrow_time: reservation.borrow_time || "",
+                return_date: formatDate(reservation.return_date),
+                return_time: reservation.return_time || "",
+                custom_message: "",
+              }),
+            });
+            updatedReservations = updatedReservations.map((entry) => entry.id === reservation.id ? { ...entry, overdue_notified: true, overdue_notified_at: new Date().toISOString() } : entry);
+          } catch (error) {
+            console.error("overdue email error", error);
+          }
+        }
+        if (JSON.stringify(updatedReservations) !== JSON.stringify(reservations)) {
+          setReservations(updatedReservations);
+          await storageSet("reservations", updatedReservations);
+        }
+      } finally {
+        busy = false;
+      }
+    };
+    syncOverdueNotifications();
+    const timerId = window.setInterval(() => { void syncOverdueNotifications(); }, 60000);
+    return () => window.clearInterval(timerId);
+  }, [loading, reservations]);
 
   const pending = reservations.filter(r=>r.status==="ממתין").length;
   const damagedCount = equipment.reduce((sum, eq) =>
     sum + (Array.isArray(eq.units) ? eq.units.filter(u=>u.status!=="תקין").length : 0), 0);
   const deptHeadPending = reservations.filter(r=>r.status==="אישור ראש מחלקה").length;
   const rejected = reservations.filter(r=>r.status==="נדחה").length;
-  const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד פעיל", damaged:"ציוד בדיקה", reservations:"ניהול בקשות", rejected:"בקשות דחויות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות", policies:"נהלים", certifications:"הסמכות" };
+  const overdue = reservations.filter(r=>r.status==="באיחור").length;
+  const rejectedOrLate = rejected + overdue;
+  const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד פעיל", damaged:"ציוד בדיקה", reservations:"ניהול בקשות", rejected:"בקשות דחויות/מאחרות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות", policies:"נהלים", certifications:"הסמכות" };
 
   return (
     <>
@@ -6818,7 +6952,7 @@ export default function App() {
                 {id:"equipment",icon:"📦",label:"ציוד פעיל"},
                 {id:"damaged",icon:"🔧",label:"ציוד בדיקה",badge:damagedCount||null},
                 {id:"certifications",icon:"🎓",label:"הסמכות"},
-                {id:"rejected",icon:"❌",label:"דחויות",badge:rejected||null},
+                {id:"rejected",icon:"🟠",label:"דחויות/מאחרות",badge:rejectedOrLate||null},
                 {id:"kits",icon:"🎒",label:"ערכות"},
                 {id:"team",icon:"👥",label:"צוות"},
                 {id:"archive",icon:"🗄️",label:"ארכיון"},
@@ -6842,13 +6976,13 @@ export default function App() {
                 <span className="topbar-title" style={{flex:1}}>{pageTitle[page]}</span>
                 {pending>0&&<div style={{background:"rgba(241,196,15,0.12)",border:"1px solid rgba(241,196,15,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--yellow)",flexShrink:0}}>⏳ {pending}</div>}
                 {deptHeadPending>0&&<div style={{background:"rgba(155,89,182,0.12)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--purple)",flexShrink:0}}>🟣 {deptHeadPending}</div>}
-                {rejected>0&&<div style={{background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--red)",flexShrink:0}}>❌ {rejected}</div>}
+                {rejectedOrLate>0&&<div style={{background:"rgba(245,166,35,0.12)",border:"1px solid rgba(245,166,35,0.32)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--accent)",flexShrink:0}}>🟠 {rejectedOrLate}</div>}
               </div>
               {(page==="reservations" || page==="rejected") && (
                 <div style={{display:"flex",gap:6,width:"100%",flexWrap:"wrap",alignItems:"center"}}>
                   <div className="search-bar" style={{flex:"1 1 130px",minWidth:120}}><span>🔍</span><input placeholder="חיפוש..." value={resSearch} onChange={e=>setResSearch(e.target.value)}/></div>
                   {page==="reservations" && (
-                    <select className="form-select" style={{flex:"1 1 100px",minWidth:95,fontSize:12,padding:"6px 8px"}} value={resStatusF==="נדחה" ? "הכל" : resStatusF} onChange={e=>setResStatusF(e.target.value)}>
+                    <select className="form-select" style={{flex:"1 1 100px",minWidth:95,fontSize:12,padding:"6px 8px"}} value={["נדחה","באיחור"].includes(resStatusF) ? "הכל" : resStatusF} onChange={e=>setResStatusF(e.target.value)}>
                       <option value="הכל">כל הסטטוסים</option>
                       {["ממתין","אישור ראש מחלקה","מאושר"].map(s=><option key={s} value={s}>{s}</option>)}
                     </select>

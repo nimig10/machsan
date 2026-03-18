@@ -85,10 +85,10 @@ function buildEmail({
     ? `ערכת השיעור <strong style="color:#e8eaf0">${lesson_kit_name || project_name || loan_type || "המבוקשת"}</strong> הורכבה על ידי צוות המחסן ומוכנה כעת לבדיקה שלך.<br/><br/>
        אפשר לעבור על פרטי הערכה שמופיעים מטה ולוודא שהכול תקין.`
     : isOverdue
-    ? `<strong style="color:#e74c3c">שימ/י לב — הציוד שהשאלת לא הוחזר עד המועד הנקבע.</strong><br/><br/>
-       מועד ההחזרה שנקבע היה <strong style="color:#e8eaf0">${return_date}${return_time ? " בשעה " + return_time : ""}</strong> והציוד <strong style="color:#e74c3c">טרם הוחזר למחסן</strong>.<br/><br/>
-       <strong style="color:#f5a623">הנהלת המכללה מתייחסת לאיחור בהחזרת ציוד בחומרה רבה.</strong> כל עיכוב נוסף עלול לגרור סנקציות אקדמיות ומניעת גישה לציוד בעתיד.<br/><br/>
-       יש להחזיר את הציוד למחסן <strong style="color:#e74c3c">באופן מיידי</strong> וליצור קשר עם צוות המחסן.`
+    ? `<strong style="color:#e74c3c">${student_name || "הסטודנט/ית"} — שים/י לב: זמן ההשאלה שלך תם והציוד עדיין לא הוחזר למחסן.</strong><br/><br/>
+       מועד ההחזרה שנקבע היה <strong style="color:#e8eaf0">${return_date}${return_time ? " בשעה " + return_time : ""}</strong>, והציוד <strong style="color:#e74c3c">טרם הוחזר</strong>.<br/><br/>
+       <strong style="color:#f5a623">מנהלת המכללה תאלץ לשקול צעדים נוספים על מנת לטפל בנושא אי ההחזרה</strong> אם הציוד לא יושב למכללה בהקדם.<br/><br/>
+       יש להשיב את הציוד למכללה <strong style="color:#e74c3c">כמה שיותר מוקדם</strong> וליצור קשר עם צוות המחסן במידת הצורך.`
     : isOverdueTeam
     ? `הסטודנט/ית <strong style="color:#e8eaf0">${student_name}</strong> לא החזיר/ה את הציוד במועד הנקבע.<br/><br/>
        מועד ההחזרה היה <strong style="color:#e8eaf0">${return_date}${return_time ? " בשעה " + return_time : ""}</strong> — <strong style="color:#e74c3c">הציוד טרם הוחזר.</strong><br/><br/>
@@ -111,9 +111,9 @@ function buildEmail({
       <div style="font-size:13px;color:#e8eaf0;white-space:pre-wrap;line-height:1.7">${finalTeacherMessage}</div>
     </div>` : "";
 
-  const studentMessageSection = custom_message && (isApproved || (!isNew && !isTeamNotify && !isDeptHead && !isManagerReport && !isLessonKitReady && !isOverdue && !isOverdueTeam)) ? `
+  const studentMessageSection = custom_message && (isApproved || isOverdue || (!isNew && !isTeamNotify && !isDeptHead && !isManagerReport && !isLessonKitReady && !isOverdueTeam)) ? `
     <div style="background:#1a1d26;border:1px solid #2d3244;border-radius:8px;padding:16px;margin:16px 0;direction:rtl">
-      <div style="font-size:13px;color:${isApproved ? "#2ecc71" : "#e74c3c"};font-weight:700;margin-bottom:10px">${isApproved ? "דיווח מצוות המחסן על אישור הבקשה" : "הסבר מצוות המחסן על סיבת הדחייה"}</div>
+      <div style="font-size:13px;color:${isApproved ? "#2ecc71" : isOverdue ? "#f5a623" : "#e74c3c"};font-weight:700;margin-bottom:10px">${isApproved ? "דיווח מצוות המחסן על אישור הבקשה" : isOverdue ? "הודעה נוספת מצוות המחסן על האיחור" : "הסבר מצוות המחסן על סיבת הדחייה"}</div>
       <div style="font-size:13px;color:#e8eaf0;white-space:pre-wrap;line-height:1.7">${custom_message}</div>
     </div>` : "";
 
@@ -246,7 +246,7 @@ export default async function handler(req, res) {
     team_notify:       `📬 בקשת השאלה חדשה (${loan_type || ""}) – ${student_name || ""}`,
     dept_head_notify:  `🎓 בקשת השאלת הפקה לאישורך — ${student_name || ""}`,
     manager_report:    `📋 דיווח מצוות המחסן — ${student_name || ""}`,
-    overdue:           "🚨 החזרת ציוד באיחור — נדרשת פעולה מיידית",
+    overdue:           "אזהרת איחור בהחזרת ציוד — נדרשת פעולה מיידית",
     overdue_team:      `🚨 ציוד לא הוחזר במועד — ${student_name || ""}`,
     lesson_kit_ready:  `📚 ערכת שיעור מוכנה לבדיקה — ${lesson_kit_name || project_name || student_name || ""}`,
   };
