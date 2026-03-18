@@ -379,7 +379,7 @@ const css = `
   .sidebar-logo { padding:24px 20px 20px; border-bottom:1px solid var(--border); }
   .sidebar-logo .app-name { font-size:20px; font-weight:900; color:var(--accent); line-height:1.1; }
   .sidebar-logo .app-sub { font-size:11px; color:var(--text3); margin-top:3px; }
-  .logo-icon { font-size:38px; margin-bottom:8px; display:block; }
+  .logo-icon { font-size:46px; margin-bottom:8px; display:block; }
   .nav { flex:1; padding:12px 0; overflow-y:auto; }
   .nav-section { padding:10px 18px 6px; font-size:12px; font-weight:900; color:var(--text2); text-transform:uppercase; letter-spacing:1px; }
   .nav-item { display:flex; align-items:center; gap:12px; padding:12px 20px; cursor:pointer; font-size:16px; font-weight:800; color:#f3f6fb; transition:all 0.15s; border-right:3px solid transparent; margin:1px 0; position:relative; }
@@ -3669,12 +3669,12 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
         <div className="form-card-header" style={{position:"relative"}}>
           <button type="button" onClick={()=>setShowInfoPanel(true)}
             title="מידע כללי, נהלים וערכות"
-            style={{position:"absolute",top:12,left:12,width:40,height:40,borderRadius:"50%",border:"2px solid #ffd24d",background:"linear-gradient(135deg,#ffe27a,#ffb300)",color:"#2b1a00",fontSize:18,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,boxShadow:"0 10px 24px rgba(255,179,0,0.28)"}}>
+            style={{position:"absolute",top:12,left:12,width:48,height:48,borderRadius:"50%",border:"3px solid #ffd24d",background:"linear-gradient(135deg,#ffe27a,#ffb300)",color:"#2b1a00",fontSize:22,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,boxShadow:"0 0 0 4px rgba(255,179,0,0.18), 0 10px 28px rgba(255,179,0,0.45)"}}>
             ℹ
           </button>
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",paddingInline:"24px"}}>
             {siteSettings.logo
-              ? <img src={siteSettings.logo} alt="לוגו" style={{width:68,height:68,objectFit:"contain",borderRadius:12,marginBottom:12}}/>
+              ? <img src={siteSettings.logo} alt="לוגו" style={{width:82,height:82,objectFit:"contain",borderRadius:12,marginBottom:12}}/>
               : <div style={{fontSize:48,marginBottom:12}}>🎬</div>}
             <div style={{fontSize:24,fontWeight:900,color:"var(--accent)"}}>מחסן השאלת ציוד קמרה אובסקורה וסאונד</div>
             <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>טופס השאלת ציוד</div>
@@ -7128,7 +7128,7 @@ export default function App() {
           <nav className="sidebar">
             <div className="sidebar-logo">
               {siteSettings.logo
-                ? <img src={siteSettings.logo} alt="לוגו" style={{width:58,height:58,objectFit:"contain",borderRadius:8}}/>
+                ? <img src={siteSettings.logo} alt="לוגו" style={{width:70,height:70,objectFit:"contain",borderRadius:8}}/>
                 : <span className="logo-icon">🎬</span>}
               <div className="app-name">מחסן השאלת ציוד<br/>קמרה אובסקורה וסאונד</div>
               <div className="app-sub">💾 נתונים נשמרים תמיד</div>
