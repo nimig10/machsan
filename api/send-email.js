@@ -111,6 +111,12 @@ function buildEmail({
       <div style="font-size:13px;color:#e8eaf0;white-space:pre-wrap;line-height:1.7">${finalTeacherMessage}</div>
     </div>` : "";
 
+  const studentMessageSection = custom_message && (isApproved || (!isNew && !isTeamNotify && !isDeptHead && !isManagerReport && !isLessonKitReady && !isOverdue && !isOverdueTeam)) ? `
+    <div style="background:#1a1d26;border:1px solid #2d3244;border-radius:8px;padding:16px;margin:16px 0;direction:rtl">
+      <div style="font-size:13px;color:${isApproved ? "#2ecc71" : "#e74c3c"};font-weight:700;margin-bottom:10px">${isApproved ? "דיווח מצוות המחסן על אישור הבקשה" : "הסבר מצוות המחסן על סיבת הדחייה"}</div>
+      <div style="font-size:13px;color:#e8eaf0;white-space:pre-wrap;line-height:1.7">${custom_message}</div>
+    </div>` : "";
+
   const crewSection = isDeptHead ? `
     <div style="background:#1a1d26;border:1px solid #2d3244;border-radius:8px;padding:16px;margin:16px 0;direction:rtl">
       <div style="font-size:13px;color:#f5a623;font-weight:700;margin-bottom:10px">פרטי צוות ההפקה</div>
@@ -166,6 +172,7 @@ function buildEmail({
       ${productionReasonSection}
       ${reportSection}
       ${lessonKitSection}
+      ${studentMessageSection}
       <div style="background:#111318;border:1px solid #252b38;border-radius:10px;padding:20px;margin:20px 0;direction:rtl">
         <h3 style="color:#f5a623;font-size:14px;margin:0 0 12px;text-align:right">פרטי הבקשה</h3>
         <table style="width:100%;font-size:13px;color:#8891a8;border-collapse:collapse;direction:rtl">

@@ -964,6 +964,7 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
   const [selectedCats, setSelectedCats] = useState([]);
   const [eqSearch, setEqSearch] = useState("");
   const [reportNote, setReportNote] = useState("");
+  const [studentApprovalNote, setStudentApprovalNote] = useState(reservation.student_approval_note || "");
   const [reportSending, setReportSending] = useState(false);
 
   const sendManagerReport = async () => {
@@ -1281,11 +1282,18 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
               </button>
             </div>
           )}
+          {reservation.status==="נדחה"&&onApprove&&(
+            <div style={{width:"100%",background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"12px",marginBottom:8,border:"1px solid var(--border)"}}>
+              <div style={{fontWeight:700,fontSize:12,marginBottom:6,color:"var(--text2)"}}>דיווח לאישור לסטודנט</div>
+              <textarea className="form-textarea" rows={3} style={{marginBottom:6}} placeholder="כתוב לסטודנט אילו שינויים בוצעו בבקשה ולמה היא אושרה כעת..." value={studentApprovalNote} onChange={e=>setStudentApprovalNote(e.target.value)}/>
+              <div style={{fontSize:11,color:"var(--text3)"}}>הטקסט יצורף למייל האישור שיישלח לסטודנט לאחר לחיצה על &quot;שמור ואשר&quot;.</div>
+            </div>
+          )}
           <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
             {reservation.status==="נדחה"&&onApprove&&(
               <button className="btn btn-success" disabled={saving} onClick={async()=>{
                 setSaving(true);
-                await onApprove({...form, items, status:"מאושר"});
+                await onApprove({...form, items, status:"מאושר", student_approval_note: studentApprovalNote});
                 setSaving(false);
               }}>✅ שמור ואשר</button>
             )}
@@ -1343,6 +1351,8 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
   const [selected, setSelected] = useState(null);
   const [editing, setEditing]   = useState(null);
   const [approvalConflict, setApprovalConflict] = useState(null);
+  const [rejecting, setRejecting] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
   const [showManualForm, setShowManualForm] = useState(false);
   const isRejectedPage = mode === "rejected";
   const effectiveStatusFilter = !isRejectedPage && statusF !== "נדחה" ? statusF : "הכל";
@@ -1437,7 +1447,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
     setSelected(null);
   };
 
-  const sendStatusEmail = async (reservation, status) => {
+  const sendStatusEmail = async (reservation, status, customMessage="") => {
     if (!reservation?.email || (status !== "מאושר" && status !== "נדחה")) return;
     const itemsList = reservation.items?.map(i => `<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${i.name || eqName(i.equipment_id)}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${i.quantity}</td></tr>`).join("") || "";
     try {
@@ -1453,6 +1463,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
           borrow_time:  reservation.borrow_time || "",
           return_date:  formatDate(reservation.return_date),
           return_time:  reservation.return_time || "",
+          custom_message: customMessage || reservation.student_approval_note || reservation.rejection_reason || "",
         }),
       });
       showToast("success", `📧 מייל נשלח ל-${reservation.email}`);
@@ -1474,7 +1485,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
     ));
     setReservations(updated);
     await storageSet("reservations", updated);
-    await sendStatusEmail({ ...reservationToApprove, status: "מאושר" }, "מאושר");
+    await sendStatusEmail({ ...reservationToApprove, status: "מאושר" }, "מאושר", reservationToApprove.student_approval_note || "");
     showToast("success", "הבקשה אושרה");
     setSelected(null);
     return true;
@@ -1493,9 +1504,28 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
     setReservations(updated);
     await storageSet("reservations", updated);
     showToast("success", `סטטוס עודכן ל-${status}`);
-    if (status === "נדחה") await sendStatusEmail({ ...res, status: "נדחה" }, "נדחה");
+    if (status === "נדחה") await sendStatusEmail({ ...res, status: "נדחה" }, "נדחה", res.rejection_reason || "");
     setSelected(null);
     return true;
+  };
+
+  const openRejectModal = (reservation) => {
+    setRejecting(reservation);
+    setRejectReason(reservation?.rejection_reason || "");
+    setSelected(null);
+  };
+
+  const rejectReservation = async () => {
+    if (!rejecting) return;
+    const updatedReservation = { ...rejecting, status:"נדחה", rejection_reason: rejectReason.trim() };
+    const updated = normalizeReservationsForArchive(reservations.map((r) => r.id !== rejecting.id ? r : updatedReservation));
+    setReservations(updated);
+    await storageSet("reservations", updated);
+    showToast("success", "סטטוס עודכן ל-נדחה");
+    await sendStatusEmail(updatedReservation, "נדחה", rejectReason.trim());
+    setSelected(null);
+    setRejecting(null);
+    setRejectReason("");
   };
 
   // ── Admin Manual Reservation Form (inner component) ──
@@ -1700,7 +1730,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
               <div className="res-card-actions" onClick={e=>e.stopPropagation()}>
                 <button className="btn btn-secondary btn-sm" onClick={()=>exportPDF(r)}>📄 PDF</button>
                 {(r.status==="מאושר"||r.status==="נדחה"||r.status==="ממתין")&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}>✏️ עריכת בקשה</button>}
-                {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" onClick={()=>updateStatus(r.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger btn-sm" onClick={()=>updateStatus(r.id,"נדחה")}>❌ דחה</button></>}
+                {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" onClick={()=>updateStatus(r.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger btn-sm" onClick={()=>openRejectModal(r)}>❌ דחה</button></>}
                 {r.status==="מאושר"&&<button className="btn btn-secondary btn-sm" onClick={()=>updateStatus(r.id,"הוחזר")}>🔄 הוחזר</button>}
                 <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${r.student_name}?`)) deleteReservation(r.id); }}>🗑️</button>
               </div>
@@ -1709,6 +1739,29 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
           })}
         </div>
       }
+      {rejecting && (
+        <Modal
+          title={`❌ דחיית בקשה — ${rejecting.student_name}`}
+          onClose={()=>{ setRejecting(null); setRejectReason(""); }}
+          size="modal-lg"
+          footer={<>
+            <button className="btn btn-secondary" onClick={()=>{ setRejecting(null); setRejectReason(""); }}>ביטול</button>
+            <button className="btn btn-danger" onClick={rejectReservation}>דחה ושלח מייל</button>
+          </>}
+        >
+          <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"14px 16px"}}>
+            <div style={{fontWeight:700,fontSize:13,marginBottom:8,color:"var(--text2)"}}>הסבר לסטודנט את סיבת הדחייה</div>
+            <textarea
+              className="form-textarea"
+              rows={5}
+              placeholder="אפשר לכתוב לסטודנט למה הבקשה נדחתה ומה עליו לשנות. מילוי השדה אינו חובה."
+              value={rejectReason}
+              onChange={e=>setRejectReason(e.target.value)}
+            />
+            <div style={{fontSize:11,color:"var(--text3)",marginTop:8}}>אפשר לדחות גם בלי לכתוב סיבה. אם תוזן כאן הודעה, היא תופיע בגוף המייל לסטודנט.</div>
+          </div>
+        </Modal>
+      )}
       {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations} collegeManager={collegeManager} managerToken={managerToken}
   onSave={async(updated)=>{ const all=normalizeReservationsForArchive(reservations.map(r=>r.id===updated.id?updated:r)); setReservations(all); await storageSet("reservations",all); showToast("success","הבקשה עודכנה"); setEditing(null); }}
   onApprove={editing.status==="נדחה" ? async(updated)=>{
@@ -1761,7 +1814,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
         <Modal title={`📋 בקשה — ${selected.student_name}`} onClose={()=>setSelected(null)} size="modal-lg"
           footer={<>
             {(selected.status==="ממתין"||selected.status==="מאושר"||selected.status==="נדחה")&&<button className="btn btn-secondary" onClick={()=>{ setEditing(selected); setSelected(null); }}>✏️ עריכת בקשה</button>}
-            {selected.status==="ממתין"&&<><button className="btn btn-success" onClick={()=>updateStatus(selected.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger" onClick={()=>updateStatus(selected.id,"נדחה")}>❌ דחה</button></>}
+            {selected.status==="ממתין"&&<><button className="btn btn-success" onClick={()=>updateStatus(selected.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger" onClick={()=>openRejectModal(selected)}>❌ דחה</button></>}
             {selected.status==="נדחה"&&<button className="btn btn-success" onClick={()=>updateStatus(selected.id,"מאושר")}>✅ אשר בקשה</button>}
             {selected.status==="מאושר"&&<button className="btn btn-secondary" onClick={()=>updateStatus(selected.id,"הוחזר")}>🔄 סמן כהוחזר</button>}
             <button className="btn btn-secondary" onClick={()=>exportPDF(selected)}>📄 ייצא PDF</button>
