@@ -2126,10 +2126,10 @@ function DashboardPage({ equipment, reservations, setReservations, showToast }) 
 
   // ── בקשות פעילות עכשיו ──
   const activeNow = reservations.filter(r => {
-    if (r.status !== "מאושר" || !r.borrow_date || !r.return_date) return false;
+    if (!["מאושר","באיחור"].includes(r.status) || !r.borrow_date || !r.return_date) return false;
     const borrowAt = toDateTime(r.borrow_date, r.borrow_time || "00:00");
     const returnAt = toDateTime(r.return_date, r.return_time || "23:59");
-    return borrowAt <= nowMs && returnAt >= nowMs;
+    return r.status === "באיחור" ? borrowAt <= nowMs : (borrowAt <= nowMs && returnAt >= nowMs);
   });
   // ── כל בקשות מאושרות (כולל עתידיות) ──
   const allApproved = reservations.filter(r => r.status === "מאושר" || r.status === "באיחור");
