@@ -978,6 +978,7 @@ function AddCategoryModal({ categories, onSave, onClose }) {
 // ─── EDIT RESERVATION MODAL ──────────────────────────────────────────────────
 function EditReservationModal({ reservation, equipment, reservations, onSave, onApprove, onClose, collegeManager={}, managerToken="" }) {
   const TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30"];
+  const isOverdueReservation = reservation.status==="באיחור";
   const [form, setForm]   = useState({...reservation});
   const [items, setItems] = useState(reservation.items ? [...reservation.items] : []);
   const [saving, setSaving] = useState(false);
@@ -988,6 +989,8 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
   const [editCategoryFilters, setEditCategoryFilters] = useState([]);
   const [reportNote, setReportNote] = useState("");
   const [reportSending, setReportSending] = useState(false);
+  const [overdueEditMailText, setOverdueEditMailText] = useState(reservation.overdue_student_note || "");
+  const [overdueEditMailSending, setOverdueEditMailSending] = useState(false);
 
   const sendManagerReport = async () => {
     if(!collegeManager.email) return;
@@ -1015,6 +1018,57 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
     setReportSending(false);
   };
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
+  const overdueEqItems = items
+    .map((item) => {
+      const eq = equipment.find((e) => e.id == item.equipment_id) || {};
+      return {
+        ...item,
+        id: item.equipment_id,
+        name: item.name || eq.name || "?",
+        category: eq.category || "",
+        image: eq.image || "📦",
+        soundOnly: !!eq.soundOnly,
+        photoOnly: !!eq.photoOnly,
+      };
+    })
+    .filter((item) => {
+      const searchText = editSearch.trim().toLowerCase();
+      if (searchText) {
+        const haystack = `${item.name||""} ${item.category||""}`.toLowerCase();
+        if (!haystack.includes(searchText)) return false;
+      }
+      if (editTypeFilter === "sound" && !item.soundOnly) return false;
+      if (editTypeFilter === "photo" && !item.photoOnly) return false;
+      if (editCategoryFilters.length && !editCategoryFilters.includes(item.category)) return false;
+      return true;
+    });
+  const overdueEquipmentCategories = [...new Set(overdueEqItems.map((item) => item.category).filter(Boolean))];
+  const sendOverdueMailFromEdit = async () => {
+    if (!reservation?.email || !overdueEditMailText.trim()) return;
+    setOverdueEditMailSending(true);
+    try {
+      await fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: reservation.email,
+          type: "overdue",
+          student_name: reservation.student_name,
+          borrow_date: formatDate(reservation.borrow_date),
+          borrow_time: reservation.borrow_time || "",
+          return_date: formatDate(reservation.return_date),
+          return_time: reservation.return_time || "",
+          custom_message: overdueEditMailText.trim(),
+        }),
+      });
+      setOverdueEditMailText("");
+      alert(`✅ המייל נשלח אל ${reservation.email}`);
+    } catch (e) {
+      console.error(e);
+      alert("שגיאה בשליחת המייל לסטודנט המאחר");
+    }
+    setOverdueEditMailSending(false);
+  };
 
   const getEquipmentBlockingDetails = (eqId) => {
     const eq = equipment.find(e=>e.id==eqId);
@@ -1119,6 +1173,7 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
           <div>
             <div style={{fontWeight:900,fontSize:18}}>✏️ עריכת בקשה</div>
             <div style={{fontSize:14,color:"var(--text2)",marginTop:4,fontWeight:700}}>{reservation.student_name}</div>
+            <div style={{fontSize:13,color:"var(--text)",marginTop:6,fontWeight:800}}>סטטוס: {reservation.status}</div>
             <div style={{display:"flex",gap:8,marginTop:4,alignItems:"center",flexWrap:"wrap"}}>
               <span style={{fontSize:12,color:"var(--accent)",fontWeight:700,background:"var(--surface3)",borderRadius:20,padding:"2px 10px"}}>
                 {reservation.loan_type==="פרטית"?"👤":reservation.loan_type==="הפקה"?"🎬":reservation.loan_type==="קולנוע יומית"?"🎥":"🎙️"} {reservation.loan_type==="סאונד"?"השאלת סאונד":reservation.loan_type==="קולנוע יומית"?"קולנוע יומית":`השאלה ${reservation.loan_type}`}
@@ -1131,44 +1186,60 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
 
         <div style={{padding:24,display:"flex",flexDirection:"column",gap:24}}>
 
-          <div>
-            <div className="form-section-title">תאריכים ושעות</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-              <div className="form-group">
-                <label className="form-label">תאריך השאלה</label>
-                <input type="date" className="form-input" value={form.borrow_date} onChange={e=>set("borrow_date",e.target.value)}/>
-              </div>
-              <div className="form-group">
-                <label className="form-label">שעת איסוף</label>
-                <select className="form-select" value={form.borrow_time||""} onChange={e=>set("borrow_time",e.target.value)}>
-                  <option value="">-- בחר שעה --</option>
-                  {TIME_SLOTS.map(t=><option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">תאריך החזרה</label>
-                <input type="date" className="form-input" value={form.return_date} min={form.borrow_date} onChange={e=>set("return_date",e.target.value)}/>
-              </div>
-              <div className="form-group">
-                <label className="form-label">שעת החזרה</label>
-                <select className="form-select" value={form.return_time||""} onChange={e=>set("return_time",e.target.value)}>
-                  <option value="">-- בחר שעה --</option>
-                  {TIME_SLOTS.map(t=><option key={t} value={t}>{t}</option>)}
-                </select>
+          {isOverdueReservation ? (
+            <div>
+              <div className="form-section-title">תאריכים ושעות</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12}}>
+                {[["תאריך השאלה", formatDate(reservation.borrow_date)],["שעת איסוף", reservation.borrow_time || "לא הוזנה"],["תאריך החזרה", formatDate(reservation.return_date)],["שעת החזרה", reservation.return_time || "לא הוזנה"]].map(([label,value])=>(
+                  <div key={label} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"14px 16px"}}>
+                    <div style={{fontSize:12,color:"var(--text3)",marginBottom:6,fontWeight:700}}>{label}</div>
+                    <div style={{fontSize:18,fontWeight:900,color:"var(--text)"}}>{value}</div>
+                  </div>
+                ))}
               </div>
             </div>
-          </div>
+          ) : (
+            <div>
+              <div className="form-section-title">תאריכים ושעות</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div className="form-group">
+                  <label className="form-label">תאריך השאלה</label>
+                  <input type="date" className="form-input" value={form.borrow_date} onChange={e=>set("borrow_date",e.target.value)}/>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">שעת איסוף</label>
+                  <select className="form-select" value={form.borrow_time||""} onChange={e=>set("borrow_time",e.target.value)}>
+                    <option value="">-- בחר שעה --</option>
+                    {TIME_SLOTS.map(t=><option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">תאריך החזרה</label>
+                  <input type="date" className="form-input" value={form.return_date} min={form.borrow_date} onChange={e=>set("return_date",e.target.value)}/>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">שעת החזרה</label>
+                  <select className="form-select" value={form.return_time||""} onChange={e=>set("return_time",e.target.value)}>
+                    <option value="">-- בחר שעה --</option>
+                    {TIME_SLOTS.map(t=><option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:8}}>
               <div className="form-section-title" style={{marginBottom:0}}>ציוד ({items.reduce((s,i)=>s+i.quantity,0)} פריטים)</div>
-              <button
-                type="button"
-                className={`btn btn-sm ${showLoanedOnly ? "btn-primary" : "btn-secondary"}`}
-                onClick={()=>setShowLoanedOnly(prev=>!prev)}
-              >
-                פריטים בלבד
-              </button>
+              {!isOverdueReservation && (
+                <button
+                  type="button"
+                  className={`btn btn-sm ${showLoanedOnly ? "btn-primary" : "btn-secondary"}`}
+                  onClick={()=>setShowLoanedOnly(prev=>!prev)}
+                >
+                  פריטים בלבד
+                </button>
+              )}
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:14}}>
               <input
@@ -1212,17 +1283,21 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
               </div>
             </div>
             <div className="highlight-box" style={{marginBottom:16}}>
-              המערכת סופרת מלאי רק מול בקשות <strong>מאושרות</strong> שחופפות בזמן לבקשה הזאת. אם ציוד חסום, יוצגו כאן שמות הסטודנטים והכמויות שחוסמות אותו כדי שתוכל לעבור לבקשות החופפות ולהפחית משם.
+              {isOverdueReservation
+                ? "הציוד כבר יצא מהמחסן. כאן מוצגת רק רשימת הפריטים שהושאלו בפועל, עם פילטרים לצפייה נוחה."
+                : <>המערכת סופרת מלאי רק מול בקשות <strong>מאושרות</strong> שחופפות בזמן לבקשה הזאת. אם ציוד חסום, יוצגו כאן שמות הסטודנטים והכמויות שחוסמות אותו כדי שתוכל לעבור לבקשות החופפות ולהפחית משם.</>}
             </div>
-            {equipmentCategories.map(cat=>{
-              const catEq = equipment.filter(e=>e.category===cat && matchesEditEquipmentFilters(e));
+            {(isOverdueReservation ? overdueEquipmentCategories : equipmentCategories).map(cat=>{
+              const catEq = isOverdueReservation
+                ? overdueEqItems.filter(item=>item.category===cat)
+                : equipment.filter(e=>e.category===cat && matchesEditEquipmentFilters(e));
               if(!catEq.length) return null;
               return (
                 <div key={cat} style={{marginBottom:16}}>
                   <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>{cat}</div>
                   {catEq.map(eq=>{
-                    const qty = getQty(eq.id);
-                    const details = getEquipmentBlockingDetails(eq.id);
+                    const qty = isOverdueReservation ? Number(eq.quantity) || 0 : getQty(eq.id);
+                    const details = isOverdueReservation ? { available: 0, usedByOthers: 0, total: 0, blockers: [] } : getEquipmentBlockingDetails(eq.id);
                     const totalAvail = details.available;
                     const remaining = Math.max(0, totalAvail - qty);
                     const missingForApproval = Math.max(0, qty - totalAvail);
@@ -1233,37 +1308,43 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
                         <div
                           className="item-row"
                           style={{
-                            opacity: blockedCompletely && !hasApprovalConflict ? 0.55 : 1,
-                            marginBottom: details.blockers.length ? 6 : 0,
-                            border: hasApprovalConflict ? "2px solid rgba(241,196,15,0.95)" : "1px solid var(--border)",
-                            background: hasApprovalConflict ? "rgba(241,196,15,0.22)" : "var(--surface2)",
-                            boxShadow: hasApprovalConflict ? "0 0 0 1px rgba(241,196,15,0.2)" : "none",
+                            opacity: isOverdueReservation ? 1 : blockedCompletely && !hasApprovalConflict ? 0.55 : 1,
+                            marginBottom: !isOverdueReservation && details.blockers.length ? 6 : 0,
+                            border: !isOverdueReservation && hasApprovalConflict ? "2px solid rgba(241,196,15,0.95)" : "1px solid var(--border)",
+                            background: !isOverdueReservation && hasApprovalConflict ? "rgba(241,196,15,0.22)" : "var(--surface2)",
+                            boxShadow: !isOverdueReservation && hasApprovalConflict ? "0 0 0 1px rgba(241,196,15,0.2)" : "none",
                           }}
                         >
                           {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
                             ? <img src={eq.image} alt="" style={{width:32,height:32,objectFit:"cover",borderRadius:6}}/>
                             : <span style={{fontSize:22}}>{eq.image||"📦"}</span>}
                           <div style={{flex:1}}>
-                            <div style={{fontWeight:700,fontSize:13,color:hasApprovalConflict?"var(--yellow)":"var(--text)"}}>{eq.name}</div>
-                            <div style={{fontSize:11,color:"var(--text3)",display:"flex",gap:10,flexWrap:"wrap"}}>
-                              <span>זמין: <span style={{color:remaining===0?"var(--red)":remaining<=2?"var(--yellow)":"var(--green)",fontWeight:700}}>{remaining}</span></span>
-                              {details.usedByOthers>0 && <span>חסום ע"י אחרים: <strong style={{color:"var(--red)"}}>{details.usedByOthers}</strong></span>}
-                              <span>סה"כ במלאי: <strong>{details.total}</strong></span>
-                              {hasApprovalConflict && <span style={{color:"var(--yellow)",fontWeight:800}}>חסר לאישור: <strong>{missingForApproval}</strong></span>}
+                            <div style={{fontWeight:700,fontSize:13,color:!isOverdueReservation && hasApprovalConflict?"var(--yellow)":"var(--text)"}}>{eq.name}</div>
+                            <div style={{fontSize:11,color:"var(--text3)",display:"flex",gap:10,flexWrap:"wrap",marginTop:2}}>
+                              <span>כמות: <strong style={{color:"var(--accent)"}}>{qty}</strong></span>
+                              {eq.category && <span>{eq.category}</span>}
+                              {eq.soundOnly && <span style={{color:"var(--accent)"}}>🎙️ ציוד סאונד</span>}
+                              {eq.photoOnly && <span style={{color:"var(--green)"}}>🎥 ציוד צילום</span>}
+                              {!isOverdueReservation && <span>זמין: <span style={{color:remaining===0?"var(--red)":remaining<=2?"var(--yellow)":"var(--green)",fontWeight:700}}>{remaining}</span></span>}
+                              {!isOverdueReservation && details.usedByOthers>0 && <span>חסום ע"י אחרים: <strong style={{color:"var(--red)"}}>{details.usedByOthers}</strong></span>}
+                              {!isOverdueReservation && <span>סה"כ במלאי: <strong>{details.total}</strong></span>}
+                              {!isOverdueReservation && hasApprovalConflict && <span style={{color:"var(--yellow)",fontWeight:800}}>חסר לאישור: <strong>{missingForApproval}</strong></span>}
                             </div>
-                            {hasApprovalConflict && (
+                            {!isOverdueReservation && hasApprovalConflict && (
                               <div style={{marginTop:4,fontSize:11,fontWeight:800,color:"var(--yellow)"}}>
                                 פריט זה חוסם את אישור הבקשה בגלל חוסר מלאי בחפיפה.
                               </div>
                             )}
                           </div>
-                          <div className="qty-ctrl">
-                            <button className="qty-btn" onClick={()=>setQty(eq.id,qty-1)}>−</button>
-                            <span className="qty-num">{qty}</span>
-                            <button className="qty-btn" disabled={remaining<=0} onClick={()=>setQty(eq.id,qty+1)}>+</button>
-                          </div>
+                          {!isOverdueReservation && (
+                            <div className="qty-ctrl">
+                              <button className="qty-btn" onClick={()=>setQty(eq.id,qty-1)}>−</button>
+                              <span className="qty-num">{qty}</span>
+                              <button className="qty-btn" disabled={remaining<=0} onClick={()=>setQty(eq.id,qty+1)}>+</button>
+                            </div>
+                          )}
                         </div>
-                        {details.blockers.length > 0 && (
+                        {!isOverdueReservation && details.blockers.length > 0 && (
                           <div style={{background:"rgba(241,196,15,0.1)",border:"1px solid rgba(241,196,15,0.28)",borderRadius:10,padding:10,marginBottom:6}}>
                             <div style={{fontSize:12,fontWeight:800,color:"var(--yellow)",marginBottom:8}}>הציוד הזה חסום כרגע ע"י הבקשות המאושרות הבאות:</div>
                             <div style={{display:"flex",flexDirection:"column",gap:6}}>
@@ -1300,8 +1381,32 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
               </button>
             </div>
           )}
+          {isOverdueReservation&&(
+            <div style={{width:"100%",background:"rgba(230,126,34,0.08)",borderRadius:"var(--r-sm)",padding:"12px",marginBottom:8,border:"1px solid rgba(230,126,34,0.28)"}}>
+              <div style={{fontWeight:700,fontSize:12,marginBottom:6,color:"#e67e22"}}>📧 דיווח לסטודנט המאחר</div>
+              <textarea
+                className="form-textarea"
+                rows={4}
+                style={{marginBottom:6}}
+                placeholder="כתוב לסטודנט שהוא חייב להחזיר את הציוד למחסן המכללה בהקדם..."
+                value={overdueEditMailText}
+                onChange={e=>setOverdueEditMailText(e.target.value)}
+              />
+              <button
+                className="btn btn-primary btn-sm"
+                style={{background:"#e67e22",borderColor:"#e67e22"}}
+                disabled={!overdueEditMailText.trim()||overdueEditMailSending||!reservation.email}
+                onClick={sendOverdueMailFromEdit}
+              >
+                {overdueEditMailSending?"⏳ שולח...":"📧 שלח מייל לסטודנט המאחר"}
+              </button>
+              <span style={{fontSize:12,color:"var(--text3)",marginRight:10}}>
+                {reservation.email ? `יישלח אל ${reservation.email}` : "אין כתובת מייל"}
+              </span>
+            </div>
+          )}
           <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
-            {reservation.status==="ממתין"&&(
+            {!isOverdueReservation && reservation.status==="ממתין"&&(
               <button
                 className="btn btn-secondary"
                 disabled={saving}
@@ -1311,7 +1416,7 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
                 החסר פרטים חופפים
               </button>
             )}
-            {reservation.status==="ממתין"&&onApprove&&(
+            {!isOverdueReservation && reservation.status==="ממתין"&&onApprove&&(
               <button
                 className="btn btn-success"
                 disabled={saving}
@@ -1324,14 +1429,14 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
                 ✅ אשר והעבר למאושר
               </button>
             )}
-            {reservation.status==="נדחה"&&onApprove&&(
+            {!isOverdueReservation && reservation.status==="נדחה"&&onApprove&&(
               <button className="btn btn-success" disabled={saving} onClick={async()=>{
                 setSaving(true);
                 await onApprove({...form, items, status:"מאושר"});
                 setSaving(false);
               }}>✅ שמור ואשר</button>
             )}
-            <button className="btn btn-primary" disabled={saving} onClick={save}>{saving?"⏳ שומר...":"💾 שמור שינויים"}</button>
+            {!isOverdueReservation && <button className="btn btn-primary" disabled={saving} onClick={save}>{saving?"⏳ שומר...":"💾 שמור שינויים"}</button>}
           </div>
         </div>
       </div>
