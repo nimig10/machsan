@@ -2125,9 +2125,12 @@ function DashboardPage({ equipment, reservations, setReservations, showToast }) 
   const totalDamaged = equipment.reduce((s, e) => s + (Array.isArray(e.units)?e.units.filter(u=>u.status!=="תקין").length:0), 0);
 
   // ── בקשות פעילות עכשיו ──
-  const activeNow = reservations.filter(r =>
-    (r.status === "מאושר" || r.status === "באיחור") && r.borrow_date <= todayStr && r.return_date >= todayStr
-  );
+  const activeNow = reservations.filter(r => {
+    if (r.status !== "מאושר" || !r.borrow_date || !r.return_date) return false;
+    const borrowAt = toDateTime(r.borrow_date, r.borrow_time || "00:00");
+    const returnAt = toDateTime(r.return_date, r.return_time || "23:59");
+    return borrowAt <= nowMs && returnAt >= nowMs;
+  });
   // ── כל בקשות מאושרות (כולל עתידיות) ──
   const allApproved = reservations.filter(r => r.status === "מאושר" || r.status === "באיחור");
 
