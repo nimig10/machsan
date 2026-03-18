@@ -1494,12 +1494,15 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
   const [overdueEmailText, setOverdueEmailText] = useState("");
   const [overdueEmailSending, setOverdueEmailSending] = useState(false);
   const isRejectedPage = mode === "rejected";
-  const effectiveStatusFilter = !isRejectedPage && statusF !== "נדחה" ? statusF : "הכל";
+  const effectiveStatusFilter = isRejectedPage
+    ? (["הכל","נדחה","באיחור"].includes(statusF) ? statusF : "הכל")
+    : (["הכל","ממתין","אישור ראש מחלקה","מאושר"].includes(statusF) ? statusF : "הכל");
 
   const filtered = [...reservations]
     .filter(r => {
       if (isRejectedPage) {
         if (r.status !== "נדחה" && r.status !== "באיחור") return false;
+        if (effectiveStatusFilter !== "הכל" && r.status !== effectiveStatusFilter) return false;
       } else {
         if (r.status === "הוחזר" || r.status === "נדחה" || r.status === "באיחור") return false;
         if (effectiveStatusFilter !== "הכל" && r.status !== effectiveStatusFilter) return false;
@@ -7020,12 +7023,18 @@ export default function App() {
               {(page==="reservations" || page==="rejected") && (
                 <div style={{display:"flex",gap:6,width:"100%",flexWrap:"wrap",alignItems:"center"}}>
                   <div className="search-bar" style={{flex:"1 1 130px",minWidth:120}}><span>🔍</span><input placeholder="חיפוש..." value={resSearch} onChange={e=>setResSearch(e.target.value)}/></div>
-                  {page==="reservations" && (
-                    <select className="form-select" style={{flex:"1 1 100px",minWidth:95,fontSize:12,padding:"6px 8px"}} value={resStatusF==="נדחה" ? "הכל" : resStatusF} onChange={e=>setResStatusF(e.target.value)}>
-                      <option value="הכל">כל הסטטוסים</option>
-                      {["ממתין","אישור ראש מחלקה","מאושר"].map(s=><option key={s} value={s}>{s}</option>)}
-                    </select>
-                  )}
+                  <select
+                    className="form-select"
+                    style={{flex:"1 1 100px",minWidth:95,fontSize:12,padding:"6px 8px"}}
+                    value={page==="rejected" ? (["הכל","נדחה","באיחור"].includes(resStatusF) ? resStatusF : "הכל") : (["הכל","ממתין","אישור ראש מחלקה","מאושר"].includes(resStatusF) ? resStatusF : "הכל")}
+                    onChange={e=>setResStatusF(e.target.value)}
+                  >
+                    <option value="הכל">כל הסטטוסים</option>
+                    {(page==="rejected"
+                      ? ["נדחה","באיחור"]
+                      : ["ממתין","אישור ראש מחלקה","מאושר"]
+                    ).map(s=><option key={s} value={s}>{s}</option>)}
+                  </select>
                   <select className="form-select" style={{flex:"1 1 90px",minWidth:85,fontSize:12,padding:"6px 8px"}} value={resLoanTypeF} onChange={e=>setResLoanTypeF(e.target.value)}>
                     <option value="הכל">כל הסוגים</option>
                     {["פרטית","הפקה","סאונד","קולנוע יומית","שיעור"].map(t=><option key={t} value={t}>{t==="שיעור"?"השאלת שיעור":t==="קולנוע יומית"?"קולנוע יומית":t}</option>)}
