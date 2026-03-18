@@ -876,7 +876,10 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                   </button>
                   <button
                     type="button"
-                    className={`btn btn-sm ${equipment.filter(e=>e.category===c).every(e=>e.privateLoanUnlimited) ? "btn-purple" : "btn-secondary"}`}
+                    className="btn btn-sm"
+                    style={equipment.filter(e=>e.category===c).every(e=>e.privateLoanUnlimited)
+                      ? {background:"rgba(86, 223, 151, 0.22)",borderColor:"#8bffba",color:"#d7ffe8",boxShadow:"0 0 0 1px rgba(139,255,186,0.18)"}
+                      : undefined}
                     onClick={()=>toggleCategoryPrivateLoanUnlimited(c)}
                   >
                     לא מוגבל בהשאלה פרטית
@@ -957,6 +960,9 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
   const [saving, setSaving] = useState(false);
   const [editConflicts, setEditConflicts] = useState([]);
   const [showLoanedOnly, setShowLoanedOnly] = useState(false);
+  const [eqTypeF, setEqTypeF] = useState("all");
+  const [selectedCats, setSelectedCats] = useState([]);
+  const [eqSearch, setEqSearch] = useState("");
   const [reportNote, setReportNote] = useState("");
   const [reportSending, setReportSending] = useState(false);
 
@@ -1042,6 +1048,14 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
   const getQty = (eqId) => items.find(i=>i.equipment_id==eqId)?.quantity||0;
 
   const categories = [...new Set(equipment.map(e=>e.category))];
+  const visibleCategories = (selectedCats.length ? selectedCats : categories).filter(cat =>
+    equipment.some(eq => {
+      const typeMatch = eqTypeF==="all" || (eqTypeF==="sound" && eq.soundOnly) || (eqTypeF==="photo" && eq.photoOnly);
+      const searchMatch = !eqSearch.trim() || eq.name?.includes(eqSearch.trim());
+      const loanedMatch = !showLoanedOnly || getQty(eq.id) > 0;
+      return eq.category===cat && typeMatch && searchMatch && loanedMatch;
+    })
+  );
 
   const save = async () => {
     const updatedReservation = { ...form, id: reservation.id, status: reservation.status, items };
@@ -1116,11 +1130,73 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
                 פריטים בלבד
               </button>
             </div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                <span style={{fontSize:12,color:"var(--text3)",fontWeight:700}}>סינון:</span>
+                {[{k:"all",l:"הכל"},{k:"sound",l:"ציוד סאונד"},{k:"photo",l:"ציוד צילום"}].map(({k,l})=>(
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={()=>setEqTypeF(k)}
+                    style={{
+                      padding:"5px 12px",
+                      borderRadius:999,
+                      border:`2px solid ${eqTypeF===k?"var(--accent)":"var(--border)"}`,
+                      background:eqTypeF===k?"var(--accent-glow)":"transparent",
+                      color:eqTypeF===k?"var(--accent)":"var(--text3)",
+                      fontWeight:800,
+                      fontSize:11,
+                      cursor:"pointer",
+                    }}
+                  >
+                    {l}
+                  </button>
+                ))}
+                <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
+                {categories.map(cat=>(
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={()=>setSelectedCats(prev=>prev.includes(cat)?prev.filter(x=>x!==cat):[...prev,cat])}
+                    style={{
+                      padding:"5px 10px",
+                      borderRadius:999,
+                      border:`2px solid ${selectedCats.includes(cat)?"var(--accent)":"var(--border)"}`,
+                      background:selectedCats.includes(cat)?"var(--accent-glow)":"transparent",
+                      color:selectedCats.includes(cat)?"var(--accent)":"var(--text3)",
+                      fontWeight:700,
+                      fontSize:11,
+                      cursor:"pointer",
+                      whiteSpace:"nowrap",
+                    }}
+                  >
+                    {cat}
+                  </button>
+                ))}
+                {selectedCats.length>0 && (
+                  <button
+                    type="button"
+                    onClick={()=>setSelectedCats([])}
+                    style={{padding:"5px 10px",borderRadius:999,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}
+                  >
+                    נקה
+                  </button>
+                )}
+              </div>
+              <div className="search-bar" style={{minWidth:180}}>
+                <span>🔍</span>
+                <input placeholder="חיפוש ציוד..." value={eqSearch} onChange={e=>setEqSearch(e.target.value)}/>
+              </div>
+            </div>
             <div className="highlight-box" style={{marginBottom:16}}>
               המערכת סופרת מלאי רק מול בקשות <strong>מאושרות</strong> שחופפות בזמן לבקשה הזאת. אם ציוד חסום, יוצגו כאן שמות הסטודנטים והכמויות שחוסמות אותו כדי שתוכל לעבור לבקשות החופפות ולהפחית משם.
             </div>
-            {categories.map(cat=>{
-              const catEq = equipment.filter(e=>e.category===cat && (!showLoanedOnly || getQty(e.id) > 0));
+            {visibleCategories.map(cat=>{
+              const catEq = equipment.filter(e=>{
+                const typeMatch = eqTypeF==="all" || (eqTypeF==="sound" && e.soundOnly) || (eqTypeF==="photo" && e.photoOnly);
+                const searchMatch = !eqSearch.trim() || e.name?.includes(eqSearch.trim());
+                return e.category===cat && typeMatch && searchMatch && (!showLoanedOnly || getQty(e.id) > 0);
+              });
               if(!catEq.length) return null;
               return (
                 <div key={cat} style={{marginBottom:16}}>
@@ -1284,7 +1360,12 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
     })
     .sort((a,b) => {
       if(sortBy==="urgency")  return new Date(a.borrow_date) - new Date(b.borrow_date);
-      if(sortBy==="received") return Number(b.id) - Number(a.id);
+      if(sortBy==="received") {
+        const aCreated = Date.parse(a.created_at || "") || 0;
+        const bCreated = Date.parse(b.created_at || "") || 0;
+        if (aCreated !== bCreated) return bCreated - aCreated;
+        return (Number(b.id) || 0) - (Number(a.id) || 0);
+      }
       return 0;
     });
   const eqName = id => equipment.find(e=>e.id==id)?.name||"?";
@@ -1618,7 +1699,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
               </div>
               <div className="res-card-actions" onClick={e=>e.stopPropagation()}>
                 <button className="btn btn-secondary btn-sm" onClick={()=>exportPDF(r)}>📄 PDF</button>
-                {(r.status==="מאושר"||r.status==="נדחה")&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}>✏️ עריכת בקשה</button>}
+                {(r.status==="מאושר"||r.status==="נדחה"||r.status==="ממתין")&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}>✏️ עריכת בקשה</button>}
                 {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" onClick={()=>updateStatus(r.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger btn-sm" onClick={()=>updateStatus(r.id,"נדחה")}>❌ דחה</button></>}
                 {r.status==="מאושר"&&<button className="btn btn-secondary btn-sm" onClick={()=>updateStatus(r.id,"הוחזר")}>🔄 הוחזר</button>}
                 <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${r.student_name}?`)) deleteReservation(r.id); }}>🗑️</button>
@@ -1679,6 +1760,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
       {selected && (
         <Modal title={`📋 בקשה — ${selected.student_name}`} onClose={()=>setSelected(null)} size="modal-lg"
           footer={<>
+            {(selected.status==="ממתין"||selected.status==="מאושר"||selected.status==="נדחה")&&<button className="btn btn-secondary" onClick={()=>{ setEditing(selected); setSelected(null); }}>✏️ עריכת בקשה</button>}
             {selected.status==="ממתין"&&<><button className="btn btn-success" onClick={()=>updateStatus(selected.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger" onClick={()=>updateStatus(selected.id,"נדחה")}>❌ דחה</button></>}
             {selected.status==="נדחה"&&<button className="btn btn-success" onClick={()=>updateStatus(selected.id,"מאושר")}>✅ אשר בקשה</button>}
             {selected.status==="מאושר"&&<button className="btn btn-secondary" onClick={()=>updateStatus(selected.id,"הוחזר")}>🔄 סמן כהוחזר</button>}
@@ -2658,9 +2740,15 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
 }
 
 // ─── STEP 4 CONFIRM ───────────────────────────────────────────────────────────
-function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, submit, onBack, policies, loanType, canSubmit }) {
+function Step4Confirm({
+  form, items, equipment, agreed, setAgreed,
+  productionPickupAgreed, setProductionPickupAgreed,
+  productionReturnAgreed, setProductionReturnAgreed,
+  submitting, submit, onBack, policies, loanType, canSubmit,
+}) {
   const [showPolicies, setShowPolicies] = useState(false);
   const [scrolledToBottom, setScrolledToBottom] = useState(false);
+  const isProductionLoan = loanType==="הפקה";
 
   const policyText = (policies && policies[loanType]) || "";
   const hasPolicies = policyText.trim().length > 0;
@@ -2703,6 +2791,18 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
         <input type="checkbox" checked={agreed} onChange={e=>setAgreed(e.target.checked)} disabled={hasPolicies&&!scrolledToBottom}/>
         <span>אני מאשר/ת שקראתי את התקנון ומתחייב/ת להחזיר את הציוד בזמן ובמצב תקין</span>
       </label>
+      {isProductionLoan && (
+        <div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:20}}>
+          <label className="checkbox-row" style={{opacity:hasPolicies&&!scrolledToBottom?0.4:1,pointerEvents:hasPolicies&&!scrolledToBottom?"none":"auto"}}>
+            <input type="checkbox" checked={productionPickupAgreed} onChange={e=>setProductionPickupAgreed(e.target.checked)} disabled={hasPolicies&&!scrolledToBottom}/>
+            <span>אני מתחייב/ת להגיע במעמד לקיחת הציוד יחד עם צלם/ת ההפקה שלי</span>
+          </label>
+          <label className="checkbox-row" style={{opacity:hasPolicies&&!scrolledToBottom?0.4:1,pointerEvents:hasPolicies&&!scrolledToBottom?"none":"auto"}}>
+            <input type="checkbox" checked={productionReturnAgreed} onChange={e=>setProductionReturnAgreed(e.target.checked)} disabled={hasPolicies&&!scrolledToBottom}/>
+            <span>אני מתחייב/ת להגיע במעמד החזרת הציוד יחד עם צלם/ת ההפקה שלי</span>
+          </label>
+        </div>
+      )}
       {hasPolicies&&!scrolledToBottom&&<div style={{fontSize:12,color:"var(--text3)",marginBottom:12,textAlign:"center"}}>יש לפתוח את נהלי ההשאלה ולגלול עד הסוף כדי לאשר</div>}
 
       <div className="flex gap-2">
@@ -2966,6 +3066,8 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",production_reason:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""});
   const [items, setItems]     = useState([]);
   const [agreed, setAgreed]   = useState(false);
+  const [productionPickupAgreed, setProductionPickupAgreed] = useState(false);
+  const [productionReturnAgreed, setProductionReturnAgreed] = useState(false);
   const [done, setDone]       = useState(false);
   const [emailError, setEmailError] = useState(false);
   const [submitting, setSub]  = useState(false);
@@ -3098,7 +3200,8 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   const hasTimes = !!form.borrow_time && !!form.return_time;
   const ok2 = !!form.borrow_date && !!form.return_date && hasTimes && !returnBeforeBorrow && !tooSoon && !cinemaTooSoon && !tooLong && !borrowWeekend && !returnWeekend && !timeOrderError;
   const ok3 = items.some(item => Number(item.quantity) > 0);
-  const canSubmit = !!ok1 && !!ok2 && !!ok3 && !privateLoanLimitExceeded && !!agreed;
+  const productionConfirmationsOk = !isProductionLoan || (productionPickupAgreed && productionReturnAgreed);
+  const canSubmit = !!ok1 && !!ok2 && !!ok3 && !privateLoanLimitExceeded && !!agreed && productionConfirmationsOk;
 
   const availEq = useMemo(()=>{
     if(!form.borrow_date||!form.return_date) return [];
@@ -3232,7 +3335,12 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   };
 
   const submit = async () => {
-    if (!ok1 || !ok2 || !ok3 || privateLoanLimitExceeded) {
+    if (isProductionLoan && !productionConfirmationsOk) {
+      showToast("error", "יש לאשר את שתי ההתחייבויות עם צלם/ת ההפקה לפני שליחת הבקשה.");
+      setStep(4);
+      return;
+    }
+    if (!ok1 || !ok2 || !ok3 || privateLoanLimitExceeded || !productionConfirmationsOk || !agreed) {
       if (privateLoanLimitExceeded) {
         showToast("error", "שים לב אין לחרוג מ-4 פריטים בהשאלה פרטית");
         setStep(3);
@@ -3241,7 +3349,8 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
       showToast("error", "לא ניתן לשלוח בקשה לפני השלמת כל שלבי הטופס, כולל תאריכים, שעות ובחירת ציוד.");
       if (!ok1) setStep(1);
       else if (!ok2) setStep(2);
-      else setStep(3);
+      else if (!ok3) setStep(3);
+      else setStep(4);
       return;
     }
     // Validate email format before doing anything
@@ -3291,7 +3400,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     showToast("success","הבקשה נשלחה בהצלחה!");
   };
 
-  const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",production_reason:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""}); setItems([]); setAgreed(false); };
+  const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",production_reason:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""}); setItems([]); setAgreed(false); setProductionPickupAgreed(false); setProductionReturnAgreed(false); };
 
   if(emailError) return (
     <div className="form-page">
@@ -3539,6 +3648,8 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
           {step===4 && <Step4Confirm
             form={form} items={items} equipment={equipment}
             agreed={agreed} setAgreed={setAgreed}
+            productionPickupAgreed={productionPickupAgreed} setProductionPickupAgreed={setProductionPickupAgreed}
+            productionReturnAgreed={productionReturnAgreed} setProductionReturnAgreed={setProductionReturnAgreed}
             submitting={submitting} submit={submit} canSubmit={canSubmit}
             onBack={()=>setStep(3)}
             policies={policies}
