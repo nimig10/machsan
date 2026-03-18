@@ -328,6 +328,27 @@ const css = `
     --green:#2ecc71; --red:#e74c3c; --blue:#3498db; --purple:#9b59b6; --yellow:#f1c40f;
     --r:12px; --r-sm:8px;
   }
+  [data-theme="light"] {
+    --bg:#f0f2f5; --surface:#ffffff; --surface2:#f5f6f8; --surface3:#ebedf0;
+    --border:#d4d8de; --accent:#d48806; --accent2:#c07a05; --accent-glow:rgba(212,136,6,0.12);
+    --text:#1a1d23; --text2:#555d6e; --text3:#8891a0;
+    --green:#27ae60; --red:#c0392b; --blue:#2980b9; --purple:#8e44ad; --yellow:#d4a017;
+  }
+  [data-theme="light"] body { background:#f0f2f5; color:#1a1d23; }
+  [data-theme="light"] .sidebar { background:#ffffff; border-left-color:#d4d8de; }
+  [data-theme="light"] .form-input, [data-theme="light"] .form-select, [data-theme="light"] .form-textarea { background:#f5f6f8; color:#1a1d23; border-color:#d4d8de; }
+  [data-theme="light"] .btn-secondary { background:#ebedf0; color:#1a1d23; border-color:#d4d8de; }
+  [data-theme="light"] .card { background:#ffffff; border-color:#d4d8de; }
+  [data-theme="light"] .topbar { background:#ffffff; border-bottom-color:#d4d8de; }
+  [data-theme="light"] .nav-item { color:#333; }
+  [data-theme="light"] .nav-item:hover { color:#111; }
+  [data-theme="light"] .nav-item.active { color:#111; }
+  [data-theme="light"] .search-bar { background:#f5f6f8; border-color:#d4d8de; }
+  [data-theme="light"] .search-bar input { color:#1a1d23; }
+  [data-theme="light"] .highlight-box { background:rgba(212,136,6,0.08); border-color:rgba(212,136,6,0.25); }
+  [data-theme="light"] .chip { background:#ebedf0; border-color:#d4d8de; color:#333; }
+  [data-theme="light"] .item-row { background:#f9fafb; border-color:#d4d8de; }
+  [data-theme="light"] .item-row:hover { background:#f0f2f5; }
   html, body, #root { width:100%; min-height:100%; }
   #root {
     max-width:none !important;
@@ -1834,7 +1855,7 @@ function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=110, fon
   );
 }
 
-function DashboardPage({ equipment, reservations }) {
+function DashboardPage({ equipment, reservations, setReservations, showToast }) {
   const todayStr = today();
   const nowMs = Date.now();
 
@@ -2281,6 +2302,21 @@ function DashboardPage({ equipment, reservations }) {
                   ))}
                 </div>
               </div>
+              {/* Approve button for pending requests */}
+              {dashViewRes.status==="ממתין" && setReservations && (
+                <div style={{borderTop:"1px solid var(--border)",paddingTop:14,display:"flex",justifyContent:"center"}}>
+                  <button className="btn btn-primary" style={{background:"var(--green)",borderColor:"var(--green)",fontSize:14,padding:"10px 32px"}}
+                    onClick={async()=>{
+                      const updated = reservations.map(r=>r.id===dashViewRes.id?{...r,status:"מאושר"}:r);
+                      setReservations(updated);
+                      await storageSet("reservations",updated);
+                      if(showToast) showToast("success",`הבקשה של ${dashViewRes.student_name} אושרה ✅`);
+                      setDashViewRes(null);
+                    }}>
+                    ✅ אשר בקשה
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2976,7 +3012,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose }) {
 }
 
 // ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
-function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], calendarToken="" }) {
+function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], calendarToken="", siteSettings={} }) {
   const initialParams = new URLSearchParams(window.location.search);
   const initialLoanTypeParam = initialParams.get("loan_type");
   const initialStepParam = Number(initialParams.get("step"));
@@ -3350,7 +3386,9 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
             style={{position:"absolute",top:12,left:12,width:32,height:32,borderRadius:"50%",border:"2px solid var(--border)",background:"var(--surface2)",color:"var(--text3)",fontSize:15,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1}}>
             ℹ
           </button>
-          <div style={{fontSize:40,marginBottom:10}}>🎬</div>
+          {siteSettings.logo
+            ? <img src={siteSettings.logo} alt="לוגו" style={{width:56,height:56,objectFit:"contain",borderRadius:10,marginBottom:10}}/>
+            : <div style={{fontSize:40,marginBottom:10}}>🎬</div>}
           <div style={{fontSize:24,fontWeight:900,color:"var(--accent)"}}>מחסן השאלת ציוד קמרה אובסקורה וסאונד</div>
           <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>טופס השאלת ציוד</div>
           {/* Clickable tab navigation — always free to navigate, validation only on submit */}
@@ -6154,6 +6192,94 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
   );
 }
 
+// ─── SETTINGS PAGE ───────────────────────────────────────────────────────────
+function SettingsPage({ siteSettings, setSiteSettings, showToast }) {
+  const [draft, setDraft] = useState({ ...siteSettings });
+  const [saving, setSaving] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
+
+  const handleLogoUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = "";
+    if (file.size > 500000) { showToast("error", "הקובץ גדול מדי — עד 500KB"); return; }
+    setLogoUploading(true);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setDraft(p => ({ ...p, logo: ev.target.result }));
+      setLogoUploading(false);
+    };
+    reader.onerror = () => { showToast("error", "שגיאה בקריאת הקובץ"); setLogoUploading(false); };
+    reader.readAsDataURL(file);
+  };
+
+  const toggleTheme = (theme) => {
+    setDraft(p => ({ ...p, theme }));
+    document.documentElement.setAttribute("data-theme", theme === "light" ? "light" : "");
+  };
+
+  const save = async () => {
+    setSaving(true);
+    setSiteSettings(draft);
+    await storageSet("siteSettings", draft);
+    setSaving(false);
+    showToast("success", "ההגדרות נשמרו ✅");
+  };
+
+  return (
+    <div className="page">
+      {/* Theme */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-header"><div className="card-title">🎨 מצב תצוגה</div></div>
+        <div style={{ padding: "16px 20px" }}>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            {[{ k: "dark", icon: "🌙", label: "מצב כהה" }, { k: "light", icon: "☀️", label: "מצב בהיר" }].map(({ k, icon, label }) => (
+              <button key={k} type="button" onClick={() => toggleTheme(k)}
+                style={{ flex: 1, minWidth: 140, padding: "20px 16px", borderRadius: "var(--r)", border: `2px solid ${draft.theme === k ? "var(--accent)" : "var(--border)"}`, background: draft.theme === k ? "var(--accent-glow)" : "var(--surface2)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 32 }}>{icon}</span>
+                <span style={{ fontWeight: 800, fontSize: 14, color: draft.theme === k ? "var(--accent)" : "var(--text)" }}>{label}</span>
+                {draft.theme === k && <span style={{ fontSize: 14, color: "var(--green)", fontWeight: 900 }}>✓ פעיל</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Logo */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-header"><div className="card-title">🏫 לוגו המכללה</div></div>
+        <div style={{ padding: "16px 20px" }}>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}>
+            הלוגו יוצג בסרגל הצדדי של לוח הבקרה ובראש טופס ההשאלה. מומלץ תמונה מרובעת עד 500KB.
+          </div>
+          <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ width: 80, height: 80, borderRadius: 12, border: "2px dashed var(--border)", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface2)", overflow: "hidden", flexShrink: 0 }}>
+              {draft.logo
+                ? <img src={draft.logo} alt="לוגו" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                : <span style={{ fontSize: 32, color: "var(--text3)" }}>🎬</span>}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <label className="btn btn-secondary" style={{ cursor: logoUploading ? "not-allowed" : "pointer", opacity: logoUploading ? 0.6 : 1 }}>
+                {logoUploading ? "⏳ מעלה..." : "📷 העלה לוגו"}
+                <input type="file" accept="image/*" style={{ display: "none" }} onChange={handleLogoUpload} disabled={logoUploading} />
+              </label>
+              {draft.logo && (
+                <button type="button" className="btn btn-secondary" onClick={() => setDraft(p => ({ ...p, logo: "" }))} style={{ fontSize: 12 }}>
+                  🗑️ הסר לוגו
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button className="btn btn-primary" disabled={saving} onClick={save} style={{ fontSize: 15, padding: "12px 32px" }}>
+        {saving ? "⏳ שומר..." : "💾 שמור הגדרות"}
+      </button>
+    </div>
+  );
+}
+
 // ─── DAMAGED EQUIPMENT PAGE ──────────────────────────────────────────────────
 function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[], collegeManager={}, managerToken="" }) {
   const [search, setSearch] = useState("");
@@ -6376,6 +6502,7 @@ export default function App() {
   const [kits, setKits]               = useState([]);
   const [policies, setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"" });
   const [certifications, setCertifications] = useState({ types:[], students:[] });
+  const [siteSettings, setSiteSettings] = useState({ logo:"", theme:"dark" });
   const [loading, setLoading]         = useState(true);
   const [toasts, setToasts]           = useState([]);
   const [authed, setAuthed]           = useState(false);
@@ -6394,7 +6521,7 @@ export default function App() {
   useEffect(()=>{
     (async()=>{
         try {
-          const [eq, res, cats, tm, kts, pol, certs, dhs, calTok, mgr, mgrTok] = await Promise.all([
+          const [eq, res, cats, tm, kts, pol, certs, dhs, calTok, mgr, mgrTok, siteSet] = await Promise.all([
             storageGet("equipment"),
           storageGet("reservations"),
           storageGet("categories"),
@@ -6406,6 +6533,7 @@ export default function App() {
           storageGet("calendarToken"),
           storageGet("collegeManager"),
           storageGet("managerToken"),
+          storageGet("siteSettings"),
           ]);
           const rawEquipment = normalizeEquipmentTagFlags(eq || INITIAL_EQUIPMENT);
           const normalizedEquipment = rawEquipment.map(ensureUnits);
@@ -6423,6 +6551,9 @@ export default function App() {
         setCalendarToken(calTok || "");
         setCollegeManager(mgr || { name:"", email:"" });
         setManagerToken(mgrTok || "");
+        const loadedSettings = siteSet || { logo:"", theme:"dark" };
+        setSiteSettings(loadedSettings);
+        if(loadedSettings.theme==="light") document.documentElement.setAttribute("data-theme","light");
         // Init missing
           if(!eq || equipmentChanged) await storageSet("equipment", normalizedEquipment);
         if(!res)  await storageSet("reservations", []);
@@ -6475,7 +6606,7 @@ export default function App() {
     sum + (Array.isArray(eq.units) ? eq.units.filter(u=>u.status!=="תקין").length : 0), 0);
   const deptHeadPending = reservations.filter(r=>r.status==="אישור ראש מחלקה").length;
   const rejected = reservations.filter(r=>r.status==="נדחה").length;
-  const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד פעיל", damaged:"ציוד בדיקה", reservations:"ניהול בקשות", rejected:"בקשות דחויות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות", policies:"נהלים", certifications:"הסמכות" };
+  const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד פעיל", damaged:"ציוד בדיקה", reservations:"ניהול בקשות", rejected:"בקשות דחויות/מאחרות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות", policies:"נהלים", certifications:"הסמכות", settings:"הגדרות" };
 
   return (
     <>
@@ -6508,7 +6639,7 @@ export default function App() {
         </div>
       ) : !isAdmin && (
         <div className="public-page-shell">
-          {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} calendarToken={calendarToken}/>}
+          {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings}/>}
         </div>
       )}
 
@@ -6519,7 +6650,9 @@ export default function App() {
         <div className="app">
           <nav className="sidebar">
             <div className="sidebar-logo">
-              <span className="logo-icon">🎬</span>
+              {siteSettings.logo
+                ? <img src={siteSettings.logo} alt="לוגו" style={{width:48,height:48,objectFit:"contain",borderRadius:8}}/>
+                : <span className="logo-icon">🎬</span>}
               <div className="app-name">מחסן השאלת ציוד<br/>קמרה אובסקורה וסאונד</div>
               <div className="app-sub">💾 נתונים נשמרים תמיד</div>
             </div>
@@ -6530,11 +6663,12 @@ export default function App() {
                 {id:"equipment",icon:"📦",label:"ציוד פעיל"},
                 {id:"damaged",icon:"🔧",label:"ציוד בדיקה",badge:damagedCount||null},
                 {id:"certifications",icon:"🎓",label:"הסמכות"},
-                {id:"rejected",icon:"❌",label:"דחויות",badge:rejected||null},
+                {id:"rejected",icon:"❌",label:"דחויות/מאחרות",badge:rejected||null},
                 {id:"kits",icon:"🎒",label:"ערכות"},
                 {id:"team",icon:"👥",label:"צוות"},
                 {id:"archive",icon:"🗄️",label:"ארכיון"},
                 {id:"policies",icon:"📋",label:"נהלים"},
+                {id:"settings",icon:"⚙️",label:"הגדרות"},
               ].map(n=>(
                 <div key={n.id} className={`nav-item ${page===n.id?"active":""}`}
                   onClick={()=>setPage(p=>p===n.id?"dashboard":n.id)} title={n.label}>
@@ -6577,7 +6711,7 @@ export default function App() {
               )}
             </div>
             {loading ? <Loading/> : <>
-              {page==="dashboard"   && <DashboardPage    equipment={equipment} reservations={reservations}/>}
+              {page==="dashboard"   && <DashboardPage    equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast}/>}
               {page==="equipment"   && <EquipmentPage    equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} certifications={certifications}/>}
               {page==="reservations"&& <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
@@ -6593,6 +6727,7 @@ export default function App() {
               {page==="policies"    && <PoliciesPage     policies={policies} setPolicies={setPolicies} showToast={showToast}/>}
               {page==="certifications" && <CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/>}
               {page==="damaged"       && <DamagedEquipmentPage equipment={equipment} setEquipment={setEquipment} showToast={showToast} categories={categories} collegeManager={collegeManager} managerToken={managerToken}/>}
+              {page==="settings"     && <SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast}/>}
             </>}
           </div>
         </div>
