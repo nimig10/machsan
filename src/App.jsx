@@ -3495,7 +3495,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
             </div>
             {isSoundDayLoan && (
               <div className="highlight-box" style={{marginBottom:16}}>
-                השאלת יום פעילה. התאריך חושב אוטומטית ל־{formatDate(soundDayLoanDate)} ומגבלת השעות מנוטרלת זמנית לצורך בדיקות.
+                השאלת יום פעילה. התאריך חושב אוטומטית ל־{formatDate(soundDayLoanDate)} ושעות האיסוף/ההחזרה פתוחות עכשיו להזנה ידנית לצורך בדיקות.
               </div>
             )}
             {isCinemaLoan && (
@@ -3533,19 +3533,39 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
                 <div className="grid-2">
                   <div className="form-group"><label className="form-label">📅 תאריך השאלה *</label>{isSoundDayLoan ? <div className="form-input" style={{display:"flex",alignItems:"center",fontWeight:700}}>{formatDate(soundDayLoanDate)}</div> : <input type="date" className="form-input" min={minDate} value={form.borrow_date} onChange={e=>set("borrow_date",e.target.value)}/>}</div>
                   <div className="form-group"><label className="form-label">שעת איסוף *</label>
-                    <select className="form-select" value={form.borrow_time} onChange={e=>setForm(prev=>({...prev,borrow_time:e.target.value,return_time:isSoundDayLoan && !disableSoundDayHourLimit && prev.return_time && toDateTime(soundDayLoanDate, prev.return_time) <= toDateTime(soundDayLoanDate, e.target.value) ? "" : prev.return_time}))}>
-                      <option value="">-- בחר שעה --</option>
-                      {availableBorrowSlots.map(t=><option key={t} value={t}>{t}</option>)}
-                    </select>
+                    {isSoundDayLoan ? (
+                      <input
+                        type="time"
+                        className="form-input"
+                        value={form.borrow_time}
+                        onChange={e=>set("borrow_time",e.target.value)}
+                        placeholder="הקלד שעה"
+                      />
+                    ) : (
+                      <select className="form-select" value={form.borrow_time} onChange={e=>setForm(prev=>({...prev,borrow_time:e.target.value,return_time:isSoundDayLoan && !disableSoundDayHourLimit && prev.return_time && toDateTime(soundDayLoanDate, prev.return_time) <= toDateTime(soundDayLoanDate, e.target.value) ? "" : prev.return_time}))}>
+                        <option value="">-- בחר שעה --</option>
+                        {availableBorrowSlots.map(t=><option key={t} value={t}>{t}</option>)}
+                      </select>
+                    )}
                   </div>
                 </div>
                 <div className="grid-2">
                   <div className="form-group"><label className="form-label">📅 תאריך החזרה *</label>{isSoundDayLoan ? <div className="form-input" style={{display:"flex",alignItems:"center",fontWeight:700}}>{formatDate(soundDayLoanDate)}</div> : <input type="date" className="form-input" min={form.borrow_date||today()} value={form.return_date} onChange={e=>set("return_date",e.target.value)}/>}</div>
                   <div className="form-group"><label className="form-label">שעת החזרה *</label>
-                    <select className="form-select" value={form.return_time} onChange={e=>set("return_time",e.target.value)}>
-                      <option value="">-- בחר שעה --</option>
-                      {availableReturnSlots.map(t=><option key={t} value={t}>{t}</option>)}
-                    </select>
+                    {isSoundDayLoan ? (
+                      <input
+                        type="time"
+                        className="form-input"
+                        value={form.return_time}
+                        onChange={e=>set("return_time",e.target.value)}
+                        placeholder="הקלד שעה"
+                      />
+                    ) : (
+                      <select className="form-select" value={form.return_time} onChange={e=>set("return_time",e.target.value)}>
+                        <option value="">-- בחר שעה --</option>
+                        {availableReturnSlots.map(t=><option key={t} value={t}>{t}</option>)}
+                      </select>
+                    )}
                   </div>
                 </div>
               </>
