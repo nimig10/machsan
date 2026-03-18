@@ -3092,7 +3092,8 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   const isProductionLoan = form.loan_type==="הפקה";
   const isSoundDayLoan = isSoundLoan && !!form.sound_day_loan;
   const soundDayLoanDate = isSoundDayLoan ? getNextSoundDayLoanDate(TIME_SLOTS) : "";
-  const availableBorrowSlots = isSoundDayLoan ? getFutureTimeSlotsForDate(soundDayLoanDate, TIME_SLOTS) : TIME_SLOTS;
+  const disableSoundDayHourLimit = true;
+  const availableBorrowSlots = isSoundDayLoan && !disableSoundDayHourLimit ? getFutureTimeSlotsForDate(soundDayLoanDate, TIME_SLOTS) : TIME_SLOTS;
   // Cinema: limit return time to max 6 hours after borrow time
   const cinemaMaxReturnSlots = (() => {
     if (!isCinemaLoan || !form.borrow_time) return TIME_SLOTS;
@@ -3107,7 +3108,9 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   const availableReturnSlots = isCinemaLoan
     ? cinemaMaxReturnSlots
     : isSoundDayLoan
-      ? availableBorrowSlots.filter((slot) => !form.borrow_time || toDateTime(soundDayLoanDate, slot) > toDateTime(soundDayLoanDate, form.borrow_time))
+      ? disableSoundDayHourLimit
+        ? TIME_SLOTS
+        : availableBorrowSlots.filter((slot) => !form.borrow_time || toDateTime(soundDayLoanDate, slot) > toDateTime(soundDayLoanDate, form.borrow_time))
       : TIME_SLOTS;
   const ok1 = form.student_name && form.email && form.phone && form.course && form.loan_type &&
     (!isProductionLoan || form.crew_photographer_name);
@@ -3492,7 +3495,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
             </div>
             {isSoundDayLoan && (
               <div className="highlight-box" style={{marginBottom:16}}>
-                השאלת יום פעילה. התאריך חושב אוטומטית ל־{formatDate(soundDayLoanDate)} וניתן לבחור רק שעות עתידיות זמינות.
+                השאלת יום פעילה. התאריך חושב אוטומטית ל־{formatDate(soundDayLoanDate)} ומגבלת השעות מנוטרלת זמנית לצורך בדיקות.
               </div>
             )}
             {isCinemaLoan && (
@@ -3530,7 +3533,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
                 <div className="grid-2">
                   <div className="form-group"><label className="form-label">📅 תאריך השאלה *</label>{isSoundDayLoan ? <div className="form-input" style={{display:"flex",alignItems:"center",fontWeight:700}}>{formatDate(soundDayLoanDate)}</div> : <input type="date" className="form-input" min={minDate} value={form.borrow_date} onChange={e=>set("borrow_date",e.target.value)}/>}</div>
                   <div className="form-group"><label className="form-label">שעת איסוף *</label>
-                    <select className="form-select" value={form.borrow_time} onChange={e=>setForm(prev=>({...prev,borrow_time:e.target.value,return_time:isSoundDayLoan && prev.return_time && toDateTime(soundDayLoanDate, prev.return_time) <= toDateTime(soundDayLoanDate, e.target.value) ? "" : prev.return_time}))}>
+                    <select className="form-select" value={form.borrow_time} onChange={e=>setForm(prev=>({...prev,borrow_time:e.target.value,return_time:isSoundDayLoan && !disableSoundDayHourLimit && prev.return_time && toDateTime(soundDayLoanDate, prev.return_time) <= toDateTime(soundDayLoanDate, e.target.value) ? "" : prev.return_time}))}>
                       <option value="">-- בחר שעה --</option>
                       {availableBorrowSlots.map(t=><option key={t} value={t}>{t}</option>)}
                     </select>
