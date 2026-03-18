@@ -4001,7 +4001,10 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
             const isLessonRes = r.loan_type==="שיעור";
             return (
             <div key={r.id}
-              style={{background:isLessonRes?"rgba(155,89,182,0.06)":"var(--surface)",border:isLessonRes?"1px solid rgba(155,89,182,0.3)":"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 18px"}}>
+              onClick={()=>setViewRes(r)}
+              style={{background:isLessonRes?"rgba(155,89,182,0.06)":"var(--surface)",border:isLessonRes?"1px solid rgba(155,89,182,0.3)":"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 18px",cursor:"pointer",transition:"border-color .15s, transform .15s"}}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=isLessonRes?"rgba(155,89,182,0.55)":"var(--accent)";}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor=isLessonRes?"rgba(155,89,182,0.3)":"var(--border)";}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
                 <div style={{display:"flex",alignItems:"center",gap:10}}>
                   <div style={{width:34,height:34,borderRadius:"50%",background:isLessonRes?"rgba(155,89,182,0.2)":"rgba(52,152,219,0.15)",border:`2px solid ${isLessonRes?"#9b59b6":"var(--blue)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:900,flexShrink:0,color:isLessonRes?"#9b59b6":"var(--blue)"}}>{isLessonRes?"📽️":r.student_name?.[0]||"?"}</div>
@@ -4015,7 +4018,6 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
                     ? <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",border:"1px solid rgba(155,89,182,0.4)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>📽️ שיעור הסתיים</span>
                     : <span style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",border:"1px solid rgba(52,152,219,0.4)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🔵 הוחזר</span>}
                   {r.loan_type&&<span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"2px 8px",fontSize:11,color:isLessonRes?"#9b59b6":"var(--accent)",fontWeight:700}}>{LOAN_ICONS[r.loan_type]||"📦"} {r.loan_type}</span>}
-                  <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();setViewRes(r);}}>👁️ פרטים</button>
                   <button className="btn btn-danger btn-sm" onClick={e=>{e.stopPropagation();deleteRes(r.id);}}>🗑️</button>
                 </div>
               </div>
