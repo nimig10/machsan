@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
 // v3.1
@@ -192,6 +192,19 @@ function toDateTime(dateStr, timeStr) {
   const [h, m] = String(timeStr || "00:00").split(":").map(Number);
   d.setHours(Number.isFinite(h) ? h : 0, Number.isFinite(m) ? m : 0, 0, 0);
   return d.getTime();
+}
+
+function safeClone(value) {
+  try {
+    if (typeof structuredClone === "function") return structuredClone(value);
+  } catch (cloneError) {
+    void cloneError;
+  }
+  return JSON.parse(JSON.stringify(value));
+}
+
+function dataEquals(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 function isValidEmailAddress(email) {
@@ -6786,26 +6799,114 @@ export default function App() {
   const isManagerCalendarView = window.location.pathname.startsWith("/manager-calendar");
   const urlToken = new URLSearchParams(window.location.search).get("token")||"";
   const [page, setPage]               = useState("dashboard");
-  const [equipment, setEquipment]     = useState([]);
-  const [reservations, setReservations] = useState([]);
-  const [categories, setCategories]   = useState(DEFAULT_CATEGORIES);
-  const [teamMembers, setTeamMembers] = useState([]);
-  const [deptHeads, setDeptHeads]       = useState([]);
-  const [collegeManager, setCollegeManager] = useState({ name:"", email:"" });
+  const [equipment, _setEquipment]     = useState([]);
+  const [reservations, _setReservations] = useState([]);
+  const [categories, _setCategories]   = useState(DEFAULT_CATEGORIES);
+  const [teamMembers, _setTeamMembers] = useState([]);
+  const [deptHeads, _setDeptHeads]       = useState([]);
+  const [collegeManager, _setCollegeManager] = useState({ name:"", email:"" });
   const [calendarToken, setCalendarToken] = useState("");
   const [managerToken, setManagerToken]   = useState("");
-  const [kits, setKits]               = useState([]);
-  const [policies, setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"" });
-  const [certifications, setCertifications] = useState({ types:[], students:[] });
-  const [siteSettings, setSiteSettings] = useState({ logo:"", theme:"dark" });
+  const [kits, _setKits]               = useState([]);
+  const [policies, _setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"" });
+  const [certifications, _setCertifications] = useState({ types:[], students:[] });
+  const [siteSettings, _setSiteSettings] = useState({ logo:"", theme:"dark" });
   const [loading, setLoading]         = useState(true);
   const [toasts, setToasts]           = useState([]);
   const [authed, setAuthed]           = useState(false);
+  const [undoStack, setUndoStack]     = useState([]);
   // Reservations filter state (in AdminApp so topbar can render them)
   const [resSearch, setResSearch]       = useState("");
   const [resStatusF, setResStatusF]     = useState("הכל");
   const [resLoanTypeF, setResLoanTypeF] = useState("הכל");
   const [resSortBy, setResSortBy]       = useState("received");
+
+  const equipmentRef = useRef(equipment);
+  const reservationsRef = useRef(reservations);
+  const categoriesRef = useRef(categories);
+  const teamMembersRef = useRef(teamMembers);
+  const deptHeadsRef = useRef(deptHeads);
+  const collegeManagerRef = useRef(collegeManager);
+  const kitsRef = useRef(kits);
+  const policiesRef = useRef(policies);
+  const certificationsRef = useRef(certifications);
+  const siteSettingsRef = useRef(siteSettings);
+  const historySuspendedRef = useRef(true);
+  const historyQueuedRef = useRef(false);
+  const undoInFlightRef = useRef(false);
+
+  equipmentRef.current = equipment;
+  reservationsRef.current = reservations;
+  categoriesRef.current = categories;
+  teamMembersRef.current = teamMembers;
+  deptHeadsRef.current = deptHeads;
+  collegeManagerRef.current = collegeManager;
+  kitsRef.current = kits;
+  policiesRef.current = policies;
+  certificationsRef.current = certifications;
+  siteSettingsRef.current = siteSettings;
+
+  const getUndoSnapshot = () => ({
+    equipment: safeClone(equipmentRef.current),
+    reservations: safeClone(reservationsRef.current),
+    categories: safeClone(categoriesRef.current),
+    teamMembers: safeClone(teamMembersRef.current),
+    deptHeads: safeClone(deptHeadsRef.current),
+    collegeManager: safeClone(collegeManagerRef.current),
+    kits: safeClone(kitsRef.current),
+    policies: safeClone(policiesRef.current),
+    certifications: safeClone(certificationsRef.current),
+    siteSettings: safeClone(siteSettingsRef.current),
+  });
+
+  const persistUndoSnapshot = async (snapshot) => {
+    const results = await Promise.all([
+      storageSet("equipment", snapshot.equipment),
+      storageSet("reservations", snapshot.reservations),
+      storageSet("categories", snapshot.categories),
+      storageSet("teamMembers", snapshot.teamMembers),
+      storageSet("deptHeads", snapshot.deptHeads),
+      storageSet("collegeManager", snapshot.collegeManager),
+      storageSet("kits", snapshot.kits),
+      storageSet("policies", snapshot.policies),
+      storageSet("certifications", snapshot.certifications),
+      storageSet("siteSettings", snapshot.siteSettings),
+    ]);
+    return results.every((result) => result?.ok);
+  };
+
+  const queueUndoSnapshot = () => {
+    if (historySuspendedRef.current || undoInFlightRef.current || historyQueuedRef.current) return;
+    historyQueuedRef.current = true;
+    const snapshot = getUndoSnapshot();
+    setUndoStack((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && dataEquals(last.snapshot, snapshot)) return prev;
+      return [...prev, { id: Date.now(), snapshot }].slice(-10);
+    });
+    window.setTimeout(() => {
+      historyQueuedRef.current = false;
+    }, 0);
+  };
+
+  const createTrackedSetter = (rawSetter) => (nextValue) => {
+    rawSetter((prev) => {
+      const resolved = typeof nextValue === "function" ? nextValue(prev) : nextValue;
+      if (!dataEquals(prev, resolved)) queueUndoSnapshot();
+      return resolved;
+    });
+  };
+
+  const setEquipment = createTrackedSetter(_setEquipment);
+  const setReservations = createTrackedSetter(_setReservations);
+  const setCategories = createTrackedSetter(_setCategories);
+  const setTeamMembers = createTrackedSetter(_setTeamMembers);
+  const setDeptHeads = createTrackedSetter(_setDeptHeads);
+  const setCollegeManager = createTrackedSetter(_setCollegeManager);
+  const setKits = createTrackedSetter(_setKits);
+  const setPolicies = createTrackedSetter(_setPolicies);
+  const setCertifications = createTrackedSetter(_setCertifications);
+  const setSiteSettings = createTrackedSetter(_setSiteSettings);
 
   const showToast = (type, msg) => {
     const id = Date.now();
@@ -6813,9 +6914,41 @@ export default function App() {
     setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)), 3500);
   };
 
+  const handleUndo = async () => {
+    const lastEntry = undoStack[undoStack.length - 1];
+    if (!lastEntry || undoInFlightRef.current) return;
+    undoInFlightRef.current = true;
+    historySuspendedRef.current = true;
+    try {
+      const snapshot = lastEntry.snapshot;
+      _setEquipment(snapshot.equipment);
+      _setReservations(snapshot.reservations);
+      _setCategories(snapshot.categories);
+      _setTeamMembers(snapshot.teamMembers);
+      _setDeptHeads(snapshot.deptHeads);
+      _setCollegeManager(snapshot.collegeManager);
+      _setKits(snapshot.kits);
+      _setPolicies(snapshot.policies);
+      _setCertifications(snapshot.certifications);
+      _setSiteSettings(snapshot.siteSettings);
+      const ok = await persistUndoSnapshot(snapshot);
+      setUndoStack((prev) => prev.slice(0, -1));
+      showToast(ok ? "success" : "error", ok ? "הפעולה האחרונה בוטלה" : "הפעולה בוטלה מקומית, אך חלק מהשמירות נכשלו");
+    } catch (error) {
+      console.error("undo error", error);
+      showToast("error", "שגיאה בביטול הפעולה האחרונה");
+    } finally {
+      window.setTimeout(() => {
+        historySuspendedRef.current = false;
+        undoInFlightRef.current = false;
+      }, 0);
+    }
+  };
+
   useEffect(()=>{
     (async()=>{
         try {
+          historySuspendedRef.current = true;
           const [eq, res, cats, tm, kts, pol, certs, dhs, calTok, mgr, mgrTok, siteSet] = await Promise.all([
             storageGet("equipment"),
           storageGet("reservations"),
@@ -6835,19 +6968,19 @@ export default function App() {
           const equipmentChanged = JSON.stringify(normalizedEquipment) !== JSON.stringify(eq || INITIAL_EQUIPMENT);
           const normalizedReservations = normalizeReservationsForArchive(res || []);
           const reservationsChanged = JSON.stringify(normalizedReservations) !== JSON.stringify(res || []);
-          setEquipment(normalizedEquipment);
-          setReservations(normalizedReservations);
-          setCategories(cats || DEFAULT_CATEGORIES);
-        setTeamMembers(tm || []);
-        setKits(kts || []);
-        setPolicies(pol || { פרטית:"", הפקה:"", סאונד:"" });
-        setCertifications(certs || { types:[], students:[] });
-        setDeptHeads(Array.isArray(dhs) ? dhs : []);
-        setCalendarToken(calTok || "");
-        setCollegeManager(mgr || { name:"", email:"" });
-        setManagerToken(mgrTok || "");
-        const loadedSettings = siteSet || { logo:"", theme:"dark" };
-        setSiteSettings(loadedSettings);
+          _setEquipment(normalizedEquipment);
+          _setReservations(normalizedReservations);
+          _setCategories(cats || DEFAULT_CATEGORIES);
+        _setTeamMembers(tm || []);
+        _setKits(kts || []);
+        _setPolicies(pol || { פרטית:"", הפקה:"", סאונד:"" });
+        _setCertifications(certs || { types:[], students:[] });
+        _setDeptHeads(Array.isArray(dhs) ? dhs : []);
+          setCalendarToken(calTok || "");
+        _setCollegeManager(mgr || { name:"", email:"" });
+          setManagerToken(mgrTok || "");
+          const loadedSettings = siteSet || { logo:"", theme:"dark" };
+        _setSiteSettings(loadedSettings);
         if(loadedSettings.theme==="light") document.documentElement.setAttribute("data-theme","light");
         // Init missing
           if(!eq || equipmentChanged) await storageSet("equipment", normalizedEquipment);
@@ -6875,6 +7008,8 @@ export default function App() {
       } catch(e) {
         showToast("error", "❌ שגיאת רשת — לא ניתן לטעון נתונים");
         console.error("load error", e);
+      } finally {
+        historySuspendedRef.current = false;
       }
       setLoading(false);
     })();
@@ -6883,7 +7018,7 @@ export default function App() {
   useEffect(() => {
     if (loading) return undefined;
     const syncArchivedReservations = () => {
-      setReservations((currentReservations) => {
+      _setReservations((currentReservations) => {
         const normalizedReservations = normalizeReservationsForArchive(currentReservations);
         if (JSON.stringify(normalizedReservations) === JSON.stringify(currentReservations)) {
           return currentReservations;
@@ -6931,7 +7066,7 @@ export default function App() {
       // Mark as sent
       const sentIds = new Set(toSend.map(r => r.id));
       const updated = reservations.map(r => sentIds.has(r.id) ? { ...r, overdue_email_sent: true } : r);
-      setReservations(updated);
+      _setReservations(updated);
       await storageSet("reservations", updated);
     };
     const t = setTimeout(checkOverdueEmails, 90000); // first check after 90s
@@ -7030,6 +7165,21 @@ export default function App() {
                 {deptHeadPending>0&&<div style={{background:"rgba(155,89,182,0.12)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--purple)",flexShrink:0}}>🟣 {deptHeadPending}</div>}
                 {overdueCount>0&&<div style={{background:"rgba(230,126,34,0.15)",border:"1px solid rgba(230,126,34,0.4)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"#e67e22",flexShrink:0,cursor:"pointer"}} onClick={()=>setPage("rejected")}>⚠️ {overdueCount} באיחור</div>}
                 {rejectedCount>0&&<div style={{background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--red)",flexShrink:0}}>❌ {rejectedCount}</div>}
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleUndo}
+                  disabled={!undoStack.length || undoInFlightRef.current}
+                  style={{
+                    flexShrink:0,
+                    borderColor: undoStack.length ? "rgba(46,204,113,0.45)" : "var(--border)",
+                    color: undoStack.length ? "#d9ffe6" : "var(--text3)",
+                    background: undoStack.length ? "rgba(46,204,113,0.12)" : "transparent",
+                    opacity: undoInFlightRef.current ? 0.7 : 1
+                  }}
+                  title={undoStack.length ? `אפשר לבטל ${undoStack.length} פעולות אחרונות` : "אין פעולות לביטול"}
+                >
+                  ↩ בטל פעולה{undoStack.length ? ` (${undoStack.length})` : ""}
+                </button>
               </div>
               {(page==="reservations" || page==="rejected") && (
                 <div style={{display:"flex",gap:6,width:"100%",flexWrap:"wrap",alignItems:"center"}}>
