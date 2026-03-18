@@ -1528,6 +1528,50 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
     setRejectReason("");
   };
 
+  const autoReduceConflictItems = async () => {
+    if (!approvalConflict?.reservation) return;
+    const reservationToFix = approvalConflict.reservation;
+    const availableByEquipment = new Map(
+      (approvalConflict.conflicts || []).map((conflict) => [String(conflict.equipment_id), Math.max(0, Number(conflict.available) || 0)])
+    );
+
+    let changed = false;
+    const nextItems = (reservationToFix.items || []).flatMap((item) => {
+      const key = String(item.equipment_id);
+      if (!availableByEquipment.has(key)) return [item];
+      const currentQty = Math.max(0, Number(item.quantity) || 0);
+      const allowedQty = Math.max(0, Number(availableByEquipment.get(key)) || 0);
+      const nextQty = Math.min(currentQty, allowedQty);
+      if (nextQty !== currentQty) changed = true;
+      if (nextQty <= 0) return [];
+      return [{ ...item, quantity: nextQty }];
+    });
+
+    if (!changed) {
+      showToast("info", "לא נמצאו פריטים לעדכון אוטומטי");
+      return;
+    }
+
+    const updatedReservation = { ...reservationToFix, items: nextItems };
+    const updatedReservations = normalizeReservationsForArchive(
+      reservations.map((r) => r.id === updatedReservation.id ? updatedReservation : r)
+    );
+    setReservations(updatedReservations);
+    setSelected((prev) => prev?.id === updatedReservation.id ? updatedReservation : prev);
+    setEditing((prev) => prev?.id === updatedReservation.id ? updatedReservation : prev);
+    await storageSet("reservations", updatedReservations);
+
+    const nextConflicts = getReservationApprovalConflicts(updatedReservation, updatedReservations, equipment);
+    if (nextConflicts.length) {
+      setApprovalConflict({ reservation: updatedReservation, conflicts: nextConflicts });
+      showToast("info", "בוצעה החסרת פריטים אוטומטית, אך עדיין קיימת חסימה נוספת");
+      return;
+    }
+
+    setApprovalConflict(null);
+    showToast("success", "הפריטים החוסמים הוחסרו אוטומטית מהבקשה");
+  };
+
   // ── Admin Manual Reservation Form (inner component) ──
   const AdminManualForm = () => {
     const ALL_TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
@@ -1776,30 +1820,39 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
           title={`⛔ אי אפשר לאשר את הבקשה של ${approvalConflict.reservation.student_name}`}
           onClose={()=>setApprovalConflict(null)}
           size="modal-lg"
-          footer={<button className="btn btn-secondary" onClick={()=>setApprovalConflict(null)}>סגור</button>}
+          footer={<>
+            <button className="btn btn-secondary" onClick={()=>setApprovalConflict(null)}>סגור</button>
+            <button className="btn btn-danger" onClick={autoReduceConflictItems}>החסרת פריטים אוטומטית</button>
+          </>}
         >
           <div className="highlight-box" style={{marginBottom:20}}>
-            הבקשה לא יכולה להיות מאושרת כי בחפיפת הזמנים המבוקשת אין מספיק מלאי זמין. להלן הפריטים החוסמים והבקשות שכבר אושרו לפניהם.
+            הבקשה לא יכולה להיות מאושרת כי בחפיפת הזמנים המבוקשת אין מספיק מלאי זמין. אפשר לבצע החסרה אוטומטית של הכמות החסומה או לעבור על הפריטים ידנית.
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:16}}>
             {approvalConflict.conflicts.map((conflict, idx)=>(
-              <div key={idx} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:16}}>
-                <div style={{fontWeight:800,fontSize:15,marginBottom:10,color:"var(--accent)"}}>{conflict.equipment_name}</div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:12,fontSize:13,marginBottom:12}}>
-                  <span>נדרש בבקשה הזאת: <strong>{conflict.requested}</strong></span>
-                  <span>זמין בפועל: <strong style={{color:"var(--red)"}}>{conflict.available}</strong></span>
-                  <span>חסר לאישור: <strong style={{color:"var(--red)"}}>{conflict.missing}</strong></span>
-                  <span>סה"כ במלאי: <strong>{conflict.total}</strong></span>
+              <div key={idx} style={{background:"var(--surface2)",border:"1px solid rgba(231,76,60,0.35)",borderRadius:"var(--r-sm)",padding:16}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:12}}>
+                  <div style={{fontWeight:900,fontSize:17,color:"var(--red)"}}>{conflict.equipment_name}</div>
+                  <div style={{background:"rgba(231,76,60,0.14)",border:"1px solid rgba(231,76,60,0.55)",borderRadius:999,padding:"6px 14px",fontSize:13,fontWeight:900,color:"var(--red)"}}>
+                    חסרה כמות: {conflict.missing}
+                  </div>
                 </div>
-                <div style={{fontSize:12,color:"var(--text3)",marginBottom:8,fontWeight:700}}>הבקשות המאושרות שחוסמות את האישור:</div>
+                <div style={{fontSize:12,color:"var(--text3)",marginBottom:10}}>
+                  נדרש בבקשה: <strong style={{color:"var(--text)"}}>{conflict.requested}</strong>
+                  <span style={{marginInline:"10px"}}>·</span>
+                  זמין כעת: <strong style={{color:"var(--red)"}}>{conflict.available}</strong>
+                </div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {conflict.blockers.map((blocker, bIdx)=>(
                     <div key={bIdx} style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:10,padding:12}}>
-                      <div style={{fontWeight:700,marginBottom:4}}>{blocker.student_name}</div>
-                      <div style={{fontSize:13,color:"var(--text2)",display:"flex",flexWrap:"wrap",gap:12}}>
-                        <span>כמות חסומה: <strong style={{color:"var(--accent)"}}>{blocker.quantity}</strong></span>
-                        <span>מ־<strong>{formatDate(blocker.borrow_date)}</strong>{blocker.borrow_time && <span style={{marginRight:6,color:"var(--accent)"}}>{blocker.borrow_time}</span>}</span>
-                        <span>עד <strong>{formatDate(blocker.return_date)}</strong>{blocker.return_time && <span style={{marginRight:6,color:"var(--accent)"}}>{blocker.return_time}</span>}</span>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:6}}>
+                        <div style={{fontWeight:800,color:"var(--text)"}}>הבקשה המאושרת של {blocker.student_name}</div>
+                        <div style={{fontSize:13,fontWeight:900,color:"var(--red)"}}>חוסם {blocker.quantity}</div>
+                      </div>
+                      <div style={{fontSize:12,color:"var(--text2)",display:"flex",flexWrap:"wrap",gap:12}}>
+                        <span><strong>{formatDate(blocker.borrow_date)}</strong>{blocker.borrow_time && <span style={{marginRight:6,color:"var(--accent)"}}> {blocker.borrow_time}</span>}</span>
+                        <span>עד</span>
+                        <span><strong>{formatDate(blocker.return_date)}</strong>{blocker.return_time && <span style={{marginRight:6,color:"var(--accent)"}}> {blocker.return_time}</span>}</span>
                       </div>
                     </div>
                   ))}
@@ -1972,6 +2025,7 @@ function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=110, fon
 function DashboardPage({ equipment, reservations }) {
   const todayStr = today();
   const nowMs = Date.now();
+  const RECENT_STATUS_OPTIONS = ["ממתין","אישור ראש מחלקה","נדחה","מאושר"];
 
   // ── מלאי ──
   const totalItems   = equipment.length;
@@ -2008,12 +2062,49 @@ function DashboardPage({ equipment, reservations }) {
   const [calStatusF, setCalStatusF] = useState([]);
   const [calLoanTypeF, setCalLoanTypeF] = useState("הכל");
   const [onLoanModal, setOnLoanModal] = useState(null); // "units" | "items" | null
+  const [recentStatusF, setRecentStatusF] = useState([]);
+  const [recentSortBy, setRecentSortBy] = useState("urgency");
 
   const yr = calDate.getFullYear();
   const mo = calDate.getMonth();
 
   const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
   const HE_D = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
+  const recentReservations = useMemo(() => {
+    const getReceivedTs = (reservation) => {
+      const createdTs = Date.parse(reservation?.created_at || "");
+      if (Number.isFinite(createdTs)) return createdTs;
+      const idNum = Number(reservation?.id);
+      return Number.isFinite(idNum) ? idNum : 0;
+    };
+    const getNumericId = (reservation) => {
+      const idNum = Number(reservation?.id);
+      return Number.isFinite(idNum) ? idNum : 0;
+    };
+    return [...reservations]
+      .filter((r) => r.status !== "הוחזר" && r.loan_type !== "שיעור")
+      .filter((r) => !recentStatusF.length || recentStatusF.includes(normalizeReservationStatus(r.status)))
+      .sort((a, b) => {
+        if (recentSortBy === "received") {
+          const receivedDiff = getReceivedTs(b) - getReceivedTs(a);
+          if (receivedDiff !== 0) return receivedDiff;
+          return getNumericId(b) - getNumericId(a);
+        }
+        const urgencyDiff = toDateTime(a.borrow_date, a.borrow_time || "00:00") - toDateTime(b.borrow_date, b.borrow_time || "00:00");
+        if (urgencyDiff !== 0) return urgencyDiff;
+        const receivedDiff = getReceivedTs(b) - getReceivedTs(a);
+        if (receivedDiff !== 0) return receivedDiff;
+        return getNumericId(b) - getNumericId(a);
+      })
+      .slice(0, 6);
+  }, [reservations, recentStatusF, recentSortBy]);
+
+  const upcomingLessons = useMemo(() => (
+    reservations
+      .filter((r) => r.loan_type === "שיעור" && r.borrow_date >= todayStr)
+      .sort((a, b) => a.borrow_date < b.borrow_date ? -1 : a.borrow_date > b.borrow_date ? 1 : (a.borrow_time || "") < (b.borrow_time || "") ? -1 : 1)
+      .slice(0, 5)
+  ), [reservations, todayStr]);
 
   const days = [];
   const startOffset = new Date(yr,mo,1).getDay();
@@ -2221,7 +2312,43 @@ function DashboardPage({ equipment, reservations }) {
         {/* ── בקשות אחרונות ── */}
         <div className="card">
           <div className="card-header"><span className="card-title">🕒 בקשות אחרונות</span></div>
-          {[...reservations].filter(r=>r.status!=="הוחזר"&&r.loan_type!=="שיעור").sort((a,b)=>Number(b.id)-Number(a.id)).slice(0,6).map(r=>(
+          <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:10}}>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+              <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סטטוס:</span>
+              {RECENT_STATUS_OPTIONS.map((status) => {
+                const active = recentStatusF.includes(status);
+                return (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={()=>setRecentStatusF((prev)=>active ? prev.filter((entry)=>entry!==status) : [...prev, status])}
+                    style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}
+                  >
+                    {status}
+                  </button>
+                );
+              })}
+              {recentStatusF.length > 0 && (
+                <button type="button" onClick={()=>setRecentStatusF([])} style={{padding:"3px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>
+                  איפוס
+                </button>
+              )}
+            </div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+              <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סידור:</span>
+              {[{key:"urgency",label:"דחיפות"},{key:"received",label:"קבלה"}].map((option)=>(
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={()=>setRecentSortBy(option.key)}
+                  style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${recentSortBy===option.key?"var(--accent)":"var(--border)"}`,background:recentSortBy===option.key?"var(--accent-glow)":"transparent",color:recentSortBy===option.key?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {recentReservations.map(r=>(
             <div key={r.id} className="recent-request-row" style={{borderBottom:"1px solid var(--border)"}} onClick={()=>setDashViewRes(r)}>
               <div style={{width:34,height:34,borderRadius:"50%",background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>{r.student_name?.[0]||"?"}</div>
               <div style={{flex:1,minWidth:0}}>
@@ -2239,15 +2366,11 @@ function DashboardPage({ equipment, reservations }) {
               </div>
             </div>
           ))}
-          {reservations.filter(r=>r.loan_type!=="שיעור").length===0&&<div className="empty-state"><div className="emoji">📋</div><p>אין בקשות עדיין</p></div>}
+          {recentReservations.length===0&&<div className="empty-state"><div className="emoji">📋</div><p>אין בקשות להצגה לפי הסינון שנבחר</p></div>}
         </div>
 
         {/* ── שיעורים להכנה ── */}
         {(()=>{
-          const upcomingLessons = reservations
-            .filter(r=>r.loan_type==="שיעור" && r.borrow_date >= todayStr)
-            .sort((a,b)=>a.borrow_date<b.borrow_date?-1:a.borrow_time<b.borrow_time?-1:1)
-            .slice(0,5);
           if(!upcomingLessons.length) return null;
           return (
             <div className="card" style={{border:"1px solid rgba(155,89,182,0.3)",background:"rgba(155,89,182,0.03)"}}>
@@ -2261,7 +2384,13 @@ function DashboardPage({ equipment, reservations }) {
                 const tag = isToday ? <span style={{background:"rgba(46,204,113,0.15)",border:"1px solid var(--green)",borderRadius:20,padding:"1px 8px",fontSize:10,fontWeight:900,color:"var(--green)",marginRight:6}}>היום</span>
                   : isTomorrow ? <span style={{background:"rgba(245,166,35,0.12)",border:"1px solid var(--accent)",borderRadius:20,padding:"1px 8px",fontSize:10,fontWeight:900,color:"var(--accent)",marginRight:6}}>מחר</span> : null;
                 return (
-                  <div key={r.id} style={{borderBottom:"1px solid var(--border)",padding:"10px 0",display:"flex",gap:10,alignItems:"flex-start"}}>
+                  <div
+                    key={r.id}
+                    style={{border:"1px solid transparent",padding:"10px 12px",display:"flex",gap:10,alignItems:"flex-start",cursor:"pointer",borderRadius:10,transition:"background .18s ease,border-color .18s ease",marginBottom:6}}
+                    onClick={()=>setDashViewRes(r)}
+                    onMouseEnter={(e)=>{e.currentTarget.style.background="rgba(155,89,182,0.08)";e.currentTarget.style.borderColor="rgba(155,89,182,0.5)";}}
+                    onMouseLeave={(e)=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor="transparent";}}
+                  >
                     <div style={{width:34,height:34,borderRadius:8,background:"rgba(155,89,182,0.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>🎬</div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontWeight:700,fontSize:13,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
@@ -2359,8 +2488,12 @@ function DashboardPage({ equipment, reservations }) {
           <div style={{width:"100%",maxWidth:520,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl",maxHeight:"90vh",overflowY:"auto"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0",position:"sticky",top:0}}>
               <div>
-                <div style={{fontWeight:900,fontSize:16}}>📋 {dashViewRes.student_name}</div>
-                <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{dashViewRes.email}</div>
+                <div style={{fontWeight:900,fontSize:16}}>
+                  {dashViewRes.loan_type==="שיעור" ? "🎬 פרטי שיעור" : "📋 פרטי בקשה"}
+                </div>
+                <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>
+                  {dashViewRes.loan_type==="שיעור" ? (dashViewRes.course || "שיעור ללא שם") : dashViewRes.email}
+                </div>
               </div>
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
                 {statusBadge(dashViewRes.status)}
@@ -2369,10 +2502,18 @@ function DashboardPage({ equipment, reservations }) {
             </div>
             <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:14}}>
               <div style={{background:"var(--accent-glow)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:"var(--r-sm)",padding:14}}>
-                {[["📅 השאלה",`${formatDate(dashViewRes.borrow_date)}${dashViewRes.borrow_time?" · "+dashViewRes.borrow_time:""}`],["↩ החזרה",`${formatDate(dashViewRes.return_date)}${dashViewRes.return_time?" · "+dashViewRes.return_time:""}`],["📚 קורס",dashViewRes.course],["🎬 סוג",dashViewRes.loan_type]].map(([l,v])=>(
+                {[
+                  ["👤 שם", dashViewRes.student_name],
+                  ["📧 אימייל", dashViewRes.email],
+                  ["📞 טלפון", dashViewRes.phone],
+                  ["📅 השאלה",`${formatDate(dashViewRes.borrow_date)}${dashViewRes.borrow_time?" · "+dashViewRes.borrow_time:""}`],
+                  ["↩ החזרה",`${formatDate(dashViewRes.return_date)}${dashViewRes.return_time?" · "+dashViewRes.return_time:""}`],
+                  [dashViewRes.loan_type==="שיעור" ? "🎬 שם השיעור" : "📚 קורס", dashViewRes.course],
+                  ["🎛️ סוג", dashViewRes.loan_type],
+                ].filter(([,v])=>v).map(([l,v])=>(
                   <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"4px 0",borderBottom:"1px solid rgba(245,166,35,0.15)"}}>
                     <span style={{color:"var(--text3)"}}>{l}</span>
-                    <strong>{v}</strong>
+                    <strong style={{textAlign:"left",maxWidth:"60%",wordBreak:"break-word"}}>{v}</strong>
                   </div>
                 ))}
               </div>
@@ -2385,7 +2526,7 @@ function DashboardPage({ equipment, reservations }) {
                 <div style={{display:"flex",flexDirection:"column",gap:6}}>
                   {dashViewRes.items?.map((i,j)=>(
                     <div key={j} style={{display:"flex",justifyContent:"space-between",padding:"6px 12px",background:"var(--surface2)",borderRadius:"var(--r-sm)",fontSize:13}}>
-                      <span>{equipment.find(e=>e.id==i.equipment_id)?.name||"?"}</span>
+                      <span>{i.name || equipment.find(e=>e.id==i.equipment_id)?.name || "פריט ללא שם"}</span>
                       <strong style={{color:"var(--accent)"}}>×{i.quantity}</strong>
                     </div>
                   ))}
