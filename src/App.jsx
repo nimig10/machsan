@@ -2191,7 +2191,7 @@ function DashboardPage({ equipment, reservations, setReservations, showToast }) 
     ["rgba(200,160,0,0.75)","#fff"],   ["rgba(230,126,34,0.75)","#fff"],
     ["rgba(26,188,156,0.75)","#fff"],  ["rgba(236,72,153,0.75)","#fff"],
   ];
-  const DASHBOARD_CAL_STATUSES = ["ממתין","מאושר","נדחה","אישור ראש מחלקה"];
+  const DASHBOARD_CAL_STATUSES = ["ממתין","מאושר","נדחה","באיחור","אישור ראש מחלקה"];
   const CAL_LOAN_TYPES = [
     { key:"הכל", label:"הכל", icon:"📦" },
     { key:"פרטית", label:"פרטית", icon:"👤" },
@@ -2497,11 +2497,11 @@ function DashboardPage({ equipment, reservations, setReservations, showToast }) 
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
               {DASHBOARD_CAL_STATUSES.map(s=>{
                 const active = calStatusF.includes(s);
-                const clr = s==="מאושר" ? "var(--green)" : s==="ממתין" ? "var(--yellow)" : s==="אישור ראש מחלקה" ? "var(--purple)" : "var(--red)";
+                const clr = s==="מאושר" ? "var(--green)" : s==="ממתין" ? "var(--yellow)" : s==="באיחור" ? "#e67e22" : s==="אישור ראש מחלקה" ? "var(--purple)" : "var(--red)";
                 return (
                   <button key={s} type="button" onClick={()=>setCalStatusF(p=>active?p.filter(x=>x!==s):[...p,s])}
                     style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${active?clr:"var(--border)"}`,background:active?`color-mix(in srgb,${clr} 15%,transparent)`:"transparent",color:active?clr:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>
-                    {s==="מאושר" ? "✅" : s==="ממתין" ? "⏳" : s==="אישור ראש מחלקה" ? "🟣" : "❌"} {s}
+                    {s==="מאושר" ? "✅" : s==="ממתין" ? "⏳" : s==="באיחור" ? "⚠️" : s==="אישור ראש מחלקה" ? "🟣" : "❌"} {s}
                   </button>
                 );
               })}
