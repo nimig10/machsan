@@ -2433,7 +2433,13 @@ function DashboardPage({ equipment, reservations, setReservations, showToast }) 
                 const tag = isToday ? <span style={{background:"rgba(46,204,113,0.15)",border:"1px solid var(--green)",borderRadius:20,padding:"1px 8px",fontSize:10,fontWeight:900,color:"var(--green)",marginRight:6}}>היום</span>
                   : isTomorrow ? <span style={{background:"rgba(245,166,35,0.12)",border:"1px solid var(--accent)",borderRadius:20,padding:"1px 8px",fontSize:10,fontWeight:900,color:"var(--accent)",marginRight:6}}>מחר</span> : null;
                 return (
-                  <div key={r.id} style={{borderBottom:"1px solid var(--border)",padding:"10px 0",display:"flex",gap:10,alignItems:"flex-start"}}>
+                  <div
+                    key={r.id}
+                    onClick={()=>setDashViewRes(r)}
+                    style={{borderBottom:"1px solid var(--border)",padding:"10px 0",display:"flex",gap:10,alignItems:"flex-start",cursor:"pointer",borderRadius:"var(--r-sm)",transition:"background .15s, border-color .15s",paddingInline:8}}
+                    onMouseEnter={e=>{e.currentTarget.style.background="rgba(155,89,182,0.08)";e.currentTarget.style.borderColor="rgba(155,89,182,0.45)";}}
+                    onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor="var(--border)";}}
+                  >
                     <div style={{width:34,height:34,borderRadius:8,background:"rgba(155,89,182,0.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>🎬</div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontWeight:700,fontSize:13,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
