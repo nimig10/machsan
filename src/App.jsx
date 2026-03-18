@@ -983,6 +983,9 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
   const [saving, setSaving] = useState(false);
   const [editConflicts, setEditConflicts] = useState([]);
   const [showLoanedOnly, setShowLoanedOnly] = useState(false);
+  const [editSearch, setEditSearch] = useState("");
+  const [editTypeFilter, setEditTypeFilter] = useState("all");
+  const [editCategoryFilters, setEditCategoryFilters] = useState([]);
   const [reportNote, setReportNote] = useState("");
   const [reportSending, setReportSending] = useState(false);
 
@@ -1067,7 +1070,32 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
   };
   const getQty = (eqId) => items.find(i=>i.equipment_id==eqId)?.quantity||0;
 
-  const categories = [...new Set(equipment.map(e=>e.category))];
+  const equipmentCategories = [...new Set(equipment.map(e=>e.category).filter(Boolean))];
+  const toggleEditCategoryFilter = (category) => {
+    setEditCategoryFilters((prev) => prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category]);
+  };
+  const matchesEditEquipmentFilters = (eq) => {
+    const searchText = editSearch.trim().toLowerCase();
+    if (searchText) {
+      const haystack = `${eq.name||""} ${eq.category||""}`.toLowerCase();
+      if (!haystack.includes(searchText)) return false;
+    }
+    if (editTypeFilter === "sound" && !eq.soundOnly) return false;
+    if (editTypeFilter === "photo" && !eq.photoOnly) return false;
+    if (editCategoryFilters.length && !editCategoryFilters.includes(eq.category)) return false;
+    if (showLoanedOnly && getQty(eq.id) <= 0) return false;
+    return true;
+  };
+  const stripConflictingItems = () => {
+    const nextItems = items.reduce((acc, item) => {
+      const details = getEquipmentBlockingDetails(item.equipment_id);
+      const nextQty = Math.max(0, Math.min(Number(item.quantity) || 0, details.available));
+      if (nextQty > 0) acc.push({ ...item, quantity: nextQty });
+      return acc;
+    }, []);
+    setItems(nextItems);
+    setEditConflicts([]);
+  };
 
   const save = async () => {
     const updatedReservation = { ...form, id: reservation.id, status: reservation.status, items };
@@ -1142,11 +1170,52 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
                 פריטים בלבד
               </button>
             </div>
+            <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:14}}>
+              <input
+                className="form-input"
+                placeholder="חיפוש ציוד לעריכה..."
+                value={editSearch}
+                onChange={e=>setEditSearch(e.target.value)}
+              />
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {[{k:"all",l:"📦 הכל"},{k:"sound",l:"🎙️ ציוד סאונד"},{k:"photo",l:"🎥 ציוד צילום"}].map(({k,l})=>(
+                  <button
+                    key={k}
+                    type="button"
+                    className={`btn btn-sm ${editTypeFilter===k?"btn-primary":"btn-secondary"}`}
+                    onClick={()=>setEditTypeFilter(k)}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {equipmentCategories.map((cat)=>(
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={()=>toggleEditCategoryFilter(cat)}
+                    style={{
+                      padding:"5px 12px",
+                      borderRadius:999,
+                      border:`1px solid ${editCategoryFilters.includes(cat)?"var(--accent)":"var(--border)"}`,
+                      background:editCategoryFilters.includes(cat)?"var(--accent-glow)":"var(--surface2)",
+                      color:editCategoryFilters.includes(cat)?"var(--accent)":"var(--text2)",
+                      fontWeight:700,
+                      fontSize:12,
+                      cursor:"pointer",
+                    }}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="highlight-box" style={{marginBottom:16}}>
               המערכת סופרת מלאי רק מול בקשות <strong>מאושרות</strong> שחופפות בזמן לבקשה הזאת. אם ציוד חסום, יוצגו כאן שמות הסטודנטים והכמויות שחוסמות אותו כדי שתוכל לעבור לבקשות החופפות ולהפחית משם.
             </div>
-            {categories.map(cat=>{
-              const catEq = equipment.filter(e=>e.category===cat && (!showLoanedOnly || getQty(e.id) > 0));
+            {equipmentCategories.map(cat=>{
+              const catEq = equipment.filter(e=>e.category===cat && matchesEditEquipmentFilters(e));
               if(!catEq.length) return null;
               return (
                 <div key={cat} style={{marginBottom:16}}>
@@ -1232,6 +1301,29 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
             </div>
           )}
           <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+            {reservation.status==="ממתין"&&(
+              <button
+                className="btn btn-secondary"
+                disabled={saving}
+                onClick={stripConflictingItems}
+                style={{borderColor:"var(--red)",color:"var(--red)"}}
+              >
+                החסר פרטים חופפים
+              </button>
+            )}
+            {reservation.status==="ממתין"&&onApprove&&(
+              <button
+                className="btn btn-success"
+                disabled={saving}
+                onClick={async()=>{
+                  setSaving(true);
+                  await onApprove({...form, items, status:"מאושר"});
+                  setSaving(false);
+                }}
+              >
+                ✅ אשר והעבר למאושר
+              </button>
+            )}
             {reservation.status==="נדחה"&&onApprove&&(
               <button className="btn btn-success" disabled={saving} onClick={async()=>{
                 setSaving(true);
@@ -1252,27 +1344,27 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
           footer={<button className="btn btn-secondary" onClick={()=>setEditConflicts([])}>סגור</button>}
         >
           <div className="highlight-box" style={{marginBottom:20}}>
-            העריכה הזאת תיצור חוסר במלאי ביחס לבקשות מאושרות אחרות שחופפות בזמן. כדי לשחרר ציוד לבקשה הזאת, צריך להפחית אותו קודם מהבקשות החוסמות שמפורטות למטה.
+            העריכה הזאת יוצרת חפיפה מול בקשות שכבר תופסות את הציוד. אלו רק הפריטים שחוסמים כרגע את השמירה.
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:16}}>
             {editConflicts.map((conflict, idx)=>(
-              <div key={idx} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:16}}>
-                <div style={{fontWeight:800,fontSize:15,marginBottom:10,color:"var(--accent)"}}>{conflict.equipment_name}</div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:12,fontSize:13,marginBottom:12}}>
-                  <span>נדרש בבקשה הערוכה: <strong>{conflict.requested}</strong></span>
-                  <span>זמין בפועל: <strong style={{color:"var(--red)"}}>{conflict.available}</strong></span>
-                  <span>חסר לשמירה: <strong style={{color:"var(--red)"}}>{conflict.missing}</strong></span>
-                  <span>סה"כ במלאי: <strong>{conflict.total}</strong></span>
+              <div key={idx} style={{background:"var(--surface2)",border:"1px solid rgba(231,76,60,0.28)",borderRadius:"var(--r-sm)",padding:16}}>
+                <div style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap",alignItems:"center",marginBottom:12}}>
+                  <div style={{fontWeight:900,fontSize:21,color:"var(--red)"}}>{conflict.equipment_name}</div>
+                  <div style={{background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.35)",borderRadius:999,padding:"6px 14px",fontWeight:900,fontSize:16,color:"var(--red)"}}>
+                    חסומות {conflict.missing} יחידות
+                  </div>
                 </div>
-                <div style={{fontSize:12,color:"var(--text3)",marginBottom:8,fontWeight:700}}>הבקשות המאושרות שחוסמות את השמירה:</div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {conflict.blockers.map((blocker, bIdx)=>(
                     <div key={bIdx} style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:10,padding:12}}>
-                      <div style={{fontWeight:700,marginBottom:4}}>{blocker.student_name}</div>
-                      <div style={{fontSize:13,color:"var(--text2)",display:"flex",flexWrap:"wrap",gap:12}}>
-                        <span>כמות חסומה: <strong style={{color:"var(--accent)"}}>{blocker.quantity}</strong></span>
-                        <span>מ־<strong>{formatDate(blocker.borrow_date)}</strong>{blocker.borrow_time && <span style={{marginRight:6,color:"var(--accent)"}}>{blocker.borrow_time}</span>}</span>
-                        <span>עד <strong>{formatDate(blocker.return_date)}</strong>{blocker.return_time && <span style={{marginRight:6,color:"var(--accent)"}}>{blocker.return_time}</span>}</span>
+                      <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",alignItems:"center",marginBottom:6}}>
+                        <strong style={{fontSize:14}}>{blocker.student_name}</strong>
+                        <span style={{fontWeight:900,fontSize:15,color:"var(--red)"}}>כמות חסומה: {blocker.quantity}</span>
+                      </div>
+                      <div style={{fontSize:12,color:"var(--text2)",display:"flex",flexWrap:"wrap",gap:10}}>
+                        <span>📅 {formatDate(blocker.borrow_date)} {blocker.borrow_time || ""}</span>
+                        <span>↩ {formatDate(blocker.return_date)} {blocker.return_time || ""}</span>
                       </div>
                     </div>
                   ))}
@@ -1673,7 +1765,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
               </div>
               <div className="res-card-actions" onClick={e=>e.stopPropagation()}>
                 <button className="btn btn-secondary btn-sm" onClick={()=>exportPDF(r)}>📄 PDF</button>
-                {(r.status==="מאושר"||r.status==="נדחה"||r.status==="באיחור")&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}>✏️ עריכת בקשה</button>}
+                {(r.status==="ממתין"||r.status==="מאושר"||r.status==="נדחה"||r.status==="באיחור")&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}>✏️ עריכת בקשה</button>}
                 {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" onClick={()=>updateStatus(r.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger btn-sm" onClick={()=>updateStatus(r.id,"נדחה")}>❌ דחה</button></>}
                 {(r.status==="מאושר"||r.status==="באיחור")&&<button className="btn btn-secondary btn-sm" onClick={()=>updateStatus(r.id,"הוחזר")}>🔄 הוחזר</button>}
                 <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${r.student_name}?`)) deleteReservation(r.id); }}>🗑️</button>
@@ -1685,7 +1777,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
       }
       {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations} collegeManager={collegeManager} managerToken={managerToken}
   onSave={async(updated)=>{ const all=normalizeReservationsForArchive(reservations.map(r=>r.id===updated.id?updated:r)); setReservations(all); await storageSet("reservations",all); showToast("success","הבקשה עודכנה"); setEditing(null); }}
-  onApprove={editing.status==="נדחה" ? async(updated)=>{
+  onApprove={(editing.status==="נדחה" || editing.status==="ממתין") ? async(updated)=>{
     const approved = await approveReservation(updated);
     if (approved) setEditing(null);
     return approved;
@@ -1700,27 +1792,27 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
           footer={<button className="btn btn-secondary" onClick={()=>setApprovalConflict(null)}>סגור</button>}
         >
           <div className="highlight-box" style={{marginBottom:20}}>
-            הבקשה לא יכולה להיות מאושרת כי בחפיפת הזמנים המבוקשת אין מספיק מלאי זמין. להלן הפריטים החוסמים והבקשות שכבר אושרו לפניהם.
+            הבקשה לא יכולה להיות מאושרת כרגע. אלו רק הפריטים שחוסמים את האישור והבקשות שכבר תופסות אותם בזמן החופף.
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:16}}>
             {approvalConflict.conflicts.map((conflict, idx)=>(
-              <div key={idx} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:16}}>
-                <div style={{fontWeight:800,fontSize:15,marginBottom:10,color:"var(--accent)"}}>{conflict.equipment_name}</div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:12,fontSize:13,marginBottom:12}}>
-                  <span>נדרש בבקשה הזאת: <strong>{conflict.requested}</strong></span>
-                  <span>זמין בפועל: <strong style={{color:"var(--red)"}}>{conflict.available}</strong></span>
-                  <span>חסר לאישור: <strong style={{color:"var(--red)"}}>{conflict.missing}</strong></span>
-                  <span>סה"כ במלאי: <strong>{conflict.total}</strong></span>
+              <div key={idx} style={{background:"var(--surface2)",border:"1px solid rgba(231,76,60,0.28)",borderRadius:"var(--r-sm)",padding:16}}>
+                <div style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap",alignItems:"center",marginBottom:12}}>
+                  <div style={{fontWeight:900,fontSize:21,color:"var(--red)"}}>{conflict.equipment_name}</div>
+                  <div style={{background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.35)",borderRadius:999,padding:"6px 14px",fontWeight:900,fontSize:16,color:"var(--red)"}}>
+                    חסומות {conflict.missing} יחידות
+                  </div>
                 </div>
-                <div style={{fontSize:12,color:"var(--text3)",marginBottom:8,fontWeight:700}}>הבקשות המאושרות שחוסמות את האישור:</div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {conflict.blockers.map((blocker, bIdx)=>(
                     <div key={bIdx} style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:10,padding:12}}>
-                      <div style={{fontWeight:700,marginBottom:4}}>{blocker.student_name}</div>
-                      <div style={{fontSize:13,color:"var(--text2)",display:"flex",flexWrap:"wrap",gap:12}}>
-                        <span>כמות חסומה: <strong style={{color:"var(--accent)"}}>{blocker.quantity}</strong></span>
-                        <span>מ־<strong>{formatDate(blocker.borrow_date)}</strong>{blocker.borrow_time && <span style={{marginRight:6,color:"var(--accent)"}}>{blocker.borrow_time}</span>}</span>
-                        <span>עד <strong>{formatDate(blocker.return_date)}</strong>{blocker.return_time && <span style={{marginRight:6,color:"var(--accent)"}}>{blocker.return_time}</span>}</span>
+                      <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",alignItems:"center",marginBottom:6}}>
+                        <strong style={{fontSize:14}}>{blocker.student_name}</strong>
+                        <span style={{fontWeight:900,fontSize:15,color:"var(--red)"}}>כמות חסומה: {blocker.quantity}</span>
+                      </div>
+                      <div style={{fontSize:12,color:"var(--text2)",display:"flex",flexWrap:"wrap",gap:10}}>
+                        <span>📅 {formatDate(blocker.borrow_date)} {blocker.borrow_time || ""}</span>
+                        <span>↩ {formatDate(blocker.return_date)} {blocker.return_time || ""}</span>
                       </div>
                     </div>
                   ))}
@@ -1734,6 +1826,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
       {selected && (
         <Modal title={`📋 בקשה — ${selected.student_name}`} onClose={()=>{setSelected(null);setOverdueEmailText("");}} size="modal-lg"
           footer={<>
+            {(selected.status==="ממתין"||selected.status==="מאושר"||selected.status==="נדחה"||selected.status==="באיחור")&&<button className="btn btn-secondary" onClick={()=>{setEditing(selected);setSelected(null);setOverdueEmailText("");}}>✏️ עריכת בקשה</button>}
             {selected.status==="ממתין"&&<><button className="btn btn-success" onClick={()=>updateStatus(selected.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger" onClick={()=>updateStatus(selected.id,"נדחה")}>❌ דחה</button></>}
             {selected.status==="נדחה"&&<button className="btn btn-success" onClick={()=>updateStatus(selected.id,"מאושר")}>✅ אשר בקשה</button>}
             {(selected.status==="מאושר"||selected.status==="באיחור")&&<button className="btn btn-secondary" onClick={()=>updateStatus(selected.id,"הוחזר")}>🔄 סמן כהוחזר</button>}
