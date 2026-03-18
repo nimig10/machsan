@@ -219,7 +219,6 @@ function markReservationReturned(reservation, returnedAt = new Date()) {
 }
 
 function normalizeReservationsForArchive(reservations, now = new Date()) {
-  const nowMs = now.getTime();
   return (reservations || []).map((reservation) => {
     if (!reservation) return reservation;
     const normalizedReservation = {
@@ -228,10 +227,6 @@ function normalizeReservationsForArchive(reservations, now = new Date()) {
     };
     if (normalizedReservation.status === "הוחזר") {
       return normalizedReservation.returned_at ? normalizedReservation : markReservationReturned(normalizedReservation, now);
-    }
-    const returnAt = getReservationReturnTimestamp(normalizedReservation);
-    if (normalizedReservation.status === "מאושר" && normalizedReservation.loan_type !== "שיעור" && returnAt !== null && nowMs >= returnAt) {
-      return markReservationReturned(normalizedReservation, now);
     }
     return normalizedReservation;
   });
