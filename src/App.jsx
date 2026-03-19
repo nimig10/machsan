@@ -840,7 +840,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       <div className="flex-between mb-4">
         <div className="search-bar"><span>🔍</span><input placeholder="חיפוש ציוד..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
         <div className="flex gap-2">
-          <button className="btn btn-primary" onClick={()=>setModal({type:"addcat"})}>➕ הוסף קטגוריה</button>
+          <button className="btn btn-primary" onClick={()=>setModal({type:"addcat"})}>📂 ניהול קטגוריות</button>
           <button className="btn btn-primary" onClick={()=>setModal({type:"add"})}>➕ הוסף ציוד</button>
         </div>
       </div>
@@ -991,7 +991,15 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
             showToast("success", `קטגוריה "${action.name}" נוספה`);
           } else if(action.action==="rename") {
             const updatedCats = categories.map(c => c===action.oldName ? action.newName : c);
-            const updatedEq = equipment.map(e => e.category===action.oldName ? {...e, category:action.newName} : e);
+            const updatedEq = equipment.map(e => {
+              if(e.category !== action.oldName) return e;
+              const base = {...e, category: action.newName};
+              if(action.type !== undefined) {
+                base.soundOnly = action.type === "סאונד";
+                base.photoOnly = action.type === "צילום";
+              }
+              return base;
+            });
             const updatedTypes = {...categoryTypes};
             if(action.oldName !== action.newName) { delete updatedTypes[action.oldName]; }
             if(action.type) updatedTypes[action.newName] = action.type;
@@ -1030,8 +1038,9 @@ function ManageCategoriesModal({ categories, categoryTypes, onSave, onClose, equ
   const exists = categories.includes(newName.trim());
   const toggleTypeFilter = (t) => setTypeFilters(prev => prev.includes(t) ? prev.filter(x=>x!==t) : [...prev, t]);
 
-  // Derive effective type from equipment items (dynamic, based on toggle buttons)
+  // Derive effective type — explicit categoryTypes takes priority, then derive from items
   const getEffectiveType = (cat) => {
+    if (categoryTypes[cat] !== undefined && categoryTypes[cat] !== null) return categoryTypes[cat];
     const items = equipment.filter(e => e.category === cat);
     if (items.length) {
       const allSound = items.every(e => e.soundOnly) && !items.every(e => e.photoOnly);
@@ -1039,7 +1048,7 @@ function ManageCategoriesModal({ categories, categoryTypes, onSave, onClose, equ
       if (allSound) return "סאונד";
       if (allPhoto) return "צילום";
     }
-    return categoryTypes[cat] || "";
+    return "";
   };
 
   // Sort categories: סאונד → צילום → כללי, then alphabetically within each group
