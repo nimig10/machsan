@@ -735,7 +735,11 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
 
   const todayStr2 = today();
   const used = (id) => reservations
-    .filter(r=>(r.status==="מאושר"||r.status==="ממתין") && r.borrow_date<=todayStr2 && r.return_date>=todayStr2)
+    .filter(r=>{
+      if(r.status==="באיחור") return true; // overdue = item still out, regardless of dates
+      if(r.status!=="מאושר"&&r.status!=="ממתין") return false;
+      return r.borrow_date<=todayStr2 && r.return_date>=todayStr2;
+    })
     .reduce((s,r)=>s+(r.items?.find(i=>i.equipment_id==id)?.quantity||0),0);
 
   const EqForm = ({ initial }) => {
@@ -925,8 +929,8 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                 </div>
               </div>
               <div className="eq-grid">
-                {filtered.filter(e=>e.category===c).map(eq=>(
-                  <div key={eq.id} className="eq-card" style={{position:"relative",cursor:"pointer"}} onClick={()=>setModal({type:"edit",item:eq})}>
+                {filtered.filter(e=>e.category===c).map(eq=>{const avail=workingUnits(eq)-used(eq.id);const isEmpty=avail<=0;return(
+                  <div key={eq.id} className="eq-card" style={{position:"relative",cursor:"pointer",border:isEmpty?"2px solid var(--red)":undefined,boxShadow:isEmpty?"0 0 0 1px rgba(231,76,60,0.35)":undefined}} onClick={()=>setModal({type:"edit",item:eq})}>
                     {/* ── Cert badge ── */}
                     {eq.certification_id&&(
                       <div title={`דורש הסמכה: ${certifications?.types?.find(t=>t.id===eq.certification_id)?.name||"הסמכה"}`}
@@ -960,7 +964,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                       <button className="btn btn-danger btn-sm" onClick={()=>setModal({type:"delete",item:eq})}>🗑️</button>
                     </div>
                   </div>
-                ))}
+                );})}
               </div>
             </div>
           ))}
@@ -1018,8 +1022,10 @@ function ManageCategoriesModal({ categories, categoryTypes, onSave, onClose, equ
   const [editingCat, setEditingCat] = useState(null);
   const [editVal, setEditVal] = useState("");
   const [editType, setEditType] = useState("");
+  const [typeFilters, setTypeFilters] = useState([]); // [] = all, else array of selected types
 
   const exists = categories.includes(newName.trim());
+  const toggleTypeFilter = (t) => setTypeFilters(prev => prev.includes(t) ? prev.filter(x=>x!==t) : [...prev, t]);
 
   // Derive effective type from equipment items (dynamic, based on toggle buttons)
   const getEffectiveType = (cat) => {
@@ -1051,15 +1057,30 @@ function ManageCategoriesModal({ categories, categoryTypes, onSave, onClose, equ
     border: `1px solid ${t === "סאונד" ? "rgba(155,89,182,0.35)" : t === "צילום" ? "rgba(39,174,96,0.3)" : "var(--border)"}`,
   });
 
+  const filteredSorted = typeFilters.length===0 ? sorted : sorted.filter(c => {
+    const t = getEffectiveType(c);
+    return typeFilters.some(f => f==="" ? t==="" : t===f);
+  });
+
   return (
     <Modal title="📂 ניהול קטגוריות" onClose={onClose}>
+      {/* Type filter chips */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+        {[{k:"סאונד",l:"🎙️ סאונד"},{k:"צילום",l:"🎥 צילום"},{k:"",l:"כללי"}].map(({k,l})=>{
+          const active=typeFilters.includes(k);
+          return <button key={k} type="button" onClick={()=>toggleTypeFilter(k)}
+            style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+            {l}
+          </button>;
+        })}
+        {typeFilters.length>0&&<button type="button" onClick={()=>setTypeFilters([])} style={{padding:"4px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>✕ הכל</button>}
+      </div>
       {/* Existing categories */}
       <div style={{marginBottom: 20}}>
         <div style={{fontSize: 12, fontWeight: 800, color: "var(--text3)", marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.5}}>
-          קטגוריות קיימות ({categories.length})
-        </div>
+          קטגוריות קיימות ({filteredSorted.length}{typeFilters.length>0?` מתוך ${categories.length}`:""})</div>
         <div style={{display: "flex", flexDirection: "column", gap: 6, maxHeight: 320, overflowY: "auto"}}>
-          {sorted.map(c => (
+          {filteredSorted.map(c => (
             <div key={c} style={{display: "flex", alignItems: "center", gap: 8, background: "var(--surface2)", borderRadius: 8, padding: "8px 12px", border: "1px solid var(--border)"}}>
               {editingCat === c ? (
                 <>
