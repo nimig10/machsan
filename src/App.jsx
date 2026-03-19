@@ -2265,7 +2265,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
                         ? new Date(selected.created_at)
                         : (!isNaN(Number(selected.id)) ? new Date(Number(selected.id)) : null);
                       if(!ts||isNaN(ts.getTime())) return "לא ידוע";
-                      return ts.toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+                      return ts.toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"});
                     })()}</span>
                   </div>
                 )}
