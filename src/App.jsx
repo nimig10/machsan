@@ -5880,7 +5880,7 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
 }
 
 // ─── DEPT HEAD CALENDAR PAGE ─────────────────────────────────────────────────
-function DeptHeadCalendarPage({ reservations: initialReservations, kits=[] }) {
+function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equipment=[] }) {
   const [localRes, setLocalRes]   = useState(initialReservations);
   const [calDate, setCalDate]     = useState(new Date());
   const [statusF, setStatusF]     = useState([]);   // empty = all
@@ -6019,20 +6019,43 @@ function DeptHeadCalendarPage({ reservations: initialReservations, kits=[] }) {
                 </span>
               </div>
               {selected===r&&(
-                <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid var(--border)",display:"flex",flexDirection:"column",gap:6}}>
-                  {r.email&&<div style={{fontSize:12,color:"var(--text3)"}}>📧 {r.email}</div>}
-                  {r.phone&&<div style={{fontSize:12,color:"var(--text3)"}}>📞 {r.phone}</div>}
-                  {r.course&&<div style={{fontSize:12,color:"var(--text3)"}}>📚 {r.course}</div>}
-                  {r.project_name&&<div style={{fontSize:12,color:"var(--text3)"}}>📽️ {r.project_name}</div>}
-                  {r.crew_photographer_name&&<div style={{fontSize:12,color:"var(--text3)"}}>🎥 צלם: {r.crew_photographer_name}</div>}
-                  {r.crew_sound_name&&<div style={{fontSize:12,color:"var(--text3)"}}>🎙️ סאונד: {r.crew_sound_name}</div>}
+                <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid var(--border)"}}>
+                  {/* פרטי סטודנט */}
+                  <div style={{display:"flex",flexWrap:"wrap",gap:14,marginBottom:14}}>
+                    {r.email&&<div style={{fontSize:13,color:"var(--text2)"}}>📧 {r.email}</div>}
+                    {r.phone&&<div style={{fontSize:13,color:"var(--text2)"}}>📞 {r.phone}</div>}
+                    {r.course&&<div style={{fontSize:13,color:"var(--text2)"}}>📚 {r.course}</div>}
+                    {r.project_name&&<div style={{fontSize:13,color:"var(--text2)"}}>📽️ {r.project_name}</div>}
+                    {r.crew_photographer_name&&<div style={{fontSize:13,color:"var(--text2)"}}>🎥 צלם: {r.crew_photographer_name}</div>}
+                    {r.crew_sound_name&&<div style={{fontSize:13,color:"var(--text2)"}}>🎙️ סאונד: {r.crew_sound_name}</div>}
+                  </div>
+                  {/* ציוד מבוקש */}
                   {r.items?.length>0&&(
-                    <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>
-                      🎒 {r.items.map(i=>`${i.name} ×${i.quantity}`).join(" · ")}
+                    <div>
+                      <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>ציוד מבוקש</div>
+                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                        {r.items.map((item,idx)=>{
+                          const eq = equipment.find(e=>e.name===item.name);
+                          return (
+                            <div key={idx} style={{display:"flex",alignItems:"center",gap:12,background:"var(--surface2)",borderRadius:8,padding:"10px 12px",border:"1px solid var(--border)"}}>
+                              <div style={{width:56,height:56,borderRadius:8,overflow:"hidden",background:"var(--surface)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid var(--border)"}}>
+                                {eq?.image
+                                  ? <img src={eq.image} alt={item.name} style={{width:"100%",height:"100%",objectFit:"contain"}}/>
+                                  : <span style={{fontSize:24}}>📦</span>}
+                              </div>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontWeight:800,fontSize:14}}>{item.name}</div>
+                                {eq?.description&&<div style={{fontSize:11,color:"var(--text3)",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{eq.description}</div>}
+                              </div>
+                              <div style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:8,padding:"5px 14px",fontSize:15,fontWeight:900,color:"var(--accent)",flexShrink:0}}>×{item.quantity}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                   {(r.status==="אישור ראש מחלקה"||r.status==="ממתין לאישור ראש המחלקה")&&(
-                    <div style={{marginTop:8}}>
+                    <div style={{marginTop:14}}>
                       <button
                         onClick={e=>{e.stopPropagation();approveReservation(r);}}
                         disabled={approving===r.id}
@@ -6047,48 +6070,6 @@ function DeptHeadCalendarPage({ reservations: initialReservations, kits=[] }) {
           ))}
         </div>
       }
-      {/* ── ערכות שיעור ── */}
-      {(()=>{
-        const lessonKits = kits.filter(k=>k.kitType==="lesson");
-        if(!lessonKits.length) return null;
-        const todayStr2 = today();
-        const upcoming = lessonKits.flatMap(kit=>
-          (kit.schedule||[])
-            .filter(s=>s.date>=todayStr2)
-            .map(s=>({...s, kitName:kit.name, instructorName:kit.instructorName||"", items:kit.items||[]}))
-        ).sort((a,b)=>a.date<b.date?-1:a.startTime<b.startTime?-1:1).slice(0,8);
-        if(!upcoming.length) return null;
-        return (
-          <div style={{marginTop:24}}>
-            <div style={{fontWeight:800,fontSize:15,marginBottom:10}}>🎬 ערכות שיעור — שיעורים קרובים</div>
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {upcoming.map((s,i)=>(
-                <div key={i} style={{background:"var(--surface)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:"var(--r)",padding:"12px 16px"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                    <span style={{fontSize:20}}>🎬</span>
-                    <div style={{flex:1}}>
-                      <div style={{fontWeight:800,fontSize:14}}>{s.kitName}</div>
-                      {s.instructorName&&<div style={{fontSize:12,color:"var(--text3)"}}>👨‍🏫 {s.instructorName}</div>}
-                    </div>
-                    <div style={{textAlign:"left",fontSize:12,color:"var(--text3)"}}>
-                      📅 {formatDate(s.date)}&nbsp;&nbsp;🕐 {s.startTime} – {s.endTime}
-                    </div>
-                  </div>
-                  {s.items.length>0&&(
-                    <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:8}}>
-                      {s.items.map((item,j)=>(
-                        <span key={j} style={{background:"rgba(155,89,182,0.1)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:6,padding:"2px 8px",fontSize:11,color:"#9b59b6"}}>
-                          {item.name} ×{item.quantity}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
     </div>
   );
 }
@@ -7144,7 +7125,7 @@ export default function App() {
         <div style={{minHeight:"100vh",background:"var(--bg)",direction:"rtl"}}>
           {loading ? <Loading/> : (
             calendarToken && urlToken === calendarToken
-              ? <DeptHeadCalendarPage reservations={reservations} calendarToken={calendarToken} kits={kits}/>
+              ? <DeptHeadCalendarPage reservations={reservations} calendarToken={calendarToken} kits={kits} equipment={equipment}/>
               : <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",flexDirection:"column",gap:16,color:"var(--text2)"}}>
                   <div style={{fontSize:48}}>🔒</div>
                   <div style={{fontSize:18,fontWeight:700}}>קישור לא תקין</div>
