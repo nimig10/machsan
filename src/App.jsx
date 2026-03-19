@@ -2261,9 +2261,12 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
                   <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginTop:8,paddingTop:8,borderTop:"1px solid rgba(245,166,35,0.15)",color:"var(--text3)"}}>
                     <span>📨 נשלח למערכת</span>
                     <span style={{fontWeight:700,color:"var(--text2)"}}>{(()=>{
-                      const ts = selected.created_at
-                        ? new Date(selected.created_at)
-                        : (!isNaN(Number(selected.id)) ? new Date(Number(selected.id)) : null);
+                      // id is Date.now() (13-digit ms) → precise timestamp
+                      // created_at is date-only string → would show UTC midnight, avoid using for time
+                      const idNum = Number(selected.id);
+                      const ts = (!isNaN(idNum) && idNum > 1000000000000)
+                        ? new Date(idNum)
+                        : (selected.created_at ? new Date(selected.created_at+"T12:00:00") : null);
                       if(!ts||isNaN(ts.getTime())) return "לא ידוע";
                       return ts.toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"});
                     })()}</span>
