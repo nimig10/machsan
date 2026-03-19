@@ -1020,12 +1020,13 @@ function ManageCategoriesModal({ categories, categoryTypes, onSave, onClose }) {
 
   const exists = categories.includes(newName.trim());
 
-  // Sort categories: סאונד first, then צילום, then unassigned
+  // Sort categories: סאונד → צילום → כללי, then alphabetically within each group
   const sorted = [...categories].sort((a, b) => {
     const order = { "סאונד": 0, "צילום": 1 };
     const oa = order[categoryTypes[a]] ?? 2;
     const ob = order[categoryTypes[b]] ?? 2;
-    return oa - ob;
+    if (oa !== ob) return oa - ob;
+    return a.localeCompare(b, "he");
   });
 
   const typeLabel = (t) => t === "סאונד" ? "🎙️ סאונד" : t === "צילום" ? "🎥 צילום" : "כללי";
