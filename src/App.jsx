@@ -254,6 +254,9 @@ function normalizeReservationsForArchive(reservations, now = new Date()) {
   });
 }
 
+// Far-future timestamp used for overdue reservations — item is physically missing, blocks all future requests
+const FAR_FUTURE = new Date("2099-12-31T23:59:00").getTime();
+
 function getAvailable(eqId, borrowDate, returnDate, reservations, equipment, excludeId=null, borrowTime="", returnTime="") {
   const eq = equipment.find(e => e.id == eqId);
   if (!eq) return 0;
@@ -265,7 +268,8 @@ function getAvailable(eqId, borrowDate, returnDate, reservations, equipment, exc
     if (res.id === excludeId) continue;
     if (res.status !== "מאושר" && res.status !== "באיחור") continue;
     const resStart = toDateTime(res.borrow_date, res.borrow_time || "00:00");
-    const resEnd   = toDateTime(res.return_date,  res.return_time  || "23:59");
+    // Overdue items are physically out of the warehouse — block every future request regardless of return_date
+    const resEnd = res.status === "באיחור" ? FAR_FUTURE : toDateTime(res.return_date, res.return_time || "23:59");
     // Overlap: new period starts before existing ends AND new period ends after existing starts
     if (bStart < resEnd && rEnd > resStart) {
       const item = res.items?.find(i => i.equipment_id == eqId);
@@ -294,7 +298,8 @@ function getReservationApprovalConflicts(targetReservation, reservations, equipm
       if (res.status !== "מאושר" && res.status !== "באיחור") continue;
 
       const resStart = toDateTime(res.borrow_date, res.borrow_time || "00:00");
-      const resEnd   = toDateTime(res.return_date, res.return_time || "23:59");
+      // Overdue items are physically missing — treat as blocking every future date
+      const resEnd = res.status === "באיחור" ? FAR_FUTURE : toDateTime(res.return_date, res.return_time || "23:59");
       const overlaps = reqStart < resEnd && reqEnd > resStart;
       if (!overlaps) continue;
 
@@ -311,6 +316,7 @@ function getReservationApprovalConflicts(targetReservation, reservations, equipm
         borrow_time: res.borrow_time || "00:00",
         return_date: res.return_date,
         return_time: res.return_time || "23:59",
+        status: res.status, // carry status so UI can highlight overdue blockers
       });
     }
 
@@ -1295,7 +1301,8 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
       if (res.status !== "מאושר" && res.status !== "באיחור") continue;
 
       const resStart = toDateTime(res.borrow_date, res.borrow_time || "00:00");
-      const resEnd   = toDateTime(res.return_date, res.return_time || "23:59");
+      // Overdue items are physically out of the warehouse — block every future request
+      const resEnd = res.status === "באיחור" ? FAR_FUTURE : toDateTime(res.return_date, res.return_time || "23:59");
       const overlaps = reqStart < resEnd && reqEnd > resStart;
       if (!overlaps) continue;
 
@@ -1312,6 +1319,7 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
         borrow_time: res.borrow_time || "00:00",
         return_date: res.return_date,
         return_time: res.return_time || "23:59",
+        status: res.status,
       });
     }
 
@@ -1558,20 +1566,29 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
                         </div>
                         {!isOverdueReservation && details.blockers.length > 0 && (
                           <div style={{background:"rgba(241,196,15,0.1)",border:"1px solid rgba(241,196,15,0.28)",borderRadius:10,padding:10,marginBottom:6}}>
-                            <div style={{fontSize:12,fontWeight:800,color:"var(--yellow)",marginBottom:8}}>הציוד הזה חסום כרגע ע"י הבקשות המאושרות הבאות:</div>
+                            <div style={{fontSize:12,fontWeight:800,color:"var(--yellow)",marginBottom:8}}>הציוד הזה חסום כרגע ע"י הבקשות הבאות:</div>
                             <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                              {details.blockers.map((blocker, idx) => (
-                                <div key={idx} style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:8,padding:"8px 10px"}}>
-                                  <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",fontSize:12}}>
-                                    <strong>{blocker.student_name}</strong>
-                                    <span>כמות שהושאלה: <strong style={{color:"var(--accent)"}}>{blocker.quantity}</strong></span>
+                              {details.blockers.map((blocker, idx) => {
+                                const isOvd = blocker.status === "באיחור";
+                                return (
+                                <div key={idx} style={{background: isOvd ? "rgba(231,76,60,0.07)" : "var(--surface3)", border: isOvd ? "1.5px solid rgba(231,76,60,0.4)" : "1px solid var(--border)", borderRadius:8, padding:"8px 10px"}}>
+                                  <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",fontSize:12,alignItems:"center"}}>
+                                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                                      <strong>{blocker.student_name}</strong>
+                                      {isOvd && <span className="badge badge-orange" style={{fontSize:10}}>⚠️ באיחור</span>}
+                                    </div>
+                                    <span>כמות שהושאלה: <strong style={{color: isOvd ? "var(--red)" : "var(--accent)"}}>{blocker.quantity}</strong></span>
                                   </div>
                                   <div style={{fontSize:11,color:"var(--text2)",marginTop:4,display:"flex",gap:10,flexWrap:"wrap"}}>
                                     <span>מ־{formatDate(blocker.borrow_date)} {blocker.borrow_time}</span>
-                                    <span>עד {formatDate(blocker.return_date)} {blocker.return_time}</span>
+                                    {isOvd
+                                      ? <span style={{color:"var(--red)",fontWeight:700}}>היה אמור לחזור {formatDate(blocker.return_date)} — עדיין לא הוחזר</span>
+                                      : <span>עד {formatDate(blocker.return_date)} {blocker.return_time}</span>
+                                    }
                                   </div>
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         )}
@@ -1830,8 +1847,9 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
   const approveReservation = async (reservationToApprove) => {
     const conflicts = getReservationApprovalConflicts(reservationToApprove, reservations, equipment);
     if (conflicts.length) {
+      const hasOverdueBlock = conflicts.some(c => c.blockers.some(b => b.status === "באיחור"));
       setApprovalConflict({ reservation: reservationToApprove, conflicts });
-      showToast("error", "לא ניתן לאשר - אין מספיק מלאי בחפיפת הזמנים");
+      showToast("error", hasOverdueBlock ? "לא ניתן לאשר — ציוד נמצא באיחור אצל סטודנט אחר" : "לא ניתן לאשר - אין מספיק מלאי בחפיפת הזמנים");
       return false;
     }
 
@@ -2139,15 +2157,26 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
   } : null}
   onClose={()=>setEditing(null)}/>}
 
-      {approvalConflict && (
+      {approvalConflict && (()=>{
+        const hasOverdueBlockers = approvalConflict.conflicts.some(c => c.blockers.some(b => b.status === "באיחור"));
+        return (
         <Modal
           title={`⛔ אי אפשר לאשר את הבקשה של ${approvalConflict.reservation.student_name}`}
           onClose={()=>setApprovalConflict(null)}
           size="modal-lg"
           footer={<button className="btn btn-secondary" onClick={()=>setApprovalConflict(null)}>סגור</button>}
         >
+          {hasOverdueBlockers && (
+            <div style={{background:"rgba(231,76,60,0.1)",border:"2px solid rgba(231,76,60,0.45)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16,display:"flex",gap:12,alignItems:"flex-start"}}>
+              <span style={{fontSize:22,lineHeight:1}}>⚠️</span>
+              <div>
+                <div style={{fontWeight:900,fontSize:14,color:"var(--red)",marginBottom:4}}>ציוד יצא מהמחסן ולא הוחזר (באיחור)</div>
+                <div style={{fontSize:13,color:"var(--text2)"}}>אחד או יותר מהפריטים המבוקשים נמצאים כרגע אצל סטודנט אחר שלא החזיר את הציוד בזמן. לא ניתן לאשר את הבקשה עד שהציוד יוחזר פיזית למחסן.</div>
+              </div>
+            </div>
+          )}
           <div className="highlight-box" style={{marginBottom:20}}>
-            הבקשה לא יכולה להיות מאושרת כרגע. אלו רק הפריטים שחוסמים את האישור והבקשות שכבר תופסות אותם בזמן החופף.
+            הבקשה לא יכולה להיות מאושרת כרגע. אלו הפריטים שחוסמים את האישור.
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:16}}>
             {approvalConflict.conflicts.map((conflict, idx)=>(
@@ -2159,24 +2188,34 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
                   </div>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {conflict.blockers.map((blocker, bIdx)=>(
-                    <div key={bIdx} style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:10,padding:12}}>
+                  {conflict.blockers.map((blocker, bIdx)=>{
+                    const isOverdue = blocker.status === "באיחור";
+                    return (
+                    <div key={bIdx} style={{background: isOverdue ? "rgba(231,76,60,0.07)" : "var(--surface3)", border: isOverdue ? "1.5px solid rgba(231,76,60,0.45)" : "1px solid var(--border)", borderRadius:10, padding:12}}>
                       <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",alignItems:"center",marginBottom:6}}>
-                        <strong style={{fontSize:14}}>{blocker.student_name}</strong>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <strong style={{fontSize:14}}>{blocker.student_name}</strong>
+                          {isOverdue && <span className="badge badge-orange" style={{fontSize:11}}>⚠️ באיחור</span>}
+                        </div>
                         <span style={{fontWeight:900,fontSize:15,color:"var(--red)"}}>כמות חסומה: {blocker.quantity}</span>
                       </div>
                       <div style={{fontSize:12,color:"var(--text2)",display:"flex",flexWrap:"wrap",gap:10}}>
                         <span>📅 {formatDate(blocker.borrow_date)} {blocker.borrow_time || ""}</span>
-                        <span>↩ {formatDate(blocker.return_date)} {blocker.return_time || ""}</span>
+                        {isOverdue
+                          ? <span style={{color:"var(--red)",fontWeight:700}}>↩ היה אמור לחזור {formatDate(blocker.return_date)} — עדיין לא הוחזר</span>
+                          : <span>↩ {formatDate(blocker.return_date)} {blocker.return_time || ""}</span>
+                        }
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ))}
           </div>
         </Modal>
-      )}
+        );
+      })()}
 
       {selected && (
         <Modal title={`📋 בקשה — ${selected.student_name}`} onClose={()=>{setSelected(null);setOverdueEmailText("");}} size="modal-lg"
