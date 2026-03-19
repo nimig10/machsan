@@ -2257,6 +2257,18 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
                   <span style={{color:"var(--text3)"}}>⏱️ משך ההשאלה</span>
                   <strong>{getLoanDurationDays(selected.borrow_date, selected.return_date)} ימים</strong>
                 </div>
+                {(selected.created_at||selected.id)&&(
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginTop:8,paddingTop:8,borderTop:"1px solid rgba(245,166,35,0.15)",color:"var(--text3)"}}>
+                    <span>📨 נשלח למערכת</span>
+                    <span style={{fontWeight:700,color:"var(--text2)"}}>{(()=>{
+                      const ts = selected.created_at
+                        ? new Date(selected.created_at)
+                        : (!isNaN(Number(selected.id)) ? new Date(Number(selected.id)) : null);
+                      if(!ts||isNaN(ts.getTime())) return "לא ידוע";
+                      return ts.toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+                    })()}</span>
+                  </div>
+                )}
               </div>
               <div style={{marginTop:12,textAlign:"center"}}>{statusBadge(selected.status)}</div>
             </div>
