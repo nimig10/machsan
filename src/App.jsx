@@ -123,16 +123,10 @@ function normalizeReservationStatus(status) {
   return status === "ממתין לאישור ראש המחלקה" ? "אישור ראש מחלקה" : status;
 }
 
-function getNextSoundDayLoanDate(slots = []) {
+function getNextSoundDayLoanDate() {
   const now = new Date();
-  const hasFutureSlotToday = slots.some((slot) => {
-    const [h, m] = String(slot || "00:00").split(":").map(Number);
-    const slotDate = new Date(now);
-    slotDate.setHours(Number.isFinite(h) ? h : 0, Number.isFinite(m) ? m : 0, 0, 0);
-    return slotDate.getTime() > now.getTime();
-  });
   const target = new Date(now);
-  if (!hasFutureSlotToday) target.setDate(target.getDate() + 1);
+  // If today is weekend (Fri=5, Sat=6) skip to next workday
   while (target.getDay() === 5 || target.getDay() === 6) {
     target.setDate(target.getDate() + 1);
   }
@@ -3824,9 +3818,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
       setForm((prev) => ({ ...prev, sound_day_loan:false }));
       return;
     }
-    const targetDate = getNextSoundDayLoanDate(
-      ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30"]
-    );
+    const targetDate = getNextSoundDayLoanDate();
     setForm((prev) => ({
       ...prev,
       sound_day_loan:true,
@@ -3881,7 +3873,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
   const isSoundLoan = form.loan_type==="סאונד";
   const isProductionLoan = form.loan_type==="הפקה";
   const isSoundDayLoan = isSoundLoan && !!form.sound_day_loan;
-  const soundDayLoanDate = isSoundDayLoan ? getNextSoundDayLoanDate(TIME_SLOTS) : "";
+  const soundDayLoanDate = isSoundDayLoan ? getNextSoundDayLoanDate() : "";
   const disableSoundDayHourLimit = true;
   const availableBorrowSlots = isSoundDayLoan && !disableSoundDayHourLimit ? getFutureTimeSlotsForDate(soundDayLoanDate, TIME_SLOTS) : TIME_SLOTS;
   // Cinema: limit return time to max 6 hours after borrow time
