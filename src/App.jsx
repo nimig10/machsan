@@ -3669,8 +3669,8 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
         <div className="form-card-header" style={{position:"relative"}}>
           <button type="button" onClick={()=>setShowInfoPanel(true)}
             title="מידע כללי, נהלים וערכות"
-            style={{position:"absolute",top:12,left:12,width:48,height:48,borderRadius:"50%",border:"3px solid #ffd24d",background:"linear-gradient(135deg,#ffe27a,#ffb300)",color:"#2b1a00",fontSize:22,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,boxShadow:"0 0 0 4px rgba(255,179,0,0.18), 0 10px 28px rgba(255,179,0,0.45)"}}>
-            ℹ
+            style={{position:"absolute",top:12,left:12,width:56,height:56,borderRadius:"50%",border:"none",background:"transparent",padding:0,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,boxShadow:"0 0 0 4px rgba(255,179,0,0.18), 0 10px 28px rgba(255,179,0,0.45)"}}>
+            <img src="/info1.svg" alt="מידע" style={{width:"100%",height:"100%"}} />
           </button>
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",paddingInline:"24px"}}>
             {siteSettings.logo
