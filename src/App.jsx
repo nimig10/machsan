@@ -626,35 +626,19 @@ function Loading() {
 }
 
 // ─── EQUIPMENT PAGE ───────────────────────────────────────────────────────────
-function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories, certifications={types:[],students:[]} }) {
+function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories, categoryTypes={}, setCategoryTypes, certifications={types:[],students:[]} }) {
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState("הכל");
   const [selectedCats, setSelectedCats] = useState([]);
   const [typeFilter, setTypeFilter] = useState("הכל"); // "הכל" | "סאונד" | "צילום"
   const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [renamingCat, setRenamingCat] = useState(null); // category name being renamed
-  const [renameVal, setRenameVal]     = useState("");
 
   const filtered = equipment.filter(e =>
     (selectedCats.length===0||selectedCats.includes(e.category)) &&
     e.name.includes(search) &&
     (typeFilter==="הכל" || (typeFilter==="סאונד" && e.soundOnly) || (typeFilter==="צילום" && e.photoOnly))
   );
-
-  const renameCategory = async (oldName, newName) => {
-    newName = newName.trim();
-    if(!newName || newName===oldName) { setRenamingCat(null); return; }
-    if(categories.includes(newName)) { showToast("error","קטגוריה בשם זה כבר קיימת"); return; }
-    const updatedCats = categories.map(c=>c===oldName?newName:c);
-    const updatedEq   = equipment.map(e=>e.category===oldName?{...e,category:newName}:e);
-    setCategories(updatedCats);
-    setEquipment(updatedEq);
-    setSelectedCats(prev=>prev.map(c=>c===oldName?newName:c));
-    await Promise.all([storageSet("categories",updatedCats), storageSet("equipment",updatedEq)]);
-    showToast("success",`קטגוריה "${oldName}" שונתה ל-"${newName}"`);
-    setRenamingCat(null);
-  };
 
   const updateQty = async (eq, delta) => {
     const newTotal = Math.max(1, (Number(eq.total_quantity) || 1) + delta);
@@ -842,7 +826,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       <div className="flex-between mb-4">
         <div className="search-bar"><span>🔍</span><input placeholder="חיפוש ציוד..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
         <div className="flex gap-2">
-          <button className="btn btn-secondary" onClick={()=>setModal({type:"addcat"})}>＋ קטגוריה</button>
+          <button className="btn btn-secondary" onClick={()=>setModal({type:"addcat"})}>＋ הוסף קטגוריה</button>
           <button className="btn btn-primary" onClick={()=>setModal({type:"add"})}>➕ הוסף ציוד</button>
         </div>
       </div>
@@ -861,35 +845,16 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
 
       {/* ── Category pills ── */}
       <div className="flex gap-2 mb-6" style={{flexWrap:"wrap",alignItems:"center"}}>
-        {categories.map(c=>{
+        {(typeFilter === "הכל" ? categories : categories.filter(c => categoryTypes[c] === typeFilter)).map(c=>{
           const active = selectedCats.includes(c);
           const hasItems = equipment.some(e=>e.category===c);
           return (
             <div key={c} style={{display:"flex",alignItems:"center",gap:0,borderRadius:8,overflow:"hidden",border:`1px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"var(--surface2)"}}>
-              {/* rename input or label */}
-              {renamingCat===c ? (
-                <input
-                  autoFocus
-                  value={renameVal}
-                  onChange={e=>setRenameVal(e.target.value)}
-                  onKeyDown={e=>{if(e.key==="Enter")renameCategory(c,renameVal);if(e.key==="Escape")setRenamingCat(null);}}
-                  onBlur={()=>renameCategory(c,renameVal)}
-                  style={{padding:"4px 8px",background:"var(--surface)",border:"none",outline:"none",fontSize:12,fontWeight:700,color:"var(--text)",width:Math.max(80,renameVal.length*9)+"px",minWidth:60}}
-                />
-              ) : (
-                <button
-                  className="btn btn-sm"
-                  style={{borderRadius:0,border:"none",background:"transparent",color:active?"var(--accent)":"var(--text2)",fontWeight:700,padding:"5px 10px"}}
-                  onClick={()=>setSelectedCats(prev=>active?prev.filter(x=>x!==c):[...prev,c])}>
-                  {c}
-                </button>
-              )}
-              {/* rename button ✏️ */}
               <button
-                title="שנה שם"
-                onClick={()=>{setRenamingCat(c);setRenameVal(c);}}
-                style={{padding:"5px 6px",border:"none",borderRight:"1px solid var(--border)",background:"transparent",color:"var(--text3)",cursor:"pointer",fontSize:11}}>
-                ✏️
+                className="btn btn-sm"
+                style={{borderRadius:0,border:"none",background:"transparent",color:active?"var(--accent)":"var(--text2)",fontWeight:700,padding:"5px 10px"}}
+                onClick={()=>setSelectedCats(prev=>active?prev.filter(x=>x!==c):[...prev,c])}>
+                {c}
               </button>
               {/* delete button ✕ */}
               <button
@@ -898,9 +863,12 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                 onClick={async()=>{
                   if(window.confirm(`למחוק את הקטגוריה "${c}"?`)){
                     const updated=categories.filter(x=>x!==c);
+                    const updatedTypes={...categoryTypes};
+                    delete updatedTypes[c];
                     setCategories(updated);
+                    setCategoryTypes(updatedTypes);
                     setSelectedCats(prev=>prev.filter(x=>x!==c));
-                    await storageSet("categories",updated);
+                    await Promise.all([storageSet("categories",updated), storageSet("categoryTypes",updatedTypes)]);
                     showToast("success",`קטגוריה "${c}" נמחקה`);
                   }
                 }}
@@ -914,7 +882,9 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
 
       {filtered.length===0 ? <div className="empty-state"><div className="emoji">📦</div><p>לא נמצא ציוד</p></div> : (
         <>
-          {(selectedCats.length>0?selectedCats:categories).filter(c=>filtered.some(e=>e.category===c)).map(c=>(
+          {(selectedCats.length>0?selectedCats:categories)
+            .filter(c => typeFilter === "הכל" || categoryTypes[c] === typeFilter)
+            .filter(c=>filtered.some(e=>e.category===c)).map(c=>(
             <div key={c} style={{marginBottom:32}}>
               <div style={{fontSize:13,fontWeight:800,color:"var(--text3)",textTransform:"uppercase",letterSpacing:1,marginBottom:12,paddingBottom:8,borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:8,justifyContent:"space-between",flexWrap:"wrap"}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
@@ -990,22 +960,158 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       {(modal?.type==="add"||modal?.type==="edit") && <Modal title={modal.type==="add"?"➕ הוספת ציוד":"✏️ עריכת ציוד"} onClose={()=>setModal(null)}><EqForm initial={modal.type==="edit"?modal.item:null}/></Modal>}
       {modal?.type==="units" && <UnitsModal eq={modal.item} equipment={equipment} setEquipment={setEquipment} showToast={showToast} onClose={()=>setModal(null)}/>}
       {modal?.type==="delete" && <Modal title="🗑️ מחיקת ציוד" onClose={()=>setModal(null)} footer={<><button className="btn btn-danger" onClick={()=>del(modal.item)}>כן, מחק</button><button className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button></>}><p>האם למחוק את <strong>{modal.item.name}</strong>?</p></Modal>}
-      {modal?.type==="addcat" && <AddCategoryModal categories={categories} onSave={async(newCat)=>{ const updated=[...categories,newCat]; setCategories(updated); await storageSet("categories",updated); showToast("success",`קטגוריה "${newCat}" נוספה`); setModal(null); }} onClose={()=>setModal(null)}/>}
+      {modal?.type==="addcat" && <ManageCategoriesModal
+        categories={categories}
+        categoryTypes={categoryTypes}
+        onClose={()=>setModal(null)}
+        onSave={async(action)=>{
+          if(action.action==="add") {
+            const updatedCats = [...categories, action.name];
+            const updatedTypes = {...categoryTypes, ...(action.type ? {[action.name]: action.type} : {})};
+            setCategories(updatedCats);
+            setCategoryTypes(updatedTypes);
+            await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes)]);
+            showToast("success", `קטגוריה "${action.name}" נוספה`);
+          } else if(action.action==="rename") {
+            const updatedCats = categories.map(c => c===action.oldName ? action.newName : c);
+            const updatedEq = equipment.map(e => e.category===action.oldName ? {...e, category:action.newName} : e);
+            const updatedTypes = {...categoryTypes};
+            if(action.oldName !== action.newName) { delete updatedTypes[action.oldName]; }
+            if(action.type) updatedTypes[action.newName] = action.type;
+            else delete updatedTypes[action.newName];
+            setCategories(updatedCats);
+            setEquipment(updatedEq);
+            setCategoryTypes(updatedTypes);
+            await Promise.all([storageSet("categories", updatedCats), storageSet("equipment", updatedEq), storageSet("categoryTypes", updatedTypes)]);
+            showToast("success", `קטגוריה עודכנה`);
+          } else if(action.action==="delete") {
+            const hasItems = equipment.some(e => e.category===action.name);
+            if(hasItems) { showToast("error", "לא ניתן למחוק — יש ציוד בקטגוריה זו"); return; }
+            const updatedCats = categories.filter(c => c!==action.name);
+            const updatedTypes = {...categoryTypes};
+            delete updatedTypes[action.name];
+            setCategories(updatedCats);
+            setCategoryTypes(updatedTypes);
+            await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes)]);
+            showToast("success", `קטגוריה "${action.name}" נמחקה`);
+          }
+        }}
+      />}
     </div>
   );
 }
 
-// ─── ADD CATEGORY MODAL ──────────────────────────────────────────────────────
-function AddCategoryModal({ categories, onSave, onClose }) {
-  const [name, setName] = useState("");
-  const exists = categories.includes(name.trim());
+// ─── MANAGE CATEGORIES MODAL ──────────────────────────────────────────────────
+function ManageCategoriesModal({ categories, categoryTypes, onSave, onClose }) {
+  const [newName, setNewName] = useState("");
+  const [newType, setNewType] = useState(""); // "" | "סאונד" | "צילום"
+  const [editingCat, setEditingCat] = useState(null); // {name, type}
+  const [editVal, setEditVal] = useState("");
+  const [editType, setEditType] = useState("");
+
+  const exists = categories.includes(newName.trim());
+
+  // Sort categories: סאונד first, then צילום, then unassigned
+  const sorted = [...categories].sort((a, b) => {
+    const order = { "סאונד": 0, "צילום": 1 };
+    const oa = order[categoryTypes[a]] ?? 2;
+    const ob = order[categoryTypes[b]] ?? 2;
+    return oa - ob;
+  });
+
+  const typeLabel = (t) => t === "סאונד" ? "🎙️ סאונד" : t === "צילום" ? "🎥 צילום" : "כללי";
+  const typeBadgeStyle = (t) => ({
+    display: "inline-flex", alignItems: "center", gap: 3,
+    padding: "2px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700,
+    background: t === "סאונד" ? "rgba(155,89,182,0.15)" : t === "צילום" ? "rgba(39,174,96,0.12)" : "rgba(255,255,255,0.06)",
+    color: t === "סאונד" ? "#9b59b6" : t === "צילום" ? "var(--green)" : "var(--text3)",
+    border: `1px solid ${t === "סאונד" ? "rgba(155,89,182,0.35)" : t === "צילום" ? "rgba(39,174,96,0.3)" : "var(--border)"}`,
+  });
+
   return (
-    <Modal title="➕ הוספת קטגוריה" onClose={onClose}
-      footer={<><button className="btn btn-primary" disabled={!name.trim()||exists} onClick={()=>onSave(name.trim())}>הוסף</button><button className="btn btn-secondary" onClick={onClose}>ביטול</button></>}>
-      <div className="form-group">
-        <label className="form-label">שם הקטגוריה *</label>
-        <input className="form-input" value={name} onChange={e=>setName(e.target.value)} placeholder="לדוגמה: סטאביליזרים"/>
-        {exists && <div style={{color:"var(--red)",fontSize:12,marginTop:4}}>קטגוריה זו כבר קיימת</div>}
+    <Modal title="📂 ניהול קטגוריות" onClose={onClose}>
+      {/* Existing categories */}
+      <div style={{marginBottom: 20}}>
+        <div style={{fontSize: 12, fontWeight: 800, color: "var(--text3)", marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.5}}>
+          קטגוריות קיימות ({categories.length})
+        </div>
+        <div style={{display: "flex", flexDirection: "column", gap: 6, maxHeight: 320, overflowY: "auto"}}>
+          {sorted.map(c => (
+            <div key={c} style={{display: "flex", alignItems: "center", gap: 8, background: "var(--surface2)", borderRadius: 8, padding: "8px 12px", border: "1px solid var(--border)"}}>
+              {editingCat === c ? (
+                <>
+                  <input
+                    autoFocus
+                    value={editVal}
+                    onChange={e => setEditVal(e.target.value)}
+                    onKeyDown={e => { if(e.key === "Escape") setEditingCat(null); }}
+                    style={{flex: 1, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 6, padding: "4px 8px", color: "var(--text)", fontSize: 13}}
+                  />
+                  <select
+                    value={editType}
+                    onChange={e => setEditType(e.target.value)}
+                    style={{background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 6, padding: "4px 8px", color: "var(--text)", fontSize: 12}}
+                  >
+                    <option value="">כללי</option>
+                    <option value="סאונד">🎙️ סאונד</option>
+                    <option value="צילום">🎥 צילום</option>
+                  </select>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => { onSave({action:"rename", oldName: c, newName: editVal.trim(), type: editType}); setEditingCat(null); }}
+                    disabled={!editVal.trim() || (editVal.trim() !== c && categories.includes(editVal.trim()))}
+                  >שמור</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setEditingCat(null)}>ביטול</button>
+                </>
+              ) : (
+                <>
+                  <span style={{flex: 1, fontSize: 13, fontWeight: 700}}>{c}</span>
+                  <span style={typeBadgeStyle(categoryTypes[c])}>{typeLabel(categoryTypes[c])}</span>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => { setEditingCat(c); setEditVal(c); setEditType(categoryTypes[c] || ""); }}
+                    title="ערוך">✏️</button>
+                  <button
+                    className="btn btn-danger btn-sm"
+                    onClick={() => onSave({action:"delete", name: c})}
+                    title="מחק">🗑️</button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Add new category */}
+      <div style={{borderTop: "1px solid var(--border)", paddingTop: 16}}>
+        <div style={{fontSize: 12, fontWeight: 800, color: "var(--text3)", marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.5}}>הוסף קטגוריה חדשה</div>
+        <div style={{display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap"}}>
+          <div style={{flex: 1, minWidth: 140}}>
+            <input
+              className="form-input"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              placeholder="שם הקטגוריה..."
+              onKeyDown={e => { if(e.key === "Enter" && newName.trim() && !exists) { onSave({action:"add", name: newName.trim(), type: newType}); setNewName(""); setNewType(""); }}}
+            />
+            {exists && <div style={{color: "var(--red)", fontSize: 11, marginTop: 3}}>קטגוריה זו כבר קיימת</div>}
+          </div>
+          <select
+            value={newType}
+            onChange={e => setNewType(e.target.value)}
+            className="form-select"
+            style={{flex: "0 0 auto", minWidth: 120}}
+          >
+            <option value="">כללי</option>
+            <option value="סאונד">🎙️ סאונד</option>
+            <option value="צילום">🎥 צילום</option>
+          </select>
+          <button
+            className="btn btn-primary"
+            disabled={!newName.trim() || exists}
+            onClick={() => { onSave({action:"add", name: newName.trim(), type: newType}); setNewName(""); setNewType(""); }}
+          >+ הוסף</button>
+        </div>
       </div>
     </Modal>
   );
@@ -6962,6 +7068,7 @@ export default function App() {
   const [equipment, _setEquipment]     = useState([]);
   const [reservations, _setReservations] = useState([]);
   const [categories, _setCategories]   = useState(DEFAULT_CATEGORIES);
+  const [categoryTypes, _setCategoryTypes] = useState({});
   const [teamMembers, _setTeamMembers] = useState([]);
   const [deptHeads, _setDeptHeads]       = useState([]);
   const [collegeManager, _setCollegeManager] = useState({ name:"", email:"" });
@@ -6984,6 +7091,7 @@ export default function App() {
   const equipmentRef = useRef(equipment);
   const reservationsRef = useRef(reservations);
   const categoriesRef = useRef(categories);
+  const categoryTypesRef = useRef(categoryTypes);
   const teamMembersRef = useRef(teamMembers);
   const deptHeadsRef = useRef(deptHeads);
   const collegeManagerRef = useRef(collegeManager);
@@ -6998,6 +7106,7 @@ export default function App() {
   equipmentRef.current = equipment;
   reservationsRef.current = reservations;
   categoriesRef.current = categories;
+  categoryTypesRef.current = categoryTypes;
   teamMembersRef.current = teamMembers;
   deptHeadsRef.current = deptHeads;
   collegeManagerRef.current = collegeManager;
@@ -7060,6 +7169,7 @@ export default function App() {
   const setEquipment = createTrackedSetter(_setEquipment);
   const setReservations = createTrackedSetter(_setReservations);
   const setCategories = createTrackedSetter(_setCategories);
+  const setCategoryTypes = createTrackedSetter(_setCategoryTypes);
   const setTeamMembers = createTrackedSetter(_setTeamMembers);
   const setDeptHeads = createTrackedSetter(_setDeptHeads);
   const setCollegeManager = createTrackedSetter(_setCollegeManager);
@@ -7109,10 +7219,11 @@ export default function App() {
     (async()=>{
         try {
           historySuspendedRef.current = true;
-          const [eq, res, cats, tm, kts, pol, certs, dhs, calTok, mgr, mgrTok, siteSet] = await Promise.all([
+          const [eq, res, cats, catTypes, tm, kts, pol, certs, dhs, calTok, mgr, mgrTok, siteSet] = await Promise.all([
             storageGet("equipment"),
           storageGet("reservations"),
           storageGet("categories"),
+          storageGet("categoryTypes"),
           storageGet("teamMembers"),
           storageGet("kits"),
           storageGet("policies"),
@@ -7131,6 +7242,7 @@ export default function App() {
           _setEquipment(normalizedEquipment);
           _setReservations(normalizedReservations);
           _setCategories(cats || DEFAULT_CATEGORIES);
+          _setCategoryTypes(catTypes || {});
         _setTeamMembers(tm || []);
         _setKits(kts || []);
         _setPolicies(pol || { פרטית:"", הפקה:"", סאונד:"" });
@@ -7372,7 +7484,7 @@ export default function App() {
             </div>
             {loading ? <Loading/> : <>
               {page==="dashboard"   && <DashboardPage    equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast}/>}
-              {page==="equipment"   && <EquipmentPage    equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} certifications={certifications}/>}
+              {page==="equipment"   && <EquipmentPage    equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} certifications={certifications}/>}
               {page==="reservations"&& <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}
