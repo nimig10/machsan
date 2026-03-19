@@ -321,7 +321,7 @@ function getReservationApprovalConflicts(targetReservation, reservations, equipm
     }
 
     const requested = Number(item.quantity) || 0;
-    const total = Number(eq.total_quantity) || 0;
+    const total = workingUnits(eq);
     const available = Math.max(0, total - used);
 
     if (requested > available) {
@@ -4974,6 +4974,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     const [xlImporting, setXlImporting]     = useState(false);
     const [teacherMessage, setTeacherMessage] = useState("");
     const [teacherEmailSending, setTeacherEmailSending] = useState(false);
+    const [kitConflicts, setKitConflicts] = useState(null); // {session, conflicts}[]
     const isEditMode = !!initial;
     const [localMsg, setLocalMsg] = useState(null); // {type:"success"|"error", text:""}
 
@@ -5183,9 +5184,64 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         setLocalMsg({type:"error",text:"יש להוסיף לפחות שיעור אחד — בחר תאריך ושעות"});
         return;
       }
+      if(!kitItems.length) {
+        setLocalMsg({type:"error",text:"יש לבחור לפחות פריט ציוד אחד לערכה"});
+        return;
+      }
+
+      // ── Availability check: ensure no item goes to negative inventory ──
+      const kitId = initial?.id||`lk_${Date.now()}`;
+      const baseRes = (reservations||[]).filter(r=>r.lesson_kit_id!==kitId);
+      const sessionConflicts = [];
+      for (let si = 0; si < finalSchedule.length; si++) {
+        const s = finalSchedule[si];
+        const sessionLabel = `שיעור ${si+1} — ${formatDate(s.date)} ${s.startTime||""}–${s.endTime||""}`;
+        const itemConflicts = [];
+        for (const item of kitItems) {
+          const eq = equipment.find(e=>e.id==item.equipment_id);
+          if (!eq) continue;
+          // Build list of reservations to check against: baseRes + earlier sessions from THIS kit
+          const checkRes = [...baseRes];
+          for (let pi = 0; pi < si; pi++) {
+            const ps = finalSchedule[pi];
+            checkRes.push({
+              id: `__kit_check_${pi}`, status: "מאושר",
+              borrow_date: ps.date, borrow_time: ps.startTime||"00:00",
+              return_date: ps.date, return_time: ps.endTime||"23:59",
+              items: kitItems,
+            });
+          }
+          const avail = getAvailable(item.equipment_id, s.date, s.date, checkRes, equipment, null, s.startTime||"", s.endTime||"");
+          if (item.quantity > avail) {
+            // Find who's blocking
+            const blockers = [];
+            const reqStart = toDateTime(s.date, s.startTime||"00:00");
+            const reqEnd   = toDateTime(s.date, s.endTime||"23:59");
+            for (const res of baseRes) {
+              if (res.status !== "מאושר" && res.status !== "באיחור") continue;
+              const resStart = toDateTime(res.borrow_date, res.borrow_time||"00:00");
+              const resEnd   = res.status === "באיחור" ? FAR_FUTURE : toDateTime(res.return_date, res.return_time||"23:59");
+              if (!(reqStart < resEnd && reqEnd > resStart)) continue;
+              const bi = (res.items||[]).find(i=>i.equipment_id==item.equipment_id);
+              if (bi && bi.quantity > 0) {
+                blockers.push({ student_name: res.student_name||"ללא שם", quantity: bi.quantity, status: res.status, borrow_date: res.borrow_date, return_date: res.return_date });
+              }
+            }
+            itemConflicts.push({ equipment_name: eq.name, requested: item.quantity, available: avail, missing: item.quantity - avail, blockers });
+          }
+        }
+        if (itemConflicts.length) sessionConflicts.push({ label: sessionLabel, date: s.date, conflicts: itemConflicts });
+      }
+      if (sessionConflicts.length) {
+        setKitConflicts(sessionConflicts);
+        setSaving(false);
+        return;
+      }
+      setKitConflicts(null);
+      // ── End availability check ──
+
       setSaving(true);
 
-      const kitId = initial?.id||`lk_${Date.now()}`;
       const kit = {
         id: kitId, kitType:"lesson",
         name: name.trim(),
@@ -5199,7 +5255,6 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       setKits(updatedKits);
 
       // Create/replace associated reservations (one per session)
-      const baseRes = (reservations||[]).filter(r=>r.lesson_kit_id!==kitId);
       const newRes = finalSchedule.map((s,i)=>({
         id: `${kitId}_s${i}`,
         lesson_kit_id: kitId,
@@ -5246,6 +5301,36 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
             display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span>{localMsg.type==="error"?"❌":"✅"} {localMsg.text}</span>
             <button onClick={()=>setLocalMsg(null)} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:16,padding:"0 4px"}}>×</button>
+          </div>
+        )}
+
+        {/* ── Kit availability conflict warning ── */}
+        {kitConflicts && (
+          <div style={{padding:16,marginBottom:16,borderRadius:"var(--r-sm)",background:"rgba(231,76,60,0.08)",border:"1px solid rgba(231,76,60,0.35)"}}>
+            <div style={{fontWeight:700,fontSize:15,color:"#e74c3c",marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
+              <span>⚠️</span><span>לא ניתן לשמור — חוסר ציוד זמין</span>
+              <button onClick={()=>setKitConflicts(null)} style={{marginRight:"auto",background:"none",border:"none",color:"#e74c3c",cursor:"pointer",fontSize:18,padding:"0 4px"}}>×</button>
+            </div>
+            <div style={{fontSize:12,color:"var(--text2)",marginBottom:10}}>הציוד הנדרש לערכת השיעור אינו זמין בתאריכים הבאים בגלל השאלות קיימות או ציוד באיחור:</div>
+            {kitConflicts.map((sc,si)=>(
+              <div key={si} style={{marginBottom:12,padding:10,borderRadius:8,background:"rgba(231,76,60,0.04)",border:"1px solid rgba(231,76,60,0.15)"}}>
+                <div style={{fontWeight:600,fontSize:13,color:"var(--text1)",marginBottom:6}}>📅 {sc.label}</div>
+                {sc.conflicts.map((c,ci)=>(
+                  <div key={ci} style={{marginBottom:8,paddingRight:12}}>
+                    <div style={{fontSize:13,fontWeight:600,color:"#e74c3c"}}>
+                      {c.equipment_name}: נדרש {c.requested}, זמין {c.available} — חסר {c.missing}
+                    </div>
+                    {c.blockers.map((b,bi)=>(
+                      <div key={bi} style={{fontSize:11,color:"var(--text3)",paddingRight:8,marginTop:2,display:"flex",alignItems:"center",gap:6}}>
+                        {b.status==="באיחור" && <span style={{background:"rgba(230,126,34,0.15)",color:"#e67e22",padding:"1px 6px",borderRadius:4,fontWeight:700,fontSize:10}}>באיחור</span>}
+                        <span>{b.student_name} · {b.quantity} יח׳ · {formatDate(b.borrow_date)}–{formatDate(b.return_date)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ))}
+            <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>💡 יש להחזיר את הציוד באיחור או להקטין כמויות בערכה לפני השמירה</div>
           </div>
         )}
 
