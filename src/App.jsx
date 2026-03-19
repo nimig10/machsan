@@ -647,7 +647,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   const filtered = equipment.filter(e =>
     (selectedCats.length===0||selectedCats.includes(e.category)) &&
     e.name.includes(search) &&
-    (typeFilter==="הכל" || (()=>{const g=(!e.soundOnly&&!e.photoOnly)||(e.soundOnly&&e.photoOnly);return(typeFilter==="סאונד"&&(e.soundOnly||g))||(typeFilter==="צילום"&&(e.photoOnly||g));})()
+    (typeFilter==="הכל" || (()=>{const g=(!e.soundOnly&&!e.photoOnly)||(e.soundOnly&&e.photoOnly);return(typeFilter==="סאונד"&&(e.soundOnly||g))||(typeFilter==="צילום"&&(e.photoOnly||g));})())
   );
 
   const updateQty = async (eq, delta) => {
