@@ -3267,6 +3267,10 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
                         <button className="qty-btn" disabled={atMax} style={{opacity:atMax?0.3:1}}
                           onClick={()=>{ if(!atMax) setQty(eq.id, Math.min(itm.quantity+1, effectiveMax)); }}>+</button>
                       </div>
+                    : eq.overdueBlocked
+                    ? <div style={{fontSize:11,color:"#e67e22",fontWeight:700,textAlign:"center",maxWidth:130,lineHeight:1.3,padding:"5px 8px",background:"rgba(230,126,34,0.1)",borderRadius:6,border:"1px solid rgba(230,126,34,0.35)"}}>
+                        ⚠️ חסום ע״י השאלה באיחור
+                      </div>
                     : <span className="badge badge-red">לא זמין</span>
                   }
                 </div>
@@ -3727,7 +3731,14 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
 
   const availEq = useMemo(()=>{
     if(!form.borrow_date||!form.return_date) return [];
-    return equipment.map(eq=>({...eq, avail: getAvailable(eq.id,form.borrow_date,form.return_date,reservations,equipment,null,form.borrow_time,form.return_time)}));
+    return equipment.map(eq=>{
+      const avail = getAvailable(eq.id,form.borrow_date,form.return_date,reservations,equipment,null,form.borrow_time,form.return_time);
+      // Check if the 0-availability is caused by an overdue reservation holding this item
+      const overdueBlocked = avail === 0 && reservations.some(r =>
+        r.status === "באיחור" && (r.items||[]).some(i => i.equipment_id == eq.id && Number(i.quantity) > 0)
+      );
+      return {...eq, avail, overdueBlocked};
+    });
   },[form.borrow_date,form.return_date,form.borrow_time,form.return_time,equipment,reservations]);
 
   const getItem = id => items.find(i=>i.equipment_id==id)||{quantity:0};
