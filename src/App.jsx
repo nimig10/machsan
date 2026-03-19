@@ -6329,7 +6329,7 @@ function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equi
     .sort((a,b)=>a.borrow_date<b.borrow_date?-1:1);
 
   return (
-    <div style={{maxWidth:1100,margin:"0 auto",padding:"24px 16px",direction:"rtl"}}>
+    <div style={{maxWidth:1100,margin:"0 auto",padding:"24px 16px",direction:"rtl","--accent":siteSettings.adminAccentColor||"#f5a623","--accent-glow":`${siteSettings.adminAccentColor||"#f5a623"}2e`}}>
       {/* Header */}
       <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:24,flexWrap:"wrap"}}>
         {siteSettings.logo
@@ -6536,7 +6536,7 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
   };
 
   return (
-    <div style={{maxWidth:1100,margin:"0 auto",padding:"24px 16px",direction:"rtl"}}>
+    <div style={{maxWidth:1100,margin:"0 auto",padding:"24px 16px",direction:"rtl","--accent":siteSettings.adminAccentColor||"#f5a623","--accent-glow":`${siteSettings.adminAccentColor||"#f5a623"}2e`}}>
       {/* Header */}
       <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:24,flexWrap:"wrap"}}>
         {siteSettings.logo
