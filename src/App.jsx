@@ -634,6 +634,16 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
 
+  // Derive category effective type: explicit tag wins, else from items
+  const getCatType = (catName) => {
+    if (categoryTypes[catName]) return categoryTypes[catName];
+    const catItems = equipment.filter(e => e.category === catName);
+    if (!catItems.length) return null;
+    if (catItems.every(e => e.soundOnly)) return "סאונד";
+    if (catItems.every(e => e.photoOnly)) return "צילום";
+    return null;
+  };
+
   const filtered = equipment.filter(e =>
     (selectedCats.length===0||selectedCats.includes(e.category)) &&
     e.name.includes(search) &&
@@ -845,7 +855,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
 
       {/* ── Category pills ── */}
       <div className="flex gap-2 mb-6" style={{flexWrap:"wrap",alignItems:"center"}}>
-        {(typeFilter === "הכל" ? categories : categories.filter(c => categoryTypes[c] === typeFilter)).map(c=>{
+        {(typeFilter === "הכל" ? categories : categories.filter(c => getCatType(c) === typeFilter)).map(c=>{
           const active = selectedCats.includes(c);
           const hasItems = equipment.some(e=>e.category===c);
           return (
@@ -883,7 +893,6 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       {filtered.length===0 ? <div className="empty-state"><div className="emoji">📦</div><p>לא נמצא ציוד</p></div> : (
         <>
           {(selectedCats.length>0?selectedCats:categories)
-            .filter(c => typeFilter === "הכל" || categoryTypes[c] === typeFilter)
             .filter(c=>filtered.some(e=>e.category===c)).map(c=>(
             <div key={c} style={{marginBottom:32}}>
               <div style={{fontSize:13,fontWeight:800,color:"var(--text3)",textTransform:"uppercase",letterSpacing:1,marginBottom:12,paddingBottom:8,borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:8,justifyContent:"space-between",flexWrap:"wrap"}}>
