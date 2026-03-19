@@ -3664,13 +3664,19 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
 
   return (
     <>
-    <div className="form-page">
+    <div className="form-page" style={{"--accent": siteSettings.accentColor||"#f5a623","--accent2": siteSettings.accentColor||"#f5a623","--accent-glow":`${siteSettings.accentColor||"#f5a623"}2e`}}>
       <div className="form-card">
         <div className="form-card-header" style={{position:"relative"}}>
           <button type="button" onClick={()=>setShowInfoPanel(true)}
             title="מידע כללי, נהלים וערכות"
-            style={{position:"absolute",top:12,left:12,width:56,height:56,borderRadius:"50%",border:"none",background:"transparent",padding:0,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2}}>
-            <img src="/info1.svg" alt="מידע" style={{width:"100%",height:"100%"}} />
+            style={{position:"absolute",top:14,left:14,width:42,height:42,borderRadius:"50%",border:"none",background:"transparent",padding:0,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,color:"var(--accent)",opacity:0.9,transition:"opacity 0.15s"}}
+            onMouseEnter={e=>e.currentTarget.style.opacity=1}
+            onMouseLeave={e=>e.currentTarget.style.opacity=0.9}>
+            <svg width="42" height="42" viewBox="0 0 42 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="21" cy="21" r="19" stroke="currentColor" strokeWidth="2.2"/>
+              <circle cx="21" cy="14.5" r="2.2" fill="currentColor"/>
+              <rect x="19.4" y="19.5" width="3.2" height="10.5" rx="1.6" fill="currentColor"/>
+            </svg>
           </button>
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",paddingInline:"24px"}}>
             {siteSettings.logo
@@ -6583,6 +6589,38 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast }) {
         </div>
       </div>
 
+      {/* Accent Color */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-header"><div className="card-title">🎨 בחירת צבע לחצנים / טקסט</div></div>
+        <div style={{ padding: "16px 20px" }}>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14 }}>
+            הצבע יוחל על הלחצנים, הכותרות והטקסטים הצבעוניים בטופס השאלת הציוד ועל אייקון המידע.
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+            <input type="color" value={draft.accentColor||"#f5a623"}
+              onChange={e => setDraft(p => ({ ...p, accentColor: e.target.value }))}
+              style={{ width: 52, height: 40, borderRadius: 8, border: "2px solid var(--border)", background: "none", cursor: "pointer", padding: 2 }} />
+            <span style={{ fontSize: 13, color: "var(--text2)", fontFamily: "monospace" }}>{draft.accentColor||"#f5a623"}</span>
+            <button type="button" className="btn btn-secondary" style={{ fontSize: 12 }}
+              onClick={() => setDraft(p => ({ ...p, accentColor: "#f5a623" }))}>
+              ↩ איפוס לברירת מחדל
+            </button>
+          </div>
+          <div style={{ marginTop: 14, padding: "12px 16px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border)" }}>
+            <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 8 }}>תצוגה מקדימה:</div>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+              <button type="button" style={{ background: draft.accentColor||"#f5a623", color: "#0a0c10", border: "none", borderRadius: 8, padding: "8px 18px", fontWeight: 800, cursor: "default", fontSize: 13 }}>כפתור לדוגמה</button>
+              <span style={{ color: draft.accentColor||"#f5a623", fontWeight: 800, fontSize: 14 }}>טקסט צבעוני</span>
+              <svg width="32" height="32" viewBox="0 0 42 42" fill="none" style={{ color: draft.accentColor||"#f5a623" }}>
+                <circle cx="21" cy="21" r="19" stroke="currentColor" strokeWidth="2.2"/>
+                <circle cx="21" cy="14.5" r="2.2" fill="currentColor"/>
+                <rect x="19.4" y="19.5" width="3.2" height="10.5" rx="1.6" fill="currentColor"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <button className="btn btn-primary" disabled={saving} onClick={save} style={{ fontSize: 15, padding: "12px 32px" }}>
         {saving ? "⏳ שומר..." : "💾 שמור הגדרות"}
       </button>
@@ -6812,7 +6850,7 @@ export default function App() {
   const [kits, _setKits]               = useState([]);
   const [policies, _setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"" });
   const [certifications, _setCertifications] = useState({ types:[], students:[] });
-  const [siteSettings, _setSiteSettings] = useState({ logo:"", theme:"dark" });
+  const [siteSettings, _setSiteSettings] = useState({ logo:"", theme:"dark", accentColor:"#f5a623" });
   const [loading, setLoading]         = useState(true);
   const [toasts, setToasts]           = useState([]);
   const [authed, setAuthed]           = useState(false);
