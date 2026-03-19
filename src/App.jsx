@@ -947,7 +947,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
               </div>
               <div className="eq-grid">
                 {filtered.filter(e=>e.category===c).map(eq=>(
-                  <div key={eq.id} className="eq-card" style={{position:"relative"}}>
+                  <div key={eq.id} className="eq-card" style={{position:"relative",cursor:"pointer"}} onClick={()=>setModal({type:"edit",item:eq})}>
                     {/* ── Cert badge ── */}
                     {eq.certification_id&&(
                       <div title={`דורש הסמכה: ${certifications?.types?.find(t=>t.id===eq.certification_id)?.name||"הסמכה"}`}
@@ -968,21 +968,14 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                       {eq.soundOnly && <div className="chip" style={{color:"var(--accent)",borderColor:"var(--accent)"}}>🎙️ ציוד סאונד</div>}
                       {eq.photoOnly && <div className="chip" style={{color:"var(--green)",borderColor:"rgba(39,174,96,0.45)"}}>🎥 ציוד צילום</div>}
                     </div>
-                    <div style={{fontSize:13,marginBottom:6}}>
+                    <div style={{fontSize:13}}>
                       <strong style={{color:"var(--accent)",fontSize:20}}>{workingUnits(eq)-used(eq.id)}</strong>
                       <span style={{color:"var(--text3)"}}> / {workingUnits(eq)} זמין</span>
                       {workingUnits(eq)<eq.total_quantity&&<span style={{color:"var(--red)",fontSize:11,fontWeight:700,marginRight:6}}> · {eq.total_quantity-workingUnits(eq)} בדיקה 🔧</span>}
                     </div>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <button onClick={e=>{e.stopPropagation();updateQty(eq,-1);}} disabled={workingUnits(eq)<=1}
-                        style={{width:28,height:28,borderRadius:8,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",fontSize:18,fontWeight:700,cursor:workingUnits(eq)<=1?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:workingUnits(eq)<=1?0.4:1,lineHeight:1}}>−</button>
-                      <span style={{fontWeight:800,fontSize:13,minWidth:18,textAlign:"center"}}>{workingUnits(eq)}</span>
-                      <button onClick={e=>{e.stopPropagation();updateQty(eq,1);}}
-                        style={{width:28,height:28,borderRadius:8,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",fontSize:18,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>+</button>
-                    </div>
                     {eq.notes && <div className="chip" style={{marginTop:6}}>💬 {eq.notes}</div>}
                     <div style={{marginTop:8}}>{statusBadge(eq.status)}</div>
-                    <div className="flex gap-2" style={{marginTop:12,flexWrap:"wrap"}}>
+                    <div className="flex gap-2" style={{marginTop:12,flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
                       <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"edit",item:eq})}>✏️ עריכה</button>
                       <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"units",item:eq})}>🔧 יחידות</button>
                       <button className="btn btn-danger btn-sm" onClick={()=>setModal({type:"delete",item:eq})}>🗑️</button>
