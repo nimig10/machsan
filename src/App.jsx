@@ -2706,7 +2706,7 @@ function DashboardPage({ equipment, reservations, setReservations, showToast }) 
         {/* ── שיעורים להכנה ── */}
         {(()=>{
           const upcomingLessons = reservations
-            .filter(r=>r.loan_type==="שיעור" && r.borrow_date >= todayStr)
+            .filter(r=>r.loan_type==="שיעור" && r.borrow_date >= todayStr && r.status!=="שיעור שהסתיים")
             .sort((a,b)=>a.borrow_date<b.borrow_date?-1:a.borrow_time<b.borrow_time?-1:1)
             .slice(0,5);
           if(!upcomingLessons.length) return null;
