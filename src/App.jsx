@@ -340,6 +340,44 @@ function getReservationApprovalConflicts(targetReservation, reservations, equipm
   return conflicts;
 }
 
+// Detect consecutive bookings — same equipment, reservation ends shortly before target starts (within 2h gap)
+function getConsecutiveBookingWarnings(targetReservation, reservations, equipment) {
+  if (!targetReservation) return [];
+  const reqStart = toDateTime(targetReservation.borrow_date, targetReservation.borrow_time || "00:00");
+  const TWO_HOURS = 2 * 60 * 60 * 1000;
+  const warnings = [];
+  const seen = new Set();
+
+  for (const item of targetReservation.items || []) {
+    const eq = equipment.find(e => e.id == item.equipment_id);
+    if (!eq) continue;
+
+    for (const res of reservations) {
+      if (res.id === targetReservation.id) continue;
+      if (res.status !== "מאושר") continue;
+      const blockingItem = (res.items || []).find(i => i.equipment_id == item.equipment_id);
+      if (!blockingItem || !blockingItem.quantity) continue;
+
+      const resEnd = toDateTime(res.return_date, res.return_time || "23:59");
+      const gap = reqStart - resEnd; // ms between previous return and new borrow
+      if (gap > 0 && gap <= TWO_HOURS) {
+        const key = `${res.id}_${item.equipment_id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        warnings.push({
+          equipment_name: eq.name,
+          student_name: res.student_name || "ללא שם",
+          return_date: res.return_date,
+          return_time: res.return_time || "23:59",
+          quantity: blockingItem.quantity,
+          reservation_id: res.id,
+        });
+      }
+    }
+  }
+  return warnings;
+}
+
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap');
@@ -1719,6 +1757,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
   const [selected, setSelected] = useState(null);
   const [editing, setEditing]   = useState(null);
   const [approvalConflict, setApprovalConflict] = useState(null);
+  const [consecutiveWarning, setConsecutiveWarning] = useState(null); // {reservation, warnings}
   const [showManualForm, setShowManualForm] = useState(false);
   const [overdueEmailText, setOverdueEmailText] = useState("");
   const [overdueEmailSending, setOverdueEmailSending] = useState(false);
@@ -1844,15 +1883,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
     }
   };
 
-  const approveReservation = async (reservationToApprove) => {
-    const conflicts = getReservationApprovalConflicts(reservationToApprove, reservations, equipment);
-    if (conflicts.length) {
-      const hasOverdueBlock = conflicts.some(c => c.blockers.some(b => b.status === "באיחור"));
-      setApprovalConflict({ reservation: reservationToApprove, conflicts });
-      showToast("error", hasOverdueBlock ? "לא ניתן לאשר — ציוד נמצא באיחור אצל סטודנט אחר" : "לא ניתן לאשר - אין מספיק מלאי בחפיפת הזמנים");
-      return false;
-    }
-
+  const doApprove = async (reservationToApprove) => {
     const updated = normalizeReservationsForArchive(reservations.map((r) =>
       r.id === reservationToApprove.id ? { ...reservationToApprove, status: "מאושר" } : r
     ));
@@ -1861,7 +1892,30 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
     await sendStatusEmail({ ...reservationToApprove, status: "מאושר" }, "מאושר");
     showToast("success", "הבקשה אושרה");
     setSelected(null);
+    setConsecutiveWarning(null);
     return true;
+  };
+
+  const approveReservation = async (reservationToApprove, skipConsecutiveCheck=false) => {
+    // 1) Hard block — not enough inventory (overdue / overlapping)
+    const conflicts = getReservationApprovalConflicts(reservationToApprove, reservations, equipment);
+    if (conflicts.length) {
+      const hasOverdueBlock = conflicts.some(c => c.blockers.some(b => b.status === "באיחור"));
+      setApprovalConflict({ reservation: reservationToApprove, conflicts });
+      showToast("error", hasOverdueBlock ? "לא ניתן לאשר — ציוד נמצא באיחור אצל סטודנט אחר" : "לא ניתן לאשר - אין מספיק מלאי בחפיפת הזמנים");
+      return false;
+    }
+
+    // 2) Soft warning — consecutive bookings with tight gap (allow override)
+    if (!skipConsecutiveCheck) {
+      const warnings = getConsecutiveBookingWarnings(reservationToApprove, reservations, equipment);
+      if (warnings.length) {
+        setConsecutiveWarning({ reservation: reservationToApprove, warnings });
+        return false;
+      }
+    }
+
+    return doApprove(reservationToApprove);
   };
 
   const updateStatus = async (id, status) => {
@@ -2217,6 +2271,42 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
         );
       })()}
 
+      {consecutiveWarning && (
+        <Modal
+          title={`⚠️ שים לב — בקשות עוקבות קרובות בזמן`}
+          onClose={()=>setConsecutiveWarning(null)}
+          size="modal-lg"
+          footer={<div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+            <button className="btn btn-secondary" onClick={()=>setConsecutiveWarning(null)}>ביטול</button>
+            <button className="btn btn-success" onClick={()=>doApprove(consecutiveWarning.reservation)}>✅ אשר בכל זאת</button>
+          </div>}
+        >
+          <div style={{background:"rgba(241,196,15,0.1)",border:"2px solid rgba(241,196,15,0.45)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16,display:"flex",gap:12,alignItems:"flex-start"}}>
+            <span style={{fontSize:22,lineHeight:1}}>⚠️</span>
+            <div>
+              <div style={{fontWeight:900,fontSize:14,color:"var(--yellow)",marginBottom:4}}>סטודנט קודם עלול לאחר בהחזרת ציוד</div>
+              <div style={{fontSize:13,color:"var(--text2)"}}>הפריטים הבאים מושאלים לסטודנט אחר שזמן ההחזרה שלו מסתיים זמן קצר לפני תחילת ההשאלה הנוכחית. במידה והסטודנט יאחר — לא יהיה ציוד זמין.</div>
+            </div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>
+            {consecutiveWarning.warnings.map((w, idx) => (
+              <div key={idx} style={{background:"var(--surface2)",border:"1px solid rgba(241,196,15,0.28)",borderRadius:"var(--r-sm)",padding:14,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:10,alignItems:"center"}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:15}}>{w.equipment_name} <span style={{color:"var(--yellow)"}}>×{w.quantity}</span></div>
+                  <div style={{fontSize:12,color:"var(--text2)",marginTop:4}}>מושאל ל-<strong>{w.student_name}</strong></div>
+                </div>
+                <div style={{fontSize:13,color:"var(--text2)",textAlign:"left"}}>
+                  <div>↩ החזרה: {formatDate(w.return_date)} {w.return_time}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="highlight-box" style={{marginTop:16}}>
+            כדאי להמתין להחזרת הציוד של <strong>{consecutiveWarning.warnings[0]?.student_name}</strong> לפני אישור הבקשה של <strong>{consecutiveWarning.reservation.student_name}</strong>.
+          </div>
+        </Modal>
+      )}
+
       {selected && (
         <Modal title={`📋 בקשה — ${selected.student_name}`} onClose={()=>{setSelected(null);setOverdueEmailText("");}} size="modal-lg"
           footer={<>
@@ -2459,6 +2549,8 @@ function DashboardPage({ equipment, reservations, setReservations, showToast }) 
   const [calDate, setCalDate]       = useState(new Date());
   const [calFS, setCalFS]           = useState(false);
   const [dashViewRes, setDashViewRes] = useState(null);
+  const [dashApprovalConflict, setDashApprovalConflict] = useState(null);
+  const [dashConsecutiveWarning, setDashConsecutiveWarning] = useState(null);
   const [calStatusF, setCalStatusF] = useState([]);
   const [calLoanTypeF, setCalLoanTypeF] = useState("הכל");
   const [onLoanModal, setOnLoanModal] = useState(null); // "units" | "items" | null
@@ -2884,15 +2976,31 @@ function DashboardPage({ equipment, reservations, setReservations, showToast }) 
                   ))}
                 </div>
               </div>
-              {/* Approve button for pending requests */}
+              {/* Approve button for pending requests — with conflict checking */}
               {dashViewRes.status==="ממתין" && setReservations && (
                 <div style={{borderTop:"1px solid var(--border)",paddingTop:14,display:"flex",justifyContent:"center"}}>
                   <button className="btn btn-primary" style={{background:"var(--green)",borderColor:"var(--green)",fontSize:14,padding:"10px 32px"}}
                     onClick={async()=>{
-                      const updated = reservations.map(r=>r.id===dashViewRes.id?{...r,status:"מאושר"}:r);
+                      const res = dashViewRes;
+                      // 1) Hard block
+                      const conflicts = getReservationApprovalConflicts(res, reservations, equipment);
+                      if (conflicts.length) {
+                        setDashApprovalConflict({ reservation: res, conflicts });
+                        setDashViewRes(null);
+                        return;
+                      }
+                      // 2) Consecutive warning
+                      const warnings = getConsecutiveBookingWarnings(res, reservations, equipment);
+                      if (warnings.length) {
+                        setDashConsecutiveWarning({ reservation: res, warnings });
+                        setDashViewRes(null);
+                        return;
+                      }
+                      // 3) Approve
+                      const updated = reservations.map(r=>r.id===res.id?{...r,status:"מאושר"}:r);
                       setReservations(updated);
                       await storageSet("reservations",updated);
-                      if(showToast) showToast("success",`הבקשה של ${dashViewRes.student_name} אושרה ✅`);
+                      if(showToast) showToast("success",`הבקשה של ${res.student_name} אושרה ✅`);
                       setDashViewRes(null);
                     }}>
                     ✅ אשר בקשה
@@ -2902,6 +3010,94 @@ function DashboardPage({ equipment, reservations, setReservations, showToast }) 
             </div>
           </div>
         </div>
+      )}
+
+      {/* Dashboard — Hard block conflict dialog */}
+      {dashApprovalConflict && (()=>{
+        const hasOverdue = dashApprovalConflict.conflicts.some(c => c.blockers.some(b => b.status === "באיחור"));
+        return (
+        <Modal title={`⛔ אי אפשר לאשר את הבקשה של ${dashApprovalConflict.reservation.student_name}`}
+          onClose={()=>setDashApprovalConflict(null)} size="modal-lg"
+          footer={<button className="btn btn-secondary" onClick={()=>setDashApprovalConflict(null)}>סגור</button>}>
+          {hasOverdue && (
+            <div style={{background:"rgba(231,76,60,0.1)",border:"2px solid rgba(231,76,60,0.45)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16,display:"flex",gap:12,alignItems:"flex-start"}}>
+              <span style={{fontSize:22,lineHeight:1}}>⚠️</span>
+              <div>
+                <div style={{fontWeight:900,fontSize:14,color:"var(--red)",marginBottom:4}}>ציוד יצא מהמחסן ולא הוחזר (באיחור)</div>
+                <div style={{fontSize:13,color:"var(--text2)"}}>אחד או יותר מהפריטים המבוקשים נמצאים כרגע אצל סטודנט אחר שלא החזיר את הציוד בזמן.</div>
+              </div>
+            </div>
+          )}
+          <div className="highlight-box" style={{marginBottom:20}}>הבקשה לא יכולה להיות מאושרת כרגע. אלו הפריטים שחוסמים את האישור:</div>
+          <div style={{display:"flex",flexDirection:"column",gap:16}}>
+            {dashApprovalConflict.conflicts.map((c, i)=>(
+              <div key={i} style={{background:"var(--surface2)",border:"1px solid rgba(231,76,60,0.28)",borderRadius:"var(--r-sm)",padding:16}}>
+                <div style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap",alignItems:"center",marginBottom:12}}>
+                  <div style={{fontWeight:900,fontSize:21,color:"var(--red)"}}>{c.equipment_name}</div>
+                  <div style={{background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.35)",borderRadius:999,padding:"6px 14px",fontWeight:900,fontSize:16,color:"var(--red)"}}>חסומות {c.missing} יחידות</div>
+                </div>
+                {c.blockers.map((b, j)=>{
+                  const isOD = b.status === "באיחור";
+                  return (
+                  <div key={j} style={{background:isOD?"rgba(231,76,60,0.07)":"var(--surface3)",border:isOD?"1.5px solid rgba(231,76,60,0.45)":"1px solid var(--border)",borderRadius:10,padding:12,marginBottom:8}}>
+                    <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",alignItems:"center",marginBottom:6}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <strong style={{fontSize:14}}>{b.student_name}</strong>
+                        {isOD && <span className="badge badge-orange" style={{fontSize:11}}>⚠️ באיחור</span>}
+                      </div>
+                      <span style={{fontWeight:900,fontSize:15,color:"var(--red)"}}>כמות חסומה: {b.quantity}</span>
+                    </div>
+                    <div style={{fontSize:12,color:"var(--text2)",display:"flex",flexWrap:"wrap",gap:10}}>
+                      <span>📅 {formatDate(b.borrow_date)} {b.borrow_time||""}</span>
+                      {isOD
+                        ? <span style={{color:"var(--red)",fontWeight:700}}>↩ היה אמור לחזור {formatDate(b.return_date)} — עדיין לא הוחזר</span>
+                        : <span>↩ {formatDate(b.return_date)} {b.return_time||""}</span>}
+                    </div>
+                  </div>);
+                })}
+              </div>
+            ))}
+          </div>
+        </Modal>);
+      })()}
+
+      {/* Dashboard — Consecutive booking warning dialog */}
+      {dashConsecutiveWarning && (
+        <Modal title="⚠️ שים לב — בקשות עוקבות קרובות בזמן"
+          onClose={()=>setDashConsecutiveWarning(null)} size="modal-lg"
+          footer={<div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+            <button className="btn btn-secondary" onClick={()=>setDashConsecutiveWarning(null)}>ביטול</button>
+            <button className="btn btn-success" onClick={async()=>{
+              const res = dashConsecutiveWarning.reservation;
+              const updated = reservations.map(r=>r.id===res.id?{...r,status:"מאושר"}:r);
+              setReservations(updated);
+              await storageSet("reservations",updated);
+              if(showToast) showToast("success",`הבקשה של ${res.student_name} אושרה ✅`);
+              setDashConsecutiveWarning(null);
+            }}>✅ אשר בכל זאת</button>
+          </div>}>
+          <div style={{background:"rgba(241,196,15,0.1)",border:"2px solid rgba(241,196,15,0.45)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16,display:"flex",gap:12,alignItems:"flex-start"}}>
+            <span style={{fontSize:22,lineHeight:1}}>⚠️</span>
+            <div>
+              <div style={{fontWeight:900,fontSize:14,color:"var(--yellow)",marginBottom:4}}>סטודנט קודם עלול לאחר בהחזרת ציוד</div>
+              <div style={{fontSize:13,color:"var(--text2)"}}>הפריטים הבאים מושאלים לסטודנט אחר שזמן ההחזרה שלו מסתיים זמן קצר לפני תחילת ההשאלה הנוכחית. במידה והסטודנט יאחר — לא יהיה ציוד זמין.</div>
+            </div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>
+            {dashConsecutiveWarning.warnings.map((w, i) => (
+              <div key={i} style={{background:"var(--surface2)",border:"1px solid rgba(241,196,15,0.28)",borderRadius:"var(--r-sm)",padding:14,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:10,alignItems:"center"}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:15}}>{w.equipment_name} <span style={{color:"var(--yellow)"}}>×{w.quantity}</span></div>
+                  <div style={{fontSize:12,color:"var(--text2)",marginTop:4}}>מושאל ל-<strong>{w.student_name}</strong></div>
+                </div>
+                <div style={{fontSize:13,color:"var(--text2)"}}>↩ החזרה: {formatDate(w.return_date)} {w.return_time}</div>
+              </div>
+            ))}
+          </div>
+          <div className="highlight-box" style={{marginTop:16}}>
+            כדאי להמתין להחזרת הציוד של <strong>{dashConsecutiveWarning.warnings[0]?.student_name}</strong> לפני אישור הבקשה של <strong>{dashConsecutiveWarning.reservation.student_name}</strong>.
+          </div>
+        </Modal>
       )}
     </div>
   );
