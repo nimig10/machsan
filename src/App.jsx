@@ -2869,12 +2869,19 @@ function PublicMiniCalendar({ reservations, initialLoanType="הכל", previewSta
     r.loan_type !== "שיעור" &&
     (loanTypeF==="הכל" || r.loan_type===loanTypeF)
   );
+  // For "באיחור" reservations whose return_date is in the past, extend to today so they appear on the calendar
+  const activeResForCalendar = activeRes.map(r => {
+    if (r.status === "באיחור" && r.return_date < todayStr) {
+      return {...r, return_date: todayStr};
+    }
+    return r;
+  });
   // Add preview entry for user's selected dates
   const previewRes = previewStart && previewEnd ? [{
     id:"__preview__", student_name:previewName, borrow_date:previewStart,
     return_date:previewEnd, status:"preview", loan_type:""
   }] : [];
-  const allRes = [...activeRes, ...previewRes];
+  const allRes = [...activeResForCalendar, ...previewRes];
   const colorMap = {};
   activeRes.forEach((r,i)=>{ colorMap[r.id]=SPAN_COLORS[i%SPAN_COLORS.length]; });
   colorMap["__preview__"] = ["rgba(245,166,35,0.45)","#f5a623"]; // dashed yellow
@@ -2882,7 +2889,7 @@ function PublicMiniCalendar({ reservations, initialLoanType="הכל", previewSta
   return (
     <div style={{marginBottom:16,marginTop:8}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,flexWrap:"wrap",gap:6}}>
-        <div style={{fontWeight:800,fontSize:13,color:"var(--text2)"}}>📅 השאלות מאושרות</div>
+        <div style={{fontWeight:800,fontSize:13,color:"var(--text2)"}}>📅 השאלות הפעילות</div>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo-1,1))}>‹</button>
           <span style={{fontWeight:700,fontSize:12,minWidth:90,textAlign:"center"}}>{HE_M[mo]} {yr}</span>
@@ -2906,7 +2913,7 @@ function PublicMiniCalendar({ reservations, initialLoanType="הכל", previewSta
           {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,color:"var(--text3)",padding:"4px 0"}}>{d}</div>)}
         </div>
         <CalendarGrid days={days} activeRes={allRes} colorMap={colorMap} todayStr={todayStr} cellHeight={80} fontSize={10} previewId="__preview__"/>
-        {activeRes.length===0&&<div style={{textAlign:"center",fontSize:12,color:"var(--text3)",padding:"8px 0"}}>אין השאלות מאושרות</div>}
+        {activeRes.length===0&&<div style={{textAlign:"center",fontSize:12,color:"var(--text3)",padding:"8px 0"}}>אין השאלות פעילות</div>}
       </div>
     </div>
   );
