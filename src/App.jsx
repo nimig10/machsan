@@ -1525,7 +1525,11 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
     })
     .sort((a,b) => {
       if(sortBy==="urgency")  return new Date(a.borrow_date) - new Date(b.borrow_date);
-      if(sortBy==="received") return Number(b.id) - Number(a.id);
+      if(sortBy==="received") {
+        const dateDiff = new Date(b.created_at) - new Date(a.created_at);
+        if(dateDiff !== 0) return dateDiff;
+        return Number(b.id) - Number(a.id);
+      }
       return 0;
     });
   const eqName = id => equipment.find(e=>e.id==id)?.name||"?";
