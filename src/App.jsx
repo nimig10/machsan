@@ -3088,7 +3088,7 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
 }
 
 // ─── INFO PANEL ───────────────────────────────────────────────────────────────
-function InfoPanel({ policies, kits, equipment, teamMembers, onClose }) {
+function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColor }) {
   const [tab, setTab] = useState("policies");
   const [selectedEq, setSelectedEq] = useState(null);  // equipment detail view
   const [infoCatFilter, setInfoCatFilter] = useState([]); // multi-select
@@ -3105,7 +3105,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose }) {
     : (equipment||[]).filter(e=>infoCatFilter.includes(e.category));
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:5000,display:"flex",alignItems:"stretch",justifyContent:"center",padding:"0",direction:"rtl"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:5000,display:"flex",alignItems:"stretch",justifyContent:"center",padding:"0",direction:"rtl","--accent":accentColor||"#f5a623","--accent2":accentColor||"#f5a623","--accent-glow":`${accentColor||"#f5a623"}2e`}}>
       <div style={{width:"100%",maxWidth:1100,background:"var(--surface)",display:"flex",flexDirection:"column",overflow:"hidden",margin:"0 auto",borderLeft:"1px solid var(--border)",borderRight:"1px solid var(--border)"}}>
 
         {/* Header */}
@@ -3907,7 +3907,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
         </div>
       </div>
     </div>
-    {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)}/>}
+    {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor}/>}
     </>
   );
 }
