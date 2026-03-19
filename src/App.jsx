@@ -1113,16 +1113,16 @@ function ManageCategoriesModal({ categories, categoryTypes, onSave, onClose, equ
               ) : (
                 <>
                   <span style={{flex: 1, fontSize: 13, fontWeight: 700}}>{c}</span>
-                  <button
-                    type="button"
-                    title="לחץ לשינוי סיווג"
-                    style={{...typeBadgeStyle(getEffectiveType(c)), cursor:"pointer", border: `1px solid ${getEffectiveType(c)==="סאונד"?"rgba(155,89,182,0.6)":getEffectiveType(c)==="צילום"?"rgba(39,174,96,0.5)":"var(--border)"}`}}
-                    onClick={() => {
-                      const cycle = {"":"סאונד","סאונד":"צילום","צילום":""};
-                      const next = cycle[getEffectiveType(c)];
-                      onSave({action:"rename", oldName:c, newName:c, type:next});
-                    }}
-                  >{typeLabel(getEffectiveType(c))} ↻</button>
+                  <div style={{display:"flex",gap:4,flexShrink:0}}>
+                    {[{v:"סאונד",l:"🎙️"},{v:"צילום",l:"🎥"},{v:"",l:"כללי"}].map(({v,l})=>{
+                      const active = getEffectiveType(c)===v;
+                      return <button key={v} type="button"
+                        onClick={()=>onSave({action:"rename",oldName:c,newName:c,type:v})}
+                        style={{padding:"2px 8px",borderRadius:6,border:`1.5px solid ${active?(v==="סאונד"?"rgba(155,89,182,0.8)":v==="צילום"?"rgba(39,174,96,0.7)":"var(--accent)"):"var(--border)"}`,background:active?(v==="סאונד"?"rgba(155,89,182,0.18)":v==="צילום"?"rgba(39,174,96,0.12)":"var(--accent-glow)"):"transparent",color:active?(v==="סאונד"?"#b97edc":v==="צילום"?"var(--green)":"var(--accent)"):"var(--text3)",fontWeight:active?800:500,fontSize:11,cursor:"pointer"}}>
+                        {l}
+                      </button>;
+                    })}
+                  </div>
                   <button
                     className="btn btn-secondary btn-sm"
                     onClick={() => { setEditingCat(c); setEditVal(c); setEditType(getEffectiveType(c) || ""); }}
