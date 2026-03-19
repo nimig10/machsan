@@ -1529,9 +1529,10 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
     .sort((a,b) => {
       if(sortBy==="urgency")  return new Date(a.borrow_date) - new Date(b.borrow_date);
       if(sortBy==="received") {
-        const dateDiff = new Date(b.created_at) - new Date(a.created_at);
-        if(dateDiff !== 0) return dateDiff;
-        return Number(b.id) - Number(a.id);
+        const idA = Number(a.id), idB = Number(b.id);
+        if(!isNaN(idA) && !isNaN(idB) && idB !== idA) return idB - idA;
+        const da = a.created_at||"0000-00-00", db = b.created_at||"0000-00-00";
+        return db > da ? 1 : db < da ? -1 : 0;
       }
       return 0;
     });
@@ -1832,22 +1833,9 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
     );
   };
 
-  return (
-    <div className="page">
-      {/* Manual reservation button */}
-      {!isRejectedPage && (
-        <div style={{marginBottom:16,display:"flex",justifyContent:"flex-end"}}>
-          <button className="btn btn-primary" onClick={()=>setShowManualForm(p=>!p)} style={{fontSize:13}}>
-            {showManualForm?"✕ סגור טופס":"➕ הקם בקשה ידנית"}
-          </button>
-        </div>
-      )}
-      {showManualForm && <AdminManualForm/>}
-
-      {filtered.length===0
-        ? <div className="empty-state"><div className="emoji">{isRejectedPage ? "❌" : "📭"}</div><div>{isRejectedPage ? "אין בקשות דחויות או מאחרות" : "אין בקשות"}</div></div>
-        : <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          {filtered.map(r=>{
+  const studentReqs = filtered.filter(r => r.loan_type !== "שיעור");
+  const lessonReqs  = filtered.filter(r => r.loan_type === "שיעור");
+  const renderResCard = (r) => {
             const isLesson = r.loan_type==="שיעור";
             const isCinema = r.loan_type==="קולנוע יומית";
             const isOverdue = r.status==="באיחור";
@@ -1900,8 +1888,46 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
               </div>
             </div>
             );
-          })}
+  };
+
+  return (
+    <div className="page">
+      {/* Manual reservation button */}
+      {!isRejectedPage && (
+        <div style={{marginBottom:16,display:"flex",justifyContent:"flex-end"}}>
+          <button className="btn btn-primary" onClick={()=>setShowManualForm(p=>!p)} style={{fontSize:13}}>
+            {showManualForm?"✕ סגור טופס":"➕ הקם בקשה ידנית"}
+          </button>
         </div>
+      )}
+      {showManualForm && <AdminManualForm/>}
+
+      {filtered.length===0
+        ? <div className="empty-state"><div className="emoji">{isRejectedPage ? "❌" : "📭"}</div><div>{isRejectedPage ? "אין בקשות דחויות או מאחרות" : "אין בקשות"}</div></div>
+        : <>
+          {/* בקשות סטודנטים */}
+          {studentReqs.length > 0 && <>
+            {lessonReqs.length > 0 && (
+              <div style={{fontWeight:900,fontSize:14,marginBottom:10,color:"var(--text2)",display:"flex",alignItems:"center",gap:8}}>
+                👤 בקשות סטודנטים
+                <span style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:20,padding:"1px 10px",fontSize:12,fontWeight:700,color:"var(--text3)"}}>{studentReqs.length}</span>
+              </div>
+            )}
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {studentReqs.map(r => renderResCard(r))}
+            </div>
+          </>}
+          {/* השאלות שיעור */}
+          {lessonReqs.length > 0 && <>
+            <div style={{fontWeight:900,fontSize:14,margin:`${studentReqs.length>0?"24px":"0px"} 0 10px`,color:"#9b59b6",display:"flex",alignItems:"center",gap:8,borderTop:studentReqs.length>0?"1px solid var(--border)":"none",paddingTop:studentReqs.length>0?20:0}}>
+              📽️ השאלות שיעור
+              <span style={{background:"rgba(155,89,182,0.12)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:20,padding:"1px 10px",fontSize:12,fontWeight:700,color:"#9b59b6"}}>{lessonReqs.length}</span>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {lessonReqs.map(r => renderResCard(r))}
+            </div>
+          </>}
+        </>
       }
       {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations} collegeManager={collegeManager} managerToken={managerToken}
   onSave={async(updated)=>{ const all=normalizeReservationsForArchive(reservations.map(r=>r.id===updated.id?updated:r)); setReservations(all); await storageSet("reservations",all); showToast("success","הבקשה עודכנה"); setEditing(null); }}
