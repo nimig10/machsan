@@ -1162,6 +1162,8 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
           items_list: eqList,
           report_note: reportNote,
           calendar_url: managerToken ? `${window.location.origin}/manager-calendar?token=${managerToken}` : "",
+          logo_url: siteSettings.logo || "",
+          sound_logo_url: siteSettings.soundLogo || "",
         }),
       });
       setReportNote("");
@@ -1211,6 +1213,8 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
           return_date: formatDate(reservation.return_date),
           return_time: reservation.return_time || "",
           custom_message: overdueEditMailText.trim(),
+          logo_url: siteSettings.logo || "",
+          sound_logo_url: siteSettings.soundLogo || "",
         }),
       });
       setOverdueEditMailText("");
@@ -1638,7 +1642,7 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
 // ─── RESERVATIONS PAGE ────────────────────────────────────────────────────────
 function ReservationsPage({ reservations, setReservations, equipment, showToast,
     search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy, mode="active", collegeManager={}, managerToken="",
-    categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], calendarToken="" }) {
+    categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], calendarToken="", siteSettings={} }) {
   const [selected, setSelected] = useState(null);
   const [editing, setEditing]   = useState(null);
   const [approvalConflict, setApprovalConflict] = useState(null);
@@ -1757,6 +1761,8 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
           borrow_time:  reservation.borrow_time || "",
           return_date:  formatDate(reservation.return_date),
           return_time:  reservation.return_time || "",
+          logo_url: siteSettings.logo || "",
+          sound_logo_url: siteSettings.soundLogo || "",
         }),
       });
       showToast("success", `📧 מייל נשלח ל-${reservation.email}`);
@@ -1817,6 +1823,8 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
           return_date: formatDate(reservation.return_date),
           return_time: reservation.return_time || "",
           custom_message: text.trim(),
+          logo_url: siteSettings.logo || "",
+          sound_logo_url: siteSettings.soundLogo || "",
         }),
       });
       showToast("success", `📧 מייל תזכורת נשלח ל-${reservation.email}`);
@@ -3669,6 +3677,8 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
           borrow_date:  formatDate(res.borrow_date),
           return_date:  formatDate(res.return_date),
           wa_link:      waLink,
+          logo_url:     siteSettings.logo || "",
+          sound_logo_url: siteSettings.soundLogo || "",
         }),
       });
       // Notify team members who handle this loan type
@@ -3691,6 +3701,8 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
             borrow_date:  formatDate(res.borrow_date),
             return_date:  formatDate(res.return_date),
             loan_type:    res.loan_type,
+            logo_url:     siteSettings.logo || "",
+            sound_logo_url: siteSettings.soundLogo || "",
           }),
         });
       }));
@@ -3727,6 +3739,8 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
                 approve_url:    approveUrl,
                 calendar_url:   calendarUrl,
                 reservation_id: String(res.id),
+                logo_url:       siteSettings.logo || "",
+                sound_logo_url: siteSettings.soundLogo || "",
               }),
             });
             if (!response.ok) {
@@ -6052,7 +6066,7 @@ function CertificationsPage({ certifications, setCertifications, showToast }) {
 }
 
 // ─── DEPT HEAD CALENDAR PAGE ─────────────────────────────────────────────────
-function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equipment=[] }) {
+function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equipment=[], siteSettings={} }) {
   const [localRes, setLocalRes]   = useState(initialReservations);
   const [calDate, setCalDate]     = useState(new Date());
   const [statusF, setStatusF]     = useState([]);   // empty = all
@@ -6117,8 +6131,13 @@ function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equi
   return (
     <div style={{maxWidth:1100,margin:"0 auto",padding:"24px 16px",direction:"rtl"}}>
       {/* Header */}
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24,flexWrap:"wrap"}}>
-        <div style={{fontSize:32}}>🎬</div>
+      <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:24,flexWrap:"wrap"}}>
+        {siteSettings.logo
+          ? <img src={siteSettings.logo} alt="לוגו" style={{width:56,height:56,objectFit:"contain",borderRadius:8}}/>
+          : <div style={{fontSize:32}}>🎬</div>}
+        {siteSettings.soundLogo && (
+          <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:44,height:44,objectFit:"contain",borderRadius:6}}/>
+        )}
         <div>
           <div style={{fontWeight:900,fontSize:20,color:"var(--accent)"}}>לוח השאלות — מבט ראש מחלקה</div>
           <div style={{fontSize:12,color:"var(--text3)"}}>קריאה בלבד · כל הסטטוסים</div>
@@ -6247,7 +6266,7 @@ function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equi
 }
 
 // ─── MANAGER CALENDAR PAGE ───────────────────────────────────────────────────
-function ManagerCalendarPage({ reservations: initialReservations, setReservations, collegeManager, equipment=[], kits=[] }) {
+function ManagerCalendarPage({ reservations: initialReservations, setReservations, collegeManager, equipment=[], kits=[], siteSettings={} }) {
   const [localRes, setLocalRes]   = useState(initialReservations);
   const [calDate, setCalDate]     = useState(new Date());
   const [statusF, setStatusF]     = useState([]);
@@ -6319,8 +6338,13 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
   return (
     <div style={{maxWidth:1100,margin:"0 auto",padding:"24px 16px",direction:"rtl"}}>
       {/* Header */}
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24,flexWrap:"wrap"}}>
-        <div style={{fontSize:32}}>🏫</div>
+      <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:24,flexWrap:"wrap"}}>
+        {siteSettings.logo
+          ? <img src={siteSettings.logo} alt="לוגו" style={{width:56,height:56,objectFit:"contain",borderRadius:8}}/>
+          : <div style={{fontSize:32}}>🏫</div>}
+        {siteSettings.soundLogo && (
+          <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:44,height:44,objectFit:"contain",borderRadius:6}}/>
+        )}
         <div>
           <div style={{fontWeight:900,fontSize:20,color:"var(--accent)"}}>לוח השאלות — מנהל המכללה</div>
           <div style={{fontSize:12,color:"var(--text3)"}}>שינוי סטטוסים · כל הבקשות{collegeManager?.name?` · שלום ${collegeManager.name}`:""}</div>
@@ -7374,7 +7398,7 @@ export default function App() {
         <div style={{minHeight:"100vh",background:"var(--bg)",direction:"rtl"}}>
           {loading ? <Loading/> : (
             managerToken && urlToken === managerToken
-              ? <ManagerCalendarPage reservations={reservations} setReservations={setReservations} collegeManager={collegeManager} equipment={equipment} kits={kits}/>
+              ? <ManagerCalendarPage reservations={reservations} setReservations={setReservations} collegeManager={collegeManager} equipment={equipment} kits={kits} siteSettings={siteSettings}/>
               : <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",flexDirection:"column",gap:16,color:"var(--text2)"}}>
                   <div style={{fontSize:48}}>🔒</div>
                   <div style={{fontSize:18,fontWeight:700}}>קישור לא תקין</div>
@@ -7386,7 +7410,7 @@ export default function App() {
         <div style={{minHeight:"100vh",background:"var(--bg)",direction:"rtl"}}>
           {loading ? <Loading/> : (
             calendarToken && urlToken === calendarToken
-              ? <DeptHeadCalendarPage reservations={reservations} calendarToken={calendarToken} kits={kits} equipment={equipment}/>
+              ? <DeptHeadCalendarPage reservations={reservations} calendarToken={calendarToken} kits={kits} equipment={equipment} siteSettings={siteSettings}/>
               : <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",flexDirection:"column",gap:16,color:"var(--text2)"}}>
                   <div style={{fontSize:48}}>🔒</div>
                   <div style={{fontSize:18,fontWeight:700}}>קישור לא תקין</div>
@@ -7498,11 +7522,11 @@ export default function App() {
               {page==="reservations"&& <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}
-                categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken}/>}
+                categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings}/>}
               {page==="rejected"    && <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} mode="rejected" collegeManager={collegeManager} managerToken={managerToken}
-                categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken}/>}
+                categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings}/>}
               {page==="archive"     && <ArchivePage      reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}/>}
               {page==="team"        && <TeamPage         teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/>}
               {page==="kits"        && <KitsPage         kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations}/>}

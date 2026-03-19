@@ -30,6 +30,8 @@ function buildEmail({
   teacher_message,
   lesson_message,
   lesson_kit_name,
+  logo_url,
+  sound_logo_url,
 }) {
   const isApproved       = type === "approved";
   const isNew            = type === "new";
@@ -158,7 +160,10 @@ function buildEmail({
 <body style="margin:0;padding:20px;background:#f0f0f0;font-family:Arial,sans-serif;direction:rtl;text-align:right">
   <div style="max-width:580px;margin:0 auto;background:#0a0c10;color:#e8eaf0;border-radius:12px;overflow:hidden;direction:rtl;text-align:right">
     <div style="background:linear-gradient(135deg,#111318,#1e232e);padding:32px;text-align:center;border-bottom:1px solid #252b38">
-      <div style="font-size:48px;margin-bottom:10px">${isLessonKitReady ? "📚" : "🎬"}</div>
+      ${logo_url
+        ? `<img src="${logo_url}" alt="לוגו" style="width:80px;height:80px;object-fit:contain;border-radius:10px;margin-bottom:${sound_logo_url ? "6px" : "12px"}"/>`
+        : `<div style="font-size:48px;margin-bottom:10px">${isLessonKitReady ? "📚" : "🎬"}</div>`}
+      ${sound_logo_url ? `<img src="${sound_logo_url}" alt="לוגו סאונד" style="width:60px;height:60px;object-fit:contain;border-radius:8px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto"/>` : ""}
       <h1 style="color:#f5a623;font-size:22px;margin:0;text-align:center">מחסן השאלת ציוד קמרה אובסקורה וסאונד</h1>
     </div>
     <div style="padding:32px;direction:rtl;text-align:right">
@@ -235,6 +240,8 @@ export default async function handler(req, res) {
     teacher_message,
     lesson_message,
     lesson_kit_name,
+    logo_url,
+    sound_logo_url,
   } = req.body;
 
   if (!to || !type) return res.status(400).json({ error: "חסרים שדות חובה" });
@@ -278,6 +285,8 @@ export default async function handler(req, res) {
         teacher_message,
         lesson_message,
         lesson_kit_name,
+        logo_url,
+        sound_logo_url,
       }),
     });
     res.json({ ok: true });
