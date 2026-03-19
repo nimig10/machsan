@@ -6327,6 +6327,7 @@ function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equi
   const [loanTypeF, setLoanTypeF] = useState("הכל");
   const [selected, setSelected]   = useState(null);
   const [approving, setApproving] = useState(null); // reservation id being approved
+  const [selectedKit, setSelectedKit] = useState(null); // kit lesson detail modal
 
   const approveReservation = async (r) => {
     setApproving(r.id);
@@ -6370,6 +6371,7 @@ function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equi
 
   const activeRes = reservations.filter(r =>
     r.status !== "הוחזר" && r.borrow_date && r.return_date &&
+    !(r.loan_type === "שיעור" && r.status !== "מאושר") &&
     (statusF.length===0 || statusF.includes(r.status)) &&
     (loanTypeF==="הכל" || r.loan_type===loanTypeF)
   );
@@ -6788,9 +6790,14 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
         const lessonKits = kits.filter(k=>k.kitType==="lesson");
         if(!lessonKits.length) return null;
         const todayStr2 = today();
+        const nowHHMM2 = (()=>{const n=new Date();return String(n.getHours()).padStart(2,"0")+":"+String(n.getMinutes()).padStart(2,"0");})();
         const upcoming = lessonKits.flatMap(kit=>
           (kit.schedule||[])
-            .filter(s=>s.date>=todayStr2)
+            .filter(s=>{
+              if(s.date > todayStr2) return true;
+              if(s.date === todayStr2) return (s.endTime||"23:59") > nowHHMM2;
+              return false;
+            })
             .map(s=>({...s, kitName:kit.name, instructorName:kit.instructorName||"", instructorPhone:kit.instructorPhone||"", items:kit.items||[]}))
         ).sort((a,b)=>a.date<b.date?-1:a.startTime<b.startTime?-1:1).slice(0,10);
         if(!upcoming.length) return null;
@@ -6799,7 +6806,9 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
             <div style={{fontWeight:800,fontSize:15,marginBottom:10}}>🎬 ערכות שיעור — שיעורים קרובים</div>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {upcoming.map((s,i)=>(
-                <div key={i} style={{background:"var(--surface)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:"var(--r)",padding:"14px 18px"}}>
+                <div key={i} onClick={()=>setSelectedKit(s)} style={{background:"var(--surface)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:"var(--r)",padding:"14px 18px",cursor:"pointer",transition:"border-color .15s"}}
+                  onMouseEnter={e=>e.currentTarget.style.borderColor="rgba(155,89,182,0.7)"}
+                  onMouseLeave={e=>e.currentTarget.style.borderColor="rgba(155,89,182,0.3)"}>
                   <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
                     <span style={{fontSize:22}}>🎬</span>
                     <div style={{flex:1}}>
@@ -6809,22 +6818,56 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
                     <div style={{textAlign:"left",fontSize:13,color:"var(--text3)",fontWeight:700}}>
                       📅 {formatDate(s.date)}&nbsp;&nbsp;🕐 {s.startTime} – {s.endTime}
                     </div>
+                    <span style={{fontSize:11,color:"#9b59b6",border:"1px solid rgba(155,89,182,0.4)",borderRadius:20,padding:"2px 8px"}}>📦 {s.items.length} פריטים</span>
                   </div>
-                  {s.items.length>0&&(
-                    <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:10}}>
-                      {s.items.map((item,j)=>(
-                        <span key={j} style={{background:"rgba(155,89,182,0.1)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:6,padding:"3px 10px",fontSize:12,color:"#9b59b6",fontWeight:700}}>
-                          {item.name} ×{item.quantity}
-                        </span>
-                      ))}
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
           </div>
         );
       })()}
+
+      {/* ── Kit lesson detail modal ── */}
+      {selectedKit&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}} onClick={e=>e.target===e.currentTarget&&setSelectedKit(null)}>
+          <div style={{width:"100%",maxWidth:540,background:"var(--surface)",borderRadius:16,border:"1px solid rgba(155,89,182,0.4)",direction:"rtl",maxHeight:"90vh",overflowY:"auto"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0",position:"sticky",top:0,zIndex:1}}>
+              <div>
+                <div style={{fontWeight:900,fontSize:16,color:"#9b59b6"}}>🎬 {selectedKit.kitName}</div>
+                <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>📅 {formatDate(selectedKit.date)} · 🕐 {selectedKit.startTime} – {selectedKit.endTime}</div>
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setSelectedKit(null)}>✕ סגור</button>
+            </div>
+            <div style={{padding:"20px"}}>
+              {selectedKit.instructorName&&(
+                <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"12px 14px",marginBottom:14,fontSize:13}}>
+                  👨‍🏫 <strong>{selectedKit.instructorName}</strong>
+                  {selectedKit.instructorPhone&&<span style={{color:"var(--text3)",marginRight:8}}> · 📞 {selectedKit.instructorPhone}</span>}
+                </div>
+              )}
+              <div style={{fontSize:12,fontWeight:800,color:"var(--text3)",marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>ציוד השיעור — {selectedKit.items.length} פריטים</div>
+              {selectedKit.items.length===0
+                ? <div style={{color:"var(--text3)",fontSize:13,textAlign:"center",padding:20}}>אין ציוד מוגדר לערכה זו</div>
+                : <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {selectedKit.items.map((item,j)=>{
+                    const eq = equipment.find(e=>e.id==item.equipment_id||e.name===item.name);
+                    const img = eq?.image||"";
+                    return (
+                      <div key={j} style={{display:"flex",alignItems:"center",gap:12,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"10px 14px",border:"1px solid var(--border)"}}>
+                        {img.startsWith("data:")||img.startsWith("http")
+                          ? <img src={img} alt="" style={{width:36,height:36,objectFit:"cover",borderRadius:6,flexShrink:0}}/>
+                          : <div style={{width:36,height:36,borderRadius:6,background:"rgba(155,89,182,0.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📦</div>}
+                        <span style={{flex:1,fontWeight:700,fontSize:14}}>{item.name||("פריט "+(j+1))}</span>
+                        <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",border:"1px solid rgba(155,89,182,0.35)",borderRadius:8,padding:"3px 12px",fontWeight:900,fontSize:14}}>×{item.quantity}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
