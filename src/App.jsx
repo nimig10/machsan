@@ -6327,7 +6327,6 @@ function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equi
   const [loanTypeF, setLoanTypeF] = useState("הכל");
   const [selected, setSelected]   = useState(null);
   const [approving, setApproving] = useState(null); // reservation id being approved
-  const [selectedKit, setSelectedKit] = useState(null); // kit lesson detail modal
 
   const approveReservation = async (r) => {
     setApproving(r.id);
@@ -6371,7 +6370,6 @@ function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equi
 
   const activeRes = reservations.filter(r =>
     r.status !== "הוחזר" && r.borrow_date && r.return_date &&
-    !(r.loan_type === "שיעור" && r.status !== "מאושר") &&
     (statusF.length===0 || statusF.includes(r.status)) &&
     (loanTypeF==="הכל" || r.loan_type===loanTypeF)
   );
@@ -6529,6 +6527,7 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
   const [loanTypeF, setLoanTypeF] = useState("הכל");
   const [selected, setSelected]   = useState(null);
   const [changingStatus, setChangingStatus] = useState(null);
+  const [selectedKit, setSelectedKit] = useState(null); // kit lesson detail modal
 
   const ALL_STATUSES  = ["ממתין","אישור ראש מחלקה","מאושר","נדחה"];
   const STATUS_COLORS = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","אישור ראש מחלקה":"#9b59b6" };
@@ -6570,6 +6569,7 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
 
   const activeRes = localRes.filter(r =>
     r.status !== "הוחזר" && r.borrow_date && r.return_date &&
+    !(r.loan_type === "שיעור" && r.status !== "מאושר") &&
     (statusF.length===0 || statusF.includes(r.status)) &&
     (loanTypeF==="הכל" || r.loan_type===loanTypeF)
   );
