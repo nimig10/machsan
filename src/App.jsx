@@ -1949,7 +1949,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
       setMSaving(true);
       let freshRes=reservations;
       try{const fr=await storageGet("reservations");if(Array.isArray(fr)){freshRes=fr;setReservations(fr);}}catch(e){}
-      const newRes={...mf,id:Date.now(),status:mf.status,created_at:today(),items:mItems,manual_by_admin:true};
+      const newRes={...mf,id:Date.now(),status:mf.status,created_at:today(),submitted_at:new Date().toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"}),items:mItems,manual_by_admin:true};
       const updated=[...freshRes,newRes];
       setReservations(updated);
       await storageSet("reservations",updated);
@@ -2260,16 +2260,9 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
                 {(selected.created_at||selected.id)&&(
                   <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginTop:8,paddingTop:8,borderTop:"1px solid rgba(245,166,35,0.15)",color:"var(--text3)"}}>
                     <span>📨 נשלח למערכת</span>
-                    <span style={{fontWeight:700,color:"var(--text2)"}}>{(()=>{
-                      // id is Date.now() (13-digit ms) → precise timestamp
-                      // created_at is date-only string → would show UTC midnight, avoid using for time
-                      const idNum = Number(selected.id);
-                      const ts = (!isNaN(idNum) && idNum > 1000000000000)
-                        ? new Date(idNum)
-                        : (selected.created_at ? new Date(selected.created_at+"T12:00:00") : null);
-                      if(!ts||isNaN(ts.getTime())) return "לא ידוע";
-                      return ts.toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"});
-                    })()}</span>
+                    <span style={{fontWeight:700,color:"var(--text2)"}}>
+                      {selected.submitted_at || "לא ידוע"}
+                    </span>
                   </div>
                 )}
               </div>
@@ -3950,7 +3943,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
       Array.isArray(dh.loanTypes) && dh.loanTypes.includes(form.loan_type)
     );
     const initStatus = relevantDH ? "אישור ראש מחלקה" : "ממתין";
-    const newRes = { ...form, id:Date.now(), status:initStatus, created_at:today(), items };
+    const newRes = { ...form, id:Date.now(), status:initStatus, created_at:today(), submitted_at:new Date().toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"}), items };
     const updated = [...freshReservations, newRes];
     setReservations(updated);
     await storageSet("reservations", updated);
