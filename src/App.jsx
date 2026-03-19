@@ -578,6 +578,9 @@ const css = `
   @media (max-width:400px) {
     .eq-grid { grid-template-columns:1fr; }
   }
+  @media (min-width:769px) {
+    .app { font-size: var(--admin-fs, 14px); }
+  }
 `;
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -3684,8 +3687,11 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
           </button>
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",paddingInline:"24px"}}>
             {siteSettings.logo
-              ? <img src={siteSettings.logo} alt="לוגו" style={{width:82,height:82,objectFit:"contain",borderRadius:12,marginBottom:12}}/>
-              : <div style={{fontSize:48,marginBottom:12}}>🎬</div>}
+              ? <img src={siteSettings.logo} alt="לוגו" style={{width:82,height:82,objectFit:"contain",borderRadius:12,marginBottom:siteSettings.soundLogo?6:12}}/>
+              : <div style={{fontSize:48,marginBottom:siteSettings.soundLogo?6:12}}>🎬</div>}
+            {siteSettings.soundLogo && (
+              <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:82,height:82,objectFit:"contain",borderRadius:12,marginBottom:12}}/>
+            )}
             <div style={{fontSize:24,fontWeight:900,color:"var(--accent)"}}>מחסן השאלת ציוד קמרה אובסקורה וסאונד</div>
             <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>טופס השאלת ציוד</div>
           </div>
@@ -6498,6 +6504,7 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast }) {
   const [draft, setDraft] = useState({ ...siteSettings });
   const [saving, setSaving] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [soundLogoUploading, setSoundLogoUploading] = useState(false);
 
   const handleLogoUpload = (e) => {
     const file = e.target.files[0];
@@ -6511,6 +6518,21 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast }) {
       setLogoUploading(false);
     };
     reader.onerror = () => { showToast("error", "שגיאה בקריאת הקובץ"); setLogoUploading(false); };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSoundLogoUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = "";
+    if (file.size > 500000) { showToast("error", "הקובץ גדול מדי — עד 500KB"); return; }
+    setSoundLogoUploading(true);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setDraft(p => ({ ...p, soundLogo: ev.target.result }));
+      setSoundLogoUploading(false);
+    };
+    reader.onerror = () => { showToast("error", "שגיאה בקריאת הקובץ"); setSoundLogoUploading(false); };
     reader.readAsDataURL(file);
   };
 
@@ -6550,10 +6572,12 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast }) {
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-header"><div className="card-title">🏫 לוגו המכללה</div></div>
         <div style={{ padding: "16px 20px" }}>
+          {/* לוגו ראשי */}
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 8 }}>לוגו ראשי</div>
           <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}>
-            הלוגו יוצג בסרגל הצדדי של לוח הבקרה ובראש טופס ההשאלה. מומלץ תמונה מרובעת עד 500KB.
+            יוצג בסרגל הצדדי של לוח הבקרה ובראש טופס ההשאלה. מומלץ תמונה מרובעת עד 500KB.
           </div>
-          <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", marginBottom: 20 }}>
             <div style={{ width: 80, height: 80, borderRadius: 12, border: "2px dashed var(--border)", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface2)", overflow: "hidden", flexShrink: 0 }}>
               {draft.logo
                 ? <img src={draft.logo} alt="לוגו" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
@@ -6567,6 +6591,31 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast }) {
               {draft.logo && (
                 <button type="button" className="btn btn-secondary" onClick={() => setDraft(p => ({ ...p, logo: "" }))} style={{ fontSize: 12 }}>
                   🗑️ הסר לוגו
+                </button>
+              )}
+            </div>
+          </div>
+          {/* מפריד */}
+          <div style={{ borderTop: "1px solid var(--border)", marginBottom: 16 }} />
+          {/* לוגו סאונד */}
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 8 }}>🎙️ לוגו סאונד (לוגו נוסף)</div>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}>
+            לוגו נוסף שיוצג מתחת ללוגו הראשי בסרגל לוח הבקרה ובטופס ההשאלה. מומלץ עד 500KB.
+          </div>
+          <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ width: 80, height: 80, borderRadius: 12, border: "2px dashed var(--border)", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface2)", overflow: "hidden", flexShrink: 0 }}>
+              {draft.soundLogo
+                ? <img src={draft.soundLogo} alt="לוגו סאונד" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                : <span style={{ fontSize: 32, color: "var(--text3)" }}>🎙️</span>}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <label className="btn btn-secondary" style={{ cursor: soundLogoUploading ? "not-allowed" : "pointer", opacity: soundLogoUploading ? 0.6 : 1 }}>
+                {soundLogoUploading ? "⏳ מעלה..." : "📷 העלה לוגו סאונד"}
+                <input type="file" accept="image/*" style={{ display: "none" }} onChange={handleSoundLogoUpload} disabled={soundLogoUploading} />
+              </label>
+              {draft.soundLogo && (
+                <button type="button" className="btn btn-secondary" onClick={() => setDraft(p => ({ ...p, soundLogo: "" }))} style={{ fontSize: 12 }}>
+                  🗑️ הסר לוגו סאונד
                 </button>
               )}
             </div>
@@ -6601,6 +6650,46 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast }) {
                 <circle cx="21" cy="14.5" r="2.2" fill="currentColor"/>
                 <rect x="19.4" y="19.5" width="3.2" height="10.5" rx="1.6" fill="currentColor"/>
               </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Admin Accent Color + Font Size */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-header"><div className="card-title">🖥️ בחירת צבע לחצים / טקסט לוח בקרה</div></div>
+        <div style={{ padding: "16px 20px" }}>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14 }}>
+            הצבע יוחל על הלחצנים, הכותרות והטקסטים הצבעוניים בלוח הבקרה (בנפרד מטופס ההשאלה).
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: 20 }}>
+            <input type="color" value={draft.adminAccentColor||"#f5a623"}
+              onChange={e => setDraft(p => ({ ...p, adminAccentColor: e.target.value }))}
+              style={{ width: 52, height: 40, borderRadius: 8, border: "2px solid var(--border)", background: "none", cursor: "pointer", padding: 2 }} />
+            <span style={{ fontSize: 13, color: "var(--text2)", fontFamily: "monospace" }}>{draft.adminAccentColor||"#f5a623"}</span>
+            <button type="button" className="btn btn-secondary" style={{ fontSize: 12 }}
+              onClick={() => setDraft(p => ({ ...p, adminAccentColor: "#f5a623" }))}>
+              ↩ איפוס לברירת מחדל
+            </button>
+          </div>
+          <div style={{ borderTop: "1px solid var(--border)", marginBottom: 16 }} />
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 10 }}>גודל פונט (דסקטופ בלבד)</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+            <input type="range" min={11} max={20} step={1}
+              value={draft.adminFontSize||14}
+              onChange={e => setDraft(p => ({ ...p, adminFontSize: Number(e.target.value) }))}
+              style={{ width: 180, accentColor: draft.adminAccentColor||"#f5a623" }} />
+            <span style={{ fontSize: 14, fontWeight: 700, minWidth: 32, color: "var(--text2)" }}>{draft.adminFontSize||14}px</span>
+            <button type="button" className="btn btn-secondary" style={{ fontSize: 12 }}
+              onClick={() => setDraft(p => ({ ...p, adminFontSize: 14 }))}>
+              ↩ איפוס
+            </button>
+          </div>
+          <div style={{ marginTop: 14, padding: "12px 16px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border)" }}>
+            <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 8 }}>תצוגה מקדימה:</div>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", fontSize: draft.adminFontSize||14 }}>
+              <button type="button" style={{ background: draft.adminAccentColor||"#f5a623", color: "#0a0c10", border: "none", borderRadius: 8, padding: "8px 18px", fontWeight: 800, cursor: "default", fontSize: "inherit" }}>כפתור לדוגמה</button>
+              <span style={{ color: draft.adminAccentColor||"#f5a623", fontWeight: 800, fontSize: "inherit" }}>טקסט צבעוני</span>
             </div>
           </div>
         </div>
@@ -6835,7 +6924,7 @@ export default function App() {
   const [kits, _setKits]               = useState([]);
   const [policies, _setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"" });
   const [certifications, _setCertifications] = useState({ types:[], students:[] });
-  const [siteSettings, _setSiteSettings] = useState({ logo:"", theme:"dark", accentColor:"#f5a623" });
+  const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14 });
   const [loading, setLoading]         = useState(true);
   const [toasts, setToasts]           = useState([]);
   const [authed, setAuthed]           = useState(false);
@@ -7147,12 +7236,15 @@ export default function App() {
       {isAdmin && !authed && <AdminLogin onSuccess={()=>setAuthed(true)}/>}
 
       {isAdmin && authed && (
-        <div className="app">
+        <div className="app" style={{"--accent":siteSettings.adminAccentColor||"#f5a623","--accent-glow":`${siteSettings.adminAccentColor||"#f5a623"}2e`,"--admin-fs":`${siteSettings.adminFontSize||14}px`}}>
           <nav className="sidebar">
             <div className="sidebar-logo">
               {siteSettings.logo
                 ? <img src={siteSettings.logo} alt="לוגו" style={{width:70,height:70,objectFit:"contain",borderRadius:8}}/>
                 : <span className="logo-icon">🎬</span>}
+              {siteSettings.soundLogo && (
+                <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:70,height:70,objectFit:"contain",borderRadius:8,marginTop:8,display:"block"}}/>
+              )}
               <div className="app-name">מחסן השאלת ציוד<br/>קמרה אובסקורה וסאונד</div>
               <div className="app-sub">💾 נתונים נשמרים תמיד</div>
             </div>
