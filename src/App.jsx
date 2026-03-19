@@ -840,7 +840,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       <div className="flex-between mb-4">
         <div className="search-bar"><span>🔍</span><input placeholder="חיפוש ציוד..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
         <div className="flex gap-2">
-          <button className="btn btn-secondary" onClick={()=>setModal({type:"addcat"})}>＋ הוסף קטגוריה</button>
+          <button className="btn btn-primary" onClick={()=>setModal({type:"addcat"})}>➕ הוסף קטגוריה</button>
           <button className="btn btn-primary" onClick={()=>setModal({type:"add"})}>➕ הוסף ציוד</button>
         </div>
       </div>
@@ -951,10 +951,13 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                       {eq.soundOnly && <div className="chip" style={{color:"var(--accent)",borderColor:"var(--accent)"}}>🎙️ ציוד סאונד</div>}
                       {eq.photoOnly && <div className="chip" style={{color:"var(--green)",borderColor:"rgba(39,174,96,0.45)"}}>🎥 ציוד צילום</div>}
                     </div>
-                    <div style={{fontSize:13}}>
-                      <strong style={{color:"var(--accent)",fontSize:20}}>{workingUnits(eq)-used(eq.id)}</strong>
-                      <span style={{color:"var(--text3)"}}> / {workingUnits(eq)} זמין</span>
-                      {workingUnits(eq)<eq.total_quantity&&<span style={{color:"var(--red)",fontSize:11,fontWeight:700,marginRight:6}}> · {eq.total_quantity-workingUnits(eq)} בדיקה 🔧</span>}
+                    <div style={{fontSize:13,display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
+                      <div>
+                        <strong style={{color:isEmpty?"var(--red)":"var(--accent)",fontSize:20}}>{avail}</strong>
+                        <span style={{color:"var(--text3)"}}> / {workingUnits(eq)} זמין</span>
+                        {workingUnits(eq)<eq.total_quantity&&<span style={{color:"var(--red)",fontSize:11,fontWeight:700,marginRight:6}}> · {eq.total_quantity-workingUnits(eq)} בדיקה 🔧</span>}
+                      </div>
+                      {isEmpty&&<span style={{fontSize:10,fontWeight:900,color:"var(--red)",background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.4)",borderRadius:6,padding:"2px 7px",whiteSpace:"nowrap"}}>אזל במלאי</span>}
                     </div>
                     {eq.notes && <div className="chip" style={{marginTop:6}}>💬 {eq.notes}</div>}
                     <div style={{marginTop:8}}>{statusBadge(eq.status)}</div>
@@ -1110,11 +1113,20 @@ function ManageCategoriesModal({ categories, categoryTypes, onSave, onClose, equ
               ) : (
                 <>
                   <span style={{flex: 1, fontSize: 13, fontWeight: 700}}>{c}</span>
-                  <span style={typeBadgeStyle(getEffectiveType(c))}>{typeLabel(getEffectiveType(c))}</span>
+                  <button
+                    type="button"
+                    title="לחץ לשינוי סיווג"
+                    style={{...typeBadgeStyle(getEffectiveType(c)), cursor:"pointer", border: `1px solid ${getEffectiveType(c)==="סאונד"?"rgba(155,89,182,0.6)":getEffectiveType(c)==="צילום"?"rgba(39,174,96,0.5)":"var(--border)"}`}}
+                    onClick={() => {
+                      const cycle = {"":"סאונד","סאונד":"צילום","צילום":""};
+                      const next = cycle[getEffectiveType(c)];
+                      onSave({action:"rename", oldName:c, newName:c, type:next});
+                    }}
+                  >{typeLabel(getEffectiveType(c))} ↻</button>
                   <button
                     className="btn btn-secondary btn-sm"
                     onClick={() => { setEditingCat(c); setEditVal(c); setEditType(getEffectiveType(c) || ""); }}
-                    title="ערוך">✏️</button>
+                    title="ערוך שם">✏️</button>
                   <button
                     className="btn btn-danger btn-sm"
                     onClick={() => onSave({action:"delete", name: c})}
