@@ -2705,8 +2705,15 @@ function DashboardPage({ equipment, reservations, setReservations, showToast }) 
 
         {/* ── שיעורים להכנה ── */}
         {(()=>{
+          const nowHHMM = (()=>{const n=new Date();return String(n.getHours()).padStart(2,"0")+":"+String(n.getMinutes()).padStart(2,"0");})();
           const upcomingLessons = reservations
-            .filter(r=>r.loan_type==="שיעור" && r.borrow_date >= todayStr && r.status!=="שיעור שהסתיים")
+            .filter(r=>{
+              if(r.loan_type!=="שיעור") return false;
+              if(r.status==="הוחזר"||r.status==="שיעור שהסתיים"||r.status==="נדחה") return false;
+              if(r.borrow_date < todayStr) return false;
+              if(r.borrow_date===todayStr) return (r.return_time||"23:59") > nowHHMM;
+              return true;
+            })
             .sort((a,b)=>a.borrow_date<b.borrow_date?-1:a.borrow_time<b.borrow_time?-1:1)
             .slice(0,5);
           if(!upcomingLessons.length) return null;
