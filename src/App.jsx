@@ -647,7 +647,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   const filtered = equipment.filter(e =>
     (selectedCats.length===0||selectedCats.includes(e.category)) &&
     e.name.includes(search) &&
-    (typeFilter==="הכל" || (typeFilter==="סאונד" && e.soundOnly) || (typeFilter==="צילום" && e.photoOnly))
+    (typeFilter==="הכל" || (()=>{const g=(!e.soundOnly&&!e.photoOnly)||(e.soundOnly&&e.photoOnly);return(typeFilter==="סאונד"&&(e.soundOnly||g))||(typeFilter==="צילום"&&(e.photoOnly||g));})()
   );
 
   const updateQty = async (eq, delta) => {
@@ -972,6 +972,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       {modal?.type==="addcat" && <ManageCategoriesModal
         categories={categories}
         categoryTypes={categoryTypes}
+        equipment={equipment}
         onClose={()=>setModal(null)}
         onSave={async(action)=>{
           if(action.action==="add") {
@@ -1011,20 +1012,32 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
 }
 
 // ─── MANAGE CATEGORIES MODAL ──────────────────────────────────────────────────
-function ManageCategoriesModal({ categories, categoryTypes, onSave, onClose }) {
+function ManageCategoriesModal({ categories, categoryTypes, onSave, onClose, equipment=[] }) {
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState(""); // "" | "סאונד" | "צילום"
-  const [editingCat, setEditingCat] = useState(null); // {name, type}
+  const [editingCat, setEditingCat] = useState(null);
   const [editVal, setEditVal] = useState("");
   const [editType, setEditType] = useState("");
 
   const exists = categories.includes(newName.trim());
 
+  // Derive effective type from equipment items (dynamic, based on toggle buttons)
+  const getEffectiveType = (cat) => {
+    const items = equipment.filter(e => e.category === cat);
+    if (items.length) {
+      const allSound = items.every(e => e.soundOnly) && !items.every(e => e.photoOnly);
+      const allPhoto = items.every(e => e.photoOnly) && !items.every(e => e.soundOnly);
+      if (allSound) return "סאונד";
+      if (allPhoto) return "צילום";
+    }
+    return categoryTypes[cat] || "";
+  };
+
   // Sort categories: סאונד → צילום → כללי, then alphabetically within each group
   const sorted = [...categories].sort((a, b) => {
     const order = { "סאונד": 0, "צילום": 1 };
-    const oa = order[categoryTypes[a]] ?? 2;
-    const ob = order[categoryTypes[b]] ?? 2;
+    const oa = order[getEffectiveType(a)] ?? 2;
+    const ob = order[getEffectiveType(b)] ?? 2;
     if (oa !== ob) return oa - ob;
     return a.localeCompare(b, "he");
   });
@@ -1076,10 +1089,10 @@ function ManageCategoriesModal({ categories, categoryTypes, onSave, onClose }) {
               ) : (
                 <>
                   <span style={{flex: 1, fontSize: 13, fontWeight: 700}}>{c}</span>
-                  <span style={typeBadgeStyle(categoryTypes[c])}>{typeLabel(categoryTypes[c])}</span>
+                  <span style={typeBadgeStyle(getEffectiveType(c))}>{typeLabel(getEffectiveType(c))}</span>
                   <button
                     className="btn btn-secondary btn-sm"
-                    onClick={() => { setEditingCat(c); setEditVal(c); setEditType(categoryTypes[c] || ""); }}
+                    onClick={() => { setEditingCat(c); setEditVal(c); setEditType(getEffectiveType(c) || ""); }}
                     title="ערוך">✏️</button>
                   <button
                     className="btn btn-danger btn-sm"
@@ -1290,8 +1303,9 @@ function EditReservationModal({ reservation, equipment, reservations, onSave, on
       const haystack = `${eq.name||""} ${eq.category||""}`.toLowerCase();
       if (!haystack.includes(searchText)) return false;
     }
-    if (editTypeFilter === "sound" && !eq.soundOnly) return false;
-    if (editTypeFilter === "photo" && !eq.photoOnly) return false;
+    const isGeneral = (!eq.soundOnly && !eq.photoOnly) || (eq.soundOnly && eq.photoOnly);
+    if (editTypeFilter === "sound" && !eq.soundOnly && !isGeneral) return false;
+    if (editTypeFilter === "photo" && !eq.photoOnly && !isGeneral) return false;
     if (editCategoryFilters.length && !editCategoryFilters.includes(eq.category)) return false;
     if (showLoanedOnly && getQty(eq.id) <= 0) return false;
     return true;
@@ -1942,10 +1956,11 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
             <div className="search-bar" style={{minWidth:150}}><span>🔍</span><input placeholder="חיפוש ציוד..." value={meqSearch} onChange={e=>setMeqSearch(e.target.value)}/></div>
           </div>
           {(()=>{
-            const visCats=(meqCatF.length>0?meqCatF:(categories||[])).filter(cat=>mAvailEq.some(e=>e.category===cat&&(meqTypeF==="all"||(meqTypeF==="sound"&&e.soundOnly)||(meqTypeF==="photo"&&e.photoOnly))&&(!meqSearch||e.name.includes(meqSearch))));
+            const meqMatch=(e)=>{const g=(!e.soundOnly&&!e.photoOnly)||(e.soundOnly&&e.photoOnly);return meqTypeF==="all"||(meqTypeF==="sound"&&(e.soundOnly||g))||(meqTypeF==="photo"&&(e.photoOnly||g));};
+            const visCats=(meqCatF.length>0?meqCatF:(categories||[])).filter(cat=>mAvailEq.some(e=>e.category===cat&&meqMatch(e)&&(!meqSearch||e.name.includes(meqSearch))));
             if(!visCats.length)return <div style={{textAlign:"center",color:"var(--text3)",padding:16,fontSize:13}}>לא נמצא ציוד תואם</div>;
             return visCats.map(cat=>{
-              const catEq=mAvailEq.filter(e=>e.category===cat&&(meqTypeF==="all"||(meqTypeF==="sound"&&e.soundOnly)||(meqTypeF==="photo"&&e.photoOnly))&&(!meqSearch||e.name.includes(meqSearch)));
+              const catEq=mAvailEq.filter(e=>e.category===cat&&meqMatch(e)&&(!meqSearch||e.name.includes(meqSearch)));
               if(!catEq.length)return null;
               return (<div key={cat} style={{marginBottom:10}}>
                 <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:5,textTransform:"uppercase",letterSpacing:1}}>{cat}</div>
@@ -3027,8 +3042,9 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
   const kitEqIds = activeKit ? new Set((activeKit.items||[]).map(i=>String(i.equipment_id))) : null;
   const equipmentFilter = isSoundLoan ? "sound" : loanType==="הפקה" ? "photo" : privateFilter;
   const visibleAvailEq = availEq.filter((eq) => {
-    if (equipmentFilter === "sound") return !!eq.soundOnly;
-    if (equipmentFilter === "photo") return !!eq.photoOnly;
+    const isGeneral = (!eq.soundOnly && !eq.photoOnly) || (eq.soundOnly && eq.photoOnly);
+    if (equipmentFilter === "sound") return !!eq.soundOnly || isGeneral;
+    if (equipmentFilter === "photo") return !!eq.photoOnly || isGeneral;
     return true;
   });
   const baseCategories = categories.filter((category) => visibleAvailEq.some((eq) => eq.category === category));
