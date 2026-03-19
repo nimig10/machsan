@@ -2260,9 +2260,14 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
                 {(selected.created_at||selected.id)&&(
                   <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginTop:8,paddingTop:8,borderTop:"1px solid rgba(245,166,35,0.15)",color:"var(--text3)"}}>
                     <span>📨 נשלח למערכת</span>
-                    <span style={{fontWeight:700,color:"var(--text2)"}}>
-                      {selected.submitted_at || "לא ידוע"}
-                    </span>
+                    <span style={{fontWeight:700,color:"var(--text2)"}}>{(()=>{
+                      if(selected.submitted_at) return selected.submitted_at;
+                      const idNum = Number(selected.id);
+                      if(!isNaN(idNum) && idNum > 1000000000000) {
+                        return new Date(idNum).toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"});
+                      }
+                      return selected.created_at ? `${selected.created_at.split("-").reverse().join("/")}` : "לא ידוע";
+                    })()}</span>
                   </div>
                 )}
               </div>
