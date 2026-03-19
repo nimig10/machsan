@@ -7240,10 +7240,10 @@ export default function App() {
           <nav className="sidebar">
             <div className="sidebar-logo">
               {siteSettings.logo
-                ? <img src={siteSettings.logo} alt="לוגו" style={{width:70,height:70,objectFit:"contain",borderRadius:8}}/>
+                ? <img src={siteSettings.logo} alt="לוגו" style={{width:90,height:90,objectFit:"contain",borderRadius:8}}/>
                 : <span className="logo-icon">🎬</span>}
               {siteSettings.soundLogo && (
-                <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:70,height:70,objectFit:"contain",borderRadius:8,marginTop:8,display:"block"}}/>
+                <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:90,height:90,objectFit:"contain",borderRadius:8,marginTop:2,display:"block"}}/>
               )}
               <div className="app-name">מחסן השאלת ציוד<br/>קמרה אובסקורה וסאונד</div>
               <div className="app-sub">💾 נתונים נשמרים תמיד</div>
