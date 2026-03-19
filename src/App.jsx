@@ -2239,13 +2239,19 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
                   </div>:null)}
               </div>
               <div style={{marginTop:16,background:"var(--accent-glow)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:"var(--r-sm)",padding:14}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:8,fontSize:13}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,fontSize:13}}>
                   <span style={{color:"var(--text3)"}}>📅 תאריך השאלה</span>
-                  <strong>{formatDate(selected.borrow_date)}{selected.borrow_time&&<span style={{marginRight:6,color:"var(--accent)"}}>{selected.borrow_time}</span>}</strong>
+                  <span style={{display:"flex",alignItems:"center",gap:6}}>
+                    <strong>{formatDate(selected.borrow_date)}</strong>
+                    {selected.borrow_time&&<span style={{background:"var(--surface)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:6,padding:"1px 8px",fontSize:12,fontWeight:800,color:"var(--accent)"}}>{selected.borrow_time}</span>}
+                  </span>
                 </div>
-                <div style={{display:"flex",justifyContent:"space-between",fontSize:13}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:13}}>
                   <span style={{color:"var(--text3)"}}>🔄 תאריך החזרה</span>
-                  <strong>{formatDate(selected.return_date)}{selected.return_time&&<span style={{marginRight:6,color:"var(--accent)"}}>{selected.return_time}</span>}</strong>
+                  <span style={{display:"flex",alignItems:"center",gap:6}}>
+                    <strong>{formatDate(selected.return_date)}</strong>
+                    {selected.return_time&&<span style={{background:"var(--surface)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:6,padding:"1px 8px",fontSize:12,fontWeight:800,color:"var(--accent)"}}>{selected.return_time}</span>}
+                  </span>
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginTop:8,paddingTop:8,borderTop:"1px solid rgba(245,166,35,0.15)"}}>
                   <span style={{color:"var(--text3)"}}>⏱️ משך ההשאלה</span>
