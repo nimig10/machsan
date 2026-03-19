@@ -87,6 +87,7 @@ const SOUND_CATEGORIES = ["מיקרופונים","מקליטי אודיו","כב
 const STATUSES    = ["תקין","פגום","בתיקון","נעלם"];
 const PHOTO_CATEGORIES = ["מצלמות","עדשות","תאורה","חצובות","אביזרים","אביזרי צילום","מייצבי מצלמה","גימבלים","רחפנים","מוניטורים"];
 const RESEND_API_KEY = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_RESEND_KEY : "";
+const ADMIN_NAV_PAGES = ["dashboard","reservations","equipment","damaged","certifications","rejected","kits","team","archive","policies","settings"];
 const NIMROD_PHONE     = "972521234567"; // ← החלף במספר של נמרוד
 const EMAIL_TYPO_DOMAINS = ["gmai.com","gmial.com","gmail.co","gamil.com","gmaill.com","yahooo.com","yahho.com","outlok.com","hotmai.com","outllook.com"];
 const TERMS = `הסטודנט מתחייב להחזיר את הציוד במועד שנקבע ובמצב תקין.
@@ -7452,6 +7453,7 @@ export default function App() {
   const historySuspendedRef = useRef(true);
   const historyQueuedRef = useRef(false);
   const undoInFlightRef = useRef(false);
+  const swipeTouchRef = useRef(null);
 
   equipmentRef.current = equipment;
   reservationsRef.current = reservations;
@@ -7705,6 +7707,21 @@ export default function App() {
   const rejected = rejectedCount + overdueCount;
   const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד פעיל", damaged:"ציוד בדיקה", reservations:"ניהול בקשות", rejected:"בקשות דחויות/מאחרות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות", policies:"נהלים", certifications:"הסמכות", settings:"הגדרות" };
 
+  const handleSwipeTouchStart = (e) => {
+    swipeTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+  const handleSwipeTouchEnd = (e) => {
+    if (!swipeTouchRef.current) return;
+    const dx = e.changedTouches[0].clientX - swipeTouchRef.current.x;
+    const dy = e.changedTouches[0].clientY - swipeTouchRef.current.y;
+    swipeTouchRef.current = null;
+    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
+    const idx = ADMIN_NAV_PAGES.indexOf(page);
+    if (idx === -1) return;
+    if (dx < 0 && idx < ADMIN_NAV_PAGES.length - 1) setPage(ADMIN_NAV_PAGES[idx + 1]);
+    else if (dx > 0 && idx > 0) setPage(ADMIN_NAV_PAGES[idx - 1]);
+  };
+
   return (
     <>
       <style>{css}</style>
@@ -7782,7 +7799,7 @@ export default function App() {
               <button className="btn btn-secondary btn-sm" onClick={()=>setAuthed(false)}>🚪 יציאה</button>
             </div>
           </nav>
-          <div className="main">
+          <div className="main" onTouchStart={handleSwipeTouchStart} onTouchEnd={handleSwipeTouchEnd}>
             <div className="topbar" style={{flexWrap:"wrap",gap:8}}>
               <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
                 <span className="topbar-title" style={{flex:1}}>{pageTitle[page]}</span>
