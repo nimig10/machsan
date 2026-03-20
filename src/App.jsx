@@ -61,9 +61,36 @@ async function keepAlive() {
 }
 setTimeout(keepAlive, 3000); // רץ 3 שניות אחרי טעינת הדף
 
+const BACKUP_KEYS = new Set(["equipment","reservations","teamMembers","kits","certifications"]);
+const BACKUP_COOLDOWN = 60 * 60 * 1000; // max once per hour per key
+
+async function autoBackup(key) {
+  if (!BACKUP_KEYS.has(key)) return;
+  const lastKey = `backup_last_${key}`;
+  const last = Number(localStorage.getItem(lastKey) || 0);
+  if (Date.now() - last < BACKUP_COOLDOWN) return;
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers: SB_HEADERS });
+    const json = await r.json();
+    if (Array.isArray(json) && json.length > 0 && json[0].data) {
+      const old = json[0].data;
+      if (Array.isArray(old) && old.length > 0) {
+        await fetch(`${SB_URL}/rest/v1/store`, {
+          method: "POST",
+          headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates" },
+          body: JSON.stringify({ key: `backup_${key}`, data: old, updated_at: new Date().toISOString() }),
+        });
+        localStorage.setItem(lastKey, String(Date.now()));
+        console.log(`🔒 Backup saved: backup_${key} (${old.length} items)`);
+      }
+    }
+  } catch(e) { /* silent — don't block the actual write */ }
+}
+
 async function storageSet(key, value) {
   lsSet(key, value); // cache immediately
   try {
+    await autoBackup(key);
     const res = await fetch(`${SB_URL}/rest/v1/store`, {
       method:  "POST",
       headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates" },
@@ -122,6 +149,32 @@ window.dbImport = async (data) => {
     const r = await storageSet(key, value);
     console.log(r.ok ? `✅ ${key} restored` : `❌ ${key} failed: ${r.error}`);
   }
+  console.log("🔄 Reload the page to see changes");
+};
+window.dbBackups = async () => {
+  const keys = ["equipment","reservations","teamMembers","kits","certifications"];
+  console.log("🔒 Backup Status:");
+  for (const key of keys) {
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.backup_${key}&select=data,updated_at`, { headers: SB_HEADERS });
+      const json = await res.json();
+      if (json.length > 0) {
+        const d = json[0].data;
+        const count = Array.isArray(d) ? d.length : 0;
+        console.log(`✅ backup_${key}: ${count} items — saved: ${json[0].updated_at}`);
+      } else {
+        console.log(`⚠️ backup_${key}: no backup yet`);
+      }
+    } catch(e) { console.log(`❌ backup_${key}: ERROR`); }
+  }
+};
+window.dbRestoreFromBackup = async (key) => {
+  if (!key) { console.error("Usage: dbRestoreFromBackup('equipment')"); return; }
+  const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.backup_${key}&select=data`, { headers: SB_HEADERS });
+  const json = await res.json();
+  if (!json.length || !json[0].data) { console.error(`No backup found for ${key}`); return; }
+  const r = await storageSet(key, json[0].data);
+  console.log(r.ok ? `✅ ${key} restored from backup (${json[0].data.length} items)` : `❌ Failed: ${r.error}`);
   console.log("🔄 Reload the page to see changes");
 };
 
