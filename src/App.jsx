@@ -81,6 +81,50 @@ async function storageSet(key, value) {
   }
 }
 
+// ─── DB DIAGNOSTICS (accessible from browser console) ────────────────────────
+window.dbDiag = async () => {
+  const keys = ["equipment","reservations","categories","categoryTypes","teamMembers","kits","policies","certifications","deptHeads","calendarToken","collegeManager","managerToken","siteSettings"];
+  console.log("🔍 Supabase DB Diagnostic Report");
+  console.log("=".repeat(50));
+  for (const key of keys) {
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data,updated_at`, { headers: SB_HEADERS });
+      const json = await res.json();
+      if (json.length > 0) {
+        const d = json[0].data;
+        const count = Array.isArray(d) ? d.length : (typeof d === "object" ? Object.keys(d).length : 1);
+        const units = key === "equipment" && Array.isArray(d) ? d.reduce((s,e) => s + (Array.isArray(e.units) ? e.units.length : (e.quantity||0)), 0) : "";
+        console.log(`✅ ${key}: ${count} items${units ? ` (${units} units)` : ""} — updated: ${json[0].updated_at}`);
+      } else {
+        console.log(`⚠️ ${key}: EMPTY (not in DB)`);
+      }
+    } catch(e) { console.log(`❌ ${key}: ERROR — ${e.message}`); }
+  }
+};
+window.dbExport = async () => {
+  const keys = ["equipment","reservations","teamMembers","kits","certifications"];
+  const data = {};
+  for (const key of keys) {
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers: SB_HEADERS });
+      const json = await res.json();
+      data[key] = json.length > 0 ? json[0].data : null;
+    } catch(e) { data[key] = `ERROR: ${e.message}`; }
+  }
+  console.log("📦 Full DB Export (copy this JSON):");
+  console.log(JSON.stringify(data, null, 2));
+  return data;
+};
+window.dbImport = async (data) => {
+  if (!data || typeof data !== "object") { console.error("Usage: dbImport({equipment:[...], reservations:[...]})"); return; }
+  for (const [key, value] of Object.entries(data)) {
+    if (value == null) continue;
+    const r = await storageSet(key, value);
+    console.log(r.ok ? `✅ ${key} restored` : `❌ ${key} failed: ${r.error}`);
+  }
+  console.log("🔄 Reload the page to see changes");
+};
+
 // ─── INITIAL DATA ─────────────────────────────────────────────────────────────
 const INITIAL_EQUIPMENT = [
   { id:1, name:"מצלמת Sony A7 III",      category:"מצלמות",      description:"מצלמת מירורלס מקצועית 24MP", total_quantity:5, image:"📷", notes:"לכלול כרטיסי זיכרון", status:"תקין" },
@@ -720,7 +764,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     setEquipment(updated);
     const _saveRes = await storageSet("equipment", updated);
     if(_saveRes.ok) showToast("success", modal.type==="add" ? `"${form.name}" נוסף בהצלחה` : "הציוד עודכן בהצלחה");
-    else showToast("error", "❌ שגיאה בשמירה ל-Google Sheets — נסה שוב");
+    else showToast("error", "❌ שגיאה בשמירה — נסה שוב");
     setSaving(false);
     setModal(null);
   };
@@ -805,7 +849,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
         });
         const json = await res.json();
         if (!res.ok || !json.url) throw new Error(json.error || "שגיאת שרת");
-        s("image", json.url);          // store only the URL — no Base64 in Sheets
+        s("image", json.url);          // store only the URL — no Base64 in DB
       } catch (err) {
         console.error("Image upload failed:", err);
         setImgError("שגיאה בהעלאת התמונה — נסה שנית");
@@ -2932,7 +2976,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, cal
     const updated = [...teamMembers, { ...addForm, id: Date.now(), name, email, phone: addForm.phone?.trim()||"" }];
     setTeamMembers(updated);
     const _tmNew = await storageSet("teamMembers", updated);
-    if(!_tmNew.ok) showToast("error", "❌ שגיאה בשמירה ל-Google Sheets — נסה שוב");
+    if(!_tmNew.ok) showToast("error", "❌ שגיאה בשמירה — נסה שוב");
     else showToast("success", `${name} נוסף לצוות`);
     setAddForm(emptyForm);
   };
@@ -2952,7 +2996,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, cal
     const updated = teamMembers.map(m => m.id===editMember.id ? {...m,...editForm,name,email,phone:editForm.phone?.trim()||""} : m);
     setTeamMembers(updated);
     const _tmEditRes = await storageSet("teamMembers", updated);
-    if(!_tmEditRes.ok) showToast("error", "❌ שגיאה בשמירה ל-Google Sheets — נסה שוב");
+    if(!_tmEditRes.ok) showToast("error", "❌ שגיאה בשמירה — נסה שוב");
     else showToast("success", "איש צוות עודכן");
     setEditMember(null);
   };
@@ -2961,7 +3005,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, cal
     const updated = teamMembers.filter(m => m.id!==id);
     setTeamMembers(updated);
     const _tmDelRes = await storageSet("teamMembers", updated);
-    if(!_tmDelRes.ok) showToast("error", "❌ שגיאה בשמירה ל-Google Sheets");
+    if(!_tmDelRes.ok) showToast("error", "❌ שגיאה בשמירה");
     else showToast("success", "איש צוות הוסר");
   };
 
@@ -4180,7 +4224,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       const updated = initial ? kits.map(k=>k.id===initial.id?kit:k) : [...kits, kit];
       setKits(updated);
       const _kitRes = await storageSet("kits", updated);
-      if(!_kitRes.ok) showToast("error", "❌ שגיאה בשמירה ל-Google Sheets — נסה שוב");
+      if(!_kitRes.ok) showToast("error", "❌ שגיאה בשמירה — נסה שוב");
       else showToast("success", initial ? "הערכה עודכנה" : `ערכה "${trimmedName}" נוצרה`);
       onDone();
     };

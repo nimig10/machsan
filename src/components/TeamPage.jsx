@@ -100,7 +100,7 @@ export function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHea
     const updated = [...teamMembers, { ...addForm, id: Date.now(), name, email, phone: addForm.phone?.trim()||"" }];
     setTeamMembers(updated);
     const _tmNew = await storageSet("teamMembers", updated);
-    if(!_tmNew.ok) showToast("error", "❌ שגיאה בשמירה ל-Google Sheets — נסה שוב");
+    if(!_tmNew.ok) showToast("error", "❌ שגיאה בשמירה — נסה שוב");
     else showToast("success", `${name} נוסף לצוות`);
     setAddForm(emptyForm);
   };
@@ -120,7 +120,7 @@ export function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHea
     const updated = teamMembers.map(m => m.id===editMember.id ? {...m,...editForm,name,email,phone:editForm.phone?.trim()||""} : m);
     setTeamMembers(updated);
     const _tmEditRes = await storageSet("teamMembers", updated);
-    if(!_tmEditRes.ok) showToast("error", "❌ שגיאה בשמירה ל-Google Sheets — נסה שוב");
+    if(!_tmEditRes.ok) showToast("error", "❌ שגיאה בשמירה — נסה שוב");
     else showToast("success", "איש צוות עודכן");
     setEditMember(null);
   };
@@ -129,7 +129,7 @@ export function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHea
     const updated = teamMembers.filter(m => m.id!==id);
     setTeamMembers(updated);
     const _tmDelRes = await storageSet("teamMembers", updated);
-    if(!_tmDelRes.ok) showToast("error", "❌ שגיאה בשמירה ל-Google Sheets");
+    if(!_tmDelRes.ok) showToast("error", "❌ שגיאה בשמירה");
     else showToast("success", "איש צוות הוסר");
   };
 

@@ -76,7 +76,7 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
     setEquipment(updated);
     const _saveRes = await storageSet("equipment", updated);
     if(_saveRes.ok) showToast("success", modal.type==="add" ? `"${form.name}" נוסף בהצלחה` : "הציוד עודכן בהצלחה");
-    else showToast("error", "❌ שגיאה בשמירה ל-Google Sheets — נסה שוב");
+    else showToast("error", "❌ שגיאה בשמירה — נסה שוב");
     setSaving(false);
     setModal(null);
   };
@@ -161,7 +161,7 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
         });
         const json = await res.json();
         if (!res.ok || !json.url) throw new Error(json.error || "שגיאת שרת");
-        s("image", json.url);          // store only the URL — no Base64 in Sheets
+        s("image", json.url);          // store only the URL — no Base64 in DB
       } catch (err) {
         console.error("Image upload failed:", err);
         setImgError("שגיאה בהעלאת התמונה — נסה שנית");
