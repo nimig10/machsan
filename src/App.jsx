@@ -87,6 +87,7 @@ const SOUND_CATEGORIES = ["מיקרופונים","מקליטי אודיו","כב
 const STATUSES    = ["תקין","פגום","בתיקון","נעלם"];
 const PHOTO_CATEGORIES = ["מצלמות","עדשות","תאורה","חצובות","אביזרים","אביזרי צילום","מייצבי מצלמה","גימבלים","רחפנים","מוניטורים"];
 const RESEND_API_KEY = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_RESEND_KEY : "";
+const ADMIN_NAV_PAGES = ["dashboard","reservations","equipment","damaged","certifications","rejected","kits","team","archive","policies","settings"];
 const NIMROD_PHONE     = "972521234567"; // ← החלף במספר של נמרוד
 const EMAIL_TYPO_DOMAINS = ["gmai.com","gmial.com","gmail.co","gamil.com","gmaill.com","yahooo.com","yahho.com","outlok.com","hotmai.com","outllook.com"];
 const TERMS = `הסטודנט מתחייב להחזיר את הציוד במועד שנקבע ובמצב תקין.
@@ -3811,6 +3812,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     ? 2
     : (Number.isInteger(initialStepParam) && initialStepParam >= 1 && initialStepParam <= 4 ? initialStepParam : 1);
   const [step, setStep]       = useState(initialStep);
+  const swipeTouchRef = useRef(null);
   const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""});
   const [items, setItems]     = useState([]);
   const [agreed, setAgreed]   = useState(false);
@@ -4156,6 +4158,19 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
 
   const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""}); setItems([]); setAgreed(false); };
 
+  const handleFormSwipeStart = (e) => {
+    swipeTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+  const handleFormSwipeEnd = (e) => {
+    if (!swipeTouchRef.current) return;
+    const dx = e.changedTouches[0].clientX - swipeTouchRef.current.x;
+    const dy = e.changedTouches[0].clientY - swipeTouchRef.current.y;
+    swipeTouchRef.current = null;
+    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
+    if (dx < 0) goToStep(Math.min(step + 1, 4));
+    else goToStep(Math.max(step - 1, 1));
+  };
+
   if(emailError) return (
     <div className="form-page">
       <div style={{width:"100%",maxWidth:500,background:"var(--surface)",border:"1px solid rgba(231,76,60,0.4)",borderRadius:16,padding:40,textAlign:"center",direction:"rtl"}}>
@@ -4184,7 +4199,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
 
   return (
     <>
-    <div className="form-page" style={{"--accent": siteSettings.accentColor||"#f5a623","--accent2": siteSettings.accentColor||"#f5a623","--accent-glow":`${siteSettings.accentColor||"#f5a623"}2e`}}>
+    <div className="form-page" style={{"--accent": siteSettings.accentColor||"#f5a623","--accent2": siteSettings.accentColor||"#f5a623","--accent-glow":`${siteSettings.accentColor||"#f5a623"}2e`}} onTouchStart={handleFormSwipeStart} onTouchEnd={handleFormSwipeEnd}>
       <div className="form-card">
         <div className="form-card-header" style={{position:"relative"}}>
           <button type="button" onClick={()=>setShowInfoPanel(true)}
@@ -7648,6 +7663,7 @@ export default function App() {
   const historySuspendedRef = useRef(true);
   const historyQueuedRef = useRef(false);
   const undoInFlightRef = useRef(false);
+  const swipeTouchRef = useRef(null);
 
   equipmentRef.current = equipment;
   reservationsRef.current = reservations;
@@ -7901,6 +7917,21 @@ export default function App() {
   const rejected = rejectedCount + overdueCount;
   const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד פעיל", damaged:"ציוד בדיקה", reservations:"ניהול בקשות", rejected:"בקשות דחויות/מאחרות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות", policies:"נהלים", certifications:"הסמכות", settings:"הגדרות" };
 
+  const handleSwipeTouchStart = (e) => {
+    swipeTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+  const handleSwipeTouchEnd = (e) => {
+    if (!swipeTouchRef.current) return;
+    const dx = e.changedTouches[0].clientX - swipeTouchRef.current.x;
+    const dy = e.changedTouches[0].clientY - swipeTouchRef.current.y;
+    swipeTouchRef.current = null;
+    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
+    const idx = ADMIN_NAV_PAGES.indexOf(page);
+    if (idx === -1) return;
+    if (dx < 0 && idx < ADMIN_NAV_PAGES.length - 1) setPage(ADMIN_NAV_PAGES[idx + 1]);
+    else if (dx > 0 && idx > 0) setPage(ADMIN_NAV_PAGES[idx - 1]);
+  };
+
   return (
     <>
       <style>{css}</style>
@@ -7978,7 +8009,7 @@ export default function App() {
               <button className="btn btn-secondary btn-sm" onClick={()=>setAuthed(false)}>🚪 יציאה</button>
             </div>
           </nav>
-          <div className="main">
+          <div className="main" onTouchStart={handleSwipeTouchStart} onTouchEnd={handleSwipeTouchEnd}>
             <div className="topbar" style={{flexWrap:"wrap",gap:8}}>
               <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
                 <span className="topbar-title" style={{flex:1}}>{pageTitle[page]}</span>
