@@ -17,18 +17,27 @@ function lsSet(key, value) {
   try { localStorage.setItem(`cache_${key}`, JSON.stringify(value)); } catch {}
 }
 
+// storageGet returns { value, source }
+//   source: "supabase" — row found in DB
+//   source: "supabase_empty" — DB responded OK but key doesn't exist (first-time)
+//   source: "cache" — network/fetch failed, fell back to localStorage
 async function storageGet(key) {
   try {
     const res  = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers: SB_HEADERS });
+    if (!res.ok) {
+      console.warn("storageGet HTTP error", key, res.status);
+      return { value: lsGet(key), source: "cache" };
+    }
     const json = await res.json();
     if (Array.isArray(json) && json.length > 0) {
       lsSet(key, json[0].data);
-      return json[0].data;
+      return { value: json[0].data, source: "supabase" };
     }
-    return lsGet(key);
+    // DB responded OK but no row — this is a genuine first-time setup
+    return { value: null, source: "supabase_empty" };
   } catch(e) {
     console.warn("storageGet error", key, e);
-    return lsGet(key);
+    return { value: lsGet(key), source: "cache" };
   }
 }
 
@@ -1949,7 +1958,7 @@ function ReservationsPage({ reservations, setReservations, equipment, showToast,
       if(!mOk1||!mOk2||!mOk3){showToast("error","יש להשלים את כל השדות");return;}
       setMSaving(true);
       let freshRes=reservations;
-      try{const fr=await storageGet("reservations");if(Array.isArray(fr)){freshRes=fr;setReservations(fr);}}catch(e){}
+      try{const fr=(await storageGet("reservations")).value;if(Array.isArray(fr)){freshRes=fr;setReservations(fr);}}catch(e){}
       const newRes={...mf,id:Date.now(),status:mf.status,created_at:today(),submitted_at:new Date().toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"}),items:mItems,manual_by_admin:true};
       const updated=[...freshRes,newRes];
       setReservations(updated);
@@ -3924,7 +3933,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     // This prevents two students submitting simultaneously from both "seeing" free stock
     let freshReservations = reservations;
     try {
-      const fresh = await storageGet("reservations");
+      const fresh = (await storageGet("reservations")).value;
       if (Array.isArray(fresh)) {
         freshReservations = fresh;
         setReservations(fresh); // update local state too
@@ -6579,7 +6588,7 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
   const changeStatus = async (r, newStatus) => {
     setChangingStatus(r.id);
     try {
-      const allRes = await storageGet("reservations");
+      const allRes = (await storageGet("reservations")).value;
       const updated = (allRes||[]).map(x => x.id===r.id ? {...x, status:newStatus} : x);
       const ok = await storageSet("reservations", updated);
       if(ok.ok) {
@@ -7585,7 +7594,7 @@ export default function App() {
     (async()=>{
         try {
           historySuspendedRef.current = true;
-          const [eq, res, cats, catTypes, tm, kts, pol, certs, dhs, calTok, mgr, mgrTok, siteSet] = await Promise.all([
+          const [eqR, resR, catsR, catTypesR, tmR, ktsR, polR, certsR, dhsR, calTokR, mgrR, mgrTokR, siteSetR] = await Promise.all([
             storageGet("equipment"),
           storageGet("reservations"),
           storageGet("categories"),
@@ -7600,11 +7609,26 @@ export default function App() {
           storageGet("managerToken"),
           storageGet("siteSettings"),
           ]);
+          // Extract values and sources
+          const eq = eqR.value, eqSrc = eqR.source;
+          const res = resR.value, resSrc = resR.source;
+          const cats = catsR.value, catsSrc = catsR.source;
+          const catTypes = catTypesR.value;
+          const tm = tmR.value, tmSrc = tmR.source;
+          const kts = ktsR.value, ktsSrc = ktsR.source;
+          const pol = polR.value, polSrc = polR.source;
+          const certs = certsR.value, certsSrc = certsR.source;
+          const dhs = dhsR.value, dhsSrc = dhsR.source;
+          const calTok = calTokR.value, calTokSrc = calTokR.source;
+          const mgr = mgrR.value, mgrSrc = mgrR.source;
+          const mgrTok = mgrTokR.value, mgrTokSrc = mgrTokR.source;
+          const siteSet = siteSetR.value;
+
           const rawEquipment = normalizeEquipmentTagFlags(eq || INITIAL_EQUIPMENT);
           const normalizedEquipment = rawEquipment.map(ensureUnits);
-          const equipmentChanged = JSON.stringify(normalizedEquipment) !== JSON.stringify(eq || INITIAL_EQUIPMENT);
+          const equipmentChanged = eq && JSON.stringify(normalizedEquipment) !== JSON.stringify(eq);
           const normalizedReservations = normalizeReservationsForArchive(res || []);
-          const reservationsChanged = JSON.stringify(normalizedReservations) !== JSON.stringify(res || []);
+          const reservationsChanged = res && JSON.stringify(normalizedReservations) !== JSON.stringify(res);
           _setEquipment(normalizedEquipment);
           _setReservations(normalizedReservations);
           _setCategories(cats || DEFAULT_CATEGORIES);
@@ -7620,29 +7644,34 @@ export default function App() {
           const loadedSettings = siteSet || { logo:"", theme:"dark" };
         _setSiteSettings(loadedSettings);
         if(loadedSettings.theme==="light") document.documentElement.setAttribute("data-theme","light");
-        // Init missing
-          if(!eq || equipmentChanged) await storageSet("equipment", normalizedEquipment);
-        if(!res)  await storageSet("reservations", []);
-        if(!cats) await storageSet("categories",   DEFAULT_CATEGORIES);
-        if(!tm)   await storageSet("teamMembers",  []);
-        if(!kts)  await storageSet("kits",         []);
-        if(!pol)   await storageSet("policies",        { פרטית:"", הפקה:"", סאונד:"" });
-        if(!certs) await storageSet("certifications", { types:[], students:[] });
-        if(!dhs)     await storageSet("deptHeads",       []);
-        if(!calTok) {
+
+        // ─── SAFE INIT: only write defaults when DB confirmed the key doesn't exist ───
+        // "supabase_empty" = DB responded OK but row missing → safe to initialize
+        // "cache" = network failed, fell back to localStorage → NEVER overwrite DB
+        if(!eq && eqSrc === "supabase_empty") await storageSet("equipment", normalizedEquipment);
+        if(!res && resSrc === "supabase_empty")  await storageSet("reservations", []);
+        if(!cats && catsSrc === "supabase_empty") await storageSet("categories",   DEFAULT_CATEGORIES);
+        if(!tm && tmSrc === "supabase_empty")   await storageSet("teamMembers",  []);
+        if(!kts && ktsSrc === "supabase_empty")  await storageSet("kits",         []);
+        if(!pol && polSrc === "supabase_empty")   await storageSet("policies",        { פרטית:"", הפקה:"", סאונד:"" });
+        if(!certs && certsSrc === "supabase_empty") await storageSet("certifications", { types:[], students:[] });
+        if(!dhs && dhsSrc === "supabase_empty")     await storageSet("deptHeads",       []);
+        if(!calTok && calTokSrc === "supabase_empty") {
           const tok = Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10);
           await storageSet("calendarToken", tok);
           setCalendarToken(tok);
         }
-        if(!mgrTok) {
+        if(!mgrTok && mgrTokSrc === "supabase_empty") {
           const tok = "mgr_"+Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10);
           await storageSet("managerToken", tok);
           setManagerToken(tok);
         }
-        if(!mgr) await storageSet("collegeManager", { name:"", email:"" });
-        if(res && reservationsChanged) await storageSet("reservations", normalizedReservations);
-        // Only warn if BOTH Sheets and cache failed (truly no data)
-        if(eq===null && !lsGet("equipment")) showToast("error", "⚠️ לא ניתן לטעון ציוד — בדוק חיבור");
+        if(!mgr && mgrSrc === "supabase_empty") await storageSet("collegeManager", { name:"", email:"" });
+        // Safe: only write back normalized data if we actually got data from DB
+        if(equipmentChanged) await storageSet("equipment", normalizedEquipment);
+        if(reservationsChanged) await storageSet("reservations", normalizedReservations);
+        // Warn if network failed and no cache
+        if(eqSrc === "cache" && !eq) showToast("error", "⚠️ לא ניתן לטעון ציוד — בדוק חיבור");
       } catch(e) {
         showToast("error", "❌ שגיאת רשת — לא ניתן לטעון נתונים");
         console.error("load error", e);
