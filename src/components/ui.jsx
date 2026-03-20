@@ -1,4 +1,10 @@
-// ui.jsx — shared UI primitives: Toast, Modal, Loading
+// ui.jsx — shared UI primitives: Toast, Modal, Loading, statusBadge
+import { normalizeReservationStatus } from "../utils.js";
+export function statusBadge(s) {
+  const normalizedStatus = normalizeReservationStatus(s);
+  const m = { "מאושר":"badge-green","ממתין":"badge-yellow","נדחה":"badge-red","הוחזר":"badge-blue","באיחור":"badge-orange","אישור ראש מחלקה":"badge-purple","תקין":"badge-green","פגום":"badge-red","בתיקון":"badge-yellow","נעלם":"badge-red" };
+  return <span className={`badge ${m[normalizedStatus]||"badge-gray"}`}>{normalizedStatus}</span>;
+}
 export function Toast({ toasts }) {
   return <div className="toast-container">{toasts.map(t=><div key={t.id} className={`toast toast-${t.type}`}><span>{t.type==="success"?"✅":t.type==="error"?"❌":"ℹ️"}</span>{t.msg}</div>)}</div>;
 }
