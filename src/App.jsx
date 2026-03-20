@@ -3616,6 +3616,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
     ? 2
     : (Number.isInteger(initialStepParam) && initialStepParam >= 1 && initialStepParam <= 4 ? initialStepParam : 1);
   const [step, setStep]       = useState(initialStep);
+  const swipeTouchRef = useRef(null);
   const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""});
   const [items, setItems]     = useState([]);
   const [agreed, setAgreed]   = useState(false);
@@ -3961,6 +3962,19 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
 
   const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""}); setItems([]); setAgreed(false); };
 
+  const handleFormSwipeStart = (e) => {
+    swipeTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+  const handleFormSwipeEnd = (e) => {
+    if (!swipeTouchRef.current) return;
+    const dx = e.changedTouches[0].clientX - swipeTouchRef.current.x;
+    const dy = e.changedTouches[0].clientY - swipeTouchRef.current.y;
+    swipeTouchRef.current = null;
+    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
+    if (dx < 0) goToStep(Math.min(step + 1, 4));
+    else goToStep(Math.max(step - 1, 1));
+  };
+
   if(emailError) return (
     <div className="form-page">
       <div style={{width:"100%",maxWidth:500,background:"var(--surface)",border:"1px solid rgba(231,76,60,0.4)",borderRadius:16,padding:40,textAlign:"center",direction:"rtl"}}>
@@ -3989,7 +4003,7 @@ function PublicForm({ equipment, reservations, setReservations, showToast, categ
 
   return (
     <>
-    <div className="form-page" style={{"--accent": siteSettings.accentColor||"#f5a623","--accent2": siteSettings.accentColor||"#f5a623","--accent-glow":`${siteSettings.accentColor||"#f5a623"}2e`}}>
+    <div className="form-page" style={{"--accent": siteSettings.accentColor||"#f5a623","--accent2": siteSettings.accentColor||"#f5a623","--accent-glow":`${siteSettings.accentColor||"#f5a623"}2e`}} onTouchStart={handleFormSwipeStart} onTouchEnd={handleFormSwipeEnd}>
       <div className="form-card">
         <div className="form-card-header" style={{position:"relative"}}>
           <button type="button" onClick={()=>setShowInfoPanel(true)}
