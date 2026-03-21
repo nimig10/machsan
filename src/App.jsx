@@ -5,6 +5,7 @@ import { CalendarGrid } from "./components/CalendarGrid.jsx";
 import { EditReservationModal } from "./components/EditReservationModal.jsx";
 import { ReservationsPage } from "./components/ReservationsPage.jsx";
 import { DashboardPage } from "./components/DashboardPage.jsx";
+import StudioBookingPage from "./components/StudioBookingPage.jsx";
 
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
 // v3.1
@@ -6259,7 +6260,7 @@ export default function App() {
   const overdueCount = reservations.filter(r=>r.status==="באיחור").length;
   const rejectedCount = reservations.filter(r=>r.status==="נדחה").length;
   const rejected = rejectedCount + overdueCount;
-  const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד פעיל", damaged:"ציוד בדיקה", reservations:"ניהול בקשות", rejected:"בקשות דחויות/מאחרות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות", policies:"נהלים", certifications:"הסמכות", settings:"הגדרות" };
+  const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד פעיל", damaged:"ציוד בדיקה", reservations:"ניהול בקשות", rejected:"בקשות דחויות/מאחרות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות", policies:"נהלים", certifications:"הסמכות", settings:"הגדרות", studios:"לוח אולפנים" };
 
   const handleSwipeTouchStart = (e) => {
     swipeTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -6330,6 +6331,7 @@ export default function App() {
             <div className="nav">
               <div className="nav-section">ניהול</div>
               {[
+                {id:"studios",icon:"🎙️",label:"אולפנים"},
                 {id:"reservations",icon:"📋",label:"בקשות",badge:pending||null},
                 {id:"equipment",icon:"📦",label:"ציוד פעיל"},
                 {id:"damaged",icon:"🔧",label:"ציוד בדיקה",badge:damagedCount||null},
@@ -6421,6 +6423,7 @@ export default function App() {
               {page==="certifications" && <CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/>}
               {page==="damaged"       && <DamagedEquipmentPage equipment={equipment} setEquipment={setEquipment} showToast={showToast} categories={categories} collegeManager={collegeManager} managerToken={managerToken}/>}
               {page==="settings"     && <SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast}/>}
+              {page==="studios"      && <StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin"/>}
             </>}
           </div>
         </div>
