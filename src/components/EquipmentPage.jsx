@@ -305,7 +305,7 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
     <div className="page">
       <div className="flex-between mb-4">
         <div className="search-bar"><span>🔍</span><input placeholder="חיפוש ציוד..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
-        <div className="flex gap-2">
+        <div className="flex gap-2" style={{flexWrap:"wrap",justifyContent:"flex-end"}}>
           <button className="btn btn-secondary" onClick={downloadTemplate} title="הורד תבנית CSV">📥 תבנית</button>
           <button className="btn btn-secondary" onClick={()=>csvInputRef.current?.click()}>📤 ייבוא CSV</button>
           <input ref={csvInputRef} type="file" accept=".csv,text/csv" style={{display:"none"}} onChange={handleCSVImport}/>
