@@ -1,6 +1,6 @@
 // DashboardPage.jsx — admin dashboard page
 import { useState } from "react";
-import { storageSet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings } from "../utils.js";
+import { storageSet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 
@@ -470,6 +470,24 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                   ))}
                 </div>
               </div>
+              {/* Return button for approved/overdue requests */}
+              {(dashViewRes.status==="מאושר"||dashViewRes.status==="באיחור") && setReservations && (
+                <div style={{borderTop:"1px solid var(--border)",paddingTop:14,display:"flex",justifyContent:"center"}}>
+                  <button className="btn btn-secondary" style={{fontSize:14,padding:"10px 32px",background:"var(--green)",borderColor:"var(--green)",color:"#fff"}}
+                    onClick={async()=>{
+                      const res = dashViewRes;
+                      const updated = normalizeReservationsForArchive(reservations.map(r =>
+                        r.id === res.id ? markReservationReturned(r) : r
+                      ));
+                      setReservations(updated);
+                      await storageSet("reservations", updated);
+                      if(showToast) showToast("success", `הציוד של ${res.student_name} הוחזר ✅`);
+                      setDashViewRes(null);
+                    }}>
+                    🔄 הוחזר
+                  </button>
+                </div>
+              )}
               {/* Approve button for pending requests — with conflict checking */}
               {dashViewRes.status==="ממתין" && setReservations && (
                 <div style={{borderTop:"1px solid var(--border)",paddingTop:14,display:"flex",justifyContent:"center"}}>
