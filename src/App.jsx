@@ -723,7 +723,9 @@ const css = `
     .form-card-body { padding:20px; }
     .toast-container { left:12px; right:12px; bottom:76px; }
     .toast { min-width:0; width:100%; }
-    .dashboard-bottom-grid { grid-template-columns:1fr; }
+    .dashboard-bottom-grid { grid-template-columns:1fr; order:1; }
+    .dash-stats-section { order:2; }
+    .page { display:flex; flex-direction:column; }
     .calendar-card { min-width:0; }
     .cal-grid { gap:4px; }
     .cal-day { min-height:64px; padding:4px; }
