@@ -46,7 +46,45 @@ export async function keepAlive() {
   } catch(e) { /* silent */ }
 }
 
+// ─── SANITY THRESHOLDS: refuse to overwrite with suspiciously small data ─────
+const CRITICAL_KEYS_MIN = {
+  equipment:    5,   // refuse if writing fewer than 5 items
+  reservations: null // no minimum — can legitimately be empty
+};
+
 export async function storageSet(key, value) {
+  // ── Sanity check: block writes that would destroy data ──
+  const minItems = CRITICAL_KEYS_MIN[key];
+  if (minItems != null && Array.isArray(value)) {
+    const cached = lsGet(key);
+    const cachedLen = Array.isArray(cached) ? cached.length : 0;
+    if (value.length < minItems && cachedLen >= minItems) {
+      console.error(`🛑 storageSet BLOCKED: refusing to write ${key} with ${value.length} items (minimum: ${minItems}, current: ${cachedLen})`);
+      return { ok: false, error: "blocked_sanity_check" };
+    }
+  }
+
+  // ── Auto-backup critical keys before overwrite ──
+  if (key in CRITICAL_KEYS_MIN) {
+    try {
+      const existing = lsGet(key);
+      if (existing && Array.isArray(existing) && existing.length > 0) {
+        await fetch(`${SB_URL}/rest/v1/store`, {
+          method: "POST",
+          headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates" },
+          body: JSON.stringify({ key: `backup_${key}`, data: existing, updated_at: new Date().toISOString() }),
+        });
+      }
+    } catch(e) { /* backup failure should not block the write */ }
+  }
+
+  // ── Log write details for critical keys ──
+  if (key in CRITICAL_KEYS_MIN) {
+    const count = Array.isArray(value) ? value.length : "N/A";
+    const units = Array.isArray(value) ? value.reduce((s, e) => s + (e?.units?.length || e?.quantity || 0), 0) : "N/A";
+    console.log(`📝 storageSet: ${key} — ${count} items, ${units} units`);
+  }
+
   lsSet(key, value); // cache immediately
   try {
     const res = await fetch(`${SB_URL}/rest/v1/store`, {
