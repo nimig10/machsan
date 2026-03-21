@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
 import { CalendarGrid } from "./components/CalendarGrid.jsx";
 import { EditReservationModal } from "./components/EditReservationModal.jsx";
@@ -786,38 +787,55 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   const handleCSVImport = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const text = await file.text();
-    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    if (lines.length < 2) { showToast("error", "הקובץ ריק או לא תקין"); return; }
-    const header = parseCSVLine(lines[0]).map(h => h.replace(/^\uFEFF/, ""));
-    const nameIdx = header.findIndex(h => ["שם פריט","name","שם"].includes(h));
-    const qtyIdx  = header.findIndex(h => ["כמות","qty","quantity"].includes(h));
-    const catIdx  = header.findIndex(h => ["רובריקה","קטגוריה","category"].includes(h));
-    const descIdx = header.findIndex(h => ["תיאור","description"].includes(h));
-    const notesIdx= header.findIndex(h => ["הערות","notes"].includes(h));
-    if (nameIdx === -1 || catIdx === -1) {
+    let rows = [];
+    const isExcel = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
+    if (isExcel) {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+    } else {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      if (lines.length < 2) { showToast("error", "הקובץ ריק או לא תקין"); return; }
+      const header = parseCSVLine(lines[0]).map(h => h.replace(/^\uFEFF/, "").trim());
+      for (let i = 1; i < lines.length; i++) {
+        const cols = parseCSVLine(lines[i]);
+        const row = {};
+        header.forEach((h, idx) => { row[h] = cols[idx]?.trim() || ""; });
+        rows.push(row);
+      }
+    }
+    if (!rows.length) { showToast("error", "הקובץ ריק"); return; }
+    const findKey = (row, keys) => keys.find(k => row[k] !== undefined);
+    const sample = rows[0];
+    const nameKey = findKey(sample, ["שם פריט","name","שם"]);
+    const catKey  = findKey(sample, ["רובריקה","קטגוריה","category"]);
+    const qtyKey  = findKey(sample, ["כמות","qty","quantity"]);
+    const descKey = findKey(sample, ["תיאור","description"]);
+    const notesKey= findKey(sample, ["הערות","notes"]);
+    if (!nameKey || !catKey) {
       showToast("error", 'חסרות עמודות חובה: "שם פריט" ו-"רובריקה"'); return;
     }
     let newEquipment = [...equipment];
     let newCategories = [...categories];
     let added = 0, skipped = 0, newCats = [];
-    for (let i = 1; i < lines.length; i++) {
-      const cols = parseCSVLine(lines[i]);
-      const name  = cols[nameIdx]?.trim();
-      const cat   = cols[catIdx]?.trim();
-      const qty   = Math.max(1, parseInt(cols[qtyIdx]) || 1);
-      const desc  = descIdx  >= 0 ? (cols[descIdx]?.trim()  || "") : "";
-      const notes = notesIdx >= 0 ? (cols[notesIdx]?.trim() || "") : "";
-      if (!name || !cat) continue;
+    rows.forEach((row, i) => {
+      const name  = String(row[nameKey] || "").trim();
+      const cat   = String(row[catKey]  || "").trim();
+      const qty   = Math.max(1, parseInt(row[qtyKey]) || 1);
+      const desc  = descKey  ? String(row[descKey]  || "").trim() : "";
+      const notes = notesKey ? String(row[notesKey] || "").trim() : "";
+      if (!name || !cat) return;
       if (!newCategories.includes(cat)) { newCategories.push(cat); newCats.push(cat); }
-      if (newEquipment.some(eq => eq.name === name && eq.category === cat)) { skipped++; continue; }
+      if (newEquipment.some(eq => eq.name === name && eq.category === cat)) { skipped++; return; }
       newEquipment.push(ensureUnits(normalizeEquipmentTagFlags([{
         id: Date.now() + i + Math.random(),
         name, category: cat, description: desc, notes,
         total_quantity: qty, image: "📦", status: "תקין",
       }])[0]));
       added++;
-    }
+    });
     setEquipment(newEquipment);
     await storageSet("equipment", newEquipment);
     if (setCategories && newCats.length) {
@@ -1044,7 +1062,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
         <div className="flex gap-2" style={{flexWrap:"wrap",justifyContent:"flex-end"}}>
           <button className="btn btn-secondary" onClick={downloadTemplate} title="הורד תבנית CSV">📥 תבנית</button>
           <button className="btn btn-secondary" onClick={()=>csvInputRef.current?.click()}>📤 ייבוא CSV</button>
-          <input ref={csvInputRef} type="file" accept=".csv,text/csv" style={{display:"none"}} onChange={handleCSVImport}/>
+          <input ref={csvInputRef} type="file" accept=".csv,.xlsx,.xls,text/csv" style={{display:"none"}} onChange={handleCSVImport}/>
           <button className="btn btn-primary" onClick={()=>setModal({type:"addcat"})}>📂 ניהול קטגוריות</button>
           <button className="btn btn-primary" onClick={()=>setModal({type:"add"})}>➕ הוסף ציוד</button>
         </div>
