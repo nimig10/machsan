@@ -120,6 +120,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
   return (
     <div className="page">
 
+      <div className="dash-stats-section">
       {/* ── Group 1: מלאי ── */}
       <div style={groupLabel()}>📦 מלאי</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginBottom:4}}>
@@ -186,6 +187,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
         ))}
       </div>
 
+      </div>
       {/* ── On-loan modal ── */}
       {onLoanModal&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px",direction:"rtl"}}
