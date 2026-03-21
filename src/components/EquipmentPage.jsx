@@ -1,5 +1,5 @@
 // EquipmentPage.jsx — equipment management page
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   DEFAULT_CATEGORIES,
   STATUSES,
@@ -25,6 +25,80 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
   const [typeFilter, setTypeFilter] = useState("הכל"); // "הכל" | "סאונד" | "צילום"
   const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [importModal, setImportModal] = useState(null);
+  const csvInputRef = useRef(null);
+
+  const parseCSVLine = (line) => {
+    const result = []; let cur = ""; let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { result.push(cur.trim()); cur = ""; }
+      else { cur += ch; }
+    }
+    result.push(cur.trim());
+    return result;
+  };
+
+  const handleCSVImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (lines.length < 2) { showToast("error", "הקובץ ריק או לא תקין"); return; }
+
+    const header = parseCSVLine(lines[0]).map(h => h.replace(/^\uFEFF/, "")); // strip BOM
+    const nameIdx = header.findIndex(h => ["שם פריט","name","שם"].includes(h));
+    const qtyIdx  = header.findIndex(h => ["כמות","qty","quantity"].includes(h));
+    const catIdx  = header.findIndex(h => ["רובריקה","קטגוריה","category"].includes(h));
+    const descIdx = header.findIndex(h => ["תיאור","description"].includes(h));
+    const notesIdx= header.findIndex(h => ["הערות","notes"].includes(h));
+
+    if (nameIdx === -1 || catIdx === -1) {
+      showToast("error", 'חסרות עמודות חובה: "שם פריט" ו-"רובריקה"'); return;
+    }
+
+    let newEquipment = [...equipment];
+    let newCategories = [...categories];
+    let added = 0, skipped = 0, newCats = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const cols = parseCSVLine(lines[i]);
+      const name  = cols[nameIdx]?.trim();
+      const cat   = cols[catIdx]?.trim();
+      const qty   = Math.max(1, parseInt(cols[qtyIdx]) || 1);
+      const desc  = descIdx  >= 0 ? (cols[descIdx]?.trim()  || "") : "";
+      const notes = notesIdx >= 0 ? (cols[notesIdx]?.trim() || "") : "";
+      if (!name || !cat) continue;
+
+      if (!newCategories.includes(cat)) { newCategories.push(cat); newCats.push(cat); }
+      if (newEquipment.some(eq => eq.name === name && eq.category === cat)) { skipped++; continue; }
+
+      newEquipment.push(ensureUnits(normalizeEquipmentTagFlags([{
+        id: Date.now() + i + Math.random(),
+        name, category: cat, description: desc, notes,
+        total_quantity: qty, image: "📦", status: "תקין",
+      }])[0]));
+      added++;
+    }
+
+    setEquipment(newEquipment);
+    await storageSet("equipment", newEquipment);
+    if (setCategories && newCats.length) {
+      setCategories(newCategories);
+      await storageSet("categories", newCategories);
+    }
+    setImportModal({ added, skipped, newCats });
+    e.target.value = "";
+  };
+
+  const downloadTemplate = () => {
+    const csv = "\uFEFFשם פריט,כמות,רובריקה,תיאור,הערות\nגמביל DJI RS3,3,מייצבי מצלמה,גמביל 3 צירים,\n";
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    a.download = "תבנית_ייבוא_ציוד.csv";
+    a.click();
+  };
 
   // Derive category effective type: explicit tag wins, else from items
   const getCatType = (catName) => {
@@ -232,6 +306,9 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
       <div className="flex-between mb-4">
         <div className="search-bar"><span>🔍</span><input placeholder="חיפוש ציוד..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
         <div className="flex gap-2">
+          <button className="btn btn-secondary" onClick={downloadTemplate} title="הורד תבנית CSV">📥 תבנית</button>
+          <button className="btn btn-secondary" onClick={()=>csvInputRef.current?.click()}>📤 ייבוא CSV</button>
+          <input ref={csvInputRef} type="file" accept=".csv,text/csv" style={{display:"none"}} onChange={handleCSVImport}/>
           <button className="btn btn-primary" onClick={()=>setModal({type:"addcat"})}>📂 ניהול קטגוריות</button>
           <button className="btn btn-primary" onClick={()=>setModal({type:"add"})}>➕ הוסף ציוד</button>
         </div>
@@ -414,6 +491,29 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
           }
         }}
       />}
+      {importModal && (
+        <Modal title="📤 תוצאות ייבוא" onClose={()=>setImportModal(null)}
+          footer={<button className="btn btn-primary" onClick={()=>setImportModal(null)}>סגור</button>}>
+          <div style={{display:"flex",flexDirection:"column",gap:12,direction:"rtl"}}>
+            <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+              <div style={{flex:1,background:"rgba(46,204,113,0.1)",border:"1px solid var(--green)",borderRadius:8,padding:"12px 16px",textAlign:"center"}}>
+                <div style={{fontSize:28,fontWeight:900,color:"var(--green)"}}>{importModal.added}</div>
+                <div style={{fontSize:12,color:"var(--text3)"}}>פריטים נוספו</div>
+              </div>
+              <div style={{flex:1,background:"rgba(245,166,35,0.1)",border:"1px solid var(--accent)",borderRadius:8,padding:"12px 16px",textAlign:"center"}}>
+                <div style={{fontSize:28,fontWeight:900,color:"var(--accent)"}}>{importModal.skipped}</div>
+                <div style={{fontSize:12,color:"var(--text3)"}}>פריטים דולגו (כבר קיימים)</div>
+              </div>
+            </div>
+            {importModal.newCats.length > 0 && (
+              <div style={{background:"rgba(52,152,219,0.1)",border:"1px solid var(--blue)",borderRadius:8,padding:"12px 16px"}}>
+                <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>רובריקות חדשות שנוצרו:</div>
+                {importModal.newCats.map(c=><div key={c} style={{fontSize:13,color:"var(--blue)"}}>📂 {c}</div>)}
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
