@@ -1468,6 +1468,53 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     setModal(null); setSaving(false);
   };
 
+  // ── Mini calendar helper (must be before early return to respect Rules of Hooks) ──
+  const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+  const HE_DAYS_SHORT = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
+  const [miniMonth, setMiniMonth] = useState(() => { const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() }; });
+
+  // Determine which month/year the current week belongs to (use middle of week — Wednesday)
+  const weekMiddle = new Date();
+  weekMiddle.setDate(weekMiddle.getDate() + weekOffset * 7);
+  const weekMonthLabel = HE_MONTHS[weekMiddle.getMonth()] + " " + weekMiddle.getFullYear();
+
+  // Mini calendar days grid
+  const miniDays = (() => {
+    const { year, month } = miniMonth;
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < firstDay; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    return cells;
+  })();
+
+  const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
+
+  // Jump to a specific date's week
+  const jumpToDate = (day) => {
+    const target = new Date(miniMonth.year, miniMonth.month, day);
+    const now = new Date(); now.setHours(0,0,0,0);
+    const diff = Math.round((target - now) / (1000*60*60*24));
+    const targetSunOffset = target.getDay();
+    const nowSunOffset = now.getDay();
+    const targetWeekStart = diff - targetSunOffset + nowSunOffset;
+    setWeekOffset(Math.round(targetWeekStart / 7));
+  };
+
+  // Check if a mini-calendar day is in the current displayed week
+  const isInCurrentWeek = (day) => {
+    if (!day) return false;
+    const dateStr = `${miniMonth.year}-${String(miniMonth.month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    return weekDays.some(wd => wd.fullDate === dateStr);
+  };
+
+  const isTodayMini = (day) => {
+    if (!day) return false;
+    const dateStr = `${miniMonth.year}-${String(miniMonth.month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    return dateStr === todayStr;
+  };
+
   // ── Day drill-down view ──
   if (dayView) {
     const studio = studios.find(s=>s.id===dayView.studioId);
@@ -1528,53 +1575,6 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       </div>
     );
   }
-
-  // ── Mini calendar helper ──
-  const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
-  const HE_DAYS_SHORT = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
-  const [miniMonth, setMiniMonth] = useState(() => { const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() }; });
-
-  // Determine which month/year the current week belongs to (use middle of week — Wednesday)
-  const weekMiddle = new Date();
-  weekMiddle.setDate(weekMiddle.getDate() + weekOffset * 7);
-  const weekMonthLabel = HE_MONTHS[weekMiddle.getMonth()] + " " + weekMiddle.getFullYear();
-
-  // Mini calendar days grid
-  const miniDays = (() => {
-    const { year, month } = miniMonth;
-    const firstDay = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const cells = [];
-    for (let i = 0; i < firstDay; i++) cells.push(null);
-    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
-    return cells;
-  })();
-
-  const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
-
-  // Jump to a specific date's week
-  const jumpToDate = (day) => {
-    const target = new Date(miniMonth.year, miniMonth.month, day);
-    const now = new Date(); now.setHours(0,0,0,0);
-    const diff = Math.round((target - now) / (1000*60*60*24));
-    const targetSunOffset = target.getDay();
-    const nowSunOffset = now.getDay();
-    const targetWeekStart = diff - targetSunOffset + nowSunOffset;
-    setWeekOffset(Math.round(targetWeekStart / 7));
-  };
-
-  // Check if a mini-calendar day is in the current displayed week
-  const isInCurrentWeek = (day) => {
-    if (!day) return false;
-    const dateStr = `${miniMonth.year}-${String(miniMonth.month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-    return weekDays.some(wd => wd.fullDate === dateStr);
-  };
-
-  const isTodayMini = (day) => {
-    if (!day) return false;
-    const dateStr = `${miniMonth.year}-${String(miniMonth.month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-    return dateStr === todayStr;
-  };
 
   // ── Weekly calendar view ──
   return (
