@@ -342,21 +342,9 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
             <div style={{fontSize:22,fontWeight:900,color:"var(--accent)"}}>{weekMonthLabel}</div>
           </div>
 
-          {/* Layout: mini calendar + week nav */}
-          <div style={{display:"flex",gap:20,marginBottom:20,flexWrap:"wrap",justifyContent:"center"}}>
-            {/* Week navigation */}
-            <div style={{flex:1,minWidth:280,display:"flex",flexDirection:"column",gap:10}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,justifyContent:"center"}}>
-                <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w-1)}>→ שבוע קודם</button>
-                <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(0)}>היום</button>
-                <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w+1)}>← שבוע הבא</button>
-              </div>
-              <div style={{fontSize:13,color:"var(--text3)",textAlign:"center"}}>
-                {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth()+1).padStart(2,"0")} — {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth()+1).padStart(2,"0")}
-              </div>
-            </div>
-
-            {/* Mini calendar */}
+          {/* Layout: mini calendar (right) + week nav (left) */}
+          <div style={{display:"flex",gap:20,marginBottom:20,flexWrap:"wrap",alignItems:"flex-start"}}>
+            {/* Mini calendar — first in DOM = right side in RTL */}
             <div style={{minWidth:220,maxWidth:260,background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:12}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                 <button onClick={()=>setMiniMonth(m=>m.month===0?{year:m.year-1,month:11}:{year:m.year,month:m.month-1})}
@@ -385,6 +373,18 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                 style={{width:"100%",marginTop:8,padding:"6px 0",borderRadius:6,border:"1px solid var(--accent)",background:"transparent",color:"var(--accent)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
                 📅 היום
               </button>
+            </div>
+
+            {/* Week navigation */}
+            <div style={{flex:1,minWidth:280,display:"flex",flexDirection:"column",gap:10,justifyContent:"center"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,justifyContent:"center"}}>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w-1)}>→ שבוע קודם</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(0)}>היום</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w+1)}>← שבוע הבא</button>
+              </div>
+              <div style={{fontSize:13,color:"var(--text3)",textAlign:"center"}}>
+                {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth()+1).padStart(2,"0")} — {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth()+1).padStart(2,"0")}
+              </div>
             </div>
           </div>
 
