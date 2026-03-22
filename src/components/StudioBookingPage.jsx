@@ -43,6 +43,9 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
   const [activeView, setActiveView] = useState("calendar");
   const [modal, setModal]   = useState(null);
   const [saving, setSaving] = useState(false);
+  // ── Add-booking form live state (for night cert warning) ────────────
+  const [formStudent, setFormStudent] = useState("");
+  const [formIsNight, setFormIsNight] = useState(false);
 
   const weekDays = getWeekDays(weekOffset);
 
@@ -222,6 +225,17 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     setModal({type:"editStudio", studio});
   };
 
+  // ── Night cert helper ─────────────────────────────────────────────────
+  const hasNightCert = (studentName) => {
+    if (!studentName) return false;
+    const certTypes = certifications?.types || [];
+    const certStudents = certifications?.students || [];
+    const nightType = certTypes.find(t => t.id === "cert_night_studio");
+    if (!nightType) return true; // no night cert type defined — allow all
+    const rec = certStudents.find(s => s.name === studentName);
+    return rec && (rec.certs || {})[nightType.id] === "עבר";
+  };
+
   // ── Submit Booking ────────────────────────────────────────────────────
   const submitBooking = async (e) => {
     e.preventDefault();
@@ -236,6 +250,11 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     const notes      = fd.get("notes")?.trim();
     if (!studioId || !date || !startTime || !endTime || !studentName) {
       showToast("error","נא למלא את כל השדות"); setSaving(false); return;
+    }
+    // Night certification check
+    if (isNight && !hasNightCert(studentName)) {
+      showToast("error", `⛔ ${studentName} לא עבר/ה הסמכת לילה לאולפנים — לא ניתן להשלים את הקביעה`);
+      setSaving(false); return;
     }
     // For night bookings, endTime can be less than startTime (crosses midnight)
     if (!isNight && startTime >= endTime) { showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה"); setSaving(false); return; }
@@ -566,23 +585,31 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
 
       {/* ── MODAL: Add Booking ── */}
       {modal?.type==="addBooking" && (
-        <Modal title={`📅 הזמנת ${modal.studioName} — ${modal.dayName} ${modal.date}`} onClose={()=>setModal(null)}
-          footer={<><button className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button><button form="addBookingForm" type="submit" className="btn btn-primary" disabled={saving}>{saving?"שומר...":"✅ שמור הזמנה"}</button></>}>
+        <Modal title={`📅 הזמנת ${modal.studioName} — ${modal.dayName} ${modal.date}`} onClose={()=>{ setFormStudent(""); setFormIsNight(false); setModal(null); }}
+          footer={<><button className="btn btn-secondary" onClick={()=>{ setFormStudent(""); setFormIsNight(false); setModal(null); }}>ביטול</button><button form="addBookingForm" type="submit" className="btn btn-primary" disabled={saving}>{saving?"שומר...":"✅ שמור הזמנה"}</button></>}>
           <form id="addBookingForm" onSubmit={submitBooking} style={{display:"flex",flexDirection:"column",gap:12}}>
             <label style={labelStyle}>שם הסטודנט *
               {allStudents.length > 0
-                ? <select name="studentName" className="form-input" required defaultValue="">
+                ? <select name="studentName" className="form-input" required defaultValue=""
+                    onChange={e => setFormStudent(e.target.value)}>
                     <option value="" disabled>בחר סטודנט...</option>
                     {allStudents.map(s=><option key={s} value={s}>{s}</option>)}
                     <option value="__manual__">אחר (הקלד ידנית)</option>
                   </select>
-                : <input name="studentName" className="form-input" placeholder="שם מלא" required/>
+                : <input name="studentName" className="form-input" placeholder="שם מלא" required
+                    onChange={e => setFormStudent(e.target.value)}/>
               }
             </label>
             <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,fontWeight:600,color:NIGHT_COLOR,cursor:"pointer",padding:"4px 0"}}>
-              <input type="checkbox" name="isNight" style={{width:18,height:18,accentColor:NIGHT_COLOR}}/>
+              <input type="checkbox" name="isNight" style={{width:18,height:18,accentColor:NIGHT_COLOR}}
+                onChange={e => setFormIsNight(e.target.checked)}/>
               🌙 הזמנת לילה (21:00–08:00)
             </label>
+            {formIsNight && formStudent && formStudent!=="__manual__" && !hasNightCert(formStudent) && (
+              <div style={{background:"rgba(231,76,60,0.12)",border:"1px solid var(--red)",borderRadius:8,padding:"10px 14px",fontSize:13,color:"var(--red)",fontWeight:700,display:"flex",alignItems:"center",gap:8}}>
+                ⛔ {formStudent} לא עבר/ה הסמכת לילה לאולפנים — לא ניתן להשלים את הקביעה
+              </div>
+            )}
             <div style={{display:"flex",gap:8}}>
               <label style={{...labelStyle,flex:1}}>שעת התחלה *
                 <select name="startTime" className="form-input" required defaultValue="09:00">
