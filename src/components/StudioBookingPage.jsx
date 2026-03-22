@@ -96,6 +96,33 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     showToast("success", "אולפן נמחק");
   };
 
+  // ── Edit Studio ─────────────────────────────────────────────────────
+  const [editImage, setEditImage] = useState("");
+  const handleEditImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setEditImage(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+  const handleEditStudio = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const name = fd.get("name")?.trim();
+    if (!name) return;
+    const type = fd.get("type");
+    const image = editImage || fd.get("emoji")?.trim() || modal.studio.image;
+    const updated = studios.map(s => s.id===modal.studio.id ? {...s, name, type, image} : s);
+    await saveStudios(updated);
+    showToast("success", `אולפן "${name}" עודכן`);
+    setEditImage("");
+    setModal(null);
+  };
+  const openEditStudio = (studio) => {
+    setEditImage(studio.image?.startsWith("data:") ? studio.image : "");
+    setModal({type:"editStudio", studio});
+  };
+
   // ── Submit Booking ────────────────────────────────────────────────────
   const submitBooking = async (e) => {
     e.preventDefault();
@@ -278,7 +305,10 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                       <div style={{fontSize:12,color:"var(--text3)"}}>{s.type==="sound"?"🎙️ סאונד":s.type==="photo"?"📷 צילום":"🌐 כללי"} · {count} הזמנות</div>
                     </div>
                   </div>
-                  <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>deleteStudio(s.id)}>🗑️ מחק</button>
+                  <div style={{display:"flex",gap:6}}>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>openEditStudio(s)}>✏️ עריכה</button>
+                    <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>deleteStudio(s.id)}>🗑️ מחק</button>
+                  </div>
                 </div>
               );
             })
@@ -306,6 +336,39 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
               {studioImage && <img src={studioImage} alt="תצוגה מקדימה" style={{width:80,height:80,objectFit:"cover",borderRadius:8,marginTop:4}}/>}
             </label>
             <label style={labelStyle}>או אימוג'י (אם אין תמונה)
+              <input name="emoji" className="form-input" placeholder="🎙️" maxLength={4}/>
+            </label>
+          </form>
+        </Modal>
+      )}
+
+      {/* ── MODAL: Edit Studio ── */}
+      {modal?.type==="editStudio" && (
+        <Modal title="✏️ עריכת אולפן" onClose={()=>{setEditImage("");setModal(null);}}
+          footer={<><button className="btn btn-secondary" onClick={()=>{setEditImage("");setModal(null);}}>ביטול</button><button form="editStudioForm" type="submit" className="btn btn-primary">💾 שמור</button></>}>
+          <form id="editStudioForm" onSubmit={handleEditStudio} style={{display:"flex",flexDirection:"column",gap:12}}>
+            <label style={labelStyle}>שם האולפן *
+              <input name="name" className="form-input" defaultValue={modal.studio.name} required/>
+            </label>
+            <label style={labelStyle}>סוג
+              <select name="type" className="form-input" defaultValue={modal.studio.type||"general"}>
+                <option value="sound">🎙️ סאונד</option>
+                <option value="photo">📷 צילום</option>
+                <option value="general">🌐 כללי</option>
+              </select>
+            </label>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--text2)"}}>תמונה נוכחית:
+              <div style={{marginTop:4}}>
+                {(editImage || modal.studio.image)?.startsWith("data:")
+                  ? <img src={editImage || modal.studio.image} alt="תמונה" style={{width:80,height:80,objectFit:"cover",borderRadius:8}}/>
+                  : <span style={{fontSize:32}}>{modal.studio.image||"🎙️"}</span>
+                }
+              </div>
+            </div>
+            <label style={labelStyle}>החלף תמונה
+              <input type="file" accept="image/*" onChange={handleEditImageUpload} style={{fontSize:13}}/>
+            </label>
+            <label style={labelStyle}>או אימוג'י (מחליף תמונה)
               <input name="emoji" className="form-input" placeholder="🎙️" maxLength={4}/>
             </label>
           </form>
