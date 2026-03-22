@@ -719,6 +719,37 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [emailError, setEmailError] = useState(false);
   const [submitting, setSub]  = useState(false);
   const [showInfoPanel, setShowInfoPanel] = useState(false);
+  const [loggedInStudent, setLoggedInStudent] = useState(null); // null = not logged in
+  const [loginForm, setLoginForm] = useState({ name:"", email:"" });
+  const [loginError, setLoginError] = useState("");
+  const [publicView, setPublicView] = useState("equipment"); // "equipment" | "studios"
+  const [studioBookings, setStudioBookings] = useState([]);
+  const [studios, setStudios] = useState([]);
+  const [studioWeekOffset, setStudioWeekOffset] = useState(0);
+  const [studioModal, setStudioModal] = useState(null);
+
+  // Load studios data when switching to studios view
+  const loadStudiosData = async () => {
+    const [s, b] = await Promise.all([storageGet("studios"), storageGet("studio_bookings")]);
+    if (Array.isArray(s)) setStudios(s);
+    if (Array.isArray(b)) setStudioBookings(b);
+  };
+
+  const handleStudentLogin = () => {
+    const name = loginForm.name.trim();
+    const email = loginForm.email.toLowerCase().trim();
+    if (!name || !email) return;
+    const stuList = certifications.students || [];
+    const found = stuList.find(s => s.email?.toLowerCase() === email && s.name?.trim().toLowerCase() === name.toLowerCase());
+    if (!found) { setLoginError("הפרטים לא תואמים למשתמש רשום במערכת"); return; }
+    setLoggedInStudent(found);
+    setLoginError("");
+    set("student_name", found.name);
+    set("email", found.email);
+    if (found.phone) set("phone", found.phone);
+    if (found.track) set("course", found.track);
+  };
+
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const setSoundDayLoan = (enabled) => {
     if (!enabled) {
@@ -1085,6 +1116,35 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     </div>
   );
 
+  // ── Student login gate ──
+  if (!loggedInStudent) return (
+    <div className="form-page" style={{"--accent": siteSettings.accentColor||"#f5a623"}}>
+      <div style={{width:"100%",maxWidth:420,background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:"40px 32px",textAlign:"center",direction:"rtl"}}>
+        {siteSettings.logo
+          ? <img src={siteSettings.logo} alt="לוגו" style={{width:82,height:82,objectFit:"contain",borderRadius:12,marginBottom:16,display:"block",marginInline:"auto"}}/>
+          : <div style={{fontSize:48,marginBottom:16}}>🎬</div>}
+        <h2 style={{fontSize:22,fontWeight:900,color:"var(--accent)",marginBottom:4}}>מחסן השאלת ציוד</h2>
+        <div style={{fontSize:13,color:"var(--text3)",marginBottom:24}}>קמרה אובסקורה וסאונד</div>
+        <div style={{textAlign:"right",marginBottom:12}}>
+          <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>שם מלא</label>
+          <input className="form-input" placeholder="הקלד/י שם מלא" value={loginForm.name}
+            onChange={e=>{setLoginForm(p=>({...p,name:e.target.value}));setLoginError("");}}
+            onKeyDown={e=>e.key==="Enter"&&handleStudentLogin()}/>
+        </div>
+        <div style={{textAlign:"right",marginBottom:16}}>
+          <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>אימייל</label>
+          <input className="form-input" type="email" placeholder="email@example.com" value={loginForm.email}
+            onChange={e=>{setLoginForm(p=>({...p,email:e.target.value}));setLoginError("");}}
+            onKeyDown={e=>e.key==="Enter"&&handleStudentLogin()}/>
+        </div>
+        {loginError && <div style={{color:"var(--red)",fontSize:13,fontWeight:700,marginBottom:12}}>❌ {loginError}</div>}
+        <button className="btn btn-primary" style={{width:"100%",padding:"12px",fontSize:15}} onClick={handleStudentLogin}
+          disabled={!loginForm.name.trim()||!loginForm.email.trim()}>🔑 כניסה למערכת</button>
+        <div style={{fontSize:11,color:"var(--text3)",marginTop:16}}>רק סטודנטים רשומים יכולים להיכנס למערכת</div>
+      </div>
+    </div>
+  );
+
   if(done) return (
     <div className="form-page">
       <div style={{width:"100%",maxWidth:500,background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:40,textAlign:"center",direction:"rtl"}}>
@@ -1120,8 +1180,20 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
               <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:82,height:82,objectFit:"contain",borderRadius:12,marginBottom:12}}/>
             )}
             <div style={{fontSize:24,fontWeight:900,color:"var(--accent)"}}>מחסן השאלת ציוד קמרה אובסקורה וסאונד</div>
-            <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>טופס השאלת ציוד</div>
+            <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>שלום, {loggedInStudent.name}</div>
           </div>
+          {/* ── View toggle: equipment vs studios ── */}
+          <div style={{display:"flex",gap:4,marginTop:16,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4}}>
+            <button type="button" onClick={()=>setPublicView("equipment")}
+              style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:publicView==="equipment"?"var(--accent)":"transparent",color:publicView==="equipment"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              📦 השאלת ציוד
+            </button>
+            <button type="button" onClick={()=>{setPublicView("studios");loadStudiosData();}}
+              style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:publicView==="studios"?"var(--accent)":"transparent",color:publicView==="studios"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              🎙️ קביעת אולפנים
+            </button>
+          </div>
+          {publicView==="equipment" && <>
           {/* Clickable tab navigation — always free to navigate, validation only on submit */}
             <div style={{display:"flex",gap:4,marginTop:20,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4}}>
               {[{n:1,l:"פרטים",icon:"👤"},{n:2,l:"תאריכים",icon:"📅"},{n:3,l:"ציוד",icon:"📦"},{n:4,l:"אישור",icon:"✅"}].map(s=>{
@@ -1345,6 +1417,187 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       </div>
     </div>
     {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor}/>}
+    </>}
+    {publicView==="studios" && <PublicStudioBooking
+      studios={studios} bookings={studioBookings} setBookings={setStudioBookings}
+      student={loggedInStudent} showToast={showToast}
+      weekOffset={studioWeekOffset} setWeekOffset={setStudioWeekOffset}
+      modal={studioModal} setModal={setStudioModal}
+    />}
     </>
+  );
+}
+
+// ─── PUBLIC STUDIO BOOKING (student side) ────────────────────────────────────
+function PublicStudioBooking({ studios, bookings, setBookings, student, showToast, weekOffset, setWeekOffset, modal, setModal }) {
+  const [saving, setSaving] = useState(false);
+  const [dayView, setDayView] = useState(null); // { studioId, date, dayName }
+
+  const HOURS = ["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00"];
+  const STATUS_C = { "ממתין":"var(--yellow)", "מאושר":"var(--green)", "נדחה":"var(--red)" };
+
+  function getWeekDays(off=0) {
+    const today = new Date();
+    today.setDate(today.getDate() + off * 7);
+    const sun = new Date(today); sun.setDate(today.getDate() - today.getDay());
+    return Array.from({length:7}, (_,i) => {
+      const d = new Date(sun); d.setDate(sun.getDate()+i);
+      const yyyy = d.getFullYear(), mm = String(d.getMonth()+1).padStart(2,"0"), dd = String(d.getDate()).padStart(2,"0");
+      return { name:["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"][i], date:dd, fullDate:`${yyyy}-${mm}-${dd}`,
+        isToday: dd===String(new Date().getDate()).padStart(2,"0") && mm===String(new Date().getMonth()+1).padStart(2,"0") && yyyy===new Date().getFullYear() };
+    });
+  }
+  const weekDays = getWeekDays(weekOffset);
+
+  const submitBooking = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    const fd = new FormData(e.target);
+    const startTime = fd.get("startTime"), endTime = fd.get("endTime"), notes = fd.get("notes")?.trim();
+    const { studioId, date } = modal;
+    if(startTime >= endTime) { showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה"); setSaving(false); return; }
+    const overlap = bookings.some(b => b.studioId===studioId && b.date===date && b.status!=="נדחה" && !(endTime<=b.startTime || startTime>=b.endTime));
+    if(overlap) { showToast("error","⚠️ קיימת הזמנה חופפת"); setSaving(false); return; }
+    const newBooking = { id:Date.now(), studioId, date, startTime, endTime, studentName:student.name, notes, status:"ממתין", createdAt:new Date().toISOString() };
+    const updated = [...bookings, newBooking];
+    setBookings(updated);
+    await storageSet("studio_bookings", updated);
+    showToast("success","✅ בקשת ההזמנה נשלחה לאישור");
+    setModal(null); setSaving(false);
+  };
+
+  // ── Day drill-down view ──
+  if (dayView) {
+    const studio = studios.find(s=>s.id===dayView.studioId);
+    const dayBookings = bookings.filter(b=>b.studioId===dayView.studioId && b.date===dayView.date && b.status!=="נדחה");
+    return (
+      <div style={{padding:"20px 16px",direction:"rtl",maxWidth:500,margin:"0 auto"}}>
+        <button className="btn btn-secondary btn-sm" onClick={()=>setDayView(null)} style={{marginBottom:12}}>← חזור ללוח</button>
+        <div style={{fontWeight:900,fontSize:18,marginBottom:4}}>{studio?.image} {studio?.name}</div>
+        <div style={{fontSize:14,color:"var(--text3)",marginBottom:16}}>{dayView.dayName} · {dayView.date}</div>
+        <div style={{display:"flex",flexDirection:"column",gap:2}}>
+          {HOURS.map((hour,i)=>{
+            const nextH = HOURS[i+1] || "21:00";
+            const booking = dayBookings.find(b=>b.startTime<=hour && b.endTime>hour);
+            return (
+              <div key={hour} style={{display:"flex",alignItems:"stretch",minHeight:48,border:"1px solid var(--border)",borderRadius:6,overflow:"hidden"}}>
+                <div style={{width:60,padding:"8px 6px",background:"var(--surface2)",fontWeight:700,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>{hour}</div>
+                {booking
+                  ? <div style={{flex:1,background:STATUS_C[booking.status]+"22",padding:"8px 12px",display:"flex",alignItems:"center",gap:8,borderRight:`3px solid ${STATUS_C[booking.status]}`}}>
+                      <span style={{fontWeight:700,fontSize:13}}>{booking.studentName}</span>
+                      <span style={{fontSize:11,color:"var(--text3)"}}>{booking.startTime}–{booking.endTime}</span>
+                    </div>
+                  : <div style={{flex:1,padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",color:"var(--text3)",fontSize:12}}
+                      onClick={()=>setModal({type:"addBooking",studioId:dayView.studioId,date:dayView.date,dayName:dayView.dayName,defaultStart:hour,defaultEnd:nextH})}>
+                      + לחץ להזמנה
+                    </div>
+                }
+              </div>
+            );
+          })}
+        </div>
+        {/* Booking modal */}
+        {modal?.type==="addBooking" && (
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={e=>e.target===e.currentTarget&&setModal(null)}>
+            <div style={{width:"100%",maxWidth:400,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl"}}>
+              <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",fontWeight:900,fontSize:16}}>📅 הזמנת אולפן</div>
+              <form onSubmit={submitBooking} style={{padding:20,display:"flex",flexDirection:"column",gap:12}}>
+                <div style={{fontSize:13,color:"var(--text3)"}}>👤 {student.name} · {dayView.dayName} {modal.date}</div>
+                <div style={{display:"flex",gap:8}}>
+                  <label style={{flex:1,fontSize:13,fontWeight:600}}>התחלה
+                    <select name="startTime" className="form-input" defaultValue={modal.defaultStart||"09:00"}>{HOURS.map(h=><option key={h}>{h}</option>)}</select>
+                  </label>
+                  <label style={{flex:1,fontSize:13,fontWeight:600}}>סיום
+                    <select name="endTime" className="form-input" defaultValue={modal.defaultEnd||"12:00"}>{HOURS.map(h=><option key={h}>{h}</option>)}</select>
+                  </label>
+                </div>
+                <label style={{fontSize:13,fontWeight:600}}>הערות
+                  <textarea name="notes" className="form-input" rows={2} placeholder="תיאור הפרויקט..."/>
+                </label>
+                <div style={{display:"flex",gap:8}}>
+                  <button type="button" className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button>
+                  <button type="submit" className="btn btn-primary" disabled={saving}>{saving?"שומר...":"✅ שלח בקשה"}</button>
+                </div>
+                <div style={{fontSize:11,color:"var(--text3)"}}>⏳ הבקשה תישלח לאישור המנהל</div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Weekly calendar view ──
+  return (
+    <div style={{padding:"20px 16px",direction:"rtl"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,justifyContent:"center",flexWrap:"wrap"}}>
+        <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w-1)}>→ שבוע קודם</button>
+        <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(0)}>היום</button>
+        <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w+1)}>← שבוע הבא</button>
+      </div>
+      {studios.length===0 ? (
+        <div style={{textAlign:"center",padding:48,color:"var(--text3)"}}>
+          <div style={{fontSize:48,marginBottom:12}}>🎙️</div>
+          <div style={{fontWeight:700}}>אין אולפנים זמינים כרגע</div>
+        </div>
+      ) : (
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",minWidth:500}}>
+            <thead>
+              <tr>
+                <th style={{padding:"8px 10px",background:"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",width:90}}>אולפן</th>
+                {weekDays.map(d=>(
+                  <th key={d.fullDate} style={{padding:"8px 10px",background:d.isToday?"rgba(245,166,35,0.15)":"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)"}}>
+                    <div>{d.name}</div><div style={{fontSize:11,color:"var(--text3)"}}>{d.date}</div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {studios.map(studio=>(
+                <tr key={studio.id}>
+                  <td style={{padding:"6px 8px",border:"1px solid var(--border)",fontWeight:700,fontSize:12,background:"var(--surface2)",textAlign:"center"}}>
+                    <span style={{fontSize:18}}>{studio.image}</span><br/>{studio.name}
+                  </td>
+                  {weekDays.map(day=>{
+                    const cells = bookings.filter(b=>b.studioId===studio.id && b.date===day.fullDate && b.status!=="נדחה");
+                    return (
+                      <td key={day.fullDate} style={{padding:"4px 6px",border:"1px solid var(--border)",verticalAlign:"top",cursor:"pointer",background:day.isToday?"rgba(245,166,35,0.05)":"transparent"}}
+                        onClick={()=>setDayView({studioId:studio.id,date:day.fullDate,dayName:day.name})}>
+                        {cells.map(b=>(
+                          <div key={b.id} style={{background:STATUS_C[b.status]+"22",border:`1px solid ${STATUS_C[b.status]}`,borderRadius:4,padding:"2px 4px",marginBottom:2,fontSize:10}}>
+                            <div style={{fontWeight:700,color:STATUS_C[b.status]}}>{b.startTime}–{b.endTime}</div>
+                            <div style={{color:"var(--text3)"}}>{b.studentName}</div>
+                          </div>
+                        ))}
+                        {cells.length===0&&<div style={{color:"var(--text3)",fontSize:10,textAlign:"center",paddingTop:8}}>פנוי</div>}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {/* My bookings */}
+      {bookings.filter(b=>b.studentName===student.name).length > 0 && (
+        <div style={{marginTop:20}}>
+          <div style={{fontWeight:800,fontSize:14,marginBottom:8}}>📋 ההזמנות שלי</div>
+          {bookings.filter(b=>b.studentName===student.name).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||"")).map(b=>{
+            const studio = studios.find(s=>s.id===b.studioId);
+            return (
+              <div key={b.id} style={{background:"var(--surface2)",borderRadius:8,padding:"10px 14px",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center",border:`1px solid ${STATUS_C[b.status]}44`}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:13}}>{studio?.image} {studio?.name} · {b.date}</div>
+                  <div style={{fontSize:12,color:"var(--text3)"}}>{b.startTime}–{b.endTime}</div>
+                </div>
+                <span style={{background:STATUS_C[b.status]+"22",color:STATUS_C[b.status],borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>{b.status}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

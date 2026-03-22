@@ -64,6 +64,16 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
       (statusFilter==="הכל" || b.status===statusFilter));
 
   // ── Add Studio ────────────────────────────────────────────────────────
+  const [studioImage, setStudioImage] = useState("");
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setStudioImage(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
   const handleAddStudio = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -71,9 +81,10 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     const type = fd.get("type");
     if (!name) return;
     if (studios.some(s => s.name===name)) { showToast("error","אולפן בשם זה כבר קיים"); return; }
-    const updated = [...studios, { id: Date.now(), name, type, image: fd.get("image")||"🎙️" }];
+    const updated = [...studios, { id: Date.now(), name, type, image: studioImage || fd.get("emoji")||"🎙️" }];
     await saveStudios(updated);
     showToast("success", `אולפן "${name}" נוסף`);
+    setStudioImage("");
     setModal(null);
   };
 
@@ -194,7 +205,10 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                     <tr key={studio.id}>
                       <td style={{...tdStyle,fontWeight:700,fontSize:13,background:"var(--surface2)"}}>
                         <div style={{display:"flex",alignItems:"center",gap:6}}>
-                          <span style={{fontSize:20}}>{studio.image}</span>
+                          {studio.image?.startsWith("data:") || studio.image?.startsWith("http")
+                            ? <img src={studio.image} alt={studio.name} style={{width:32,height:32,borderRadius:6,objectFit:"cover"}}/>
+                            : <span style={{fontSize:20}}>{studio.image||"🎙️"}</span>
+                          }
                           <span>{studio.name}</span>
                         </div>
                         <div style={{fontSize:10,color:"var(--text3)",marginTop:2}}>{studio.type==="sound"?"סאונד":studio.type==="photo"?"צילום":"כללי"}</div>
@@ -287,8 +301,12 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                 <option value="general">🌐 כללי</option>
               </select>
             </label>
-            <label style={labelStyle}>אייקון / אימוג'י
-              <input name="image" className="form-input" placeholder="🎙️" maxLength={4}/>
+            <label style={labelStyle}>תמונה
+              <input type="file" accept="image/*" onChange={handleImageUpload} style={{fontSize:13}}/>
+              {studioImage && <img src={studioImage} alt="תצוגה מקדימה" style={{width:80,height:80,objectFit:"cover",borderRadius:8,marginTop:4}}/>}
+            </label>
+            <label style={labelStyle}>או אימוג'י (אם אין תמונה)
+              <input name="emoji" className="form-input" placeholder="🎙️" maxLength={4}/>
             </label>
           </form>
         </Modal>
