@@ -1210,8 +1210,9 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
               );
             })}
           </div>
+          </>}
         </div>
-        <div className="form-card-body">
+        {publicView==="equipment" && <div className="form-card-body">
 
           {step===1 && <>
             <div className="form-section-title">סוג ההשאלה</div>
@@ -1413,7 +1414,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
             policies={policies}
             loanType={form.loan_type}
           />}
-        </div>
+        </div>}
       </div>
     </div>
     {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor}/>}
