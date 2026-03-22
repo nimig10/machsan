@@ -1515,30 +1515,40 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     return dateStr === todayStr;
   };
 
+  const isPastMiniDay = (day) => {
+    if (!day) return false;
+    const dateStr = `${miniMonth.year}-${String(miniMonth.month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    return dateStr < todayStr;
+  };
+
   // ── Day drill-down view ──
   if (dayView) {
     const studio = studios.find(s=>s.id===dayView.studioId);
     const dayBookings = bookings.filter(b=>b.studioId===dayView.studioId && b.date===dayView.date && b.status!=="נדחה");
+    const isDayPast = dayView.date < todayStr;
+    const nowHour = new Date().getHours();
     return (
       <div style={{padding:"20px 16px",direction:"rtl",maxWidth:500,margin:"0 auto"}}>
-        <button className="btn btn-secondary btn-sm" onClick={()=>setDayView(null)} style={{marginBottom:12}}>← חזור ללוח</button>
+        <button className="btn btn-secondary btn-sm" onClick={()=>{ setModal(null); setDayView(null); }} style={{marginBottom:12}}>← חזור ללוח</button>
         <div style={{fontWeight:900,fontSize:18,marginBottom:4}}>{studio?.image} {studio?.name}</div>
         <div style={{fontSize:14,color:"var(--text3)",marginBottom:16}}>{dayView.dayName} · {dayView.date}</div>
+        {isDayPast && <div style={{background:"rgba(255,80,80,0.1)",border:"1px solid var(--red)",borderRadius:8,padding:"8px 12px",fontSize:13,color:"var(--red)",marginBottom:12,textAlign:"center"}}>⛔ לא ניתן להזמין תאריכים שעברו</div>}
         <div style={{display:"flex",flexDirection:"column",gap:2}}>
           {HOURS.map((hour,i)=>{
             const nextH = HOURS[i+1] || "21:00";
             const booking = dayBookings.find(b=>b.startTime<=hour && b.endTime>hour);
+            const isHourPast = isDayPast || (dayView.date===todayStr && parseInt(hour)<nowHour);
             return (
-              <div key={hour} style={{display:"flex",alignItems:"stretch",minHeight:48,border:"1px solid var(--border)",borderRadius:6,overflow:"hidden"}}>
+              <div key={hour} style={{display:"flex",alignItems:"stretch",minHeight:48,border:"1px solid var(--border)",borderRadius:6,overflow:"hidden",opacity:isHourPast?0.5:1}}>
                 <div style={{width:60,padding:"8px 6px",background:"var(--surface2)",fontWeight:700,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>{hour}</div>
                 {booking
                   ? <div style={{flex:1,background:STATUS_C[booking.status]+"22",padding:"8px 12px",display:"flex",alignItems:"center",gap:8,borderRight:`3px solid ${STATUS_C[booking.status]}`}}>
                       <span style={{fontWeight:700,fontSize:13}}>{booking.studentName}</span>
                       <span style={{fontSize:11,color:"var(--text3)"}}>{booking.startTime}–{booking.endTime}</span>
                     </div>
-                  : <div style={{flex:1,padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",color:"var(--text3)",fontSize:12}}
-                      onClick={()=>setModal({type:"addBooking",studioId:dayView.studioId,date:dayView.date,dayName:dayView.dayName,defaultStart:hour,defaultEnd:nextH})}>
-                      + לחץ להזמנה
+                  : <div style={{flex:1,padding:"8px 12px",cursor:isHourPast?"default":"pointer",display:"flex",alignItems:"center",color:"var(--text3)",fontSize:12}}
+                      onClick={()=>{ if(!isHourPast) setModal({type:"addBooking",studioId:dayView.studioId,date:dayView.date,dayName:dayView.dayName,defaultStart:hour,defaultEnd:nextH}); }}>
+                      {isHourPast ? "" : "+ לחץ להזמנה"}
                     </div>
                 }
               </div>
@@ -1597,19 +1607,24 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:1,textAlign:"center"}}>
             {HE_DAYS_SHORT.map(d=><div key={d} style={{fontSize:10,fontWeight:700,color:"var(--text3)",padding:"4px 0"}}>{d}</div>)}
-            {miniDays.map((day,i)=>(
-              <div key={i}
-                onClick={()=>day && jumpToDate(day)}
-                style={{
-                  fontSize:12,fontWeight:isInCurrentWeek(day)?800:500,padding:"5px 0",cursor:day?"pointer":"default",
-                  borderRadius:"50%",
-                  background: isTodayMini(day) ? "var(--accent)" : isInCurrentWeek(day) ? "rgba(245,166,35,0.15)" : "transparent",
-                  color: isTodayMini(day) ? "#000" : isInCurrentWeek(day) ? "var(--accent)" : day ? "var(--text)" : "transparent",
-                  transition:"background 0.15s"
-                }}>
-                {day || ""}
-              </div>
-            ))}
+            {miniDays.map((day,i)=>{
+              const past = isPastMiniDay(day);
+              return (
+                <div key={i}
+                  onClick={()=>{ if(day && !past) jumpToDate(day); }}
+                  style={{
+                    fontSize:12,fontWeight:isInCurrentWeek(day)?800:500,padding:"5px 0",
+                    cursor: past ? "default" : day ? "pointer" : "default",
+                    borderRadius:"50%",
+                    opacity: past ? 0.35 : 1,
+                    background: isTodayMini(day) ? "var(--accent)" : isInCurrentWeek(day) ? "rgba(245,166,35,0.15)" : "transparent",
+                    color: isTodayMini(day) ? "#000" : isInCurrentWeek(day) ? "var(--accent)" : day ? "var(--text)" : "transparent",
+                    transition:"background 0.15s"
+                  }}>
+                  {day || ""}
+                </div>
+              );
+            })}
           </div>
           <button onClick={()=>{ setWeekOffset(0); const d=new Date(); setMiniMonth({year:d.getFullYear(),month:d.getMonth()}); }}
             style={{width:"100%",marginTop:8,padding:"6px 0",borderRadius:6,border:"1px solid var(--accent)",background:"transparent",color:"var(--accent)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
@@ -1620,7 +1635,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
         {/* Week navigation */}
         <div style={{flex:1,minWidth:280,display:"flex",flexDirection:"column",gap:10}}>
           <div style={{display:"flex",alignItems:"center",gap:8,justifyContent:"center"}}>
-            <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w-1)}>→ שבוע קודם</button>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w-1)} disabled={weekOffset<=0} style={{opacity:weekOffset<=0?0.4:1,cursor:weekOffset<=0?"default":"pointer"}}>→ שבוע קודם</button>
             <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(0)}>היום</button>
             <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w+1)}>← שבוע הבא</button>
           </div>
@@ -1656,16 +1671,24 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                   </td>
                   {weekDays.map(day=>{
                     const cells = bookings.filter(b=>b.studioId===studio.id && b.date===day.fullDate && b.status!=="נדחה");
+                    const isPast = day.fullDate < todayStr;
                     return (
-                      <td key={day.fullDate} style={{padding:"4px 6px",border:"1px solid var(--border)",verticalAlign:"top",cursor:"pointer",background:day.isToday?"rgba(245,166,35,0.05)":"transparent"}}
-                        onClick={()=>setDayView({studioId:studio.id,date:day.fullDate,dayName:day.name})}>
+                      <td key={day.fullDate}
+                        style={{
+                          padding:"4px 6px",border:"1px solid var(--border)",verticalAlign:"top",
+                          cursor: isPast ? "not-allowed" : "pointer",
+                          background: isPast ? "rgba(0,0,0,0.12)" : day.isToday ? "rgba(245,166,35,0.05)" : "transparent",
+                          opacity: isPast ? 0.55 : 1
+                        }}
+                        onClick={()=>{ if(!isPast){ setModal(null); setDayView({studioId:studio.id,date:day.fullDate,dayName:day.name}); } }}>
                         {cells.map(b=>(
                           <div key={b.id} style={{background:STATUS_C[b.status]+"22",border:`1px solid ${STATUS_C[b.status]}`,borderRadius:4,padding:"2px 4px",marginBottom:2,fontSize:10}}>
                             <div style={{fontWeight:700,color:STATUS_C[b.status]}}>{b.startTime}–{b.endTime}</div>
                             <div style={{color:"var(--text3)"}}>{b.studentName}</div>
                           </div>
                         ))}
-                        {cells.length===0&&<div style={{color:"var(--text3)",fontSize:10,textAlign:"center",paddingTop:8}}>פנוי</div>}
+                        {cells.length===0 && !isPast && <div style={{color:"var(--text3)",fontSize:10,textAlign:"center",paddingTop:8}}>פנוי</div>}
+                        {isPast && cells.length===0 && <div style={{color:"var(--text3)",fontSize:10,textAlign:"center",paddingTop:8}}>—</div>}
                       </td>
                     );
                   })}
