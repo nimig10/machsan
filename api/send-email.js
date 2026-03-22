@@ -33,19 +33,23 @@ function buildEmail({
   logo_url,
   sound_logo_url,
 }) {
-  const isApproved       = type === "approved";
-  const isNew            = type === "new";
-  const isTeamNotify     = type === "team_notify";
-  const isDeptHead       = type === "dept_head_notify";
-  const isManagerReport  = type === "manager_report";
-  const isOverdue        = type === "overdue";
-  const isOverdueTeam    = type === "overdue_team";
-  const isLessonKitReady = type === "lesson_kit_ready";
+  const isApproved        = type === "approved";
+  const isNew             = type === "new";
+  const isTeamNotify      = type === "team_notify";
+  const isDeptHead        = type === "dept_head_notify";
+  const isManagerReport   = type === "manager_report";
+  const isOverdue         = type === "overdue";
+  const isOverdueTeam     = type === "overdue_team";
+  const isLessonKitReady  = type === "lesson_kit_ready";
+  const isStudioApproved  = type === "studio_approved";
+  const isStudioDeleted   = type === "studio_deleted";
 
   const finalTeacherMessage =
     teacher_message || custom_message || lesson_message || report_note || "";
 
-  const color = isApproved ? "#2ecc71"
+  const color = isStudioApproved ? "#2ecc71"
+    : isStudioDeleted ? "#e74c3c"
+    : isApproved ? "#2ecc71"
     : isDeptHead ? "#9b59b6"
     : isManagerReport ? "#e67e22"
     : isLessonKitReady ? "#3498db"
@@ -53,7 +57,9 @@ function buildEmail({
     : (isNew || isTeamNotify) ? "#f5a623"
     : "#e74c3c";
 
-  const icon = isApproved ? "✅"
+  const icon = isStudioApproved ? "🎙️"
+    : isStudioDeleted ? "❌"
+    : isApproved ? "✅"
     : isDeptHead ? "🎓"
     : isManagerReport ? "📋"
     : isLessonKitReady ? "📚"
@@ -61,7 +67,9 @@ function buildEmail({
     : (isNew || isTeamNotify) ? "⏳"
     : "❌";
 
-  const title = isApproved ? "הבקשה אושרה!"
+  const title = isStudioApproved ? "קביעת האולפן אושרה! 🎙️"
+    : isStudioDeleted ? "קביעת האולפן בוטלה"
+    : isApproved ? "הבקשה אושרה!"
     : isDeptHead ? "בקשת השאלת הפקה ממתינה לאישורך"
     : isManagerReport ? "דיווח מצוות המחסן"
     : isLessonKitReady ? "ערכת השיעור מוכנה לבדיקה"
@@ -76,7 +84,13 @@ function buildEmail({
     : isLessonKitReady ? (recipient_name || student_name || "המורה")
     : student_name;
 
-  const body = isApproved
+  const body = isStudioApproved
+    ? `קביעת האולפן שלך עברה את אישורו של איש הצוות בהצלחה 🎉<br/><br/>
+       ניתן להגיע בשמחה ולעבוד באולפן <strong style="color:#2ecc71">${project_name || "האולפן"}</strong>.`
+    : isStudioDeleted
+    ? `לצערנו לא ניתן לקבוע את האולפן <strong style="color:#e8eaf0">${project_name || "האולפן"}</strong>.<br/><br/>
+       מתנצלים על אי הנוחות, ומזמנים אותך לנסות ולקבוע אותו במועד אחר.`
+    : isApproved
     ? `בקשת ההשאלה של <strong>${student_name}</strong> <strong style="color:#2ecc71">אושרה</strong>.`
     : isDeptHead
     ? `הסטודנט/ית <strong style="color:#e8eaf0">${student_name}</strong> הגיש/ה בקשת השאלת הפקה הממתינה לאישורך.<br/><br/>
@@ -247,6 +261,8 @@ export default async function handler(req, res) {
   if (!to || !type) return res.status(400).json({ error: "חסרים שדות חובה" });
 
   const subjects = {
+    studio_approved:   "🎙️ קביעת האולפן שלך אושרה – מחסן ציוד קמרה אובסקורה וסאונד",
+    studio_deleted:    "❌ קביעת האולפן בוטלה – מחסן ציוד קמרה אובסקורה וסאונד",
     new:               "⏳ קיבלנו את הבקשה שלך – מחסן ציוד קמרה אובסקורה וסאונד",
     approved:          "✅ הבקשה שלך אושרה – מחסן ציוד קמרה אובסקורה וסאונד",
     rejected:          "עדכון לגבי בקשת ההשאלה – מחסן ציוד קמרה אובסקורה וסאונד",

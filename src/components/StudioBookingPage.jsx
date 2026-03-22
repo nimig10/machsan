@@ -4,7 +4,7 @@ import { Modal } from "./ui.jsx";
 
 const DAY_HOURS = ["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00"];
 const NIGHT_HOURS = ["21:00","22:00","23:00","00:00","01:00","02:00","03:00","04:00","05:00","06:00","07:00","08:00"];
-const STATUS_COLORS = { "ממתין":"var(--yellow)", "מאושר":"var(--green)", "נדחה":"var(--red)" };
+const STATUS_COLORS = { "ממתין":"var(--yellow)", "מאושר":"var(--green)" };
 const NIGHT_COLOR = "#9b59b6";
 const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 const HE_DAYS_SHORT = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
@@ -40,6 +40,8 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [statusFilter, setStatusFilter] = useState("הכל");
+  const [todayOnly,   setTodayOnly]   = useState(false);
+  const [sortMode,    setSortMode]    = useState("urgency");
   const [activeView, setActiveView] = useState("calendar");
   const [modal, setModal]   = useState(null);
   const [saving, setSaving] = useState(false);
@@ -236,6 +238,30 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     return rec && (rec.certs || {})[nightType.id] === "עבר";
   };
 
+  // ── Send studio email to student ──────────────────────────────────────
+  const sendStudioEmail = async (type, booking) => {
+    const studio = studios.find(s => s.id === booking.studioId);
+    const studioName = studio?.name || "האולפן";
+    const studentRecord = (certifications?.students || []).find(s => s.name === booking.studentName);
+    const email = studentRecord?.email;
+    if (!email) return; // אין מייל — לא שולחים
+    try {
+      await fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to:           email,
+          type,
+          student_name: booking.studentName,
+          project_name: studioName,
+          borrow_date:  booking.date,
+          borrow_time:  booking.startTime,
+          return_time:  booking.endTime,
+        }),
+      });
+    } catch(e) { console.error("Studio email error:", e); }
+  };
+
   // ── Submit Booking ────────────────────────────────────────────────────
   const submitBooking = async (e) => {
     e.preventDefault();
@@ -276,28 +302,50 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
   };
 
   // ── Change Status ─────────────────────────────────────────────────────
-  const changeStatus = async (id, status) => {
-    const updated = bookings.map(b => b.id===id ? {...b, status} : b);
+  const changeStatus = async (id, newStatus) => {
+    const booking = bookings.find(b => b.id === id);
+    const updated = bookings.map(b => b.id===id ? {...b, status:newStatus} : b);
     await saveBookings(updated);
-    showToast("success", `סטטוס שונה ל-${status}`);
-    setModal(m => m?.booking ? {...m, booking:{...m.booking, status}} : m);
+    showToast("success", `סטטוס שונה ל-${newStatus}`);
+    setModal(m => m?.booking ? {...m, booking:{...m.booking, status:newStatus}} : m);
+    if (newStatus === "מאושר" && booking) await sendStudioEmail("studio_approved", booking);
   };
 
   // ── Delete Booking ────────────────────────────────────────────────────
   const deleteBooking = async (id) => {
     if (!confirm("למחוק הזמנה זו?")) return;
+    const booking = bookings.find(b => b.id === id);
     await saveBookings(bookings.filter(b => b.id!==id));
-    showToast("success","הזמנה נמחקה");
+    showToast("success","הבקשה נמחקה");
     setModal(null);
+    if (booking?.status === "ממתין") await sendStudioEmail("studio_deleted", booking);
   };
 
-  // ── Filtered bookings for list view (sorted by date + time) ──────────
+  // ── Delete booking from list row (inline button) ──────────────────────
+  const deleteBookingInList = async (e, id) => {
+    e.stopPropagation();
+    if (!confirm("למחוק בקשה זו?")) return;
+    const booking = bookings.find(b => b.id === id);
+    await saveBookings(bookings.filter(b => b.id !== id));
+    showToast("success","הבקשה נמחקה");
+    if (booking?.status === "ממתין") await sendStudioEmail("studio_deleted", booking);
+  };
+
+  // ── Filtered bookings for list view ──────────────────────────────────
   const filteredBookings = bookings
     .filter(b => statusFilter==="הכל" || b.status===statusFilter)
+    .filter(b => !todayOnly || b.date===todayStr)
     .sort((a,b) => {
-      const dc = (b.date||"").localeCompare(a.date||"");
-      if (dc !== 0) return dc;
-      return (a.startTime||"").localeCompare(b.startTime||"");
+      if (sortMode==="urgency") {
+        // קירבה לזמן הנוכחי — הקרוב ביותר לעכשיו עולה ראשון
+        const now = Date.now();
+        const aMs = new Date(`${a.date}T${(a.startTime||"00:00")}:00`).getTime();
+        const bMs = new Date(`${b.date}T${(b.startTime||"00:00")}:00`).getTime();
+        return Math.abs(aMs - now) - Math.abs(bMs - now);
+      } else {
+        // זמן קבלת הבקשה — הישנה ביותר עולה ראשון
+        return new Date(a.createdAt||0) - new Date(b.createdAt||0);
+      }
     });
 
   const pendingCount = bookings.filter(b=>b.status==="ממתין").length;
@@ -326,7 +374,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
           <select className="form-input" style={{width:"auto",fontSize:13}} value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
-            {["הכל","ממתין","מאושר","נדחה"].map(s=><option key={s}>{s}</option>)}
+            {["הכל","ממתין","מאושר"].map(s=><option key={s}>{s}</option>)}
           </select>
           {role==="admin" && activeView==="manage" &&
             <button className="btn btn-primary" onClick={()=>setModal({type:"addStudio"})}>➕ אולפן חדש</button>
@@ -453,6 +501,25 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
       {/* ── LIST VIEW ── */}
       {activeView==="list" && (
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {/* ── כלי פילטור ומיון ── */}
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",padding:"10px 14px",background:"var(--surface2)",borderRadius:10,marginBottom:4}}>
+            <label style={{display:"flex",alignItems:"center",gap:6,fontSize:13,cursor:"pointer",fontWeight:600}}>
+              <input type="checkbox" checked={todayOnly} onChange={e=>setTodayOnly(e.target.checked)} style={{accentColor:"var(--accent)",width:15,height:15}}/>
+              📅 היום בלבד
+            </label>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginRight:"auto"}}>
+              <span style={{fontSize:12,color:"var(--text3)"}}>מיון:</span>
+              <button onClick={()=>setSortMode("urgency")}
+                style={{padding:"3px 10px",borderRadius:6,border:`1px solid ${sortMode==="urgency"?"var(--accent)":"var(--border)"}`,background:sortMode==="urgency"?"var(--accent)22":"transparent",color:sortMode==="urgency"?"var(--accent)":"var(--text3)",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                ⚡ דחיפות
+              </button>
+              <button onClick={()=>setSortMode("request_time")}
+                style={{padding:"3px 10px",borderRadius:6,border:`1px solid ${sortMode==="request_time"?"var(--accent)":"var(--border)"}`,background:sortMode==="request_time"?"var(--accent)22":"transparent",color:sortMode==="request_time"?"var(--accent)":"var(--text3)",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                🕐 זמן קבלה
+              </button>
+            </div>
+          </div>
+
           {filteredBookings.length===0
             ? <div style={{textAlign:"center",padding:48,color:"var(--text3)"}}>אין הזמנות להצגה</div>
             : filteredBookings.map(b=>{
@@ -476,7 +543,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                       <button className="btn btn-sm" style={{background:"var(--green)",color:"#fff",border:"none",padding:"4px 10px",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer"}}
                         onClick={e=>{e.stopPropagation();changeStatus(b.id,"מאושר")}}>✅ אשר</button>
                       <button className="btn btn-sm" style={{background:"var(--red)",color:"#fff",border:"none",padding:"4px 10px",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer"}}
-                        onClick={e=>{e.stopPropagation();changeStatus(b.id,"נדחה")}}>❌ דחה</button>
+                        onClick={e=>deleteBookingInList(e,b.id)}>🗑️ מחק</button>
                     </>}
                     <span style={{background:color+"22",color,borderRadius:20,padding:"3px 12px",fontSize:12,fontWeight:700,border:`1px solid ${color}55`}}>{b.status}</span>
                   </div>
@@ -644,7 +711,6 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
               <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>deleteBooking(modal.booking.id)}>🗑️ מחק</button>
               <div style={{display:"flex",gap:8}}>
                 {role==="admin" && modal.booking.status==="ממתין" && <>
-                  <button className="btn btn-secondary btn-sm" style={{color:"var(--red)"}} onClick={()=>changeStatus(modal.booking.id,"נדחה")}>❌ דחה</button>
                   <button className="btn btn-primary btn-sm" onClick={()=>changeStatus(modal.booking.id,"מאושר")}>✅ אשר</button>
                 </>}
                 <button className="btn btn-secondary btn-sm" onClick={()=>setModal(null)}>סגור</button>
