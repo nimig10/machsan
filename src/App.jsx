@@ -7,6 +7,7 @@ import { ReservationsPage } from "./components/ReservationsPage.jsx";
 import { DashboardPage } from "./components/DashboardPage.jsx";
 import StudioBookingPage from "./components/StudioBookingPage.jsx";
 import { StudentsPage } from "./components/StudentsPage.jsx";
+import { CertificationsPage } from "./components/CertificationsPage.jsx";
 
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
 // v3.1
@@ -4459,8 +4460,8 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     );
   };
 
-// ─── CERTIFICATIONS PAGE ──────────────────────────────────────────────────────
-function CertificationsPage({ certifications, setCertifications, showToast }) {
+// ─── CERTIFICATIONS PAGE (removed — now imported from components/CertificationsPage.jsx) ──
+function CertificationsPage_REMOVED({ certifications, setCertifications, showToast }) {
   const { types=[], students=[] } = certifications;
   const [newTypeName, setNewTypeName] = useState("");
   const [addingStudent, setAddingStudent] = useState(false);
