@@ -1415,15 +1415,17 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
             loanType={form.loan_type}
           />}
         </div>}
+        {publicView==="studios" && <div className="form-card-body" style={{padding:0}}>
+          <PublicStudioBooking
+            studios={studios} bookings={studioBookings} setBookings={setStudioBookings}
+            student={loggedInStudent} showToast={showToast}
+            weekOffset={studioWeekOffset} setWeekOffset={setStudioWeekOffset}
+            modal={studioModal} setModal={setStudioModal}
+          />
+        </div>}
       </div>
     </div>
     {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor}/>}
-    {publicView==="studios" && <PublicStudioBooking
-      studios={studios} bookings={studioBookings} setBookings={setStudioBookings}
-      student={loggedInStudent} showToast={showToast}
-      weekOffset={studioWeekOffset} setWeekOffset={setStudioWeekOffset}
-      modal={studioModal} setModal={setStudioModal}
-    />}
     </>
   );
 }
