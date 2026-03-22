@@ -304,7 +304,8 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
   // ── Studio display helper ─────────────────────────────────────────────
   const StudioImg = ({ studio, size=32 }) => {
     if (!studio) return null;
-    if (studio.image?.startsWith("http")) return <img src={studio.image} alt={studio.name} style={{width:size,height:size,borderRadius:6,objectFit:"cover"}}/>;
+    if (studio.image?.startsWith("http") || studio.image?.startsWith("data:"))
+      return <img src={studio.image} alt={studio.name} style={{width:size,height:size,borderRadius:6,objectFit:"cover"}}/>;
     return <span style={{fontSize:size*0.65}}>{studio.image||"🎙️"}</span>;
   };
 
