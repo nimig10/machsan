@@ -44,7 +44,29 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
         storageGet("studios"),
         storageGet("studio_bookings"),
       ]);
-      if (Array.isArray(s)) setStudios(s);
+      if (Array.isArray(s)) {
+        setStudios(s);
+        // One-time migration: convert legacy base64 images to Cloudinary URLs
+        const needsMigration = s.some(st => st.image?.startsWith("data:"));
+        if (needsMigration) {
+          const migrated = await Promise.all(s.map(async (st) => {
+            if (!st.image?.startsWith("data:")) return st;
+            try {
+              const res = await fetch("/api/upload-image", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ data: st.image }),
+              });
+              const json = await res.json();
+              if (res.ok && json.url) return { ...st, image: json.url };
+            } catch (e) { console.error("Migration failed for", st.name, e); }
+            return st;
+          }));
+          setStudios(migrated);
+          await storageSet("studios", migrated);
+          console.log("✅ Studio images migrated to Cloudinary");
+        }
+      }
       if (Array.isArray(b)) setBookings(b);
     })();
   }, []);
@@ -65,13 +87,39 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
 
   // ── Add Studio ────────────────────────────────────────────────────────
   const [studioImage, setStudioImage] = useState("");
+  const [imgUploading, setImgUploading] = useState(false);
 
-  const handleImageUpload = (e) => {
+  const uploadToCloudinary = async (file) => {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = ev => resolve(ev.target.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    const res = await fetch("/api/upload-image", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data: dataUrl }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json.url) throw new Error(json.error || "שגיאת שרת");
+    return json.url;
+  };
+
+  const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => setStudioImage(ev.target.result);
-    reader.readAsDataURL(file);
+    setImgUploading(true);
+    try {
+      const url = await uploadToCloudinary(file);
+      setStudioImage(url);
+      showToast("success", "✅ תמונה הועלתה");
+    } catch (err) {
+      console.error("Image upload failed:", err);
+      showToast("error", "שגיאה בהעלאת התמונה — נסה שנית");
+    } finally {
+      setImgUploading(false);
+    }
   };
 
   const handleAddStudio = async (e) => {
@@ -99,12 +147,20 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
 
   // ── Edit Studio ─────────────────────────────────────────────────────
   const [editImage, setEditImage] = useState("");
-  const handleEditImageUpload = (e) => {
+  const handleEditImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => setEditImage(ev.target.result);
-    reader.readAsDataURL(file);
+    setImgUploading(true);
+    try {
+      const url = await uploadToCloudinary(file);
+      setEditImage(url);
+      showToast("success", "✅ תמונה הועלתה");
+    } catch (err) {
+      console.error("Image upload failed:", err);
+      showToast("error", "שגיאה בהעלאת התמונה — נסה שנית");
+    } finally {
+      setImgUploading(false);
+    }
   };
   const handleEditStudio = async (e) => {
     e.preventDefault();
@@ -121,7 +177,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     setModal(null);
   };
   const openEditStudio = (studio) => {
-    setEditImage(studio.image?.startsWith("data:") ? studio.image : "");
+    setEditImage("");
     setModal({type:"editStudio", studio});
   };
 
@@ -324,7 +380,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
       {/* ── MODAL: Add Studio ── */}
       {modal?.type==="addStudio" && (
         <Modal title="➕ הוסף אולפן" onClose={()=>setModal(null)}
-          footer={<><button className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button><button form="addStudioForm" type="submit" className="btn btn-primary">שמור</button></>}>
+          footer={<><button className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button><button form="addStudioForm" type="submit" className="btn btn-primary" disabled={imgUploading}>{imgUploading?"מעלה תמונה...":"שמור"}</button></>}>
           <form id="addStudioForm" onSubmit={handleAddStudio} style={{display:"flex",flexDirection:"column",gap:12}}>
             <label style={labelStyle}>שם האולפן *
               <input name="name" className="form-input" placeholder='לדוגמה: אולפן A' required/>
@@ -337,7 +393,8 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
               </select>
             </label>
             <label style={labelStyle}>תמונה
-              <input type="file" accept="image/*" onChange={handleImageUpload} style={{fontSize:13}}/>
+              <input type="file" accept="image/*" onChange={handleImageUpload} style={{fontSize:13}} disabled={imgUploading}/>
+              {imgUploading && <div style={{fontSize:12,color:"var(--accent)",marginTop:4}}>⏳ מעלה תמונה...</div>}
               {studioImage && <img src={studioImage} alt="תצוגה מקדימה" style={{width:80,height:80,objectFit:"cover",borderRadius:8,marginTop:4}}/>}
             </label>
             <label style={labelStyle}>או אימוג'י (אם אין תמונה)
@@ -354,7 +411,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
       {/* ── MODAL: Edit Studio ── */}
       {modal?.type==="editStudio" && (
         <Modal title="✏️ עריכת אולפן" onClose={()=>{setEditImage("");setModal(null);}}
-          footer={<><button className="btn btn-secondary" onClick={()=>{setEditImage("");setModal(null);}}>ביטול</button><button form="editStudioForm" type="submit" className="btn btn-primary">💾 שמור</button></>}>
+          footer={<><button className="btn btn-secondary" onClick={()=>{setEditImage("");setModal(null);}}>ביטול</button><button form="editStudioForm" type="submit" className="btn btn-primary" disabled={imgUploading}>{imgUploading?"מעלה תמונה...":"💾 שמור"}</button></>}>
           <form id="editStudioForm" onSubmit={handleEditStudio} style={{display:"flex",flexDirection:"column",gap:12}}>
             <label style={labelStyle}>שם האולפן *
               <input name="name" className="form-input" defaultValue={modal.studio.name} required/>
@@ -368,14 +425,15 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
             </label>
             <div style={{fontSize:13,fontWeight:600,color:"var(--text2)"}}>תמונה נוכחית:
               <div style={{marginTop:4}}>
-                {(editImage || modal.studio.image)?.startsWith("data:")
+                {(editImage || modal.studio.image)?.startsWith("data:") || (editImage || modal.studio.image)?.startsWith("http")
                   ? <img src={editImage || modal.studio.image} alt="תמונה" style={{width:80,height:80,objectFit:"cover",borderRadius:8}}/>
                   : <span style={{fontSize:32}}>{modal.studio.image||"🎙️"}</span>
                 }
               </div>
             </div>
             <label style={labelStyle}>החלף תמונה
-              <input type="file" accept="image/*" onChange={handleEditImageUpload} style={{fontSize:13}}/>
+              <input type="file" accept="image/*" onChange={handleEditImageUpload} style={{fontSize:13}} disabled={imgUploading}/>
+              {imgUploading && <div style={{fontSize:12,color:"var(--accent)",marginTop:4}}>⏳ מעלה תמונה...</div>}
             </label>
             <label style={labelStyle}>או אימוג'י (מחליף תמונה)
               <input name="emoji" className="form-input" placeholder="🎙️" maxLength={4}/>
