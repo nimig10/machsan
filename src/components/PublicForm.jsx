@@ -1471,7 +1471,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     const overlap = bookings.some(b => b.studioId===studioId && b.date===date && b.status!=="נדחה" && !(endTime<=b.startTime || startTime>=b.endTime));
     if(!isNight && overlap) { showToast("error","⚠️ קיימת הזמנה חופפת"); setSaving(false); return; }
     const studioObj = studios.find(s=>s.id===studioId);
-    const autoApprove = studioObj && !studioObj.requiresApproval;
+    const autoApprove = isNight || (studioObj && !studioObj.requiresApproval);
     const newBooking = { id:Date.now(), studioId, date, startTime, endTime, studentName:student.name, notes, isNight, status: autoApprove ? "מאושר" : "ממתין", createdAt:new Date().toISOString() };
     const updated = [...bookings, newBooking];
     setBookings(updated);
@@ -1663,9 +1663,12 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                   <button type="button" className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button>
                   <button type="submit" className="btn btn-primary" disabled={saving} style={modal.isNight?{background:NIGHT_COLOR,borderColor:NIGHT_COLOR}:{}}>{saving?"שומר...":"✅ שלח בקשה"}</button>
                 </div>
-                {(()=>{const s=studios.find(st=>st.id===modal.studioId); return s?.requiresApproval
-                  ? <div style={{fontSize:11,color:"var(--text3)"}}>⏳ הבקשה תישלח לאישור המנהל</div>
-                  : <div style={{fontSize:11,color:"var(--green)"}}>✅ האולפן יאושר אוטומטית</div>;
+                {(()=>{
+                  if (modal.isNight) return <div style={{fontSize:11,color:"var(--green)"}}>✅ הזמנות לילה מאושרות אוטומטית</div>;
+                  const s=studios.find(st=>st.id===modal.studioId);
+                  return s?.requiresApproval
+                    ? <div style={{fontSize:11,color:"var(--text3)"}}>⏳ הבקשה תישלח לאישור המנהל</div>
+                    : <div style={{fontSize:11,color:"var(--green)"}}>✅ האולפן יאושר אוטומטית</div>;
                 })()}
               </form>
             </div>

@@ -30,12 +30,6 @@ function getWeekDays(offset=0) {
   });
 }
 
-function nextDay(dateStr) {
-  const d = new Date(dateStr + "T12:00:00");
-  d.setDate(d.getDate() + 1);
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
-
 export default function StudioBookingPage({ showToast, teamMembers=[], certifications={types:[],students:[]}, role="admin", currentUser=null, studios: studiosProp, setStudios: setStudiosProp, bookings: bookingsProp, setBookings: setBookingsProp }) {
   const [localStudios,   setLocalStudios]   = useState(() => lsGet("studios") || []);
   const [localBookings,  setLocalBookings]  = useState(() => lsGet("studio_bookings") || []);
@@ -125,20 +119,11 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     ...(teamMembers || []).map(m => m.name || m),
   ].filter(Boolean).filter((v,i,a) => a.indexOf(v)===i);
 
-  // ── Bookings for a cell (including night bookings from previous day) ──
+  // ── Bookings for a cell (night bookings show only on their original date) ──
   const cellBookings = (studioId, fullDate) => {
-    const direct = bookings.filter(b => b.studioId===studioId && b.date===fullDate &&
-      (statusFilter==="הכל" || b.status===statusFilter));
-    // Also show night bookings from previous day that extend past midnight
-    const prevDate = (() => {
-      const d = new Date(fullDate + "T12:00:00"); d.setDate(d.getDate() - 1);
-      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-    })();
-    const nightFromPrev = bookings.filter(b =>
-      b.studioId===studioId && b.date===prevDate && b.isNight && b.endTime <= "08:00" && b.endTime > "00:00" &&
-      (statusFilter==="הכל" || b.status===statusFilter)
-    );
-    return [...direct, ...nightFromPrev].sort((a,b) => (a.startTime||"").localeCompare(b.startTime||""));
+    return bookings.filter(b => b.studioId===studioId && b.date===fullDate &&
+      (statusFilter==="הכל" || b.status===statusFilter))
+      .sort((a,b) => (a.startTime||"").localeCompare(b.startTime||""));
   };
 
   // ── Studio Image Upload ─────────────────────────────────────────────
