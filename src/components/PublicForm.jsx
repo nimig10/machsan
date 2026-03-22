@@ -1530,7 +1530,13 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     return (
       <div style={{padding:"20px 16px",direction:"rtl",maxWidth:500,margin:"0 auto"}}>
         <button className="btn btn-secondary btn-sm" onClick={()=>{ setModal(null); setDayView(null); }} style={{marginBottom:12}}>← חזור ללוח</button>
-        <div style={{fontWeight:900,fontSize:18,marginBottom:4}}>{studio?.image} {studio?.name}</div>
+        <div style={{fontWeight:900,fontSize:18,marginBottom:4,display:"flex",alignItems:"center",gap:8}}>
+          {studio?.image?.startsWith("data:") || studio?.image?.startsWith("http")
+            ? <img src={studio.image} alt={studio.name} style={{width:32,height:32,borderRadius:6,objectFit:"cover"}}/>
+            : <span>{studio?.image||"🎙️"}</span>
+          }
+          {studio?.name}
+        </div>
         <div style={{fontSize:14,color:"var(--text3)",marginBottom:16}}>{dayView.dayName} · {dayView.date}</div>
         {isDayPast && <div style={{background:"rgba(255,80,80,0.1)",border:"1px solid var(--red)",borderRadius:8,padding:"8px 12px",fontSize:13,color:"var(--red)",marginBottom:12,textAlign:"center"}}>⛔ לא ניתן להזמין תאריכים שעברו</div>}
         <div style={{display:"flex",flexDirection:"column",gap:2}}>
@@ -1667,7 +1673,11 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
               {studios.map(studio=>(
                 <tr key={studio.id}>
                   <td style={{padding:"6px 8px",border:"1px solid var(--border)",fontWeight:700,fontSize:12,background:"var(--surface2)",textAlign:"center"}}>
-                    <span style={{fontSize:18}}>{studio.image}</span><br/>{studio.name}
+                    {studio.image?.startsWith("data:") || studio.image?.startsWith("http")
+                      ? <img src={studio.image} alt={studio.name} style={{width:36,height:36,borderRadius:6,objectFit:"cover",display:"block",margin:"0 auto 4px"}}/>
+                      : <span style={{fontSize:18,display:"block"}}>{studio.image||"🎙️"}</span>
+                    }
+                    <span>{studio.name}</span>
                   </td>
                   {weekDays.map(day=>{
                     const cells = bookings.filter(b=>b.studioId===studio.id && b.date===day.fullDate && b.status!=="נדחה");

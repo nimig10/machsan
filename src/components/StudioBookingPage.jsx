@@ -299,7 +299,10 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
               return (
                 <div key={s.id} style={{background:"var(--surface2)",borderRadius:10,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
                   <div style={{display:"flex",alignItems:"center",gap:12}}>
-                    <span style={{fontSize:28}}>{s.image}</span>
+                    {s.image?.startsWith("data:") || s.image?.startsWith("http")
+                      ? <img src={s.image} alt={s.name} style={{width:44,height:44,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
+                      : <span style={{fontSize:28,flexShrink:0}}>{s.image||"🎙️"}</span>
+                    }
                     <div>
                       <div style={{fontWeight:700}}>{s.name}</div>
                       <div style={{fontSize:12,color:"var(--text3)"}}>{s.type==="sound"?"🎙️ סאונד":s.type==="photo"?"📷 צילום":"🌐 כללי"} · {count} הזמנות</div>
