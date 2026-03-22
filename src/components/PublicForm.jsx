@@ -1460,11 +1460,13 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     if(startTime >= endTime) { showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה"); setSaving(false); return; }
     const overlap = bookings.some(b => b.studioId===studioId && b.date===date && b.status!=="נדחה" && !(endTime<=b.startTime || startTime>=b.endTime));
     if(overlap) { showToast("error","⚠️ קיימת הזמנה חופפת"); setSaving(false); return; }
-    const newBooking = { id:Date.now(), studioId, date, startTime, endTime, studentName:student.name, notes, status:"ממתין", createdAt:new Date().toISOString() };
+    const studioObj = studios.find(s=>s.id===studioId);
+    const autoApprove = studioObj && !studioObj.requiresApproval;
+    const newBooking = { id:Date.now(), studioId, date, startTime, endTime, studentName:student.name, notes, status: autoApprove ? "מאושר" : "ממתין", createdAt:new Date().toISOString() };
     const updated = [...bookings, newBooking];
     setBookings(updated);
     await storageSet("studio_bookings", updated);
-    showToast("success","✅ בקשת ההזמנה נשלחה לאישור");
+    showToast("success", autoApprove ? "✅ האולפן הוזמן בהצלחה!" : "✅ בקשת ההזמנה נשלחה לאישור");
     setModal(null); setSaving(false);
   };
 
@@ -1548,9 +1550,22 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
               <div key={hour} style={{display:"flex",alignItems:"stretch",minHeight:48,border:"1px solid var(--border)",borderRadius:6,overflow:"hidden",opacity:isHourPast?0.5:1}}>
                 <div style={{width:60,padding:"8px 6px",background:"var(--surface2)",fontWeight:700,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>{hour}</div>
                 {booking
-                  ? <div style={{flex:1,background:STATUS_C[booking.status]+"22",padding:"8px 12px",display:"flex",alignItems:"center",gap:8,borderRight:`3px solid ${STATUS_C[booking.status]}`}}>
-                      <span style={{fontWeight:700,fontSize:13}}>{booking.studentName}</span>
-                      <span style={{fontSize:11,color:"var(--text3)"}}>{booking.startTime}–{booking.endTime}</span>
+                  ? <div style={{flex:1,background:STATUS_C[booking.status]+"22",padding:"8px 12px",display:"flex",alignItems:"center",gap:8,borderRight:`3px solid ${STATUS_C[booking.status]}`,justifyContent:"space-between"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontWeight:700,fontSize:13}}>{booking.studentName}</span>
+                        <span style={{fontSize:11,color:"var(--text3)"}}>{booking.startTime}–{booking.endTime}</span>
+                      </div>
+                      {booking.studentName===student.name && !isHourPast && (
+                        <button onClick={async()=>{
+                          if(!confirm("לבטל את ההזמנה שלך?")) return;
+                          const updated = bookings.filter(b=>b.id!==booking.id);
+                          setBookings(updated);
+                          await storageSet("studio_bookings", updated);
+                          showToast("success","❌ ההזמנה בוטלה");
+                        }} style={{background:"var(--red)",color:"#fff",border:"none",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>
+                          ❌ בטל
+                        </button>
+                      )}
                     </div>
                   : <div style={{flex:1,padding:"8px 12px",cursor:isHourPast?"default":"pointer",display:"flex",alignItems:"center",color:"var(--text3)",fontSize:12}}
                       onClick={()=>{ if(!isHourPast) setModal({type:"addBooking",studioId:dayView.studioId,date:dayView.date,dayName:dayView.dayName,defaultStart:hour,defaultEnd:nextH}); }}>
@@ -1583,7 +1598,10 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                   <button type="button" className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button>
                   <button type="submit" className="btn btn-primary" disabled={saving}>{saving?"שומר...":"✅ שלח בקשה"}</button>
                 </div>
-                <div style={{fontSize:11,color:"var(--text3)"}}>⏳ הבקשה תישלח לאישור המנהל</div>
+                {(()=>{const s=studios.find(st=>st.id===modal.studioId); return s?.requiresApproval
+                  ? <div style={{fontSize:11,color:"var(--text3)"}}>⏳ הבקשה תישלח לאישור המנהל</div>
+                  : <div style={{fontSize:11,color:"var(--green)"}}>✅ האולפן יאושר אוטומטית</div>;
+                })()}
               </form>
             </div>
           </div>
@@ -1680,7 +1698,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                     <span>{studio.name}</span>
                   </td>
                   {weekDays.map(day=>{
-                    const cells = bookings.filter(b=>b.studioId===studio.id && b.date===day.fullDate && b.status!=="נדחה");
+                    const cells = bookings.filter(b=>b.studioId===studio.id && b.date===day.fullDate && b.status!=="נדחה").sort((a,b)=>(a.startTime||"").localeCompare(b.startTime||""));
                     const isPast = day.fullDate < todayStr;
                     return (
                       <td key={day.fullDate}

@@ -81,7 +81,8 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     const type = fd.get("type");
     if (!name) return;
     if (studios.some(s => s.name===name)) { showToast("error","אולפן בשם זה כבר קיים"); return; }
-    const updated = [...studios, { id: Date.now(), name, type, image: studioImage || fd.get("emoji")||"🎙️" }];
+    const requiresApproval = fd.get("requiresApproval") === "on";
+    const updated = [...studios, { id: Date.now(), name, type, image: studioImage || fd.get("emoji")||"🎙️", requiresApproval }];
     await saveStudios(updated);
     showToast("success", `אולפן "${name}" נוסף`);
     setStudioImage("");
@@ -112,7 +113,8 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     if (!name) return;
     const type = fd.get("type");
     const image = editImage || fd.get("emoji")?.trim() || modal.studio.image;
-    const updated = studios.map(s => s.id===modal.studio.id ? {...s, name, type, image} : s);
+    const requiresApproval = fd.get("requiresApproval") === "on";
+    const updated = studios.map(s => s.id===modal.studio.id ? {...s, name, type, image, requiresApproval} : s);
     await saveStudios(updated);
     showToast("success", `אולפן "${name}" עודכן`);
     setEditImage("");
@@ -305,7 +307,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                     }
                     <div>
                       <div style={{fontWeight:700}}>{s.name}</div>
-                      <div style={{fontSize:12,color:"var(--text3)"}}>{s.type==="sound"?"🎙️ סאונד":s.type==="photo"?"📷 צילום":"🌐 כללי"} · {count} הזמנות</div>
+                      <div style={{fontSize:12,color:"var(--text3)"}}>{s.type==="sound"?"🎙️ סאונד":s.type==="photo"?"📷 צילום":"🌐 כללי"} · {count} הזמנות{s.requiresApproval ? " · 🔒 באישור מיוחד" : " · ✅ הזמנה חופשית"}</div>
                     </div>
                   </div>
                   <div style={{display:"flex",gap:6}}>
@@ -341,6 +343,10 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
             <label style={labelStyle}>או אימוג'י (אם אין תמונה)
               <input name="emoji" className="form-input" placeholder="🎙️" maxLength={4}/>
             </label>
+            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,fontWeight:600,color:"var(--text2)",cursor:"pointer",padding:"8px 0"}}>
+              <input type="checkbox" name="requiresApproval" style={{width:18,height:18,accentColor:"var(--accent)"}}/>
+              🔒 רק באישור מיוחד (דורש אישור איש צוות)
+            </label>
           </form>
         </Modal>
       )}
@@ -373,6 +379,10 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
             </label>
             <label style={labelStyle}>או אימוג'י (מחליף תמונה)
               <input name="emoji" className="form-input" placeholder="🎙️" maxLength={4}/>
+            </label>
+            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,fontWeight:600,color:"var(--text2)",cursor:"pointer",padding:"8px 0"}}>
+              <input type="checkbox" name="requiresApproval" defaultChecked={modal.studio.requiresApproval} style={{width:18,height:18,accentColor:"var(--accent)"}}/>
+              🔒 רק באישור מיוחד (דורש אישור איש צוות)
             </label>
           </form>
         </Modal>
