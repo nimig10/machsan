@@ -8,6 +8,7 @@ import { DashboardPage } from "./components/DashboardPage.jsx";
 import StudioBookingPage from "./components/StudioBookingPage.jsx";
 import { StudentsPage } from "./components/StudentsPage.jsx";
 import { CertificationsPage } from "./components/CertificationsPage.jsx";
+import { PublicForm } from "./components/PublicForm.jsx";
 
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
 // v3.1
@@ -2129,8 +2130,8 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
   );
 }
 
-// ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
-function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], calendarToken="", siteSettings={} }) {
+// ─── PUBLIC FORM (removed — now imported from components/PublicForm.jsx) ──────
+function PublicForm_REMOVED({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], calendarToken="", siteSettings={} }) {
   const initialParams = new URLSearchParams(window.location.search);
   const initialLoanTypeParam = initialParams.get("loan_type");
   const initialStepParam = Number(initialParams.get("step"));
