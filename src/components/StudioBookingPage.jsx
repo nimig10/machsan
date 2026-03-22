@@ -2,8 +2,12 @@ import { useState, useEffect, useCallback } from "react";
 import { storageGet, storageSet, lsGet } from "../utils.js";
 import { Modal } from "./ui.jsx";
 
-const HOURS = ["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00"];
-const STATUS_COLORS = { ממתין:"var(--yellow)", מאושר:"var(--green)", נדחה:"var(--red)" };
+const DAY_HOURS = ["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00"];
+const NIGHT_HOURS = ["21:00","22:00","23:00","00:00","01:00","02:00","03:00","04:00","05:00","06:00","07:00","08:00"];
+const STATUS_COLORS = { "ממתין":"var(--yellow)", "מאושר":"var(--green)", "נדחה":"var(--red)" };
+const NIGHT_COLOR = "#9b59b6";
+const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+const HE_DAYS_SHORT = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
 
 function getWeekDays(offset=0) {
   const today = new Date();
@@ -26,8 +30,13 @@ function getWeekDays(offset=0) {
   });
 }
 
+function nextDay(dateStr) {
+  const d = new Date(dateStr + "T12:00:00");
+  d.setDate(d.getDate() + 1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
 export default function StudioBookingPage({ showToast, teamMembers=[], certifications={types:[],students:[]}, role="admin", currentUser=null, studios: studiosProp, setStudios: setStudiosProp, bookings: bookingsProp, setBookings: setBookingsProp }) {
-  // Use props from App if provided (persistent state), otherwise local state (fallback)
   const [localStudios,   setLocalStudios]   = useState(() => lsGet("studios") || []);
   const [localBookings,  setLocalBookings]  = useState(() => lsGet("studio_bookings") || []);
   const studios = studiosProp ?? localStudios;
@@ -43,7 +52,46 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
 
   const weekDays = getWeekDays(weekOffset);
 
-  // One-time migration: convert legacy base64 images to Cloudinary URLs
+  // ── Mini Calendar State ─────────────────────────────────────────────
+  const [miniMonth, setMiniMonth] = useState(() => { const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() }; });
+  const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
+  const weekMiddle = new Date();
+  weekMiddle.setDate(weekMiddle.getDate() + weekOffset * 7);
+  const weekMonthLabel = HE_MONTHS[weekMiddle.getMonth()] + " " + weekMiddle.getFullYear();
+
+  const miniDays = (() => {
+    const { year, month } = miniMonth;
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < firstDay; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    return cells;
+  })();
+
+  const jumpToDate = (day) => {
+    const target = new Date(miniMonth.year, miniMonth.month, day);
+    const now = new Date(); now.setHours(0,0,0,0);
+    const diff = Math.round((target - now) / (1000*60*60*24));
+    const targetSunOffset = target.getDay();
+    const nowSunOffset = now.getDay();
+    const targetWeekStart = diff - targetSunOffset + nowSunOffset;
+    setWeekOffset(Math.round(targetWeekStart / 7));
+  };
+
+  const isInCurrentWeek = (day) => {
+    if (!day) return false;
+    const dateStr = `${miniMonth.year}-${String(miniMonth.month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    return weekDays.some(wd => wd.fullDate === dateStr);
+  };
+
+  const isTodayMini = (day) => {
+    if (!day) return false;
+    const dateStr = `${miniMonth.year}-${String(miniMonth.month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    return dateStr === todayStr;
+  };
+
+  // ── Migration ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!studios.length) return;
     const needsMigration = studios.some(st => st.image?.startsWith("data:"));
@@ -77,12 +125,23 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     ...(teamMembers || []).map(m => m.name || m),
   ].filter(Boolean).filter((v,i,a) => a.indexOf(v)===i);
 
-  // ── Bookings for a cell ───────────────────────────────────────────────
-  const cellBookings = (studioId, fullDate) =>
-    bookings.filter(b => b.studioId===studioId && b.date===fullDate &&
+  // ── Bookings for a cell (including night bookings from previous day) ──
+  const cellBookings = (studioId, fullDate) => {
+    const direct = bookings.filter(b => b.studioId===studioId && b.date===fullDate &&
       (statusFilter==="הכל" || b.status===statusFilter));
+    // Also show night bookings from previous day that extend past midnight
+    const prevDate = (() => {
+      const d = new Date(fullDate + "T12:00:00"); d.setDate(d.getDate() - 1);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    })();
+    const nightFromPrev = bookings.filter(b =>
+      b.studioId===studioId && b.date===prevDate && b.isNight && b.endTime <= "08:00" && b.endTime > "00:00" &&
+      (statusFilter==="הכל" || b.status===statusFilter)
+    );
+    return [...direct, ...nightFromPrev].sort((a,b) => (a.startTime||"").localeCompare(b.startTime||""));
+  };
 
-  // ── Add Studio ────────────────────────────────────────────────────────
+  // ── Studio Image Upload ─────────────────────────────────────────────
   const [studioImage, setStudioImage] = useState("");
   const [imgUploading, setImgUploading] = useState(false);
 
@@ -185,6 +244,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     const fd = new FormData(e.target);
     const studioId   = modal?.studioId;
     const date       = modal?.date;
+    const isNight    = fd.get("isNight") === "on";
     const startTime  = fd.get("startTime");
     const endTime    = fd.get("endTime");
     const studentName= fd.get("studentName")?.trim();
@@ -192,15 +252,17 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     if (!studioId || !date || !startTime || !endTime || !studentName) {
       showToast("error","נא למלא את כל השדות"); setSaving(false); return;
     }
-    if (startTime >= endTime) { showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה"); setSaving(false); return; }
+    // For night bookings, endTime can be less than startTime (crosses midnight)
+    if (!isNight && startTime >= endTime) { showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה"); setSaving(false); return; }
+    // Overlap check
     const overlap = bookings.some(b =>
       b.studioId===studioId && b.date===date && b.status!=="נדחה" &&
       !(endTime <= b.startTime || startTime >= b.endTime)
     );
-    if (overlap) { showToast("error","⚠️ קיימת הזמנה חופפת בשעות אלו"); setSaving(false); return; }
+    if (!isNight && overlap) { showToast("error","⚠️ קיימת הזמנה חופפת בשעות אלו"); setSaving(false); return; }
     const newBooking = {
       id: Date.now(), studioId, date, startTime, endTime,
-      studentName, notes,
+      studentName, notes, isNight: isNight || false,
       status: role==="admin" ? "מאושר" : "ממתין",
       createdAt: new Date().toISOString()
     };
@@ -225,12 +287,26 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     setModal(null);
   };
 
-  // ── Filtered bookings for list view ──────────────────────────────────
+  // ── Filtered bookings for list view (sorted by date + time) ──────────
   const filteredBookings = bookings
     .filter(b => statusFilter==="הכל" || b.status===statusFilter)
-    .sort((a,b) => b.createdAt?.localeCompare(a.createdAt||"")||0);
+    .sort((a,b) => {
+      const dc = (b.date||"").localeCompare(a.date||"");
+      if (dc !== 0) return dc;
+      return (a.startTime||"").localeCompare(b.startTime||"");
+    });
 
   const pendingCount = bookings.filter(b=>b.status==="ממתין").length;
+
+  // ── Booking color helper ──────────────────────────────────────────────
+  const bookingColor = (b) => b.isNight ? NIGHT_COLOR : (STATUS_COLORS[b.status] || "var(--text3)");
+
+  // ── Studio display helper ─────────────────────────────────────────────
+  const StudioImg = ({ studio, size=32 }) => {
+    if (!studio) return null;
+    if (studio.image?.startsWith("http")) return <img src={studio.image} alt={studio.name} style={{width:size,height:size,borderRadius:6,objectFit:"cover"}}/>;
+    return <span style={{fontSize:size*0.65}}>{studio.image||"🎙️"}</span>;
+  };
 
   return (
     <div className="page" style={{direction:"rtl"}}>
@@ -256,12 +332,57 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
       {/* ── CALENDAR VIEW ── */}
       {activeView==="calendar" && (
         <div>
-          {/* Week navigation */}
-          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12,justifyContent:"center"}}>
-            <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w-1)}>→ שבוע קודם</button>
-            <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(0)}>היום</button>
-            <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w+1)}>← שבוע הבא</button>
+          {/* Month/Year header */}
+          <div style={{textAlign:"center",marginBottom:16}}>
+            <div style={{fontSize:22,fontWeight:900,color:"var(--accent)"}}>{weekMonthLabel}</div>
           </div>
+
+          {/* Layout: mini calendar + week nav */}
+          <div style={{display:"flex",gap:20,marginBottom:20,flexWrap:"wrap",justifyContent:"center"}}>
+            {/* Week navigation */}
+            <div style={{flex:1,minWidth:280,display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,justifyContent:"center"}}>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w-1)}>→ שבוע קודם</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(0)}>היום</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w+1)}>← שבוע הבא</button>
+              </div>
+              <div style={{fontSize:13,color:"var(--text3)",textAlign:"center"}}>
+                {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth()+1).padStart(2,"0")} — {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth()+1).padStart(2,"0")}
+              </div>
+            </div>
+
+            {/* Mini calendar */}
+            <div style={{minWidth:220,maxWidth:260,background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:12}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                <button onClick={()=>setMiniMonth(m=>m.month===0?{year:m.year-1,month:11}:{year:m.year,month:m.month-1})}
+                  style={{background:"none",border:"none",color:"var(--text2)",cursor:"pointer",fontSize:16,padding:"2px 6px"}}>→</button>
+                <span style={{fontWeight:800,fontSize:14,color:"var(--text)"}}>{HE_MONTHS[miniMonth.month]} {miniMonth.year}</span>
+                <button onClick={()=>setMiniMonth(m=>m.month===11?{year:m.year+1,month:0}:{year:m.year,month:m.month+1})}
+                  style={{background:"none",border:"none",color:"var(--text2)",cursor:"pointer",fontSize:16,padding:"2px 6px"}}>←</button>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:1,textAlign:"center"}}>
+                {HE_DAYS_SHORT.map(d=><div key={d} style={{fontSize:10,fontWeight:700,color:"var(--text3)",padding:"4px 0"}}>{d}</div>)}
+                {miniDays.map((day,i)=>(
+                  <div key={i}
+                    onClick={()=>day && jumpToDate(day)}
+                    style={{
+                      fontSize:12,fontWeight:isInCurrentWeek(day)?800:500,padding:"5px 0",cursor:day?"pointer":"default",
+                      borderRadius:"50%",
+                      background: isTodayMini(day)?"var(--accent)":isInCurrentWeek(day)?"rgba(245,166,35,0.15)":"transparent",
+                      color: isTodayMini(day)?"#000":isInCurrentWeek(day)?"var(--accent)":day?"var(--text)":"transparent",
+                      transition:"background 0.15s"
+                    }}>
+                    {day || ""}
+                  </div>
+                ))}
+              </div>
+              <button onClick={()=>{ setWeekOffset(0); const d=new Date(); setMiniMonth({year:d.getFullYear(),month:d.getMonth()}); }}
+                style={{width:"100%",marginTop:8,padding:"6px 0",borderRadius:6,border:"1px solid var(--accent)",background:"transparent",color:"var(--accent)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                📅 היום
+              </button>
+            </div>
+          </div>
+
           {studios.length === 0 ? (
             <div style={{textAlign:"center",padding:48,color:"var(--text3)"}}>
               <div style={{fontSize:48,marginBottom:12}}>🎙️</div>
@@ -275,9 +396,9 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                   <tr>
                     <th style={{...thStyle,width:100}}>אולפן</th>
                     {weekDays.map(d=>(
-                      <th key={d.fullDate} style={{...thStyle,background:d.isToday?"rgba(var(--accent-rgb,241,196,15),0.15)":undefined}}>
+                      <th key={d.fullDate} style={{...thStyle,background:d.isToday?"rgba(245,166,35,0.15)":undefined}}>
                         <div style={{fontWeight:700}}>{d.name}</div>
-                        <div style={{fontSize:11,color:"var(--text3)"}}>{d.date}</div>
+                        <div style={{fontSize:11,color:d.isToday?"var(--accent)":"var(--text3)"}}>{d.date}/{String(new Date(d.fullDate).getMonth()+1).padStart(2,"0")}</div>
                       </th>
                     ))}
                   </tr>
@@ -287,27 +408,30 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                     <tr key={studio.id}>
                       <td style={{...tdStyle,fontWeight:700,fontSize:13,background:"var(--surface2)"}}>
                         <div style={{display:"flex",alignItems:"center",gap:6}}>
-                          {studio.image?.startsWith("data:") || studio.image?.startsWith("http")
-                            ? <img src={studio.image} alt={studio.name} style={{width:32,height:32,borderRadius:6,objectFit:"cover"}}/>
-                            : <span style={{fontSize:20}}>{studio.image||"🎙️"}</span>
-                          }
+                          <StudioImg studio={studio} size={32}/>
                           <span>{studio.name}</span>
                         </div>
-                        <div style={{fontSize:10,color:"var(--text3)",marginTop:2}}>{studio.type==="sound"?"סאונד":studio.type==="photo"?"צילום":"כללי"}</div>
+                        <div style={{fontSize:10,color:"var(--text3)",marginTop:2}}>
+                          {studio.type==="sound"?"סאונד":studio.type==="photo"?"צילום":"כללי"}
+                          {studio.requiresApproval && <span style={{color:NIGHT_COLOR,marginRight:4}}>🔒</span>}
+                        </div>
                       </td>
                       {weekDays.map(day=>{
                         const cells = cellBookings(studio.id, day.fullDate);
                         return (
-                          <td key={day.fullDate} style={{...tdStyle,verticalAlign:"top",cursor:"pointer",minHeight:60,background:day.isToday?"rgba(var(--accent-rgb,241,196,15),0.05)":undefined}}
+                          <td key={day.fullDate} style={{...tdStyle,verticalAlign:"top",cursor:"pointer",minHeight:60,background:day.isToday?"rgba(245,166,35,0.05)":undefined}}
                             onClick={()=>setModal({type:"addBooking", studioId:studio.id, studioName:studio.name, date:day.fullDate, dayName:day.name})}>
-                            {cells.map(b=>(
-                              <div key={b.id}
-                                style={{background:STATUS_COLORS[b.status]+"22",border:`1px solid ${STATUS_COLORS[b.status]}`,borderRadius:6,padding:"3px 6px",marginBottom:3,fontSize:11,cursor:"pointer"}}
-                                onClick={e=>{e.stopPropagation();setModal({type:"viewBooking",booking:b,studioName:studio.name});}}>
-                                <div style={{fontWeight:700,color:STATUS_COLORS[b.status]}}>{b.startTime}–{b.endTime}</div>
-                                <div style={{color:"var(--text2)"}}>{b.studentName}</div>
-                              </div>
-                            ))}
+                            {cells.map(b=>{
+                              const color = bookingColor(b);
+                              return (
+                                <div key={b.id}
+                                  style={{background:color+"22",border:`1px solid ${color}`,borderRadius:6,padding:"3px 6px",marginBottom:3,fontSize:11,cursor:"pointer"}}
+                                  onClick={e=>{e.stopPropagation();setModal({type:"viewBooking",booking:b,studioName:studio.name});}}>
+                                  <div style={{fontWeight:700,color}}>{b.isNight&&"🌙 "}{b.startTime}–{b.endTime}</div>
+                                  <div style={{color:"var(--text2)"}}>{b.studentName}</div>
+                                </div>
+                              );
+                            })}
                             {cells.length===0 && <div style={{color:"var(--text3)",fontSize:11,textAlign:"center",paddingTop:12}}>+ הוסף</div>}
                           </td>
                         );
@@ -328,15 +452,29 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
             ? <div style={{textAlign:"center",padding:48,color:"var(--text3)"}}>אין הזמנות להצגה</div>
             : filteredBookings.map(b=>{
               const studio = studios.find(s=>s.id===b.studioId);
+              const color = bookingColor(b);
               return (
-                <div key={b.id} style={{background:"var(--surface2)",borderRadius:10,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap",cursor:"pointer",border:`1px solid ${STATUS_COLORS[b.status]}44`}}
+                <div key={b.id} style={{background:"var(--surface2)",borderRadius:10,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap",cursor:"pointer",border:`1px solid ${color}44`,borderRight:`4px solid ${color}`}}
                   onClick={()=>setModal({type:"viewBooking",booking:b,studioName:studio?.name||"?"})}>
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:700,fontSize:14}}>{b.studentName}</div>
-                    <div style={{fontSize:12,color:"var(--text3)"}}>{studio?.image} {studio?.name||"?"} · {b.date} · {b.startTime}–{b.endTime}</div>
+                  <div style={{flex:1,minWidth:200}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                      {studio && <StudioImg studio={studio} size={24}/>}
+                      <span style={{fontWeight:800,fontSize:14}}>{studio?.name||"?"}</span>
+                      {b.isNight && <span style={{background:NIGHT_COLOR+"22",color:NIGHT_COLOR,borderRadius:12,padding:"1px 8px",fontSize:10,fontWeight:700}}>🌙 לילה</span>}
+                    </div>
+                    <div style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>{b.studentName}</div>
+                    <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>📅 {b.date} · ⏰ {b.startTime}–{b.endTime}</div>
                     {b.notes && <div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>📝 {b.notes}</div>}
                   </div>
-                  <span style={{background:STATUS_COLORS[b.status]+"22",color:STATUS_COLORS[b.status],borderRadius:20,padding:"3px 12px",fontSize:12,fontWeight:700,border:`1px solid ${STATUS_COLORS[b.status]}55`}}>{b.status}</span>
+                  <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+                    {b.status==="ממתין" && role==="admin" && <>
+                      <button className="btn btn-sm" style={{background:"var(--green)",color:"#fff",border:"none",padding:"4px 10px",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer"}}
+                        onClick={e=>{e.stopPropagation();changeStatus(b.id,"מאושר")}}>✅ אשר</button>
+                      <button className="btn btn-sm" style={{background:"var(--red)",color:"#fff",border:"none",padding:"4px 10px",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer"}}
+                        onClick={e=>{e.stopPropagation();changeStatus(b.id,"נדחה")}}>❌ דחה</button>
+                    </>}
+                    <span style={{background:color+"22",color,borderRadius:20,padding:"3px 12px",fontSize:12,fontWeight:700,border:`1px solid ${color}55`}}>{b.status}</span>
+                  </div>
                 </div>
               );
             })
@@ -354,10 +492,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
               return (
                 <div key={s.id} style={{background:"var(--surface2)",borderRadius:10,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
                   <div style={{display:"flex",alignItems:"center",gap:12}}>
-                    {s.image?.startsWith("data:") || s.image?.startsWith("http")
-                      ? <img src={s.image} alt={s.name} style={{width:44,height:44,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
-                      : <span style={{fontSize:28,flexShrink:0}}>{s.image||"🎙️"}</span>
-                    }
+                    <StudioImg studio={s} size={44}/>
                     <div>
                       <div style={{fontWeight:700}}>{s.name}</div>
                       <div style={{fontSize:12,color:"var(--text3)"}}>{s.type==="sound"?"🎙️ סאונד":s.type==="photo"?"📷 צילום":"🌐 כללי"} · {count} הזמנות{s.requiresApproval ? " · 🔒 באישור מיוחד" : " · ✅ הזמנה חופשית"}</div>
@@ -422,7 +557,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
             </label>
             <div style={{fontSize:13,fontWeight:600,color:"var(--text2)"}}>תמונה נוכחית:
               <div style={{marginTop:4}}>
-                {(editImage || modal.studio.image)?.startsWith("data:") || (editImage || modal.studio.image)?.startsWith("http")
+                {(editImage || modal.studio.image)?.startsWith("http")
                   ? <img src={editImage || modal.studio.image} alt="תמונה" style={{width:80,height:80,objectFit:"cover",borderRadius:8}}/>
                   : <span style={{fontSize:32}}>{modal.studio.image||"🎙️"}</span>
                 }
@@ -458,15 +593,25 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                 : <input name="studentName" className="form-input" placeholder="שם מלא" required/>
               }
             </label>
+            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,fontWeight:600,color:NIGHT_COLOR,cursor:"pointer",padding:"4px 0"}}>
+              <input type="checkbox" name="isNight" style={{width:18,height:18,accentColor:NIGHT_COLOR}}/>
+              🌙 הזמנת לילה (21:00–08:00)
+            </label>
             <div style={{display:"flex",gap:8}}>
               <label style={{...labelStyle,flex:1}}>שעת התחלה *
                 <select name="startTime" className="form-input" required defaultValue="09:00">
-                  {HOURS.map(h=><option key={h}>{h}</option>)}
+                  {DAY_HOURS.map(h=><option key={h}>{h}</option>)}
+                  <optgroup label="🌙 שעות לילה">
+                    {NIGHT_HOURS.filter(h=>h!=="21:00").map(h=><option key={h}>{h}</option>)}
+                  </optgroup>
                 </select>
               </label>
               <label style={{...labelStyle,flex:1}}>שעת סיום *
                 <select name="endTime" className="form-input" required defaultValue="12:00">
-                  {HOURS.map(h=><option key={h}>{h}</option>)}
+                  {DAY_HOURS.map(h=><option key={h}>{h}</option>)}
+                  <optgroup label="🌙 שעות לילה">
+                    {NIGHT_HOURS.filter(h=>h!=="21:00").map(h=><option key={h}>{h}</option>)}
+                  </optgroup>
                 </select>
               </label>
             </div>
@@ -500,7 +645,8 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                 <Row label="סטודנט" value={b.studentName}/>
                 <Row label="תאריך"  value={b.date}/>
                 <Row label="שעות"   value={`${b.startTime} – ${b.endTime}`}/>
-                <Row label="סטטוס"  value={<span style={{color:STATUS_COLORS[b.status],fontWeight:700}}>{b.status}</span>}/>
+                <Row label="סוג"    value={b.isNight ? <span style={{color:NIGHT_COLOR,fontWeight:700}}>🌙 הזמנת לילה</span> : "יום"}/>
+                <Row label="סטטוס"  value={<span style={{color:bookingColor(b),fontWeight:700}}>{b.status}</span>}/>
                 {b.notes && <Row label="הערות" value={b.notes}/>}
               </div>
             );
