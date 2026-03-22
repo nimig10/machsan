@@ -5,7 +5,7 @@ import { Modal } from "./ui.jsx";
 const DAY_HOURS = ["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00"];
 const NIGHT_HOURS = ["21:00","22:00","23:00","00:00","01:00","02:00","03:00","04:00","05:00","06:00","07:00","08:00"];
 const STATUS_COLORS = { "ממתין":"var(--yellow)", "מאושר":"var(--green)" };
-const NIGHT_COLOR = "#9b59b6";
+const NIGHT_COLOR = "#2196f3";
 const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 const HE_DAYS_SHORT = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
 
@@ -520,13 +520,25 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
             </div>
           </div>
 
-          {filteredBookings.length===0
-            ? <div style={{textAlign:"center",padding:48,color:"var(--text3)"}}>אין הזמנות להצגה</div>
-            : filteredBookings.map(b=>{
+          {(() => {
+            const pending      = filteredBookings.filter(b => b.status==="ממתין");
+            const approvedDay  = filteredBookings.filter(b => b.status==="מאושר" && !b.isNight);
+            const approvedNight= filteredBookings.filter(b => b.status==="מאושר" && b.isNight);
+
+            const SectionHeader = ({label, color, count, icon}) => count===0 ? null : (
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:color+"12",borderRadius:10,border:`1px solid ${color}30`,borderRight:`4px solid ${color}`,marginTop:12}}>
+                <span style={{fontSize:16}}>{icon}</span>
+                <span style={{fontWeight:800,fontSize:14,color}}>{label}</span>
+                <span style={{background:color,color:"#fff",borderRadius:20,padding:"1px 9px",fontSize:12,fontWeight:800,marginRight:"auto"}}>{count}</span>
+              </div>
+            );
+
+            const BookingRow = (b) => {
               const studio = studios.find(s=>s.id===b.studioId);
-              const color = bookingColor(b);
+              const color  = bookingColor(b);
               return (
-                <div key={b.id} style={{background:"var(--surface2)",borderRadius:10,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap",cursor:"pointer",border:`1px solid ${color}44`,borderRight:`4px solid ${color}`}}
+                <div key={b.id}
+                  style={{background:"var(--surface2)",borderRadius:10,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap",cursor:"pointer",border:`1px solid ${color}33`,borderRight:`4px solid ${color}`}}
                   onClick={()=>setModal({type:"viewBooking",booking:b,studioName:studio?.name||"?"})}>
                   <div style={{flex:1,minWidth:200}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
@@ -549,8 +561,25 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                   </div>
                 </div>
               );
-            })
-          }
+            };
+
+            if (filteredBookings.length===0)
+              return <div style={{textAlign:"center",padding:48,color:"var(--text3)"}}>אין הזמנות להצגה</div>;
+
+            return (
+              <>
+                <SectionHeader label="ממתין לאישור" color="var(--yellow)" count={pending.length} icon="⏳"/>
+                {pending.map(BookingRow)}
+
+                <SectionHeader label="מאושר — יום" color="var(--green)" count={approvedDay.length} icon="✅"/>
+                {approvedDay.map(BookingRow)}
+
+                <SectionHeader label="לילה מאושר" color={NIGHT_COLOR} count={approvedNight.length} icon="🌙"/>
+                {approvedNight.map(BookingRow)}
+              </>
+            );
+          })()}
+
         </div>
       )}
 

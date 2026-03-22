@@ -4,7 +4,7 @@ import { storageSet } from "../utils.js";
 
 const NIGHT_CERT_ID = "cert_night_studio";
 const NIGHT_CERT_NAME = "הסמכת לילה לאולפנים";
-const NIGHT_COLOR = "#9b59b6";
+const NIGHT_COLOR = "#2196f3";
 
 export function CertificationsPage({ certifications, setCertifications, showToast }) {
   const { types=[], students=[] } = certifications;
