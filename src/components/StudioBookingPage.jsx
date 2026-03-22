@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { storageGet, storageSet } from "../utils.js";
+import { storageGet, storageSet, lsGet } from "../utils.js";
 import { Modal } from "./ui.jsx";
 
 const HOURS = ["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00"];
@@ -27,8 +27,8 @@ function getWeekDays(offset=0) {
 }
 
 export default function StudioBookingPage({ showToast, teamMembers=[], certifications={types:[],students:[]}, role="admin", currentUser=null }) {
-  const [studios,   setStudios]   = useState([]);
-  const [bookings,  setBookings]  = useState([]);
+  const [studios,   setStudios]   = useState(() => lsGet("studios") || []);
+  const [bookings,  setBookings]  = useState(() => lsGet("studio_bookings") || []);
   const [weekOffset, setWeekOffset] = useState(0);
   const [statusFilter, setStatusFilter] = useState("הכל");
   const [activeView, setActiveView] = useState("calendar");
