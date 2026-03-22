@@ -26,9 +26,15 @@ function getWeekDays(offset=0) {
   });
 }
 
-export default function StudioBookingPage({ showToast, teamMembers=[], certifications={types:[],students:[]}, role="admin", currentUser=null }) {
-  const [studios,   setStudios]   = useState(() => lsGet("studios") || []);
-  const [bookings,  setBookings]  = useState(() => lsGet("studio_bookings") || []);
+export default function StudioBookingPage({ showToast, teamMembers=[], certifications={types:[],students:[]}, role="admin", currentUser=null, studios: studiosProp, setStudios: setStudiosProp, bookings: bookingsProp, setBookings: setBookingsProp }) {
+  // Use props from App if provided (persistent state), otherwise local state (fallback)
+  const [localStudios,   setLocalStudios]   = useState(() => lsGet("studios") || []);
+  const [localBookings,  setLocalBookings]  = useState(() => lsGet("studio_bookings") || []);
+  const studios = studiosProp ?? localStudios;
+  const setStudios = setStudiosProp ?? setLocalStudios;
+  const bookings = bookingsProp ?? localBookings;
+  const setBookings = setBookingsProp ?? setLocalBookings;
+
   const [weekOffset, setWeekOffset] = useState(0);
   const [statusFilter, setStatusFilter] = useState("הכל");
   const [activeView, setActiveView] = useState("calendar");
@@ -37,39 +43,30 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
 
   const weekDays = getWeekDays(weekOffset);
 
-  // ── Load from Supabase ────────────────────────────────────────────────
+  // One-time migration: convert legacy base64 images to Cloudinary URLs
   useEffect(() => {
+    if (!studios.length) return;
+    const needsMigration = studios.some(st => st.image?.startsWith("data:"));
+    if (!needsMigration) return;
     (async () => {
-      const [s, b] = await Promise.all([
-        storageGet("studios"),
-        storageGet("studio_bookings"),
-      ]);
-      if (Array.isArray(s)) {
-        setStudios(s);
-        // One-time migration: convert legacy base64 images to Cloudinary URLs
-        const needsMigration = s.some(st => st.image?.startsWith("data:"));
-        if (needsMigration) {
-          const migrated = await Promise.all(s.map(async (st) => {
-            if (!st.image?.startsWith("data:")) return st;
-            try {
-              const res = await fetch("/api/upload-image", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ data: st.image }),
-              });
-              const json = await res.json();
-              if (res.ok && json.url) return { ...st, image: json.url };
-            } catch (e) { console.error("Migration failed for", st.name, e); }
-            return st;
-          }));
-          setStudios(migrated);
-          await storageSet("studios", migrated);
-          console.log("✅ Studio images migrated to Cloudinary");
-        }
-      }
-      if (Array.isArray(b)) setBookings(b);
+      const migrated = await Promise.all(studios.map(async (st) => {
+        if (!st.image?.startsWith("data:")) return st;
+        try {
+          const res = await fetch("/api/upload-image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data: st.image }),
+          });
+          const json = await res.json();
+          if (res.ok && json.url) return { ...st, image: json.url };
+        } catch (e) { console.error("Migration failed for", st.name, e); }
+        return st;
+      }));
+      setStudios(migrated);
+      await storageSet("studios", migrated);
+      console.log("✅ Studio images migrated to Cloudinary");
     })();
-  }, []);
+  }, [studios.length]); // eslint-disable-line
 
   // ── Helpers ───────────────────────────────────────────────────────────
   const saveStudios  = useCallback(async (data) => { setStudios(data);  await storageSet("studios", data); }, []);

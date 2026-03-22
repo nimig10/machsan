@@ -5967,6 +5967,8 @@ export default function App() {
   const [policies, _setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"" });
   const [certifications, _setCertifications] = useState({ types:[], students:[] });
   const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14 });
+  const [studios, _setStudios] = useState([]);
+  const [studioBookings, _setStudioBookings] = useState([]);
   const [loading, setLoading]         = useState(true);
   const [toasts, setToasts]           = useState([]);
   const [authed, setAuthed]           = useState(false);
@@ -6109,7 +6111,7 @@ export default function App() {
     (async()=>{
         try {
           historySuspendedRef.current = true;
-          const [eqR, resR, catsR, catTypesR, tmR, ktsR, polR, certsR, dhsR, calTokR, mgrR, mgrTokR, siteSetR] = await Promise.all([
+          const [eqR, resR, catsR, catTypesR, tmR, ktsR, polR, certsR, dhsR, calTokR, mgrR, mgrTokR, siteSetR, studiosR, studioBkR] = await Promise.all([
             storageGet("equipment"),
           storageGet("reservations"),
           storageGet("categories"),
@@ -6123,6 +6125,8 @@ export default function App() {
           storageGet("collegeManager"),
           storageGet("managerToken"),
           storageGet("siteSettings"),
+          storageGet("studios"),
+          storageGet("studio_bookings"),
           ]);
           // Extract values and sources
           const eq = eqR.value, eqSrc = eqR.source;
@@ -6138,6 +6142,8 @@ export default function App() {
           const mgr = mgrR.value, mgrSrc = mgrR.source;
           const mgrTok = mgrTokR.value, mgrTokSrc = mgrTokR.source;
           const siteSet = siteSetR.value;
+          const stds = studiosR.value;
+          const stdBk = studioBkR.value;
 
           const rawEquipment = normalizeEquipmentTagFlags(eq || INITIAL_EQUIPMENT);
           const normalizedEquipment = rawEquipment.map(ensureUnits);
@@ -6156,6 +6162,8 @@ export default function App() {
           setCalendarToken(calTok || "");
         _setCollegeManager(mgr || { name:"", email:"" });
           setManagerToken(mgrTok || "");
+        _setStudios(Array.isArray(stds) ? stds : []);
+        _setStudioBookings(Array.isArray(stdBk) ? stdBk : []);
           const loadedSettings = siteSet || { logo:"", theme:"dark" };
         _setSiteSettings(loadedSettings);
         if(loadedSettings.theme==="light") document.documentElement.setAttribute("data-theme","light");
@@ -6428,7 +6436,7 @@ export default function App() {
               {page==="students"       && <StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/>}
               {page==="damaged"       && <DamagedEquipmentPage equipment={equipment} setEquipment={setEquipment} showToast={showToast} categories={categories} collegeManager={collegeManager} managerToken={managerToken}/>}
               {page==="settings"     && <SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast}/>}
-              {page==="studios"      && <StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin"/>}
+              {page==="studios"      && <StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin" studios={studios} setStudios={_setStudios} bookings={studioBookings} setBookings={_setStudioBookings}/>}
             </>}
           </div>
         </div>
