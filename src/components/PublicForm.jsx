@@ -1529,14 +1529,107 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     );
   }
 
+  // ── Mini calendar helper ──
+  const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+  const HE_DAYS_SHORT = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
+  const [miniMonth, setMiniMonth] = useState(() => { const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() }; });
+
+  // Determine which month/year the current week belongs to (use middle of week — Wednesday)
+  const weekMiddle = new Date();
+  weekMiddle.setDate(weekMiddle.getDate() + weekOffset * 7);
+  const weekMonthLabel = HE_MONTHS[weekMiddle.getMonth()] + " " + weekMiddle.getFullYear();
+
+  // Mini calendar days grid
+  const miniDays = (() => {
+    const { year, month } = miniMonth;
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < firstDay; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    return cells;
+  })();
+
+  const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
+
+  // Jump to a specific date's week
+  const jumpToDate = (day) => {
+    const target = new Date(miniMonth.year, miniMonth.month, day);
+    const now = new Date(); now.setHours(0,0,0,0);
+    const diff = Math.round((target - now) / (1000*60*60*24));
+    const targetSunOffset = target.getDay();
+    const nowSunOffset = now.getDay();
+    const targetWeekStart = diff - targetSunOffset + nowSunOffset;
+    setWeekOffset(Math.round(targetWeekStart / 7));
+  };
+
+  // Check if a mini-calendar day is in the current displayed week
+  const isInCurrentWeek = (day) => {
+    if (!day) return false;
+    const dateStr = `${miniMonth.year}-${String(miniMonth.month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    return weekDays.some(wd => wd.fullDate === dateStr);
+  };
+
+  const isTodayMini = (day) => {
+    if (!day) return false;
+    const dateStr = `${miniMonth.year}-${String(miniMonth.month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    return dateStr === todayStr;
+  };
+
   // ── Weekly calendar view ──
   return (
     <div style={{padding:"20px 16px",direction:"rtl"}}>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,justifyContent:"center",flexWrap:"wrap"}}>
-        <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w-1)}>→ שבוע קודם</button>
-        <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(0)}>היום</button>
-        <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w+1)}>← שבוע הבא</button>
+      {/* ── Month/year header ── */}
+      <div style={{textAlign:"center",marginBottom:16}}>
+        <div style={{fontSize:22,fontWeight:900,color:"var(--accent)"}}>{weekMonthLabel}</div>
       </div>
+
+      {/* ── Layout: mini calendar + week nav ── */}
+      <div style={{display:"flex",gap:20,marginBottom:20,flexWrap:"wrap",justifyContent:"center"}}>
+        {/* Mini calendar */}
+        <div style={{minWidth:220,maxWidth:260,background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:12}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+            <button onClick={()=>setMiniMonth(m=>{ const prev = m.month===0 ? {year:m.year-1,month:11} : {year:m.year,month:m.month-1}; return prev; })}
+              style={{background:"none",border:"none",color:"var(--text2)",cursor:"pointer",fontSize:16,padding:"2px 6px"}}>→</button>
+            <span style={{fontWeight:800,fontSize:14,color:"var(--text)"}}>{HE_MONTHS[miniMonth.month]} {miniMonth.year}</span>
+            <button onClick={()=>setMiniMonth(m=>{ const next = m.month===11 ? {year:m.year+1,month:0} : {year:m.year,month:m.month+1}; return next; })}
+              style={{background:"none",border:"none",color:"var(--text2)",cursor:"pointer",fontSize:16,padding:"2px 6px"}}>←</button>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:1,textAlign:"center"}}>
+            {HE_DAYS_SHORT.map(d=><div key={d} style={{fontSize:10,fontWeight:700,color:"var(--text3)",padding:"4px 0"}}>{d}</div>)}
+            {miniDays.map((day,i)=>(
+              <div key={i}
+                onClick={()=>day && jumpToDate(day)}
+                style={{
+                  fontSize:12,fontWeight:isInCurrentWeek(day)?800:500,padding:"5px 0",cursor:day?"pointer":"default",
+                  borderRadius:"50%",
+                  background: isTodayMini(day) ? "var(--accent)" : isInCurrentWeek(day) ? "rgba(245,166,35,0.15)" : "transparent",
+                  color: isTodayMini(day) ? "#000" : isInCurrentWeek(day) ? "var(--accent)" : day ? "var(--text)" : "transparent",
+                  transition:"background 0.15s"
+                }}>
+                {day || ""}
+              </div>
+            ))}
+          </div>
+          <button onClick={()=>{ setWeekOffset(0); const d=new Date(); setMiniMonth({year:d.getFullYear(),month:d.getMonth()}); }}
+            style={{width:"100%",marginTop:8,padding:"6px 0",borderRadius:6,border:"1px solid var(--accent)",background:"transparent",color:"var(--accent)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+            📅 היום
+          </button>
+        </div>
+
+        {/* Week navigation */}
+        <div style={{flex:1,minWidth:280,display:"flex",flexDirection:"column",gap:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,justifyContent:"center"}}>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w-1)}>→ שבוע קודם</button>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(0)}>היום</button>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w+1)}>← שבוע הבא</button>
+          </div>
+          <div style={{fontSize:13,color:"var(--text3)",textAlign:"center"}}>
+            {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth()+1).padStart(2,"0")} — {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth()+1).padStart(2,"0")}
+          </div>
+        </div>
+      </div>
+
       {studios.length===0 ? (
         <div style={{textAlign:"center",padding:48,color:"var(--text3)"}}>
           <div style={{fontSize:48,marginBottom:12}}>🎙️</div>
@@ -1550,7 +1643,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                 <th style={{padding:"8px 10px",background:"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",width:90}}>אולפן</th>
                 {weekDays.map(d=>(
                   <th key={d.fullDate} style={{padding:"8px 10px",background:d.isToday?"rgba(245,166,35,0.15)":"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)"}}>
-                    <div>{d.name}</div><div style={{fontSize:11,color:"var(--text3)"}}>{d.date}</div>
+                    <div>{d.name}</div><div style={{fontSize:11,color:d.isToday?"var(--accent)":"var(--text3)"}}>{d.date}/{String(new Date(d.fullDate).getMonth()+1).padStart(2,"0")}</div>
                   </th>
                 ))}
               </tr>
