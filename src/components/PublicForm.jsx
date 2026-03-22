@@ -1480,6 +1480,22 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     setModal(null); setSaving(false);
   };
 
+  const submitEditBooking = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    const fd = new FormData(e.target);
+    const startTime = fd.get("startTime"), endTime = fd.get("endTime"), notes = fd.get("notes")?.trim();
+    const { bookingId, studioId, date, isNight } = modal;
+    if(!isNight && startTime >= endTime) { showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה"); setSaving(false); return; }
+    const overlap = bookings.some(b => b.studioId===studioId && b.date===date && b.id!==bookingId && b.status!=="נדחה" && !(endTime<=b.startTime || startTime>=b.endTime));
+    if(!isNight && overlap) { showToast("error","⚠️ קיימת הזמנה חופפת"); setSaving(false); return; }
+    const updated = bookings.map(b => b.id===bookingId ? {...b, startTime, endTime, notes: notes || b.notes} : b);
+    setBookings(updated);
+    await storageSet("studio_bookings", updated);
+    showToast("success","✅ ההזמנה עודכנה בהצלחה");
+    setModal(null); setSaving(false);
+  };
+
   const cancelBooking = async (bookingId) => {
     if(!confirm("לבטל את ההזמנה שלך?")) return;
     const updated = bookings.filter(b=>b.id!==bookingId);
@@ -1580,9 +1596,14 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                         <span style={{fontSize:11,color:"var(--text3)"}}>{booking.startTime}–{booking.endTime}</span>
                       </div>
                       {booking.studentName===student.name && !isHourPast && (
-                        <button onClick={()=>cancelBooking(booking.id)} style={{background:"var(--red)",color:"#fff",border:"none",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>
-                          ❌ בטל
-                        </button>
+                        <div style={{display:"flex",gap:4,flexShrink:0}}>
+                          <button onClick={()=>setModal({type:"editBooking",bookingId:booking.id,studioId:dayView.studioId,date:dayView.date,dayName:dayView.dayName,isNight:false,defaultStart:booking.startTime,defaultEnd:booking.endTime,notes:booking.notes})} style={{background:"var(--accent)",color:"#000",border:"none",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                            ✏️ ערוך
+                          </button>
+                          <button onClick={()=>cancelBooking(booking.id)} style={{background:"var(--red)",color:"#fff",border:"none",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                            ❌ בטל
+                          </button>
+                        </div>
                       )}
                     </div>
                   : <div style={{flex:1,padding:"6px 10px",cursor:isHourPast?"default":"pointer",display:"flex",alignItems:"center",color:"var(--text3)",fontSize:12}}
@@ -1613,9 +1634,14 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                       <span style={{background:STATUS_C[b.status]+"22",color:STATUS_C[b.status],borderRadius:12,padding:"1px 8px",fontSize:10,fontWeight:700}}>{b.status}</span>
                     </div>
                     {b.studentName===student.name && !isDayPast && (
-                      <button onClick={()=>cancelBooking(b.id)} style={{background:"var(--red)",color:"#fff",border:"none",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>
-                        ❌ בטל
-                      </button>
+                      <div style={{display:"flex",gap:4,flexShrink:0}}>
+                        <button onClick={()=>setModal({type:"editBooking",bookingId:b.id,studioId:dayView.studioId,date:dayView.date,dayName:dayView.dayName,isNight:true,defaultStart:b.startTime,defaultEnd:b.endTime,notes:b.notes})} style={{background:NIGHT_COLOR,color:"#fff",border:"none",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                          ✏️ ערוך
+                        </button>
+                        <button onClick={()=>cancelBooking(b.id)} style={{background:"var(--red)",color:"#fff",border:"none",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                          ❌ בטל
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1670,6 +1696,39 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                     ? <div style={{fontSize:11,color:"var(--text3)"}}>⏳ הבקשה תישלח לאישור המנהל</div>
                     : <div style={{fontSize:11,color:"var(--green)"}}>✅ האולפן יאושר אוטומטית</div>;
                 })()}
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Edit booking modal */}
+        {modal?.type==="editBooking" && (
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={e=>e.target===e.currentTarget&&setModal(null)}>
+            <div style={{width:"100%",maxWidth:400,background:"var(--surface)",borderRadius:16,border:`1px solid ${modal.isNight ? NIGHT_COLOR : "var(--accent)"}`,direction:"rtl"}}>
+              <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",fontWeight:900,fontSize:16,color:modal.isNight?NIGHT_COLOR:"var(--accent)"}}>
+                ✏️ עריכת הזמנה
+              </div>
+              <form onSubmit={submitEditBooking} style={{padding:20,display:"flex",flexDirection:"column",gap:12}}>
+                <div style={{fontSize:13,color:"var(--text3)"}}>👤 {student.name} · {modal.date}</div>
+                <div style={{display:"flex",gap:8}}>
+                  <label style={{flex:1,fontSize:13,fontWeight:600}}>התחלה
+                    <select name="startTime" className="form-input" defaultValue={modal.defaultStart}>
+                      {(modal.isNight ? NIGHT_HOURS : DAY_HOURS).map(h=><option key={h}>{h}</option>)}
+                    </select>
+                  </label>
+                  <label style={{flex:1,fontSize:13,fontWeight:600}}>סיום
+                    <select name="endTime" className="form-input" defaultValue={modal.defaultEnd}>
+                      {(modal.isNight ? NIGHT_HOURS : DAY_HOURS).map(h=><option key={h}>{h}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <label style={{fontSize:13,fontWeight:600}}>הערות
+                  <textarea name="notes" className="form-input" rows={2} defaultValue={modal.notes||""} placeholder="תיאור הפרויקט..."/>
+                </label>
+                <div style={{display:"flex",gap:8}}>
+                  <button type="button" className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button>
+                  <button type="submit" className="btn btn-primary" disabled={saving} style={modal.isNight?{background:NIGHT_COLOR,borderColor:NIGHT_COLOR}:{}}>{saving?"שומר...":"💾 שמור שינויים"}</button>
+                </div>
               </form>
             </div>
           </div>
@@ -1816,9 +1875,14 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
                   {canCancel && (
-                    <button onClick={()=>cancelBooking(b.id)} style={{background:"var(--red)",color:"#fff",border:"none",borderRadius:4,padding:"3px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                      ❌ בטל
-                    </button>
+                    <>
+                      <button onClick={()=>setModal({type:"editBooking",bookingId:b.id,studioId:b.studioId,date:b.date,dayName:"",isNight:b.isNight||false,defaultStart:b.startTime,defaultEnd:b.endTime,notes:b.notes})} style={{background:"var(--accent)",color:"#000",border:"none",borderRadius:4,padding:"3px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                        ✏️ ערוך
+                      </button>
+                      <button onClick={()=>cancelBooking(b.id)} style={{background:"var(--red)",color:"#fff",border:"none",borderRadius:4,padding:"3px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                        ❌ בטל
+                      </button>
+                    </>
                   )}
                   <span style={{background:color+"22",color,borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>{b.status}</span>
                 </div>
