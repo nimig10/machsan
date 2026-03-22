@@ -1418,7 +1418,6 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       </div>
     </div>
     {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor}/>}
-    </>}
     {publicView==="studios" && <PublicStudioBooking
       studios={studios} bookings={studioBookings} setBookings={setStudioBookings}
       student={loggedInStudent} showToast={showToast}
