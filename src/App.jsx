@@ -6577,7 +6577,7 @@ export default function App() {
               {page==="kits"        && <KitsPage         kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons}/>}
               {page==="lessons"     && <LessonsPage      lessons={lessons} setLessons={_setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment}/>}
               {page==="policies"    && <PoliciesPage     policies={policies} setPolicies={setPolicies} showToast={showToast}/>}
-              {page==="certifications" && <CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={_setStudios}/>}
+              {page==="certifications" && <CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={_setStudios} equipment={equipment} setEquipment={setEquipment}/>}
               {page==="students"       && <StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/>}
 
               {page==="settings"     && <SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast}/>}

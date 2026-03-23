@@ -7,7 +7,7 @@ const NIGHT_CERT_ID = "cert_night_studio";
 const NIGHT_CERT_NAME = "הסמכת לילה לאולפנים";
 const NIGHT_COLOR = "#2196f3";
 
-export function CertificationsPage({ certifications, setCertifications, showToast, studios=[], setStudios }) {
+export function CertificationsPage({ certifications, setCertifications, showToast, studios=[], setStudios, equipment=[], setEquipment }) {
   const { types=[], students=[] } = certifications;
   const [certMode, setCertMode] = useState("equipment");
   const [newTypeName, setNewTypeName] = useState("");
@@ -16,6 +16,11 @@ export function CertificationsPage({ certifications, setCertifications, showToas
   const [trackFilter, setTrackFilter] = useState("הכל");
   const [saving, setSaving] = useState(false);
   const [editCert, setEditCert] = useState(null); // {id, name, studioIds}
+  const [editEquipmentCert, setEditEquipmentCert] = useState(null); // {id, name, equipmentIds}
+  const [eqTypeF, setEqTypeF] = useState("all");
+  const [eqCatF, setEqCatF] = useState([]);
+  const [eqSearch, setEqSearch] = useState("");
+  const [eqShowSelected, setEqShowSelected] = useState(false);
 
   const save = async (updated) => {
     setSaving(true);
@@ -39,8 +44,18 @@ export function CertificationsPage({ certifications, setCertifications, showToas
   const equipmentTypes = types.filter(t => !isStudioType(t));
   const studioTypes = types.filter(t => isStudioType(t));
   const activeTypes = certMode === "equipment" ? equipmentTypes : studioTypes;
+  const equipmentCategories = [...new Set((equipment || []).map(eq => eq.category).filter(Boolean))];
 
   const hasNightCert = types.some(t => t.id === NIGHT_CERT_ID);
+
+  const openEditEquipmentCert = (t) => {
+    const linkedIds = (equipment || []).filter(eq => eq.certification_id === t.id).map(eq => eq.id);
+    setEqTypeF("all");
+    setEqCatF([]);
+    setEqSearch("");
+    setEqShowSelected(false);
+    setEditEquipmentCert({ id: t.id, name: t.name, equipmentIds: linkedIds });
+  };
 
   const addType = async () => {
     const name = newTypeName.trim();
@@ -75,6 +90,11 @@ export function CertificationsPage({ certifications, setCertifications, showToas
         const updatedStudios = studios.map(s => withStudioCertIds(s, getStudioCertIds(s).filter(id => id !== typeId)));
         setStudios(updatedStudios);
         await storageSet("studios", updatedStudios);
+      }
+      if (setEquipment && !isStudioType(types.find(t=>t.id===typeId)||{})) {
+        const updatedEquipment = equipment.map(eq => eq.certification_id === typeId ? { ...eq, certification_id: "" } : eq);
+        setEquipment(updatedEquipment);
+        await storageSet("equipment", updatedEquipment);
       }
       showToast("success","ההסמכה נמחקה");
     }
@@ -127,8 +147,37 @@ export function CertificationsPage({ certifications, setCertifications, showToas
     }
   };
 
+  const saveEditEquipmentCert = async () => {
+    if (!editEquipmentCert) return;
+    const name = editEquipmentCert.name.trim();
+    if (!name) return;
+    if (types.find(t => t.name === name && t.id !== editEquipmentCert.id)) {
+      showToast("error","הסמכה בשם זה כבר קיימת");
+      return;
+    }
+    const updatedCertifications = {
+      types: types.map(t => t.id === editEquipmentCert.id ? { ...t, name } : t),
+      students
+    };
+    if (!(await save(updatedCertifications))) return;
+    if (setEquipment) {
+      const updatedEquipment = equipment.map(eq => {
+        if (editEquipmentCert.equipmentIds.includes(eq.id)) return { ...eq, certification_id: editEquipmentCert.id };
+        if (eq.certification_id === editEquipmentCert.id) return { ...eq, certification_id: "" };
+        return eq;
+      });
+      setEquipment(updatedEquipment);
+      await storageSet("equipment", updatedEquipment);
+    }
+    showToast("success", `הסמכת ציוד "${name}" עודכנה`);
+    setEditEquipmentCert(null);
+  };
+
   const toggleEditStudioId = (id) => {
     setEditCert(ec => ({ ...ec, studioIds: ec.studioIds.includes(id) ? ec.studioIds.filter(i => i !== id) : [...ec.studioIds, id] }));
+  };
+  const toggleEditEquipmentId = (id) => {
+    setEditEquipmentCert(ec => ({ ...ec, equipmentIds: ec.equipmentIds.includes(id) ? ec.equipmentIds.filter(i => i !== id) : [...ec.equipmentIds, id] }));
   };
 
   const allTracks = ["הכל", ...new Set(students.map(s=>s.track||"").filter(Boolean))];
@@ -170,7 +219,10 @@ export function CertificationsPage({ certifications, setCertifications, showToas
             const isNight = t.id === NIGHT_CERT_ID;
             return (
               <span key={t.id} style={{display:"flex",alignItems:"center",gap:6,background:isNight?NIGHT_COLOR+"15":"var(--surface2)",border:`1px solid ${isNight?NIGHT_COLOR:"var(--border)"}`,borderRadius:20,padding:"4px 14px",fontSize:13,fontWeight:700,color:isNight?NIGHT_COLOR:undefined,cursor:"pointer"}}
-                onClick={()=>certMode==="studio"&&!isNight&&openEditCert(t)}>
+                onClick={()=>{
+                  if (certMode==="studio" && !isNight) openEditCert(t);
+                  if (certMode==="equipment") openEditEquipmentCert(t);
+                }}>
                 {isNight?"🌙":certMode==="studio"?"🎙️":"🎓"} {t.name}
                 <button onClick={e=>{e.stopPropagation();deleteType(t.id);}} style={{background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
               </span>
@@ -336,6 +388,113 @@ export function CertificationsPage({ certifications, setCertifications, showToas
             </>
           )}
         </>
+      )}
+      {/* Edit equipment cert modal */}
+      {editEquipmentCert && (
+        <Modal title="✏️ עריכת הסמכת ציוד" onClose={()=>setEditEquipmentCert(null)}
+          footer={<><button className="btn btn-secondary" onClick={()=>setEditEquipmentCert(null)}>ביטול</button><button className="btn btn-primary" onClick={saveEditEquipmentCert} disabled={!editEquipmentCert.name.trim()||saving}>{saving?"שומר...":"💾 שמור"}</button></>}>
+          <div style={{display:"flex",flexDirection:"column",gap:14,direction:"rtl"}}>
+            <label style={{display:"flex",flexDirection:"column",gap:4,fontSize:13,fontWeight:600,color:"var(--text2)"}}>שם ההסמכה
+              <input className="form-input" value={editEquipmentCert.name} onChange={e=>setEditEquipmentCert(ec=>({...ec,name:e.target.value}))}/>
+            </label>
+
+            <div style={{fontSize:13,fontWeight:700,color:"var(--text2)"}}>📦 פריטי ציוד משויכים</div>
+            <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"12px 14px"}}>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
+                <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סינון:</span>
+                {[{k:"all",l:"📦 הכל"},{k:"sound",l:"🎙️ ציוד סאונד"},{k:"photo",l:"🎥 ציוד צילום"}].map(({k,l})=>{
+                  const active = eqTypeF===k;
+                  return (
+                    <button key={k} type="button" onClick={()=>setEqTypeF(k)}
+                      style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                      {l}
+                    </button>
+                  );
+                })}
+                <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
+                {equipmentCategories.map(cat=>{
+                  const active = eqCatF.includes(cat);
+                  return (
+                    <button key={cat} type="button" onClick={()=>setEqCatF(prev=>active?prev.filter(c=>c!==cat):[...prev,cat])}
+                      style={{padding:"4px 10px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>
+                      {cat}
+                    </button>
+                  );
+                })}
+                {eqCatF.length>0&&<button type="button" onClick={()=>setEqCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>✕ נקה</button>}
+              </div>
+              <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                <div className="search-bar" style={{flex:1,minWidth:170}}>
+                  <span>🔍</span>
+                  <input placeholder="חיפוש ציוד..." value={eqSearch} onChange={e=>setEqSearch(e.target.value)}/>
+                </div>
+                <button type="button" onClick={()=>setEqShowSelected(prev=>!prev)}
+                  style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${eqShowSelected?"var(--green)":"var(--border)"}`,background:eqShowSelected?"rgba(46,204,113,0.12)":"transparent",color:eqShowSelected?"var(--green)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>
+                  {eqShowSelected ? "✅ נבחרים" : "⬜ פריטים נבחרים בלבד"}
+                </button>
+              </div>
+            </div>
+
+            <div style={{maxHeight:"52vh",overflowY:"auto",paddingLeft:4}}>
+              {(()=>{
+                const matchesType = (eq) => {
+                  if (eqTypeF === "sound") return !!eq.soundOnly;
+                  if (eqTypeF === "photo") return !!eq.photoOnly;
+                  return true;
+                };
+                const matchesSearch = (eq) => !eqSearch || String(eq.name||"").toLowerCase().includes(eqSearch.toLowerCase());
+                const visibleCats = (eqCatF.length>0 ? eqCatF : equipmentCategories).filter(cat =>
+                  (equipment || []).some(eq =>
+                    eq.category===cat &&
+                    matchesType(eq) &&
+                    matchesSearch(eq) &&
+                    (!eqShowSelected || editEquipmentCert.equipmentIds.includes(eq.id))
+                  )
+                );
+                if (!visibleCats.length) return <div style={{textAlign:"center",color:"var(--text3)",padding:"20px 8px",fontSize:13}}>לא נמצא ציוד תואם</div>;
+                return visibleCats.map(cat=>{
+                  const catEq = (equipment || []).filter(eq =>
+                    eq.category===cat &&
+                    matchesType(eq) &&
+                    matchesSearch(eq) &&
+                    (!eqShowSelected || editEquipmentCert.equipmentIds.includes(eq.id))
+                  );
+                  if (!catEq.length) return null;
+                  return (
+                    <div key={cat} style={{marginBottom:12}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
+                        <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",textTransform:"uppercase",letterSpacing:1}}>{cat}</div>
+                        {catEq.some(eq=>eq.soundOnly)&&<span style={{fontSize:10,color:"var(--accent)",fontWeight:700}}>🎙️ סאונד</span>}
+                        {catEq.some(eq=>eq.photoOnly)&&<span style={{fontSize:10,color:"var(--green)",fontWeight:700}}>🎥 צילום</span>}
+                      </div>
+                      {catEq.map(eq=>{
+                        const checked = editEquipmentCert.equipmentIds.includes(eq.id);
+                        return (
+                          <label key={eq.id} style={{display:"flex",alignItems:"center",gap:10,fontSize:13,cursor:"pointer",padding:"8px 12px",borderRadius:10,border:`1px solid ${checked?"var(--accent)":"var(--border)"}`,background:checked?"var(--accent-glow)":"var(--surface2)",marginBottom:6}}>
+                            <input type="checkbox" checked={checked} onChange={()=>toggleEditEquipmentId(eq.id)} style={{accentColor:"var(--accent)"}}/>
+                            <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={eq.image} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||"📦"}</span>
+                            <div style={{flex:1}}>
+                              <div style={{fontWeight:700,color:"var(--text)"}}>{eq.name}</div>
+                              <div style={{fontSize:11,color:"var(--text3)"}}>
+                                {eq.soundOnly&&<span style={{marginLeft:6}}>🎙️ סאונד</span>}
+                                {eq.photoOnly&&<span style={{marginLeft:6}}>🎥 צילום</span>}
+                                {eq.certification_id && eq.certification_id !== editEquipmentCert.id && <span style={{color:"var(--red)"}}>כבר משויך להסמכה אחרת</span>}
+                              </div>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            {editEquipmentCert.equipmentIds.length>0 && (
+              <div className="highlight-box">🎓 {editEquipmentCert.equipmentIds.length} פריטי ציוד ישויכו להסמכה זו</div>
+            )}
+          </div>
+        </Modal>
       )}
       {/* Edit studio cert modal */}
       {editCert && (

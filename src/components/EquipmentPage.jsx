@@ -27,6 +27,7 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
   const [saving, setSaving] = useState(false);
   const [importModal, setImportModal] = useState(null);
   const csvInputRef = useRef(null);
+  const equipmentCertTypes = (certifications?.types || []).filter(t => t.category !== "studio" && t.id !== "cert_night_studio");
 
   const parseCSVLine = (line) => {
     const result = []; let cur = ""; let inQ = false;
@@ -287,7 +288,7 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
           <label className="form-label">🎓 הסמכה נדרשת</label>
           <select className="form-select" value={f.certification_id||""} onChange={e=>s("certification_id",e.target.value)}>
             <option value="">ללא הסמכה (כולם רשאים)</option>
-            {(certifications?.types||[]).map(ct=>(
+            {equipmentCertTypes.map(ct=>(
               <option key={ct.id} value={ct.id}>{ct.name}</option>
             ))}
           </select>
