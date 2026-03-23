@@ -124,6 +124,24 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     ...(teamMembers || []).map(m => m.name || m),
   ].filter(Boolean).filter((v,i,a) => a.indexOf(v)===i);
 
+  const studioCertTypes = (certifications?.types || []).filter(t => t.category === "studio" && t.id !== "cert_night_studio");
+
+  const getBookingStudents = (studioId) => {
+    const studio = studios.find(s => s.id === studioId);
+    if (!studio?.studioCertId) return allStudents;
+    const cStudents = certifications?.students || [];
+    return allStudents.filter(name => {
+      const rec = cStudents.find(s => s.name === name);
+      return rec && (rec.certs || {})[studio.studioCertId] === "עבר";
+    });
+  };
+
+  const bookingStudents = getBookingStudents(modal?.studioId);
+  const bookingRequiredCert = (() => {
+    const st = studios.find(s => s.id === modal?.studioId);
+    return st?.studioCertId ? studioCertTypes.find(t => t.id === st.studioCertId) : null;
+  })();
+
   // ── Bookings for a cell (night bookings show only on their original date) ──
   const cellBookings = (studioId, fullDate) => {
     return bookings.filter(b => b.studioId===studioId && b.date===fullDate &&
@@ -172,11 +190,11 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     e.preventDefault();
     const fd = new FormData(e.target);
     const name = fd.get("name")?.trim();
-    const type = fd.get("type");
     if (!name) return;
     if (studios.some(s => s.name===name)) { showToast("error","אולפן בשם זה כבר קיים"); return; }
     const requiresApproval = fd.get("requiresApproval") === "on";
-    const updated = [...studios, { id: Date.now(), name, type, image: studioImage || fd.get("emoji")||"🎙️", requiresApproval }];
+    const studioCertId = fd.get("studioCertId") || undefined;
+    const updated = [...studios, { id: Date.now(), name, studioCertId, image: studioImage || fd.get("emoji")||"🎙️", requiresApproval }];
     await saveStudios(updated);
     showToast("success", `אולפן "${name}" נוסף`);
     setStudioImage("");
@@ -213,10 +231,10 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     const fd = new FormData(e.target);
     const name = fd.get("name")?.trim();
     if (!name) return;
-    const type = fd.get("type");
+    const studioCertId = fd.get("studioCertId") || undefined;
     const image = editImage || fd.get("emoji")?.trim() || modal.studio.image;
     const requiresApproval = fd.get("requiresApproval") === "on";
-    const updated = studios.map(s => s.id===modal.studio.id ? {...s, name, type, image, requiresApproval} : s);
+    const updated = studios.map(s => s.id===modal.studio.id ? {...s, name, studioCertId, image, requiresApproval} : s);
     await saveStudios(updated);
     showToast("success", `אולפן "${name}" עודכן`);
     setEditImage("");
@@ -281,6 +299,17 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     if (isNight && !hasNightCert(studentName)) {
       showToast("error", `⛔ ${studentName} לא עבר/ה הסמכת לילה לאולפנים — לא ניתן להשלים את הקביעה`);
       setSaving(false); return;
+    }
+    // Studio certification check
+    const bookingStudioObj = studios.find(s => s.id === studioId);
+    if (bookingStudioObj?.studioCertId) {
+      const certStudentsList = certifications?.students || [];
+      const studentRec = certStudentsList.find(s => s.name === studentName);
+      if (!studentRec || (studentRec.certs||{})[bookingStudioObj.studioCertId] !== "עבר") {
+        const certTypeName = (certifications?.types || []).find(t => t.id === bookingStudioObj.studioCertId)?.name || "אולפן";
+        showToast("error", `⛔ ${studentName} לא עבר/ה הסמכת "${certTypeName}" — לא ניתן לקבוע`);
+        setSaving(false); return;
+      }
     }
     // For night bookings, endTime can be less than startTime (crosses midnight)
     if (!isNight && startTime >= endTime) { showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה"); setSaving(false); return; }
@@ -465,7 +494,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                           <span>{studio.name}</span>
                         </div>
                         <div style={{fontSize:10,color:"var(--text3)",marginTop:2}}>
-                          {studio.type==="sound"?"סאונד":studio.type==="photo"?"צילום":"כללי"}
+                          {(()=>{ const ct=studioCertTypes.find(t=>t.id===studio.studioCertId); return ct?ct.name:studio.type==="sound"?"סאונד":studio.type==="photo"?"צילום":"כללי"; })()}
                           {studio.requiresApproval && <span style={{color:NIGHT_COLOR,marginRight:4}}>🔒</span>}
                         </div>
                       </td>
@@ -596,7 +625,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                     <StudioImg studio={s} size={44}/>
                     <div>
                       <div style={{fontWeight:700}}>{s.name}</div>
-                      <div style={{fontSize:12,color:"var(--text3)"}}>{s.type==="sound"?"🎙️ סאונד":s.type==="photo"?"📷 צילום":"🌐 כללי"} · {count} הזמנות{s.requiresApproval ? " · 🔒 באישור מיוחד" : " · ✅ הזמנה חופשית"}</div>
+                      <div style={{fontSize:12,color:"var(--text3)"}}>{(()=>{ const ct=studioCertTypes.find(t=>t.id===s.studioCertId); return ct?`🎓 ${ct.name}`:s.type==="sound"?"🎙️ סאונד":s.type==="photo"?"📷 צילום":"🌐 כללי"; })()} · {count} הזמנות{s.requiresApproval ? " · 🔒 באישור מיוחד" : " · ✅ הזמנה חופשית"}</div>
                     </div>
                   </div>
                   <div style={{display:"flex",gap:6}}>
@@ -618,11 +647,10 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
             <label style={labelStyle}>שם האולפן *
               <input name="name" className="form-input" placeholder='לדוגמה: אולפן A' required/>
             </label>
-            <label style={labelStyle}>סוג
-              <select name="type" className="form-input">
-                <option value="sound">🎙️ סאונד</option>
-                <option value="photo">📷 צילום</option>
-                <option value="general">🌐 כללי</option>
+            <label style={labelStyle}>הסמכת אולפן
+              <select name="studioCertId" className="form-input" defaultValue="">
+                <option value="">ללא הסמכה</option>
+                {studioCertTypes.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </label>
             <label style={labelStyle}>תמונה
@@ -649,11 +677,10 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
             <label style={labelStyle}>שם האולפן *
               <input name="name" className="form-input" defaultValue={modal.studio.name} required/>
             </label>
-            <label style={labelStyle}>סוג
-              <select name="type" className="form-input" defaultValue={modal.studio.type||"general"}>
-                <option value="sound">🎙️ סאונד</option>
-                <option value="photo">📷 צילום</option>
-                <option value="general">🌐 כללי</option>
+            <label style={labelStyle}>הסמכת אולפן
+              <select name="studioCertId" className="form-input" defaultValue={modal.studio.studioCertId||""}>
+                <option value="">ללא הסמכה</option>
+                {studioCertTypes.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </label>
             <div style={{fontSize:13,fontWeight:600,color:"var(--text2)"}}>תמונה נוכחית:
@@ -684,16 +711,19 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
         <Modal title={`📅 הזמנת ${modal.studioName} — ${modal.dayName} ${modal.date}`} onClose={()=>{ setFormStudent(""); setFormIsNight(false); setModal(null); }}
           footer={<><button className="btn btn-secondary" onClick={()=>{ setFormStudent(""); setFormIsNight(false); setModal(null); }}>ביטול</button><button form="addBookingForm" type="submit" className="btn btn-primary" disabled={saving}>{saving?"שומר...":"✅ שמור הזמנה"}</button></>}>
           <form id="addBookingForm" onSubmit={submitBooking} style={{display:"flex",flexDirection:"column",gap:12}}>
+            {bookingRequiredCert && <div style={{background:"rgba(52,152,219,0.08)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:8,padding:"8px 12px",fontSize:12,color:"var(--blue)",fontWeight:600}}>🎓 נדרשת הסמכה: {bookingRequiredCert.name}</div>}
             <label style={labelStyle}>שם הסטודנט *
-              {allStudents.length > 0
+              {bookingStudents.length > 0
                 ? <select name="studentName" className="form-input" required defaultValue=""
                     onChange={e => setFormStudent(e.target.value)}>
                     <option value="" disabled>בחר סטודנט...</option>
-                    {allStudents.map(s=><option key={s} value={s}>{s}</option>)}
+                    {bookingStudents.map(s=><option key={s} value={s}>{s}</option>)}
                     <option value="__manual__">אחר (הקלד ידנית)</option>
                   </select>
-                : <input name="studentName" className="form-input" placeholder="שם מלא" required
-                    onChange={e => setFormStudent(e.target.value)}/>
+                : allStudents.length > 0
+                  ? <div style={{fontSize:13,color:"var(--red)",padding:8,background:"rgba(231,76,60,0.06)",borderRadius:8,border:"1px solid rgba(231,76,60,0.2)"}}>⚠️ אין סטודנטים מוסמכים לאולפן זה. הגדר הסמכות ברובריקת "הסמכות".</div>
+                  : <input name="studentName" className="form-input" placeholder="שם מלא" required
+                      onChange={e => setFormStudent(e.target.value)}/>
               }
             </label>
             <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,fontWeight:600,color:NIGHT_COLOR,cursor:"pointer",padding:"4px 0"}}>
