@@ -1448,15 +1448,22 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
 
   // Studio certification check
   const studioCertTypes = (certifications?.types || []).filter(t => t.category === "studio" && t.id !== "cert_night_studio");
+  const getStudioCertIds = (studio) => {
+    if (Array.isArray(studio?.studioCertIds)) return studio.studioCertIds.filter(Boolean);
+    return studio?.studioCertId ? [studio.studioCertId] : [];
+  };
   const hasStudioCert = (studioId) => {
     const studio = studios.find(s => s.id === studioId);
-    if (!studio?.studioCertId) return true; // no cert required
-    return studentRecord && (studentRecord.certs || {})[studio.studioCertId] === "עבר";
+    const certIds = getStudioCertIds(studio);
+    if (!certIds.length) return true; // no cert required
+    return studentRecord && certIds.some(id => (studentRecord.certs || {})[id] === "עבר");
   };
   const getStudioCertName = (studioId) => {
     const studio = studios.find(s => s.id === studioId);
-    if (!studio?.studioCertId) return null;
-    return studioCertTypes.find(t => t.id === studio.studioCertId)?.name || null;
+    const names = getStudioCertIds(studio)
+      .map(id => studioCertTypes.find(t => t.id === id)?.name)
+      .filter(Boolean);
+    return names.length ? names.join(" / ") : null;
   };
 
   function getWeekDays(off=0) {

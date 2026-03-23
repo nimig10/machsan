@@ -26,6 +26,15 @@ export function CertificationsPage({ certifications, setCertifications, showToas
     return r.ok;
   };
 
+  const getStudioCertIds = (studio) => {
+    if (Array.isArray(studio?.studioCertIds)) return studio.studioCertIds.filter(Boolean);
+    return studio?.studioCertId ? [studio.studioCertId] : [];
+  };
+  const withStudioCertIds = (studio, nextIds) => {
+    const ids = [...new Set((nextIds || []).filter(Boolean))];
+    return { ...studio, studioCertIds: ids, studioCertId: ids[0] || undefined };
+  };
+
   const isStudioType = (t) => t.category === "studio" || t.id === NIGHT_CERT_ID;
   const equipmentTypes = types.filter(t => !isStudioType(t));
   const studioTypes = types.filter(t => isStudioType(t));
@@ -42,7 +51,10 @@ export function CertificationsPage({ certifications, setCertifications, showToas
     const updated = { types:[...types, newType], students };
     if(await save(updated)) {
       if (certMode === "studio" && newStudioIds.length > 0 && setStudios) {
-        const updatedStudios = studios.map(s => newStudioIds.includes(s.id) ? { ...s, studioCertId: id } : s);
+        const updatedStudios = studios.map(s => {
+          if (!newStudioIds.includes(s.id)) return s;
+          return withStudioCertIds(s, [...getStudioCertIds(s), id]);
+        });
         setStudios(updatedStudios);
         await storageSet("studios", updatedStudios);
       }
@@ -60,7 +72,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
     };
     if(await save(updated)) {
       if (setStudios && isStudioType(types.find(t=>t.id===typeId)||{})) {
-        const updatedStudios = studios.map(s => s.studioCertId === typeId ? { ...s, studioCertId: undefined } : s);
+        const updatedStudios = studios.map(s => withStudioCertIds(s, getStudioCertIds(s).filter(id => id !== typeId)));
         setStudios(updatedStudios);
         await storageSet("studios", updatedStudios);
       }
@@ -86,7 +98,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
   };
 
   const openEditCert = (t) => {
-    const linkedIds = studios.filter(s => s.studioCertId === t.id).map(s => s.id);
+    const linkedIds = studios.filter(s => getStudioCertIds(s).includes(t.id)).map(s => s.id);
     setEditCert({ id: t.id, name: t.name, studioIds: linkedIds });
   };
 
@@ -102,9 +114,10 @@ export function CertificationsPage({ certifications, setCertifications, showToas
     if (await save(updated)) {
       if (setStudios && isStudioType(types.find(t => t.id === editCert.id) || {})) {
         const updatedStudios = studios.map(s => {
-          if (editCert.studioIds.includes(s.id)) return { ...s, studioCertId: editCert.id };
-          if (s.studioCertId === editCert.id) return { ...s, studioCertId: undefined };
-          return s;
+          const ids = new Set(getStudioCertIds(s));
+          if (editCert.studioIds.includes(s.id)) ids.add(editCert.id);
+          else ids.delete(editCert.id);
+          return withStudioCertIds(s, [...ids]);
         });
         setStudios(updatedStudios);
         await storageSet("studios", updatedStudios);
@@ -155,7 +168,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
         <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
           {activeTypes.map(t=>{
             const isNight = t.id === NIGHT_CERT_ID;
-            const linked = certMode==="studio" && !isNight ? studios.filter(s=>s.studioCertId===t.id) : [];
+            const linked = certMode==="studio" && !isNight ? studios.filter(s=>getStudioCertIds(s).includes(t.id)) : [];
             return (
               <span key={t.id} style={{display:"flex",alignItems:"center",gap:6,background:isNight?NIGHT_COLOR+"15":"var(--surface2)",border:`1px solid ${isNight?NIGHT_COLOR:"var(--border)"}`,borderRadius:20,padding:"4px 14px",fontSize:13,fontWeight:700,color:isNight?NIGHT_COLOR:undefined,cursor:"pointer"}}
                 onClick={()=>certMode==="studio"&&!isNight&&openEditCert(t)}>
@@ -189,12 +202,12 @@ export function CertificationsPage({ certifications, setCertifications, showToas
             <div style={{fontSize:12,fontWeight:700,color:"var(--text2)",marginBottom:8}}>🎙️ סווג אולפנים להסמכה זו:</div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
               {studios.map(s=>{
-                const existingCert = s.studioCertId ? studioTypes.find(t=>t.id===s.studioCertId) : null;
+                const existingCerts = studioTypes.filter(t=>getStudioCertIds(s).includes(t.id));
                 return (
                   <label key={s.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:13,cursor:"pointer",padding:"4px 10px",borderRadius:8,border:`1px solid ${newStudioIds.includes(s.id)?"var(--accent)":"var(--border)"}`,background:newStudioIds.includes(s.id)?"var(--accent-glow)":"transparent"}}>
                     <input type="checkbox" checked={newStudioIds.includes(s.id)} onChange={()=>toggleNewStudioId(s.id)} style={{accentColor:"var(--accent)"}}/>
                     {s.name}
-                    {existingCert && !newStudioIds.includes(s.id) && <span style={{fontSize:10,color:"var(--text3)"}}>(כרגע: {existingCert.name})</span>}
+                    {existingCerts.length>0 && !newStudioIds.includes(s.id) && <span style={{fontSize:10,color:"var(--text3)"}}>(כרגע: {existingCerts.map(t=>t.name).join(", ")})</span>}
                   </label>
                 );
               })}
@@ -340,12 +353,12 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                   {studios.map(s=>{
                     const checked = editCert.studioIds.includes(s.id);
-                    const otherCert = !checked && s.studioCertId && s.studioCertId !== editCert.id ? studioTypes.find(t=>t.id===s.studioCertId) : null;
+                    const otherCerts = studioTypes.filter(t => t.id !== editCert.id && getStudioCertIds(s).includes(t.id));
                     return (
                       <label key={s.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:13,cursor:"pointer",padding:"6px 12px",borderRadius:8,border:`1px solid ${checked?"var(--accent)":"var(--border)"}`,background:checked?"var(--accent-glow)":"transparent"}}>
                         <input type="checkbox" checked={checked} onChange={()=>toggleEditStudioId(s.id)} style={{accentColor:"var(--accent)"}}/>
                         {s.name}
-                        {otherCert && <span style={{fontSize:10,color:"var(--text3)"}}>(כרגע: {otherCert.name})</span>}
+                        {otherCerts.length>0 && <span style={{fontSize:10,color:"var(--text3)"}}>(כרגע גם: {otherCerts.map(t=>t.name).join(", ")})</span>}
                       </label>
                     );
                   })}

@@ -125,17 +125,26 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
   ].filter(Boolean).filter((v,i,a) => a.indexOf(v)===i);
 
   const studioCertTypes = (certifications?.types || []).filter(t => t.category === "studio" && t.id !== "cert_night_studio");
+  const getStudioCertIds = (studio) => {
+    if (Array.isArray(studio?.studioCertIds)) return studio.studioCertIds.filter(Boolean);
+    return studio?.studioCertId ? [studio.studioCertId] : [];
+  };
+  const getStudioCertNames = (studio) =>
+    getStudioCertIds(studio)
+      .map(id => studioCertTypes.find(t => t.id === id)?.name)
+      .filter(Boolean);
 
   const bookingRequiredCert = (() => {
     const st = studios.find(s => s.id === modal?.studioId);
-    return st?.studioCertId ? studioCertTypes.find(t => t.id === st.studioCertId) : null;
+    return studioCertTypes.filter(t => getStudioCertIds(st).includes(t.id));
   })();
 
   const studentHasStudioCert = (studentName, studioId) => {
     const studio = studios.find(s => s.id === studioId);
-    if (!studio?.studioCertId) return true; // no cert required
+    const certIds = getStudioCertIds(studio);
+    if (!certIds.length) return true; // no cert required
     const rec = (certifications?.students || []).find(s => s.name === studentName);
-    return rec && (rec.certs || {})[studio.studioCertId] === "עבר";
+    return rec && certIds.some(id => (rec.certs || {})[id] === "עבר");
   };
 
   const formStudentBlocked = formStudent && formStudent !== "__manual__" && modal?.studioId && !studentHasStudioCert(formStudent, modal.studioId);
@@ -191,7 +200,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     if (!name) return;
     if (studios.some(s => s.name===name)) { showToast("error","אולפן בשם זה כבר קיים"); return; }
     const studioCertId = fd.get("studioCertId") || undefined;
-    const updated = [...studios, { id: Date.now(), name, studioCertId, image: studioImage || fd.get("emoji")||"🎙️" }];
+    const updated = [...studios, { id: Date.now(), name, studioCertId, studioCertIds: studioCertId ? [studioCertId] : [], image: studioImage || fd.get("emoji")||"🎙️" }];
     await saveStudios(updated);
     showToast("success", `אולפן "${name}" נוסף`);
     setStudioImage("");
@@ -230,7 +239,11 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     if (!name) return;
     const studioCertId = fd.get("studioCertId") || undefined;
     const image = editImage || fd.get("emoji")?.trim() || modal.studio.image;
-    const updated = studios.map(s => s.id===modal.studio.id ? {...s, name, studioCertId, image} : s);
+    const prevIds = getStudioCertIds(modal.studio);
+    const nextStudioCertIds = !studioCertId
+      ? []
+      : (prevIds.length > 1 && prevIds.includes(studioCertId) ? prevIds : [studioCertId]);
+    const updated = studios.map(s => s.id===modal.studio.id ? {...s, name, studioCertId, studioCertIds: nextStudioCertIds, image} : s);
     await saveStudios(updated);
     showToast("success", `אולפן "${name}" עודכן`);
     setEditImage("");
@@ -298,11 +311,14 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     }
     // Studio certification check
     const bookingStudioObj = studios.find(s => s.id === studioId);
-    if (bookingStudioObj?.studioCertId) {
+    const bookingStudioCertIds = getStudioCertIds(bookingStudioObj);
+    if (bookingStudioCertIds.length) {
       const certStudentsList = certifications?.students || [];
       const studentRec = certStudentsList.find(s => s.name === studentName);
-      if (!studentRec || (studentRec.certs||{})[bookingStudioObj.studioCertId] !== "עבר") {
-        const certTypeName = (certifications?.types || []).find(t => t.id === bookingStudioObj.studioCertId)?.name || "אולפן";
+      const hasMatchingStudioCert = studentRec && bookingStudioCertIds.some(id => (studentRec.certs||{})[id] === "עבר");
+      if (!hasMatchingStudioCert) {
+        const certTypeNames = bookingStudioCertIds.map(id => (certifications?.types || []).find(t => t.id === id)?.name).filter(Boolean);
+        const certTypeName = certTypeNames.join(" / ") || "אולפן";
         showToast("error", `⛔ ${studentName} לא עבר/ה הסמכת "${certTypeName}" — לא ניתן לקבוע`);
         setSaving(false); return;
       }
@@ -490,7 +506,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                           <span>{studio.name}</span>
                         </div>
                         <div style={{fontSize:10,color:"var(--text3)",marginTop:2}}>
-                          {(()=>{ const ct=studioCertTypes.find(t=>t.id===studio.studioCertId); return ct?<span style={{color:"var(--accent)"}}>🎓 {ct.name}</span>:studio.type==="sound"?"סאונד":studio.type==="photo"?"צילום":"כללי"; })()}
+                          {(()=>{ const certNames=getStudioCertNames(studio); return certNames.length?<span style={{color:"var(--accent)"}}>🎓 {certNames.join(", ")}</span>:studio.type==="sound"?"סאונד":studio.type==="photo"?"צילום":"כללי"; })()}
                         </div>
                       </td>
                       {weekDays.map(day=>{
@@ -620,7 +636,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                     <StudioImg studio={s} size={44}/>
                     <div>
                       <div style={{fontWeight:700}}>{s.name}</div>
-                      <div style={{fontSize:12,color:"var(--text3)"}}>{(()=>{ const ct=studioCertTypes.find(t=>t.id===s.studioCertId); return ct?<span style={{color:"var(--accent)"}}>🎓 {ct.name}</span>:"ללא הסמכה"; })()} · {count} הזמנות</div>
+                      <div style={{fontSize:12,color:"var(--text3)"}}>{(()=>{ const certNames=getStudioCertNames(s); return certNames.length?<span style={{color:"var(--accent)"}}>🎓 {certNames.join(", ")}</span>:"ללא הסמכה"; })()} · {count} הזמנות</div>
                     </div>
                   </div>
                   <div style={{display:"flex",gap:6}}>
@@ -648,6 +664,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                 {studioCertTypes.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </label>
+            <div style={{fontSize:11,color:"var(--text3)",marginTop:-6}}>אפשר לשייך כמה הסמכות אולפן שונות מאזור "הסמכות". כאן בוחרים שיוך יחיד מהיר.</div>
             <label style={labelStyle}>תמונה
               <input type="file" accept="image/*" onChange={handleImageUpload} style={{fontSize:13}} disabled={imgUploading}/>
               {imgUploading && <div style={{fontSize:12,color:"var(--accent)",marginTop:4}}>⏳ מעלה תמונה...</div>}
@@ -669,11 +686,12 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
               <input name="name" className="form-input" defaultValue={modal.studio.name} required/>
             </label>
             <label style={labelStyle}>הסמכת אולפן
-              <select name="studioCertId" className="form-input" defaultValue={modal.studio.studioCertId||""}>
+              <select name="studioCertId" className="form-input" defaultValue={modal.studio.studioCertId || modal.studio.studioCertIds?.[0] || ""}>
                 <option value="">ללא הסמכה</option>
                 {studioCertTypes.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </label>
+            <div style={{fontSize:11,color:"var(--text3)",marginTop:-6}}>שיוכים מרובים נשמרים ומנוהלים מתוך רובריקת "הסמכות". בחירה כאן משמשת לעדכון מהיר של שיוך יחיד.</div>
             <div style={{fontSize:13,fontWeight:600,color:"var(--text2)"}}>תמונה נוכחית:
               <div style={{marginTop:4}}>
                 {(editImage || modal.studio.image)?.startsWith("http")
@@ -698,7 +716,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
         <Modal title={`📅 הזמנת ${modal.studioName} — ${modal.dayName} ${modal.date}`} onClose={()=>{ setFormStudent(""); setFormIsNight(false); setModal(null); }}
           footer={<><button className="btn btn-secondary" onClick={()=>{ setFormStudent(""); setFormIsNight(false); setModal(null); }}>ביטול</button><button form="addBookingForm" type="submit" className="btn btn-primary" disabled={saving||formStudentBlocked}>{saving?"שומר...":"✅ שמור הזמנה"}</button></>}>
           <form id="addBookingForm" onSubmit={submitBooking} style={{display:"flex",flexDirection:"column",gap:12}}>
-            {bookingRequiredCert && <div style={{background:"rgba(52,152,219,0.08)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:8,padding:"8px 12px",fontSize:12,color:"var(--blue)",fontWeight:600}}>🎓 נדרשת הסמכה: {bookingRequiredCert.name}</div>}
+            {bookingRequiredCert.length>0 && <div style={{background:"rgba(52,152,219,0.08)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:8,padding:"8px 12px",fontSize:12,color:"var(--blue)",fontWeight:600}}>🎓 נדרשת הסמכה: {bookingRequiredCert.map(t=>t.name).join(" / ")}</div>}
             <label style={labelStyle}>שם הסטודנט *
               {allStudents.length > 0
                 ? <select name="studentName" className="form-input" required defaultValue=""
@@ -713,7 +731,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
             </label>
             {formStudentBlocked && (
               <div style={{background:"rgba(231,76,60,0.12)",border:"1px solid var(--red)",borderRadius:8,padding:"12px 16px",fontSize:14,color:"var(--red)",fontWeight:800,display:"flex",alignItems:"center",gap:8}}>
-                ⛔ טרם עבר הסמכה — {formStudent} לא עבר/ה הסמכת "{bookingRequiredCert?.name}" ולא ניתן לקבוע אולפן זה
+                ⛔ טרם עבר הסמכה — {formStudent} לא עבר/ה הסמכת "{bookingRequiredCert.map(t=>t.name).join(" / ")}" ולא ניתן לקבוע אולפן זה
               </div>
             )}
             <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,fontWeight:600,color:NIGHT_COLOR,cursor:"pointer",padding:"4px 0"}}>
