@@ -1493,6 +1493,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     if (kind === "team") return "צוות המחסן";
     return "";
   };
+  const isActiveStudioBooking = (booking) => booking?.status !== "נדחה";
 
   function getWeekDays(off=0) {
     const today = new Date();
@@ -1521,7 +1522,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     }
     // Night bookings can have endTime < startTime (crosses midnight)
     if(!isNight && startTime >= endTime) { showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה"); setSaving(false); return; }
-    const overlap = bookings.some(b => sameStudioId(b.studioId, studioId) && b.date===date && b.status!=="נדחה" && !(endTime<=b.startTime || startTime>=b.endTime));
+    const overlap = bookings.some(b => sameStudioId(b.studioId, studioId) && b.date===date && isActiveStudioBooking(b) && !(endTime<=b.startTime || startTime>=b.endTime));
     if(!isNight && overlap) { showToast("error","⚠️ קיימת הזמנה חופפת"); setSaving(false); return; }
     const newBooking = { id:Date.now(), bookingKind:"student", studioId, date, startTime, endTime, studentName:student.name, notes, isNight, createdAt:new Date().toISOString() };
     const updated = [...bookings, newBooking];
@@ -1538,7 +1539,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     const startTime = fd.get("startTime"), endTime = fd.get("endTime"), notes = fd.get("notes")?.trim();
     const { bookingId, studioId, date, isNight } = modal;
     if(!isNight && startTime >= endTime) { showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה"); setSaving(false); return; }
-    const overlap = bookings.some(b => sameStudioId(b.studioId, studioId) && b.date===date && b.id!==bookingId && b.status!=="נדחה" && !(endTime<=b.startTime || startTime>=b.endTime));
+    const overlap = bookings.some(b => sameStudioId(b.studioId, studioId) && b.date===date && b.id!==bookingId && isActiveStudioBooking(b) && !(endTime<=b.startTime || startTime>=b.endTime));
     if(!isNight && overlap) { showToast("error","⚠️ קיימת הזמנה חופפת"); setSaving(false); return; }
     const updated = bookings.map(b => b.id===bookingId ? {...b, startTime, endTime, notes: notes || b.notes} : b);
     setBookings(updated);
@@ -1611,7 +1612,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
   // ── Day drill-down view ──
   if (dayView) {
     const studio = studios.find(s=>sameStudioId(s.id, dayView.studioId));
-    const dayBookings = bookings.filter(b=>sameStudioId(b.studioId, dayView.studioId) && b.date===dayView.date && b.status!=="נדחה")
+    const dayBookings = bookings.filter(b=>sameStudioId(b.studioId, dayView.studioId) && b.date===dayView.date && isActiveStudioBooking(b))
       .sort((a,b)=>(a.startTime||"").localeCompare(b.startTime||""));
     const isDayPast = dayView.date < todayStr;
     const nowHour = new Date().getHours();
@@ -1879,7 +1880,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                     {blocked && certName && <div style={{fontSize:9,color:"var(--text3)"}}>{certName}</div>}
                   </td>
                   {weekDays.map(day=>{
-                    const cells = bookings.filter(b=>sameStudioId(b.studioId, studio.id) && b.date===day.fullDate && b.status!=="נדחה").sort((a,b)=>(a.startTime||"").localeCompare(b.startTime||""));
+                    const cells = bookings.filter(b=>sameStudioId(b.studioId, studio.id) && b.date===day.fullDate && isActiveStudioBooking(b)).sort((a,b)=>(a.startTime||"").localeCompare(b.startTime||""));
                     const isPast = day.fullDate < todayStr;
                     return (
                       <td key={day.fullDate}

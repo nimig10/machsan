@@ -459,7 +459,7 @@ function buildLessonReservations(lessons = [], kits = []) {
         lesson_id: lesson.id,
         lesson_kit_id: kit.id,
         lesson_auto: true,
-        status: "מאושר",
+        bookingKind: "lesson",
         loan_type: "שיעור",
         student_name: String(lesson.instructorName || lesson.name || "").trim(),
         email: String(lesson.instructorEmail || "").trim(),
@@ -495,6 +495,7 @@ function buildLessonStudioBookings(lessons = []) {
         id: `lesson_booking_${lesson.id}_${index}`,
         lesson_id: lesson.id,
         lesson_auto: true,
+        bookingKind: "lesson",
         studioId: lesson.studioId,
         date: session.date,
         startTime: session.startTime,
@@ -505,7 +506,6 @@ function buildLessonStudioBookings(lessons = []) {
         studentName: lessonName && instructorName ? `${lessonName} · ${instructorName}` : (lessonName || instructorName),
         notes: String(lesson.description || "").trim(),
         isNight: false,
-        status: "מאושר",
         createdAt: lesson.created_at || new Date().toISOString(),
       });
     });
