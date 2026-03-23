@@ -1,6 +1,7 @@
 // CertificationsPage.jsx — certifications management with equipment/studio modes
 import { useState } from "react";
 import { storageSet } from "../utils.js";
+import { Modal } from "./ui.jsx";
 
 const NIGHT_CERT_ID = "cert_night_studio";
 const NIGHT_CERT_NAME = "הסמכת לילה לאולפנים";
@@ -14,6 +15,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState("הכל");
   const [saving, setSaving] = useState(false);
+  const [editCert, setEditCert] = useState(null); // {id, name, studioIds}
 
   const save = async (updated) => {
     setSaving(true);
@@ -83,6 +85,39 @@ export function CertificationsPage({ certifications, setCertifications, showToas
     setNewStudioIds(ids => ids.includes(id) ? ids.filter(i=>i!==id) : [...ids, id]);
   };
 
+  const openEditCert = (t) => {
+    const linkedIds = studios.filter(s => s.studioCertId === t.id).map(s => s.id);
+    setEditCert({ id: t.id, name: t.name, studioIds: linkedIds });
+  };
+
+  const saveEditCert = async () => {
+    if (!editCert) return;
+    const name = editCert.name.trim();
+    if (!name) return;
+    if (types.find(t => t.name === name && t.id !== editCert.id)) { showToast("error","הסמכה בשם זה כבר קיימת"); return; }
+    const updated = {
+      types: types.map(t => t.id === editCert.id ? { ...t, name } : t),
+      students
+    };
+    if (await save(updated)) {
+      if (setStudios && isStudioType(types.find(t => t.id === editCert.id) || {})) {
+        const updatedStudios = studios.map(s => {
+          if (editCert.studioIds.includes(s.id)) return { ...s, studioCertId: editCert.id };
+          if (s.studioCertId === editCert.id) return { ...s, studioCertId: undefined };
+          return s;
+        });
+        setStudios(updatedStudios);
+        await storageSet("studios", updatedStudios);
+      }
+      showToast("success", `הסמכה "${name}" עודכנה`);
+      setEditCert(null);
+    }
+  };
+
+  const toggleEditStudioId = (id) => {
+    setEditCert(ec => ({ ...ec, studioIds: ec.studioIds.includes(id) ? ec.studioIds.filter(i => i !== id) : [...ec.studioIds, id] }));
+  };
+
   const allTracks = ["הכל", ...new Set(students.map(s=>s.track||"").filter(Boolean))];
   const filteredStudents = students
     .filter(s=>
@@ -122,10 +157,11 @@ export function CertificationsPage({ certifications, setCertifications, showToas
             const isNight = t.id === NIGHT_CERT_ID;
             const linked = certMode==="studio" && !isNight ? studios.filter(s=>s.studioCertId===t.id) : [];
             return (
-              <span key={t.id} style={{display:"flex",alignItems:"center",gap:6,background:isNight?NIGHT_COLOR+"15":"var(--surface2)",border:`1px solid ${isNight?NIGHT_COLOR:"var(--border)"}`,borderRadius:20,padding:"4px 14px",fontSize:13,fontWeight:700,color:isNight?NIGHT_COLOR:undefined}}>
+              <span key={t.id} style={{display:"flex",alignItems:"center",gap:6,background:isNight?NIGHT_COLOR+"15":"var(--surface2)",border:`1px solid ${isNight?NIGHT_COLOR:"var(--border)"}`,borderRadius:20,padding:"4px 14px",fontSize:13,fontWeight:700,color:isNight?NIGHT_COLOR:undefined,cursor:"pointer"}}
+                onClick={()=>certMode==="studio"&&!isNight&&openEditCert(t)}>
                 {isNight?"🌙":certMode==="studio"?"🎙️":"🎓"} {t.name}
                 {linked.length>0 && <span style={{fontSize:10,color:"var(--text3)",marginRight:4}}>({linked.map(s=>s.name).join(", ")})</span>}
-                <button onClick={()=>deleteType(t.id)} style={{background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
+                <button onClick={e=>{e.stopPropagation();deleteType(t.id);}} style={{background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
               </span>
             );
           })}
@@ -289,6 +325,35 @@ export function CertificationsPage({ certifications, setCertifications, showToas
             </>
           )}
         </>
+      )}
+      {/* Edit studio cert modal */}
+      {editCert && (
+        <Modal title="✏️ עריכת הסמכת אולפן" onClose={()=>setEditCert(null)}
+          footer={<><button className="btn btn-secondary" onClick={()=>setEditCert(null)}>ביטול</button><button className="btn btn-primary" onClick={saveEditCert} disabled={!editCert.name.trim()||saving}>{saving?"שומר...":"💾 שמור"}</button></>}>
+          <div style={{display:"flex",flexDirection:"column",gap:14,direction:"rtl"}}>
+            <label style={{display:"flex",flexDirection:"column",gap:4,fontSize:13,fontWeight:600,color:"var(--text2)"}}>שם ההסמכה
+              <input className="form-input" value={editCert.name} onChange={e=>setEditCert(ec=>({...ec,name:e.target.value}))}/>
+            </label>
+            {studios.length>0 && (
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:"var(--text2)",marginBottom:8}}>🎙️ אולפנים משויכים:</div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  {studios.map(s=>{
+                    const checked = editCert.studioIds.includes(s.id);
+                    const otherCert = !checked && s.studioCertId && s.studioCertId !== editCert.id ? studioTypes.find(t=>t.id===s.studioCertId) : null;
+                    return (
+                      <label key={s.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:13,cursor:"pointer",padding:"6px 12px",borderRadius:8,border:`1px solid ${checked?"var(--accent)":"var(--border)"}`,background:checked?"var(--accent-glow)":"transparent"}}>
+                        <input type="checkbox" checked={checked} onChange={()=>toggleEditStudioId(s.id)} style={{accentColor:"var(--accent)"}}/>
+                        {s.name}
+                        {otherCert && <span style={{fontSize:10,color:"var(--text3)"}}>(כרגע: {otherCert.name})</span>}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </Modal>
       )}
     </div>
   );
