@@ -203,7 +203,7 @@ const SOUND_CATEGORIES = ["מיקרופונים","מקליטי אודיו","כב
 const STATUSES    = ["תקין","פגום","בתיקון","נעלם"];
 const PHOTO_CATEGORIES = ["מצלמות","עדשות","תאורה","חצובות","אביזרים","אביזרי צילום","מייצבי מצלמה","גימבלים","רחפנים","מוניטורים"];
 const RESEND_API_KEY = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_RESEND_KEY : "";
-const ADMIN_NAV_PAGES = ["dashboard","reservations","equipment","damaged","certifications","rejected","kits","team","archive","policies","settings"];
+const ADMIN_NAV_PAGES = ["dashboard","reservations","equipment","certifications","studios","kits","team","students","policies","settings"];
 const NIMROD_PHONE     = "972521234567"; // ← החלף במספר של נמרוד
 const EMAIL_TYPO_DOMAINS = ["gmai.com","gmial.com","gmail.co","gamil.com","gmaill.com","yahooo.com","yahho.com","outlok.com","hotmai.com","outllook.com"];
 const TERMS = `הסטודנט מתחייב להחזיר את הציוד במועד שנקבע ובמצב תקין.
@@ -766,7 +766,8 @@ function workingUnits(eq) {
 
 
 // ─── EQUIPMENT PAGE ───────────────────────────────────────────────────────────
-function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories, categoryTypes={}, setCategoryTypes, certifications={types:[],students:[]} }) {
+function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories, categoryTypes={}, setCategoryTypes, certifications={types:[],students:[]}, collegeManager={}, managerToken="" }) {
+  const [eqSubView, setEqSubView] = useState("active"); // "active" | "damaged"
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState("הכל");
   const [selectedCats, setSelectedCats] = useState([]);
@@ -1059,8 +1060,31 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     );
   };
 
+  const damagedCount = equipment.reduce((n,eq) => n + (eq.units||[]).filter(u=>u.status!=="תקין").length, 0);
+
   return (
     <div className="page">
+      {/* Sub-view tabs */}
+      <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+        {[
+          {id:"active",label:"📦 ציוד פעיל",badge:null},
+          {id:"damaged",label:"🔧 ציוד בדיקה",badge:damagedCount||null},
+        ].map(t=>(
+          <button key={t.id} onClick={()=>setEqSubView(t.id)}
+            style={{padding:"8px 18px",borderRadius:8,border:`2px solid ${eqSubView===t.id?"var(--accent)":"var(--border)"}`,
+              background:eqSubView===t.id?"var(--accent)22":"transparent",color:eqSubView===t.id?"var(--accent)":"var(--text2)",
+              fontWeight:800,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+            {t.label}
+            {t.badge!=null && <span style={{background:eqSubView===t.id?"var(--accent)":"var(--text3)",color:"#000",borderRadius:20,padding:"0 7px",fontSize:11,fontWeight:900}}>{t.badge}</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* Damaged sub-view */}
+      {eqSubView==="damaged" && <DamagedEquipmentPage equipment={equipment} setEquipment={setEquipment} showToast={showToast} categories={categories} collegeManager={collegeManager} managerToken={managerToken}/>}
+
+      {/* Active equipment sub-view */}
+      {eqSubView==="active" && <>
       <div className="flex-between mb-4">
         <div className="search-bar"><span>🔍</span><input placeholder="חיפוש ציוד..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
         <div className="flex gap-2" style={{flexWrap:"wrap",justifyContent:"flex-end"}}>
@@ -1272,6 +1296,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
           </div>
         </Modal>
       )}
+      </>}
     </div>
   );
 }
@@ -6271,7 +6296,7 @@ export default function App() {
   const overdueCount = reservations.filter(r=>r.status==="באיחור").length;
   const rejectedCount = reservations.filter(r=>r.status==="נדחה").length;
   const rejected = rejectedCount + overdueCount;
-  const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד פעיל", damaged:"ציוד בדיקה", reservations:"ניהול בקשות", rejected:"בקשות דחויות/מאחרות", archive:"ארכיון בקשות", team:"פרטי צוות", kits:"ערכות", policies:"נהלים", certifications:"הסמכות", students:"ניהול סטודנטים", settings:"הגדרות", studios:"לוח אולפנים" };
+  const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד מחסן", reservations:"ניהול בקשות", team:"פרטי צוות", kits:"ערכות", policies:"נהלים", certifications:"הסמכות", students:"ניהול סטודנטים", settings:"הגדרות", studios:"לוח אולפנים" };
 
   const handleSwipeTouchStart = (e) => {
     swipeTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -6343,15 +6368,12 @@ export default function App() {
               <div className="nav-section">ניהול</div>
               {[
                 {id:"studios",icon:"🎙️",label:"אולפנים"},
-                {id:"reservations",icon:"📋",label:"בקשות",badge:pending||null},
-                {id:"equipment",icon:"📦",label:"ציוד פעיל"},
-                {id:"damaged",icon:"🔧",label:"ציוד בדיקה",badge:damagedCount||null},
+                {id:"reservations",icon:"📋",label:"בקשות",badge:(pending||0)+(rejected||0)||null},
+                {id:"equipment",icon:"📦",label:"ציוד מחסן",badge:damagedCount||null},
                 {id:"students",icon:"👨‍🎓",label:"סטודנטים"},
                 {id:"certifications",icon:"🎓",label:"הסמכות"},
-                {id:"rejected",icon:"❌",label:"דחויות/מאחרות",badge:rejected||null},
                 {id:"kits",icon:"🎒",label:"ערכות"},
                 {id:"team",icon:"👥",label:"צוות"},
-                {id:"archive",icon:"🗄️",label:"ארכיון"},
                 {id:"policies",icon:"📋",label:"נהלים"},
                 {id:"settings",icon:"⚙️",label:"הגדרות"},
               ].map(n=>(
@@ -6391,20 +6413,17 @@ export default function App() {
                   ↩ בטל פעולה{undoStack.length ? ` (${undoStack.length})` : ""}
                 </button>
               </div>
-              {(page==="reservations" || page==="rejected") && (
+              {page==="reservations" && (
                 <div style={{display:"flex",gap:6,width:"100%",flexWrap:"wrap",alignItems:"center"}}>
                   <div className="search-bar" style={{flex:"1 1 130px",minWidth:120}}><span>🔍</span><input placeholder="חיפוש..." value={resSearch} onChange={e=>setResSearch(e.target.value)}/></div>
                   <select
                     className="form-select"
                     style={{flex:"1 1 100px",minWidth:95,fontSize:12,padding:"6px 8px"}}
-                    value={page==="rejected" ? (["הכל","נדחה","באיחור"].includes(resStatusF) ? resStatusF : "הכל") : (["הכל","ממתין","אישור ראש מחלקה","מאושר"].includes(resStatusF) ? resStatusF : "הכל")}
+                    value={["הכל","ממתין","אישור ראש מחלקה","מאושר"].includes(resStatusF) ? resStatusF : "הכל"}
                     onChange={e=>setResStatusF(e.target.value)}
                   >
                     <option value="הכל">כל הסטטוסים</option>
-                    {(page==="rejected"
-                      ? ["נדחה","באיחור"]
-                      : ["ממתין","אישור ראש מחלקה","מאושר"]
-                    ).map(s=><option key={s} value={s}>{s}</option>)}
+                    {["ממתין","אישור ראש מחלקה","מאושר"].map(s=><option key={s} value={s}>{s}</option>)}
                   </select>
                   <select className="form-select" style={{flex:"1 1 90px",minWidth:85,fontSize:12,padding:"6px 8px"}} value={resLoanTypeF} onChange={e=>setResLoanTypeF(e.target.value)}>
                     <option value="הכל">כל הסוגים</option>
@@ -6419,22 +6438,17 @@ export default function App() {
             </div>
             {loading ? <Loading/> : <>
               {page==="dashboard"   && <DashboardPage    equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast}/>}
-              {page==="equipment"   && <EquipmentPage    equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} certifications={certifications}/>}
+              {page==="equipment"   && <EquipmentPage    equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} certifications={certifications} collegeManager={collegeManager} managerToken={managerToken}/>}
               {page==="reservations"&& <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}
                 categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings}/>}
-              {page==="rejected"    && <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
-                search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
-                loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} mode="rejected" collegeManager={collegeManager} managerToken={managerToken}
-                categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings}/>}
-              {page==="archive"     && <ArchivePage      reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}/>}
               {page==="team"        && <TeamPage         teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/>}
               {page==="kits"        && <KitsPage         kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations}/>}
               {page==="policies"    && <PoliciesPage     policies={policies} setPolicies={setPolicies} showToast={showToast}/>}
               {page==="certifications" && <CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={_setStudios}/>}
               {page==="students"       && <StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/>}
-              {page==="damaged"       && <DamagedEquipmentPage equipment={equipment} setEquipment={setEquipment} showToast={showToast} categories={categories} collegeManager={collegeManager} managerToken={managerToken}/>}
+
               {page==="settings"     && <SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast}/>}
               {page==="studios"      && <StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin" studios={studios} setStudios={_setStudios} bookings={studioBookings} setBookings={_setStudioBookings}/>}
             </>}

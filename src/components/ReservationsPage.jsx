@@ -1,12 +1,14 @@
-// ReservationsPage.jsx — admin reservations management page
+// ReservationsPage.jsx — admin reservations management page (includes rejected + archive tabs)
 import { useState } from "react";
 import { storageSet, storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
+import { ArchivePage } from "./ArchivePage.jsx";
 
 export function ReservationsPage({ reservations, setReservations, equipment, showToast,
     search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy, mode="active", collegeManager={}, managerToken="",
     categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], calendarToken="", siteSettings={} }) {
+  const [subView, setSubView] = useState("active"); // "active" | "rejected" | "archive"
   const [selected, setSelected] = useState(null);
   const [editing, setEditing]   = useState(null);
   const [approvalConflict, setApprovalConflict] = useState(null);
@@ -14,7 +16,9 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
   const [showManualForm, setShowManualForm] = useState(false);
   const [overdueEmailText, setOverdueEmailText] = useState("");
   const [overdueEmailSending, setOverdueEmailSending] = useState(false);
-  const isRejectedPage = mode === "rejected";
+  const isRejectedPage = subView === "rejected";
+  const rejectedCount = reservations.filter(r=>r.status==="נדחה"||r.status==="באיחור").length;
+  const archivedCount = reservations.filter(r=>r.status==="הוחזר").length;
   const effectiveStatusFilter = isRejectedPage
     ? (["הכל","נדחה","באיחור"].includes(statusF) ? statusF : "הכל")
     : (["הכל","ממתין","אישור ראש מחלקה","מאושר"].includes(statusF) ? statusF : "הכל");
@@ -418,6 +422,29 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
 
   return (
     <div className="page">
+      {/* Sub-view tabs */}
+      <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+        {[
+          {id:"active",label:"📋 בקשות",badge:null},
+          {id:"rejected",label:"❌ דחויות/מאחרות",badge:rejectedCount||null},
+          {id:"archive",label:"🗄️ ארכיון",badge:archivedCount||null},
+        ].map(t=>(
+          <button key={t.id} onClick={()=>setSubView(t.id)}
+            style={{padding:"8px 18px",borderRadius:8,border:`2px solid ${subView===t.id?"var(--accent)":"var(--border)"}`,
+              background:subView===t.id?"var(--accent)22":"transparent",color:subView===t.id?"var(--accent)":"var(--text2)",
+              fontWeight:800,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+            {t.label}
+            {t.badge!=null && <span style={{background:subView===t.id?"var(--accent)":"var(--text3)",color:"#000",borderRadius:20,padding:"0 7px",fontSize:11,fontWeight:900}}>{t.badge}</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* Archive sub-view */}
+      {subView==="archive" && <ArchivePage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}/>}
+
+      {/* Active / Rejected sub-views */}
+      {subView!=="archive" && <>
+
       {/* Manual reservation button */}
       {!isRejectedPage && (
         <div style={{marginBottom:16,display:"flex",justifyContent:"flex-end"}}>
@@ -658,6 +685,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
           )}
         </Modal>
       )}
+      </>}
     </div>
   );
 }
