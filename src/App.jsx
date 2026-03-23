@@ -397,6 +397,118 @@ function getAvailable(eqId, borrowDate, returnDate, reservations, equipment, exc
   const working = workingUnits(eq);
   return Math.max(0, working - used);
 }
+
+function hasLinkedValue(value) {
+  return value !== null && value !== undefined && String(value).trim() !== "";
+}
+
+function compareDateTimeParts(a = {}, b = {}) {
+  const dateCompare = String(a.date || "").localeCompare(String(b.date || ""));
+  if (dateCompare !== 0) return dateCompare;
+  return String(a.startTime || "").localeCompare(String(b.startTime || ""));
+}
+
+function getLinkedLessonKit(lesson, kits = []) {
+  if (!lesson) return null;
+  if (hasLinkedValue(lesson.kitId)) {
+    return kits.find((kit) => String(kit.id) === String(lesson.kitId)) || null;
+  }
+  return kits.find((kit) => kit.kitType === "lesson" && hasLinkedValue(kit.lessonId) && String(kit.lessonId) === String(lesson.id)) || null;
+}
+
+function getLessonsLinkedToKit(kit, lessons = []) {
+  if (!kit) return [];
+  return lessons.filter((lesson) => {
+    if (!lesson) return false;
+    if (hasLinkedValue(lesson.kitId)) {
+      return String(lesson.kitId) === String(kit.id);
+    }
+    return hasLinkedValue(kit.lessonId) && String(kit.lessonId) === String(lesson.id);
+  });
+}
+
+function getLessonScheduleEntries(lesson) {
+  return (Array.isArray(lesson?.schedule) ? lesson.schedule : [])
+    .filter((session) => session?.date)
+    .map((session) => ({
+      date: session.date,
+      startTime: session.startTime || "09:00",
+      endTime: session.endTime || "12:00",
+    }))
+    .sort(compareDateTimeParts);
+}
+
+function buildLessonReservations(lessons = [], kits = []) {
+  const reservations = [];
+  const linkedKitIds = new Set();
+
+  lessons.forEach((lesson) => {
+    const schedule = getLessonScheduleEntries(lesson);
+    const kit = getLinkedLessonKit(lesson, kits);
+    const items = (Array.isArray(kit?.items) ? kit.items : [])
+      .filter((item) => Number(item?.quantity) > 0)
+      .map((item) => ({ ...item }));
+
+    if (!kit || !items.length || !schedule.length) return;
+
+    linkedKitIds.add(String(kit.id));
+
+    schedule.forEach((session, index) => {
+      reservations.push({
+        id: `lesson_res_${lesson.id}_${index}`,
+        lesson_id: lesson.id,
+        lesson_kit_id: kit.id,
+        lesson_auto: true,
+        status: "מאושר",
+        loan_type: "שיעור",
+        student_name: String(lesson.instructorName || lesson.name || "").trim(),
+        email: String(lesson.instructorEmail || "").trim(),
+        phone: String(lesson.instructorPhone || "").trim(),
+        course: String(lesson.name || kit.name || "").trim(),
+        borrow_date: session.date,
+        borrow_time: session.startTime,
+        return_date: session.date,
+        return_time: session.endTime,
+        items,
+        created_at: lesson.created_at || new Date().toISOString(),
+        overdue_notified: true,
+      });
+    });
+  });
+
+  return { reservations, linkedKitIds };
+}
+
+function buildLessonStudioBookings(lessons = []) {
+  const bookings = [];
+
+  lessons.forEach((lesson) => {
+    if (!hasLinkedValue(lesson?.studioId)) return;
+    const schedule = getLessonScheduleEntries(lesson);
+    if (!schedule.length) return;
+
+    schedule.forEach((session, index) => {
+      const lessonName = String(lesson.name || "").trim();
+      const instructorName = String(lesson.instructorName || "").trim();
+      bookings.push({
+        id: `lesson_booking_${lesson.id}_${index}`,
+        lesson_id: lesson.id,
+        lesson_auto: true,
+        studioId: lesson.studioId,
+        date: session.date,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        studentName: lessonName && instructorName ? `${lessonName} · ${instructorName}` : (lessonName || instructorName),
+        notes: String(lesson.description || "").trim(),
+        isNight: false,
+        status: "מאושר",
+        createdAt: lesson.created_at || new Date().toISOString(),
+      });
+    });
+  });
+
+  return bookings.sort(compareDateTimeParts);
+}
  
 function getReservationApprovalConflicts(targetReservation, reservations, equipment) {
   if (!targetReservation) return [];
@@ -3728,10 +3840,10 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
 
   // ── Lesson Kit Form ───────────────────────────────────────────────────────
   const LessonKitForm = ({ initial, onDone }) => {
-    const [name, setName]                   = useState(initial?.name||initial?.courseName||"");
-    const [instructorName, setInstructorName] = useState(initial?.instructorName||"");
-    const [instructorPhone, setInstructorPhone] = useState(initial?.instructorPhone||"");
-    const [instructorEmail, setInstructorEmail] = useState(initial?.instructorEmail||"");
+    const [name, setName]                   = useState(initial?.name||initial?.courseName||getLessonsLinkedToKit(initial, lessons)[0]?.name||"");
+    const [instructorName, setInstructorName] = useState(initial?.instructorName||getLessonsLinkedToKit(initial, lessons)[0]?.instructorName||"");
+    const [instructorPhone, setInstructorPhone] = useState(initial?.instructorPhone||getLessonsLinkedToKit(initial, lessons)[0]?.instructorPhone||"");
+    const [instructorEmail, setInstructorEmail] = useState(initial?.instructorEmail||getLessonsLinkedToKit(initial, lessons)[0]?.instructorEmail||"");
     const [description, setDescription]     = useState(initial?.description||"");
     const [kitItems, setKitItems]           = useState(initial?.items||[]);
     const [schedule, setSchedule]           = useState(initial?.schedule||[]);
@@ -3749,6 +3861,16 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     const [lessonCatF, setLessonCatF]             = useState([]);    // multi-select categories
     const [lessonEqSearch, setLessonEqSearch]     = useState("");
     const [lessonShowSelected, setLessonShowSelected] = useState(false);
+
+    const linkedLessons = getLessonsLinkedToKit(initial, lessons);
+    const lessonManagedKit = isEditMode && linkedLessons.length > 0;
+    const linkedLesson = linkedLessons[0] || null;
+    const linkedSchedule = linkedLessons.flatMap(getLessonScheduleEntries).sort(compareDateTimeParts);
+    const effectiveSchedule = lessonManagedKit && linkedSchedule.length > 0 ? linkedSchedule : schedule;
+    const effectiveName = String(name || linkedLesson?.name || "").trim();
+    const effectiveInstructorName = String(instructorName || linkedLesson?.instructorName || linkedLesson?.name || "").trim();
+    const effectiveInstructorPhone = String(instructorPhone || linkedLesson?.instructorPhone || "").trim();
+    const effectiveInstructorEmail = String(instructorEmail || linkedLesson?.instructorEmail || "").trim();
 
     // Manual schedule builder
     const [manStartDate, setManStartDate] = useState("");
@@ -3868,7 +3990,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     };
 
     const sendTeacherKitEmail = async () => {
-      const recipient = String(instructorEmail || "").trim();
+      const recipient = effectiveInstructorEmail || String(instructorEmail || "").trim();
       if (!recipient) {
         setLocalMsg({type:"error",text:"יש להזין מייל למורה לפני השליחה"});
         return;
@@ -3889,7 +4011,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
           const itemName = eq?.name || item.name || "פריט";
           return `<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${itemName}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${item.quantity}</td></tr>`;
         }).join("");
-        const scheduleList = (schedule || []).map((session, index) => {
+        const scheduleList = effectiveSchedule.map((session, index) => {
           const start = session?.startTime || "";
           const end = session?.endTime || "";
           return `<div style="margin-bottom:6px;color:#c7cedf">שיעור ${index + 1}: ${formatDate(session.date)} ${start}${end ? `–${end}` : ""}</div>`;
@@ -3900,9 +4022,9 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
           body: JSON.stringify({
             to: recipient,
             type: "lesson_kit_ready",
-            student_name: instructorName.trim() || name.trim() || "מורה",
-            recipient_name: instructorName.trim() || name.trim() || "",
-            lesson_kit_name: name.trim(),
+            student_name: effectiveInstructorName || instructorName.trim() || effectiveName || name.trim() || "מורה",
+            recipient_name: effectiveInstructorName || instructorName.trim() || effectiveName || name.trim() || "",
+            lesson_kit_name: effectiveName || name.trim(),
             custom_message: message,
             items_list: itemsList,
             lesson_schedule: scheduleList,
@@ -3933,6 +4055,9 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
 
       // Always rebuild from current schedule state + manual inputs if needed
       let finalSchedule = [...schedule]; // copy current state
+      if (lessonManagedKit && linkedSchedule.length > 0) {
+        finalSchedule = linkedSchedule.map((session) => ({ ...session }));
+      }
 
       if(scheduleMode==="manual" && manStartDate) {
         // If schedule is empty OR user wants to add more — build from inputs
@@ -4010,10 +4135,10 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
 
       const kit = {
         id: kitId, kitType:"lesson",
-        name: name.trim(),
-        instructorName: instructorName.trim(),
-        instructorPhone: instructorPhone.trim(),
-        instructorEmail: instructorEmail.trim(),
+        name: effectiveName || name.trim(),
+        instructorName: effectiveInstructorName || instructorName.trim(),
+        instructorPhone: effectiveInstructorPhone || instructorPhone.trim(),
+        instructorEmail: effectiveInstructorEmail || instructorEmail.trim(),
         description: description.trim(),
         items: kitItems, schedule: finalSchedule,
       };
@@ -4026,10 +4151,10 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         lesson_kit_id: kitId,
         status: "מאושר",
         loan_type: "שיעור",
-        student_name: instructorName.trim()||name.trim(),
-        email: instructorEmail.trim(),
-        phone: instructorPhone.trim(),
-        course: name.trim(),
+        student_name: effectiveInstructorName || instructorName.trim() || effectiveName || name.trim(),
+        email: effectiveInstructorEmail || instructorEmail.trim(),
+        phone: effectiveInstructorPhone || instructorPhone.trim(),
+        course: effectiveName || name.trim(),
         borrow_date: s.date,
         borrow_time: s.startTime,
         return_date: s.date,
@@ -4048,7 +4173,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       setSaving(false);
       if(r1.ok&&r2.ok) {
         onDone();
-        showToast("success", `ערכת שיעור "${name.trim()}" נשמרה · ${finalSchedule.length} שיעורים שוריינו`);
+        showToast("success", `ערכת שיעור "${effectiveName || name.trim()}" נשמרה · ${finalSchedule.length} שיעורים שוריינו`);
       } else setLocalMsg({type:"error",text:"❌ שגיאה בשמירה"});
     };
 
@@ -4101,6 +4226,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         )}
 
         {/* Instructor details */}
+        {!lessonManagedKit && (
         <div style={{background:"rgba(52,152,219,0.06)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
           <div style={{fontWeight:800,fontSize:13,color:"#3498db",marginBottom:12}}>👨‍🏫 פרטי הקורס והמרצה</div>
           <div className="form-group" style={{marginBottom:10}}>
@@ -4122,6 +4248,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
             <textarea className="form-textarea" rows={2} placeholder="הערות על הקורס או הערכה..." value={description} onChange={e=>setDescription(e.target.value)}/>
           </div>
         </div>
+        )}
 
         {/* Equipment picker */}
         <div style={{marginBottom:16}}>
@@ -4210,6 +4337,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         </div>
 
         {/* Schedule builder */}
+        {!lessonManagedKit && (
         <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:"var(--r)",padding:16,marginBottom:18}}>
           <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:12}}>📅 לוח שיעורים</div>
 
@@ -4333,6 +4461,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
             <div style={{textAlign:"center",color:"var(--text3)",fontSize:12,padding:"8px 0"}}>בחר תאריך וזמנים למעלה — השיעורים ייווצרו אוטומטית בלחיצה על \"צור ערכת שיעור\"</div>
           )}
         </div>
+        )}
 
         <div style={{background:"rgba(46,204,113,0.08)",border:"1px solid rgba(46,204,113,0.25)",borderRadius:"var(--r)",padding:16,marginBottom:18}}>
           <div style={{fontWeight:800,fontSize:13,color:"var(--green)",marginBottom:12}}>📧 שליחת ערכה למורה</div>
@@ -4354,12 +4483,12 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
               type="button"
               className="btn btn-success"
               onClick={sendTeacherKitEmail}
-              disabled={teacherEmailSending || !String(instructorEmail||"").trim()}
+              disabled={teacherEmailSending || !(effectiveInstructorEmail || String(instructorEmail||"").trim())}
             >
               {teacherEmailSending ? "⏳ שולח למורה..." : "📤 שליחת ערכה למורה"}
             </button>
             <span style={{fontSize:12,color:"var(--text3)"}}>
-              {String(instructorEmail||"").trim() ? `המייל יישלח אל ${instructorEmail.trim()}` : "יש להזין קודם כתובת מייל למורה"}
+              {(effectiveInstructorEmail || String(instructorEmail||"").trim()) ? `המייל יישלח אל ${effectiveInstructorEmail || instructorEmail.trim()}` : "יש להזין קודם כתובת מייל למורה"}
             </span>
           </div>
         </div>
@@ -4367,18 +4496,18 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         {/* Single CTA */}
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",paddingTop:4}}>
           <button className="btn btn-primary"
-            disabled={saving || !name.trim() || (scheduleMode==="xl" && schedule.length===0)}
+            disabled={saving || !(effectiveName || name.trim()) || (!lessonManagedKit && scheduleMode==="xl" && schedule.length===0)}
             onClick={save}
             style={{fontSize:15,padding:"12px 28px"}}>
             {saving ? "⏳ שומר ומשריין..." : initial ? "💾 שמור שינויים" : "🎬 צור ערכת שיעור"}
           </button>
-          {scheduleMode==="manual" && manStartDate && schedule.length===0 && (
+          {!lessonManagedKit && scheduleMode==="manual" && manStartDate && schedule.length===0 && (
             <span style={{fontSize:12,color:"var(--text3)"}}>
               יפרוס {manCount} שיעורים ב-{formatDate(manStartDate)}
             </span>
           )}
-          {schedule.length>0 && (
-            <span style={{fontSize:12,color:"#9b59b6",fontWeight:700}}>📅 {schedule.length} שיעורים בלוח</span>
+          {effectiveSchedule.length>0 && (
+            <span style={{fontSize:12,color:"#9b59b6",fontWeight:700}}>📅 {effectiveSchedule.length} שיעורים בלוח</span>
           )}
         </div>
       </div>
@@ -4449,7 +4578,13 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:12}}>
             {lessonKits.map(kit=>{
-              const nextSession = (kit.schedule||[]).find(s=>s.date>=today());
+              const linkedKitLessons = getLessonsLinkedToKit(kit, lessons);
+              const linkedKitSchedule = linkedKitLessons.flatMap(getLessonScheduleEntries).sort(compareDateTimeParts);
+              const displaySchedule = linkedKitSchedule.length > 0 ? linkedKitSchedule : (kit.schedule||[]);
+              const nextSession = displaySchedule.find(s=>s.date>=today());
+              const displayInstructorName = kit.instructorName || linkedKitLessons[0]?.instructorName || "";
+              const displayInstructorPhone = kit.instructorPhone || linkedKitLessons[0]?.instructorPhone || "";
+              const displayInstructorEmail = kit.instructorEmail || linkedKitLessons[0]?.instructorEmail || "";
               return (
                 <div key={kit.id} style={{background:"var(--surface)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:"var(--r)",padding:"16px 18px"}}>
                   <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
@@ -4457,11 +4592,11 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                       <span style={{fontSize:28}}>🎬</span>
                       <div>
                         <div style={{fontWeight:800,fontSize:15}}>{kit.name}</div>
-                      {kit.instructorName&&<div style={{fontSize:12,color:"var(--text2)",marginTop:2}}>👨‍🏫 {kit.instructorName}{kit.instructorPhone?` · 📞 ${kit.instructorPhone}`:""}</div>}
-                        {kit.instructorEmail&&<div style={{fontSize:11,color:"var(--text3)"}}>✉️ {kit.instructorEmail}</div>}
+                      {displayInstructorName&&<div style={{fontSize:12,color:"var(--text2)",marginTop:2}}>👨‍🏫 {displayInstructorName}{displayInstructorPhone?` · 📞 ${displayInstructorPhone}`:""}</div>}
+                        {displayInstructorEmail&&<div style={{fontSize:11,color:"var(--text3)"}}>✉️ {displayInstructorEmail}</div>}
                         <div style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap"}}>
                           <span style={{background:"rgba(155,89,182,0.15)",border:"1px solid rgba(155,89,182,0.35)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"#9b59b6",fontWeight:700}}>
-                            📅 {(kit.schedule||[]).length} שיעורים
+                            📅 {displaySchedule.length} שיעורים
                           </span>
                           {nextSession&&<span style={{background:"rgba(46,204,113,0.1)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"var(--green)",fontWeight:700}}>
                             הבא: {formatDate(nextSession.date)} {nextSession.startTime}
@@ -6344,6 +6479,36 @@ export default function App() {
       setLoading(false);
     })();
   },[]);
+
+  useEffect(() => {
+    if (loading) return;
+
+    const { reservations: generatedLessonReservations, linkedKitIds } = buildLessonReservations(lessons, kits);
+    const nextReservations = normalizeReservationsForArchive([
+      ...reservations.filter((reservation) => {
+        if (reservation.lesson_auto || hasLinkedValue(reservation.lesson_id)) return false;
+        if (hasLinkedValue(reservation.lesson_kit_id) && linkedKitIds.has(String(reservation.lesson_kit_id))) return false;
+        return true;
+      }),
+      ...generatedLessonReservations,
+    ]);
+
+    if (!dataEquals(nextReservations, reservations)) {
+      _setReservations(nextReservations);
+      void storageSet("reservations", nextReservations);
+    }
+
+    const generatedLessonBookings = buildLessonStudioBookings(lessons);
+    const nextStudioBookings = [
+      ...studioBookings.filter((booking) => !(booking.lesson_auto || hasLinkedValue(booking.lesson_id))),
+      ...generatedLessonBookings,
+    ];
+
+    if (!dataEquals(nextStudioBookings, studioBookings)) {
+      _setStudioBookings(nextStudioBookings);
+      void storageSet("studio_bookings", nextStudioBookings);
+    }
+  }, [loading, lessons, kits, reservations, studioBookings]);
 
   useEffect(() => {
     if (loading) return undefined;

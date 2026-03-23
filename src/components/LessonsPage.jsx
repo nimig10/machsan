@@ -8,6 +8,13 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const [search, setSearch] = useState("");
 
   const lessonKits = kits.filter(k=>k.kitType==="lesson");
+  const getLinkedKit = (lesson) => {
+    if(!lesson) return null;
+    if(lesson.kitId !== null && lesson.kitId !== undefined && String(lesson.kitId).trim() !== "") {
+      return lessonKits.find(k=>String(k.id)===String(lesson.kitId)) || null;
+    }
+    return lessonKits.find(k=>k.lessonId !== null && k.lessonId !== undefined && String(k.lessonId).trim() !== "" && String(k.lessonId)===String(lesson.id)) || null;
+  };
 
   const save = async (lesson) => {
     const updated = editTarget
@@ -58,7 +65,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             : <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {filtered.map(l=>{
                   const studio = studios.find(s=>s.id===l.studioId);
-                  const kit = kits.find(k=>k.id===l.kitId);
+                  const kit = getLinkedKit(l);
                   const upcoming = (l.schedule||[]).filter(s=>s.date>=today()).length;
                   return (
                     <div key={l.id} style={{background:"var(--surface2)",borderRadius:10,padding:"14px 16px",border:"1px solid var(--border)",borderRight:"4px solid #9b59b6"}}>
@@ -93,13 +100,14 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
 // ── Lesson/Course Form ────────────────────────────────────────────────────────
 function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment, reservations, setReservations, kits, showToast }) {
+  const initialLinkedKitId = initial?.kitId || lessonKits.find(k=>k.lessonId !== null && k.lessonId !== undefined && String(k.lessonId).trim() !== "" && String(k.lessonId)===String(initial?.id||""))?.id || "";
   const [name, setName]                       = useState(initial?.name||"");
   const [instructorName, setInstructorName]   = useState(initial?.instructorName||"");
   const [instructorPhone, setInstructorPhone] = useState(initial?.instructorPhone||"");
   const [instructorEmail, setInstructorEmail] = useState(initial?.instructorEmail||"");
   const [description, setDescription]         = useState(initial?.description||"");
   const [studioId, setStudioId]               = useState(initial?.studioId||"");
-  const [kitId, setKitId]                     = useState(initial?.kitId||"");
+  const [kitId, setKitId]                     = useState(initialLinkedKitId);
   const [schedule, setSchedule]               = useState(initial?.schedule||[]);
   const [scheduleMode, setScheduleMode]       = useState("manual");
   const [saving, setSaving]                   = useState(false);
