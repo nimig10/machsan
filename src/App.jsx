@@ -767,7 +767,7 @@ function workingUnits(eq) {
 
 
 // ─── EQUIPMENT PAGE ───────────────────────────────────────────────────────────
-function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories, categoryTypes={}, setCategoryTypes, certifications={types:[],students:[]}, collegeManager={}, managerToken="" }) {
+function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories, categoryTypes={}, setCategoryTypes, certifications={types:[],students:[]}, studios=[], collegeManager={}, managerToken="" }) {
   const [eqSubView, setEqSubView] = useState("active"); // "active" | "damaged"
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState("הכל");
@@ -6574,7 +6574,7 @@ export default function App() {
             </div>
             {loading ? <Loading/> : <>
               {page==="dashboard"   && <DashboardPage    equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast}/>}
-              {page==="equipment"   && <EquipmentPage    equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} certifications={certifications} collegeManager={collegeManager} managerToken={managerToken}/>}
+              {page==="equipment"   && <EquipmentPage    equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} certifications={certifications} studios={studios} collegeManager={collegeManager} managerToken={managerToken}/>}
               {page==="reservations"&& <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}
