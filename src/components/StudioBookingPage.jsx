@@ -192,9 +192,8 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     const name = fd.get("name")?.trim();
     if (!name) return;
     if (studios.some(s => s.name===name)) { showToast("error","אולפן בשם זה כבר קיים"); return; }
-    const requiresApproval = fd.get("requiresApproval") === "on";
     const studioCertId = fd.get("studioCertId") || undefined;
-    const updated = [...studios, { id: Date.now(), name, studioCertId, image: studioImage || fd.get("emoji")||"🎙️", requiresApproval }];
+    const updated = [...studios, { id: Date.now(), name, studioCertId, image: studioImage || fd.get("emoji")||"🎙️" }];
     await saveStudios(updated);
     showToast("success", `אולפן "${name}" נוסף`);
     setStudioImage("");
@@ -233,8 +232,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     if (!name) return;
     const studioCertId = fd.get("studioCertId") || undefined;
     const image = editImage || fd.get("emoji")?.trim() || modal.studio.image;
-    const requiresApproval = fd.get("requiresApproval") === "on";
-    const updated = studios.map(s => s.id===modal.studio.id ? {...s, name, studioCertId, image, requiresApproval} : s);
+    const updated = studios.map(s => s.id===modal.studio.id ? {...s, name, studioCertId, image} : s);
     await saveStudios(updated);
     showToast("success", `אולפן "${name}" עודכן`);
     setEditImage("");
@@ -495,7 +493,6 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                         </div>
                         <div style={{fontSize:10,color:"var(--text3)",marginTop:2}}>
                           {(()=>{ const ct=studioCertTypes.find(t=>t.id===studio.studioCertId); return ct?ct.name:studio.type==="sound"?"סאונד":studio.type==="photo"?"צילום":"כללי"; })()}
-                          {studio.requiresApproval && <span style={{color:NIGHT_COLOR,marginRight:4}}>🔒</span>}
                         </div>
                       </td>
                       {weekDays.map(day=>{
@@ -625,7 +622,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                     <StudioImg studio={s} size={44}/>
                     <div>
                       <div style={{fontWeight:700}}>{s.name}</div>
-                      <div style={{fontSize:12,color:"var(--text3)"}}>{(()=>{ const ct=studioCertTypes.find(t=>t.id===s.studioCertId); return ct?`🎓 ${ct.name}`:s.type==="sound"?"🎙️ סאונד":s.type==="photo"?"📷 צילום":"🌐 כללי"; })()} · {count} הזמנות{s.requiresApproval ? " · 🔒 באישור מיוחד" : " · ✅ הזמנה חופשית"}</div>
+                      <div style={{fontSize:12,color:"var(--text3)"}}>{(()=>{ const ct=studioCertTypes.find(t=>t.id===s.studioCertId); return ct?`🎓 ${ct.name}`:s.type==="sound"?"🎙️ סאונד":s.type==="photo"?"📷 צילום":"🌐 כללי"; })()} · {count} הזמנות</div>
                     </div>
                   </div>
                   <div style={{display:"flex",gap:6}}>
@@ -661,10 +658,6 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
             <label style={labelStyle}>או אימוג'י (אם אין תמונה)
               <input name="emoji" className="form-input" placeholder="🎙️" maxLength={4}/>
             </label>
-            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,fontWeight:600,color:"var(--text2)",cursor:"pointer",padding:"8px 0"}}>
-              <input type="checkbox" name="requiresApproval" style={{width:18,height:18,accentColor:"var(--accent)"}}/>
-              🔒 רק באישור מיוחד (דורש אישור איש צוות)
-            </label>
           </form>
         </Modal>
       )}
@@ -697,10 +690,6 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
             </label>
             <label style={labelStyle}>או אימוג'י (מחליף תמונה)
               <input name="emoji" className="form-input" placeholder="🎙️" maxLength={4}/>
-            </label>
-            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,fontWeight:600,color:"var(--text2)",cursor:"pointer",padding:"8px 0"}}>
-              <input type="checkbox" name="requiresApproval" defaultChecked={modal.studio.requiresApproval} style={{width:18,height:18,accentColor:"var(--accent)"}}/>
-              🔒 רק באישור מיוחד (דורש אישור איש צוות)
             </label>
           </form>
         </Modal>
