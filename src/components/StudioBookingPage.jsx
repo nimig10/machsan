@@ -1,532 +1,624 @@
-import { useState, useEffect, useCallback } from "react";
-import { storageGet, storageSet, lsGet } from "../utils.js";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { storageSet, lsGet } from "../utils.js";
 import { Modal } from "./ui.jsx";
 
 const DAY_HOURS = ["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00"];
 const NIGHT_HOURS = ["21:00","22:00","23:00","00:00","01:00","02:00","03:00","04:00","05:00","06:00","07:00","08:00"];
-const STATUS_COLORS = { "ממתין":"var(--yellow)", "מאושר":"var(--green)" };
-const NIGHT_COLOR = "#2196f3";
 const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 const HE_DAYS_SHORT = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
+const NIGHT_COLOR = "#2196f3";
+const STUDENT_COLOR = "var(--green)";
+const TEAM_COLOR = "#9b59b6";
+const LESSON_COLOR = "#f5a623";
+const RANGE_OPTIONS = [7, 30, 90];
 
-function getWeekDays(offset=0) {
-  const today = new Date();
-  today.setDate(today.getDate() + offset * 7);
-  const day = today.getDay();
-  const sunday = new Date(today); sunday.setDate(today.getDate() - day);
-  return Array.from({length:7}, (_,i) => {
-    const d = new Date(sunday); d.setDate(sunday.getDate()+i);
-    const yyyy = d.getFullYear();
-    const mm   = String(d.getMonth()+1).padStart(2,"0");
-    const dd   = String(d.getDate()).padStart(2,"0");
+function getTodayStr() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function parseDate(dateStr) {
+  if (!dateStr) return null;
+  const [year, month, day] = String(dateStr).split("-").map(Number);
+  return new Date(year, (month || 1) - 1, day || 1, 0, 0, 0, 0);
+}
+
+function getWeekDays(offset = 0) {
+  const current = new Date();
+  current.setDate(current.getDate() + offset * 7);
+  const sunday = new Date(current);
+  sunday.setDate(current.getDate() - current.getDay());
+  const todayStr = getTodayStr();
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(sunday);
+    date.setDate(sunday.getDate() + index);
+    const fullDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
     return {
-      name: ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"][i],
-      date: dd,
-      fullDate: `${yyyy}-${mm}-${dd}`,
-      isToday: dd === String(new Date().getDate()).padStart(2,"0") &&
-               mm === String(new Date().getMonth()+1).padStart(2,"0") &&
-               yyyy === new Date().getFullYear()
+      name: ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"][index],
+      date: String(date.getDate()).padStart(2, "0"),
+      fullDate,
+      isToday: fullDate === todayStr,
     };
   });
 }
 
-export default function StudioBookingPage({ showToast, teamMembers=[], certifications={types:[],students:[]}, role="admin", currentUser=null, studios: studiosProp, setStudios: setStudiosProp, bookings: bookingsProp, setBookings: setBookingsProp }) {
-  const [localStudios,   setLocalStudios]   = useState(() => lsGet("studios") || []);
-  const [localBookings,  setLocalBookings]  = useState(() => lsGet("studio_bookings") || []);
+function sameStudioId(a, b) {
+  return String(a) === String(b);
+}
+
+function hasValue(value) {
+  return value !== null && value !== undefined && String(value).trim() !== "";
+}
+
+function isRejectedBooking(booking) {
+  return booking?.status === "נדחה";
+}
+
+function getRangeDiff(dateStr) {
+  const target = parseDate(dateStr);
+  const today = parseDate(getTodayStr());
+  if (!target || !today) return Number.POSITIVE_INFINITY;
+  return Math.floor((target.getTime() - today.getTime()) / 86400000);
+}
+
+function getBookingSortTime(booking) {
+  return new Date(`${booking.date}T${booking.startTime || "00:00"}:00`).getTime();
+}
+
+const thStyle = { padding:"8px 10px", background:"var(--surface2)", fontSize:12, fontWeight:700, textAlign:"center", border:"1px solid var(--border)" };
+const tdStyle = { padding:"6px 8px", border:"1px solid var(--border)", textAlign:"center" };
+const labelStyle = { display:"flex", flexDirection:"column", gap:4, fontSize:13, fontWeight:600, color:"var(--text2)" };
+
+export default function StudioBookingPage(props) {
+  const { showToast, teamMembers = [], certifications = { types: [], students: [] }, role = "admin", studios: studiosProp, setStudios: setStudiosProp, bookings: bookingsProp, setBookings: setBookingsProp } = props;
+  const [localStudios, setLocalStudios] = useState(() => lsGet("studios") || []);
+  const [localBookings, setLocalBookings] = useState(() => lsGet("studio_bookings") || []);
   const studios = studiosProp ?? localStudios;
   const setStudios = setStudiosProp ?? setLocalStudios;
   const bookings = bookingsProp ?? localBookings;
   const setBookings = setBookingsProp ?? setLocalBookings;
 
   const [weekOffset, setWeekOffset] = useState(0);
-  const [statusFilter, setStatusFilter] = useState("הכל");
-  const [todayOnly,   setTodayOnly]   = useState(false);
-  const [sortMode,    setSortMode]    = useState("urgency");
+  const [todayOnly, setTodayOnly] = useState(false);
+  const [sortMode, setSortMode] = useState("urgency");
+  const [futureRangeDays, setFutureRangeDays] = useState(7);
   const [activeView, setActiveView] = useState("calendar");
-  const [modal, setModal]   = useState(null);
+  const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
-  // ── Add-booking form live state (for night cert warning) ────────────
-  const [formStudent, setFormStudent] = useState("");
-  const [formIsNight, setFormIsNight] = useState(false);
+  const [miniMonth, setMiniMonth] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+  const [studioImage, setStudioImage] = useState("");
+  const [editImage, setEditImage] = useState("");
+  const [imgUploading, setImgUploading] = useState(false);
+  const [formTeamMember, setFormTeamMember] = useState("");
+  const [cancelMessage, setCancelMessage] = useState("");
 
+  const todayStr = getTodayStr();
   const weekDays = getWeekDays(weekOffset);
 
-  // ── Mini Calendar State ─────────────────────────────────────────────
-  const [miniMonth, setMiniMonth] = useState(() => { const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() }; });
-  const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
+  const saveStudios = useCallback(async (nextStudios) => {
+    setStudios(nextStudios);
+    await storageSet("studios", nextStudios);
+  }, [setStudios]);
+
+  const saveBookings = useCallback(async (nextBookings) => {
+    setBookings(nextBookings);
+    await storageSet("studio_bookings", nextBookings);
+  }, [setBookings]);
+
+  const teamMemberOptions = useMemo(() => {
+    const names = new Set();
+    return (teamMembers || []).reduce((list, member) => {
+      const normalized = typeof member === "string" ? { id: member, name: member } : { id: member?.id ?? member?.name, name: member?.name || "" };
+      if (!normalized.name || names.has(normalized.name)) return list;
+      names.add(normalized.name);
+      return [...list, normalized];
+    }, []);
+  }, [teamMembers]);
+
+  const studioCertTypes = useMemo(() => (certifications?.types || []).filter((type) => type.category === "studio" && type.id !== "cert_night_studio"), [certifications]);
+
+  const getStudioCertIds = useCallback((studio) => {
+    if (Array.isArray(studio?.studioCertIds)) return studio.studioCertIds.filter(Boolean);
+    return studio?.studioCertId ? [studio.studioCertId] : [];
+  }, []);
+
+  const getStudioCertNames = useCallback((studio) => (
+    getStudioCertIds(studio)
+      .map((certId) => studioCertTypes.find((type) => type.id === certId)?.name)
+      .filter(Boolean)
+  ), [getStudioCertIds, studioCertTypes]);
+
+  const activeBookings = useMemo(() => (Array.isArray(bookings) ? bookings : []).filter((booking) => !isRejectedBooking(booking)), [bookings]);
+
+  const getBookingKind = useCallback((booking) => {
+    if (!booking) return "student";
+    if (booking.bookingKind === "lesson" || booking.lesson_auto || hasValue(booking.lesson_id)) return "lesson";
+    if (booking.bookingKind === "team" || hasValue(booking.teamMemberId) || hasValue(booking.teamMemberName) || booking.ownerType === "team") return "team";
+    return "student";
+  }, []);
+
+  const getBookingColor = useCallback((booking) => {
+    const kind = getBookingKind(booking);
+    if (kind === "lesson") return LESSON_COLOR;
+    if (kind === "team") return TEAM_COLOR;
+    if (booking?.isNight) return NIGHT_COLOR;
+    return STUDENT_COLOR;
+  }, [getBookingKind]);
+
+  const getBookingTypeLabel = useCallback((booking) => {
+    const kind = getBookingKind(booking);
+    if (kind === "lesson") return "שיעור";
+    if (kind === "team") return "קביעת צוות";
+    return booking?.isNight ? "קביעת סטודנט לילה" : "קביעת סטודנט";
+  }, [getBookingKind]);
+
+  const getBookingTitle = useCallback((booking) => {
+    const kind = getBookingKind(booking);
+    if (kind === "lesson") return booking?.courseName || booking?.studentName || "שיעור";
+    if (kind === "team") return booking?.teamMemberName || booking?.studentName || "איש צוות";
+    return booking?.studentName || "סטודנט";
+  }, [getBookingKind]);
+
+  const getBookingSubtitle = useCallback((booking) => {
+    const kind = getBookingKind(booking);
+    if (kind === "lesson") return [booking?.instructorName, booking?.track].filter(Boolean).join(" · ");
+    if (kind === "team") return "צוות המחסן";
+    return "";
+  }, [getBookingKind]);
+
   const weekMiddle = new Date();
   weekMiddle.setDate(weekMiddle.getDate() + weekOffset * 7);
-  const weekMonthLabel = HE_MONTHS[weekMiddle.getMonth()] + " " + weekMiddle.getFullYear();
+  const weekMonthLabel = `${HE_MONTHS[weekMiddle.getMonth()]} ${weekMiddle.getFullYear()}`;
 
   const miniDays = (() => {
-    const { year, month } = miniMonth;
-    const firstDay = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDay = new Date(miniMonth.year, miniMonth.month, 1).getDay();
+    const daysInMonth = new Date(miniMonth.year, miniMonth.month + 1, 0).getDate();
     const cells = [];
-    for (let i = 0; i < firstDay; i++) cells.push(null);
-    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    for (let index = 0; index < firstDay; index += 1) cells.push(null);
+    for (let day = 1; day <= daysInMonth; day += 1) cells.push(day);
     return cells;
   })();
 
+  const filteredBookings = useMemo(() => (
+    activeBookings
+      .filter((booking) => {
+        if (todayOnly) return booking.date === todayStr;
+        const diff = getRangeDiff(booking.date);
+        return diff >= 0 && diff < futureRangeDays;
+      })
+      .sort((left, right) => {
+        if (sortMode === "request_time") {
+          return new Date(left.createdAt || 0).getTime() - new Date(right.createdAt || 0).getTime();
+        }
+        return getBookingSortTime(left) - getBookingSortTime(right);
+      })
+  ), [activeBookings, futureRangeDays, sortMode, todayOnly, todayStr]);
+
+  const lessonBookings = filteredBookings.filter((booking) => getBookingKind(booking) === "lesson");
+  const studentBookings = filteredBookings.filter((booking) => getBookingKind(booking) === "student");
+  const teamBookings = filteredBookings.filter((booking) => getBookingKind(booking) === "team");
+
+  const bookingRequiredCert = useMemo(() => {
+    if (!modal?.studioId) return [];
+    const studio = studios.find((item) => sameStudioId(item.id, modal.studioId));
+    return studioCertTypes.filter((type) => getStudioCertIds(studio).includes(type.id));
+  }, [getStudioCertIds, modal?.studioId, studioCertTypes, studios]);
+
+  useEffect(() => {
+    if (!Array.isArray(studios) || studios.length === 0) return;
+    const needsMigration = studios.some((studio) => studio?.image?.startsWith("data:"));
+    if (!needsMigration) return;
+
+    let cancelled = false;
+    const migrate = async () => {
+      const migrated = await Promise.all(studios.map(async (studio) => {
+        if (!studio?.image?.startsWith("data:")) return studio;
+        try {
+          const response = await fetch("/api/upload-image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data: studio.image }),
+          });
+          const json = await response.json();
+          if (response.ok && json.url) return { ...studio, image: json.url };
+        } catch (error) {
+          console.error("Studio image migration failed", studio?.name, error);
+        }
+        return studio;
+      }));
+      if (cancelled) return;
+      await saveStudios(migrated);
+      showToast("success", "תמונות האולפנים עודכנו");
+    };
+
+    void migrate();
+    return () => {
+      cancelled = true;
+    };
+  }, [saveStudios, showToast, studios]);
+
   const jumpToDate = (day) => {
     const target = new Date(miniMonth.year, miniMonth.month, day);
-    const now = new Date(); now.setHours(0,0,0,0);
-    const diff = Math.round((target - now) / (1000*60*60*24));
-    const targetSunOffset = target.getDay();
-    const nowSunOffset = now.getDay();
-    const targetWeekStart = diff - targetSunOffset + nowSunOffset;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const diff = Math.round((target.getTime() - now.getTime()) / 86400000);
+    const targetWeekStart = diff - target.getDay() + now.getDay();
     setWeekOffset(Math.round(targetWeekStart / 7));
   };
 
   const isInCurrentWeek = (day) => {
     if (!day) return false;
-    const dateStr = `${miniMonth.year}-${String(miniMonth.month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-    return weekDays.some(wd => wd.fullDate === dateStr);
+    const fullDate = `${miniMonth.year}-${String(miniMonth.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return weekDays.some((weekDay) => weekDay.fullDate === fullDate);
   };
 
   const isTodayMini = (day) => {
     if (!day) return false;
-    const dateStr = `${miniMonth.year}-${String(miniMonth.month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-    return dateStr === todayStr;
+    const fullDate = `${miniMonth.year}-${String(miniMonth.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return fullDate === todayStr;
   };
 
-  // ── Migration ───────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!studios.length) return;
-    const needsMigration = studios.some(st => st.image?.startsWith("data:"));
-    if (!needsMigration) return;
-    (async () => {
-      const migrated = await Promise.all(studios.map(async (st) => {
-        if (!st.image?.startsWith("data:")) return st;
-        try {
-          const res = await fetch("/api/upload-image", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ data: st.image }),
-          });
-          const json = await res.json();
-          if (res.ok && json.url) return { ...st, image: json.url };
-        } catch (e) { console.error("Migration failed for", st.name, e); }
-        return st;
-      }));
-      setStudios(migrated);
-      await storageSet("studios", migrated);
-      console.log("✅ Studio images migrated to Cloudinary");
-    })();
-  }, [studios.length]); // eslint-disable-line
-
-  // ── Helpers ───────────────────────────────────────────────────────────
-  const saveStudios  = useCallback(async (data) => { setStudios(data);  await storageSet("studios", data); }, []);
-  const saveBookings = useCallback(async (data) => { setBookings(data); await storageSet("studio_bookings", data); }, []);
-
-  const allStudents = [
-    ...(certifications.students || []).map(s => typeof s==="string" ? s : s.name),
-    ...(teamMembers || []).map(m => m.name || m),
-  ].filter(Boolean).filter((v,i,a) => a.indexOf(v)===i);
-
-  const studioCertTypes = (certifications?.types || []).filter(t => t.category === "studio" && t.id !== "cert_night_studio");
-  const sameStudioId = (a, b) => String(a) === String(b);
-  const getStudioCertIds = (studio) => {
-    if (Array.isArray(studio?.studioCertIds)) return studio.studioCertIds.filter(Boolean);
-    return studio?.studioCertId ? [studio.studioCertId] : [];
-  };
-  const getStudioCertNames = (studio) =>
-    getStudioCertIds(studio)
-      .map(id => studioCertTypes.find(t => t.id === id)?.name)
-      .filter(Boolean);
-
-  const bookingRequiredCert = (() => {
-    const st = studios.find(s => sameStudioId(s.id, modal?.studioId));
-    return studioCertTypes.filter(t => getStudioCertIds(st).includes(t.id));
-  })();
-
-  const studentHasStudioCert = (studentName, studioId) => {
-    const studio = studios.find(s => sameStudioId(s.id, studioId));
-    const certIds = getStudioCertIds(studio);
-    if (!certIds.length) return true; // no cert required
-    const rec = (certifications?.students || []).find(s => s.name === studentName);
-    return rec && certIds.some(id => (rec.certs || {})[id] === "עבר");
+  const StudioImg = ({ studio, size = 32 }) => {
+    if (!studio) return null;
+    if (studio.image?.startsWith("http") || studio.image?.startsWith("data:")) {
+      return <img src={studio.image} alt={studio.name} style={{ width:size, height:size, borderRadius:6, objectFit:"cover" }} />;
+    }
+    return <span style={{ fontSize:size * 0.65 }}>{studio.image || "🎙️"}</span>;
   };
 
-  const formStudentBlocked = formStudent && formStudent !== "__manual__" && modal?.studioId && !studentHasStudioCert(formStudent, modal.studioId);
-
-  // ── Bookings for a cell (night bookings show only on their original date) ──
-  const cellBookings = (studioId, fullDate) => {
-    return bookings.filter(b => sameStudioId(b.studioId, studioId) && b.date===fullDate &&
-      (statusFilter==="הכל" || b.status===statusFilter))
-      .sort((a,b) => (a.startTime||"").localeCompare(b.startTime||""));
+  const openAddBookingModal = (studioId, studioName, date, dayName) => {
+    setFormTeamMember("");
+    setModal({ type:"addBooking", studioId, studioName, date, dayName });
   };
 
-  // ── Studio Image Upload ─────────────────────────────────────────────
-  const [studioImage, setStudioImage] = useState("");
-  const [imgUploading, setImgUploading] = useState(false);
+  const openViewBookingModal = (booking, studioName) => {
+    setCancelMessage("");
+    setModal({ type:"viewBooking", booking, studioName });
+  };
+
+  const closeModal = () => {
+    setCancelMessage("");
+    setFormTeamMember("");
+    setEditImage("");
+    setModal(null);
+  };
+
+  const cellBookings = useCallback((studioId, fullDate) => (
+    activeBookings
+      .filter((booking) => sameStudioId(booking.studioId, studioId) && booking.date === fullDate)
+      .sort((left, right) => (left.startTime || "").localeCompare(right.startTime || ""))
+  ), [activeBookings]);
 
   const uploadToCloudinary = async (file) => {
     const dataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = ev => resolve(ev.target.result);
+      reader.onload = (event) => resolve(event.target.result);
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
-    const res = await fetch("/api/upload-image", {
+
+    const response = await fetch("/api/upload-image", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ data: dataUrl }),
     });
-    const json = await res.json();
-    if (!res.ok || !json.url) throw new Error(json.error || "שגיאת שרת");
+    const json = await response.json();
+    if (!response.ok || !json.url) throw new Error(json.error || "שגיאת שרת");
     return json.url;
   };
 
-  const handleImageUpload = async (e) => {
-    const file = e.target.files[0];
+  const handleImageUpload = async (event, setter) => {
+    const file = event.target.files?.[0];
     if (!file) return;
     setImgUploading(true);
     try {
-      const url = await uploadToCloudinary(file);
-      setStudioImage(url);
-      showToast("success", "✅ תמונה הועלתה");
-    } catch (err) {
-      console.error("Image upload failed:", err);
-      showToast("error", "שגיאה בהעלאת התמונה — נסה שנית");
+      const imageUrl = await uploadToCloudinary(file);
+      setter(imageUrl);
+      showToast("success", "התמונה הועלתה");
+    } catch (error) {
+      console.error("Studio image upload failed", error);
+      showToast("error", "שגיאה בהעלאת התמונה");
     } finally {
       setImgUploading(false);
     }
   };
 
-  const handleAddStudio = async (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const name = fd.get("name")?.trim();
+  const handleAddStudio = async (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const name = String(formData.get("name") || "").trim();
     if (!name) return;
-    if (studios.some(s => s.name===name)) { showToast("error","אולפן בשם זה כבר קיים"); return; }
-    const studioCertId = fd.get("studioCertId") || undefined;
-    const updated = [...studios, { id: Date.now(), name, studioCertId, studioCertIds: studioCertId ? [studioCertId] : [], image: studioImage || fd.get("emoji")||"🎙️" }];
-    await saveStudios(updated);
-    showToast("success", `אולפן "${name}" נוסף`);
+    if (studios.some((studio) => studio.name === name)) {
+      showToast("error", "אולפן בשם הזה כבר קיים");
+      return;
+    }
+    const studioCertId = formData.get("studioCertId") || undefined;
+    const nextStudios = [...studios, { id:Date.now(), name, studioCertId, studioCertIds:studioCertId ? [studioCertId] : [], image:studioImage || formData.get("emoji") || "🎙️" }];
+    await saveStudios(nextStudios);
     setStudioImage("");
-    setModal(null);
+    closeModal();
+    showToast("success", `האולפן "${name}" נוסף`);
   };
 
-  // ── Delete Studio ─────────────────────────────────────────────────────
-  const deleteStudio = async (id) => {
-    if (!confirm("למחוק אולפן זה וכל הזמנותיו?")) return;
-    await saveStudios(studios.filter(s => s.id!==id));
-    await saveBookings(bookings.filter(b => !sameStudioId(b.studioId, id)));
-    showToast("success", "אולפן נמחק");
-  };
-
-  // ── Edit Studio ─────────────────────────────────────────────────────
-  const [editImage, setEditImage] = useState("");
-  const handleEditImageUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setImgUploading(true);
-    try {
-      const url = await uploadToCloudinary(file);
-      setEditImage(url);
-      showToast("success", "✅ תמונה הועלתה");
-    } catch (err) {
-      console.error("Image upload failed:", err);
-      showToast("error", "שגיאה בהעלאת התמונה — נסה שנית");
-    } finally {
-      setImgUploading(false);
-    }
-  };
-  const handleEditStudio = async (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const name = fd.get("name")?.trim();
+  const handleEditStudio = async (event) => {
+    event.preventDefault();
+    if (!modal?.studio) return;
+    const formData = new FormData(event.target);
+    const name = String(formData.get("name") || "").trim();
     if (!name) return;
-    const studioCertId = fd.get("studioCertId") || undefined;
-    const image = editImage || fd.get("emoji")?.trim() || modal.studio.image;
-    const prevIds = getStudioCertIds(modal.studio);
-    const nextStudioCertIds = !studioCertId
-      ? []
-      : (prevIds.length > 1 && prevIds.includes(studioCertId) ? prevIds : [studioCertId]);
-    const updated = studios.map(s => s.id===modal.studio.id ? {...s, name, studioCertId, studioCertIds: nextStudioCertIds, image} : s);
-    await saveStudios(updated);
-    showToast("success", `אולפן "${name}" עודכן`);
-    setEditImage("");
-    setModal(null);
-  };
-  const openEditStudio = (studio) => {
-    setEditImage("");
-    setModal({type:"editStudio", studio});
+    const studioCertId = formData.get("studioCertId") || undefined;
+    const image = editImage || String(formData.get("emoji") || "").trim() || modal.studio.image;
+    const previousIds = getStudioCertIds(modal.studio);
+    const nextStudioCertIds = !studioCertId ? [] : (previousIds.length > 1 && previousIds.includes(studioCertId) ? previousIds : [studioCertId]);
+    const nextStudios = studios.map((studio) => studio.id === modal.studio.id ? { ...studio, name, studioCertId, studioCertIds:nextStudioCertIds, image } : studio);
+    await saveStudios(nextStudios);
+    showToast("success", `האולפן "${name}" עודכן`);
+    closeModal();
   };
 
-  // ── Night cert helper ─────────────────────────────────────────────────
-  const hasNightCert = (studentName) => {
-    if (!studentName) return false;
-    const certTypes = certifications?.types || [];
-    const certStudents = certifications?.students || [];
-    const nightType = certTypes.find(t => t.id === "cert_night_studio");
-    if (!nightType) return true; // no night cert type defined — allow all
-    const rec = certStudents.find(s => s.name === studentName);
-    return rec && (rec.certs || {})[nightType.id] === "עבר";
+  const deleteStudio = async (studioId) => {
+    if (!window.confirm("למחוק את האולפן הזה ואת כל ההזמנות שלו?")) return;
+    await saveStudios(studios.filter((studio) => studio.id !== studioId));
+    await saveBookings(bookings.filter((booking) => !sameStudioId(booking.studioId, studioId)));
+    showToast("success", "האולפן נמחק");
   };
 
-  // ── Send studio email to student ──────────────────────────────────────
-  const sendStudioEmail = async (type, booking) => {
-    const studio = studios.find(s => sameStudioId(s.id, booking.studioId));
-    const studioName = studio?.name || "האולפן";
-    const studentRecord = (certifications?.students || []).find(s => s.name === booking.studentName);
+  const sendStudioEmail = async (type, booking, customMessage = "") => {
+    if (getBookingKind(booking) !== "student") return;
+    const studio = studios.find((item) => sameStudioId(item.id, booking.studioId));
+    const studentRecord = (certifications?.students || []).find((student) => student.name === booking.studentName);
     const email = studentRecord?.email;
-    if (!email) return; // אין מייל — לא שולחים
+    if (!email) return;
     try {
       await fetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          to:           email,
+          to: email,
           type,
           student_name: booking.studentName,
-          project_name: studioName,
-          borrow_date:  booking.date,
-          borrow_time:  booking.startTime,
-          return_time:  booking.endTime,
+          project_name: studio?.name || "האולפן",
+          borrow_date: booking.date,
+          borrow_time: booking.startTime,
+          return_time: booking.endTime,
+          custom_message: customMessage,
         }),
       });
-    } catch(e) { console.error("Studio email error:", e); }
+    } catch (error) {
+      console.error("Studio email failed", error);
+    }
   };
 
-  // ── Submit Booking ────────────────────────────────────────────────────
-  const submitBooking = async (e) => {
-    e.preventDefault();
+  const submitBooking = async (event) => {
+    event.preventDefault();
+    if (!modal?.studioId || !modal?.date) return;
     setSaving(true);
-    const fd = new FormData(e.target);
-    const studioId   = modal?.studioId;
-    const date       = modal?.date;
-    const isNight    = fd.get("isNight") === "on";
-    const startTime  = fd.get("startTime");
-    const endTime    = fd.get("endTime");
-    const studentName= fd.get("studentName")?.trim();
-    const notes      = fd.get("notes")?.trim();
-    if (!studioId || !date || !startTime || !endTime || !studentName) {
-      showToast("error","נא למלא את כל השדות"); setSaving(false); return;
+
+    const selectedMember = teamMemberOptions.find((member) => String(member.id) === String(formTeamMember));
+    const memberName = selectedMember?.name || "";
+    const formData = new FormData(event.target);
+    const startTime = String(formData.get("startTime") || "");
+    const endTime = String(formData.get("endTime") || "");
+    const notes = String(formData.get("notes") || "").trim();
+    const isNight = formData.get("isNight") === "on";
+
+    if (!memberName || !startTime || !endTime) {
+      showToast("error", "נא לבחור איש צוות ושעות");
+      setSaving(false);
+      return;
     }
-    // Night certification check
-    if (isNight && !hasNightCert(studentName)) {
-      showToast("error", `⛔ ${studentName} לא עבר/ה הסמכת לילה לאולפנים — לא ניתן להשלים את הקביעה`);
-      setSaving(false); return;
+    if (!isNight && startTime >= endTime) {
+      showToast("error", "שעת סיום חייבת להיות אחרי שעת התחלה");
+      setSaving(false);
+      return;
     }
-    // Studio certification check
-    const bookingStudioObj = studios.find(s => sameStudioId(s.id, studioId));
-    const bookingStudioCertIds = getStudioCertIds(bookingStudioObj);
-    if (bookingStudioCertIds.length) {
-      const certStudentsList = certifications?.students || [];
-      const studentRec = certStudentsList.find(s => s.name === studentName);
-      const hasMatchingStudioCert = studentRec && bookingStudioCertIds.some(id => (studentRec.certs||{})[id] === "עבר");
-      if (!hasMatchingStudioCert) {
-        const certTypeNames = bookingStudioCertIds.map(id => (certifications?.types || []).find(t => t.id === id)?.name).filter(Boolean);
-        const certTypeName = certTypeNames.join(" / ") || "אולפן";
-        showToast("error", `⛔ ${studentName} לא עבר/ה הסמכת "${certTypeName}" — לא ניתן לקבוע`);
-        setSaving(false); return;
-      }
+
+    const overlap = activeBookings.some((booking) => (
+      sameStudioId(booking.studioId, modal.studioId)
+      && booking.date === modal.date
+      && !(endTime <= booking.startTime || startTime >= booking.endTime)
+    ));
+    if (!isNight && overlap) {
+      showToast("error", "קיימת כבר קביעה חופפת בשעות האלו");
+      setSaving(false);
+      return;
     }
-    // For night bookings, endTime can be less than startTime (crosses midnight)
-    if (!isNight && startTime >= endTime) { showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה"); setSaving(false); return; }
-    // Overlap check
-    const overlap = bookings.some(b =>
-      sameStudioId(b.studioId, studioId) && b.date===date && b.status!=="נדחה" &&
-      !(endTime <= b.startTime || startTime >= b.endTime)
-    );
-    if (!isNight && overlap) { showToast("error","⚠️ קיימת הזמנה חופפת בשעות אלו"); setSaving(false); return; }
-    const newBooking = {
-      id: Date.now(), studioId, date, startTime, endTime,
-      studentName, notes, isNight: isNight || false,
-      status: role==="admin" ? "מאושר" : "ממתין",
-      createdAt: new Date().toISOString()
+
+    const nextBooking = {
+      id: Date.now(),
+      bookingKind: "team",
+      ownerType: "team",
+      teamMemberId: selectedMember?.id ?? null,
+      teamMemberName: memberName,
+      studentName: memberName,
+      studioId: modal.studioId,
+      date: modal.date,
+      startTime,
+      endTime,
+      notes,
+      isNight,
+      createdAt: new Date().toISOString(),
     };
-    await saveBookings([...bookings, newBooking]);
-    showToast("success", role==="admin" ? "✅ הזמנה נוספה ואושרה" : "✅ הבקשה נשלחה לאישור");
-    setModal(null); setSaving(false);
+
+    await saveBookings([...bookings, nextBooking]);
+    setSaving(false);
+    closeModal();
+    showToast("success", "קביעת הצוות נשמרה בלוח האולפנים");
   };
 
-  // ── Change Status ─────────────────────────────────────────────────────
-  const changeStatus = async (id, newStatus) => {
-    const booking = bookings.find(b => b.id === id);
-    const updated = bookings.map(b => b.id===id ? {...b, status:newStatus} : b);
-    await saveBookings(updated);
-    showToast("success", `סטטוס שונה ל-${newStatus}`);
-    setModal(m => m?.booking ? {...m, booking:{...m.booking, status:newStatus}} : m);
-    if (newStatus === "מאושר" && booking) await sendStudioEmail("studio_approved", booking);
+  const deleteBooking = async (bookingId) => {
+    const booking = bookings.find((item) => item.id === bookingId);
+    if (!booking) return;
+    const kind = getBookingKind(booking);
+    if (kind === "lesson") {
+      showToast("info", "קביעת שיעור מנוהלת מתוך רובריקת שיעורים");
+      return;
+    }
+    const confirmText = kind === "student" ? "למחוק את הקביעה ולשלוח לסטודנט הודעת ביטול?" : "למחוק את קביעת הצוות הזאת?";
+    if (!window.confirm(confirmText)) return;
+
+    await saveBookings(bookings.filter((item) => item.id !== bookingId));
+    if (kind === "student") {
+      await sendStudioEmail("studio_deleted", booking, cancelMessage.trim());
+      showToast("success", "הקביעה נמחקה ונשלח מייל לסטודנט");
+    } else {
+      showToast("success", "קביעת הצוות נמחקה");
+    }
+    closeModal();
   };
 
-  // ── Delete Booking ────────────────────────────────────────────────────
-  const deleteBooking = async (id) => {
-    if (!confirm("למחוק הזמנה זו?")) return;
-    const booking = bookings.find(b => b.id === id);
-    await saveBookings(bookings.filter(b => b.id!==id));
-    showToast("success","הבקשה נמחקה");
-    setModal(null);
-    if (booking?.status === "ממתין") await sendStudioEmail("studio_deleted", booking);
+  const canDeleteBooking = (booking) => role === "admin" && getBookingKind(booking) !== "lesson";
+
+  const SectionHeader = ({ label, color, count, icon }) => {
+    if (count === 0) return null;
+    return (
+      <div style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 14px", background:`${color}12`, borderRadius:10, border:`1px solid ${color}33`, borderRight:`4px solid ${color}`, marginTop:12 }}>
+        <span style={{ fontSize:16 }}>{icon}</span>
+        <span style={{ fontWeight:800, fontSize:14, color }}>{label}</span>
+        <span style={{ background:color, color:"#fff", borderRadius:20, padding:"1px 9px", fontSize:12, fontWeight:800, marginRight:"auto" }}>{count}</span>
+      </div>
+    );
   };
 
-  // ── Delete booking from list row (inline button) ──────────────────────
-  const deleteBookingInList = async (e, id) => {
-    e.stopPropagation();
-    if (!confirm("למחוק בקשה זו?")) return;
-    const booking = bookings.find(b => b.id === id);
-    await saveBookings(bookings.filter(b => b.id !== id));
-    showToast("success","הבקשה נמחקה");
-    if (booking?.status === "ממתין") await sendStudioEmail("studio_deleted", booking);
-  };
-
-  // ── Filtered bookings for list view ──────────────────────────────────
-  const filteredBookings = bookings
-    .filter(b => statusFilter==="הכל" || b.status===statusFilter)
-    .filter(b => !todayOnly || b.date===todayStr)
-    .sort((a,b) => {
-      if (sortMode==="urgency") {
-        // קירבה לזמן הנוכחי — הקרוב ביותר לעכשיו עולה ראשון
-        const now = Date.now();
-        const aMs = new Date(`${a.date}T${(a.startTime||"00:00")}:00`).getTime();
-        const bMs = new Date(`${b.date}T${(b.startTime||"00:00")}:00`).getTime();
-        return Math.abs(aMs - now) - Math.abs(bMs - now);
-      } else {
-        // זמן קבלת הבקשה — הישנה ביותר עולה ראשון
-        return new Date(a.createdAt||0) - new Date(b.createdAt||0);
-      }
-    });
-
-  const pendingCount = bookings.filter(b=>b.status==="ממתין").length;
-
-  // ── Booking color helper ──────────────────────────────────────────────
-  const bookingColor = (b) => b.isNight ? NIGHT_COLOR : (STATUS_COLORS[b.status] || "var(--text3)");
-
-  // ── Studio display helper ─────────────────────────────────────────────
-  const StudioImg = ({ studio, size=32 }) => {
-    if (!studio) return null;
-    if (studio.image?.startsWith("http") || studio.image?.startsWith("data:"))
-      return <img src={studio.image} alt={studio.name} style={{width:size,height:size,borderRadius:6,objectFit:"cover"}}/>;
-    return <span style={{fontSize:size*0.65}}>{studio.image||"🎙️"}</span>;
+  const BookingRow = (booking) => {
+    const studio = studios.find((item) => sameStudioId(item.id, booking.studioId));
+    const color = getBookingColor(booking);
+    const kind = getBookingKind(booking);
+    const subtitle = getBookingSubtitle(booking);
+    return (
+      <div
+        key={booking.id}
+        style={{ background:"var(--surface2)", borderRadius:10, padding:"12px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, flexWrap:"wrap", cursor:"pointer", border:`1px solid ${color}33`, borderRight:`4px solid ${color}` }}
+        onClick={() => openViewBookingModal(booking, studio?.name || "?")}
+      >
+        <div style={{ flex:1, minWidth:220 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
+            {studio && <StudioImg studio={studio} size={24} />}
+            <span style={{ fontWeight:800, fontSize:14 }}>{studio?.name || "?"}</span>
+            <span style={{ background:`${color}22`, color, borderRadius:20, padding:"2px 10px", fontSize:11, fontWeight:800 }}>{getBookingTypeLabel(booking)}</span>
+            {booking.isNight && kind !== "lesson" && <span style={{ background:`${NIGHT_COLOR}22`, color:NIGHT_COLOR, borderRadius:20, padding:"2px 10px", fontSize:11, fontWeight:800 }}>לילה</span>}
+          </div>
+          <div style={{ fontSize:14, fontWeight:700, color:"var(--text)" }}>{getBookingTitle(booking)}</div>
+          {subtitle && <div style={{ fontSize:12, color:"var(--text2)", marginTop:2 }}>{subtitle}</div>}
+          <div style={{ fontSize:12, color:"var(--text3)", marginTop:2 }}>📅 {booking.date} · ⏰ {booking.startTime}–{booking.endTime}</div>
+          {booking.notes && <div style={{ fontSize:11, color:"var(--text3)", marginTop:2 }}>📝 {booking.notes}</div>}
+        </div>
+        {canDeleteBooking(booking) && (
+          <button
+            className="btn btn-secondary btn-sm"
+            style={{ color:"var(--red)", borderColor:"var(--red)" }}
+            onClick={(event) => {
+              event.stopPropagation();
+              openViewBookingModal(booking, studio?.name || "?");
+            }}
+          >
+            {kind === "student" ? "מחק ושלח" : "מחק"}
+          </button>
+        )}
+      </div>
+    );
   };
 
   return (
-    <div className="page" style={{direction:"rtl"}}>
-      {/* Top bar */}
-      <div className="flex-between mb-4" style={{flexWrap:"wrap",gap:8}}>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          <button className={`btn ${activeView==="calendar"?"btn-primary":"btn-secondary"}`} onClick={()=>setActiveView("calendar")}>📅 לוח שנה</button>
-          <button className={`btn ${activeView==="list"?"btn-primary":"btn-secondary"}`} onClick={()=>setActiveView("list")}>
-            📋 כל ההזמנות {pendingCount>0&&<span style={{background:"var(--accent)",color:"#000",borderRadius:"50%",padding:"1px 6px",fontSize:11,marginRight:4}}>{pendingCount}</span>}
+    <div className="page" style={{ direction:"rtl" }}>
+      <div className="flex-between mb-4" style={{ flexWrap:"wrap", gap:8 }}>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          <button className={`btn ${activeView==="calendar" ? "btn-primary" : "btn-secondary"}`} onClick={() => setActiveView("calendar")}>📅 לוח שנה</button>
+          <button className={`btn ${activeView==="list" ? "btn-primary" : "btn-secondary"}`} onClick={() => setActiveView("list")}>
+            📋 כל ההזמנות {activeBookings.length > 0 && <span style={{ background:"var(--accent)", color:"#000", borderRadius:"50%", padding:"1px 6px", fontSize:11, marginRight:4 }}>{activeBookings.length}</span>}
           </button>
-          {role==="admin" && <button className={`btn ${activeView==="manage"?"btn-primary":"btn-secondary"}`} onClick={()=>setActiveView("manage")}>🏠 ניהול אולפנים</button>}
+          {role === "admin" && <button className={`btn ${activeView==="manage" ? "btn-primary" : "btn-secondary"}`} onClick={() => setActiveView("manage")}>🏛️ ניהול אולפנים</button>}
         </div>
-        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-          <select className="form-input" style={{width:"auto",fontSize:13}} value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
-            {["הכל","ממתין","מאושר"].map(s=><option key={s}>{s}</option>)}
-          </select>
-          {role==="admin" && activeView==="manage" &&
-            <button className="btn btn-primary" onClick={()=>setModal({type:"addStudio"})}>➕ אולפן חדש</button>
-          }
-        </div>
+        {role === "admin" && activeView === "manage" && <button className="btn btn-primary" onClick={() => setModal({ type:"addStudio" })}>➕ אולפן חדש</button>}
       </div>
 
-      {/* ── CALENDAR VIEW ── */}
-      {activeView==="calendar" && (
+      {activeView === "calendar" && (
         <div>
-          {/* Month/Year header */}
-          <div style={{textAlign:"center",marginBottom:16}}>
-            <div style={{fontSize:22,fontWeight:900,color:"var(--accent)"}}>{weekMonthLabel}</div>
+          <div style={{ textAlign:"center", marginBottom:16 }}>
+            <div style={{ fontSize:22, fontWeight:900, color:"var(--accent)" }}>{weekMonthLabel}</div>
           </div>
 
-          {/* Layout: mini calendar (right) + week nav (left) */}
-          <div style={{display:"flex",gap:20,marginBottom:20,flexWrap:"wrap",alignItems:"flex-start"}}>
-            {/* Mini calendar — first in DOM = right side in RTL */}
-            <div style={{minWidth:220,maxWidth:260,background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:12}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                <button onClick={()=>setMiniMonth(m=>m.month===0?{year:m.year-1,month:11}:{year:m.year,month:m.month-1})}
-                  style={{background:"none",border:"none",color:"var(--text2)",cursor:"pointer",fontSize:16,padding:"2px 6px"}}>→</button>
-                <span style={{fontWeight:800,fontSize:14,color:"var(--text)"}}>{HE_MONTHS[miniMonth.month]} {miniMonth.year}</span>
-                <button onClick={()=>setMiniMonth(m=>m.month===11?{year:m.year+1,month:0}:{year:m.year,month:m.month+1})}
-                  style={{background:"none",border:"none",color:"var(--text2)",cursor:"pointer",fontSize:16,padding:"2px 6px"}}>←</button>
+          <div style={{ display:"flex", gap:20, marginBottom:20, flexWrap:"wrap", alignItems:"flex-start" }}>
+            <div style={{ minWidth:220, maxWidth:260, background:"var(--surface2)", borderRadius:"var(--r)", border:"1px solid var(--border)", padding:12 }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+                <button onClick={() => setMiniMonth((current) => current.month === 0 ? { year:current.year - 1, month:11 } : { year:current.year, month:current.month - 1 })} style={{ background:"none", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:16, padding:"2px 6px" }}>→</button>
+                <span style={{ fontWeight:800, fontSize:14, color:"var(--text)" }}>{HE_MONTHS[miniMonth.month]} {miniMonth.year}</span>
+                <button onClick={() => setMiniMonth((current) => current.month === 11 ? { year:current.year + 1, month:0 } : { year:current.year, month:current.month + 1 })} style={{ background:"none", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:16, padding:"2px 6px" }}>←</button>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:1,textAlign:"center"}}>
-                {HE_DAYS_SHORT.map(d=><div key={d} style={{fontSize:10,fontWeight:700,color:"var(--text3)",padding:"4px 0"}}>{d}</div>)}
-                {miniDays.map((day,i)=>(
-                  <div key={i}
-                    onClick={()=>day && jumpToDate(day)}
-                    style={{
-                      fontSize:12,fontWeight:isInCurrentWeek(day)?800:500,padding:"5px 0",cursor:day?"pointer":"default",
-                      borderRadius:"50%",
-                      background: isTodayMini(day)?"var(--accent)":isInCurrentWeek(day)?"rgba(245,166,35,0.15)":"transparent",
-                      color: isTodayMini(day)?"#000":isInCurrentWeek(day)?"var(--accent)":day?"var(--text)":"transparent",
-                      transition:"background 0.15s"
-                    }}>
-                    {day || ""}
-                  </div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:1, textAlign:"center" }}>
+                {HE_DAYS_SHORT.map((day) => <div key={day} style={{ fontSize:10, fontWeight:700, color:"var(--text3)", padding:"4px 0" }}>{day}</div>)}
+                {miniDays.map((day, index) => (
+                  <div key={index} onClick={() => day && jumpToDate(day)} style={{ fontSize:12, fontWeight:isInCurrentWeek(day) ? 800 : 500, padding:"5px 0", cursor:day ? "pointer" : "default", borderRadius:"50%", background:isTodayMini(day) ? "var(--accent)" : isInCurrentWeek(day) ? "rgba(245,166,35,0.15)" : "transparent", color:isTodayMini(day) ? "#000" : isInCurrentWeek(day) ? "var(--accent)" : day ? "var(--text)" : "transparent" }}>{day || ""}</div>
                 ))}
               </div>
-              <button onClick={()=>{ setWeekOffset(0); const d=new Date(); setMiniMonth({year:d.getFullYear(),month:d.getMonth()}); }}
-                style={{width:"100%",marginTop:8,padding:"6px 0",borderRadius:6,border:"1px solid var(--accent)",background:"transparent",color:"var(--accent)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-                📅 היום
-              </button>
+              <button onClick={() => { setWeekOffset(0); const now = new Date(); setMiniMonth({ year:now.getFullYear(), month:now.getMonth() }); }} style={{ width:"100%", marginTop:8, padding:"6px 0", borderRadius:6, border:"1px solid var(--accent)", background:"transparent", color:"var(--accent)", fontWeight:700, fontSize:12, cursor:"pointer" }}>📅 היום</button>
             </div>
 
-            {/* Week navigation */}
-            <div style={{flex:1,minWidth:280,display:"flex",flexDirection:"column",gap:10,justifyContent:"center"}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,justifyContent:"center"}}>
-                <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w-1)}>→ שבוע קודם</button>
-                <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(0)}>היום</button>
-                <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w+1)}>← שבוע הבא</button>
+            <div style={{ flex:1, minWidth:280, display:"flex", flexDirection:"column", gap:10, justifyContent:"center" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, justifyContent:"center" }}>
+                <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current - 1)}>→ שבוע קודם</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(0)}>היום</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current + 1)}>← שבוע הבא</button>
               </div>
-              <div style={{fontSize:13,color:"var(--text3)",textAlign:"center"}}>
-                {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth()+1).padStart(2,"0")} — {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth()+1).padStart(2,"0")}
+              <div style={{ fontSize:13, color:"var(--text3)", textAlign:"center" }}>
+                {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth() + 1).padStart(2, "0")} – {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth() + 1).padStart(2, "0")}
               </div>
             </div>
           </div>
 
           {studios.length === 0 ? (
-            <div style={{textAlign:"center",padding:48,color:"var(--text3)"}}>
-              <div style={{fontSize:48,marginBottom:12}}>🎙️</div>
-              <div style={{fontWeight:700,fontSize:16,marginBottom:8}}>אין אולפנים עדיין</div>
-              {role==="admin" && <button className="btn btn-primary" onClick={()=>{setActiveView("manage");setModal({type:"addStudio"})}}>➕ הוסף אולפן ראשון</button>}
+            <div style={{ textAlign:"center", padding:48, color:"var(--text3)" }}>
+              <div style={{ fontSize:48, marginBottom:12 }}>🎙️</div>
+              <div style={{ fontWeight:700, fontSize:16, marginBottom:8 }}>אין אולפנים עדיין</div>
             </div>
           ) : (
-            <div style={{overflowX:"auto"}}>
-              <table style={{width:"100%",borderCollapse:"collapse",minWidth:600}}>
+            <div style={{ overflowX:"auto" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", minWidth:760 }}>
                 <thead>
                   <tr>
-                    <th style={{...thStyle,width:100}}>אולפן</th>
-                    {weekDays.map(d=>(
-                      <th key={d.fullDate} style={{...thStyle,background:d.isToday?"rgba(245,166,35,0.15)":undefined}}>
-                        <div style={{fontWeight:700}}>{d.name}</div>
-                        <div style={{fontSize:11,color:d.isToday?"var(--accent)":"var(--text3)"}}>{d.date}/{String(new Date(d.fullDate).getMonth()+1).padStart(2,"0")}</div>
+                    <th style={{ ...thStyle, width:120 }}>אולפן</th>
+                    {weekDays.map((day) => (
+                      <th key={day.fullDate} style={{ ...thStyle, background:day.isToday ? "rgba(245,166,35,0.15)" : undefined }}>
+                        <div style={{ fontWeight:700 }}>{day.name}</div>
+                        <div style={{ fontSize:11, color:day.isToday ? "var(--accent)" : "var(--text3)" }}>{day.date}/{String(new Date(day.fullDate).getMonth() + 1).padStart(2, "0")}</div>
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {studios.map(studio=>(
+                  {studios.map((studio) => (
                     <tr key={studio.id}>
-                      <td style={{...tdStyle,fontWeight:700,fontSize:13,background:"var(--surface2)"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:6}}>
-                          <StudioImg studio={studio} size={32}/>
+                      <td style={{ ...tdStyle, fontWeight:700, fontSize:13, background:"var(--surface2)" }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                          <StudioImg studio={studio} size={32} />
                           <span>{studio.name}</span>
                         </div>
-                        <div style={{fontSize:10,color:"var(--text3)",marginTop:2}}>
-                          {(()=>{ const certNames=getStudioCertNames(studio); return certNames.length?<span style={{color:"var(--accent)"}}>🎓 {certNames.join(", ")}</span>:studio.type==="sound"?"סאונד":studio.type==="photo"?"צילום":"כללי"; })()}
+                        <div style={{ fontSize:10, color:"var(--text3)", marginTop:2 }}>
+                          {(() => {
+                            const certNames = getStudioCertNames(studio);
+                            return certNames.length ? <span style={{ color:"var(--accent)" }}>🎓 {certNames.join(", ")}</span> : "ללא הסמכת אולפן";
+                          })()}
                         </div>
                       </td>
-                      {weekDays.map(day=>{
-                        const cells = cellBookings(studio.id, day.fullDate);
+                      {weekDays.map((day) => {
+                        const dayBookings = cellBookings(studio.id, day.fullDate);
                         return (
-                          <td key={day.fullDate} style={{...tdStyle,verticalAlign:"top",cursor:"pointer",minHeight:60,background:day.isToday?"rgba(245,166,35,0.05)":undefined}}
-                            onClick={()=>setModal({type:"addBooking", studioId:studio.id, studioName:studio.name, date:day.fullDate, dayName:day.name})}>
-                            {cells.map(b=>{
-                              const color = bookingColor(b);
+                          <td key={day.fullDate} style={{ ...tdStyle, verticalAlign:"top", cursor:"pointer", minHeight:70, background:day.isToday ? "rgba(245,166,35,0.05)" : undefined }} onClick={() => openAddBookingModal(studio.id, studio.name, day.fullDate, day.name)}>
+                            {dayBookings.map((booking) => {
+                              const color = getBookingColor(booking);
+                              const subtitle = getBookingSubtitle(booking);
                               return (
-                                <div key={b.id}
-                                  style={{background:color+"22",border:`1px solid ${color}`,borderRadius:6,padding:"3px 6px",marginBottom:3,fontSize:11,cursor:"pointer"}}
-                                  onClick={e=>{e.stopPropagation();setModal({type:"viewBooking",booking:b,studioName:studio.name});}}>
-                                  <div style={{fontWeight:700,color}}>{b.isNight&&"🌙 "}{b.startTime}–{b.endTime}</div>
-                                  <div style={{color:"var(--text2)"}}>{b.studentName}</div>
+                                <div key={booking.id} style={{ background:`${color}20`, border:`1px solid ${color}`, borderRadius:6, padding:"4px 6px", marginBottom:4, fontSize:11, cursor:"pointer" }} onClick={(event) => { event.stopPropagation(); openViewBookingModal(booking, studio.name); }}>
+                                  <div style={{ fontWeight:800, color }}>{booking.startTime}–{booking.endTime}</div>
+                                  <div style={{ color:"var(--text)", fontWeight:700 }}>{getBookingTitle(booking)}</div>
+                                  {subtitle && <div style={{ color:"var(--text3)", fontSize:10 }}>{subtitle}</div>}
                                 </div>
                               );
                             })}
-                            {cells.length===0 && <div style={{color:"var(--text3)",fontSize:11,textAlign:"center",paddingTop:12}}>+ הוסף</div>}
+                            {dayBookings.length === 0 && <div style={{ color:"var(--text3)", fontSize:11, textAlign:"center", paddingTop:12 }}>+ הוסף</div>}
                           </td>
                         );
                       })}
@@ -539,262 +631,128 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
         </div>
       )}
 
-      {/* ── LIST VIEW ── */}
-      {activeView==="list" && (
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {/* ── כלי פילטור ומיון ── */}
-          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",padding:"10px 14px",background:"var(--surface2)",borderRadius:10,marginBottom:4}}>
-            <label style={{display:"flex",alignItems:"center",gap:6,fontSize:13,cursor:"pointer",fontWeight:600}}>
-              <input type="checkbox" checked={todayOnly} onChange={e=>setTodayOnly(e.target.checked)} style={{accentColor:"var(--accent)",width:15,height:15}}/>
-              📅 היום בלבד
+      {activeView === "list" && (
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap", padding:"10px 14px", background:"var(--surface2)", borderRadius:10, marginBottom:4 }}>
+            <label style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, cursor:"pointer", fontWeight:600 }}>
+              <input type="checkbox" checked={todayOnly} onChange={(event) => setTodayOnly(event.target.checked)} style={{ accentColor:"var(--accent)", width:15, height:15 }} />
+              היום בלבד
             </label>
-            <div style={{display:"flex",alignItems:"center",gap:6,marginRight:"auto"}}>
-              <span style={{fontSize:12,color:"var(--text3)"}}>מיון:</span>
-              <button onClick={()=>setSortMode("urgency")}
-                style={{padding:"3px 10px",borderRadius:6,border:`1px solid ${sortMode==="urgency"?"var(--accent)":"var(--border)"}`,background:sortMode==="urgency"?"var(--accent)22":"transparent",color:sortMode==="urgency"?"var(--accent)":"var(--text3)",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                ⚡ דחיפות
-              </button>
-              <button onClick={()=>setSortMode("request_time")}
-                style={{padding:"3px 10px",borderRadius:6,border:`1px solid ${sortMode==="request_time"?"var(--accent)":"var(--border)"}`,background:sortMode==="request_time"?"var(--accent)22":"transparent",color:sortMode==="request_time"?"var(--accent)":"var(--text3)",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                🕐 זמן קבלה
-              </button>
+            <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+              <span style={{ fontSize:12, color:"var(--text3)" }}>טווח קדימה:</span>
+              {RANGE_OPTIONS.map((days) => {
+                const active = futureRangeDays === days;
+                return <button key={days} type="button" onClick={() => setFutureRangeDays(days)} style={{ padding:"3px 10px", borderRadius:6, border:`1px solid ${active ? "var(--accent)" : "var(--border)"}`, background:active ? "var(--accent)22" : "transparent", color:active ? "var(--accent)" : "var(--text3)", fontSize:12, fontWeight:700, cursor:"pointer" }}>{days} יום</button>;
+              })}
+            </div>
+            <div style={{ display:"flex", alignItems:"center", gap:6, marginRight:"auto", flexWrap:"wrap" }}>
+              <span style={{ fontSize:12, color:"var(--text3)" }}>מיון:</span>
+              <button onClick={() => setSortMode("urgency")} style={{ padding:"3px 10px", borderRadius:6, border:`1px solid ${sortMode==="urgency" ? "var(--accent)" : "var(--border)"}`, background:sortMode==="urgency" ? "var(--accent)22" : "transparent", color:sortMode==="urgency" ? "var(--accent)" : "var(--text3)", fontSize:12, fontWeight:700, cursor:"pointer" }}>דחיפות</button>
+              <button onClick={() => setSortMode("request_time")} style={{ padding:"3px 10px", borderRadius:6, border:`1px solid ${sortMode==="request_time" ? "var(--accent)" : "var(--border)"}`, background:sortMode==="request_time" ? "var(--accent)22" : "transparent", color:sortMode==="request_time" ? "var(--accent)" : "var(--text3)", fontSize:12, fontWeight:700, cursor:"pointer" }}>זמן יצירה</button>
             </div>
           </div>
 
-          {(() => {
-            const pending      = filteredBookings.filter(b => b.status==="ממתין");
-            const approvedDay  = filteredBookings.filter(b => b.status==="מאושר" && !b.isNight);
-            const approvedNight= filteredBookings.filter(b => b.status==="מאושר" && b.isNight);
-
-            const SectionHeader = ({label, color, count, icon}) => count===0 ? null : (
-              <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:color+"12",borderRadius:10,border:`1px solid ${color}30`,borderRight:`4px solid ${color}`,marginTop:12}}>
-                <span style={{fontSize:16}}>{icon}</span>
-                <span style={{fontWeight:800,fontSize:14,color}}>{label}</span>
-                <span style={{background:color,color:"#fff",borderRadius:20,padding:"1px 9px",fontSize:12,fontWeight:800,marginRight:"auto"}}>{count}</span>
-              </div>
-            );
-
-            const BookingRow = (b) => {
-              const studio = studios.find(s=>sameStudioId(s.id, b.studioId));
-              const color  = bookingColor(b);
-              return (
-                <div key={b.id}
-                  style={{background:"var(--surface2)",borderRadius:10,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap",cursor:"pointer",border:`1px solid ${color}33`,borderRight:`4px solid ${color}`}}
-                  onClick={()=>setModal({type:"viewBooking",booking:b,studioName:studio?.name||"?"})}>
-                  <div style={{flex:1,minWidth:200}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                      {studio && <StudioImg studio={studio} size={24}/>}
-                      <span style={{fontWeight:800,fontSize:14}}>{studio?.name||"?"}</span>
-                      {b.isNight && <span style={{background:NIGHT_COLOR+"22",color:NIGHT_COLOR,borderRadius:12,padding:"1px 8px",fontSize:10,fontWeight:700}}>🌙 לילה</span>}
-                    </div>
-                    <div style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>{b.studentName}</div>
-                    <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>📅 {b.date} · ⏰ {b.startTime}–{b.endTime}</div>
-                    {b.notes && <div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>📝 {b.notes}</div>}
-                  </div>
-                  <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
-                    {b.status==="ממתין" && role==="admin" && <>
-                      <button className="btn btn-sm" style={{background:"var(--green)",color:"#fff",border:"none",padding:"4px 10px",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer"}}
-                        onClick={e=>{e.stopPropagation();changeStatus(b.id,"מאושר")}}>✅ אשר</button>
-                      <button className="btn btn-sm" style={{background:"var(--red)",color:"#fff",border:"none",padding:"4px 10px",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer"}}
-                        onClick={e=>deleteBookingInList(e,b.id)}>🗑️ מחק</button>
-                    </>}
-                    <span style={{background:color+"22",color,borderRadius:20,padding:"3px 12px",fontSize:12,fontWeight:700,border:`1px solid ${color}55`}}>{b.status}</span>
-                  </div>
-                </div>
-              );
-            };
-
-            if (filteredBookings.length===0)
-              return <div style={{textAlign:"center",padding:48,color:"var(--text3)"}}>אין הזמנות להצגה</div>;
-
-            return (
-              <>
-                <SectionHeader label="ממתין לאישור" color="var(--yellow)" count={pending.length} icon="⏳"/>
-                {pending.map(BookingRow)}
-
-                <SectionHeader label="מאושר — יום" color="var(--green)" count={approvedDay.length} icon="✅"/>
-                {approvedDay.map(BookingRow)}
-
-                <SectionHeader label="לילה מאושר" color={NIGHT_COLOR} count={approvedNight.length} icon="🌙"/>
-                {approvedNight.map(BookingRow)}
-              </>
-            );
-          })()}
-
+          {filteredBookings.length === 0 ? (
+            <div style={{ textAlign:"center", padding:48, color:"var(--text3)" }}>אין הזמנות להצגה בטווח שנבחר</div>
+          ) : (
+            <>
+              <SectionHeader label="קביעות שיעורים" color={LESSON_COLOR} count={lessonBookings.length} icon="📚" />
+              {lessonBookings.map(BookingRow)}
+              <SectionHeader label="קביעות סטודנטים" color={STUDENT_COLOR} count={studentBookings.length} icon="🎓" />
+              {studentBookings.map(BookingRow)}
+              <SectionHeader label="קביעות צוות" color={TEAM_COLOR} count={teamBookings.length} icon="🧑‍💼" />
+              {teamBookings.map(BookingRow)}
+            </>
+          )}
         </div>
       )}
 
-      {/* ── MANAGE STUDIOS VIEW ── */}
-      {activeView==="manage" && role==="admin" && (
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {studios.length===0
-            ? <div style={{textAlign:"center",padding:48,color:"var(--text3)"}}>אין אולפנים עדיין</div>
-            : studios.map(s=>{
-              const count = bookings.filter(b=>sameStudioId(b.studioId, s.id)).length;
-              return (
-                <div key={s.id} style={{background:"var(--surface2)",borderRadius:10,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
-                  <div style={{display:"flex",alignItems:"center",gap:12}}>
-                    <StudioImg studio={s} size={44}/>
-                    <div>
-                      <div style={{fontWeight:700}}>{s.name}</div>
-                      <div style={{fontSize:12,color:"var(--text3)"}}>{(()=>{ const certNames=getStudioCertNames(s); return certNames.length?<span style={{color:"var(--accent)"}}>🎓 {certNames.join(", ")}</span>:"ללא הסמכה"; })()} · {count} הזמנות</div>
-                    </div>
-                  </div>
-                  <div style={{display:"flex",gap:6}}>
-                    <button className="btn btn-secondary btn-sm" onClick={()=>openEditStudio(s)}>✏️ עריכה</button>
-                    <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>deleteStudio(s.id)}>🗑️ מחק</button>
+      {activeView === "manage" && role === "admin" && (
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {studios.length === 0 ? <div style={{ textAlign:"center", padding:48, color:"var(--text3)" }}>אין אולפנים עדיין</div> : studios.map((studio) => (
+            <div key={studio.id} style={{ background:"var(--surface2)", borderRadius:10, padding:"12px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:8 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                <StudioImg studio={studio} size={44} />
+                <div>
+                  <div style={{ fontWeight:700 }}>{studio.name}</div>
+                  <div style={{ fontSize:12, color:"var(--text3)" }}>
+                    {(() => {
+                      const certNames = getStudioCertNames(studio);
+                      return certNames.length ? <span style={{ color:"var(--accent)" }}>🎓 {certNames.join(", ")}</span> : "ללא הסמכה";
+                    })()}
+                    {" · "}
+                    {activeBookings.filter((booking) => sameStudioId(booking.studioId, studio.id)).length} קביעות
                   </div>
                 </div>
-              );
-            })
-          }
+              </div>
+              <div style={{ display:"flex", gap:6 }}>
+                <button className="btn btn-secondary btn-sm" onClick={() => { setEditImage(""); setModal({ type:"editStudio", studio }); }}>✏️ עריכה</button>
+                <button className="btn btn-secondary btn-sm" style={{ color:"var(--red)", borderColor:"var(--red)" }} onClick={() => deleteStudio(studio.id)}>🗑️ מחק</button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* ── MODAL: Add Studio ── */}
-      {modal?.type==="addStudio" && (
-        <Modal title="➕ הוסף אולפן" onClose={()=>setModal(null)}
-          footer={<><button className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button><button form="addStudioForm" type="submit" className="btn btn-primary" disabled={imgUploading}>{imgUploading?"מעלה תמונה...":"שמור"}</button></>}>
-          <form id="addStudioForm" onSubmit={handleAddStudio} style={{display:"flex",flexDirection:"column",gap:12}}>
-            <label style={labelStyle}>שם האולפן *
-              <input name="name" className="form-input" placeholder='לדוגמה: אולפן A' required/>
-            </label>
-            <label style={labelStyle}>הסמכת אולפן
-              <select name="studioCertId" className="form-input" defaultValue="">
-                <option value="">ללא הסמכה</option>
-                {studioCertTypes.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </label>
-            <div style={{fontSize:11,color:"var(--text3)",marginTop:-6}}>אפשר לשייך כמה הסמכות אולפן שונות מאזור "הסמכות". כאן בוחרים שיוך יחיד מהיר.</div>
-            <label style={labelStyle}>תמונה
-              <input type="file" accept="image/*" onChange={handleImageUpload} style={{fontSize:13}} disabled={imgUploading}/>
-              {imgUploading && <div style={{fontSize:12,color:"var(--accent)",marginTop:4}}>⏳ מעלה תמונה...</div>}
-              {studioImage && <img src={studioImage} alt="תצוגה מקדימה" style={{width:80,height:80,objectFit:"cover",borderRadius:8,marginTop:4}}/>}
-            </label>
-            <label style={labelStyle}>או אימוג'י (אם אין תמונה)
-              <input name="emoji" className="form-input" placeholder="🎙️" maxLength={4}/>
-            </label>
+      {modal?.type === "addStudio" && (
+        <Modal title="➕ הוסף אולפן" onClose={closeModal} footer={<><button className="btn btn-secondary" onClick={closeModal}>ביטול</button><button form="addStudioForm" type="submit" className="btn btn-primary" disabled={imgUploading}>{imgUploading ? "מעלה תמונה..." : "שמור"}</button></>}>
+          <form id="addStudioForm" onSubmit={handleAddStudio} style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            <label style={labelStyle}>שם האולפן *<input name="name" className="form-input" placeholder='למשל: אולפן A' required /></label>
+            <label style={labelStyle}>הסמכת אולפן<select name="studioCertId" className="form-input" defaultValue=""><option value="">ללא הסמכה</option>{studioCertTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select></label>
+            <div style={{ fontSize:11, color:"var(--text3)", marginTop:-6 }}>שיוכים מרובים ממשיכים להתנהל מתוך רובריקת ההסמכות.</div>
+            <label style={labelStyle}>תמונה<input type="file" accept="image/*" onChange={(event) => void handleImageUpload(event, setStudioImage)} style={{ fontSize:13 }} disabled={imgUploading} />{imgUploading && <div style={{ fontSize:12, color:"var(--accent)", marginTop:4 }}>מעלה תמונה...</div>}{studioImage && <img src={studioImage} alt="תצוגה מקדימה" style={{ width:80, height:80, objectFit:"cover", borderRadius:8, marginTop:4 }} />}</label>
+            <label style={labelStyle}>או אימוג'י<input name="emoji" className="form-input" placeholder="🎙️" maxLength={4} /></label>
           </form>
         </Modal>
       )}
 
-      {/* ── MODAL: Edit Studio ── */}
-      {modal?.type==="editStudio" && (
-        <Modal title="✏️ עריכת אולפן" onClose={()=>{setEditImage("");setModal(null);}}
-          footer={<><button className="btn btn-secondary" onClick={()=>{setEditImage("");setModal(null);}}>ביטול</button><button form="editStudioForm" type="submit" className="btn btn-primary" disabled={imgUploading}>{imgUploading?"מעלה תמונה...":"💾 שמור"}</button></>}>
-          <form id="editStudioForm" onSubmit={handleEditStudio} style={{display:"flex",flexDirection:"column",gap:12}}>
-            <label style={labelStyle}>שם האולפן *
-              <input name="name" className="form-input" defaultValue={modal.studio.name} required/>
-            </label>
-            <label style={labelStyle}>הסמכת אולפן
-              <select name="studioCertId" className="form-input" defaultValue={modal.studio.studioCertId || modal.studio.studioCertIds?.[0] || ""}>
-                <option value="">ללא הסמכה</option>
-                {studioCertTypes.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </label>
-            <div style={{fontSize:11,color:"var(--text3)",marginTop:-6}}>שיוכים מרובים נשמרים ומנוהלים מתוך רובריקת "הסמכות". בחירה כאן משמשת לעדכון מהיר של שיוך יחיד.</div>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--text2)"}}>תמונה נוכחית:
-              <div style={{marginTop:4}}>
-                {(editImage || modal.studio.image)?.startsWith("http")
-                  ? <img src={editImage || modal.studio.image} alt="תמונה" style={{width:80,height:80,objectFit:"cover",borderRadius:8}}/>
-                  : <span style={{fontSize:32}}>{modal.studio.image||"🎙️"}</span>
-                }
-              </div>
-            </div>
-            <label style={labelStyle}>החלף תמונה
-              <input type="file" accept="image/*" onChange={handleEditImageUpload} style={{fontSize:13}} disabled={imgUploading}/>
-              {imgUploading && <div style={{fontSize:12,color:"var(--accent)",marginTop:4}}>⏳ מעלה תמונה...</div>}
-            </label>
-            <label style={labelStyle}>או אימוג'י (מחליף תמונה)
-              <input name="emoji" className="form-input" placeholder="🎙️" maxLength={4}/>
-            </label>
+      {modal?.type === "editStudio" && (
+        <Modal title="✏️ עריכת אולפן" onClose={closeModal} footer={<><button className="btn btn-secondary" onClick={closeModal}>ביטול</button><button form="editStudioForm" type="submit" className="btn btn-primary" disabled={imgUploading}>{imgUploading ? "מעלה תמונה..." : "שמור"}</button></>}>
+          <form id="editStudioForm" onSubmit={handleEditStudio} style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            <label style={labelStyle}>שם האולפן *<input name="name" className="form-input" defaultValue={modal.studio.name} required /></label>
+            <label style={labelStyle}>הסמכת אולפן<select name="studioCertId" className="form-input" defaultValue={modal.studio.studioCertId || modal.studio.studioCertIds?.[0] || ""}><option value="">ללא הסמכה</option>{studioCertTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select></label>
+            <div style={{ fontSize:11, color:"var(--text3)", marginTop:-6 }}>שיוכים מרובים נשמרים מתוך רובריקת ההסמכות.</div>
+            <div style={{ fontSize:13, fontWeight:600, color:"var(--text2)" }}>תמונה נוכחית:<div style={{ marginTop:4 }}>{(editImage || modal.studio.image)?.startsWith("http") ? <img src={editImage || modal.studio.image} alt="תמונה" style={{ width:80, height:80, objectFit:"cover", borderRadius:8 }} /> : <span style={{ fontSize:32 }}>{modal.studio.image || "🎙️"}</span>}</div></div>
+            <label style={labelStyle}>החלף תמונה<input type="file" accept="image/*" onChange={(event) => void handleImageUpload(event, setEditImage)} style={{ fontSize:13 }} disabled={imgUploading} />{imgUploading && <div style={{ fontSize:12, color:"var(--accent)", marginTop:4 }}>מעלה תמונה...</div>}</label>
+            <label style={labelStyle}>או אימוג'י<input name="emoji" className="form-input" placeholder="🎙️" maxLength={4} /></label>
           </form>
         </Modal>
       )}
 
-      {/* ── MODAL: Add Booking ── */}
-      {modal?.type==="addBooking" && (
-        <Modal title={`📅 הזמנת ${modal.studioName} — ${modal.dayName} ${modal.date}`} onClose={()=>{ setFormStudent(""); setFormIsNight(false); setModal(null); }}
-          footer={<><button className="btn btn-secondary" onClick={()=>{ setFormStudent(""); setFormIsNight(false); setModal(null); }}>ביטול</button><button form="addBookingForm" type="submit" className="btn btn-primary" disabled={saving||formStudentBlocked}>{saving?"שומר...":"✅ שמור הזמנה"}</button></>}>
-          <form id="addBookingForm" onSubmit={submitBooking} style={{display:"flex",flexDirection:"column",gap:12}}>
-            {bookingRequiredCert.length>0 && <div style={{background:"rgba(52,152,219,0.08)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:8,padding:"8px 12px",fontSize:12,color:"var(--blue)",fontWeight:600}}>🎓 נדרשת הסמכה: {bookingRequiredCert.map(t=>t.name).join(" / ")}</div>}
-            <label style={labelStyle}>שם הסטודנט *
-              {allStudents.length > 0
-                ? <select name="studentName" className="form-input" required defaultValue=""
-                    onChange={e => setFormStudent(e.target.value)}>
-                    <option value="" disabled>בחר סטודנט...</option>
-                    {allStudents.map(s=><option key={s} value={s}>{s}</option>)}
-                    <option value="__manual__">אחר (הקלד ידנית)</option>
-                  </select>
-                : <input name="studentName" className="form-input" placeholder="שם מלא" required
-                    onChange={e => setFormStudent(e.target.value)}/>
-              }
-            </label>
-            {formStudentBlocked && (
-              <div style={{background:"rgba(231,76,60,0.12)",border:"1px solid var(--red)",borderRadius:8,padding:"12px 16px",fontSize:14,color:"var(--red)",fontWeight:800,display:"flex",alignItems:"center",gap:8}}>
-                ⛔ טרם עבר הסמכה — {formStudent} לא עבר/ה הסמכת "{bookingRequiredCert.map(t=>t.name).join(" / ")}" ולא ניתן לקבוע אולפן זה
-              </div>
-            )}
-            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,fontWeight:600,color:NIGHT_COLOR,cursor:"pointer",padding:"4px 0"}}>
-              <input type="checkbox" name="isNight" style={{width:18,height:18,accentColor:NIGHT_COLOR}}
-                onChange={e => setFormIsNight(e.target.checked)}/>
-              🌙 הזמנת לילה (21:00–08:00)
-            </label>
-            {formIsNight && formStudent && formStudent!=="__manual__" && !hasNightCert(formStudent) && (
-              <div style={{background:"rgba(231,76,60,0.12)",border:"1px solid var(--red)",borderRadius:8,padding:"10px 14px",fontSize:13,color:"var(--red)",fontWeight:700,display:"flex",alignItems:"center",gap:8}}>
-                ⛔ {formStudent} לא עבר/ה הסמכת לילה לאולפנים — לא ניתן להשלים את הקביעה
-              </div>
-            )}
-            <div style={{display:"flex",gap:8}}>
-              <label style={{...labelStyle,flex:1}}>שעת התחלה *
-                <select name="startTime" className="form-input" required defaultValue="09:00">
-                  {DAY_HOURS.map(h=><option key={h}>{h}</option>)}
-                  <optgroup label="🌙 שעות לילה">
-                    {NIGHT_HOURS.filter(h=>h!=="21:00").map(h=><option key={h}>{h}</option>)}
-                  </optgroup>
-                </select>
-              </label>
-              <label style={{...labelStyle,flex:1}}>שעת סיום *
-                <select name="endTime" className="form-input" required defaultValue="12:00">
-                  {DAY_HOURS.map(h=><option key={h}>{h}</option>)}
-                  <optgroup label="🌙 שעות לילה">
-                    {NIGHT_HOURS.filter(h=>h!=="21:00").map(h=><option key={h}>{h}</option>)}
-                  </optgroup>
-                </select>
-              </label>
+      {modal?.type === "addBooking" && (
+        <Modal title={`📅 קביעת אולפן לצוות — ${modal.studioName} · ${modal.dayName} ${modal.date}`} onClose={closeModal} footer={<><button className="btn btn-secondary" onClick={closeModal}>ביטול</button><button form="addBookingForm" type="submit" className="btn btn-primary" disabled={saving || !teamMemberOptions.length}>{saving ? "שומר..." : "שמור קביעה"}</button></>}>
+          <form id="addBookingForm" onSubmit={submitBooking} style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            {bookingRequiredCert.length > 0 && <div style={{ background:"rgba(52,152,219,0.08)", border:"1px solid rgba(52,152,219,0.2)", borderRadius:8, padding:"8px 12px", fontSize:12, color:"var(--blue)", fontWeight:600 }}>🎓 האולפן הזה דורש לסטודנטים הסמכה: {bookingRequiredCert.map((type) => type.name).join(" / ")}. קביעת צוות ממשיכה לעבוד גם בלי הסמכה.</div>}
+            <label style={labelStyle}>איש צוות *{teamMemberOptions.length > 0 ? <select className="form-input" value={formTeamMember} onChange={(event) => setFormTeamMember(event.target.value)} required><option value="" disabled>בחר איש צוות...</option>{teamMemberOptions.map((member) => <option key={String(member.id)} value={String(member.id)}>{member.name}</option>)}</select> : <div style={{ background:"rgba(231,76,60,0.08)", border:"1px solid rgba(231,76,60,0.2)", borderRadius:8, padding:"10px 12px", color:"var(--red)", fontWeight:700 }}>אין כרגע אנשי צוות ברובריקת "צוות"</div>}</label>
+            <div style={{ display:"flex", gap:8 }}>
+              <label style={{ ...labelStyle, flex:1 }}>שעת התחלה *<select name="startTime" className="form-input" required defaultValue="09:00">{DAY_HOURS.map((hour) => <option key={hour}>{hour}</option>)}<optgroup label="שעות לילה">{NIGHT_HOURS.filter((hour) => hour !== "21:00").map((hour) => <option key={hour}>{hour}</option>)}</optgroup></select></label>
+              <label style={{ ...labelStyle, flex:1 }}>שעת סיום *<select name="endTime" className="form-input" required defaultValue="12:00">{DAY_HOURS.map((hour) => <option key={hour}>{hour}</option>)}<optgroup label="שעות לילה">{NIGHT_HOURS.filter((hour) => hour !== "21:00").map((hour) => <option key={hour}>{hour}</option>)}</optgroup></select></label>
             </div>
-            <label style={labelStyle}>הערות
-              <textarea name="notes" className="form-input" rows={2} placeholder="תיאור הפרויקט, ציוד נדרש..."/>
-            </label>
-            {role!=="admin" && <div style={{fontSize:12,color:"var(--text3)"}}>⏳ הבקשה תישלח לאישור המנהל</div>}
+            <label style={labelStyle}><span style={{ color:NIGHT_COLOR }}>קביעת לילה לצוות</span><input type="checkbox" name="isNight" style={{ width:18, height:18, accentColor:NIGHT_COLOR }} /></label>
+            <label style={labelStyle}>הערות<textarea name="notes" className="form-input" rows={2} placeholder="למשל: הכנת אולפן / עבודה של איש צוות" /></label>
+            <div style={{ fontSize:12, color:"var(--text3)" }}>קביעת צוות נשמרת ישירות בלוח, בלי סטטוס ובלי בדיקות הסמכה.</div>
           </form>
         </Modal>
       )}
 
-      {/* ── MODAL: View Booking ── */}
-      {modal?.type==="viewBooking" && (
-        <Modal title={`📋 הזמנה — ${modal.studioName}`} onClose={()=>setModal(null)}
-          footer={
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"space-between",width:"100%"}}>
-              <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>deleteBooking(modal.booking.id)}>🗑️ מחק</button>
-              <div style={{display:"flex",gap:8}}>
-                {role==="admin" && modal.booking.status==="ממתין" && <>
-                  <button className="btn btn-primary btn-sm" onClick={()=>changeStatus(modal.booking.id,"מאושר")}>✅ אשר</button>
-                </>}
-                <button className="btn btn-secondary btn-sm" onClick={()=>setModal(null)}>סגור</button>
-              </div>
-            </div>
-          }>
+      {modal?.type === "viewBooking" && (
+        <Modal title={`📋 הזמנה — ${modal.studioName}`} onClose={closeModal} footer={<div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"space-between", width:"100%" }}><div>{canDeleteBooking(modal.booking) && <button className="btn btn-secondary btn-sm" style={{ color:"var(--red)", borderColor:"var(--red)" }} onClick={() => void deleteBooking(modal.booking.id)}>{getBookingKind(modal.booking) === "student" ? "מחק ושלח" : "מחק"}</button>}</div><button className="btn btn-secondary btn-sm" onClick={closeModal}>סגור</button></div>}>
           {(() => {
-            const b = modal.booking;
+            const booking = modal.booking;
+            const kind = getBookingKind(booking);
+            const color = getBookingColor(booking);
             return (
-              <div style={{display:"flex",flexDirection:"column",gap:10,direction:"rtl"}}>
-                <Row label="סטודנט" value={b.studentName}/>
-                <Row label="תאריך"  value={b.date}/>
-                <Row label="שעות"   value={`${b.startTime} – ${b.endTime}`}/>
-                <Row label="סוג"    value={b.isNight ? <span style={{color:NIGHT_COLOR,fontWeight:700}}>🌙 הזמנת לילה</span> : "יום"}/>
-                <Row label="סטטוס"  value={<span style={{color:bookingColor(b),fontWeight:700}}>{b.status}</span>}/>
-                {b.notes && <Row label="הערות" value={b.notes}/>}
+              <div style={{ display:"flex", flexDirection:"column", gap:10, direction:"rtl" }}>
+                <Row label="סוג" value={<span style={{ color, fontWeight:700 }}>{getBookingTypeLabel(booking)}</span>} />
+                <Row label="תאריך" value={booking.date} />
+                <Row label="חלון שעות" value={`${booking.startTime} – ${booking.endTime}`} />
+                {kind === "lesson" && <><Row label="קורס" value={booking.courseName || "—"} /><Row label="מרצה" value={booking.instructorName || "—"} /><Row label="מסלול" value={booking.track || "—"} /></>}
+                {kind === "student" && <Row label="סטודנט" value={booking.studentName} />}
+                {kind === "team" && <Row label="איש צוות" value={booking.teamMemberName || booking.studentName} />}
+                {booking.isNight && kind !== "lesson" && <Row label="זמן" value={<span style={{ color:NIGHT_COLOR, fontWeight:700 }}>קביעת לילה</span>} />}
+                {booking.notes && <Row label="הערות" value={booking.notes} />}
+                {kind === "lesson" && <div style={{ background:"rgba(245,166,35,0.10)", border:"1px solid rgba(245,166,35,0.25)", borderRadius:8, padding:"12px 14px", fontSize:13, color:"var(--text2)", lineHeight:1.7 }}>קביעת שיעור מנוהלת מתוך רובריקת "שיעורים". כדי לשנות או לבטל אותה צריך לערוך את הקורס עצמו.</div>}
+                {kind === "student" && role === "admin" && <div style={{ display:"flex", flexDirection:"column", gap:6 }}><label style={{ fontSize:13, fontWeight:700, color:"var(--text2)" }}>הודעה לסטודנט במקרה ביטול</label><textarea className="form-input" rows={3} value={cancelMessage} onChange={(event) => setCancelMessage(event.target.value)} placeholder="למשל: נאלצנו לבטל את הקביעה בגלל חסימת אולפן / תחזוקה / שיעור" /><div style={{ fontSize:11, color:"var(--text3)" }}>ההודעה תצורף למייל הביטול שנשלח אוטומטית לסטודנט.</div></div>}
               </div>
             );
           })()}
@@ -804,15 +762,11 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
   );
 }
 
-// ── Small helpers ─────────────────────────────────────────────────────────────
-const thStyle = { padding:"8px 10px", background:"var(--surface2)", fontSize:12, fontWeight:700, textAlign:"center", border:"1px solid var(--border)" };
-const tdStyle  = { padding:"6px 8px", border:"1px solid var(--border)", textAlign:"center" };
-const labelStyle = { display:"flex", flexDirection:"column", gap:4, fontSize:13, fontWeight:600, color:"var(--text2)" };
 function Row({ label, value }) {
   return (
-    <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
-      <span style={{color:"var(--text3)",fontSize:13,minWidth:60}}>{label}:</span>
-      <span style={{fontWeight:600,fontSize:13}}>{value}</span>
+    <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
+      <span style={{ color:"var(--text3)", fontSize:13, minWidth:72 }}>{label}:</span>
+      <span style={{ fontWeight:600, fontSize:13 }}>{value}</span>
     </div>
   );
 }

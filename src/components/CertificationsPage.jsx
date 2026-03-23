@@ -113,6 +113,23 @@ export function CertificationsPage({ certifications, setCertifications, showToas
     await save(updated);
   };
 
+  const setTrackCertStatus = async (trackName, typeId, nextValue) => {
+    const affectedStudents = students.filter((student) => (student.track || "") === trackName);
+    if (!affectedStudents.length) return;
+    const updated = {
+      types,
+      students: students.map((student) => (
+        (student.track || "") !== trackName
+          ? student
+          : { ...student, certs:{ ...student.certs, [typeId]: nextValue } }
+      )),
+    };
+    if (await save(updated)) {
+      const trackLabel = trackName || "ללא מסלול";
+      showToast("success", `עודכנה הסמכה לכל תלמידי ${trackLabel}`);
+    }
+  };
+
   const toggleNewStudioId = (id) => {
     setNewStudioIds(ids => ids.includes(id) ? ids.filter(i=>i!==id) : [...ids, id]);
   };
@@ -320,7 +337,39 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                       filteredStudents.forEach((s,i)=>{
                         const t=s.track||"";
                         if(t!==lastTrack){
-                          rows.push(<tr key={`grp_${i}`}><td colSpan={activeTypes.length+2} style={{background:"rgba(245,166,35,0.06)",padding:"5px 14px",fontWeight:800,fontSize:11,color:"var(--accent)",borderBottom:"1px solid var(--border)"}}>{t?"🎓 "+t:"📋 ללא מסלול"}</td></tr>);
+                          rows.push(
+                            <tr key={`grp_${i}`} style={{background:"rgba(245,166,35,0.06)",borderBottom:"1px solid var(--border)"}}>
+                              <td colSpan={2} style={{padding:"7px 14px",fontWeight:800,fontSize:11,color:"var(--accent)"}}>
+                                {t?"🎓 "+t:"📋 ללא מסלול"}
+                              </td>
+                              {activeTypes.map(type=>{
+                                const isNight = type.id === NIGHT_CERT_ID;
+                                const activeColor = isNight ? NIGHT_COLOR : "var(--accent)";
+                                return (
+                                  <td key={`grp_${i}_${type.id}`} style={{padding:"6px 8px",textAlign:"center",background:isNight?NIGHT_COLOR+"05":undefined}}>
+                                    <div style={{display:"flex",justifyContent:"center",gap:4,flexWrap:"wrap"}}>
+                                      <button
+                                        type="button"
+                                        onClick={()=>setTrackCertStatus(t, type.id, "עבר")}
+                                        disabled={saving}
+                                        style={{padding:"4px 10px",borderRadius:20,border:`1px solid ${activeColor}`,background:`${activeColor}18`,color:activeColor,fontWeight:700,fontSize:10,cursor:"pointer",whiteSpace:"nowrap"}}
+                                      >
+                                        עבר/ה
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={()=>setTrackCertStatus(t, type.id, "לא עבר")}
+                                        disabled={saving}
+                                        style={{padding:"4px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontWeight:700,fontSize:10,cursor:"pointer",whiteSpace:"nowrap"}}
+                                      >
+                                        לא עבר/ה
+                                      </button>
+                                    </div>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
                           lastTrack=t;
                         }
                         rows.push(<tr key={s.id} style={{borderBottom:"1px solid var(--border)",background:i%2===0?"var(--surface)":"var(--surface2)"}}>

@@ -490,6 +490,7 @@ function buildLessonStudioBookings(lessons = []) {
     schedule.forEach((session, index) => {
       const lessonName = String(lesson.name || "").trim();
       const instructorName = String(lesson.instructorName || "").trim();
+      const track = String(lesson.track || "").trim();
       bookings.push({
         id: `lesson_booking_${lesson.id}_${index}`,
         lesson_id: lesson.id,
@@ -498,6 +499,9 @@ function buildLessonStudioBookings(lessons = []) {
         date: session.date,
         startTime: session.startTime,
         endTime: session.endTime,
+        courseName: lessonName,
+        instructorName,
+        track,
         studentName: lessonName && instructorName ? `${lessonName} · ${instructorName}` : (lessonName || instructorName),
         notes: String(lesson.description || "").trim(),
         isNight: false,
@@ -6726,7 +6730,7 @@ export default function App() {
                 categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings}/>}
               {page==="team"        && <TeamPage         teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/>}
               {page==="kits"        && <KitsPage         kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons}/>}
-              {page==="lessons"     && <LessonsPage      lessons={lessons} setLessons={_setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment}/>}
+              {page==="lessons"     && <LessonsPage      lessons={lessons} setLessons={_setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} trackOptions={[...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/>}
               {page==="policies"    && <PoliciesPage     policies={policies} setPolicies={setPolicies} showToast={showToast}/>}
               {page==="certifications" && <CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={_setStudios} equipment={equipment} setEquipment={setEquipment}/>}
               {page==="students"       && <StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/>}

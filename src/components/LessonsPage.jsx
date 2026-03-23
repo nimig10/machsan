@@ -2,7 +2,15 @@
 import { useState } from "react";
 import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today } from "../utils.js";
 
-export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[] }) {
+function sortScheduleEntries(entries = []) {
+  return [...entries].sort((a, b) => {
+    const aDateTime = `${a?.date || ""} ${a?.startTime || "00:00"}`;
+    const bDateTime = `${b?.date || ""} ${b?.startTime || "00:00"}`;
+    return aDateTime.localeCompare(bDateTime, "he");
+  });
+}
+
+export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[], trackOptions=[] }) {
   const [mode, setMode] = useState(null); // null | "add" | "edit"
   const [editTarget, setEditTarget] = useState(null);
   const [search, setSearch] = useState("");
@@ -51,6 +59,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           setReservations={setReservations}
           kits={kits}
           showToast={showToast}
+          trackOptions={trackOptions}
         />
       ) : (
         <>
@@ -64,7 +73,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             ? <div className="empty-state"><div className="emoji">📽️</div><div>אין קורסים עדיין</div><div style={{fontSize:13,color:"var(--text3)"}}>לחץ "➕ קורס חדש" כדי להתחיל</div></div>
             : <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {filtered.map(l=>{
-                  const studio = studios.find(s=>s.id===l.studioId);
+                  const studio = studios.find(s=>String(s.id)===String(l.studioId));
                   const kit = getLinkedKit(l);
                   const upcoming = (l.schedule||[]).filter(s=>s.date>=today()).length;
                   return (
@@ -77,6 +86,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
                             <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>📅 {(l.schedule||[]).length} שיעורים</span>
                             {upcoming>0 && <span style={{background:"rgba(46,204,113,0.12)",color:"var(--green)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🟢 {upcoming} קרובים</span>}
+                            {l.track && <span style={{background:"rgba(245,166,35,0.12)",color:"var(--accent)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🎓 {l.track}</span>}
                             {studio && <span style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🎙️ {studio.name}</span>}
                             {kit && <span style={{background:"rgba(245,166,35,0.12)",color:"var(--accent)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🎒 {kit.name}</span>}
                           </div>
@@ -99,9 +109,10 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 }
 
 // ── Lesson/Course Form ────────────────────────────────────────────────────────
-function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment, reservations, setReservations, kits, showToast }) {
+function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment, reservations, setReservations, kits, showToast, trackOptions=[] }) {
   const initialLinkedKitId = initial?.kitId || lessonKits.find(k=>k.lessonId !== null && k.lessonId !== undefined && String(k.lessonId).trim() !== "" && String(k.lessonId)===String(initial?.id||""))?.id || "";
   const [name, setName]                       = useState(initial?.name||"");
+  const [track, setTrack]                     = useState(initial?.track||"");
   const [instructorName, setInstructorName]   = useState(initial?.instructorName||"");
   const [instructorPhone, setInstructorPhone] = useState(initial?.instructorPhone||"");
   const [instructorEmail, setInstructorEmail] = useState(initial?.instructorEmail||"");
@@ -115,6 +126,9 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
   const [localMsg, setLocalMsg]               = useState(null);
   const [teacherMessage, setTeacherMessage]   = useState("");
   const [teacherEmailSending, setTeacherEmailSending] = useState(false);
+  const [editingSessionIndex, setEditingSessionIndex] = useState(null);
+  const [editingSession, setEditingSession] = useState({ date:"", startTime:"09:00", endTime:"12:00" });
+  const normalizedTrackOptions = [...new Set((trackOptions || []).map(option => String(option || "").trim()).filter(Boolean))];
 
   // Manual schedule builder
   const [manStartDate, setManStartDate] = useState("");
@@ -135,7 +149,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
       sessions.push({ date: formatLocalDateInput(d), startTime: manStartTime, endTime: manEndTime });
       d.setDate(d.getDate()+7);
     }
-    setSchedule(prev => [...prev, ...sessions]);
+    setSchedule(prev => sortScheduleEntries([...prev, ...sessions]));
     setLocalMsg({type:"success",text:`נוספו ${sessions.length} שיעורים`});
   };
 
@@ -145,11 +159,11 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
     const lastLesson = schedule[schedule.length-1];
     const nextDateObj = parseLocalDate(lastLesson.date || today());
     nextDateObj.setDate(nextDateObj.getDate()+7);
-    setSchedule(prev=>[...prev, {
+    setSchedule(prev=>sortScheduleEntries([...prev, {
       date: formatLocalDateInput(nextDateObj),
       startTime: firstLesson.startTime||"09:00",
       endTime: firstLesson.endTime||"12:00",
-    }]);
+    }]));
   };
 
   // XL import for schedule
@@ -192,7 +206,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
             endTime: endIdx>=0?String(row[endIdx]||"12:00").trim():"12:00",
           });
         }
-        setSchedule(prev=>[...prev,...sessions]);
+        setSchedule(prev=>sortScheduleEntries([...prev,...sessions]));
         setLocalMsg({type:"success",text:`יובאו ${sessions.length} שיעורים`});
         setXlImporting(false);
       };
@@ -224,6 +238,44 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
       setLocalMsg({type:"error",text:"שגיאה בייבוא הקובץ"});
       setXlImporting(false);
     }
+  };
+
+  const beginEditSession = (session, index) => {
+    setEditingSessionIndex(index);
+    setEditingSession({
+      date: session?.date || "",
+      startTime: session?.startTime || "09:00",
+      endTime: session?.endTime || "12:00",
+    });
+  };
+
+  const cancelEditSession = () => {
+    setEditingSessionIndex(null);
+    setEditingSession({ date:"", startTime:"09:00", endTime:"12:00" });
+  };
+
+  const saveEditedSession = () => {
+    if(editingSessionIndex === null) return;
+    if(!editingSession.date) {
+      setLocalMsg({type:"error",text:"יש לבחור תאריך לשיעור"});
+      return;
+    }
+    if(editingSession.startTime >= editingSession.endTime) {
+      setLocalMsg({type:"error",text:"שעת סיום חייבת להיות אחרי שעת התחלה"});
+      return;
+    }
+    setSchedule(prev => sortScheduleEntries(prev.map((session, index) => (
+      index === editingSessionIndex
+        ? {
+            ...session,
+            date: editingSession.date,
+            startTime: editingSession.startTime,
+            endTime: editingSession.endTime,
+          }
+        : session
+    ))));
+    cancelEditSession();
+    setLocalMsg({type:"success",text:"השיעור עודכן"});
   };
 
   const sendTeacherEmail = async () => {
@@ -270,10 +322,12 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
         d.setDate(d.getDate()+7);
       }
     }
+    finalSchedule = sortScheduleEntries(finalSchedule);
     setSaving(true);
     const lesson = {
       id: initial?.id||`lesson_${Date.now()}`,
       name: name.trim(),
+      track: track.trim(),
       instructorName: instructorName.trim(),
       instructorPhone: instructorPhone.trim(),
       instructorEmail: instructorEmail.trim(),
@@ -318,9 +372,18 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
           <div className="form-group"><label className="form-label">טלפון מרצה</label>
             <input className="form-input" placeholder="05x-xxxxxxx" value={instructorPhone} onChange={e=>setInstructorPhone(e.target.value)}/></div>
         </div>
-        <div className="form-group" style={{marginBottom:10}}>
-          <label className="form-label">מייל מרצה</label>
-          <input className="form-input" type="email" placeholder="lecturer@college.ac.il" value={instructorEmail} onChange={e=>setInstructorEmail(e.target.value)}/>
+        <div className="grid-2" style={{marginBottom:10}}>
+          <div className="form-group">
+            <label className="form-label">מייל מרצה</label>
+            <input className="form-input" type="email" placeholder="lecturer@college.ac.il" value={instructorEmail} onChange={e=>setInstructorEmail(e.target.value)}/>
+          </div>
+          <div className="form-group">
+            <label className="form-label">מסלול לימודים</label>
+            <datalist id="lesson-track-options">
+              {normalizedTrackOptions.map(option => <option key={option} value={option}/>)}
+            </datalist>
+            <input className="form-input" list="lesson-track-options" placeholder='למשל: "הנדסאי קולנוע ב"' value={track} onChange={e=>setTrack(e.target.value)}/>
+          </div>
         </div>
         <div className="form-group">
           <label className="form-label">הערות</label>
@@ -398,8 +461,68 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
           </div>
         )}
 
-        {/* Current schedule */}
         {schedule.length>0 && (
+          <div style={{marginBottom:16}}>
+            <div style={{fontWeight:700,fontSize:12,color:"#9b59b6",marginBottom:6}}>📅 {schedule.length} שיעורים בלוח:</div>
+            <div style={{maxHeight:260,overflow:"auto",display:"flex",flexDirection:"column",gap:4}}>
+              {schedule.map((s,i)=>(
+                editingSessionIndex===i ? (
+                  <div key={i} style={{display:"flex",flexDirection:"column",gap:8,padding:"10px 12px",background:"rgba(155,89,182,0.08)",borderRadius:8,border:"1px solid rgba(155,89,182,0.22)"}}>
+                    <div style={{fontWeight:700,fontSize:12,color:"#9b59b6"}}>עריכת שיעור #{i+1}</div>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end"}}>
+                      <div className="form-group" style={{flex:"1 1 140px",margin:0}}>
+                        <label className="form-label">תאריך</label>
+                        <input className="form-input" type="date" value={editingSession.date} onChange={e=>setEditingSession(prev=>({...prev,date:e.target.value}))}/>
+                      </div>
+                      <div className="form-group" style={{flex:"0 0 100px",margin:0}}>
+                        <label className="form-label">התחלה</label>
+                        <select className="form-select" value={editingSession.startTime} onChange={e=>setEditingSession(prev=>({...prev,startTime:e.target.value}))}>
+                          {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                      <div className="form-group" style={{flex:"0 0 100px",margin:0}}>
+                        <label className="form-label">סיום</label>
+                        <select className="form-select" value={editingSession.endTime} onChange={e=>setEditingSession(prev=>({...prev,endTime:e.target.value}))}>
+                          {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:6}}>
+                      <button className="btn btn-primary btn-sm" style={{background:"#9b59b6",borderColor:"#9b59b6"}} onClick={saveEditedSession}>שמור שיעור</button>
+                      <button className="btn btn-secondary btn-sm" onClick={cancelEditSession}>בטל</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:8,fontSize:12,padding:"4px 8px",background:"var(--surface2)",borderRadius:6}}>
+                    <span style={{fontWeight:700,color:"#9b59b6",minWidth:24,flexShrink:0}}>#{i+1}</span>
+                    <span>{formatDate(s.date)}</span>
+                    <span style={{color:"var(--text3)"}}>{s.startTime}–{s.endTime}</span>
+                    <div style={{display:"flex",gap:4,marginRight:"auto"}}>
+                      <button className="btn btn-secondary btn-sm" onClick={()=>beginEditSession(s, i)}>ערוך</button>
+                      <button onClick={()=>{
+                        setSchedule(prev=>prev.filter((_,j)=>j!==i));
+                        if(editingSessionIndex===i) cancelEditSession();
+                      }}
+                        style={{background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:13,padding:"0 4px"}}>×</button>
+                    </div>
+                  </div>
+                )
+              ))}
+            </div>
+            <div style={{display:"flex",gap:6,marginTop:8}}>
+              <button className="btn btn-secondary btn-sm" onClick={appendLessonFromExisting}>➕ שיעור נוסף</button>
+              <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>{
+                if(window.confirm("לנקות את כל לוח השיעורים?")) {
+                  setSchedule([]);
+                  cancelEditSession();
+                }
+              }}>🗑️ נקה הכל</button>
+            </div>
+          </div>
+        )}
+
+        {/* Current schedule */}
+        {false && schedule.length>0 && (
           <div>
             <div style={{fontWeight:700,fontSize:12,color:"#9b59b6",marginBottom:6}}>📅 {schedule.length} שיעורים בלוח:</div>
             <div style={{maxHeight:200,overflow:"auto",display:"flex",flexDirection:"column",gap:4}}>
