@@ -168,12 +168,10 @@ export function CertificationsPage({ certifications, setCertifications, showToas
         <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
           {activeTypes.map(t=>{
             const isNight = t.id === NIGHT_CERT_ID;
-            const linked = certMode==="studio" && !isNight ? studios.filter(s=>getStudioCertIds(s).includes(t.id)) : [];
             return (
               <span key={t.id} style={{display:"flex",alignItems:"center",gap:6,background:isNight?NIGHT_COLOR+"15":"var(--surface2)",border:`1px solid ${isNight?NIGHT_COLOR:"var(--border)"}`,borderRadius:20,padding:"4px 14px",fontSize:13,fontWeight:700,color:isNight?NIGHT_COLOR:undefined,cursor:"pointer"}}
                 onClick={()=>certMode==="studio"&&!isNight&&openEditCert(t)}>
                 {isNight?"🌙":certMode==="studio"?"🎙️":"🎓"} {t.name}
-                {linked.length>0 && <span style={{fontSize:10,color:"var(--text3)",marginRight:4}}>({linked.map(s=>s.name).join(", ")})</span>}
                 <button onClick={e=>{e.stopPropagation();deleteType(t.id);}} style={{background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
               </span>
             );
