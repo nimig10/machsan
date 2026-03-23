@@ -3481,7 +3481,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, cal
 
 // ─── KITS PAGE ────────────────────────────────────────────────────────────────
 function KitsPage({ kits, setKits, equipment, categories, showToast, reservations=[], setReservations, lessons=[] }) {
-  const [mode, setMode] = useState(null); // null | "student" | "lesson" | "editStudent" | "editLesson"
+  const [mode, setMode] = useState(null); // null | "create" | "editStudent" | "editLesson"
   const [editTarget, setEditTarget] = useState(null);
   const LOAN_TYPES = ["פרטית","הפקה","סאונד","קולנוע יומית","הכל"];
   const LOAN_ICONS = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️", "קולנוע יומית":"🎥", "הכל":"📦" };
@@ -3511,6 +3511,8 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
 
   // ── Student Kit Form ──────────────────────────────────────────────────────
   const StudentKitForm = ({ initial, onDone }) => {
+    const [kitTypeLocal, setKitTypeLocal] = useState(initial?.kitType||"student"); // "student"|"lesson"
+    const [linkedLessonId, setLinkedLessonId] = useState(initial?.lessonId||"");
     const [name, setName] = useState(initial?.name||"");
     const [description, setDescription] = useState(initial?.description||"");
     const [loanType, setLoanType] = useState(initial?.loanType||"הכל");
@@ -3537,11 +3539,19 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     const save = async () => {
       if(!trimmedName||duplicateName) return;
       setSaving(true);
-      const kit = { id:initial?.id||Date.now(), kitType:"student", name:trimmedName, description:description.trim(), loanType:loanType==="הכל"?"":loanType, items:kitItems };
+      const kit = {
+        id: initial?.id||Date.now(),
+        kitType: kitTypeLocal,
+        name: trimmedName,
+        description: description.trim(),
+        loanType: kitTypeLocal==="student" ? (loanType==="הכל"?"":loanType) : "",
+        lessonId: kitTypeLocal==="lesson" ? (linkedLessonId||null) : null,
+        items: kitItems
+      };
       const updated = initial ? kits.map(k=>k.id===initial.id?kit:k) : [...kits, kit];
       setKits(updated);
       const r = await storageSet("kits", updated);
-      showToast(r.ok?"success":"error", r.ok ? (initial?"הערכה עודכנה":`ערכה לסטודנט "${trimmedName}" נוצרה`) : "❌ שגיאה בשמירה");
+      showToast(r.ok?"success":"error", r.ok ? (initial?"הערכה עודכנה":`ערכה "${trimmedName}" נוצרה`) : "❌ שגיאה בשמירה");
       if(r.ok) onDone();
       setSaving(false);
     };
@@ -3549,14 +3559,50 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     return (
       <div className="card" style={{marginBottom:20}}>
         <div className="card-header">
-          <div className="card-title">🎒 {initial?"עריכת ערכה לסטודנט":"ערכה חדשה לסטודנט"}</div>
+          <div className="card-title">{kitTypeLocal==="lesson"?"🎬":"🎒"} {initial?"עריכת ערכה":"ערכה חדשה"}</div>
           <button className="btn btn-secondary btn-sm" onClick={onDone}>✕ ביטול</button>
         </div>
+
+        {/* Kit type selector */}
+        {!initial && (
+          <div className="form-group" style={{marginBottom:14}}>
+            <label className="form-label">סוג ערכה</label>
+            <div style={{display:"flex",gap:8,marginTop:6}}>
+              {[{k:"student",l:"🎒 ערכה לסטודנט"},{k:"lesson",l:"🎬 ערכת שיעור"}].map(({k,l})=>(
+                <button key={k} type="button" onClick={()=>setKitTypeLocal(k)}
+                  style={{padding:"7px 16px",borderRadius:20,border:`2px solid ${kitTypeLocal===k?"var(--accent)":"var(--border)"}`,background:kitTypeLocal===k?"var(--accent-glow)":"var(--surface2)",color:kitTypeLocal===k?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Lesson link panel */}
+        {kitTypeLocal==="lesson" && (
+          <div style={{background:"rgba(155,89,182,0.07)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:"var(--r)",padding:14,marginBottom:14}}>
+            <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:8}}>📽️ שיוך לשיעור</div>
+            {lessons.length===0
+              ? <div style={{fontSize:12,color:"var(--text3)"}}>אין שיעורים ברובריקת "שיעורים" — ניתן לשייך לאחר מכן.</div>
+              : <div className="form-group" style={{marginBottom:0}}>
+                  <label className="form-label">שיעור משויך (אופציונלי)</label>
+                  <select className="form-select" value={linkedLessonId} onChange={e=>setLinkedLessonId(e.target.value)}>
+                    <option value="">— ללא שיוך —</option>
+                    {lessons.map(ls=>(
+                      <option key={ls.id} value={ls.id}>{ls.name}{ls.instructorName?` · ${ls.instructorName}`:""}</option>
+                    ))}
+                  </select>
+                </div>
+            }
+          </div>
+        )}
+
         <div className="responsive-split" style={{marginBottom:12}}>
           <div className="form-group"><label className="form-label">שם הערכה *</label>
             <input className="form-input" placeholder='לדוגמה: "ערכת דוקומנטרי"' value={name} onChange={e=>setName(e.target.value)}/>
             {duplicateName&&<div style={{fontSize:12,color:"var(--red)",marginTop:4}}>כבר קיימת ערכה עם השם הזה.</div>}
           </div>
+          {kitTypeLocal==="student" && (
           <div className="form-group">
             <label className="form-label">שיוך לסוג השאלה</label>
             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>
@@ -3568,6 +3614,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
               ))}
             </div>
           </div>
+          )}
         </div>
         <div className="form-group" style={{marginBottom:16}}>
           <label className="form-label">תיאור הערכה</label>
@@ -4273,17 +4320,16 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       {/* Header */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:20,flexWrap:"wrap"}}>
         <div style={{display:"flex",gap:8}}>
-          {mode===null&&<button className="btn btn-primary" onClick={()=>{setMode("student");setEditTarget(null);}}>➕ ערכה לסטודנט</button>}
-          {mode===null&&<button className="btn btn-primary" style={{background:"#9b59b6",borderColor:"#9b59b6"}} onClick={()=>{setMode("lesson");setEditTarget(null);}}>🎬 ערכת שיעור חדשה</button>}
+          {mode===null&&<button className="btn btn-primary" onClick={()=>{setMode("create");setEditTarget(null);}}>➕ ערכה חדשה</button>}
         </div>
       </div>
 
       {/* Forms */}
-      {(mode==="student"||mode==="editStudent")&&(
+      {(mode==="create"||mode==="editStudent")&&(
         <StudentKitForm initial={mode==="editStudent"?editTarget:null} onDone={()=>{setMode(null);setEditTarget(null);}}/>
       )}
-      {(mode==="lesson"||mode==="editLesson")&&(
-        <LessonKitForm initial={mode==="editLesson"?editTarget:null} onDone={()=>{setMode(null);setEditTarget(null);}}/>
+      {mode==="editLesson"&&(
+        <LessonKitForm initial={editTarget} onDone={()=>{setMode(null);setEditTarget(null);}}/>
       )}
 
       {/* Student kits list */}
