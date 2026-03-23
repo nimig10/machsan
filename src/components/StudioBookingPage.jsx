@@ -126,21 +126,19 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
 
   const studioCertTypes = (certifications?.types || []).filter(t => t.category === "studio" && t.id !== "cert_night_studio");
 
-  const getBookingStudents = (studioId) => {
-    const studio = studios.find(s => s.id === studioId);
-    if (!studio?.studioCertId) return allStudents;
-    const cStudents = certifications?.students || [];
-    return allStudents.filter(name => {
-      const rec = cStudents.find(s => s.name === name);
-      return rec && (rec.certs || {})[studio.studioCertId] === "עבר";
-    });
-  };
-
-  const bookingStudents = getBookingStudents(modal?.studioId);
   const bookingRequiredCert = (() => {
     const st = studios.find(s => s.id === modal?.studioId);
     return st?.studioCertId ? studioCertTypes.find(t => t.id === st.studioCertId) : null;
   })();
+
+  const studentHasStudioCert = (studentName, studioId) => {
+    const studio = studios.find(s => s.id === studioId);
+    if (!studio?.studioCertId) return true; // no cert required
+    const rec = (certifications?.students || []).find(s => s.name === studentName);
+    return rec && (rec.certs || {})[studio.studioCertId] === "עבר";
+  };
+
+  const formStudentBlocked = formStudent && formStudent !== "__manual__" && modal?.studioId && !studentHasStudioCert(formStudent, modal.studioId);
 
   // ── Bookings for a cell (night bookings show only on their original date) ──
   const cellBookings = (studioId, fullDate) => {
@@ -492,7 +490,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                           <span>{studio.name}</span>
                         </div>
                         <div style={{fontSize:10,color:"var(--text3)",marginTop:2}}>
-                          {(()=>{ const ct=studioCertTypes.find(t=>t.id===studio.studioCertId); return ct?ct.name:studio.type==="sound"?"סאונד":studio.type==="photo"?"צילום":"כללי"; })()}
+                          {(()=>{ const ct=studioCertTypes.find(t=>t.id===studio.studioCertId); return ct?<span style={{color:"var(--accent)"}}>🎓 {ct.name}</span>:studio.type==="sound"?"סאונד":studio.type==="photo"?"צילום":"כללי"; })()}
                         </div>
                       </td>
                       {weekDays.map(day=>{
@@ -622,7 +620,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
                     <StudioImg studio={s} size={44}/>
                     <div>
                       <div style={{fontWeight:700}}>{s.name}</div>
-                      <div style={{fontSize:12,color:"var(--text3)"}}>{(()=>{ const ct=studioCertTypes.find(t=>t.id===s.studioCertId); return ct?`🎓 ${ct.name}`:s.type==="sound"?"🎙️ סאונד":s.type==="photo"?"📷 צילום":"🌐 כללי"; })()} · {count} הזמנות</div>
+                      <div style={{fontSize:12,color:"var(--text3)"}}>{(()=>{ const ct=studioCertTypes.find(t=>t.id===s.studioCertId); return ct?<span style={{color:"var(--accent)"}}>🎓 {ct.name}</span>:"ללא הסמכה"; })()} · {count} הזמנות</div>
                     </div>
                   </div>
                   <div style={{display:"flex",gap:6}}>
@@ -698,23 +696,26 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
       {/* ── MODAL: Add Booking ── */}
       {modal?.type==="addBooking" && (
         <Modal title={`📅 הזמנת ${modal.studioName} — ${modal.dayName} ${modal.date}`} onClose={()=>{ setFormStudent(""); setFormIsNight(false); setModal(null); }}
-          footer={<><button className="btn btn-secondary" onClick={()=>{ setFormStudent(""); setFormIsNight(false); setModal(null); }}>ביטול</button><button form="addBookingForm" type="submit" className="btn btn-primary" disabled={saving}>{saving?"שומר...":"✅ שמור הזמנה"}</button></>}>
+          footer={<><button className="btn btn-secondary" onClick={()=>{ setFormStudent(""); setFormIsNight(false); setModal(null); }}>ביטול</button><button form="addBookingForm" type="submit" className="btn btn-primary" disabled={saving||formStudentBlocked}>{saving?"שומר...":"✅ שמור הזמנה"}</button></>}>
           <form id="addBookingForm" onSubmit={submitBooking} style={{display:"flex",flexDirection:"column",gap:12}}>
             {bookingRequiredCert && <div style={{background:"rgba(52,152,219,0.08)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:8,padding:"8px 12px",fontSize:12,color:"var(--blue)",fontWeight:600}}>🎓 נדרשת הסמכה: {bookingRequiredCert.name}</div>}
             <label style={labelStyle}>שם הסטודנט *
-              {bookingStudents.length > 0
+              {allStudents.length > 0
                 ? <select name="studentName" className="form-input" required defaultValue=""
                     onChange={e => setFormStudent(e.target.value)}>
                     <option value="" disabled>בחר סטודנט...</option>
-                    {bookingStudents.map(s=><option key={s} value={s}>{s}</option>)}
+                    {allStudents.map(s=><option key={s} value={s}>{s}</option>)}
                     <option value="__manual__">אחר (הקלד ידנית)</option>
                   </select>
-                : allStudents.length > 0
-                  ? <div style={{fontSize:13,color:"var(--red)",padding:8,background:"rgba(231,76,60,0.06)",borderRadius:8,border:"1px solid rgba(231,76,60,0.2)"}}>⚠️ אין סטודנטים מוסמכים לאולפן זה. הגדר הסמכות ברובריקת "הסמכות".</div>
-                  : <input name="studentName" className="form-input" placeholder="שם מלא" required
-                      onChange={e => setFormStudent(e.target.value)}/>
+                : <input name="studentName" className="form-input" placeholder="שם מלא" required
+                    onChange={e => setFormStudent(e.target.value)}/>
               }
             </label>
+            {formStudentBlocked && (
+              <div style={{background:"rgba(231,76,60,0.12)",border:"1px solid var(--red)",borderRadius:8,padding:"12px 16px",fontSize:14,color:"var(--red)",fontWeight:800,display:"flex",alignItems:"center",gap:8}}>
+                ⛔ טרם עבר הסמכה — {formStudent} לא עבר/ה הסמכת "{bookingRequiredCert?.name}" ולא ניתן לקבוע אולפן זה
+              </div>
+            )}
             <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,fontWeight:600,color:NIGHT_COLOR,cursor:"pointer",padding:"4px 0"}}>
               <input type="checkbox" name="isNight" style={{width:18,height:18,accentColor:NIGHT_COLOR}}
                 onChange={e => setFormIsNight(e.target.checked)}/>
