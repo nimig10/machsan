@@ -125,6 +125,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
   ].filter(Boolean).filter((v,i,a) => a.indexOf(v)===i);
 
   const studioCertTypes = (certifications?.types || []).filter(t => t.category === "studio" && t.id !== "cert_night_studio");
+  const sameStudioId = (a, b) => String(a) === String(b);
   const getStudioCertIds = (studio) => {
     if (Array.isArray(studio?.studioCertIds)) return studio.studioCertIds.filter(Boolean);
     return studio?.studioCertId ? [studio.studioCertId] : [];
@@ -135,12 +136,12 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
       .filter(Boolean);
 
   const bookingRequiredCert = (() => {
-    const st = studios.find(s => s.id === modal?.studioId);
+    const st = studios.find(s => sameStudioId(s.id, modal?.studioId));
     return studioCertTypes.filter(t => getStudioCertIds(st).includes(t.id));
   })();
 
   const studentHasStudioCert = (studentName, studioId) => {
-    const studio = studios.find(s => s.id === studioId);
+    const studio = studios.find(s => sameStudioId(s.id, studioId));
     const certIds = getStudioCertIds(studio);
     if (!certIds.length) return true; // no cert required
     const rec = (certifications?.students || []).find(s => s.name === studentName);
@@ -151,7 +152,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
 
   // ── Bookings for a cell (night bookings show only on their original date) ──
   const cellBookings = (studioId, fullDate) => {
-    return bookings.filter(b => b.studioId===studioId && b.date===fullDate &&
+    return bookings.filter(b => sameStudioId(b.studioId, studioId) && b.date===fullDate &&
       (statusFilter==="הכל" || b.status===statusFilter))
       .sort((a,b) => (a.startTime||"").localeCompare(b.startTime||""));
   };
@@ -211,7 +212,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
   const deleteStudio = async (id) => {
     if (!confirm("למחוק אולפן זה וכל הזמנותיו?")) return;
     await saveStudios(studios.filter(s => s.id!==id));
-    await saveBookings(bookings.filter(b => b.studioId!==id));
+    await saveBookings(bookings.filter(b => !sameStudioId(b.studioId, id)));
     showToast("success", "אולפן נמחק");
   };
 
@@ -267,7 +268,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
 
   // ── Send studio email to student ──────────────────────────────────────
   const sendStudioEmail = async (type, booking) => {
-    const studio = studios.find(s => s.id === booking.studioId);
+    const studio = studios.find(s => sameStudioId(s.id, booking.studioId));
     const studioName = studio?.name || "האולפן";
     const studentRecord = (certifications?.students || []).find(s => s.name === booking.studentName);
     const email = studentRecord?.email;
@@ -310,7 +311,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
       setSaving(false); return;
     }
     // Studio certification check
-    const bookingStudioObj = studios.find(s => s.id === studioId);
+    const bookingStudioObj = studios.find(s => sameStudioId(s.id, studioId));
     const bookingStudioCertIds = getStudioCertIds(bookingStudioObj);
     if (bookingStudioCertIds.length) {
       const certStudentsList = certifications?.students || [];
@@ -327,7 +328,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
     if (!isNight && startTime >= endTime) { showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה"); setSaving(false); return; }
     // Overlap check
     const overlap = bookings.some(b =>
-      b.studioId===studioId && b.date===date && b.status!=="נדחה" &&
+      sameStudioId(b.studioId, studioId) && b.date===date && b.status!=="נדחה" &&
       !(endTime <= b.startTime || startTime >= b.endTime)
     );
     if (!isNight && overlap) { showToast("error","⚠️ קיימת הזמנה חופפת בשעות אלו"); setSaving(false); return; }
@@ -574,7 +575,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
             );
 
             const BookingRow = (b) => {
-              const studio = studios.find(s=>s.id===b.studioId);
+              const studio = studios.find(s=>sameStudioId(s.id, b.studioId));
               const color  = bookingColor(b);
               return (
                 <div key={b.id}
@@ -629,7 +630,7 @@ export default function StudioBookingPage({ showToast, teamMembers=[], certifica
           {studios.length===0
             ? <div style={{textAlign:"center",padding:48,color:"var(--text3)"}}>אין אולפנים עדיין</div>
             : studios.map(s=>{
-              const count = bookings.filter(b=>b.studioId===s.id).length;
+              const count = bookings.filter(b=>sameStudioId(b.studioId, s.id)).length;
               return (
                 <div key={s.id} style={{background:"var(--surface2)",borderRadius:10,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
                   <div style={{display:"flex",alignItems:"center",gap:12}}>
