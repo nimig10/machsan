@@ -1119,33 +1119,13 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       <div className="flex gap-2 mb-6" style={{flexWrap:"wrap",alignItems:"center"}}>
         {(typeFilter === "הכל" ? categories : categories.filter(c => getCatType(c) === typeFilter)).map(c=>{
           const active = selectedCats.includes(c);
-          const hasItems = equipment.some(e=>e.category===c);
           return (
-            <div key={c} style={{display:"flex",alignItems:"center",gap:0,borderRadius:8,overflow:"hidden",border:`1px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"var(--surface2)"}}>
+            <div key={c} style={{display:"flex",alignItems:"center",borderRadius:8,overflow:"hidden",border:`1px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"var(--surface2)"}}>
               <button
                 className="btn btn-sm"
                 style={{borderRadius:0,border:"none",background:"transparent",color:active?"var(--accent)":"var(--text2)",fontWeight:700,padding:"5px 10px"}}
                 onClick={()=>setSelectedCats(prev=>active?prev.filter(x=>x!==c):[...prev,c])}>
                 {c}
-              </button>
-              {/* delete button ✕ */}
-              <button
-                title={hasItems?"לא ניתן למחוק — יש ציוד":"מחק קטגוריה"}
-                disabled={hasItems}
-                onClick={async()=>{
-                  if(window.confirm(`למחוק את הקטגוריה "${c}"?`)){
-                    const updated=categories.filter(x=>x!==c);
-                    const updatedTypes={...categoryTypes};
-                    delete updatedTypes[c];
-                    setCategories(updated);
-                    setCategoryTypes(updatedTypes);
-                    setSelectedCats(prev=>prev.filter(x=>x!==c));
-                    await Promise.all([storageSet("categories",updated), storageSet("categoryTypes",updatedTypes)]);
-                    showToast("success",`קטגוריה "${c}" נמחקה`);
-                  }
-                }}
-                style={{padding:"5px 8px",border:"none",background:"transparent",color:hasItems?"var(--border)":"var(--red)",cursor:hasItems?"not-allowed":"pointer",fontSize:12,fontWeight:900}}>
-                ✕
               </button>
             </div>
           );
