@@ -960,6 +960,12 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   };
 
   const todayStr2 = today();
+  const studioCertIdsForEquipment = new Set([
+    "cert_night_studio",
+    ...(certifications?.types || []).filter(t => t.category === "studio").map(t => t.id),
+    ...(studios || []).flatMap(s => Array.isArray(s?.studioCertIds) ? s.studioCertIds.filter(Boolean) : (s?.studioCertId ? [s.studioCertId] : [])),
+  ]);
+  const equipmentCertTypes = (certifications?.types || []).filter(t => !studioCertIdsForEquipment.has(t.id));
   const used = (id) => reservations
     .filter(r=>{
       if(r.status==="באיחור") return true; // overdue = item still out, regardless of dates
@@ -1047,7 +1053,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
           <label className="form-label">🎓 הסמכה נדרשת</label>
           <select className="form-select" value={f.certification_id||""} onChange={e=>s("certification_id",e.target.value)}>
             <option value="">ללא הסמכה (כולם רשאים)</option>
-            {(certifications?.types||[]).map(ct=>(
+            {equipmentCertTypes.map(ct=>(
               <option key={ct.id} value={ct.id}>{ct.name}</option>
             ))}
           </select>
