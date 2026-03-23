@@ -372,7 +372,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
 
         <div className="card calendar-card">
           <div className="card-header">
-            <span className="card-title">📅 יומן</span>
+            <span className="card-title">📅 השאלות ציוד פעילות</span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <button className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo-1,1))}>‹</button>
               <span style={{fontWeight:800,minWidth:110,textAlign:"center"}}>{HE_M[mo]} {yr}</span>
