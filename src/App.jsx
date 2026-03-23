@@ -9,6 +9,7 @@ import StudioBookingPage from "./components/StudioBookingPage.jsx";
 import { StudentsPage } from "./components/StudentsPage.jsx";
 import { CertificationsPage } from "./components/CertificationsPage.jsx";
 import { PublicForm } from "./components/PublicForm.jsx";
+import { LessonsPage } from "./components/LessonsPage.jsx";
 
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
 // v3.1
@@ -203,7 +204,7 @@ const SOUND_CATEGORIES = ["מיקרופונים","מקליטי אודיו","כב
 const STATUSES    = ["תקין","פגום","בתיקון","נעלם"];
 const PHOTO_CATEGORIES = ["מצלמות","עדשות","תאורה","חצובות","אביזרים","אביזרי צילום","מייצבי מצלמה","גימבלים","רחפנים","מוניטורים"];
 const RESEND_API_KEY = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_RESEND_KEY : "";
-const ADMIN_NAV_PAGES = ["dashboard","reservations","equipment","certifications","studios","kits","team","students","policies","settings"];
+const ADMIN_NAV_PAGES = ["dashboard","reservations","equipment","certifications","studios","lessons","kits","team","students","policies","settings"];
 const NIMROD_PHONE     = "972521234567"; // ← החלף במספר של נמרוד
 const EMAIL_TYPO_DOMAINS = ["gmai.com","gmial.com","gmail.co","gamil.com","gmaill.com","yahooo.com","yahho.com","outlok.com","hotmai.com","outllook.com"];
 const TERMS = `הסטודנט מתחייב להחזיר את הציוד במועד שנקבע ובמצב תקין.
@@ -3479,10 +3480,9 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, cal
 }
 
 // ─── KITS PAGE ────────────────────────────────────────────────────────────────
-function KitsPage({ kits, setKits, equipment, categories, showToast, reservations=[], setReservations }) {
+function KitsPage({ kits, setKits, equipment, categories, showToast, reservations=[], setReservations, lessons=[] }) {
   const [mode, setMode] = useState(null); // null | "student" | "lesson" | "editStudent" | "editLesson"
   const [editTarget, setEditTarget] = useState(null);
-  const [tabView, setTabView] = useState("student"); // "student" | "lesson"
   const LOAN_TYPES = ["פרטית","הפקה","סאונד","קולנוע יומית","הכל"];
   const LOAN_ICONS = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️", "קולנוע יומית":"🎥", "הכל":"📦" };
 
@@ -4270,20 +4270,11 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="page">
-      {/* Tab header */}
-      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
-        {[{k:"student",l:"🎒 ערכות לסטודנטים"},{k:"lesson",l:"🎬 ערכות שיעור"}].map(({k,l})=>(
-          <button key={k} type="button" onClick={()=>setTabView(k)}
-            style={{padding:"8px 20px",borderRadius:"var(--r-sm)",border:`2px solid ${tabView===k?"var(--accent)":"var(--border)"}`,background:tabView===k?"var(--accent-glow)":"transparent",color:tabView===k?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:14,cursor:"pointer"}}>
-            {l}
-            <span style={{marginRight:6,background:tabView===k?"var(--accent)":"var(--surface3)",color:tabView===k?"#000":"var(--text3)",borderRadius:20,padding:"1px 7px",fontSize:11,fontWeight:900}}>
-              {k==="student"?studentKits.length:lessonKits.length}
-            </span>
-          </button>
-        ))}
-        <div style={{marginRight:"auto",display:"flex",gap:8}}>
-          {mode===null&&tabView==="student"&&<button className="btn btn-primary" onClick={()=>{setMode("student");setEditTarget(null);}}>➕ ערכה לסטודנט</button>}
-          {mode===null&&tabView==="lesson"&&<button className="btn btn-primary" style={{background:"#9b59b6",borderColor:"#9b59b6"}} onClick={()=>{setMode("lesson");setEditTarget(null);}}>🎬 ערכת שיעור חדשה</button>}
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:8}}>
+          {mode===null&&<button className="btn btn-primary" onClick={()=>{setMode("student");setEditTarget(null);}}>➕ ערכה לסטודנט</button>}
+          {mode===null&&<button className="btn btn-primary" style={{background:"#9b59b6",borderColor:"#9b59b6"}} onClick={()=>{setMode("lesson");setEditTarget(null);}}>🎬 ערכת שיעור חדשה</button>}
         </div>
       </div>
 
@@ -4296,7 +4287,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       )}
 
       {/* Student kits list */}
-      {tabView==="student"&&mode===null&&(
+      {mode===null&&(
         studentKits.length===0
           ? <div className="empty-state"><div className="emoji">🎒</div><p>אין ערכות לסטודנטים</p><p style={{fontSize:13,color:"var(--text3)"}}>ערכות מוצגות בטופס ההשאלה</p></div>
           : <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -4334,10 +4325,12 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       )}
 
       {/* Lesson kits list */}
-      {tabView==="lesson"&&mode===null&&(
-        lessonKits.length===0
-          ? <div className="empty-state"><div className="emoji">🎬</div><p>אין ערכות שיעור</p><p style={{fontSize:13,color:"var(--text3)"}}>ערכות שיעור משריינות ציוד לפי לוח שיעורים קבוע</p></div>
-          : <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {mode===null&&lessonKits.length>0&&(
+          <><div style={{fontWeight:900,fontSize:14,margin:"24px 0 10px",color:"#9b59b6",display:"flex",alignItems:"center",gap:8,borderTop:"1px solid var(--border)",paddingTop:20}}>
+            🎬 ערכות שיעור
+            <span style={{background:"rgba(155,89,182,0.12)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:20,padding:"1px 10px",fontSize:12,fontWeight:700,color:"#9b59b6"}}>{lessonKits.length}</span>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>
             {lessonKits.map(kit=>{
               const nextSession = (kit.schedule||[]).find(s=>s.date>=today());
               return (
@@ -4377,6 +4370,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
               );
             })}
           </div>
+          </>
       )}
     </div>
   );
@@ -5994,6 +5988,7 @@ export default function App() {
   const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14 });
   const [studios, _setStudios] = useState([]);
   const [studioBookings, _setStudioBookings] = useState([]);
+  const [lessons, _setLessons] = useState([]);
   const [loading, setLoading]         = useState(true);
   const [toasts, setToasts]           = useState([]);
   const [authed, setAuthed]           = useState(false);
@@ -6136,7 +6131,7 @@ export default function App() {
     (async()=>{
         try {
           historySuspendedRef.current = true;
-          const [eqR, resR, catsR, catTypesR, tmR, ktsR, polR, certsR, dhsR, calTokR, mgrR, mgrTokR, siteSetR, studiosR, studioBkR] = await Promise.all([
+          const [eqR, resR, catsR, catTypesR, tmR, ktsR, polR, certsR, dhsR, calTokR, mgrR, mgrTokR, siteSetR, studiosR, studioBkR, lessonsR] = await Promise.all([
             storageGet("equipment"),
           storageGet("reservations"),
           storageGet("categories"),
@@ -6152,6 +6147,7 @@ export default function App() {
           storageGet("siteSettings"),
           storageGet("studios"),
           storageGet("studio_bookings"),
+          storageGet("lessons"),
           ]);
           // Extract values and sources
           const eq = eqR.value, eqSrc = eqR.source;
@@ -6189,6 +6185,8 @@ export default function App() {
           setManagerToken(mgrTok || "");
         _setStudios(Array.isArray(stds) ? stds : []);
         _setStudioBookings(Array.isArray(stdBk) ? stdBk : []);
+        const lsns = lessonsR.value;
+        _setLessons(Array.isArray(lsns) ? lsns : []);
           const loadedSettings = siteSet || { logo:"", theme:"dark" };
         _setSiteSettings(loadedSettings);
         if(loadedSettings.theme==="light") document.documentElement.setAttribute("data-theme","light");
@@ -6296,7 +6294,7 @@ export default function App() {
   const overdueCount = reservations.filter(r=>r.status==="באיחור").length;
   const rejectedCount = reservations.filter(r=>r.status==="נדחה").length;
   const rejected = rejectedCount + overdueCount;
-  const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד מחסן", reservations:"ניהול בקשות", team:"פרטי צוות", kits:"ערכות", policies:"נהלים", certifications:"הסמכות", students:"ניהול סטודנטים", settings:"הגדרות", studios:"לוח אולפנים" };
+  const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד מחסן", reservations:"ניהול בקשות", team:"פרטי צוות", kits:"ערכות", lessons:"שיעורים", policies:"נהלים", certifications:"הסמכות", students:"ניהול סטודנטים", settings:"הגדרות", studios:"לוח אולפנים" };
 
   const handleSwipeTouchStart = (e) => {
     swipeTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -6372,6 +6370,7 @@ export default function App() {
                 {id:"equipment",icon:"📦",label:"ציוד מחסן",badge:damagedCount||null},
                 {id:"students",icon:"👨‍🎓",label:"סטודנטים"},
                 {id:"certifications",icon:"🎓",label:"הסמכות"},
+                {id:"lessons",icon:"📽️",label:"שיעורים",badge:lessons.length||null},
                 {id:"kits",icon:"🎒",label:"ערכות"},
                 {id:"team",icon:"👥",label:"צוות"},
                 {id:"policies",icon:"📋",label:"נהלים"},
@@ -6444,7 +6443,8 @@ export default function App() {
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}
                 categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings}/>}
               {page==="team"        && <TeamPage         teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/>}
-              {page==="kits"        && <KitsPage         kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations}/>}
+              {page==="kits"        && <KitsPage         kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons}/>}
+              {page==="lessons"     && <LessonsPage      lessons={lessons} setLessons={_setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment}/>}
               {page==="policies"    && <PoliciesPage     policies={policies} setPolicies={setPolicies} showToast={showToast}/>}
               {page==="certifications" && <CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={_setStudios}/>}
               {page==="students"       && <StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/>}

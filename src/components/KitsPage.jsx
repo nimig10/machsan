@@ -2,10 +2,9 @@
 import { useState } from "react";
 import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, FAR_FUTURE } from "../utils.js";
 
-export function KitsPage({ kits, setKits, equipment, categories, showToast, reservations=[], setReservations }) {
+export function KitsPage({ kits, setKits, equipment, categories, showToast, reservations=[], setReservations, lessons=[] }) {
   const [mode, setMode] = useState(null); // null | "student" | "lesson" | "editStudent" | "editLesson"
   const [editTarget, setEditTarget] = useState(null);
-  const [tabView, setTabView] = useState("student"); // "student" | "lesson"
   const LOAN_TYPES = ["פרטית","הפקה","סאונד","קולנוע יומית","הכל"];
   const LOAN_ICONS = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️", "קולנוע יומית":"🎥", "הכל":"📦" };
 
@@ -793,20 +792,11 @@ export function KitsPage({ kits, setKits, equipment, categories, showToast, rese
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="page">
-      {/* Tab header */}
-      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
-        {[{k:"student",l:"🎒 ערכות לסטודנטים"},{k:"lesson",l:"🎬 ערכות שיעור"}].map(({k,l})=>(
-          <button key={k} type="button" onClick={()=>setTabView(k)}
-            style={{padding:"8px 20px",borderRadius:"var(--r-sm)",border:`2px solid ${tabView===k?"var(--accent)":"var(--border)"}`,background:tabView===k?"var(--accent-glow)":"transparent",color:tabView===k?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:14,cursor:"pointer"}}>
-            {l}
-            <span style={{marginRight:6,background:tabView===k?"var(--accent)":"var(--surface3)",color:tabView===k?"#000":"var(--text3)",borderRadius:20,padding:"1px 7px",fontSize:11,fontWeight:900}}>
-              {k==="student"?studentKits.length:lessonKits.length}
-            </span>
-          </button>
-        ))}
-        <div style={{marginRight:"auto",display:"flex",gap:8}}>
-          {mode===null&&tabView==="student"&&<button className="btn btn-primary" onClick={()=>{setMode("student");setEditTarget(null);}}>➕ ערכה לסטודנט</button>}
-          {mode===null&&tabView==="lesson"&&<button className="btn btn-primary" style={{background:"#9b59b6",borderColor:"#9b59b6"}} onClick={()=>{setMode("lesson");setEditTarget(null);}}>🎬 ערכת שיעור חדשה</button>}
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:8}}>
+          {mode===null&&<button className="btn btn-primary" onClick={()=>{setMode("student");setEditTarget(null);}}>➕ ערכה לסטודנט</button>}
+          {mode===null&&<button className="btn btn-primary" style={{background:"#9b59b6",borderColor:"#9b59b6"}} onClick={()=>{setMode("lesson");setEditTarget(null);}}>🎬 ערכת שיעור חדשה</button>}
         </div>
       </div>
 
@@ -819,7 +809,7 @@ export function KitsPage({ kits, setKits, equipment, categories, showToast, rese
       )}
 
       {/* Student kits list */}
-      {tabView==="student"&&mode===null&&(
+      {mode===null&&(
         studentKits.length===0
           ? <div className="empty-state"><div className="emoji">🎒</div><p>אין ערכות לסטודנטים</p><p style={{fontSize:13,color:"var(--text3)"}}>ערכות מוצגות בטופס ההשאלה</p></div>
           : <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -857,10 +847,12 @@ export function KitsPage({ kits, setKits, equipment, categories, showToast, rese
       )}
 
       {/* Lesson kits list */}
-      {tabView==="lesson"&&mode===null&&(
-        lessonKits.length===0
-          ? <div className="empty-state"><div className="emoji">🎬</div><p>אין ערכות שיעור</p><p style={{fontSize:13,color:"var(--text3)"}}>ערכות שיעור משריינות ציוד לפי לוח שיעורים קבוע</p></div>
-          : <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {mode===null&&lessonKits.length>0&&(
+          <><div style={{fontWeight:900,fontSize:14,margin:"24px 0 10px",color:"#9b59b6",display:"flex",alignItems:"center",gap:8,borderTop:"1px solid var(--border)",paddingTop:20}}>
+            🎬 ערכות שיעור
+            <span style={{background:"rgba(155,89,182,0.12)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:20,padding:"1px 10px",fontSize:12,fontWeight:700,color:"#9b59b6"}}>{lessonKits.length}</span>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>
             {lessonKits.map(kit=>{
               const nextSession = (kit.schedule||[]).find(s=>s.date>=today());
               return (
@@ -900,6 +892,7 @@ export function KitsPage({ kits, setKits, equipment, categories, showToast, rese
               );
             })}
           </div>
+          </>
       )}
     </div>
   );
