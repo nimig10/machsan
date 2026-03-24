@@ -3,7 +3,6 @@ import { useState, useRef, useMemo } from "react";
 import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE } from "../utils.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 
-const SMART_EQUIPMENT_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
 const SMART_LOAN_TYPES = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
 
 function normalizeSmartDate(value) {
@@ -1143,37 +1142,6 @@ ${inventory}
       }
 
       const jsonResponse = await response.json();
-
-      if (false) {
-        for (const modelName of SMART_EQUIPMENT_MODELS) {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-        const response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(requestBody),
-        });
-
-        if (!response.ok) {
-          const errText = await response.text();
-          if ([400, 404, 429, 503].includes(response.status)) {
-            console.error(`Gemini ${modelName} failed (${response.status})`, errText);
-            lastError = new Error(
-              response.status === 429 || response.status === 503
-                ? "שירות ה-AI עמוס כרגע. נסו שוב בעוד כמה דקות."
-                : "לא הצלחנו להשלים את הפענוח מול Gemini כרגע. נסו שוב בעוד רגע."
-            );
-            continue;
-          }
-          throw new Error(`API HTTP Error ${response.status}: ${errText}`);
-        }
-
-        jsonResponse = await response.json();
-        lastError = null;
-        break;
-      }
-
-      }
-      if (false && lastError) throw lastError;
       if (!jsonResponse?.candidates?.length) {
         throw new Error("לא התקבלה תשובה תקינה מ-Gemini.");
       }

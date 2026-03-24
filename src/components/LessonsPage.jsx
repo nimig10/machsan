@@ -418,38 +418,6 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           }
 
           const jsonResponse = await response.json();
-
-          if (false) {
-            for (const modelName of AI_IMPORT_MODELS) {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-            const response = await fetch(url, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(requestBody),
-            });
-
-            if (!response.ok) {
-              const errText = await response.text();
-              // נסה מודל הבא על שגיאות שרת נפוצות
-              if ([400, 404, 429, 503].includes(response.status)) {
-                console.error(`Lessons AI import failed on ${modelName} (${response.status})`, errText);
-                lastError = new Error(
-                  response.status === 429 || response.status === 503
-                    ? "שירות ה-AI עמוס כרגע. נסה שוב בעוד כמה דקות."
-                    : `שגיאה ${response.status} במודל ${modelName} — מנסה מודל אחר`
-                );
-                continue;
-              }
-              throw new Error(`שגיאת API (${response.status}): ${errText}`);
-            }
-
-            jsonResponse = await response.json();
-            lastError = null;
-            break;
-          }
-
-          if (lastError) throw new Error(`כל המודלים נכשלו. ${lastError.message}`);
-          }
           if (!jsonResponse?.candidates || jsonResponse.candidates.length === 0) {
             throw new Error("Gemini לא החזיר תוצאות. נסה שוב.");
           }
