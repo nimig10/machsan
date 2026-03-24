@@ -3,6 +3,51 @@ import { useState, useRef, useMemo } from "react";
 import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE } from "../utils.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 
+const SMART_EQUIPMENT_MODELS = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
+const SMART_LOAN_TYPES = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
+
+function normalizeSmartDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  const localMatch = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
+  if (localMatch) {
+    const year = localMatch[3].length === 2 ? `20${localMatch[3]}` : localMatch[3];
+    return `${year}-${String(localMatch[2]).padStart(2, "0")}-${String(localMatch[1]).padStart(2, "0")}`;
+  }
+  return "";
+}
+
+function normalizeSmartTime(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const match = raw.match(/^(\d{1,2}):(\d{1,2})$/);
+  if (!match) return "";
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (Number.isNaN(hours) || Number.isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return "";
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function normalizeSmartLoanType(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (SMART_LOAN_TYPES.includes(raw)) return raw;
+  if (raw.includes("הפק")) return "הפקה";
+  if (raw.includes("סאונד")) return "סאונד";
+  if (raw.includes("יומית") || raw.includes("קולנוע")) return "קולנוע יומית";
+  if (raw.includes("פרט")) return "פרטית";
+  return "";
+}
+
+function parseSmartBookingJson(text) {
+  const raw = String(text || "").trim();
+  const fencedMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  const jsonText = fencedMatch ? fencedMatch[1].trim() : raw;
+  return JSON.parse(jsonText);
+}
+
 function PublicMiniCalendar({ reservations, initialLoanType="הכל", previewStart="", previewEnd="", previewName="" }) {
   const [calDate, setCalDate] = useState(new Date());
   const [loanTypeF, setLoanTypeF] = useState(["פרטית","הפקה","סאונד","קולנוע יומית"].includes(initialLoanType) ? initialLoanType : "הכל");
@@ -727,6 +772,9 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [studios, setStudios] = useState([]);
   const [studioWeekOffset, setStudioWeekOffset] = useState(0);
   const [studioModal, setStudioModal] = useState(null);
+  const [showEquipmentAiModal, setShowEquipmentAiModal] = useState(false);
+  const [equipmentAiPrompt, setEquipmentAiPrompt] = useState("");
+  const [equipmentAiLoading, setEquipmentAiLoading] = useState(false);
 
   // Load studios data when switching to studios view
   const loadStudiosData = async () => {
@@ -924,6 +972,155 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       return;
     }
     showToast("error", "יש להשלים את שלבי פרטים, תאריכים וציוד לפני המעבר לשלב האישור.");
+  };
+
+  const closeEquipmentAiModal = () => {
+    setShowEquipmentAiModal(false);
+    setEquipmentAiPrompt("");
+    setEquipmentAiLoading(false);
+  };
+
+  const handleSmartEquipmentBooking = async (promptText, equipmentList) => {
+    if (!promptText) return;
+    setEquipmentAiLoading(true);
+
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.REACT_APP_GEMINI_API_KEY || "";
+      if (!apiKey) throw new Error("חסר מפתח API עבור פענוח אוטומטי.");
+
+      const todayStr = today();
+      const inventory = (equipmentList || [])
+        .map((item) => `ID: ${item.id}, Name: ${item.name}, Category: ${item.category || ""}`)
+        .join("\n");
+
+      const systemInstruction = `
+אתה עוזר חכם למחסן ציוד במכללה. התאריך היום הוא ${todayStr}.
+עליך לחלץ מהטקסט של הסטודנט את סוג ההשאלה, תאריכי ההשאלה, שעות, ורשימת ציוד עם כמויות.
+התאם את הציוד המבוקש למזהים (IDs) מרשימת המלאי הבאה בלבד:
+${inventory}
+
+החזר אך ורק JSON תקני.
+אם סוג ההשאלה לא ברור, החזר "פרטית".
+      `.trim();
+
+      const requestBody = {
+        contents: [{ parts: [{ text: promptText }] }],
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              loanType: { type: "STRING" },
+              startDate: { type: "STRING" },
+              startTime: { type: "STRING" },
+              endDate: { type: "STRING" },
+              endTime: { type: "STRING" },
+              items: {
+                type: "ARRAY",
+                items: {
+                  type: "OBJECT",
+                  properties: {
+                    equipmentId: { type: "STRING" },
+                    quantity: { type: "NUMBER" },
+                  },
+                  required: ["equipmentId", "quantity"],
+                },
+              },
+            },
+            required: ["loanType", "startDate", "startTime", "endDate", "endTime", "items"],
+          },
+        },
+      };
+
+      let jsonResponse = null;
+      let lastError = null;
+
+      for (const modelName of SMART_EQUIPMENT_MODELS) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          if ([400, 404, 429, 503].includes(response.status)) {
+            lastError = new Error(`Gemini ${modelName} failed (${response.status}): ${errText}`);
+            continue;
+          }
+          throw new Error(`API HTTP Error ${response.status}: ${errText}`);
+        }
+
+        jsonResponse = await response.json();
+        lastError = null;
+        break;
+      }
+
+      if (lastError) throw lastError;
+      if (!jsonResponse?.candidates?.length) {
+        throw new Error("לא התקבלה תשובה תקינה מ-Gemini.");
+      }
+
+      const generatedText = jsonResponse.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const result = parseSmartBookingJson(generatedText);
+      const resolvedItems = (result?.items || [])
+        .map((item) => {
+          const match = (equipmentList || []).find((equipmentItem) => String(equipmentItem.id) === String(item?.equipmentId));
+          if (!match) return null;
+          return {
+            equipment_id: match.id,
+            quantity: Math.max(1, Number(item?.quantity) || 1),
+            name: match.name,
+          };
+        })
+        .filter(Boolean);
+
+      if (!resolvedItems.length) {
+        throw new Error("לא הצלחנו להתאים ציוד קיים מתוך הבקשה.");
+      }
+
+      const nextLoanType = normalizeSmartLoanType(result?.loanType) || normalizeSmartLoanType(form.loan_type) || "פרטית";
+      const startDate = normalizeSmartDate(result?.startDate);
+      const endDate = normalizeSmartDate(result?.endDate) || startDate;
+      const startTime = normalizeSmartTime(result?.startTime);
+      const endTime = normalizeSmartTime(result?.endTime);
+
+      if (!startDate || !endDate || !startTime || !endTime) {
+        throw new Error("לא הצלחנו לפענח תאריכים ושעות תקינים מהבקשה.");
+      }
+
+      const nextForm = {
+        ...form,
+        student_name: form.student_name || loggedInStudent?.name || "",
+        email: form.email || loggedInStudent?.email || "",
+        phone: form.phone || loggedInStudent?.phone || "",
+        course: form.course || loggedInStudent?.track || "",
+        loan_type: nextLoanType,
+        borrow_date: startDate,
+        borrow_time: startTime,
+        return_date: endDate,
+        return_time: endTime,
+        sound_day_loan: false,
+      };
+
+      if (nextLoanType === "הפקה" && !nextForm.crew_photographer_name) {
+        nextForm.crew_photographer_name = form.student_name || loggedInStudent?.name || "";
+      }
+
+      setForm(nextForm);
+      setItems(resolvedItems);
+      setAgreed(false);
+      setStep(4);
+      showToast("success", "ה-AI מילא את הטופס עבורך. עברו לשלב האישור וקראו את הנהלים.");
+    } catch (error) {
+      console.error("AI Equipment Booking Error:", error);
+      showToast("error", error?.message || "לא הצלחנו להבין את הבקשה. נסה לפרט יותר או למלא ידנית.");
+    } finally {
+      setEquipmentAiLoading(false);
+      setShowEquipmentAiModal(false);
+    }
   };
 
   const waText = encodeURIComponent("שלום נמרוד הגשתי בקשה להשאלה ממתין לאישורך תודה");
@@ -1213,6 +1410,17 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
           </>}
         </div>
         {publicView==="equipment" && <div className="form-card-body">
+          <div style={{display:"flex",justifyContent:"center",marginBottom:16}}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={()=>setShowEquipmentAiModal(true)}
+              disabled={equipmentAiLoading}
+              style={{display:"inline-flex",alignItems:"center",gap:8,fontWeight:800}}
+            >
+              ✨ השאלת חכמה
+            </button>
+          </div>
 
           {step===1 && <>
             <div className="form-section-title">סוג ההשאלה</div>
@@ -1427,6 +1635,53 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       </div>
     </div>
     {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor}/>}
+    {showEquipmentAiModal && (
+      <div
+        style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:2600,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
+        onClick={(e)=>e.target===e.currentTarget&&closeEquipmentAiModal()}
+      >
+        <div style={{width:"100%",maxWidth:560,background:"var(--surface)",borderRadius:18,border:"1px solid var(--border)",direction:"rtl",boxShadow:"0 30px 80px rgba(0,0,0,0.35)"}}>
+          <div style={{padding:"18px 22px",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+            <div>
+              <div style={{fontWeight:900,fontSize:18,color:"var(--accent)"}}>✨ השאלת חכמה</div>
+              <div style={{fontSize:12,color:"var(--text3)",marginTop:4}}>כתבו במשפט אחד מה אתם צריכים, והמערכת תמלא תאריכים וציוד אוטומטית.</div>
+            </div>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={closeEquipmentAiModal}>סגור</button>
+          </div>
+          <form
+            onSubmit={(e)=>{
+              e.preventDefault();
+              handleSmartEquipmentBooking(equipmentAiPrompt.trim(), equipment);
+            }}
+            style={{padding:22,display:"flex",flexDirection:"column",gap:14}}
+          >
+            <label style={{display:"flex",flexDirection:"column",gap:8,fontWeight:700,color:"var(--text2)"}}>
+              מה תרצו להשאיל?
+              <textarea
+                className="form-input"
+                rows={5}
+                value={equipmentAiPrompt}
+                onChange={(e)=>setEquipmentAiPrompt(e.target.value)}
+                placeholder='למשל: אני צריך 2 פנסי לד, מצלמת Sony FX3 ומיקרופון אלחוטי ליום חמישי מ-09:00 עד 16:00'
+                style={{resize:"vertical",minHeight:140}}
+              />
+            </label>
+            <div style={{fontSize:12,color:"var(--text3)",lineHeight:1.6}}>
+              ה-AI ימלא את סוג ההשאלה, התאריכים, השעות והציוד, ואז יעביר אתכם ישר לשלב האישור הסופי.
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+              {equipmentAiLoading && <span style={{fontSize:12,color:"var(--accent)",fontWeight:700}}>מפענח את הבקשה...</span>}
+              <div style={{display:"flex",gap:8,marginInlineStart:"auto"}}>
+                <button type="button" className="btn btn-secondary" onClick={closeEquipmentAiModal} disabled={equipmentAiLoading}>ביטול</button>
+                <button type="submit" className="btn btn-primary" disabled={equipmentAiLoading || !equipmentAiPrompt.trim()}>
+                  {equipmentAiLoading ? "ממלא..." : "מלא לי"}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
     </>
   );
 }
