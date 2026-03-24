@@ -301,10 +301,17 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
         </div>
         <div className="form-group">
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
-            <label className="form-label" style={{margin:0}}>תיאור</label>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={()=>generateAutoDescription(f.name)} disabled={isGeneratingDesc}>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={()=>generateAutoDescription(f.name)}
+              disabled={isGeneratingDesc}
+              style={{display:"inline-flex",alignItems:"center",gap:6,fontWeight:800}}
+            >
+              <span aria-hidden="true">✨</span>
               {isGeneratingDesc ? "מייצר תיאור..." : "תיאור אוטומטי"}
             </button>
+            <label className="form-label" style={{margin:0}}>תיאור</label>
           </div>
           <textarea className="form-textarea" rows={2} value={f.description} onChange={e=>s("description",e.target.value)}/>
         </div>
