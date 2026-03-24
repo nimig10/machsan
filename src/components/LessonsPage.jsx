@@ -311,7 +311,13 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       if (!String(rawCsv || "").trim()) throw new Error("לא נמצא תוכן קריא בקובץ");
 
       const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
-      const systemInstruction = "אתה מנהל מערכת חכם במכללה בישראל. תקבל טקסט גולמי שחולץ מקובץ אקסל של מערכת שעות. עליך לזהות ולחלץ את כל השיעורים והקורסים הקבועים שמופיעים בו. עבור כל שיעור מצא: שם קורס, שם מורה, מסלול לימודים (למשל 'סאונד', 'וידאו'), יום בשבוע בעברית (למשל 'ראשון', 'שני'), שעת התחלה (HH:MM) ושעת סיום (HH:MM). אם אתה מזהה מסלול לימודים חדש שלא מופיע בדרך כלל, פשוט ציין אותו כמו שהוא.";
+      const systemInstruction = `אתה מנהל מערכת חכם במכללת קולנוע וסאונד. מטרתך לחלץ שיעורים מקובץ CSV מבולגן ולהחזירם כ-JSON.
+חוקים קריטיים:
+1. התעלם לחלוטין משורות של חופשות, חגים או שבתות (למשל: 'פורים', 'שבת', '9 באב', 'יום השואה'). אל תיצור עבורם שיעור!
+2. התעלם משורות של טקסט חופשי או הערות מנהלה.
+3. חלץ שעות לפורמט HH:MM, גם אם הן כתובות בתוך תא טקסט (למשל '15:15-18:00').
+4. אם יש שיעור אבל חסרה שעה - הגדר '00:00' להתחלה וסיום.
+5. נסה להבין את מסלול הלימודים (Track) מהכותרות (למשל 'סאונד', 'וידאו'). אם לא ברור, כתוב 'כללי'.`;
 
       const response = await fetch(url, {
         method: "POST",
@@ -357,15 +363,22 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
         throw new Error("לא נמצאו שיעורים בקובץ לפי הפענוח של Gemini");
       }
 
+      const blockedKeywords = ["פורים", "שבת", "9 באב", "יום השואה", "חופשה", "חג", "הערה", "מזכירות", "הודעה", "ביטול"];
+      const cleanedLessons = parsedLessons.filter((item) => {
+        const mergedText = [item?.courseName, item?.teacher, item?.track, item?.dayOfWeek].map((value) => String(value || "")).join(" ");
+        return !blockedKeywords.some((keyword) => mergedText.includes(keyword));
+      });
+      if (cleanedLessons.length === 0) throw new Error("Gemini לא החזיר שיעורים תקינים אחרי סינון חגים והערות");
+
       const groupedLessons = new Map();
-      parsedLessons.forEach((item, index) => {
+      cleanedLessons.forEach((item, index) => {
         const courseName = String(item?.courseName || "").trim();
-        const teacher = String(item?.teacher || "").trim();
-        const track = String(item?.track || "").trim();
+        const teacher = String(item?.teacher || "").trim() || "לא צוין";
+        const track = String(item?.track || "").trim() || "כללי";
         const dayOfWeek = String(item?.dayOfWeek || "").trim();
-        const startTime = String(item?.startTime || "").trim();
-        const endTime = String(item?.endTime || "").trim();
-        if (!courseName || !teacher || !startTime || !endTime) return;
+        const startTime = String(item?.startTime || "").trim() || "00:00";
+        const endTime = String(item?.endTime || "").trim() || "00:00";
+        if (!courseName) return;
 
         const groupKey = `${courseName}__${teacher}__${track}`;
         if (!groupedLessons.has(groupKey)) {
@@ -424,7 +437,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
       setLessons(updatedLessons);
       await storageSet("lessons", updatedLessons);
-      showToast("success", `פוענחו ${parsedLessons.length} שיעורים. נוספו ${addedCount} קורסים ועודכנו ${updatedCount} קורסים.`);
+      showToast("success", `פוענחו ${cleanedLessons.length} שיעורים. נוספו ${addedCount} קורסים ועודכנו ${updatedCount} קורסים.`);
     } catch (error) {
       console.error("Smart AI lesson import failed", error);
       showToast("error", error?.message || "שגיאה בייבוא האקסל החכם");
