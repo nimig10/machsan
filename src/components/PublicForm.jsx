@@ -1884,8 +1884,29 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
   const LESSON_COLOR = "#f5a623";
   const NIGHT_COLOR = "#2196f3";
 
+  const normalizeStudioPhone = (value) => String(value || "").replace(/[^0-9]/g, "");
   // Check if student has night certification
-  const studentRecord = (certifications?.students||[]).find(s => s.name === student.name);
+  const studentRecord = (() => {
+    const students = certifications?.students || [];
+    if (!student) return null;
+    if (student.id !== undefined && student.id !== null) {
+      const byId = students.find((candidate) => String(candidate.id) === String(student.id));
+      if (byId) return byId;
+    }
+    const studentEmail = String(student.email || "").toLowerCase().trim();
+    if (studentEmail) {
+      const byEmail = students.find((candidate) => candidate.email?.toLowerCase().trim() === studentEmail);
+      if (byEmail) return byEmail;
+    }
+    const normalizedName = normalizeName(student.name);
+    const normalizedPhone = normalizeStudioPhone(student.phone);
+    return students.find((candidate) => {
+      const sameName = normalizeName(candidate.name) === normalizedName;
+      if (!sameName) return false;
+      if (!normalizedPhone) return true;
+      return normalizeStudioPhone(candidate.phone) === normalizedPhone;
+    }) || null;
+  })();
   const nightCertType = (certifications?.types||[]).find(t => t.id === "cert_night_studio");
   const hasNightCert = studentRecord && nightCertType && (studentRecord.certs||{})[nightCertType.id] === "עבר";
 
@@ -2022,7 +2043,11 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
 
       const today = todayStr;
       const activeStudios = (studiosList || []).filter((studio) => !isStudioDisabled(studio?.id));
-      const availableStudios = activeStudios.length ? activeStudios : (studiosList || []);
+      const certifiedStudios = activeStudios.filter((studio) => hasStudioCert(studio?.id));
+      const availableStudios = certifiedStudios.length ? certifiedStudios : activeStudios;
+      if (!availableStudios.length) {
+        throw new Error("לא נמצאו אולפנים זמינים שמתאימים להסמכות שלך כרגע.");
+      }
       const availableStudiosStr = availableStudios
         .map((studio) => `ID: ${studio.id}, Name: ${studio.name}, Type: ${studio.type || ""}`)
         .join("\n");
@@ -2086,18 +2111,30 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
 
       const result = JSON.parse(jsonResponse.candidates[0].content.parts[0].text);
       const resolvedStudio = availableStudios.find((studio) => sameStudioId(studio.id, result?.studioId));
+      if (resolvedStudio && isStudioDisabled(resolvedStudio.id)) throw new Error(STUDIO_MAINTENANCE_MESSAGE);
+      if (resolvedStudio && !hasStudioCert(resolvedStudio.id)) throw new Error("לא ניתן לקבוע את האולפן הזה כי לא עברת עליו הסמכת אולפן פעילה.");
       if (!resolvedStudio) throw new Error("האולפן שפוענח לא קיים ברשימה הזמינה.");
 
       const isNightBooking = Boolean(modal?.isNight);
       const timeOptions = isNightBooking ? NIGHT_HOURS : DAY_HOURS;
+      const selectedDate = result?.date || modal?.date || today;
       const selectedStartTime = getClosestTimeOption(result?.startTime, timeOptions, modal?.defaultStart || timeOptions[0] || "09:00");
       const selectedEndTime = getClosestTimeOption(result?.endTime, timeOptions, modal?.defaultEnd || timeOptions.at(-1) || "12:00");
+      if (selectedDate < todayStr) throw new Error("לא ניתן לקבוע אולפן לתאריך שכבר עבר.");
+      if (!isNightBooking && selectedStartTime >= selectedEndTime) throw new Error("שעת הסיום חייבת להיות אחרי שעת ההתחלה.");
+      const overlap = bookings.some((booking) =>
+        sameStudioId(booking.studioId, resolvedStudio.id) &&
+        booking.date === selectedDate &&
+        isActiveStudioBooking(booking) &&
+        !(selectedEndTime <= booking.startTime || selectedStartTime >= booking.endTime)
+      );
+      if (!isNightBooking && overlap) throw new Error("האולפן שפוענח כבר תפוס בטווח השעות הזה. נסה לנסח שעה אחרת.");
 
       updateAddBookingModal({
         studioId: resolvedStudio.id,
-        date: result?.date || modal?.date || today,
+        date: selectedDate,
         selectedStudioId: String(resolvedStudio.id),
-        selectedDate: result?.date || modal?.date || today,
+        selectedDate,
         selectedStartTime,
         selectedEndTime,
         defaultStart: selectedStartTime,
@@ -2113,11 +2150,9 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     }
   };
   const openSmartBookingFromCalendar = () => {
-    const defaultStudio = studios.find((studio) => !isStudioDisabled(studio.id) && hasStudioCert(studio.id))
-      || studios.find((studio) => !isStudioDisabled(studio.id))
-      || studios[0];
+    const defaultStudio = studios.find((studio) => !isStudioDisabled(studio.id) && hasStudioCert(studio.id));
     if (!defaultStudio) {
-      showToast("error", "אין אולפנים זמינים כרגע");
+      showToast("error", "אין כרגע אולפנים זמינים שמתאימים להסמכות האולפן שלך.");
       return;
     }
     const defaultDate = weekDays.find((day) => day.fullDate >= todayStr)?.fullDate || todayStr;
@@ -2144,7 +2179,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
             <div style={{fontSize:12,color:"var(--text3)"}}>
               🎙️ {(studios.find((studio) => sameStudioId(studio.id, modal.selectedStudioId || modal.studioId))?.name) || "בחר אולפן"}
             </div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            {false && <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
               <button
                 type="button"
                 className="btn btn-primary"
@@ -2155,7 +2190,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                 ✨ עוזר שיבוץ חכם
               </button>
               {isAiLoading && <span style={{fontSize:12,color:"var(--accent)",fontWeight:700}}>מפענח את הבקשה...</span>}
-            </div>
+            </div>}
             {showAiAssistant && (
               <div style={{background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.25)",borderRadius:12,padding:12,display:"flex",flexDirection:"column",gap:10}}>
                 <label style={{fontSize:13,fontWeight:700,color:"var(--text2)"}}>
@@ -2171,6 +2206,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                 </label>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                   <span style={{fontSize:11,color:"var(--text3)"}}>ה־AI ינסה למלא אולפן, תאריך ושעות לפי הבקשה שלך.</span>
+                  {isAiLoading && <span style={{fontSize:12,color:"var(--accent)",fontWeight:700}}>מפענח את הבקשה...</span>}
                   <button
                     type="button"
                     className="btn btn-primary"
