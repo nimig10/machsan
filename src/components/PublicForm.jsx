@@ -1435,6 +1435,9 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 function PublicStudioBooking({ studios, bookings, setBookings, student, showToast, weekOffset, setWeekOffset, modal, setModal, certifications }) {
   const [saving, setSaving] = useState(false);
   const [dayView, setDayView] = useState(null); // { studioId, date, dayName }
+  const [showAiAssistant, setShowAiAssistant] = useState(false);
+  const [smartBookingPrompt, setSmartBookingPrompt] = useState("");
+  const [isAiLoading, setIsAiLoading] = useState(false);
 
   const DAY_HOURS = ["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00"];
   const NIGHT_HOURS = ["21:00","22:00","23:00","00:00","01:00","02:00","03:00","04:00","05:00","06:00","07:00","08:00"];
@@ -1512,14 +1515,184 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     });
   }
   const weekDays = getWeekDays(weekOffset);
+  const openAddBookingModal = ({ studioId, date, dayName, isNight=false, defaultStart, defaultEnd }) => {
+    setShowAiAssistant(false);
+    setSmartBookingPrompt("");
+    setIsAiLoading(false);
+    setModal({
+      type: "addBooking",
+      studioId,
+      date,
+      dayName,
+      isNight,
+      defaultStart,
+      defaultEnd,
+      selectedStudioId: String(studioId ?? ""),
+      selectedDate: date || "",
+      selectedStartTime: defaultStart || (isNight ? "21:00" : "09:00"),
+      selectedEndTime: defaultEnd || (isNight ? "08:00" : "12:00"),
+      notes: "",
+    });
+  };
+  const closeBookingModal = () => {
+    setShowAiAssistant(false);
+    setSmartBookingPrompt("");
+    setIsAiLoading(false);
+    setModal(null);
+  };
+  const updateAddBookingModal = (patch) => {
+    setModal((prev) => (
+      prev?.type === "addBooking"
+        ? { ...prev, ...patch }
+        : prev
+    ));
+  };
+  const getHebrewDayName = (dateStr) => {
+    if (!dateStr) return "";
+    const date = new Date(`${dateStr}T12:00:00`);
+    if (Number.isNaN(date.getTime())) return "";
+    return ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"][date.getDay()] || "";
+  };
+  const getClosestTimeOption = (value, options = [], fallback = "") => {
+    const target = String(value || "").trim();
+    if (!target) return fallback || options[0] || "";
+    if (options.includes(target)) return target;
+    const targetParts = target.split(":").map(Number);
+    if (targetParts.length !== 2 || targetParts.some((part) => Number.isNaN(part))) return fallback || options[0] || "";
+    const targetMinutes = targetParts[0] * 60 + targetParts[1];
+    let best = fallback || options[0] || "";
+    let bestDiff = Number.POSITIVE_INFINITY;
+    options.forEach((option) => {
+      const [hours, minutes] = String(option || "").split(":").map(Number);
+      if (Number.isNaN(hours) || Number.isNaN(minutes)) return;
+      const diff = Math.abs((hours * 60 + minutes) - targetMinutes);
+      if (diff < bestDiff) {
+        best = option;
+        bestDiff = diff;
+      }
+    });
+    return best;
+  };
+
+  const handleSmartBooking = async (promptText, studiosList) => {
+    if (!promptText) return;
+    setIsAiLoading(true);
+
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.REACT_APP_GEMINI_API_KEY;
+      if (!apiKey) throw new Error("API Key missing");
+
+      const today = todayStr;
+      const activeStudios = (studiosList || []).filter((studio) => !isStudioDisabled(studio?.id));
+      const availableStudios = activeStudios.length ? activeStudios : (studiosList || []);
+      const availableStudiosStr = availableStudios
+        .map((studio) => `ID: ${studio.id}, Name: ${studio.name}, Type: ${studio.type || ""}`)
+        .join("\n");
+
+      const systemInstruction = `
+      אתה עוזר AI חכם להזמנת אולפנים במכללה.
+      התאריך של היום הוא: ${today}.
+      המשימה שלך היא לחלץ מהבקשה של הסטודנט את תאריך ההזמנה, שעת ההתחלה, שעת הסיום, ואת מזהה האולפן (studioId) המתאים ביותר מתוך הרשימה הבאה:
+      ${availableStudiosStr}
+
+      אם הסטודנט מבקש למשל "מחר", חשב את התאריך ביחס ל-${today}.
+      החזר אך ורק JSON תקני.
+    `;
+
+      const requestBody = {
+        contents: [{ parts: [{ text: promptText }] }],
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              studioId: { type: "STRING", description: "The exact ID of the requested studio from the provided list" },
+              date: { type: "STRING", description: "Format: YYYY-MM-DD" },
+              startTime: { type: "STRING", description: "Format: HH:MM" },
+              endTime: { type: "STRING", description: "Format: HH:MM" },
+            },
+            required: ["studioId", "date", "startTime", "endTime"],
+          },
+        },
+      };
+
+      let jsonResponse = null;
+      let lastError = null;
+      for (const modelName of ["gemini-2.5-flash", "gemini-2.5-flash-lite"]) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          if (response.status === 503) {
+            lastError = new Error("Gemini עמוס כרגע. נסה שוב בעוד כמה דקות.");
+            continue;
+          }
+          throw new Error(`API Error: ${response.status} - ${errText}`);
+        }
+
+        jsonResponse = await response.json();
+        lastError = null;
+        break;
+      }
+
+      if (lastError) throw lastError;
+      if (!jsonResponse?.candidates?.length) {
+        throw new Error("No response from Gemini API.");
+      }
+
+      const result = JSON.parse(jsonResponse.candidates[0].content.parts[0].text);
+      const resolvedStudio = availableStudios.find((studio) => sameStudioId(studio.id, result?.studioId));
+      if (!resolvedStudio) throw new Error("האולפן שפוענח לא קיים ברשימה הזמינה.");
+
+      const isNightBooking = Boolean(modal?.isNight);
+      const timeOptions = isNightBooking ? NIGHT_HOURS : DAY_HOURS;
+      const selectedStartTime = getClosestTimeOption(result?.startTime, timeOptions, modal?.defaultStart || timeOptions[0] || "09:00");
+      const selectedEndTime = getClosestTimeOption(result?.endTime, timeOptions, modal?.defaultEnd || timeOptions.at(-1) || "12:00");
+
+      updateAddBookingModal({
+        studioId: resolvedStudio.id,
+        date: result?.date || modal?.date || today,
+        selectedStudioId: String(resolvedStudio.id),
+        selectedDate: result?.date || modal?.date || today,
+        selectedStartTime,
+        selectedEndTime,
+        defaultStart: selectedStartTime,
+        defaultEnd: selectedEndTime,
+      });
+      setShowAiAssistant(false);
+      showToast("success", "הטופס מולא בהצלחה! אנא אשר את ההזמנה.");
+    } catch (err) {
+      console.error("Smart Booking Error:", err);
+      showToast("error", err?.message || "לא הצלחנו לפענח את הבקשה. אנא נסה לנסח שוב.");
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
 
   const submitBooking = async (e) => {
     e.preventDefault();
     setSaving(true);
     const fd = new FormData(e.target);
-    const startTime = fd.get("startTime"), endTime = fd.get("endTime"), notes = fd.get("notes")?.trim();
+    const studioId = String(fd.get("studioId") || modal?.selectedStudioId || modal?.studioId || "").trim();
+    const date = String(fd.get("date") || modal?.selectedDate || modal?.date || "").trim();
+    const startTime = String(fd.get("startTime") || modal?.selectedStartTime || "").trim();
+    const endTime = String(fd.get("endTime") || modal?.selectedEndTime || "").trim();
+    const notes = fd.get("notes")?.trim();
     const isNight = modal.isNight || false;
-    const { studioId, date } = modal;
+    if (!studioId || !date || !startTime || !endTime) {
+      showToast("error", "יש להשלים אולפן, תאריך ושעות לפני השליחה");
+      setSaving(false); return;
+    }
+    if (date < todayStr) {
+      showToast("error", "לא ניתן להזמין תאריך שעבר");
+      setSaving(false); return;
+    }
     // Studio certification check
     if (isStudioDisabled(studioId)) {
       showToast("error", STUDIO_MAINTENANCE_MESSAGE);
@@ -1538,7 +1711,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     setBookings(updated);
     await storageSet("studio_bookings", updated);
     showToast("success", "✅ האולפן הוזמן בהצלחה!");
-    setModal(null); setSaving(false);
+    closeBookingModal(); setSaving(false);
   };
 
   const submitEditBooking = async (e) => {
@@ -1675,7 +1848,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                       )}
                     </div>
                   : <div style={{flex:1,padding:"6px 10px",cursor:(isHourPast||dayBlocked)?"default":"pointer",display:"flex",alignItems:"center",color:dayBlocked?"var(--red)":"var(--text3)",fontSize:12}}
-                      onClick={()=>{ if(!isHourPast && !dayBlocked) setModal({type:"addBooking",studioId:dayView.studioId,date:dayView.date,dayName:dayView.dayName,defaultStart:hour,defaultEnd:nextH}); }}>
+                        onClick={()=>{ if(!isHourPast && !dayBlocked) openAddBookingModal({studioId:dayView.studioId,date:dayView.date,dayName:dayView.dayName,defaultStart:hour,defaultEnd:nextH}); }}>
                       {dayBlocked ? "🔒" : isHourPast ? "" : "+ לחץ להזמנה"}
                     </div>
                 }
@@ -1717,7 +1890,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
             ) : (
               !isDayPast && (
                 <div style={{border:`1px dashed ${NIGHT_COLOR}`,borderRadius:6,padding:"12px 16px",textAlign:"center",cursor:"pointer",color:NIGHT_COLOR,fontSize:13}}
-                  onClick={()=>setModal({type:"addBooking",studioId:dayView.studioId,date:dayView.date,dayName:dayView.dayName,isNight:true,defaultStart:"21:00",defaultEnd:"08:00"})}>
+                  onClick={()=>openAddBookingModal({studioId:dayView.studioId,date:dayView.date,dayName:dayView.dayName,isNight:true,defaultStart:"21:00",defaultEnd:"08:00"})}>
                   + לחץ להזמנת לילה
                 </div>
               )
@@ -1731,31 +1904,116 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
 
         {/* Booking modal */}
         {modal?.type==="addBooking" && (
-          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={e=>e.target===e.currentTarget&&setModal(null)}>
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={e=>e.target===e.currentTarget&&closeBookingModal()}>
             <div style={{width:"100%",maxWidth:400,background:"var(--surface)",borderRadius:16,border:`1px solid ${modal.isNight ? NIGHT_COLOR : "var(--border)"}`,direction:"rtl"}}>
               <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",fontWeight:900,fontSize:16,color:modal.isNight?NIGHT_COLOR:undefined}}>
                 {modal.isNight ? "🌙 הזמנת לילה" : "📅 הזמנת אולפן"}
               </div>
               <form onSubmit={submitBooking} style={{padding:20,display:"flex",flexDirection:"column",gap:12}}>
-                <div style={{fontSize:13,color:"var(--text3)"}}>👤 {student.name} · {dayView.dayName} {modal.date}</div>
+                <div style={{fontSize:13,color:"var(--text3)"}}>👤 {student.name} · {(modal.selectedDate || modal.date) ? `${getHebrewDayName(modal.selectedDate || modal.date)} ` : ""}{modal.selectedDate || modal.date}</div>
+                <div style={{fontSize:12,color:"var(--text3)"}}>
+                  🎙️ {(studios.find((studio) => sameStudioId(studio.id, modal.selectedStudioId || modal.studioId))?.name) || "בחר אולפן"}
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => setShowAiAssistant((prev) => !prev)}
+                    disabled={isAiLoading}
+                    style={{display:"inline-flex",alignItems:"center",gap:6}}
+                  >
+                    ✨ עוזר שיבוץ חכם
+                  </button>
+                  {isAiLoading && <span style={{fontSize:12,color:"var(--accent)",fontWeight:700}}>מפענח את הבקשה...</span>}
+                </div>
+                {showAiAssistant && (
+                  <div style={{background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.25)",borderRadius:12,padding:12,display:"flex",flexDirection:"column",gap:10}}>
+                    <label style={{fontSize:13,fontWeight:700,color:"var(--text2)"}}>
+                      כתוב/י מה צריך
+                      <textarea
+                        className="form-input"
+                        rows={3}
+                        value={smartBookingPrompt}
+                        onChange={(e) => setSmartBookingPrompt(e.target.value)}
+                        placeholder='למשל: אני צריך חדר עריכה מחר מ-12:00 עד 16:00'
+                        style={{marginTop:8}}
+                      />
+                    </label>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                      <span style={{fontSize:11,color:"var(--text3)"}}>ה־AI ינסה למלא אולפן, תאריך ושעות לפי הבקשה שלך.</span>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={isAiLoading || !smartBookingPrompt.trim()}
+                        onClick={() => handleSmartBooking(smartBookingPrompt.trim(), studios)}
+                      >
+                        {isAiLoading ? "משבץ..." : "שבץ לי"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <div style={{display:"flex",gap:8}}>
+                  <label style={{flex:1,fontSize:13,fontWeight:600}}>אולפן
+                    <select
+                      name="studioId"
+                      className="form-input"
+                      value={modal.selectedStudioId || modal.studioId || ""}
+                      onChange={(e) => updateAddBookingModal({ selectedStudioId: e.target.value, studioId: e.target.value })}
+                    >
+                      <option value="">-- בחר אולפן --</option>
+                      {studios.map((studio) => (
+                        <option key={studio.id} value={studio.id} disabled={isStudioDisabled(studio.id)}>
+                          {studio.name}{isStudioDisabled(studio.id) ? " (בתחזוקה)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={{flex:1,fontSize:13,fontWeight:600}}>תאריך
+                    <input
+                      type="date"
+                      name="date"
+                      className="form-input"
+                      min={todayStr}
+                      value={modal.selectedDate || modal.date || ""}
+                      onChange={(e) => updateAddBookingModal({ selectedDate: e.target.value, date: e.target.value })}
+                    />
+                  </label>
+                </div>
                 <div style={{display:"flex",gap:8}}>
                   <label style={{flex:1,fontSize:13,fontWeight:600}}>התחלה
-                    <select name="startTime" className="form-input" defaultValue={modal.defaultStart||"09:00"}>
+                    <select
+                      name="startTime"
+                      className="form-input"
+                      value={modal.selectedStartTime || modal.defaultStart || "09:00"}
+                      onChange={(e) => updateAddBookingModal({ selectedStartTime: e.target.value, defaultStart: e.target.value })}
+                    >
                       {(modal.isNight ? NIGHT_HOURS : DAY_HOURS).map(h=><option key={h}>{h}</option>)}
                     </select>
                   </label>
                   <label style={{flex:1,fontSize:13,fontWeight:600}}>סיום
-                    <select name="endTime" className="form-input" defaultValue={modal.defaultEnd||(modal.isNight?"08:00":"12:00")}>
+                    <select
+                      name="endTime"
+                      className="form-input"
+                      value={modal.selectedEndTime || modal.defaultEnd || (modal.isNight?"08:00":"12:00")}
+                      onChange={(e) => updateAddBookingModal({ selectedEndTime: e.target.value, defaultEnd: e.target.value })}
+                    >
                       {(modal.isNight ? NIGHT_HOURS : DAY_HOURS).map(h=><option key={h}>{h}</option>)}
                     </select>
                   </label>
                 </div>
                 <label style={{fontSize:13,fontWeight:600}}>הערות
-                  <textarea name="notes" className="form-input" rows={2} placeholder="תיאור הפרויקט..."/>
+                  <textarea
+                    name="notes"
+                    className="form-input"
+                    rows={2}
+                    placeholder="תיאור הפרויקט..."
+                    value={modal.notes || ""}
+                    onChange={(e) => updateAddBookingModal({ notes: e.target.value })}
+                  />
                 </label>
                 <div style={{display:"flex",gap:8}}>
-                  <button type="button" className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button>
-                  <button type="submit" className="btn btn-primary" disabled={saving} style={modal.isNight?{background:NIGHT_COLOR,borderColor:NIGHT_COLOR}:{}}>{saving?"שומר...":"✅ שלח בקשה"}</button>
+                  <button type="button" className="btn btn-secondary" onClick={closeBookingModal}>ביטול</button>
+                  <button type="submit" className="btn btn-primary" disabled={saving || isAiLoading} style={modal.isNight?{background:NIGHT_COLOR,borderColor:NIGHT_COLOR}:{}}>{saving?"שומר...":"✅ שלח בקשה"}</button>
                 </div>
                 <div style={{fontSize:11,color:"var(--green)"}}>✅ {modal.isNight ? "הזמנת הלילה נשמרת אוטומטית בלוח" : "האולפן נשמר אוטומטית בלוח"}</div>
               </form>
