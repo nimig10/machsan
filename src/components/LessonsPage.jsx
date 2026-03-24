@@ -3,6 +3,8 @@ import { useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today } from "../utils.js";
 
+const AI_IMPORT_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+
 function sortScheduleEntries(entries = []) {
   return [...entries].sort((a, b) => {
     const aDateTime = `${a?.date || ""} ${a?.startTime || "00:00"}`;
@@ -295,154 +297,209 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   };
 
   const importLessonsSmartAI = async (event) => {
-    const file = event.target.files?.[0];
+    const input = event.target;
+    const file = input?.files?.[0];
     if (!file) return;
-    event.target.value = "";
+
     setAiImporting(true);
+
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error("חסר מפתח Gemini במשתני הסביבה");
+      const reader = new FileReader();
 
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type:"array" });
-      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      if (!firstSheet) throw new Error("לא נמצא גיליון ראשון בקובץ");
-      const rawCsv = XLSX.utils.sheet_to_csv(firstSheet);
-      if (!String(rawCsv || "").trim()) throw new Error("לא נמצא תוכן קריא בקובץ");
+      reader.onload = async (e) => {
+        try {
+          const result = e?.target?.result;
+          const data = new Uint8Array(result instanceof ArrayBuffer ? result : new ArrayBuffer(0));
+          const workbook = XLSX.read(data, { type: "array" });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          if (!worksheet) throw new Error("לא נמצא גיליון ראשון בקובץ.");
 
-      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
-      const systemInstruction = `אתה מנהל מערכת חכם במכללת קולנוע וסאונד. מטרתך לחלץ שיעורים מקובץ CSV מבולגן ולהחזירם כ-JSON.
-חוקים קריטיים:
-1. התעלם לחלוטין משורות של חופשות, חגים או שבתות (למשל: 'פורים', 'שבת', '9 באב', 'יום השואה'). אל תיצור עבורם שיעור!
-2. התעלם משורות של טקסט חופשי או הערות מנהלה.
-3. חלץ שעות לפורמט HH:MM, גם אם הן כתובות בתוך תא טקסט (למשל '15:15-18:00').
-4. אם יש שיעור אבל חסרה שעה - הגדר '00:00' להתחלה וסיום.
-5. נסה להבין את מסלול הלימודים (Track) מהכותרות (למשל 'סאונד', 'וידאו'). אם לא ברור, כתוב 'כללי'.`;
+          const csvData = XLSX.utils.sheet_to_csv(worksheet);
+          if (!String(csvData || "").trim()) throw new Error("לא נמצא תוכן קריא בקובץ.");
 
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: rawCsv }] }],
-          systemInstruction: { parts: [{ text: systemInstruction }] },
-          generationConfig: {
-            responseMimeType: "application/json",
-            responseJsonSchema: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  id: { type: "string" },
-                  courseName: { type: "string" },
-                  teacher: { type: "string" },
-                  track: { type: "string" },
-                  dayOfWeek: { type: "string" },
-                  startTime: { type: "string" },
-                  endTime: { type: "string" },
+          const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.REACT_APP_GEMINI_API_KEY;
+          if (!apiKey) {
+            throw new Error("API Key is missing. Check your .env or Vercel settings.");
+          }
+
+          const systemInstruction = `
+          אתה מנהל מערכת חכם במכללת קולנוע וסאונד. מטרתך לחלץ שיעורים מקובץ CSV מבולגן ולהחזירם כ-JSON.
+          חוקים קריטיים:
+          1. התעלם לחלוטין משורות של חופשות, חגים או שבתות (למשל: 'פורים', 'שבת', '9 באב', 'יום השואה'). אל תיצור עבורם שיעור!
+          2. התעלם משורות של טקסט חופשי או הערות מנהלה.
+          3. חלץ שעות לפורמט HH:MM.
+          4. אם חסרה שעה - הגדר '00:00'.
+          5. נסה להבין את מסלול הלימודים מהכותרות. אם לא ברור, כתוב 'כללי'.
+        `;
+
+          const requestBody = {
+            contents: [{ parts: [{ text: csvData }] }],
+            systemInstruction: { parts: [{ text: systemInstruction }] },
+            generationConfig: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: "ARRAY",
+                items: {
+                  type: "OBJECT",
+                  properties: {
+                    id: { type: "STRING" },
+                    courseName: { type: "STRING" },
+                    teacher: { type: "STRING" },
+                    track: { type: "STRING" },
+                    dayOfWeek: { type: "STRING" },
+                    startTime: { type: "STRING" },
+                    endTime: { type: "STRING" },
+                  },
+                  required: ["id", "courseName", "teacher", "track", "dayOfWeek", "startTime", "endTime"],
                 },
-                required: ["id", "courseName", "teacher", "track", "dayOfWeek", "startTime", "endTime"],
               },
             },
-          },
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Gemini request failed");
-      }
-
-      const data = await response.json();
-      const generatedJson = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!generatedJson) throw new Error("Gemini לא החזיר JSON");
-      const parsedLessons = JSON.parse(generatedJson);
-      if (!Array.isArray(parsedLessons) || parsedLessons.length === 0) {
-        throw new Error("לא נמצאו שיעורים בקובץ לפי הפענוח של Gemini");
-      }
-
-      const blockedKeywords = ["פורים", "שבת", "9 באב", "יום השואה", "חופשה", "חג", "הערה", "מזכירות", "הודעה", "ביטול"];
-      const cleanedLessons = parsedLessons.filter((item) => {
-        const mergedText = [item?.courseName, item?.teacher, item?.track, item?.dayOfWeek].map((value) => String(value || "")).join(" ");
-        return !blockedKeywords.some((keyword) => mergedText.includes(keyword));
-      });
-      if (cleanedLessons.length === 0) throw new Error("Gemini לא החזיר שיעורים תקינים אחרי סינון חגים והערות");
-
-      const groupedLessons = new Map();
-      cleanedLessons.forEach((item, index) => {
-        const courseName = String(item?.courseName || "").trim();
-        const teacher = String(item?.teacher || "").trim() || "לא צוין";
-        const track = String(item?.track || "").trim() || "כללי";
-        const dayOfWeek = String(item?.dayOfWeek || "").trim();
-        const startTime = String(item?.startTime || "").trim() || "00:00";
-        const endTime = String(item?.endTime || "").trim() || "00:00";
-        if (!courseName) return;
-
-        const groupKey = `${courseName}__${teacher}__${track}`;
-        if (!groupedLessons.has(groupKey)) {
-          groupedLessons.set(groupKey, {
-            id: `lesson_ai_${Date.now()}_${index}`,
-            name: courseName,
-            instructorName: teacher,
-            instructorPhone: "",
-            instructorEmail: "",
-            track,
-            description: "יובא באמצעות ייבוא אקסל חכם (AI)",
-            studioId: null,
-            kitId: null,
-            created_at: new Date().toISOString(),
-            schedule: [],
-          });
-        }
-
-        groupedLessons.get(groupKey).schedule.push(normalizeScheduleEntry({
-          date: getNextDateForHebrewDay(dayOfWeek),
-          startTime,
-          endTime,
-          topic: dayOfWeek ? `מערכת קבועה · יום ${dayOfWeek}` : "",
-        }));
-      });
-
-      if (groupedLessons.size === 0) throw new Error("לא נוצרו קורסים תקינים מהפענוח");
-
-      let addedCount = 0;
-      let updatedCount = 0;
-      const updatedLessons = [...lessons];
-      groupedLessons.forEach((group) => {
-        const existingIndex = updatedLessons.findIndex((lesson) => (
-          String(lesson?.name || "").trim() === group.name
-          && String(lesson?.instructorName || "").trim() === group.instructorName
-          && String(lesson?.track || "").trim() === group.track
-        ));
-
-        if (existingIndex >= 0) {
-          const existing = updatedLessons[existingIndex];
-          updatedLessons[existingIndex] = {
-            ...existing,
-            track: group.track || existing.track || "",
-            schedule: dedupeScheduleEntries([...(existing.schedule || []), ...group.schedule]),
           };
-          updatedCount += 1;
-          return;
+
+          let jsonResponse = null;
+          let lastError = null;
+
+          for (const modelName of AI_IMPORT_MODELS) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+            const response = await fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(requestBody),
+            });
+
+            if (!response.ok) {
+              const errText = await response.text();
+              const errorMessage = `API HTTP Error ${response.status}: ${errText}`;
+              if (response.status === 503) {
+                lastError = new Error("Gemini עמוס כרגע. נסה שוב בעוד כמה דקות.");
+                continue;
+              }
+              throw new Error(errorMessage);
+            }
+
+            jsonResponse = await response.json();
+            lastError = null;
+            break;
+          }
+
+          if (lastError) throw lastError;
+          if (!jsonResponse?.candidates || jsonResponse.candidates.length === 0) {
+            throw new Error("No response from Gemini API.");
+          }
+
+          const generatedText = jsonResponse.candidates[0]?.content?.parts?.[0]?.text;
+          if (!generatedText) throw new Error("Gemini לא החזיר JSON.");
+
+          const parsedLessons = JSON.parse(generatedText);
+          if (!Array.isArray(parsedLessons) || parsedLessons.length === 0) {
+            throw new Error("לא נמצאו שיעורים בקובץ לפי הפענוח של Gemini.");
+          }
+
+          const blockedKeywords = ["פורים", "שבת", "9 באב", "יום השואה", "חופשה", "חג", "הערה", "מזכירות", "הודעה", "ביטול"];
+          const cleanedLessons = parsedLessons.filter((item) => {
+            const mergedText = [item?.courseName, item?.teacher, item?.track, item?.dayOfWeek]
+              .map((value) => String(value || ""))
+              .join(" ");
+            return !blockedKeywords.some((keyword) => mergedText.includes(keyword));
+          });
+
+          if (cleanedLessons.length === 0) {
+            throw new Error("Gemini לא החזיר שיעורים תקינים אחרי סינון חגים והערות.");
+          }
+
+          const groupedLessons = new Map();
+          cleanedLessons.forEach((item, index) => {
+            const courseName = String(item?.courseName || "").trim();
+            const teacher = String(item?.teacher || "").trim() || "לא צוין";
+            const track = String(item?.track || "").trim() || "כללי";
+            const dayOfWeek = String(item?.dayOfWeek || "").trim();
+            const startTime = String(item?.startTime || "").trim() || "00:00";
+            const endTime = String(item?.endTime || "").trim() || "00:00";
+            if (!courseName) return;
+
+            const groupKey = `${courseName}__${teacher}__${track}`;
+            if (!groupedLessons.has(groupKey)) {
+              groupedLessons.set(groupKey, {
+                id: `lesson_ai_${Date.now()}_${index}`,
+                name: courseName,
+                instructorName: teacher,
+                instructorPhone: "",
+                instructorEmail: "",
+                track,
+                description: "יובא באמצעות ייבוא אקסל חכם (AI)",
+                studioId: null,
+                kitId: null,
+                created_at: new Date().toISOString(),
+                schedule: [],
+              });
+            }
+
+            groupedLessons.get(groupKey).schedule.push(normalizeScheduleEntry({
+              date: getNextDateForHebrewDay(dayOfWeek),
+              startTime,
+              endTime,
+              topic: dayOfWeek ? `מערכת קבועה · יום ${dayOfWeek}` : "",
+            }));
+          });
+
+          if (groupedLessons.size === 0) {
+            throw new Error("לא נוצרו קורסים תקינים מהפענוח.");
+          }
+
+          let addedCount = 0;
+          let updatedCount = 0;
+          const updatedLessons = [...lessons];
+          groupedLessons.forEach((group) => {
+            const existingIndex = updatedLessons.findIndex((lesson) => (
+              String(lesson?.name || "").trim() === group.name
+              && String(lesson?.instructorName || "").trim() === group.instructorName
+              && String(lesson?.track || "").trim() === group.track
+            ));
+
+            if (existingIndex >= 0) {
+              const existing = updatedLessons[existingIndex];
+              updatedLessons[existingIndex] = {
+                ...existing,
+                track: group.track || existing.track || "",
+                schedule: dedupeScheduleEntries([...(existing.schedule || []), ...group.schedule]),
+              };
+              updatedCount += 1;
+              return;
+            }
+
+            updatedLessons.push({
+              ...group,
+              schedule: dedupeScheduleEntries(group.schedule),
+            });
+            addedCount += 1;
+          });
+
+          setLessons(updatedLessons);
+          await storageSet("lessons", updatedLessons);
+          showToast("success", `פוענחו ${cleanedLessons.length} שיעורים. נוספו ${addedCount} קורסים ועודכנו ${updatedCount} קורסים.`);
+        } catch (err) {
+          console.error("Error processing Excel:", err);
+          showToast("error", err?.message || "שגיאה בפענוח הקובץ.");
+        } finally {
+          setAiImporting(false);
+          if (input) input.value = null;
         }
+      };
 
-        updatedLessons.push({
-          ...group,
-          schedule: dedupeScheduleEntries(group.schedule),
-        });
-        addedCount += 1;
-      });
+      reader.onerror = () => {
+        console.error("File upload error: failed to read file");
+        showToast("error", "שגיאה בקריאת הקובץ.");
+        setAiImporting(false);
+        if (input) input.value = null;
+      };
 
-      setLessons(updatedLessons);
-      await storageSet("lessons", updatedLessons);
-      showToast("success", `פוענחו ${cleanedLessons.length} שיעורים. נוספו ${addedCount} קורסים ועודכנו ${updatedCount} קורסים.`);
+      reader.readAsArrayBuffer(file);
     } catch (error) {
-      console.error("Smart AI lesson import failed", error);
-      showToast("error", error?.message || "שגיאה בייבוא האקסל החכם");
-    } finally {
+      console.error("File upload error:", error);
+      showToast("error", "שגיאה בהעלאת הקובץ.");
       setAiImporting(false);
+      if (input) input.value = null;
     }
   };
 
