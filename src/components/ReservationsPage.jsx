@@ -1,12 +1,12 @@
 // ReservationsPage.jsx — admin reservations management page (includes rejected + archive tabs)
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { storageSet, storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
 
 export function ReservationsPage({ reservations, setReservations, equipment, showToast,
-    search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy, mode="active", collegeManager={}, managerToken="",
+    search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy, mode="active", initialSubView="active", collegeManager={}, managerToken="",
     categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], calendarToken="", siteSettings={} }) {
   const [subView, setSubView] = useState("active"); // "active" | "rejected" | "archive"
   const [selected, setSelected] = useState(null);
@@ -16,6 +16,9 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
   const [showManualForm, setShowManualForm] = useState(false);
   const [overdueEmailText, setOverdueEmailText] = useState("");
   const [overdueEmailSending, setOverdueEmailSending] = useState(false);
+  useEffect(() => {
+    setSubView(initialSubView === "archive" ? "archive" : initialSubView === "rejected" ? "rejected" : "active");
+  }, [initialSubView]);
   const isRejectedPage = subView === "rejected";
   const rejectedCount = reservations.filter(r=>r.status==="נדחה"||r.status==="באיחור").length;
   const archivedCount = reservations.filter(r=>r.status==="הוחזר").length;

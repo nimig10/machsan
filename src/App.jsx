@@ -434,6 +434,7 @@ function getLessonScheduleEntries(lesson) {
       date: session.date,
       startTime: session.startTime || "09:00",
       endTime: session.endTime || "12:00",
+      topic: String(session.topic || "").trim(),
     }))
     .sort(compareDateTimeParts);
 }
@@ -503,6 +504,7 @@ function buildLessonStudioBookings(lessons = []) {
         courseName: lessonName,
         instructorName,
         track,
+        subject: String(session.topic || "").trim(),
         studentName: lessonName && instructorName ? `${lessonName} · ${instructorName}` : (lessonName || instructorName),
         notes: String(lesson.description || "").trim(),
         isNight: false,
@@ -6254,6 +6256,7 @@ export default function App() {
   const [resStatusF, setResStatusF]     = useState("הכל");
   const [resLoanTypeF, setResLoanTypeF] = useState("הכל");
   const [resSortBy, setResSortBy]       = useState("received");
+  const [reservationsInitialSubView, setReservationsInitialSubView] = useState("active");
 
   const equipmentRef = useRef(equipment);
   const reservationsRef = useRef(reservations);
@@ -6663,7 +6666,10 @@ export default function App() {
                 {id:"settings",icon:"⚙️",label:"הגדרות"},
               ].map(n=>(
                 <div key={n.id} className={`nav-item ${page===n.id?"active":""}`}
-                  onClick={()=>setPage(p=>p===n.id?"dashboard":n.id)} title={n.label}>
+                  onClick={() => {
+                    if (n.id === "reservations") setReservationsInitialSubView("active");
+                    setPage(p=>p===n.id?"dashboard":n.id);
+                  }} title={n.label}>
                   <span className="icon">{n.icon}</span>
                   <span className="nav-label">{n.label}</span>
                   {n.badge&&<span style={{background:"var(--accent)",color:"#000",borderRadius:"50%",width:16,height:16,fontSize:10,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",position:"absolute",top:4,left:"50%",transform:"translateX(-50%) translateX(10px)"}}>{n.badge}</span>}
@@ -6680,7 +6686,7 @@ export default function App() {
                 <span className="topbar-title" style={{flex:1}}>{pageTitle[page]}</span>
                 {pending>0&&<div style={{background:"rgba(241,196,15,0.12)",border:"1px solid rgba(241,196,15,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--yellow)",flexShrink:0}}>⏳ {pending}</div>}
                 {deptHeadPending>0&&<div style={{background:"rgba(155,89,182,0.12)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--purple)",flexShrink:0}}>🟣 {deptHeadPending}</div>}
-                {overdueCount>0&&<div style={{background:"rgba(230,126,34,0.15)",border:"1px solid rgba(230,126,34,0.4)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"#e67e22",flexShrink:0,cursor:"pointer"}} onClick={()=>setPage("rejected")}>⚠️ {overdueCount} באיחור</div>}
+                {overdueCount>0&&<div style={{background:"rgba(230,126,34,0.15)",border:"1px solid rgba(230,126,34,0.4)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"#e67e22",flexShrink:0,cursor:"pointer"}} onClick={()=>{setReservationsInitialSubView("rejected");setPage("reservations");}}>⚠️ {overdueCount} באיחור</div>}
                 {rejectedCount>0&&<div style={{background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--red)",flexShrink:0}}>❌ {rejectedCount}</div>}
                 <button
                   className="btn btn-secondary btn-sm"
@@ -6727,7 +6733,7 @@ export default function App() {
               {page==="reservations"&& <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}
-                categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings}/>}
+                initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings}/>}
               {page==="team"        && <TeamPage         teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/>}
               {page==="kits"        && <KitsPage         kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons}/>}
               {page==="lessons"     && <LessonsPage      lessons={lessons} setLessons={_setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} trackOptions={[...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/>}

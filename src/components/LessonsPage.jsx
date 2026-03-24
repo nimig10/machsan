@@ -1,5 +1,5 @@
 // LessonsPage.jsx — course & lesson schedule management
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today } from "../utils.js";
 
 function sortScheduleEntries(entries = []) {
@@ -10,10 +10,32 @@ function sortScheduleEntries(entries = []) {
   });
 }
 
+function normalizeScheduleEntry(entry = {}) {
+  return {
+    date: entry?.date || "",
+    startTime: entry?.startTime || "09:00",
+    endTime: entry?.endTime || "12:00",
+    topic: String(entry?.topic || "").trim(),
+  };
+}
+
+function dedupeScheduleEntries(entries = []) {
+  const seen = new Set();
+  return sortScheduleEntries(entries).filter((entry) => {
+    const normalized = normalizeScheduleEntry(entry);
+    const key = `${normalized.date}__${normalized.startTime}__${normalized.endTime}__${normalized.topic}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[], trackOptions=[] }) {
   const [mode, setMode] = useState(null); // null | "add" | "edit"
   const [editTarget, setEditTarget] = useState(null);
   const [search, setSearch] = useState("");
+  const [xlImporting, setXlImporting] = useState(false);
+  const importInputRef = useRef(null);
 
   const lessonKits = kits.filter(k=>k.kitType==="lesson");
   const getLinkedKit = (lesson) => {
@@ -45,6 +67,171 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
   const filtered = lessons.filter(l=>!search || l.name?.includes(search) || l.instructorName?.includes(search));
 
+  const importLessonsXL = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = "";
+    setXlImporting(true);
+    try {
+      const ensureXlsx = async () => {
+        if (window.XLSX) return window.XLSX;
+        await new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+        return window.XLSX;
+      };
+
+      const readRows = async () => {
+        if (/\.xlsx?$/i.test(file.name)) {
+          const XLSX = await ensureXlsx();
+          const buf = await file.arrayBuffer();
+          const wb = XLSX.read(buf, { type:"array" });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          return XLSX.utils.sheet_to_json(ws, { header:1, defval:"" });
+        }
+        const text = await file.text();
+        const lines = text.split(/\r?\n/).filter(line => line.trim());
+        const sep = lines[0]?.includes("\t") ? "\t" : ",";
+        return lines.map(line => line.split(sep).map(cell => cell.trim().replace(/^"|"$/g, "")));
+      };
+
+      const rows = await readRows();
+      if (!rows.length) {
+        showToast("error", "קובץ ה־XL ריק");
+        setXlImporting(false);
+        return;
+      }
+
+      const headers = rows[0].map((header) => String(header || "").trim().replace(/[\uFEFF\u200B-\u200D\u00A0]/g, "").toLowerCase());
+      const findHeader = (...patterns) => headers.findIndex((header) => patterns.some((pattern) => header.includes(pattern)));
+      const courseIdx = findHeader("קורס", "course", "שם קורס");
+      const dateIdx = findHeader("תאריך", "date");
+      const startIdx = findHeader("התחלה", "start", "שעת התחלה");
+      const endIdx = findHeader("סיום", "end", "שעת סיום");
+      if (courseIdx === -1 || dateIdx === -1) {
+        showToast("error", 'חסרות עמודות חובה: "קורס" ו-"תאריך"');
+        setXlImporting(false);
+        return;
+      }
+
+      const instructorIdx = findHeader("מרצה", "מורה", "lecturer", "teacher", "instructor");
+      const phoneIdx = findHeader("טלפון", "phone", "נייד");
+      const emailIdx = findHeader("מייל", "email", "mail");
+      const trackIdx = findHeader("מסלול", "track", "קבוצה", "class");
+      const studioIdx = findHeader("אולפן", "studio");
+      const kitIdx = findHeader("ערכה", "kit");
+      const topicIdx = findHeader("נושא", "topic", "subject");
+      const notesIdx = findHeader("הערות", "description", "notes", "תיאור");
+
+      const groups = new Map();
+      const toIsoDate = (rawValue) => {
+        let value = String(rawValue || "").trim();
+        if (!value) return "";
+        if (/^\d{5}$/.test(value)) {
+          const date = new Date(Math.round((Number(value) - 25569) * 86400000));
+          return formatLocalDateInput(date);
+        }
+        const parts = value.includes("/") ? value.split("/") : value.split("-");
+        if (parts.length !== 3) return value;
+        if (parts[0].length === 4) return `${parts[0]}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}`;
+        return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+      };
+
+      for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+        const row = rows[rowIndex];
+        const courseName = String(row[courseIdx] || "").trim();
+        const date = toIsoDate(row[dateIdx]);
+        if (!courseName || !date) continue;
+        if (!groups.has(courseName)) {
+          groups.set(courseName, {
+            name: courseName,
+            instructorName: instructorIdx >= 0 ? String(row[instructorIdx] || "").trim() : "",
+            instructorPhone: phoneIdx >= 0 ? String(row[phoneIdx] || "").trim() : "",
+            instructorEmail: emailIdx >= 0 ? String(row[emailIdx] || "").trim() : "",
+            track: trackIdx >= 0 ? String(row[trackIdx] || "").trim() : "",
+            studioName: studioIdx >= 0 ? String(row[studioIdx] || "").trim() : "",
+            kitName: kitIdx >= 0 ? String(row[kitIdx] || "").trim() : "",
+            description: notesIdx >= 0 ? String(row[notesIdx] || "").trim() : "",
+            schedule: [],
+          });
+        }
+        const group = groups.get(courseName);
+        if (!group.instructorName && instructorIdx >= 0) group.instructorName = String(row[instructorIdx] || "").trim();
+        if (!group.instructorPhone && phoneIdx >= 0) group.instructorPhone = String(row[phoneIdx] || "").trim();
+        if (!group.instructorEmail && emailIdx >= 0) group.instructorEmail = String(row[emailIdx] || "").trim();
+        if (!group.track && trackIdx >= 0) group.track = String(row[trackIdx] || "").trim();
+        if (!group.studioName && studioIdx >= 0) group.studioName = String(row[studioIdx] || "").trim();
+        if (!group.kitName && kitIdx >= 0) group.kitName = String(row[kitIdx] || "").trim();
+        if (!group.description && notesIdx >= 0) group.description = String(row[notesIdx] || "").trim();
+        group.schedule.push(normalizeScheduleEntry({
+          date,
+          startTime: startIdx >= 0 ? String(row[startIdx] || "").trim() || "09:00" : "09:00",
+          endTime: endIdx >= 0 ? String(row[endIdx] || "").trim() || "12:00" : "12:00",
+          topic: topicIdx >= 0 ? String(row[topicIdx] || "").trim() : "",
+        }));
+      }
+
+      if (groups.size === 0) {
+        showToast("error", "לא נמצאו קורסים תקינים לייבוא");
+        setXlImporting(false);
+        return;
+      }
+
+      let addedCount = 0;
+      let updatedCount = 0;
+      const updatedLessons = [...lessons];
+      groups.forEach((group) => {
+        const studioId = studios.find((studio) => studio.name === group.studioName)?.id ?? null;
+        const kitId = lessonKits.find((kit) => kit.name === group.kitName)?.id ?? null;
+        const existingIndex = updatedLessons.findIndex((lesson) => lesson.name === group.name);
+        const nextSchedule = dedupeScheduleEntries(group.schedule);
+        if (existingIndex >= 0) {
+          const existing = updatedLessons[existingIndex];
+          updatedLessons[existingIndex] = {
+            ...existing,
+            track: group.track || existing.track || "",
+            instructorName: group.instructorName || existing.instructorName || "",
+            instructorPhone: group.instructorPhone || existing.instructorPhone || "",
+            instructorEmail: group.instructorEmail || existing.instructorEmail || "",
+            description: group.description || existing.description || "",
+            studioId: studioId ?? existing.studioId ?? null,
+            kitId: kitId ?? existing.kitId ?? null,
+            schedule: dedupeScheduleEntries([...(existing.schedule || []), ...nextSchedule]),
+          };
+          updatedCount += 1;
+          return;
+        }
+        updatedLessons.push({
+          id: `lesson_${Date.now()}_${addedCount + updatedCount}`,
+          name: group.name,
+          track: group.track,
+          instructorName: group.instructorName,
+          instructorPhone: group.instructorPhone,
+          instructorEmail: group.instructorEmail,
+          description: group.description,
+          studioId,
+          kitId,
+          schedule: nextSchedule,
+          created_at: new Date().toISOString(),
+        });
+        addedCount += 1;
+      });
+
+      setLessons(updatedLessons);
+      await storageSet("lessons", updatedLessons);
+      showToast("success", `יובאו ${addedCount} קורסים ועודכנו ${updatedCount} קורסים`);
+    } catch (error) {
+      console.error("Lessons XL import failed", error);
+      showToast("error", "שגיאה בייבוא קורסים מ־XL");
+    } finally {
+      setXlImporting(false);
+    }
+  };
+
   return (
     <div className="page">
       {mode ? (
@@ -66,7 +253,11 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap"}}>
             <div className="search-bar" style={{flex:1,minWidth:180}}><span>🔍</span>
               <input placeholder="חיפוש קורס או מרצה..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
-            <button className="btn btn-primary" onClick={()=>{setMode("add");setEditTarget(null);}}>➕ קורס חדש</button>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <input ref={importInputRef} type="file" accept=".csv,.tsv,.xlsx,.xls" style={{display:"none"}} onChange={importLessonsXL} disabled={xlImporting}/>
+              <button className="btn btn-secondary" onClick={()=>importInputRef.current?.click()} disabled={xlImporting}>{xlImporting ? "מייבא..." : "ייבוא XL"}</button>
+              <button className="btn btn-primary" onClick={()=>{setMode("add");setEditTarget(null);}}>➕ קורס חדש</button>
+            </div>
           </div>
 
           {filtered.length===0
@@ -119,15 +310,11 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
   const [description, setDescription]         = useState(initial?.description||"");
   const [studioId, setStudioId]               = useState(initial?.studioId||"");
   const [kitId, setKitId]                     = useState(initialLinkedKitId);
-  const [schedule, setSchedule]               = useState(initial?.schedule||[]);
-  const [scheduleMode, setScheduleMode]       = useState("manual");
+  const [schedule, setSchedule]               = useState((initial?.schedule||[]).map(normalizeScheduleEntry));
   const [saving, setSaving]                   = useState(false);
-  const [xlImporting, setXlImporting]         = useState(false);
   const [localMsg, setLocalMsg]               = useState(null);
   const [teacherMessage, setTeacherMessage]   = useState("");
   const [teacherEmailSending, setTeacherEmailSending] = useState(false);
-  const [editingSessionIndex, setEditingSessionIndex] = useState(null);
-  const [editingSession, setEditingSession] = useState({ date:"", startTime:"09:00", endTime:"12:00" });
   const normalizedTrackOptions = [...new Set((trackOptions || []).map(option => String(option || "").trim()).filter(Boolean))];
 
   // Manual schedule builder
@@ -146,10 +333,10 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
     const sessions = [];
     let d = parseLocalDate(manStartDate);
     for(let i=0;i<count;i++) {
-      sessions.push({ date: formatLocalDateInput(d), startTime: manStartTime, endTime: manEndTime });
+      sessions.push({ date: formatLocalDateInput(d), startTime: manStartTime, endTime: manEndTime, topic: "" });
       d.setDate(d.getDate()+7);
     }
-    setSchedule(prev => sortScheduleEntries([...prev, ...sessions]));
+    setSchedule(prev => dedupeScheduleEntries([...prev, ...sessions]));
     setLocalMsg({type:"success",text:`נוספו ${sessions.length} שיעורים`});
   };
 
@@ -159,123 +346,20 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
     const lastLesson = schedule[schedule.length-1];
     const nextDateObj = parseLocalDate(lastLesson.date || today());
     nextDateObj.setDate(nextDateObj.getDate()+7);
-    setSchedule(prev=>sortScheduleEntries([...prev, {
+    setSchedule(prev=>dedupeScheduleEntries([...prev, {
       date: formatLocalDateInput(nextDateObj),
       startTime: firstLesson.startTime||"09:00",
       endTime: firstLesson.endTime||"12:00",
+      topic: "",
     }]));
   };
 
-  // XL import for schedule
-  const importScheduleXL = async (e) => {
-    const file = e.target.files[0];
-    if(!file) return;
-    e.target.value = "";
-    setXlImporting(true);
-    try {
-      const processRows = (rows) => {
-        if(!rows.length) { setLocalMsg({type:"error",text:"קובץ ריק"}); return; }
-        const headers = rows[0].map(h=>String(h||"").trim().replace(/[\uFEFF]/g,"").toLowerCase());
-        const dateIdx  = headers.findIndex(h=>h.includes("תאריך")||h.includes("date"));
-        const startIdx = headers.findIndex(h=>h.includes("התחלה")||h.includes("start")||h.includes("שעת התחלה"));
-        const endIdx   = headers.findIndex(h=>h.includes("סיום")||h.includes("end")||h.includes("שעת סיום"));
-        const courseIdx= headers.findIndex(h=>h.includes("קורס")||h.includes("course")||h.includes("שם"));
-        if(dateIdx===-1) { setLocalMsg({type:"error",text:'לא נמצאה עמודת "תאריך"'}); setXlImporting(false); return; }
-        if(courseIdx>=0 && !name.trim()) {
-          const firstCourseName = String(rows[1]?.[courseIdx]||"").trim();
-          if(firstCourseName) setName(firstCourseName);
-        }
-        const sessions = [];
-        for(let i=1;i<rows.length;i++) {
-          const row = rows[i];
-          let dateVal = String(row[dateIdx]||"").trim();
-          if(!dateVal) continue;
-          if(/^\d{5}$/.test(dateVal)) {
-            const d = new Date(Math.round((Number(dateVal)-25569)*86400000));
-            dateVal = formatLocalDateInput(d);
-          } else {
-            const parts = dateVal.includes("/")?dateVal.split("/"):dateVal.split("-");
-            if(parts.length===3) {
-              if(parts[0].length===4) dateVal=`${parts[0]}-${parts[1].padStart(2,"0")}-${parts[2].padStart(2,"0")}`;
-              else dateVal=`${parts[2]}-${parts[1].padStart(2,"0")}-${parts[0].padStart(2,"0")}`;
-            }
-          }
-          sessions.push({
-            date: dateVal,
-            startTime: startIdx>=0?String(row[startIdx]||"09:00").trim():"09:00",
-            endTime: endIdx>=0?String(row[endIdx]||"12:00").trim():"12:00",
-          });
-        }
-        setSchedule(prev=>sortScheduleEntries([...prev,...sessions]));
-        setLocalMsg({type:"success",text:`יובאו ${sessions.length} שיעורים`});
-        setXlImporting(false);
-      };
-
-      if(/\.xlsx?$/i.test(file.name)) {
-        if(!window.XLSX) {
-          await new Promise((res,rej)=>{
-            const s=document.createElement("script");
-            s.src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-            s.onload=res; s.onerror=rej;
-            document.head.appendChild(s);
-          });
-        }
-        const buf = await file.arrayBuffer();
-        const wb = window.XLSX.read(buf,{type:"array"});
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        processRows(window.XLSX.utils.sheet_to_json(ws,{header:1,defval:""}));
-      } else {
-        const reader = new FileReader();
-        reader.onload = ev => {
-          const lines = ev.target.result.split(/\r?\n/).filter(l=>l.trim());
-          const sep = lines[0]?.includes("\t")?"\t":",";
-          processRows(lines.map(l=>l.split(sep).map(c=>c.trim().replace(/^"|"$/g,""))));
-        };
-        reader.readAsText(file,"UTF-8");
-      }
-    } catch(err) {
-      console.error("XL import error",err);
-      setLocalMsg({type:"error",text:"שגיאה בייבוא הקובץ"});
-      setXlImporting(false);
-    }
-  };
-
-  const beginEditSession = (session, index) => {
-    setEditingSessionIndex(index);
-    setEditingSession({
-      date: session?.date || "",
-      startTime: session?.startTime || "09:00",
-      endTime: session?.endTime || "12:00",
-    });
-  };
-
-  const cancelEditSession = () => {
-    setEditingSessionIndex(null);
-    setEditingSession({ date:"", startTime:"09:00", endTime:"12:00" });
-  };
-
-  const saveEditedSession = () => {
-    if(editingSessionIndex === null) return;
-    if(!editingSession.date) {
-      setLocalMsg({type:"error",text:"יש לבחור תאריך לשיעור"});
-      return;
-    }
-    if(editingSession.startTime >= editingSession.endTime) {
-      setLocalMsg({type:"error",text:"שעת סיום חייבת להיות אחרי שעת התחלה"});
-      return;
-    }
-    setSchedule(prev => sortScheduleEntries(prev.map((session, index) => (
-      index === editingSessionIndex
-        ? {
-            ...session,
-            date: editingSession.date,
-            startTime: editingSession.startTime,
-            endTime: editingSession.endTime,
-          }
+  const updateSessionField = (index, field, value) => {
+    setSchedule(prev => prev.map((session, sessionIndex) => (
+      sessionIndex === index
+        ? { ...session, [field]: field === "topic" ? value : value || (field === "date" ? "" : session[field]) }
         : session
-    ))));
-    cancelEditSession();
-    setLocalMsg({type:"success",text:"השיעור עודכן"});
+    )));
   };
 
   const sendTeacherEmail = async () => {
@@ -286,7 +370,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
     setTeacherEmailSending(true);
     try {
       const scheduleList = (schedule||[]).map((s,i)=>
-        `<div style="margin-bottom:6px;color:#c7cedf">שיעור ${i+1}: ${formatDate(s.date)} ${s.startTime||""}${s.endTime?`–${s.endTime}`:""}</div>`
+        `<div style="margin-bottom:6px;color:#c7cedf">שיעור ${i+1}: ${formatDate(s.date)} ${s.startTime||""}${s.endTime?`–${s.endTime}`:""}${s.topic?` · ${s.topic}`:""}</div>`
       ).join("");
       await fetch("/api/send-email", {
         method:"POST",
@@ -314,15 +398,17 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
   const handleSave = async () => {
     if(!name.trim()) { setLocalMsg({type:"error",text:"חובה למלא שם קורס"}); return; }
     let finalSchedule = [...schedule];
-    if(scheduleMode==="manual" && manStartDate && finalSchedule.length===0) {
+    if(manStartDate && finalSchedule.length===0) {
       const count = Math.max(1,Math.min(52,Number(manCount)||1));
       let d = parseLocalDate(manStartDate);
       for(let i=0;i<count;i++) {
-        finalSchedule.push({date:formatLocalDateInput(d),startTime:manStartTime,endTime:manEndTime});
+        finalSchedule.push({date:formatLocalDateInput(d),startTime:manStartTime,endTime:manEndTime,topic:""});
         d.setDate(d.getDate()+7);
       }
     }
-    finalSchedule = sortScheduleEntries(finalSchedule);
+    finalSchedule = dedupeScheduleEntries(finalSchedule.map(normalizeScheduleEntry));
+    const invalidSession = finalSchedule.find(session => !session.date || session.startTime >= session.endTime);
+    if(invalidSession) { setLocalMsg({type:"error",text:"יש לתקן תאריך או שעות לא תקינים בלוח השיעורים"}); return; }
     setSaving(true);
     const lesson = {
       id: initial?.id||`lesson_${Date.now()}`,
@@ -415,98 +501,61 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
       {/* Schedule builder */}
       <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
         <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:12}}>📅 לוח שיעורים</div>
-
-        <div style={{display:"flex",gap:6,marginBottom:12}}>
-          {[{k:"manual",l:"📝 ידני"},{k:"xl",l:"📤 ייבוא XL"}].map(({k,l})=>(
-            <button key={k} onClick={()=>setScheduleMode(k)}
-              style={{padding:"7px 16px",borderRadius:20,border:`2px solid ${scheduleMode===k?"#9b59b6":"var(--border)"}`,background:scheduleMode===k?"rgba(155,89,182,0.15)":"transparent",color:scheduleMode===k?"#9b59b6":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer"}}>
-              {l}
-            </button>
-          ))}
+        <div style={{fontSize:12,color:"var(--text3)",marginBottom:10}}>הוספת מפגשים ידנית נשארת כאן. ייבוא XL עבר לראש דף "שיעורים" כדי לאפשר העלאה מהירה של כמה קורסים במקביל.</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end",marginBottom:12}}>
+          <div className="form-group" style={{flex:"1 1 130px",minWidth:120}}>
+            <label className="form-label">תאריך התחלה</label>
+            <input className="form-input" type="date" value={manStartDate} onChange={e=>setManStartDate(e.target.value)}/>
+          </div>
+          <div className="form-group" style={{flex:"0 0 90px"}}>
+            <label className="form-label">שעת התחלה</label>
+            <select className="form-select" value={manStartTime} onChange={e=>setManStartTime(e.target.value)}>
+              {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div className="form-group" style={{flex:"0 0 90px"}}>
+            <label className="form-label">שעת סיום</label>
+            <select className="form-select" value={manEndTime} onChange={e=>setManEndTime(e.target.value)}>
+              {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div className="form-group" style={{flex:"0 0 80px"}}>
+            <label className="form-label">מס׳ שבועות</label>
+            <input className="form-input" type="number" min={1} max={52} value={manCount} onChange={e=>setManCount(e.target.value)}/>
+          </div>
+          <button className="btn btn-primary" style={{background:"#9b59b6",borderColor:"#9b59b6",whiteSpace:"nowrap"}} onClick={buildAndAppendSchedule}>➕ הוסף</button>
         </div>
-
-        {scheduleMode==="manual" && (
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end",marginBottom:12}}>
-            <div className="form-group" style={{flex:"1 1 130px",minWidth:120}}>
-              <label className="form-label">תאריך התחלה</label>
-              <input className="form-input" type="date" value={manStartDate} onChange={e=>setManStartDate(e.target.value)}/>
-            </div>
-            <div className="form-group" style={{flex:"0 0 90px"}}>
-              <label className="form-label">שעת התחלה</label>
-              <select className="form-select" value={manStartTime} onChange={e=>setManStartTime(e.target.value)}>
-                {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <div className="form-group" style={{flex:"0 0 90px"}}>
-              <label className="form-label">שעת סיום</label>
-              <select className="form-select" value={manEndTime} onChange={e=>setManEndTime(e.target.value)}>
-                {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <div className="form-group" style={{flex:"0 0 80px"}}>
-              <label className="form-label">מס׳ שבועות</label>
-              <input className="form-input" type="number" min={1} max={52} value={manCount} onChange={e=>setManCount(e.target.value)}/>
-            </div>
-            <button className="btn btn-primary" style={{background:"#9b59b6",borderColor:"#9b59b6",whiteSpace:"nowrap"}} onClick={buildAndAppendSchedule}>➕ הוסף</button>
-          </div>
-        )}
-
-        {scheduleMode==="xl" && (
-          <div style={{marginBottom:12}}>
-            <div style={{fontSize:12,color:"var(--text3)",marginBottom:8}}>יש להעלות קובץ CSV/XLSX עם עמודות: תאריך, שעת התחלה, שעת סיום (אופציונלי: קורס)</div>
-            <label className="btn btn-secondary" style={{cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6}}>
-              {xlImporting?"⏳ מייבא...":"📂 בחר קובץ"}
-              <input type="file" accept=".csv,.tsv,.xlsx,.xls" style={{display:"none"}} onChange={importScheduleXL} disabled={xlImporting}/>
-            </label>
-          </div>
-        )}
 
         {schedule.length>0 && (
           <div style={{marginBottom:16}}>
             <div style={{fontWeight:700,fontSize:12,color:"#9b59b6",marginBottom:6}}>📅 {schedule.length} שיעורים בלוח:</div>
             <div style={{maxHeight:260,overflow:"auto",display:"flex",flexDirection:"column",gap:4}}>
               {schedule.map((s,i)=>(
-                editingSessionIndex===i ? (
-                  <div key={i} style={{display:"flex",flexDirection:"column",gap:8,padding:"10px 12px",background:"rgba(155,89,182,0.08)",borderRadius:8,border:"1px solid rgba(155,89,182,0.22)"}}>
-                    <div style={{fontWeight:700,fontSize:12,color:"#9b59b6"}}>עריכת שיעור #{i+1}</div>
-                    <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end"}}>
-                      <div className="form-group" style={{flex:"1 1 140px",margin:0}}>
-                        <label className="form-label">תאריך</label>
-                        <input className="form-input" type="date" value={editingSession.date} onChange={e=>setEditingSession(prev=>({...prev,date:e.target.value}))}/>
-                      </div>
-                      <div className="form-group" style={{flex:"0 0 100px",margin:0}}>
-                        <label className="form-label">התחלה</label>
-                        <select className="form-select" value={editingSession.startTime} onChange={e=>setEditingSession(prev=>({...prev,startTime:e.target.value}))}>
-                          {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
-                        </select>
-                      </div>
-                      <div className="form-group" style={{flex:"0 0 100px",margin:0}}>
-                        <label className="form-label">סיום</label>
-                        <select className="form-select" value={editingSession.endTime} onChange={e=>setEditingSession(prev=>({...prev,endTime:e.target.value}))}>
-                          {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                    <div style={{display:"flex",gap:6}}>
-                      <button className="btn btn-primary btn-sm" style={{background:"#9b59b6",borderColor:"#9b59b6"}} onClick={saveEditedSession}>שמור שיעור</button>
-                      <button className="btn btn-secondary btn-sm" onClick={cancelEditSession}>בטל</button>
-                    </div>
+                <div key={`${s.date}-${s.startTime}-${i}`} style={{display:"grid",gridTemplateColumns:"minmax(34px,40px) minmax(130px,1.1fr) minmax(90px,0.6fr) minmax(90px,0.6fr) minmax(180px,1.5fr) auto",alignItems:"end",gap:8,fontSize:12,padding:"10px 12px",background:"var(--surface2)",borderRadius:8,border:"1px solid rgba(155,89,182,0.14)"}}>
+                  <div style={{fontWeight:800,color:"#9b59b6",paddingBottom:10}}>#{i+1}</div>
+                  <div className="form-group" style={{margin:0}}>
+                    <label className="form-label">תאריך</label>
+                    <input className="form-input" type="date" value={s.date} onChange={e=>updateSessionField(i, "date", e.target.value)}/>
                   </div>
-                ) : (
-                  <div key={i} style={{display:"flex",alignItems:"center",gap:8,fontSize:12,padding:"4px 8px",background:"var(--surface2)",borderRadius:6}}>
-                    <span style={{fontWeight:700,color:"#9b59b6",minWidth:24,flexShrink:0}}>#{i+1}</span>
-                    <span>{formatDate(s.date)}</span>
-                    <span style={{color:"var(--text3)"}}>{s.startTime}–{s.endTime}</span>
-                    <div style={{display:"flex",gap:4,marginRight:"auto"}}>
-                      <button className="btn btn-secondary btn-sm" onClick={()=>beginEditSession(s, i)}>ערוך</button>
-                      <button onClick={()=>{
-                        setSchedule(prev=>prev.filter((_,j)=>j!==i));
-                        if(editingSessionIndex===i) cancelEditSession();
-                      }}
-                        style={{background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:13,padding:"0 4px"}}>×</button>
-                    </div>
+                  <div className="form-group" style={{margin:0}}>
+                    <label className="form-label">התחלה</label>
+                    <select className="form-select" value={s.startTime} onChange={e=>updateSessionField(i, "startTime", e.target.value)}>
+                      {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+                    </select>
                   </div>
-                )
+                  <div className="form-group" style={{margin:0}}>
+                    <label className="form-label">סיום</label>
+                    <select className="form-select" value={s.endTime} onChange={e=>updateSessionField(i, "endTime", e.target.value)}>
+                      {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{margin:0}}>
+                    <label className="form-label">נושא השיעור</label>
+                    <input className="form-input" placeholder="אופציונלי" value={s.topic||""} onChange={e=>updateSessionField(i, "topic", e.target.value)}/>
+                  </div>
+                  <button onClick={()=>setSchedule(prev=>prev.filter((_,j)=>j!==i))}
+                    style={{background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:18,padding:"0 4px",alignSelf:"center"}} title="מחק מפגש">×</button>
+                </div>
               ))}
             </div>
             <div style={{display:"flex",gap:6,marginTop:8}}>
@@ -514,31 +563,8 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
               <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>{
                 if(window.confirm("לנקות את כל לוח השיעורים?")) {
                   setSchedule([]);
-                  cancelEditSession();
                 }
               }}>🗑️ נקה הכל</button>
-            </div>
-          </div>
-        )}
-
-        {/* Current schedule */}
-        {false && schedule.length>0 && (
-          <div>
-            <div style={{fontWeight:700,fontSize:12,color:"#9b59b6",marginBottom:6}}>📅 {schedule.length} שיעורים בלוח:</div>
-            <div style={{maxHeight:200,overflow:"auto",display:"flex",flexDirection:"column",gap:4}}>
-              {schedule.map((s,i)=>(
-                <div key={i} style={{display:"flex",alignItems:"center",gap:8,fontSize:12,padding:"4px 8px",background:"var(--surface2)",borderRadius:6}}>
-                  <span style={{fontWeight:700,color:"#9b59b6",minWidth:24,flexShrink:0}}>#{i+1}</span>
-                  <span>{formatDate(s.date)}</span>
-                  <span style={{color:"var(--text3)"}}>{s.startTime}–{s.endTime}</span>
-                  <button onClick={()=>setSchedule(p=>p.filter((_,j)=>j!==i))}
-                    style={{marginRight:"auto",background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:13,padding:"0 4px"}}>×</button>
-                </div>
-              ))}
-            </div>
-            <div style={{display:"flex",gap:6,marginTop:8}}>
-              <button className="btn btn-secondary btn-sm" onClick={appendLessonFromExisting}>➕ שיעור נוסף</button>
-              <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>{if(window.confirm("לנקות את כל לוח השיעורים?"))setSchedule([]);}}>🗑️ נקה הכל</button>
             </div>
           </div>
         )}

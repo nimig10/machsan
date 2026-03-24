@@ -1451,9 +1451,14 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
   // Studio certification check
   const studioCertTypes = (certifications?.types || []).filter(t => t.category === "studio" && t.id !== "cert_night_studio");
   const sameStudioId = (a, b) => String(a) === String(b);
+  const STUDIO_MAINTENANCE_MESSAGE = "האולפן בתחזוקה, מקווים שישוב לעבוד בקרוב";
   const getStudioCertIds = (studio) => {
     if (Array.isArray(studio?.studioCertIds)) return studio.studioCertIds.filter(Boolean);
     return studio?.studioCertId ? [studio.studioCertId] : [];
+  };
+  const isStudioDisabled = (studioId) => {
+    const studio = studios.find(s => sameStudioId(s.id, studioId));
+    return Boolean(studio?.isDisabled);
   };
   const hasStudioCert = (studioId) => {
     const studio = studios.find(s => sameStudioId(s.id, studioId));
@@ -1489,7 +1494,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
   };
   const getBookingSubtitle = (booking) => {
     const kind = getBookingKind(booking);
-    if (kind === "lesson") return [booking?.instructorName, booking?.track].filter(Boolean).join(" · ");
+    if (kind === "lesson") return [booking?.subject, booking?.instructorName, booking?.track].filter(Boolean).join(" · ");
     if (kind === "team") return "צוות המחסן";
     return "";
   };
@@ -1516,6 +1521,10 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     const isNight = modal.isNight || false;
     const { studioId, date } = modal;
     // Studio certification check
+    if (isStudioDisabled(studioId)) {
+      showToast("error", STUDIO_MAINTENANCE_MESSAGE);
+      setSaving(false); return;
+    }
     if (!hasStudioCert(studioId)) {
       showToast("error", `⛔ טרם עבר הסמכה — לא ניתן לקבוע אולפן זה`);
       setSaving(false); return;
@@ -1538,6 +1547,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     const fd = new FormData(e.target);
     const startTime = fd.get("startTime"), endTime = fd.get("endTime"), notes = fd.get("notes")?.trim();
     const { bookingId, studioId, date, isNight } = modal;
+    if (isStudioDisabled(studioId)) { showToast("error", STUDIO_MAINTENANCE_MESSAGE); setSaving(false); return; }
     if(!isNight && startTime >= endTime) { showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה"); setSaving(false); return; }
     const overlap = bookings.some(b => sameStudioId(b.studioId, studioId) && b.date===date && b.id!==bookingId && isActiveStudioBooking(b) && !(endTime<=b.startTime || startTime>=b.endTime));
     if(!isNight && overlap) { showToast("error","⚠️ קיימת הזמנה חופפת"); setSaving(false); return; }
@@ -1618,7 +1628,8 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     const nowHour = new Date().getHours();
     // Night bookings from this day
     const nightBookings = dayBookings.filter(b=>b.isNight);
-    const dayBlocked = !hasStudioCert(dayView.studioId);
+    const maintenanceBlocked = isStudioDisabled(dayView.studioId);
+    const dayBlocked = maintenanceBlocked || !hasStudioCert(dayView.studioId);
     const dayCertName = getStudioCertName(dayView.studioId);
     return (
       <div style={{padding:"20px 16px",direction:"rtl",maxWidth:500,margin:"0 auto"}}>
@@ -1631,7 +1642,8 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
           {studio?.name}
         </div>
         <div style={{fontSize:14,color:"var(--text3)",marginBottom:16}}>{dayView.dayName} · {dayView.date}</div>
-        {dayBlocked && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid var(--red)",borderRadius:8,padding:"12px 16px",fontSize:14,color:"var(--red)",marginBottom:12,textAlign:"center",fontWeight:700}}>⛔ טרם עבר הסמכה{dayCertName ? ` — ${dayCertName}` : ""}<br/><span style={{fontSize:12,fontWeight:500}}>לא ניתן לקבוע אולפן זה. יש לפנות לאיש צוות.</span></div>}
+        {maintenanceBlocked && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid var(--red)",borderRadius:8,padding:"12px 16px",fontSize:14,color:"var(--red)",marginBottom:12,textAlign:"center",fontWeight:700}}>🔧 {STUDIO_MAINTENANCE_MESSAGE}</div>}
+        {!maintenanceBlocked && dayBlocked && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid var(--red)",borderRadius:8,padding:"12px 16px",fontSize:14,color:"var(--red)",marginBottom:12,textAlign:"center",fontWeight:700}}>⛔ טרם עבר הסמכה{dayCertName ? ` — ${dayCertName}` : ""}<br/><span style={{fontSize:12,fontWeight:500}}>לא ניתן לקבוע אולפן זה. יש לפנות לאיש צוות.</span></div>}
         {isDayPast && !dayBlocked && <div style={{background:"rgba(255,80,80,0.1)",border:"1px solid var(--red)",borderRadius:8,padding:"8px 12px",fontSize:13,color:"var(--red)",marginBottom:12,textAlign:"center"}}>⛔ לא ניתן להזמין תאריכים שעברו</div>}
 
         {/* Day hours (09:00-21:00) */}
@@ -1866,7 +1878,8 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
             </thead>
             <tbody>
               {studios.map(studio=>{
-                const blocked = !hasStudioCert(studio.id);
+                const maintenanceBlocked = isStudioDisabled(studio.id);
+                const blocked = maintenanceBlocked || !hasStudioCert(studio.id);
                 const certName = getStudioCertName(studio.id);
                 return (
                 <tr key={studio.id} style={{opacity:blocked?0.5:1}}>
@@ -1876,8 +1889,9 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                       : <span style={{fontSize:18,display:"block"}}>{studio.image||"🎙️"}</span>
                     }
                     <span>{studio.name}</span>
-                    {blocked && <div style={{fontSize:10,color:"var(--red)",fontWeight:800,marginTop:2}}>⛔ טרם עבר הסמכה</div>}
-                    {blocked && certName && <div style={{fontSize:9,color:"var(--text3)"}}>{certName}</div>}
+                    {maintenanceBlocked && <div style={{fontSize:10,color:"var(--red)",fontWeight:800,marginTop:2}}>🔧 בתחזוקה</div>}
+                    {!maintenanceBlocked && blocked && <div style={{fontSize:10,color:"var(--red)",fontWeight:800,marginTop:2}}>⛔ טרם עבר הסמכה</div>}
+                    {!maintenanceBlocked && blocked && certName && <div style={{fontSize:9,color:"var(--text3)"}}>{certName}</div>}
                   </td>
                   {weekDays.map(day=>{
                     const cells = bookings.filter(b=>sameStudioId(b.studioId, studio.id) && b.date===day.fullDate && isActiveStudioBooking(b)).sort((a,b)=>(a.startTime||"").localeCompare(b.startTime||""));
@@ -1891,7 +1905,8 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                           opacity: isPast ? 0.55 : 1
                         }}
                         onClick={()=>{ if(!blocked && !isPast){ setModal(null); setDayView({studioId:studio.id,date:day.fullDate,dayName:day.name}); } }}>
-                        {blocked && !isPast && <div style={{color:"var(--red)",fontSize:9,textAlign:"center",paddingTop:8,fontWeight:700}}>🔒</div>}
+                        {maintenanceBlocked && !isPast && <div style={{color:"var(--red)",fontSize:9,textAlign:"center",paddingTop:8,fontWeight:700,lineHeight:1.5}}>{STUDIO_MAINTENANCE_MESSAGE}</div>}
+                        {!maintenanceBlocked && blocked && !isPast && <div style={{color:"var(--red)",fontSize:9,textAlign:"center",paddingTop:8,fontWeight:700}}>🔒</div>}
                         {!blocked && cells.map(b=>{
                           const color = getBookingColor(b);
                           return (

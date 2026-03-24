@@ -11,6 +11,7 @@ const STUDENT_COLOR = "var(--green)";
 const TEAM_COLOR = "#9b59b6";
 const LESSON_COLOR = "#f5a623";
 const RANGE_OPTIONS = [7, 30, 90];
+const STUDIO_MAINTENANCE_MESSAGE = "האולפן בתחזוקה, מקווים שישוב לעבוד בקרוב";
 
 function getTodayStr() {
   const now = new Date();
@@ -48,6 +49,10 @@ function sameStudioId(a, b) {
 
 function hasValue(value) {
   return value !== null && value !== undefined && String(value).trim() !== "";
+}
+
+function isStudioDisabled(studio) {
+  return Boolean(studio?.isDisabled);
 }
 
 function isRejectedBooking(booking) {
@@ -164,7 +169,7 @@ export default function StudioBookingPage(props) {
 
   const getBookingSubtitle = useCallback((booking) => {
     const kind = getBookingKind(booking);
-    if (kind === "lesson") return [booking?.instructorName, booking?.track].filter(Boolean).join(" · ");
+    if (kind === "lesson") return [booking?.subject, booking?.instructorName, booking?.track].filter(Boolean).join(" · ");
     if (kind === "team") return "צוות המחסן";
     return "";
   }, [getBookingKind]);
@@ -198,7 +203,8 @@ export default function StudioBookingPage(props) {
   ), [activeBookings, futureRangeDays, sortMode, todayOnly, todayStr]);
 
   const lessonBookings = filteredBookings.filter((booking) => getBookingKind(booking) === "lesson");
-  const studentBookings = filteredBookings.filter((booking) => getBookingKind(booking) === "student");
+  const studentBookings = filteredBookings.filter((booking) => getBookingKind(booking) === "student" && !booking.isNight);
+  const nightBookings = filteredBookings.filter((booking) => getBookingKind(booking) === "student" && booking.isNight);
   const teamBookings = filteredBookings.filter((booking) => getBookingKind(booking) === "team");
 
   const bookingRequiredCert = useMemo(() => {
@@ -270,6 +276,11 @@ export default function StudioBookingPage(props) {
   };
 
   const openAddBookingModal = (studioId, studioName, date, dayName) => {
+    const studio = studios.find((item) => sameStudioId(item.id, studioId));
+    if (isStudioDisabled(studio)) {
+      showToast("error", STUDIO_MAINTENANCE_MESSAGE);
+      return;
+    }
     setFormTeamMember("");
     setModal({ type:"addBooking", studioId, studioName, date, dayName });
   };
@@ -336,7 +347,7 @@ export default function StudioBookingPage(props) {
       return;
     }
     const studioCertId = formData.get("studioCertId") || undefined;
-    const nextStudios = [...studios, { id:Date.now(), name, studioCertId, studioCertIds:studioCertId ? [studioCertId] : [], image:studioImage || formData.get("emoji") || "🎙️" }];
+    const nextStudios = [...studios, { id:Date.now(), name, studioCertId, studioCertIds:studioCertId ? [studioCertId] : [], image:studioImage || formData.get("emoji") || "🎙️", isDisabled:false }];
     await saveStudios(nextStudios);
     setStudioImage("");
     closeModal();
@@ -350,10 +361,11 @@ export default function StudioBookingPage(props) {
     const name = String(formData.get("name") || "").trim();
     if (!name) return;
     const studioCertId = formData.get("studioCertId") || undefined;
+    const isDisabled = formData.get("isDisabled") === "on";
     const image = editImage || String(formData.get("emoji") || "").trim() || modal.studio.image;
     const previousIds = getStudioCertIds(modal.studio);
     const nextStudioCertIds = !studioCertId ? [] : (previousIds.length > 1 && previousIds.includes(studioCertId) ? previousIds : [studioCertId]);
-    const nextStudios = studios.map((studio) => studio.id === modal.studio.id ? { ...studio, name, studioCertId, studioCertIds:nextStudioCertIds, image } : studio);
+    const nextStudios = studios.map((studio) => studio.id === modal.studio.id ? { ...studio, name, studioCertId, studioCertIds:nextStudioCertIds, image, isDisabled } : studio);
     await saveStudios(nextStudios);
     showToast("success", `האולפן "${name}" עודכן`);
     closeModal();
@@ -400,6 +412,7 @@ export default function StudioBookingPage(props) {
     const selectedMember = teamMemberOptions.find((member) => String(member.id) === String(formTeamMember));
     const memberName = selectedMember?.name || "";
     const formData = new FormData(event.target);
+    const studio = studios.find((item) => sameStudioId(item.id, modal.studioId));
     const startTime = String(formData.get("startTime") || "");
     const endTime = String(formData.get("endTime") || "");
     const notes = String(formData.get("notes") || "").trim();
@@ -407,6 +420,11 @@ export default function StudioBookingPage(props) {
 
     if (!memberName || !startTime || !endTime) {
       showToast("error", "נא לבחור איש צוות ושעות");
+      setSaving(false);
+      return;
+    }
+    if (isStudioDisabled(studio)) {
+      showToast("error", STUDIO_MAINTENANCE_MESSAGE);
       setSaving(false);
       return;
     }
@@ -602,8 +620,13 @@ export default function StudioBookingPage(props) {
                             return certNames.length ? <span style={{ color:"var(--accent)" }}>🎓 {certNames.join(", ")}</span> : "ללא הסמכת אולפן";
                           })()}
                         </div>
+                        {isStudioDisabled(studio) && <div style={{ fontSize:10, color:"var(--red)", fontWeight:800, marginTop:4 }}>🔧 מושבת לתחזוקה</div>}
                       </td>
-                      {weekDays.map((day) => {
+                      {isStudioDisabled(studio) ? (
+                        <td colSpan={weekDays.length} style={{ ...tdStyle, background:"rgba(231,76,60,0.08)", color:"var(--red)", fontWeight:800, textAlign:"center", padding:"14px 18px" }}>
+                          {STUDIO_MAINTENANCE_MESSAGE}
+                        </td>
+                      ) : weekDays.map((day) => {
                         const dayBookings = cellBookings(studio.id, day.fullDate);
                         return (
                           <td key={day.fullDate} style={{ ...tdStyle, verticalAlign:"top", cursor:"pointer", minHeight:70, background:day.isToday ? "rgba(245,166,35,0.05)" : undefined }} onClick={() => openAddBookingModal(studio.id, studio.name, day.fullDate, day.name)}>
@@ -660,6 +683,8 @@ export default function StudioBookingPage(props) {
               {lessonBookings.map(BookingRow)}
               <SectionHeader label="קביעות סטודנטים" color={STUDENT_COLOR} count={studentBookings.length} icon="🎓" />
               {studentBookings.map(BookingRow)}
+              <SectionHeader label="קביעות לילה" color={NIGHT_COLOR} count={nightBookings.length} icon="🌙" />
+              {nightBookings.map(BookingRow)}
               <SectionHeader label="קביעות צוות" color={TEAM_COLOR} count={teamBookings.length} icon="🧑‍💼" />
               {teamBookings.map(BookingRow)}
             </>
@@ -682,6 +707,7 @@ export default function StudioBookingPage(props) {
                     })()}
                     {" · "}
                     {activeBookings.filter((booking) => sameStudioId(booking.studioId, studio.id)).length} קביעות
+                    {isStudioDisabled(studio) && <span style={{ color:"var(--red)", fontWeight:800 }}> · מושבת לתחזוקה</span>}
                   </div>
                 </div>
               </div>
@@ -715,6 +741,11 @@ export default function StudioBookingPage(props) {
             <div style={{ fontSize:13, fontWeight:600, color:"var(--text2)" }}>תמונה נוכחית:<div style={{ marginTop:4 }}>{(editImage || modal.studio.image)?.startsWith("http") ? <img src={editImage || modal.studio.image} alt="תמונה" style={{ width:80, height:80, objectFit:"cover", borderRadius:8 }} /> : <span style={{ fontSize:32 }}>{modal.studio.image || "🎙️"}</span>}</div></div>
             <label style={labelStyle}>החלף תמונה<input type="file" accept="image/*" onChange={(event) => void handleImageUpload(event, setEditImage)} style={{ fontSize:13 }} disabled={imgUploading} />{imgUploading && <div style={{ fontSize:12, color:"var(--accent)", marginTop:4 }}>מעלה תמונה...</div>}</label>
             <label style={labelStyle}>או אימוג'י<input name="emoji" className="form-input" placeholder="🎙️" maxLength={4} /></label>
+            <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, fontWeight:700, color:"var(--text2)", background:"rgba(231,76,60,0.06)", border:"1px solid rgba(231,76,60,0.14)", borderRadius:8, padding:"10px 12px" }}>
+              <input type="checkbox" name="isDisabled" defaultChecked={Boolean(modal.studio.isDisabled)} style={{ width:18, height:18, accentColor:"var(--red)" }} />
+              השבתת אולפן
+            </label>
+            <div style={{ fontSize:12, color:"var(--text3)", marginTop:-4 }}>כאשר האפשרות פעילה, האולפן ייחסם בלוח ויוצג כתחזוקה.</div>
           </form>
         </Modal>
       )}
@@ -746,7 +777,7 @@ export default function StudioBookingPage(props) {
                 <Row label="סוג" value={<span style={{ color, fontWeight:700 }}>{getBookingTypeLabel(booking)}</span>} />
                 <Row label="תאריך" value={booking.date} />
                 <Row label="חלון שעות" value={`${booking.startTime} – ${booking.endTime}`} />
-                {kind === "lesson" && <><Row label="קורס" value={booking.courseName || "—"} /><Row label="מרצה" value={booking.instructorName || "—"} /><Row label="מסלול" value={booking.track || "—"} /></>}
+                {kind === "lesson" && <><Row label="קורס" value={booking.courseName || "—"} /><Row label="מרצה" value={booking.instructorName || "—"} /><Row label="מסלול" value={booking.track || "—"} /><Row label="נושא השיעור" value={booking.subject || "—"} /></>}
                 {kind === "student" && <Row label="סטודנט" value={booking.studentName} />}
                 {kind === "team" && <Row label="איש צוות" value={booking.teamMemberName || booking.studentName} />}
                 {booking.isNight && kind !== "lesson" && <Row label="זמן" value={<span style={{ color:NIGHT_COLOR, fontWeight:700 }}>קביעת לילה</span>} />}
