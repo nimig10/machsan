@@ -790,6 +790,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [equipmentAiLoading, setEquipmentAiLoading] = useState(false);
   const [showEquipmentAiLoanTypePrompt, setShowEquipmentAiLoanTypePrompt] = useState(false);
   const [equipmentAiForcedLoanType, setEquipmentAiForcedLoanType] = useState("");
+  const todayStr = today();
 
   // Load studios data when switching to studios view
   const loadStudiosData = async () => {
