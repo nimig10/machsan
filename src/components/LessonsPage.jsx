@@ -34,6 +34,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const [mode, setMode] = useState(null); // null | "add" | "edit"
   const [editTarget, setEditTarget] = useState(null);
   const [search, setSearch] = useState("");
+  const [trackFilter, setTrackFilter] = useState("הכל");
   const [xlImporting, setXlImporting] = useState(false);
   const importInputRef = useRef(null);
 
@@ -65,7 +66,27 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     showToast("success", `קורס "${name}" נמחק`);
   };
 
-  const filtered = lessons.filter(l=>!search || l.name?.includes(search) || l.instructorName?.includes(search));
+  const getLessonTrackLabel = (lesson) => String(lesson?.track || "").trim() || "ללא מסלול";
+  const allTrackFilters = [
+    "הכל",
+    ...new Set([
+      ...(trackOptions || []).map((option) => String(option || "").trim()).filter(Boolean),
+      ...lessons.map((lesson) => String(lesson?.track || "").trim()).filter(Boolean),
+      ...(lessons.some((lesson) => !String(lesson?.track || "").trim()) ? ["ללא מסלול"] : []),
+    ]),
+  ];
+  const filtered = lessons.filter((lesson) => {
+    const matchesSearch = !search || lesson.name?.includes(search) || lesson.instructorName?.includes(search);
+    const trackLabel = getLessonTrackLabel(lesson);
+    const matchesTrack = trackFilter === "הכל" || trackLabel === trackFilter;
+    return matchesSearch && matchesTrack;
+  });
+  const groupedLessons = filtered.reduce((groups, lesson) => {
+    const trackLabel = getLessonTrackLabel(lesson);
+    if (!groups[trackLabel]) groups[trackLabel] = [];
+    groups[trackLabel].push(lesson);
+    return groups;
+  }, {});
 
   const importLessonsXL = async (event) => {
     const file = event.target.files?.[0];
@@ -260,37 +281,74 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             </div>
           </div>
 
+          {allTrackFilters.length > 1 && (
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
+              {allTrackFilters.map((trackName) => {
+                const active = trackFilter === trackName;
+                return (
+                  <button
+                    key={trackName}
+                    type="button"
+                    onClick={() => setTrackFilter(trackName)}
+                    style={{
+                      padding:"5px 12px",
+                      borderRadius:20,
+                      border:`2px solid ${active ? "#f5a623" : "var(--border)"}`,
+                      background:active ? "rgba(245,166,35,0.14)" : "transparent",
+                      color:active ? "#f5a623" : "var(--text3)",
+                      fontWeight:700,
+                      fontSize:12,
+                      cursor:"pointer",
+                    }}
+                  >
+                    {trackName === "הכל" ? "כל המסלולים" : trackName}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {filtered.length===0
-            ? <div className="empty-state"><div className="emoji">📽️</div><div>אין קורסים עדיין</div><div style={{fontSize:13,color:"var(--text3)"}}>לחץ "➕ קורס חדש" כדי להתחיל</div></div>
+            ? <div className="empty-state"><div className="emoji">📽️</div><div>{lessons.length===0 ? "אין קורסים עדיין" : "לא נמצאו קורסים למסלול שנבחר"}</div><div style={{fontSize:13,color:"var(--text3)"}}>{lessons.length===0 ? 'לחץ "➕ קורס חדש" כדי להתחיל' : "נסה לשנות חיפוש או מסלול לימודים"}</div></div>
             : <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                {filtered.map(l=>{
-                  const studio = studios.find(s=>String(s.id)===String(l.studioId));
-                  const kit = getLinkedKit(l);
-                  const upcoming = (l.schedule||[]).filter(s=>s.date>=today()).length;
-                  return (
-                    <div key={l.id} style={{background:"var(--surface2)",borderRadius:10,padding:"14px 16px",border:"1px solid var(--border)",borderRight:"4px solid #9b59b6"}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,flexWrap:"wrap"}}>
-                        <div style={{flex:1,minWidth:200}}>
-                          <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{l.name}</div>
-                          {l.instructorName && <div style={{fontSize:13,color:"var(--text2)"}}>👨‍🏫 {l.instructorName}{l.instructorPhone?` · ${l.instructorPhone}`:""}</div>}
-                          {l.instructorEmail && <div style={{fontSize:12,color:"var(--text3)"}}>✉️ {l.instructorEmail}</div>}
-                          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
-                            <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>📅 {(l.schedule||[]).length} שיעורים</span>
-                            {upcoming>0 && <span style={{background:"rgba(46,204,113,0.12)",color:"var(--green)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🟢 {upcoming} קרובים</span>}
-                            {l.track && <span style={{background:"rgba(245,166,35,0.12)",color:"var(--accent)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🎓 {l.track}</span>}
-                            {studio && <span style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🎙️ {studio.name}</span>}
-                            {kit && <span style={{background:"rgba(245,166,35,0.12)",color:"var(--accent)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🎒 {kit.name}</span>}
-                          </div>
-                          {l.description && <div style={{fontSize:12,color:"var(--text3)",marginTop:6}}>📝 {l.description}</div>}
-                        </div>
-                        <div style={{display:"flex",gap:6}}>
-                          <button className="btn btn-secondary btn-sm" onClick={()=>{setEditTarget(l);setMode("edit");}}>✏️ עריכה</button>
-                          <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>del(l.id,l.name)}>🗑️ מחק</button>
-                        </div>
+                {Object.entries(groupedLessons)
+                  .sort(([left], [right]) => left.localeCompare(right, "he"))
+                  .map(([trackName, trackLessons]) => (
+                    <div key={trackName} style={{display:"flex",flexDirection:"column",gap:10,background:"rgba(245,166,35,0.04)",border:"1px solid rgba(245,166,35,0.18)",borderRadius:14,padding:"14px 16px"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                        <span style={{fontWeight:900,fontSize:15,color:"#f5a623"}}>🎓 {trackName}</span>
+                        <span style={{background:"rgba(245,166,35,0.16)",color:"#f5a623",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:800}}>{trackLessons.length} קורסים</span>
                       </div>
+                      {trackLessons.map(l=>{
+                        const studio = studios.find(s=>String(s.id)===String(l.studioId));
+                        const kit = getLinkedKit(l);
+                        const upcoming = (l.schedule||[]).filter(s=>s.date>=today()).length;
+                        return (
+                          <div key={l.id} style={{background:"var(--surface2)",borderRadius:10,padding:"14px 16px",border:"1px solid var(--border)",borderRight:"4px solid #9b59b6"}}>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,flexWrap:"wrap"}}>
+                              <div style={{flex:1,minWidth:200}}>
+                                <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{l.name}</div>
+                                {l.instructorName && <div style={{fontSize:13,color:"var(--text2)"}}>👨‍🏫 {l.instructorName}{l.instructorPhone?` · ${l.instructorPhone}`:""}</div>}
+                                {l.instructorEmail && <div style={{fontSize:12,color:"var(--text3)"}}>✉️ {l.instructorEmail}</div>}
+                                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+                                  <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>📅 {(l.schedule||[]).length} שיעורים</span>
+                                  {upcoming>0 && <span style={{background:"rgba(46,204,113,0.12)",color:"var(--green)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🟢 {upcoming} קרובים</span>}
+                                  <span style={{background:"rgba(245,166,35,0.12)",color:"var(--accent)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🎓 {getLessonTrackLabel(l)}</span>
+                                  {studio && <span style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🎙️ {studio.name}</span>}
+                                  {kit && <span style={{background:"rgba(245,166,35,0.12)",color:"var(--accent)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🎒 {kit.name}</span>}
+                                </div>
+                                {l.description && <div style={{fontSize:12,color:"var(--text3)",marginTop:6}}>📝 {l.description}</div>}
+                              </div>
+                              <div style={{display:"flex",gap:6}}>
+                                <button className="btn btn-secondary btn-sm" onClick={()=>{setEditTarget(l);setMode("edit");}}>✏️ עריכה</button>
+                                <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>del(l.id,l.name)}>🗑️ מחק</button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
+                  ))}
               </div>
           }
         </>
