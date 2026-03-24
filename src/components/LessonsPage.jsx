@@ -310,29 +310,32 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       const rawCsv = XLSX.utils.sheet_to_csv(firstSheet);
       if (!String(rawCsv || "").trim()) throw new Error("לא נמצא תוכן קריא בקובץ");
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
       const systemInstruction = "אתה מנהל מערכת חכם במכללה בישראל. תקבל טקסט גולמי שחולץ מקובץ אקסל של מערכת שעות. עליך לזהות ולחלץ את כל השיעורים והקורסים הקבועים שמופיעים בו. עבור כל שיעור מצא: שם קורס, שם מורה, מסלול לימודים (למשל 'סאונד', 'וידאו'), יום בשבוע בעברית (למשל 'ראשון', 'שני'), שעת התחלה (HH:MM) ושעת סיום (HH:MM). אם אתה מזהה מסלול לימודים חדש שלא מופיע בדרך כלל, פשוט ציין אותו כמו שהוא.";
 
       const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
         body: JSON.stringify({
           contents: [{ parts: [{ text: rawCsv }] }],
           systemInstruction: { parts: [{ text: systemInstruction }] },
           generationConfig: {
             responseMimeType: "application/json",
-            responseSchema: {
-              type: "ARRAY",
+            responseJsonSchema: {
+              type: "array",
               items: {
-                type: "OBJECT",
+                type: "object",
                 properties: {
-                  id: { type: "STRING" },
-                  courseName: { type: "STRING" },
-                  teacher: { type: "STRING" },
-                  track: { type: "STRING" },
-                  dayOfWeek: { type: "STRING" },
-                  startTime: { type: "STRING" },
-                  endTime: { type: "STRING" },
+                  id: { type: "string" },
+                  courseName: { type: "string" },
+                  teacher: { type: "string" },
+                  track: { type: "string" },
+                  dayOfWeek: { type: "string" },
+                  startTime: { type: "string" },
+                  endTime: { type: "string" },
                 },
                 required: ["id", "courseName", "teacher", "track", "dayOfWeek", "startTime", "endTime"],
               },
