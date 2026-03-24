@@ -1674,6 +1674,26 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       setIsAiLoading(false);
     }
   };
+  const openSmartBookingFromCalendar = () => {
+    const defaultStudio = studios.find((studio) => !isStudioDisabled(studio.id) && hasStudioCert(studio.id))
+      || studios.find((studio) => !isStudioDisabled(studio.id))
+      || studios[0];
+    if (!defaultStudio) {
+      showToast("error", "אין אולפנים זמינים כרגע");
+      return;
+    }
+    const defaultDate = weekDays.find((day) => day.fullDate >= todayStr)?.fullDate || todayStr;
+    const defaultDayName = getHebrewDayName(defaultDate);
+    setDayView({ studioId: defaultStudio.id, date: defaultDate, dayName: defaultDayName });
+    openAddBookingModal({
+      studioId: defaultStudio.id,
+      date: defaultDate,
+      dayName: defaultDayName,
+      defaultStart: "09:00",
+      defaultEnd: "12:00",
+    });
+    setShowAiAssistant(true);
+  };
 
   const submitBooking = async (e) => {
     e.preventDefault();
@@ -2112,6 +2132,16 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
           </div>
           <div style={{fontSize:13,color:"var(--text3)",textAlign:"center"}}>
             {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth()+1).padStart(2,"0")} — {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth()+1).padStart(2,"0")}
+          </div>
+          <div style={{display:"flex",justifyContent:"center",marginTop:6}}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={openSmartBookingFromCalendar}
+              style={{display:"inline-flex",alignItems:"center",gap:6}}
+            >
+              ✨ קביעת אולפן חכמה
+            </button>
           </div>
         </div>
       </div>
