@@ -117,6 +117,19 @@ function parseGeneratedLessonsJson(text = "") {
   return JSON.parse(cleaned);
 }
 
+const fetchWithRetry = async (url, options, maxRetries = 5) => {
+  const delays = [1000, 2000, 4000, 8000, 16000];
+  for (let i = 0; i < maxRetries; i += 1) {
+    const response = await fetch(url, options);
+    if (response.status === 429) {
+      await new Promise((resolve) => setTimeout(resolve, delays[i] ?? delays[delays.length - 1]));
+      continue;
+    }
+    return response;
+  }
+  return fetch(url, options);
+};
+
 export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[], trackOptions=[] }) {
   const [mode, setMode] = useState(null); // null | "add" | "edit"
   const [editTarget, setEditTarget] = useState(null);
@@ -406,7 +419,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           };
 
           const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-          const response = await fetch(url, {
+          const response = await fetchWithRetry(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(requestBody),
