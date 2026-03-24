@@ -1,5 +1,6 @@
 // LessonsPage.jsx — course & lesson schedule management
 import { useRef, useState } from "react";
+import * as XLSX from "xlsx";
 import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today } from "../utils.js";
 
 function sortScheduleEntries(entries = []) {
@@ -30,13 +31,53 @@ function dedupeScheduleEntries(entries = []) {
   });
 }
 
+function normalizeHebrewDay(dayOfWeek = "") {
+  const cleaned = String(dayOfWeek || "").trim().replace(/^יום\s+/, "");
+  const aliasMap = {
+    ראשון: 0,
+    א: 0,
+    "א׳": 0,
+    שני: 1,
+    ב: 1,
+    "ב׳": 1,
+    שלישי: 2,
+    ג: 2,
+    "ג׳": 2,
+    רביעי: 3,
+    ד: 3,
+    "ד׳": 3,
+    חמישי: 4,
+    ה: 4,
+    "ה׳": 4,
+    שישי: 5,
+    ו: 5,
+    "ו׳": 5,
+    שבת: 6,
+    ש: 6,
+    "ש׳": 6,
+  };
+  return aliasMap[cleaned];
+}
+
+function getNextDateForHebrewDay(dayOfWeek = "") {
+  const targetDay = normalizeHebrewDay(dayOfWeek);
+  if (targetDay === undefined) return today();
+  const now = new Date();
+  const diff = (targetDay - now.getDay() + 7) % 7;
+  const nextDate = new Date(now);
+  nextDate.setDate(now.getDate() + diff);
+  return formatLocalDateInput(nextDate);
+}
+
 export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[], trackOptions=[] }) {
   const [mode, setMode] = useState(null); // null | "add" | "edit"
   const [editTarget, setEditTarget] = useState(null);
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState("הכל");
   const [xlImporting, setXlImporting] = useState(false);
+  const [aiImporting, setAiImporting] = useState(false);
   const importInputRef = useRef(null);
+  const aiImportInputRef = useRef(null);
 
   const lessonKits = kits.filter(k=>k.kitType==="lesson");
   const getLinkedKit = (lesson) => {
@@ -253,6 +294,142 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     }
   };
 
+  const importLessonsSmartAI = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = "";
+    setAiImporting(true);
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error("חסר מפתח Gemini במשתני הסביבה");
+
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type:"array" });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      if (!firstSheet) throw new Error("לא נמצא גיליון ראשון בקובץ");
+      const rawCsv = XLSX.utils.sheet_to_csv(firstSheet);
+      if (!String(rawCsv || "").trim()) throw new Error("לא נמצא תוכן קריא בקובץ");
+
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+      const systemInstruction = "אתה מנהל מערכת חכם במכללה בישראל. תקבל טקסט גולמי שחולץ מקובץ אקסל של מערכת שעות. עליך לזהות ולחלץ את כל השיעורים והקורסים הקבועים שמופיעים בו. עבור כל שיעור מצא: שם קורס, שם מורה, מסלול לימודים (למשל 'סאונד', 'וידאו'), יום בשבוע בעברית (למשל 'ראשון', 'שני'), שעת התחלה (HH:MM) ושעת סיום (HH:MM). אם אתה מזהה מסלול לימודים חדש שלא מופיע בדרך כלל, פשוט ציין אותו כמו שהוא.";
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: rawCsv }] }],
+          systemInstruction: { parts: [{ text: systemInstruction }] },
+          generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: "ARRAY",
+              items: {
+                type: "OBJECT",
+                properties: {
+                  id: { type: "STRING" },
+                  courseName: { type: "STRING" },
+                  teacher: { type: "STRING" },
+                  track: { type: "STRING" },
+                  dayOfWeek: { type: "STRING" },
+                  startTime: { type: "STRING" },
+                  endTime: { type: "STRING" },
+                },
+                required: ["id", "courseName", "teacher", "track", "dayOfWeek", "startTime", "endTime"],
+              },
+            },
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Gemini request failed");
+      }
+
+      const data = await response.json();
+      const generatedJson = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!generatedJson) throw new Error("Gemini לא החזיר JSON");
+      const parsedLessons = JSON.parse(generatedJson);
+      if (!Array.isArray(parsedLessons) || parsedLessons.length === 0) {
+        throw new Error("לא נמצאו שיעורים בקובץ לפי הפענוח של Gemini");
+      }
+
+      const groupedLessons = new Map();
+      parsedLessons.forEach((item, index) => {
+        const courseName = String(item?.courseName || "").trim();
+        const teacher = String(item?.teacher || "").trim();
+        const track = String(item?.track || "").trim();
+        const dayOfWeek = String(item?.dayOfWeek || "").trim();
+        const startTime = String(item?.startTime || "").trim();
+        const endTime = String(item?.endTime || "").trim();
+        if (!courseName || !teacher || !startTime || !endTime) return;
+
+        const groupKey = `${courseName}__${teacher}__${track}`;
+        if (!groupedLessons.has(groupKey)) {
+          groupedLessons.set(groupKey, {
+            id: `lesson_ai_${Date.now()}_${index}`,
+            name: courseName,
+            instructorName: teacher,
+            instructorPhone: "",
+            instructorEmail: "",
+            track,
+            description: "יובא באמצעות ייבוא אקסל חכם (AI)",
+            studioId: null,
+            kitId: null,
+            created_at: new Date().toISOString(),
+            schedule: [],
+          });
+        }
+
+        groupedLessons.get(groupKey).schedule.push(normalizeScheduleEntry({
+          date: getNextDateForHebrewDay(dayOfWeek),
+          startTime,
+          endTime,
+          topic: dayOfWeek ? `מערכת קבועה · יום ${dayOfWeek}` : "",
+        }));
+      });
+
+      if (groupedLessons.size === 0) throw new Error("לא נוצרו קורסים תקינים מהפענוח");
+
+      let addedCount = 0;
+      let updatedCount = 0;
+      const updatedLessons = [...lessons];
+      groupedLessons.forEach((group) => {
+        const existingIndex = updatedLessons.findIndex((lesson) => (
+          String(lesson?.name || "").trim() === group.name
+          && String(lesson?.instructorName || "").trim() === group.instructorName
+          && String(lesson?.track || "").trim() === group.track
+        ));
+
+        if (existingIndex >= 0) {
+          const existing = updatedLessons[existingIndex];
+          updatedLessons[existingIndex] = {
+            ...existing,
+            track: group.track || existing.track || "",
+            schedule: dedupeScheduleEntries([...(existing.schedule || []), ...group.schedule]),
+          };
+          updatedCount += 1;
+          return;
+        }
+
+        updatedLessons.push({
+          ...group,
+          schedule: dedupeScheduleEntries(group.schedule),
+        });
+        addedCount += 1;
+      });
+
+      setLessons(updatedLessons);
+      await storageSet("lessons", updatedLessons);
+      showToast("success", `פוענחו ${parsedLessons.length} שיעורים. נוספו ${addedCount} קורסים ועודכנו ${updatedCount} קורסים.`);
+    } catch (error) {
+      console.error("Smart AI lesson import failed", error);
+      showToast("error", error?.message || "שגיאה בייבוא האקסל החכם");
+    } finally {
+      setAiImporting(false);
+    }
+  };
+
   return (
     <div className="page">
       {mode ? (
@@ -275,6 +452,10 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             <div className="search-bar" style={{flex:1,minWidth:180}}><span>🔍</span>
               <input placeholder="חיפוש קורס או מרצה..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <input ref={aiImportInputRef} type="file" accept=".csv,.xlsx,.xls" style={{display:"none"}} onChange={importLessonsSmartAI} disabled={aiImporting}/>
+              <button className="btn btn-primary" style={{display:"inline-flex",alignItems:"center",gap:6}} onClick={()=>aiImportInputRef.current?.click()} disabled={aiImporting}>
+                {aiImporting ? "מפענח את קובץ האקסל..." : "✨ ייבוא אקסל חכם (AI)"}
+              </button>
               <input ref={importInputRef} type="file" accept=".csv,.tsv,.xlsx,.xls" style={{display:"none"}} onChange={importLessonsXL} disabled={xlImporting}/>
               <button className="btn btn-secondary" onClick={()=>importInputRef.current?.click()} disabled={xlImporting}>{xlImporting ? "מייבא..." : "ייבוא XL"}</button>
               <button className="btn btn-primary" onClick={()=>{setMode("add");setEditTarget(null);}}>➕ קורס חדש</button>
