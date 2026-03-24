@@ -1108,28 +1108,36 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       setIsGeneratingDesc(true);
       try {
         const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+        if (!apiKey) throw new Error("חסר מפתח Gemini במשתני הסביבה");
+        const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
         const systemInstruction = "You are a professional AV and film equipment expert. The user will provide an equipment name. Write a concise, professional technical description of this item in Hebrew (around 2-3 sentences), highlighting its main uses and features. Output ONLY the Hebrew text, without formatting or markdown.";
 
         const response = await fetch(url, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
           body: JSON.stringify({
             contents: [{ parts: [{ text: itemName }] }],
             systemInstruction: { parts: [{ text: systemInstruction }] },
           }),
         });
 
-        if (!response.ok) throw new Error("API request failed");
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || "API request failed");
+        }
 
         const data = await response.json();
-        const generatedText = data.candidates[0].content.parts[0].text;
+        const generatedText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!generatedText) throw new Error("לא התקבל טקסט מה־API");
 
         setF(prev => ({ ...prev, description: generatedText }));
       } catch (error) {
         console.error("Error generating description:", error);
-        alert("שגיאה ביצירת התיאור. נסה שוב.");
+        alert(`שגיאה ביצירת התיאור. ${error?.message || "נסה שוב."}`);
       } finally {
         setIsGeneratingDesc(false);
       }
@@ -1178,7 +1186,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
             <label className="form-label" style={{margin:0}}>תיאור</label>
             <button type="button" className="btn btn-secondary btn-sm" onClick={()=>generateAutoDescription(f.name)} disabled={isGeneratingDesc}>
-              {isGeneratingDesc ? "מייצר תיאור..." : "Auto Description"}
+              {isGeneratingDesc ? "מייצר תיאור..." : "תיאור אוטומטי"}
             </button>
           </div>
           <textarea className="form-textarea" rows={2} value={f.description} onChange={e=>s("description",e.target.value)}/>
