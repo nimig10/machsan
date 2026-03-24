@@ -71,6 +71,54 @@ function getNextDateForHebrewDay(dayOfWeek = "") {
   return formatLocalDateInput(nextDate);
 }
 
+function isValidImportedDate(dateStr = "") {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const date = new Date(year, month - 1, day, 12, 0, 0, 0);
+  return (
+    date.getFullYear() === year
+    && date.getMonth() === month - 1
+    && date.getDate() === day
+  );
+}
+
+function normalizeImportedLessonDate(dateValue = "", dayOfWeek = "") {
+  const raw = String(dateValue || "").trim();
+  if (!raw) return getNextDateForHebrewDay(dayOfWeek);
+
+  if (isValidImportedDate(raw)) return raw;
+
+  const localMatch = raw.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
+  if (localMatch) {
+    const [, day, month, yearRaw] = localMatch;
+    const year = yearRaw.length === 2 ? `20${yearRaw}` : yearRaw;
+    const normalized = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    if (isValidImportedDate(normalized)) return normalized;
+  }
+
+  return getNextDateForHebrewDay(dayOfWeek);
+}
+
+function normalizeImportedLessonTime(timeValue = "") {
+  const raw = String(timeValue || "").trim();
+  const match = raw.match(/(\d{1,2}):(\d{1,2})/);
+  if (!match) return "00:00";
+  const hours = Math.max(0, Math.min(23, Number(match[1]) || 0));
+  const minutes = Math.max(0, Math.min(59, Number(match[2]) || 0));
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function parseGeneratedLessonsJson(text = "") {
+  const raw = String(text || "").trim();
+  if (!raw) return [];
+  const cleaned = raw
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  return JSON.parse(cleaned);
+}
+
 export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[], trackOptions=[] }) {
   const [mode, setMode] = useState(null); // null | "add" | "edit"
   const [editTarget, setEditTarget] = useState(null);
@@ -331,6 +379,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           3. חלץ שעות לפורמט HH:MM.
           4. אם חסרה שעה - הגדר '00:00'.
           5. נסה להבין את מסלול הלימודים מהכותרות. אם לא ברור, כתוב 'כללי'.
+          6. אם קיים תאריך מפורש בקובץ, החזר אותו בפורמט YYYY-MM-DD.
         `;
 
           const requestBody = {
@@ -344,6 +393,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                   type: "OBJECT",
                   properties: {
                     id: { type: "STRING" },
+                    date: { type: "STRING" },
                     courseName: { type: "STRING" },
                     teacher: { type: "STRING" },
                     track: { type: "STRING" },
@@ -351,7 +401,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                     startTime: { type: "STRING" },
                     endTime: { type: "STRING" },
                   },
-                  required: ["id", "courseName", "teacher", "track", "dayOfWeek", "startTime", "endTime"],
+                  required: ["id", "date", "courseName", "teacher", "track", "dayOfWeek", "startTime", "endTime"],
                 },
               },
             },
@@ -391,14 +441,15 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           const generatedText = jsonResponse.candidates[0]?.content?.parts?.[0]?.text;
           if (!generatedText) throw new Error("Gemini לא החזיר JSON.");
 
-          const parsedLessons = JSON.parse(generatedText);
+          const parsedLessons = parseGeneratedLessonsJson(generatedText);
           if (!Array.isArray(parsedLessons) || parsedLessons.length === 0) {
             throw new Error("לא נמצאו שיעורים בקובץ לפי הפענוח של Gemini.");
           }
 
           const blockedKeywords = ["פורים", "שבת", "9 באב", "יום השואה", "חופשה", "חג", "הערה", "מזכירות", "הודעה", "ביטול"];
+          blockedKeywords.push("פגרה", "סגור", "בית הספר יהיה סגור");
           const cleanedLessons = parsedLessons.filter((item) => {
-            const mergedText = [item?.courseName, item?.teacher, item?.track, item?.dayOfWeek]
+            const mergedText = [item?.courseName, item?.teacher, item?.track, item?.dayOfWeek, item?.date]
               .map((value) => String(value || ""))
               .join(" ");
             return !blockedKeywords.some((keyword) => mergedText.includes(keyword));
@@ -414,8 +465,9 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             const teacher = String(item?.teacher || "").trim() || "לא צוין";
             const track = String(item?.track || "").trim() || "כללי";
             const dayOfWeek = String(item?.dayOfWeek || "").trim();
-            const startTime = String(item?.startTime || "").trim() || "00:00";
-            const endTime = String(item?.endTime || "").trim() || "00:00";
+            const lessonDate = normalizeImportedLessonDate(item?.date, dayOfWeek);
+            const startTime = normalizeImportedLessonTime(item?.startTime);
+            const endTime = normalizeImportedLessonTime(item?.endTime);
             if (!courseName) return;
 
             const groupKey = `${courseName}__${teacher}__${track}`;
@@ -436,7 +488,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             }
 
             groupedLessons.get(groupKey).schedule.push(normalizeScheduleEntry({
-              date: getNextDateForHebrewDay(dayOfWeek),
+              date: lessonDate,
               startTime,
               endTime,
               topic: dayOfWeek ? `מערכת קבועה · יום ${dayOfWeek}` : "",
