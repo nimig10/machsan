@@ -3,8 +3,6 @@ import { useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today } from "../utils.js";
 
-const AI_IMPORT_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
-
 function sortScheduleEntries(entries = []) {
   return [...entries].sort((a, b) => {
     const aDateTime = `${a?.date || ""} ${a?.startTime || "00:00"}`;
@@ -366,7 +364,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           const csvData = XLSX.utils.sheet_to_csv(worksheet);
           if (!String(csvData || "").trim()) throw new Error("לא נמצא תוכן קריא בקובץ.");
 
-          const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.REACT_APP_GEMINI_API_KEY;
+          const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.REACT_APP_GEMINI_API_KEY || "";
           if (!apiKey) {
             throw new Error("API Key is missing. Check your .env or Vercel settings.");
           }
@@ -407,10 +405,22 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             },
           };
 
-          let jsonResponse = null;
-          let lastError = null;
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+          const response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(requestBody),
+          });
 
-          for (const modelName of AI_IMPORT_MODELS) {
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`API Error ${response.status}: ${errorText}`);
+          }
+
+          const jsonResponse = await response.json();
+
+          if (false) {
+            for (const modelName of AI_IMPORT_MODELS) {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
             const response = await fetch(url, {
               method: "POST",
@@ -439,6 +449,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           }
 
           if (lastError) throw new Error(`כל המודלים נכשלו. ${lastError.message}`);
+          }
           if (!jsonResponse?.candidates || jsonResponse.candidates.length === 0) {
             throw new Error("Gemini לא החזיר תוצאות. נסה שוב.");
           }

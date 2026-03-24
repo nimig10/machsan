@@ -1130,10 +1130,22 @@ ${inventory}
         },
       };
 
-      let jsonResponse = null;
-      let lastError = null;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
 
-      for (const modelName of SMART_EQUIPMENT_MODELS) {
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API Error ${response.status}: ${errorText}`);
+      }
+
+      const jsonResponse = await response.json();
+
+      if (false) {
+        for (const modelName of SMART_EQUIPMENT_MODELS) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
         const response = await fetch(url, {
           method: "POST",
@@ -1160,7 +1172,8 @@ ${inventory}
         break;
       }
 
-      if (lastError) throw lastError;
+      }
+      if (false && lastError) throw lastError;
       if (!jsonResponse?.candidates?.length) {
         throw new Error("לא התקבלה תשובה תקינה מ-Gemini.");
       }
