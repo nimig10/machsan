@@ -3,7 +3,7 @@ import { useState, useRef, useMemo } from "react";
 import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE } from "../utils.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 
-const SMART_EQUIPMENT_MODELS = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
+const SMART_EQUIPMENT_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
 const SMART_LOAN_TYPES = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
 
 function normalizeSmartDate(value) {
@@ -1119,7 +1119,12 @@ ${inventory}
         if (!response.ok) {
           const errText = await response.text();
           if ([400, 404, 429, 503].includes(response.status)) {
-            lastError = new Error(`Gemini ${modelName} failed (${response.status}): ${errText}`);
+            console.error(`Gemini ${modelName} failed (${response.status})`, errText);
+            lastError = new Error(
+              response.status === 429 || response.status === 503
+                ? "שירות ה-AI עמוס כרגע. נסו שוב בעוד כמה דקות."
+                : "לא הצלחנו להשלים את הפענוח מול Gemini כרגע. נסו שוב בעוד רגע."
+            );
             continue;
           }
           throw new Error(`API HTTP Error ${response.status}: ${errText}`);
