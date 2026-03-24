@@ -775,6 +775,8 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [showEquipmentAiModal, setShowEquipmentAiModal] = useState(false);
   const [equipmentAiPrompt, setEquipmentAiPrompt] = useState("");
   const [equipmentAiLoading, setEquipmentAiLoading] = useState(false);
+  const [showEquipmentAiLoanTypePrompt, setShowEquipmentAiLoanTypePrompt] = useState(false);
+  const [equipmentAiForcedLoanType, setEquipmentAiForcedLoanType] = useState("");
 
   // Load studios data when switching to studios view
   const loadStudiosData = async () => {
@@ -978,10 +980,24 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     setShowEquipmentAiModal(false);
     setEquipmentAiPrompt("");
     setEquipmentAiLoading(false);
+    setShowEquipmentAiLoanTypePrompt(false);
+    setEquipmentAiForcedLoanType("");
   };
 
   const handleSmartEquipmentBooking = async (promptText, equipmentList) => {
     if (!promptText) return;
+    const preselectedLoanType = normalizeSmartLoanType(form.loan_type);
+    const promptLoanType = normalizeSmartLoanType(promptText);
+    const forcedLoanType = normalizeSmartLoanType(equipmentAiForcedLoanType);
+    const requestedLoanType = preselectedLoanType || forcedLoanType || promptLoanType;
+
+    if (!requestedLoanType) {
+      setShowEquipmentAiLoanTypePrompt(true);
+      showToast("error", "יש לבחור סוג השאלה או לציין אותו בתיאור.");
+      return;
+    }
+
+    setShowEquipmentAiLoanTypePrompt(false);
     setEquipmentAiLoading(true);
 
     try {
@@ -1000,7 +1016,8 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 ${inventory}
 
 החזר אך ורק JSON תקני.
-אם סוג ההשאלה לא ברור, החזר "פרטית".
+סוג ההשאלה שנבחר או זוהה מראש הוא: ${requestedLoanType}.
+אם הטקסט לא סותר זאת במפורש, השתמש בדיוק בסוג ההשאלה הזה.
       `.trim();
 
       const requestBody = {
@@ -1081,11 +1098,15 @@ ${inventory}
         throw new Error("לא הצלחנו להתאים ציוד קיים מתוך הבקשה.");
       }
 
-      const nextLoanType = normalizeSmartLoanType(result?.loanType) || normalizeSmartLoanType(form.loan_type) || "פרטית";
+      const nextLoanType = preselectedLoanType || forcedLoanType || promptLoanType || normalizeSmartLoanType(result?.loanType);
       const startDate = normalizeSmartDate(result?.startDate);
       const endDate = normalizeSmartDate(result?.endDate) || startDate;
       const startTime = normalizeSmartTime(result?.startTime);
       const endTime = normalizeSmartTime(result?.endTime);
+
+      if (!nextLoanType) {
+        throw new Error("יש לבחור סוג השאלה לפני המשך.");
+      }
 
       if (!startDate || !endDate || !startTime || !endTime) {
         throw new Error("לא הצלחנו לפענח תאריכים ושעות תקינים מהבקשה.");
@@ -1113,6 +1134,7 @@ ${inventory}
       setItems(resolvedItems);
       setAgreed(false);
       setStep(4);
+      setEquipmentAiForcedLoanType("");
       showToast("success", "ה-AI מילא את הטופס עבורך. עברו לשלב האישור וקראו את הנהלים.");
     } catch (error) {
       console.error("AI Equipment Booking Error:", error);
@@ -1669,6 +1691,31 @@ ${inventory}
             <div style={{fontSize:12,color:"var(--text3)",lineHeight:1.6}}>
               ה-AI ימלא את סוג ההשאלה, התאריכים, השעות והציוד, ואז יעביר אתכם ישר לשלב האישור הסופי.
             </div>
+            {!normalizeSmartLoanType(form.loan_type) && (showEquipmentAiLoanTypePrompt || equipmentAiForcedLoanType) && (
+              <div style={{background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.25)",borderRadius:14,padding:"14px 16px",display:"flex",flexDirection:"column",gap:10}}>
+                <div style={{fontSize:13,fontWeight:800,color:"var(--text)"}}>
+                  {equipmentAiForcedLoanType ? `סוג ההשאלה שנבחר: ${equipmentAiForcedLoanType}` : "לא זיהינו סוג השאלה. בחרו סוג השאלה כדי להמשיך."}
+                </div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  {SMART_LOAN_TYPES.map((loanTypeOption) => {
+                    const isActive = normalizeSmartLoanType(equipmentAiForcedLoanType) === loanTypeOption;
+                    return (
+                      <button
+                        key={loanTypeOption}
+                        type="button"
+                        className={isActive ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
+                        onClick={()=>{
+                          setEquipmentAiForcedLoanType(loanTypeOption);
+                          setShowEquipmentAiLoanTypePrompt(false);
+                        }}
+                      >
+                        {loanTypeOption}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
               {equipmentAiLoading && <span style={{fontSize:12,color:"var(--accent)",fontWeight:700}}>מפענח את הבקשה...</span>}
               <div style={{display:"flex",gap:8,marginInlineStart:"auto"}}>
