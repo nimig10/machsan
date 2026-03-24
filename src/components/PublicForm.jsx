@@ -952,10 +952,20 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       normalizePhone(s.phone) === normalizedPhone
     ) || null;
   };
-  const studentRecord = (certifications.students||[]).find(s =>
-    s.email?.toLowerCase().trim() === form.email?.toLowerCase().trim() &&
-    normalizePhone(s.phone) === normalizePhone(form.phone)
-  );
+  const studentRecord = (() => {
+    if (!loggedInStudent) return null;
+    const students = certifications.students || [];
+    if (loggedInStudent.id !== undefined && loggedInStudent.id !== null) {
+      const byId = students.find(s => String(s.id) === String(loggedInStudent.id));
+      if (byId) return byId;
+    }
+    const loggedEmail = String(loggedInStudent.email || "").toLowerCase().trim();
+    if (loggedEmail) {
+      const byEmail = students.find(s => s.email?.toLowerCase().trim() === loggedEmail);
+      if (byEmail) return byEmail;
+    }
+    return matchCertificationStudentByNamePhone(loggedInStudent.name, loggedInStudent.phone);
+  })();
   const studentCerts = studentRecord?.certs || {};
   // For production: also check photographer and sound person certs
   const crewPhotographerRecord = isProductionLoan
