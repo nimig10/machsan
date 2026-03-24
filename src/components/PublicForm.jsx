@@ -849,6 +849,15 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     while (d.getDay() === 5 || d.getDay() === 6) d.setDate(d.getDate() + 1);
     return formatLocalDateInput(d);
   };
+  const getPastLoanTimeError = (candidateForm) => {
+    const borrowDate = String(candidateForm?.borrow_date || "").trim();
+    const borrowTime = String(candidateForm?.borrow_time || "").trim();
+    if (!borrowDate || !borrowTime) return "";
+    if (toDateTime(borrowDate, borrowTime) <= Date.now()) {
+      return "לא ניתן להגיש בקשת השאלה לזמן שכבר עבר. יש לבחור זמן עתידי בלבד.";
+    }
+    return "";
+  };
   const getSmartEquipmentPolicyError = (candidateForm, candidateItems) => {
     const loanType = normalizeSmartLoanType(candidateForm?.loan_type);
     const borrowDate = String(candidateForm?.borrow_date || "").trim();
@@ -873,6 +882,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     const candidateSameDay = borrowDate === returnDate;
     const candidateTimeOrderError = candidateSameDay && toDateTime(returnDate, returnTime) <= toDateTime(borrowDate, borrowTime);
     const candidateLoanDays = Math.ceil((parseLocalDate(returnDate) - parseLocalDate(borrowDate)) / 86400000) + 1;
+    const candidatePastTimeError = getPastLoanTimeError(candidateForm);
 
     if (candidateBorrowWeekend || (!candidateIsCinema && candidateReturnWeekend)) {
       return "הבקשה שפוענחה מנוגדת לנהלי המכללה: המחסן אינו פעיל בימי שישי ושבת, ולכן יש לבחור ימי השאלה והחזרה בין ראשון לחמישי בלבד.";
@@ -891,6 +901,9 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     }
     if (candidateTimeOrderError) {
       return "הבקשה שפוענחה מנוגדת לנהלי המכללה: שעת ההחזרה חייבת להיות אחרי שעת האיסוף באותו יום.";
+    }
+    if (candidatePastTimeError) {
+      return `הבקשה שפוענחה מנוגדת לנהלי המכללה: ${candidatePastTimeError}`;
     }
     if (candidateLoanDays > candidateMaxDays) {
       return `הבקשה שפוענחה מנוגדת לנהלי המכללה: משך ההשאלה שביקשת חורג מהזמן המותר לסוג השאלה ${loanType}.`;
@@ -931,8 +944,10 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const isProductionLoan = form.loan_type==="הפקה";
   const isSoundDayLoan = isSoundLoan && !!form.sound_day_loan;
   const soundDayLoanDate = isSoundDayLoan ? getNextSoundDayLoanDate(TIME_SLOTS) : "";
-  const disableSoundDayHourLimit = true;
-  const availableBorrowSlots = isSoundDayLoan && !disableSoundDayHourLimit ? getFutureTimeSlotsForDate(soundDayLoanDate, TIME_SLOTS) : TIME_SLOTS;
+  const activeBorrowDate = isSoundDayLoan ? soundDayLoanDate : form.borrow_date;
+  const activeReturnDate = isSoundDayLoan ? soundDayLoanDate : form.return_date;
+  const availableBorrowSlots = getFutureTimeSlotsForDate(activeBorrowDate, TIME_SLOTS);
+  const availableReturnSlotsBase = getFutureTimeSlotsForDate(activeReturnDate, TIME_SLOTS);
   // Cinema: limit return time to max 6 hours after borrow time
   const cinemaMaxReturnSlots = (() => {
     if (!isCinemaLoan || !form.borrow_time) return TIME_SLOTS;
@@ -945,12 +960,8 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     });
   })();
   const availableReturnSlots = isCinemaLoan
-    ? cinemaMaxReturnSlots
-    : isSoundDayLoan
-      ? disableSoundDayHourLimit
-        ? TIME_SLOTS
-        : availableBorrowSlots.filter((slot) => !form.borrow_time || toDateTime(soundDayLoanDate, slot) > toDateTime(soundDayLoanDate, form.borrow_time))
-      : TIME_SLOTS;
+    ? cinemaMaxReturnSlots.filter((slot) => availableReturnSlotsBase.includes(slot))
+    : availableReturnSlotsBase;
   const ok1 = form.student_name && form.email && form.phone && form.course && form.loan_type &&
     (!isProductionLoan || form.crew_photographer_name);
 
@@ -1021,7 +1032,8 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const timeOrderError = sameDay && form.borrow_time && form.return_time && toDateTime(form.return_date, form.return_time) <= toDateTime(form.borrow_date, form.borrow_time);
   const returnBeforeBorrow = form.borrow_date && form.return_date && parseLocalDate(form.return_date) < parseLocalDate(form.borrow_date);
   const hasTimes = !!form.borrow_time && !!form.return_time;
-  const ok2 = !!form.borrow_date && !!form.return_date && hasTimes && !returnBeforeBorrow && !tooSoon && !cinemaTooSoon && !tooLong && !borrowWeekend && !returnWeekend && !timeOrderError;
+  const pastLoanTimeError = getPastLoanTimeError(form);
+  const ok2 = !!form.borrow_date && !!form.return_date && hasTimes && !returnBeforeBorrow && !tooSoon && !cinemaTooSoon && !tooLong && !borrowWeekend && !returnWeekend && !timeOrderError && !pastLoanTimeError;
   const ok3 = items.some(item => Number(item.quantity) > 0);
   const canSubmit = !!ok1 && !!ok2 && !!ok3 && !privateLoanLimitExceeded && !!agreed;
 
@@ -1063,6 +1075,10 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     }
     if (privateLoanLimitExceeded) {
       showToast("error", "שים לב אין לחרוג מ-4 פריטים בהשאלה פרטית");
+      return;
+    }
+    if (pastLoanTimeError) {
+      showToast("error", pastLoanTimeError);
       return;
     }
     showToast("error", "יש להשלים את שלבי פרטים, תאריכים וציוד לפני המעבר לשלב האישור.");
@@ -1378,6 +1394,11 @@ ${inventory}
   };
 
   const submit = async () => {
+    if (pastLoanTimeError) {
+      showToast("error", pastLoanTimeError);
+      setStep(2);
+      return;
+    }
     if (!ok1 || !ok2 || !ok3 || privateLoanLimitExceeded) {
       if (privateLoanLimitExceeded) {
         showToast("error", "שים לב אין לחרוג מ-4 פריטים בהשאלה פרטית");
@@ -1657,7 +1678,7 @@ ${inventory}
             </div>
             {isSoundDayLoan && (
               <div className="highlight-box" style={{marginBottom:16}}>
-                השאלת יום פעילה. התאריך חושב אוטומטית ל־{formatDate(soundDayLoanDate)} ושעות האיסוף/ההחזרה פתוחות עכשיו להזנה ידנית לצורך בדיקות.
+                השאלת יום פעילה. התאריך חושב אוטומטית ל־{formatDate(soundDayLoanDate)} וניתן להזין שעות ידנית, אבל רק לזמן עתידי.
               </div>
             )}
             {isCinemaLoan && (
@@ -1702,9 +1723,10 @@ ${inventory}
                         value={form.borrow_time}
                         onChange={e=>set("borrow_time",e.target.value)}
                         placeholder="הקלד שעה"
+                        min={soundDayLoanDate === todayStr ? new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }) : undefined}
                       />
                     ) : (
-                      <select className="form-select" value={form.borrow_time} onChange={e=>setForm(prev=>({...prev,borrow_time:e.target.value,return_time:isSoundDayLoan && !disableSoundDayHourLimit && prev.return_time && toDateTime(soundDayLoanDate, prev.return_time) <= toDateTime(soundDayLoanDate, e.target.value) ? "" : prev.return_time}))}>
+                      <select className="form-select" value={form.borrow_time} onChange={e=>setForm(prev=>({...prev,borrow_time:e.target.value}))}>
                         <option value="">-- בחר שעה --</option>
                         {availableBorrowSlots.map(t=><option key={t} value={t}>{t}</option>)}
                       </select>
@@ -1721,6 +1743,7 @@ ${inventory}
                         value={form.return_time}
                         onChange={e=>set("return_time",e.target.value)}
                         placeholder="הקלד שעה"
+                        min={soundDayLoanDate === todayStr ? (form.borrow_time || new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false })) : undefined}
                       />
                     ) : (
                       <select className="form-select" value={form.return_time} onChange={e=>set("return_time",e.target.value)}>
@@ -1738,6 +1761,7 @@ ${inventory}
             {tooLong && !isCinemaLoan && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 לא ניתן להשלים את התהליך כי זמן ההשאלה חורג מנהלי המכללה. משך מקסימלי: <strong>{maxDays} ימים</strong></div>}
             {returnBeforeBorrow && !isCinemaLoan && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 זמנים לא נכונים — תאריך החזרה חייב להיות אחרי תאריך ההשאלה.</div>}
             {timeOrderError && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 זמנים לא נכונים — שעת החזרה חייבת להיות אחרי שעת האיסוף באותו יום.</div>}
+            {pastLoanTimeError && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 {pastLoanTimeError}</div>}
             {ok2 && <div className="highlight-box">{isCinemaLoan ? `🎥 השאלת קולנוע יומית · ${formatDate(form.borrow_date)} · ${form.borrow_time}–${form.return_time}` : `📅 השאלה ל-${loanDays} ימים · איסוף ${form.borrow_time} · החזרה ${form.return_time}`}</div>}
 
             {/* Mini calendar — approved reservations */}
