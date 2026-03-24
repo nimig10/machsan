@@ -214,6 +214,43 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
     const s = (k,v) => setF(p=>({...p,[k]:v}));
     const [imgUploading, setImgUploading] = useState(false);
     const [imgError, setImgError]         = useState("");
+    const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
+
+    const generateAutoDescription = async (itemName) => {
+      if (!itemName) {
+        alert("נא להזין שם פריט קודם");
+        return;
+      }
+
+      setIsGeneratingDesc(true);
+      try {
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+        const systemInstruction = "You are a professional AV and film equipment expert. The user will provide an equipment name. Write a concise, professional technical description of this item in Hebrew (around 2-3 sentences), highlighting its main uses and features. Output ONLY the Hebrew text, without formatting or markdown.";
+
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: itemName }] }],
+            systemInstruction: { parts: [{ text: systemInstruction }] },
+          }),
+        });
+
+        if (!response.ok) throw new Error("API request failed");
+
+        const data = await response.json();
+        const generatedText = data.candidates[0].content.parts[0].text;
+
+        setF(prev => ({ ...prev, description: generatedText }));
+      } catch (error) {
+        console.error("Error generating description:", error);
+        alert("שגיאה ביצירת התיאור. נסה שוב.");
+      } finally {
+        setIsGeneratingDesc(false);
+      }
+    };
 
     const handleImageUpload = async (e) => {
       const file = e.target.files[0];
@@ -254,7 +291,15 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
           <div className="form-group"><label className="form-label">שם הציוד *</label><input className="form-input" value={f.name} onChange={e=>s("name",e.target.value)}/></div>
           <div className="form-group"><label className="form-label">קטגוריה</label><select className="form-select" value={f.category} onChange={e=>s("category",e.target.value)}>{categories.map(c=><option key={c}>{c}</option>)}</select></div>
         </div>
-        <div className="form-group"><label className="form-label">תיאור</label><textarea className="form-textarea" rows={2} value={f.description} onChange={e=>s("description",e.target.value)}/></div>
+        <div className="form-group">
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
+            <label className="form-label" style={{margin:0}}>תיאור</label>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={()=>generateAutoDescription(f.name)} disabled={isGeneratingDesc}>
+              {isGeneratingDesc ? "מייצר תיאור..." : "Auto Description"}
+            </button>
+          </div>
+          <textarea className="form-textarea" rows={2} value={f.description} onChange={e=>s("description",e.target.value)}/>
+        </div>
         <div className="grid-2">
           <div className="form-group"><label className="form-label">כמות *</label><input type="number" min="0" className="form-input" value={f.total_quantity} onChange={e=>s("total_quantity",Number(e.target.value))}/></div>
           <div className="form-group">
