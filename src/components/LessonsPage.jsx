@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today } from "../utils.js";
 
-const AI_IMPORT_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+const AI_IMPORT_MODELS = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
 
 function sortScheduleEntries(entries = []) {
   return [...entries].sort((a, b) => {
@@ -420,12 +420,12 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
             if (!response.ok) {
               const errText = await response.text();
-              const errorMessage = `API HTTP Error ${response.status}: ${errText}`;
-              if (response.status === 503) {
-                lastError = new Error("Gemini עמוס כרגע. נסה שוב בעוד כמה דקות.");
+              // נסה מודל הבא על שגיאות שרת נפוצות
+              if ([400, 404, 429, 503].includes(response.status)) {
+                lastError = new Error(`שגיאה ${response.status} במודל ${modelName} — מנסה מודל אחר`);
                 continue;
               }
-              throw new Error(errorMessage);
+              throw new Error(`שגיאת API (${response.status}): ${errText}`);
             }
 
             jsonResponse = await response.json();
@@ -433,9 +433,9 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             break;
           }
 
-          if (lastError) throw lastError;
+          if (lastError) throw new Error(`כל המודלים נכשלו. ${lastError.message}`);
           if (!jsonResponse?.candidates || jsonResponse.candidates.length === 0) {
-            throw new Error("No response from Gemini API.");
+            throw new Error("Gemini לא החזיר תוצאות. נסה שוב.");
           }
 
           const generatedText = jsonResponse.candidates[0]?.content?.parts?.[0]?.text;
@@ -532,7 +532,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           showToast("success", `פוענחו ${cleanedLessons.length} שיעורים. נוספו ${addedCount} קורסים ועודכנו ${updatedCount} קורסים.`);
         } catch (err) {
           console.error("Error processing Excel:", err);
-          showToast("error", err?.message || "שגיאה בפענוח הקובץ.");
+          showToast("error", `שגיאה בייבוא: ${err?.message || "שגיאה לא ידועה"}`);
         } finally {
           setAiImporting(false);
           if (input) input.value = null;
