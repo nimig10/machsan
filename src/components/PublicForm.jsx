@@ -47,6 +47,14 @@ function parseSmartBookingJson(text) {
   return JSON.parse(jsonText);
 }
 
+function matchesEquipmentLoanType(eq, loanType, privateFilter = "all") {
+  const equipmentFilter = loanType === "סאונד" ? "sound" : loanType === "הפקה" ? "photo" : privateFilter;
+  const isGeneral = (!eq?.soundOnly && !eq?.photoOnly) || (eq?.soundOnly && eq?.photoOnly);
+  if (equipmentFilter === "sound") return !!eq?.soundOnly || isGeneral;
+  if (equipmentFilter === "photo") return !!eq?.photoOnly || isGeneral;
+  return true;
+}
+
 const fetchWithRetry = async (url, options, maxRetries = 5) => {
   const delays = [2000, 5000, 10000, 20000, 32000];
   for (let i = 0; i < maxRetries; i += 1) {
@@ -308,13 +316,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
 
   // Equipment to display: if a kit is active, only show that kit's items
   const kitEqIds = activeKit ? new Set((activeKit.items||[]).map(i=>String(i.equipment_id))) : null;
-  const equipmentFilter = isSoundLoan ? "sound" : loanType==="הפקה" ? "photo" : privateFilter;
-  const visibleAvailEq = availEq.filter((eq) => {
-    const isGeneral = (!eq.soundOnly && !eq.photoOnly) || (eq.soundOnly && eq.photoOnly);
-    if (equipmentFilter === "sound") return !!eq.soundOnly || isGeneral;
-    if (equipmentFilter === "photo") return !!eq.photoOnly || isGeneral;
-    return true;
-  });
+  const visibleAvailEq = availEq.filter((eq) => matchesEquipmentLoanType(eq, loanType, privateFilter));
   const baseCategories = categories.filter((category) => visibleAvailEq.some((eq) => eq.category === category));
   const filteredCategories = selectedCats.length===0 ? baseCategories : baseCategories.filter(c=>selectedCats.includes(c));
 
@@ -1179,10 +1181,25 @@ ${inventory}
 
       const generatedText = jsonResponse.candidates?.[0]?.content?.parts?.[0]?.text || "";
       const result = parseSmartBookingJson(generatedText);
+      const nextLoanType = preselectedLoanType || forcedLoanType || promptLoanType || normalizeSmartLoanType(result?.loanType);
+      const startDate = normalizeSmartDate(result?.startDate);
+      const endDate = normalizeSmartDate(result?.endDate) || startDate;
+      const startTime = normalizeSmartTime(result?.startTime);
+      const endTime = normalizeSmartTime(result?.endTime);
+
+      if (!nextLoanType) {
+        throw new Error("יש לבחור סוג השאלה לפני המשך.");
+      }
+
+      const visibleEquipmentIds = new Set(
+        (equipmentList || [])
+          .filter((equipmentItem) => matchesEquipmentLoanType(equipmentItem, nextLoanType))
+          .map((equipmentItem) => String(equipmentItem.id))
+      );
       const resolvedItems = (result?.items || [])
         .map((item) => {
           const match = (equipmentList || []).find((equipmentItem) => String(equipmentItem.id) === String(item?.equipmentId));
-          if (!match) return null;
+          if (!match || !visibleEquipmentIds.has(String(match.id))) return null;
           return {
             equipment_id: match.id,
             quantity: Math.max(1, Number(item?.quantity) || 1),
@@ -1192,17 +1209,7 @@ ${inventory}
         .filter(Boolean);
 
       if (!resolvedItems.length) {
-        throw new Error("לא הצלחנו להתאים ציוד קיים מתוך הבקשה.");
-      }
-
-      const nextLoanType = preselectedLoanType || forcedLoanType || promptLoanType || normalizeSmartLoanType(result?.loanType);
-      const startDate = normalizeSmartDate(result?.startDate);
-      const endDate = normalizeSmartDate(result?.endDate) || startDate;
-      const startTime = normalizeSmartTime(result?.startTime);
-      const endTime = normalizeSmartTime(result?.endTime);
-
-      if (!nextLoanType) {
-        throw new Error("יש לבחור סוג השאלה לפני המשך.");
+        throw new Error("לא הצלחנו להתאים פריטי ציוד שמותרים לסוג ההשאלה הזה.");
       }
 
       if (!startDate || !endDate || !startTime || !endTime) {
