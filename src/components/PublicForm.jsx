@@ -977,6 +977,21 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     }
     return studentCerts[certId] === "עבר";
   };
+  const canBorrowEqForForm = (candidateForm, eq) => {
+    if (!eq?.certification_id) return true;
+    const certId = eq.certification_id;
+    const candidateLoanType = normalizeSmartLoanType(candidateForm?.loan_type);
+    if (candidateLoanType === "הפקה") {
+      const candidatePhotographerRecord = matchCertificationStudentByNamePhone(candidateForm?.crew_photographer_name, candidateForm?.crew_photographer_phone);
+      const candidateSoundRecord = candidateForm?.crew_sound_name
+        ? matchCertificationStudentByNamePhone(candidateForm?.crew_sound_name, candidateForm?.crew_sound_phone)
+        : null;
+      const candidatePhotographerCerts = candidatePhotographerRecord?.certs || {};
+      const candidateSoundCerts = candidateSoundRecord?.certs || {};
+      return candidatePhotographerCerts[certId] === "עבר" || candidateSoundCerts[certId] === "עבר";
+    }
+    return studentCerts[certId] === "עבר";
+  };
   const privateLoanLimitedQty = form.loan_type==="פרטית" ? getPrivateLoanLimitedQty(items, equipment) : 0;
   const privateLoanLimitExceeded = form.loan_type==="פרטית" && privateLoanLimitedQty > 4;
   const sameDay = form.borrow_date && form.return_date && form.borrow_date === form.return_date;
@@ -1193,6 +1208,47 @@ ${inventory}
       const policyError = getSmartEquipmentPolicyError(nextForm, resolvedItems);
       if (policyError) {
         showToast("error", policyError);
+        return;
+      }
+
+      let liveReservations = reservations;
+      try {
+        const freshReservations = await storageGet("reservations");
+        if (Array.isArray(freshReservations)) liveReservations = freshReservations;
+      } catch (error) {
+        console.warn("Could not refresh reservations before AI equipment validation", error);
+      }
+
+      const certificationIssues = resolvedItems
+        .map((item) => {
+          const equipmentItem = equipment.find((eq) => String(eq.id) === String(item.equipment_id));
+          if (!equipmentItem || canBorrowEqForForm(nextForm, equipmentItem)) return null;
+          return equipmentItem.name;
+        })
+        .filter(Boolean);
+      if (certificationIssues.length) {
+        showToast("error", `הבקשה שפוענחה לא תואמת להסמכות הפעילות במערכת: ${certificationIssues.join(", ")}.`);
+        return;
+      }
+
+      const availabilityIssues = resolvedItems
+        .map((item) => {
+          const availableQty = getAvailable(
+            item.equipment_id,
+            nextForm.borrow_date,
+            nextForm.return_date,
+            liveReservations,
+            equipment,
+            null,
+            nextForm.borrow_time,
+            nextForm.return_time
+          );
+          if (Number(item.quantity) <= availableQty) return null;
+          return `${item.name} — ביקשת ${item.quantity}, זמינים כרגע ${availableQty}`;
+        })
+        .filter(Boolean);
+      if (availabilityIssues.length) {
+        showToast("error", `הבקשה שפוענחה לא תואמת למלאי המחסן בזמן אמת: ${availabilityIssues.join(" ; ")}.`);
         return;
       }
 
