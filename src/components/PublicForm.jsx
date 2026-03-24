@@ -836,6 +836,60 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     while (d.getDay() === 5 || d.getDay() === 6) d.setDate(d.getDate() + 1);
     return formatLocalDateInput(d);
   };
+  const getSmartEquipmentPolicyError = (candidateForm, candidateItems) => {
+    const loanType = normalizeSmartLoanType(candidateForm?.loan_type);
+    const borrowDate = String(candidateForm?.borrow_date || "").trim();
+    const returnDate = String(candidateForm?.return_date || "").trim();
+    const borrowTime = String(candidateForm?.borrow_time || "").trim();
+    const returnTime = String(candidateForm?.return_time || "").trim();
+
+    if (!loanType || !borrowDate || !returnDate || !borrowTime || !returnTime) return "";
+
+    const candidateIsCinema = loanType === "קולנוע יומית";
+    const candidateIsSound = loanType === "סאונד";
+    const candidateMinDays = loanType === "פרטית" ? 2 : candidateIsSound ? 0 : candidateIsCinema ? 0 : 7;
+    const candidateMinDate = (() => {
+      const date = new Date();
+      date.setDate(date.getDate() + (candidateIsCinema ? 1 : candidateMinDays));
+      return moveToNextWeekday(formatLocalDateInput(date));
+    })();
+    const candidateMaxDays = loanType === "פרטית" ? 4 : candidateIsCinema ? 1 : 7;
+    const candidateBorrowWeekend = isWeekend(borrowDate);
+    const candidateReturnWeekend = isWeekend(returnDate);
+    const candidateReturnBeforeBorrow = parseLocalDate(returnDate) < parseLocalDate(borrowDate);
+    const candidateSameDay = borrowDate === returnDate;
+    const candidateTimeOrderError = candidateSameDay && toDateTime(returnDate, returnTime) <= toDateTime(borrowDate, borrowTime);
+    const candidateLoanDays = Math.ceil((parseLocalDate(returnDate) - parseLocalDate(borrowDate)) / 86400000) + 1;
+
+    if (candidateBorrowWeekend || (!candidateIsCinema && candidateReturnWeekend)) {
+      return "הבקשה שפוענחה מנוגדת לנהלי המכללה: המחסן אינו פעיל בימי שישי ושבת, ולכן יש לבחור ימי השאלה והחזרה בין ראשון לחמישי בלבד.";
+    }
+    if (!candidateIsSound && !candidateIsCinema && borrowDate < candidateMinDate) {
+      if (loanType === "פרטית") {
+        return `הבקשה שפוענחה מנוגדת לנהלי המכללה: השאלה פרטית דורשת התראה של 48 שעות לפחות. התאריך המוקדם ביותר האפשרי הוא ${formatDate(candidateMinDate)}.`;
+      }
+      return `הבקשה שפוענחה מנוגדת לנהלי המכללה: סוג ההשאלה ${loanType} דורש התראה של שבוע לפחות. התאריך המוקדם ביותר האפשרי הוא ${formatDate(candidateMinDate)}.`;
+    }
+    if (candidateIsCinema && borrowDate < candidateMinDate) {
+      return `הבקשה שפוענחה מנוגדת לנהלי המכללה: השאלת קולנוע יומית דורשת הזמנה של 24 שעות מראש. התאריך המוקדם ביותר האפשרי הוא ${formatDate(candidateMinDate)}.`;
+    }
+    if (candidateReturnBeforeBorrow) {
+      return "הבקשה שפוענחה מנוגדת לנהלי המכללה: תאריך ההחזרה חייב להיות אחרי תאריך ההשאלה.";
+    }
+    if (candidateTimeOrderError) {
+      return "הבקשה שפוענחה מנוגדת לנהלי המכללה: שעת ההחזרה חייבת להיות אחרי שעת האיסוף באותו יום.";
+    }
+    if (candidateLoanDays > candidateMaxDays) {
+      return `הבקשה שפוענחה מנוגדת לנהלי המכללה: משך ההשאלה שביקשת חורג מהזמן המותר לסוג השאלה ${loanType}.`;
+    }
+    if (loanType === "פרטית") {
+      const privateQty = getPrivateLoanLimitedQty(candidateItems, equipment);
+      if (privateQty > 4) {
+        return "הבקשה שפוענחה מנוגדת לנהלי המכללה: בהשאלה פרטית לא ניתן לחרוג מ-4 פריטים.";
+      }
+    }
+    return "";
+  };
   const borrowWeekend = isWeekend(form.borrow_date);
   const returnWeekend = isWeekend(form.return_date);
   const minDate = (() => {
@@ -990,6 +1044,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     const promptLoanType = normalizeSmartLoanType(promptText);
     const forcedLoanType = normalizeSmartLoanType(equipmentAiForcedLoanType);
     const requestedLoanType = preselectedLoanType || forcedLoanType || promptLoanType;
+    let shouldCloseEquipmentAiModal = false;
 
     if (!requestedLoanType) {
       setShowEquipmentAiLoanTypePrompt(true);
@@ -1130,18 +1185,29 @@ ${inventory}
         nextForm.crew_photographer_name = form.student_name || loggedInStudent?.name || "";
       }
 
+      const policyError = getSmartEquipmentPolicyError(nextForm, resolvedItems);
+      if (policyError) {
+        showToast("error", policyError);
+        return;
+      }
+
       setForm(nextForm);
       setItems(resolvedItems);
       setAgreed(false);
       setStep(4);
       setEquipmentAiForcedLoanType("");
+      shouldCloseEquipmentAiModal = true;
       showToast("success", "ה-AI מילא את הטופס עבורך. עברו לשלב האישור וקראו את הנהלים.");
     } catch (error) {
       console.error("AI Equipment Booking Error:", error);
       showToast("error", error?.message || "לא הצלחנו להבין את הבקשה. נסה לפרט יותר או למלא ידנית.");
     } finally {
       setEquipmentAiLoading(false);
-      setShowEquipmentAiModal(false);
+      if (shouldCloseEquipmentAiModal) {
+        setShowEquipmentAiModal(false);
+        setShowEquipmentAiLoanTypePrompt(false);
+        setEquipmentAiPrompt("");
+      }
     }
   };
 
@@ -1432,19 +1498,18 @@ ${inventory}
           </>}
         </div>
         {publicView==="equipment" && <div className="form-card-body">
-          <div style={{display:"flex",justifyContent:"center",marginBottom:16}}>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={()=>setShowEquipmentAiModal(true)}
-              disabled={equipmentAiLoading}
-              style={{display:"inline-flex",alignItems:"center",gap:8,fontWeight:800}}
-            >
-              ✨ השאלת חכמה
-            </button>
-          </div>
-
           {step===1 && <>
+            <div style={{display:"flex",justifyContent:"flex-end",marginBottom:16}}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={()=>setShowEquipmentAiModal(true)}
+                disabled={equipmentAiLoading}
+                style={{display:"inline-flex",alignItems:"center",gap:8,fontWeight:800}}
+              >
+                ✨ השאלת ציוד חכמה
+              </button>
+            </div>
             <div className="form-section-title">סוג ההשאלה</div>
             <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:24}}>
               {[
@@ -1665,7 +1730,7 @@ ${inventory}
         <div style={{width:"100%",maxWidth:560,background:"var(--surface)",borderRadius:18,border:"1px solid var(--border)",direction:"rtl",boxShadow:"0 30px 80px rgba(0,0,0,0.35)"}}>
           <div style={{padding:"18px 22px",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
             <div>
-              <div style={{fontWeight:900,fontSize:18,color:"var(--accent)"}}>✨ השאלת חכמה</div>
+              <div style={{fontWeight:900,fontSize:18,color:"var(--accent)"}}>✨ השאלת ציוד חכמה</div>
               <div style={{fontSize:12,color:"var(--text3)",marginTop:4}}>כתבו במשפט אחד מה אתם צריכים, והמערכת תמלא תאריכים וציוד אוטומטית.</div>
             </div>
             <button type="button" className="btn btn-secondary btn-sm" onClick={closeEquipmentAiModal}>סגור</button>
