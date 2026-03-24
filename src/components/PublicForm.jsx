@@ -48,10 +48,11 @@ function parseSmartBookingJson(text) {
 }
 
 const fetchWithRetry = async (url, options, maxRetries = 5) => {
-  const delays = [1000, 2000, 4000, 8000, 16000];
+  const delays = [2000, 5000, 10000, 20000, 32000];
   for (let i = 0; i < maxRetries; i += 1) {
     const response = await fetch(url, options);
     if (response.status === 429) {
+      console.warn(`API Rate Limit hit. Retrying in ${(delays[i] ?? delays[delays.length - 1]) / 1000} seconds...`);
       await new Promise((resolve) => setTimeout(resolve, delays[i] ?? delays[delays.length - 1]));
       continue;
     }
