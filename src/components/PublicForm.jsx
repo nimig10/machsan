@@ -1908,6 +1908,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
   // Studio certification check
   const studioCertTypes = (certifications?.types || []).filter(t => t.category === "studio" && t.id !== "cert_night_studio");
   const sameStudioId = (a, b) => String(a) === String(b);
+  const SMART_BOOKING_BLOCKED_MESSAGE = "לא ניתן להשלים את הבקשה";
   const STUDIO_MAINTENANCE_MESSAGE = "האולפן בתחזוקה, מקווים שישוב לעבוד בקרוב";
   const getStudioCertIds = (studio) => {
     if (Array.isArray(studio?.studioCertIds)) return studio.studioCertIds.filter(Boolean);
@@ -1994,6 +1995,11 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     setIsAiLoading(false);
     setModal(null);
   };
+  const closeSmartBookingModal = () => {
+    setShowAiAssistant(false);
+    setSmartBookingPrompt("");
+    setIsAiLoading(false);
+  };
   const updateAddBookingModal = (patch) => {
     setModal((prev) => (
       prev?.type === "addBooking"
@@ -2027,6 +2033,45 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     });
     return best;
   };
+  const getStudioBookingValidationError = ({ studioId, date, startTime, endTime, isNight=false, blockedMessage="" }) => {
+    if (!studioId || !date || !startTime || !endTime) return "יש להשלים אולפן, תאריך ושעות לפני השליחה";
+    if (date < todayStr) return "לא ניתן להזמין תאריך שעבר";
+    if (isStudioDisabled(studioId)) return blockedMessage || STUDIO_MAINTENANCE_MESSAGE;
+    if (!hasStudioCert(studioId) || (isNight && !hasNightCert)) return blockedMessage || "🔒 טרם עבר הסמכה — לא ניתן לקבוע אולפן זה";
+    if (!isNight && startTime >= endTime) return "שעת סיום חייבת להיות אחרי שעת ההתחלה";
+    const overlap = bookings.some((booking) => (
+      sameStudioId(booking.studioId, studioId)
+      && booking.date === date
+      && isActiveStudioBooking(booking)
+      && !(endTime <= booking.startTime || startTime >= booking.endTime)
+    ));
+    if (!isNight && overlap) return "⚠️ קיימת הזמנה חופפת";
+    return "";
+  };
+  const persistStudentBooking = async ({ studioId, date, startTime, endTime, notes="", isNight=false, blockedMessage="", successMessage="✅ האולפן הוזמן בהצלחה!" }) => {
+    const validationError = getStudioBookingValidationError({ studioId, date, startTime, endTime, isNight, blockedMessage });
+    if (validationError) {
+      showToast("error", validationError);
+      return false;
+    }
+    const newBooking = {
+      id: Date.now(),
+      bookingKind: "student",
+      studioId,
+      date,
+      startTime,
+      endTime,
+      studentName: student.name,
+      notes,
+      isNight,
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [...bookings, newBooking];
+    setBookings(updated);
+    await storageSet("studio_bookings", updated);
+    showToast("success", successMessage);
+    return true;
+  };
 
   const handleSmartBooking = async (promptText, studiosList) => {
     if (!promptText) return;
@@ -2039,9 +2084,9 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       const today = todayStr;
       const activeStudios = (studiosList || []).filter((studio) => !isStudioDisabled(studio?.id));
       const certifiedStudios = activeStudios.filter((studio) => hasStudioCert(studio?.id));
-      const availableStudios = certifiedStudios.length ? certifiedStudios : activeStudios;
+      const availableStudios = certifiedStudios;
       if (!availableStudios.length) {
-        throw new Error("לא נמצאו אולפנים זמינים שמתאימים להסמכות שלך כרגע.");
+        throw new Error(SMART_BOOKING_BLOCKED_MESSAGE);
       }
       const availableStudiosStr = availableStudios
         .map((studio) => `ID: ${studio.id}, Name: ${studio.name}, Type: ${studio.type || ""}`)
@@ -2079,7 +2124,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       let lastError = null;
       for (const modelName of ["gemini-2.5-flash", "gemini-2.5-flash-lite"]) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-        const response = await fetch(url, {
+        const response = await fetchWithRetry(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(requestBody),
@@ -2104,39 +2149,32 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
         throw new Error("No response from Gemini API.");
       }
 
-      const result = JSON.parse(jsonResponse.candidates[0].content.parts[0].text);
-      const resolvedStudio = availableStudios.find((studio) => sameStudioId(studio.id, result?.studioId));
-      if (resolvedStudio && isStudioDisabled(resolvedStudio.id)) throw new Error(STUDIO_MAINTENANCE_MESSAGE);
-      if (resolvedStudio && !hasStudioCert(resolvedStudio.id)) throw new Error("לא ניתן לקבוע את האולפן הזה כי לא עברת עליו הסמכת אולפן פעילה.");
-      if (!resolvedStudio) throw new Error("האולפן שפוענח לא קיים ברשימה הזמינה.");
+      const result = parseSmartBookingJson(jsonResponse.candidates[0].content.parts[0].text);
+      const directResolvedStudio = availableStudios.find((studio) => sameStudioId(studio.id, result?.studioId));
+      if (!directResolvedStudio) throw new Error(SMART_BOOKING_BLOCKED_MESSAGE);
 
-      const isNightBooking = Boolean(modal?.isNight);
-      const timeOptions = isNightBooking ? NIGHT_HOURS : DAY_HOURS;
-      const selectedDate = result?.date || modal?.date || today;
-      const selectedStartTime = getClosestTimeOption(result?.startTime, timeOptions, modal?.defaultStart || timeOptions[0] || "09:00");
-      const selectedEndTime = getClosestTimeOption(result?.endTime, timeOptions, modal?.defaultEnd || timeOptions.at(-1) || "12:00");
-      if (selectedDate < todayStr) throw new Error("לא ניתן לקבוע אולפן לתאריך שכבר עבר.");
-      if (!isNightBooking && selectedStartTime >= selectedEndTime) throw new Error("שעת הסיום חייבת להיות אחרי שעת ההתחלה.");
-      const overlap = bookings.some((booking) =>
-        sameStudioId(booking.studioId, resolvedStudio.id) &&
-        booking.date === selectedDate &&
-        isActiveStudioBooking(booking) &&
-        !(selectedEndTime <= booking.startTime || selectedStartTime >= booking.endTime)
+      const parsedStartTime = String(result?.startTime || "").trim();
+      const parsedEndTime = String(result?.endTime || "").trim();
+      const inferredNightBooking = (
+        (parsedStartTime && parsedStartTime >= "21:00")
+        || (parsedEndTime && parsedEndTime <= "08:00")
+        || (parsedStartTime && parsedEndTime && parsedEndTime <= parsedStartTime)
       );
-      if (!isNightBooking && overlap) throw new Error("האולפן שפוענח כבר תפוס בטווח השעות הזה. נסה לנסח שעה אחרת.");
-
-      updateAddBookingModal({
-        studioId: resolvedStudio.id,
-        date: selectedDate,
-        selectedStudioId: String(resolvedStudio.id),
-        selectedDate,
-        selectedStartTime,
-        selectedEndTime,
-        defaultStart: selectedStartTime,
-        defaultEnd: selectedEndTime,
+      const timeOptions = inferredNightBooking ? NIGHT_HOURS : DAY_HOURS;
+      const directSelectedDate = result?.date || today;
+      const directSelectedStartTime = getClosestTimeOption(result?.startTime, timeOptions, inferredNightBooking ? "21:00" : "09:00");
+      const directSelectedEndTime = getClosestTimeOption(result?.endTime, timeOptions, inferredNightBooking ? "08:00" : "12:00");
+      const didSave = await persistStudentBooking({
+        studioId: directResolvedStudio.id,
+        date: directSelectedDate,
+        startTime: directSelectedStartTime,
+        endTime: directSelectedEndTime,
+        notes: promptText,
+        isNight: inferredNightBooking,
+        blockedMessage: SMART_BOOKING_BLOCKED_MESSAGE,
       });
-      setShowAiAssistant(false);
-      showToast("success", "הטופס מולא בהצלחה! אנא אשר את ההזמנה.");
+      if (!didSave) return;
+      closeSmartBookingModal();
     } catch (err) {
       console.error("Smart Booking Error:", err);
       showToast("error", err?.message || "לא הצלחנו לפענח את הבקשה. אנא נסה לנסח שוב.");
@@ -2147,20 +2185,12 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
   const openSmartBookingFromCalendar = () => {
     const defaultStudio = studios.find((studio) => !isStudioDisabled(studio.id) && hasStudioCert(studio.id));
     if (!defaultStudio) {
-      showToast("error", "אין כרגע אולפנים זמינים שמתאימים להסמכות האולפן שלך.");
+      showToast("error", SMART_BOOKING_BLOCKED_MESSAGE);
       return;
     }
-    const defaultDate = weekDays.find((day) => day.fullDate >= todayStr)?.fullDate || todayStr;
-    const defaultDayName = getHebrewDayName(defaultDate);
-    setDayView({ studioId: defaultStudio.id, date: defaultDate, dayName: defaultDayName });
-    openAddBookingModal({
-      studioId: defaultStudio.id,
-      date: defaultDate,
-      dayName: defaultDayName,
-      defaultStart: "09:00",
-      defaultEnd: "12:00",
-    });
+    setModal(null);
     setShowAiAssistant(true);
+    setSmartBookingPrompt("");
   };
   const renderAddBookingModal = () => (
     modal?.type==="addBooking" ? (
@@ -2174,45 +2204,6 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
             <div style={{fontSize:12,color:"var(--text3)"}}>
               🎙️ {(studios.find((studio) => sameStudioId(studio.id, modal.selectedStudioId || modal.studioId))?.name) || "בחר אולפן"}
             </div>
-            {false && <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => setShowAiAssistant((prev) => !prev)}
-                disabled={isAiLoading}
-                style={{display:"inline-flex",alignItems:"center",gap:6}}
-              >
-                ✨ עוזר שיבוץ חכם
-              </button>
-              {isAiLoading && <span style={{fontSize:12,color:"var(--accent)",fontWeight:700}}>מפענח את הבקשה...</span>}
-            </div>}
-            {showAiAssistant && (
-              <div style={{background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.25)",borderRadius:12,padding:12,display:"flex",flexDirection:"column",gap:10}}>
-                <label style={{fontSize:13,fontWeight:700,color:"var(--text2)"}}>
-                  כתוב/י מה צריך
-                  <textarea
-                    className="form-input"
-                    rows={3}
-                    value={smartBookingPrompt}
-                    onChange={(e) => setSmartBookingPrompt(e.target.value)}
-                    placeholder='למשל: אני צריך חדר עריכה מחר מ-12:00 עד 16:00'
-                    style={{marginTop:8}}
-                  />
-                </label>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                  <span style={{fontSize:11,color:"var(--text3)"}}>ה־AI ינסה למלא אולפן, תאריך ושעות לפי הבקשה שלך.</span>
-                  {isAiLoading && <span style={{fontSize:12,color:"var(--accent)",fontWeight:700}}>מפענח את הבקשה...</span>}
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={isAiLoading || !smartBookingPrompt.trim()}
-                    onClick={() => handleSmartBooking(smartBookingPrompt.trim(), studios)}
-                  >
-                    {isAiLoading ? "משבץ..." : "שבץ לי"}
-                  </button>
-                </div>
-              </div>
-            )}
             <div style={{display:"flex",gap:8}}>
               <label style={{flex:1,fontSize:13,fontWeight:600}}>אולפן
                 <select
@@ -2293,33 +2284,9 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     const endTime = String(fd.get("endTime") || modal?.selectedEndTime || "").trim();
     const notes = fd.get("notes")?.trim();
     const isNight = modal.isNight || false;
-    if (!studioId || !date || !startTime || !endTime) {
-      showToast("error", "יש להשלים אולפן, תאריך ושעות לפני השליחה");
-      setSaving(false); return;
-    }
-    if (date < todayStr) {
-      showToast("error", "לא ניתן להזמין תאריך שעבר");
-      setSaving(false); return;
-    }
-    // Studio certification check
-    if (isStudioDisabled(studioId)) {
-      showToast("error", STUDIO_MAINTENANCE_MESSAGE);
-      setSaving(false); return;
-    }
-    if (!hasStudioCert(studioId)) {
-      showToast("error", `⛔ טרם עבר הסמכה — לא ניתן לקבוע אולפן זה`);
-      setSaving(false); return;
-    }
-    // Night bookings can have endTime < startTime (crosses midnight)
-    if(!isNight && startTime >= endTime) { showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה"); setSaving(false); return; }
-    const overlap = bookings.some(b => sameStudioId(b.studioId, studioId) && b.date===date && isActiveStudioBooking(b) && !(endTime<=b.startTime || startTime>=b.endTime));
-    if(!isNight && overlap) { showToast("error","⚠️ קיימת הזמנה חופפת"); setSaving(false); return; }
-    const newBooking = { id:Date.now(), bookingKind:"student", studioId, date, startTime, endTime, studentName:student.name, notes, isNight, createdAt:new Date().toISOString() };
-    const updated = [...bookings, newBooking];
-    setBookings(updated);
-    await storageSet("studio_bookings", updated);
-    showToast("success", "✅ האולפן הוזמן בהצלחה!");
-    closeBookingModal(); setSaving(false);
+    const didSave = await persistStudentBooking({ studioId, date, startTime, endTime, notes, isNight });
+    if (didSave) closeBookingModal();
+    setSaving(false);
   };
 
   const submitEditBooking = async (e) => {
@@ -2616,6 +2583,54 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
           </div>
         </div>
       </div>
+
+      {showAiAssistant && (
+        <div
+          style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
+          onClick={(e)=>e.target===e.currentTarget&&closeSmartBookingModal()}
+        >
+          <div style={{width:"100%",maxWidth:560,background:"var(--surface)",borderRadius:18,border:"1px solid var(--border)",direction:"rtl",boxShadow:"0 30px 80px rgba(0,0,0,0.35)"}}>
+            <div style={{padding:"18px 22px",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+              <div>
+                <div style={{fontWeight:900,fontSize:18,color:"var(--accent)"}}>✨ קביעת אולפן חכמה</div>
+                <div style={{fontSize:12,color:"var(--text3)",marginTop:4}}>כתבו את הבקשה בשפה חופשית והמערכת תנסה לקבוע את האולפן ישירות בלוח הכללי.</div>
+              </div>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={closeSmartBookingModal} disabled={isAiLoading}>סגור</button>
+            </div>
+            <form
+              onSubmit={(e)=>{
+                e.preventDefault();
+                handleSmartBooking(smartBookingPrompt.trim(), studios);
+              }}
+              style={{padding:22,display:"flex",flexDirection:"column",gap:14}}
+            >
+              <label style={{display:"flex",flexDirection:"column",gap:8,fontWeight:700,color:"var(--text2)"}}>
+                מה תרצו לקבוע?
+                <textarea
+                  className="form-input"
+                  rows={5}
+                  value={smartBookingPrompt}
+                  onChange={(e)=>setSmartBookingPrompt(e.target.value)}
+                  placeholder='למשל: אני צריך חדר עריכה מחר מ-12:00 עד 16:00'
+                  style={{resize:"vertical",minHeight:140}}
+                />
+              </label>
+              <div style={{fontSize:12,color:"var(--text3)",lineHeight:1.6}}>
+                האולפן ייקבע אוטומטית רק אם הבקשה תואמת להסמכות הפעילות שלך ולחסימות הקיימות בלוח האולפנים.
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                {isAiLoading && <span style={{fontSize:12,color:"var(--accent)",fontWeight:700}}>מעבד בקשה...</span>}
+                <div style={{display:"flex",gap:8,marginInlineStart:"auto"}}>
+                  <button type="button" className="btn btn-secondary" onClick={closeSmartBookingModal} disabled={isAiLoading}>ביטול</button>
+                  <button type="submit" className="btn btn-primary" disabled={isAiLoading || !smartBookingPrompt.trim()}>
+                    {isAiLoading ? "קובע..." : "קבע לי"}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {studios.length===0 ? (
         <div style={{textAlign:"center",padding:48,color:"var(--text3)"}}>
