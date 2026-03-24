@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today } from "../utils.js";
 
-const AI_IMPORT_MODELS = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
+const AI_IMPORT_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
 
 function sortScheduleEntries(entries = []) {
   return [...entries].sort((a, b) => {
@@ -422,7 +422,12 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
               const errText = await response.text();
               // נסה מודל הבא על שגיאות שרת נפוצות
               if ([400, 404, 429, 503].includes(response.status)) {
-                lastError = new Error(`שגיאה ${response.status} במודל ${modelName} — מנסה מודל אחר`);
+                console.error(`Lessons AI import failed on ${modelName} (${response.status})`, errText);
+                lastError = new Error(
+                  response.status === 429 || response.status === 503
+                    ? "שירות ה-AI עמוס כרגע. נסה שוב בעוד כמה דקות."
+                    : `שגיאה ${response.status} במודל ${modelName} — מנסה מודל אחר`
+                );
                 continue;
               }
               throw new Error(`שגיאת API (${response.status}): ${errText}`);
