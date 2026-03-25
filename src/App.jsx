@@ -6680,21 +6680,21 @@ export default function App() {
         storageGet("categoryLoanTypes"),
       ]);
 
-      applyPublicLiveSync("equipment", eqR?.value);
-      applyPublicLiveSync("reservations", resR?.value);
-      applyPublicLiveSync("categories", catsR?.value);
-      applyPublicLiveSync("categoryLoanTypes", catLoanTypesR?.value);
+      applyPublicLiveSync("equipment", eqR);
+      applyPublicLiveSync("reservations", resR);
+      applyPublicLiveSync("categories", catsR);
+      applyPublicLiveSync("categoryLoanTypes", catLoanTypesR);
 
       return {
-        equipment: Array.isArray(eqR?.value)
-          ? normalizeEquipmentTagFlags(eqR.value).map(ensureUnits)
+        equipment: Array.isArray(eqR)
+          ? normalizeEquipmentTagFlags(eqR).map(ensureUnits)
           : equipmentRef.current,
-        reservations: Array.isArray(resR?.value)
-          ? normalizeReservationsForArchive(resR.value)
+        reservations: Array.isArray(resR)
+          ? normalizeReservationsForArchive(resR)
           : reservationsRef.current,
-        categories: Array.isArray(catsR?.value) ? catsR.value : categoriesRef.current,
-        categoryLoanTypes: catLoanTypesR?.value && typeof catLoanTypesR.value === "object" && !Array.isArray(catLoanTypesR.value)
-          ? catLoanTypesR.value
+        categories: Array.isArray(catsR) ? catsR : categoriesRef.current,
+        categoryLoanTypes: catLoanTypesR && typeof catLoanTypesR === "object" && !Array.isArray(catLoanTypesR)
+          ? catLoanTypesR
           : categoryLoanTypesRef.current,
       };
     } catch (error) {
