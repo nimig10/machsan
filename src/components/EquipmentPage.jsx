@@ -18,7 +18,100 @@ function statusBadge(s) {
   return <span className={`badge ${m[s]||"badge-gray"}`}>{s}</span>;
 }
 
-export function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories, categoryTypes={}, setCategoryTypes, certifications={types:[],students:[]} }) {
+const CATEGORY_LOAN_TYPE_OPTIONS = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
+
+function getCategoryLoanTypeSelection(categoryName, categoryLoanTypes = {}) {
+  const allowedLoanTypes = CATEGORY_LOAN_TYPE_OPTIONS.filter((loanType) => Array.isArray(categoryLoanTypes?.[categoryName]) && categoryLoanTypes[categoryName].includes(loanType));
+  return allowedLoanTypes.length ? allowedLoanTypes : [...CATEGORY_LOAN_TYPE_OPTIONS];
+}
+
+function buildCategoryLoanTypesMap(categories = [], draft = {}) {
+  const next = {};
+  (categories || []).forEach((categoryName) => {
+    const allowedLoanTypes = CATEGORY_LOAN_TYPE_OPTIONS.filter((loanType) => Array.isArray(draft?.[categoryName]) && draft[categoryName].includes(loanType));
+    if (allowedLoanTypes.length && allowedLoanTypes.length < CATEGORY_LOAN_TYPE_OPTIONS.length) {
+      next[categoryName] = allowedLoanTypes;
+    }
+  });
+  return next;
+}
+
+function CategoryLoanTypesModal({ categories, categoryLoanTypes = {}, onSave, onClose }) {
+  const [draft, setDraft] = useState(() => {
+    const initialDraft = {};
+    (categories || []).forEach((categoryName) => {
+      initialDraft[categoryName] = getCategoryLoanTypeSelection(categoryName, categoryLoanTypes);
+    });
+    return initialDraft;
+  });
+
+  const toggleLoanType = (categoryName, loanType) => {
+    setDraft((prev) => {
+      const current = Array.isArray(prev?.[categoryName]) && prev[categoryName].length ? prev[categoryName] : [...CATEGORY_LOAN_TYPE_OPTIONS];
+      const nextSelection = current.includes(loanType)
+        ? current.filter((value) => value !== loanType)
+        : [...current, loanType];
+      if (!nextSelection.length) return prev;
+      return { ...prev, [categoryName]: nextSelection };
+    });
+  };
+
+  const setAllLoanTypes = (categoryName) => {
+    setDraft((prev) => ({ ...prev, [categoryName]: [...CATEGORY_LOAN_TYPE_OPTIONS] }));
+  };
+
+  return (
+    <Modal
+      title="🗂️ סיווג לסוגי ההשאלות"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-primary" onClick={() => onSave(buildCategoryLoanTypesMap(categories, draft))}>שמור</button>
+          <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+        </>
+      }
+    >
+      <div style={{display:"grid",gap:12}}>
+        <div style={{fontSize:13,color:"var(--text3)",lineHeight:1.7}}>
+          בחרו לכל רובריקת ציוד אילו סוגי השאלה יכולים לראות אותה בטופס ההשאלה.
+          אם כל סוגי ההשאלות מסומנים, הרובריקה תהיה זמינה לכולם.
+        </div>
+        {(categories || []).map((categoryName) => {
+          const selectedLoanTypes = Array.isArray(draft?.[categoryName]) && draft[categoryName].length ? draft[categoryName] : [...CATEGORY_LOAN_TYPE_OPTIONS];
+          const isAllSelected = selectedLoanTypes.length === CATEGORY_LOAN_TYPE_OPTIONS.length;
+          return (
+            <div key={categoryName} style={{border:"1px solid var(--border)",borderRadius:12,padding:12,background:"var(--surface2)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+                <div style={{fontWeight:800,fontSize:14}}>{categoryName}</div>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${isAllSelected ? "btn-primary" : "btn-secondary"}`}
+                  onClick={() => setAllLoanTypes(categoryName)}
+                >
+                  כל סוגי ההשאלות
+                </button>
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {CATEGORY_LOAN_TYPE_OPTIONS.map((loanType) => (
+                  <button
+                    key={loanType}
+                    type="button"
+                    className={`btn btn-sm ${selectedLoanTypes.includes(loanType) ? "btn-primary" : "btn-secondary"}`}
+                    onClick={() => toggleLoanType(categoryName, loanType)}
+                  >
+                    {loanType}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Modal>
+  );
+}
+
+export function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories, categoryTypes={}, setCategoryTypes, categoryLoanTypes={}, setCategoryLoanTypes=()=>{}, certifications={types:[],students:[]} }) {
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState("הכל");
   const [selectedCats, setSelectedCats] = useState([]);
@@ -197,6 +290,13 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
     showToast("success", shouldEnable ? `הקטגוריה "${categoryName}" הוחרגה ממגבלת השאלה פרטית` : `הוחזרה מגבלת השאלה פרטית לקטגוריה "${categoryName}"`);
   };
 
+  const saveCategoryLoanTypes = async (nextCategoryLoanTypes) => {
+    setCategoryLoanTypes(nextCategoryLoanTypes);
+    await storageSet("categoryLoanTypes", nextCategoryLoanTypes);
+    showToast("success", "סיווג סוגי ההשאלות עודכן");
+    setModal(null);
+  };
+
   const deleteEmptyCategoryFromFilters = async (categoryName) => {
     const hasItems = equipment.some((item) => item.category === categoryName);
     if (hasItems) {
@@ -205,11 +305,14 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
     }
     const updatedCats = categories.filter((category) => category !== categoryName);
     const updatedTypes = { ...categoryTypes };
+    const updatedCategoryLoanTypes = { ...categoryLoanTypes };
     delete updatedTypes[categoryName];
+    delete updatedCategoryLoanTypes[categoryName];
     setSelectedCats((prev) => prev.filter((category) => category !== categoryName));
     setCategories(updatedCats);
     setCategoryTypes(updatedTypes);
-    await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes)]);
+    setCategoryLoanTypes(updatedCategoryLoanTypes);
+    await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes), storageSet("categoryLoanTypes", updatedCategoryLoanTypes)]);
     showToast("success", `הרובריקה "${categoryName}" נמחקה`);
   };
 
@@ -384,6 +487,7 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
           <button className="btn btn-secondary" onClick={()=>csvInputRef.current?.click()}>📤 ייבוא CSV</button>
           <input ref={csvInputRef} type="file" accept=".csv,text/csv" style={{display:"none"}} onChange={handleCSVImport}/>
           <button className="btn btn-primary" onClick={()=>setModal({type:"addcat"})}>📂 ניהול קטגוריות</button>
+          <button className="btn btn-primary" onClick={()=>setModal({type:"loan-types"})}>🗂️ סיווג לסוגי ההשאלות</button>
           <button className="btn btn-primary" onClick={()=>setModal({type:"add"})}>➕ הוסף ציוד</button>
         </div>
       </div>
@@ -514,6 +618,7 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
       {(modal?.type==="add"||modal?.type==="edit") && <Modal title={modal.type==="add"?"➕ הוספת ציוד":"✏️ עריכת ציוד"} onClose={()=>setModal(null)}><EqForm initial={modal.type==="edit"?modal.item:null}/></Modal>}
       {modal?.type==="units" && <UnitsModal eq={modal.item} equipment={equipment} setEquipment={setEquipment} showToast={showToast} onClose={()=>setModal(null)}/>}
       {modal?.type==="delete" && <Modal title="🗑️ מחיקת ציוד" onClose={()=>setModal(null)} footer={<><button className="btn btn-danger" onClick={()=>del(modal.item)}>כן, מחק</button><button className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button></>}><p>האם למחוק את <strong>{modal.item.name}</strong>?</p></Modal>}
+      {modal?.type==="loan-types" && <CategoryLoanTypesModal categories={categories} categoryLoanTypes={categoryLoanTypes} onSave={saveCategoryLoanTypes} onClose={()=>setModal(null)}/>}
       {modal?.type==="addcat" && <ManageCategoriesModal
         categories={categories}
         categoryTypes={categoryTypes}
@@ -539,23 +644,32 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
               return base;
             });
             const updatedTypes = {...categoryTypes};
+            const updatedCategoryLoanTypes = {...categoryLoanTypes};
             if(action.oldName !== action.newName) { delete updatedTypes[action.oldName]; }
             if(action.type) updatedTypes[action.newName] = action.type;
             else delete updatedTypes[action.newName];
+            if (action.oldName !== action.newName && Object.prototype.hasOwnProperty.call(updatedCategoryLoanTypes, action.oldName)) {
+              updatedCategoryLoanTypes[action.newName] = updatedCategoryLoanTypes[action.oldName];
+              delete updatedCategoryLoanTypes[action.oldName];
+            }
             setCategories(updatedCats);
             setEquipment(updatedEq);
             setCategoryTypes(updatedTypes);
-            await Promise.all([storageSet("categories", updatedCats), storageSet("equipment", updatedEq), storageSet("categoryTypes", updatedTypes)]);
+            setCategoryLoanTypes(updatedCategoryLoanTypes);
+            await Promise.all([storageSet("categories", updatedCats), storageSet("equipment", updatedEq), storageSet("categoryTypes", updatedTypes), storageSet("categoryLoanTypes", updatedCategoryLoanTypes)]);
             showToast("success", `קטגוריה עודכנה`);
           } else if(action.action==="delete") {
             const hasItems = equipment.some(e => e.category===action.name);
             if(hasItems) { showToast("error", "לא ניתן למחוק — יש ציוד בקטגוריה זו"); return; }
             const updatedCats = categories.filter(c => c!==action.name);
             const updatedTypes = {...categoryTypes};
+            const updatedCategoryLoanTypes = {...categoryLoanTypes};
             delete updatedTypes[action.name];
+            delete updatedCategoryLoanTypes[action.name];
             setCategories(updatedCats);
             setCategoryTypes(updatedTypes);
-            await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes)]);
+            setCategoryLoanTypes(updatedCategoryLoanTypes);
+            await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes), storageSet("categoryLoanTypes", updatedCategoryLoanTypes)]);
             showToast("success", `קטגוריה "${action.name}" נמחקה`);
           }
         }}

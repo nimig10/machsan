@@ -116,7 +116,7 @@ async function storageSet(key, value) {
 
 // ─── DB DIAGNOSTICS (accessible from browser console) ────────────────────────
 window.dbDiag = async () => {
-  const keys = ["equipment","reservations","categories","categoryTypes","teamMembers","kits","policies","certifications","deptHeads","calendarToken","collegeManager","managerToken","siteSettings"];
+  const keys = ["equipment","reservations","categories","categoryTypes","categoryLoanTypes","teamMembers","kits","policies","certifications","deptHeads","calendarToken","collegeManager","managerToken","siteSettings"];
   console.log("🔍 Supabase DB Diagnostic Report");
   console.log("=".repeat(50));
   for (const key of keys) {
@@ -885,7 +885,100 @@ function workingUnits(eq) {
 
 
 // ─── EQUIPMENT PAGE ───────────────────────────────────────────────────────────
-function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories, categoryTypes={}, setCategoryTypes, certifications={types:[],students:[]}, studios=[], collegeManager={}, managerToken="" }) {
+const CATEGORY_LOAN_TYPE_OPTIONS = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
+
+function getCategoryLoanTypeSelection(categoryName, categoryLoanTypes = {}) {
+  const allowedLoanTypes = CATEGORY_LOAN_TYPE_OPTIONS.filter((loanType) => Array.isArray(categoryLoanTypes?.[categoryName]) && categoryLoanTypes[categoryName].includes(loanType));
+  return allowedLoanTypes.length ? allowedLoanTypes : [...CATEGORY_LOAN_TYPE_OPTIONS];
+}
+
+function buildCategoryLoanTypesMap(categories = [], draft = {}) {
+  const next = {};
+  (categories || []).forEach((categoryName) => {
+    const allowedLoanTypes = CATEGORY_LOAN_TYPE_OPTIONS.filter((loanType) => Array.isArray(draft?.[categoryName]) && draft[categoryName].includes(loanType));
+    if (allowedLoanTypes.length && allowedLoanTypes.length < CATEGORY_LOAN_TYPE_OPTIONS.length) {
+      next[categoryName] = allowedLoanTypes;
+    }
+  });
+  return next;
+}
+
+function CategoryLoanTypesModal({ categories, categoryLoanTypes = {}, onSave, onClose }) {
+  const [draft, setDraft] = useState(() => {
+    const initialDraft = {};
+    (categories || []).forEach((categoryName) => {
+      initialDraft[categoryName] = getCategoryLoanTypeSelection(categoryName, categoryLoanTypes);
+    });
+    return initialDraft;
+  });
+
+  const toggleLoanType = (categoryName, loanType) => {
+    setDraft((prev) => {
+      const current = Array.isArray(prev?.[categoryName]) && prev[categoryName].length ? prev[categoryName] : [...CATEGORY_LOAN_TYPE_OPTIONS];
+      const nextSelection = current.includes(loanType)
+        ? current.filter((value) => value !== loanType)
+        : [...current, loanType];
+      if (!nextSelection.length) return prev;
+      return { ...prev, [categoryName]: nextSelection };
+    });
+  };
+
+  const setAllLoanTypes = (categoryName) => {
+    setDraft((prev) => ({ ...prev, [categoryName]: [...CATEGORY_LOAN_TYPE_OPTIONS] }));
+  };
+
+  return (
+    <Modal
+      title="🗂️ סיווג לסוגי ההשאלות"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-primary" onClick={() => onSave(buildCategoryLoanTypesMap(categories, draft))}>שמור</button>
+          <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+        </>
+      }
+    >
+      <div style={{display:"grid",gap:12}}>
+        <div style={{fontSize:13,color:"var(--text3)",lineHeight:1.7}}>
+          בחרו לכל רובריקת ציוד אילו סוגי השאלה יכולים לראות אותה בטופס ההשאלה.
+          אם כל סוגי ההשאלות מסומנים, הרובריקה תהיה זמינה לכולם.
+        </div>
+        {(categories || []).map((categoryName) => {
+          const selectedLoanTypes = Array.isArray(draft?.[categoryName]) && draft[categoryName].length ? draft[categoryName] : [...CATEGORY_LOAN_TYPE_OPTIONS];
+          const isAllSelected = selectedLoanTypes.length === CATEGORY_LOAN_TYPE_OPTIONS.length;
+          return (
+            <div key={categoryName} style={{border:"1px solid var(--border)",borderRadius:12,padding:12,background:"var(--surface2)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+                <div style={{fontWeight:800,fontSize:14}}>{categoryName}</div>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${isAllSelected ? "btn-primary" : "btn-secondary"}`}
+                  onClick={() => setAllLoanTypes(categoryName)}
+                >
+                  כל סוגי ההשאלות
+                </button>
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {CATEGORY_LOAN_TYPE_OPTIONS.map((loanType) => (
+                  <button
+                    key={loanType}
+                    type="button"
+                    className={`btn btn-sm ${selectedLoanTypes.includes(loanType) ? "btn-primary" : "btn-secondary"}`}
+                    onClick={() => toggleLoanType(categoryName, loanType)}
+                  >
+                    {loanType}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Modal>
+  );
+}
+
+function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories, categoryTypes={}, setCategoryTypes, categoryLoanTypes={}, setCategoryLoanTypes=()=>{}, certifications={types:[],students:[]}, studios=[], collegeManager={}, managerToken="" }) {
   const [eqSubView, setEqSubView] = useState("active"); // "active" | "damaged"
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState("הכל");
@@ -1074,6 +1167,13 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     showToast("success", shouldEnable ? `הקטגוריה "${categoryName}" הוחרגה ממגבלת השאלה פרטית` : `הוחזרה מגבלת השאלה פרטית לקטגוריה "${categoryName}"`);
   };
 
+  const saveCategoryLoanTypes = async (nextCategoryLoanTypes) => {
+    setCategoryLoanTypes(nextCategoryLoanTypes);
+    await storageSet("categoryLoanTypes", nextCategoryLoanTypes);
+    showToast("success", "סיווג סוגי ההשאלות עודכן");
+    setModal(null);
+  };
+
   const deleteEmptyCategoryFromFilters = async (categoryName) => {
     const hasItems = equipment.some((item) => item.category === categoryName);
     if (hasItems) {
@@ -1082,11 +1182,14 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     }
     const updatedCats = categories.filter((category) => category !== categoryName);
     const updatedTypes = { ...categoryTypes };
+    const updatedCategoryLoanTypes = { ...categoryLoanTypes };
     delete updatedTypes[categoryName];
+    delete updatedCategoryLoanTypes[categoryName];
     setSelectedCats((prev) => prev.filter((category) => category !== categoryName));
     setCategories(updatedCats);
     setCategoryTypes(updatedTypes);
-    await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes)]);
+    setCategoryLoanTypes(updatedCategoryLoanTypes);
+    await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes), storageSet("categoryLoanTypes", updatedCategoryLoanTypes)]);
     showToast("success", `הרובריקה "${categoryName}" נמחקה`);
   };
 
@@ -1290,6 +1393,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
           <button className="btn btn-secondary" onClick={()=>csvInputRef.current?.click()}>📤 ייבוא CSV</button>
           <input ref={csvInputRef} type="file" accept=".csv,.xlsx,.xls,text/csv" style={{display:"none"}} onChange={handleCSVImport}/>
           <button className="btn btn-primary" onClick={()=>setModal({type:"addcat"})}>📂 ניהול קטגוריות</button>
+          <button className="btn btn-primary" onClick={()=>setModal({type:"loan-types"})}>🗂️ סיווג לסוגי ההשאלות</button>
           <button className="btn btn-primary" onClick={()=>setModal({type:"add"})}>➕ הוסף ציוד</button>
         </div>
       </div>
@@ -1420,6 +1524,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       {(modal?.type==="add"||modal?.type==="edit") && <Modal title={modal.type==="add"?"➕ הוספת ציוד":"✏️ עריכת ציוד"} onClose={()=>setModal(null)}><EqForm initial={modal.type==="edit"?modal.item:null}/></Modal>}
       {modal?.type==="units" && <UnitsModal eq={modal.item} equipment={equipment} setEquipment={setEquipment} showToast={showToast} onClose={()=>setModal(null)}/>}
       {modal?.type==="delete" && <Modal title="🗑️ מחיקת ציוד" onClose={()=>setModal(null)} footer={<><button className="btn btn-danger" onClick={()=>del(modal.item)}>כן, מחק</button><button className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button></>}><p>האם למחוק את <strong>{modal.item.name}</strong>?</p></Modal>}
+      {modal?.type==="loan-types" && <CategoryLoanTypesModal categories={categories} categoryLoanTypes={categoryLoanTypes} onSave={saveCategoryLoanTypes} onClose={()=>setModal(null)}/>}
       {modal?.type==="addcat" && <ManageCategoriesModal
         categories={categories}
         categoryTypes={categoryTypes}
@@ -1445,23 +1550,32 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
               return base;
             });
             const updatedTypes = {...categoryTypes};
+            const updatedCategoryLoanTypes = {...categoryLoanTypes};
             if(action.oldName !== action.newName) { delete updatedTypes[action.oldName]; }
             if(action.type) updatedTypes[action.newName] = action.type;
             else delete updatedTypes[action.newName];
+            if (action.oldName !== action.newName && Object.prototype.hasOwnProperty.call(updatedCategoryLoanTypes, action.oldName)) {
+              updatedCategoryLoanTypes[action.newName] = updatedCategoryLoanTypes[action.oldName];
+              delete updatedCategoryLoanTypes[action.oldName];
+            }
             setCategories(updatedCats);
             setEquipment(updatedEq);
             setCategoryTypes(updatedTypes);
-            await Promise.all([storageSet("categories", updatedCats), storageSet("equipment", updatedEq), storageSet("categoryTypes", updatedTypes)]);
+            setCategoryLoanTypes(updatedCategoryLoanTypes);
+            await Promise.all([storageSet("categories", updatedCats), storageSet("equipment", updatedEq), storageSet("categoryTypes", updatedTypes), storageSet("categoryLoanTypes", updatedCategoryLoanTypes)]);
             showToast("success", `קטגוריה עודכנה`);
           } else if(action.action==="delete") {
             const hasItems = equipment.some(e => e.category===action.name);
             if(hasItems) { showToast("error", "לא ניתן למחוק — יש ציוד בקטגוריה זו"); return; }
             const updatedCats = categories.filter(c => c!==action.name);
             const updatedTypes = {...categoryTypes};
+            const updatedCategoryLoanTypes = {...categoryLoanTypes};
             delete updatedTypes[action.name];
+            delete updatedCategoryLoanTypes[action.name];
             setCategories(updatedCats);
             setCategoryTypes(updatedTypes);
-            await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes)]);
+            setCategoryLoanTypes(updatedCategoryLoanTypes);
+            await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes), storageSet("categoryLoanTypes", updatedCategoryLoanTypes)]);
             showToast("success", `קטגוריה "${action.name}" נמחקה`);
           }
         }}
@@ -6323,6 +6437,7 @@ export default function App() {
   const [reservations, _setReservations] = useState([]);
   const [categories, _setCategories]   = useState(DEFAULT_CATEGORIES);
   const [categoryTypes, _setCategoryTypes] = useState({});
+  const [categoryLoanTypes, _setCategoryLoanTypes] = useState({});
   const [teamMembers, _setTeamMembers] = useState([]);
   const [deptHeads, _setDeptHeads]       = useState([]);
   const [collegeManager, _setCollegeManager] = useState({ name:"", email:"" });
@@ -6350,6 +6465,7 @@ export default function App() {
   const reservationsRef = useRef(reservations);
   const categoriesRef = useRef(categories);
   const categoryTypesRef = useRef(categoryTypes);
+  const categoryLoanTypesRef = useRef(categoryLoanTypes);
   const teamMembersRef = useRef(teamMembers);
   const deptHeadsRef = useRef(deptHeads);
   const collegeManagerRef = useRef(collegeManager);
@@ -6366,6 +6482,7 @@ export default function App() {
   reservationsRef.current = reservations;
   categoriesRef.current = categories;
   categoryTypesRef.current = categoryTypes;
+  categoryLoanTypesRef.current = categoryLoanTypes;
   teamMembersRef.current = teamMembers;
   deptHeadsRef.current = deptHeads;
   collegeManagerRef.current = collegeManager;
@@ -6378,6 +6495,8 @@ export default function App() {
     equipment: safeClone(equipmentRef.current),
     reservations: safeClone(reservationsRef.current),
     categories: safeClone(categoriesRef.current),
+    categoryTypes: safeClone(categoryTypesRef.current),
+    categoryLoanTypes: safeClone(categoryLoanTypesRef.current),
     teamMembers: safeClone(teamMembersRef.current),
     deptHeads: safeClone(deptHeadsRef.current),
     collegeManager: safeClone(collegeManagerRef.current),
@@ -6392,6 +6511,8 @@ export default function App() {
       storageSet("equipment", snapshot.equipment),
       storageSet("reservations", snapshot.reservations),
       storageSet("categories", snapshot.categories),
+      storageSet("categoryTypes", snapshot.categoryTypes),
+      storageSet("categoryLoanTypes", snapshot.categoryLoanTypes),
       storageSet("teamMembers", snapshot.teamMembers),
       storageSet("deptHeads", snapshot.deptHeads),
       storageSet("collegeManager", snapshot.collegeManager),
@@ -6429,6 +6550,7 @@ export default function App() {
   const setReservations = createTrackedSetter(_setReservations);
   const setCategories = createTrackedSetter(_setCategories);
   const setCategoryTypes = createTrackedSetter(_setCategoryTypes);
+  const setCategoryLoanTypes = createTrackedSetter(_setCategoryLoanTypes);
   const setTeamMembers = createTrackedSetter(_setTeamMembers);
   const setDeptHeads = createTrackedSetter(_setDeptHeads);
   const setCollegeManager = createTrackedSetter(_setCollegeManager);
@@ -6453,6 +6575,8 @@ export default function App() {
       _setEquipment(snapshot.equipment);
       _setReservations(snapshot.reservations);
       _setCategories(snapshot.categories);
+      _setCategoryTypes(snapshot.categoryTypes || {});
+      _setCategoryLoanTypes(snapshot.categoryLoanTypes || {});
       _setTeamMembers(snapshot.teamMembers);
       _setDeptHeads(snapshot.deptHeads);
       _setCollegeManager(snapshot.collegeManager);
@@ -6478,11 +6602,12 @@ export default function App() {
     (async()=>{
         try {
           historySuspendedRef.current = true;
-          const [eqR, resR, catsR, catTypesR, tmR, ktsR, polR, certsR, dhsR, calTokR, mgrR, mgrTokR, siteSetR, studiosR, studioBkR, lessonsR] = await Promise.all([
+          const [eqR, resR, catsR, catTypesR, catLoanTypesR, tmR, ktsR, polR, certsR, dhsR, calTokR, mgrR, mgrTokR, siteSetR, studiosR, studioBkR, lessonsR] = await Promise.all([
             storageGet("equipment"),
           storageGet("reservations"),
           storageGet("categories"),
           storageGet("categoryTypes"),
+          storageGet("categoryLoanTypes"),
           storageGet("teamMembers"),
           storageGet("kits"),
           storageGet("policies"),
@@ -6501,6 +6626,7 @@ export default function App() {
           const res = resR.value, resSrc = resR.source;
           const cats = catsR.value, catsSrc = catsR.source;
           const catTypes = catTypesR.value;
+          const catLoanTypes = catLoanTypesR.value;
           const tm = tmR.value, tmSrc = tmR.source;
           const kts = ktsR.value, ktsSrc = ktsR.source;
           const pol = polR.value, polSrc = polR.source;
@@ -6522,6 +6648,7 @@ export default function App() {
           _setReservations(normalizedReservations);
           _setCategories(cats || DEFAULT_CATEGORIES);
           _setCategoryTypes(catTypes || {});
+          _setCategoryLoanTypes(catLoanTypes || {});
         _setTeamMembers(tm || []);
         _setKits(kts || []);
         _setPolicies(pol || { פרטית:"", הפקה:"", סאונד:"" });
@@ -6719,7 +6846,7 @@ export default function App() {
         </div>
       ) : !isAdmin && (
         <div className="public-page-shell">
-          {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings}/>}
+          {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes}/>}
         </div>
       )}
 
@@ -6817,7 +6944,7 @@ export default function App() {
             </div>
             {loading ? <Loading/> : <>
               {page==="dashboard"   && <DashboardPage    equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast}/>}
-              {page==="equipment"   && <EquipmentPage    equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} certifications={certifications} studios={studios} collegeManager={collegeManager} managerToken={managerToken}/>}
+              {page==="equipment"   && <EquipmentPage    equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} categoryLoanTypes={categoryLoanTypes} setCategoryLoanTypes={setCategoryLoanTypes} certifications={certifications} studios={studios} collegeManager={collegeManager} managerToken={managerToken}/>}
               {page==="reservations"&& <ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}
