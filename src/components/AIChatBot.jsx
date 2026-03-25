@@ -86,17 +86,20 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
     }
   };
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 600;
+  const panelWidth = isMobile ? Math.min(320, window.innerWidth - 32) : 340;
+
   return (
-    <div style={{ position: 'fixed', bottom: 24, left: 24, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }} dir="rtl">
+    <div style={{ position: 'fixed', bottom: 20, left: 20, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
 
       {/* Panel */}
       {isOpen && (
-        <div style={{
+        <div dir="rtl" style={{
           background: '#1a1a2e',
           borderRadius: 16,
           boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
           border: '1px solid rgba(99,102,241,0.3)',
-          width: 340,
+          width: panelWidth,
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
@@ -134,7 +137,7 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
 
           {/* Messages */}
           <div style={{
-            height: 300,
+            height: isMobile ? 250 : 300,
             overflowY: 'auto',
             padding: '12px',
             display: 'flex',
