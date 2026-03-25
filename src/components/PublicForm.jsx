@@ -79,15 +79,23 @@ function matchesEquipmentLoanType(eq, loanType, categoryLoanTypes = {}) {
   });
 }
 
-function buildTrackSettings(students = [], existingTrackSettings = []) {
+function buildTrackSettings(students = [], existingTrackSettings = [], explicitTracks = []) {
   const existing = Array.isArray(existingTrackSettings) ? existingTrackSettings : [];
-  const trackNames = [...new Set((students || []).map((student) => String(student?.track || "").trim()).filter(Boolean))];
+  const explicit = Array.isArray(explicitTracks) ? explicitTracks : [];
+  const explicitNames = explicit.map(t => String(t?.name || "").trim()).filter(Boolean);
+  const studentNames = (students || []).map((s) => String(s?.track || "").trim()).filter(Boolean);
+  const trackNames = [...new Set([...explicitNames, ...studentNames])];
   return trackNames.map((name) => {
     const match = existing.find((setting) => String(setting?.name || "").trim() === name);
+    const explicitMatch = explicit.find(t => String(t?.name || "").trim() === name);
     const allowedLoanTypes = SMART_LOAN_TYPES.filter((loanType) => Array.isArray(match?.loanTypes) && match.loanTypes.includes(loanType));
+    // infer trackType: from explicit tracks first, then from track name keywords
+    const inferredType = explicitMatch?.trackType
+      || (/סאונד|sound/i.test(name) ? "sound" : /קולנוע|cinema|film/i.test(name) ? "cinema" : "");
     return {
       name,
       loanTypes: allowedLoanTypes.length ? allowedLoanTypes : [...SMART_LOAN_TYPES],
+      trackType: inferredType,
     };
   });
 }
@@ -873,16 +881,11 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [showEquipmentAiLoanTypePrompt, setShowEquipmentAiLoanTypePrompt] = useState(false);
   const [equipmentAiForcedLoanType, setEquipmentAiForcedLoanType] = useState("");
   const todayStr = today();
-  const normalizedTrackSettings = buildTrackSettings(certifications?.students, certifications?.trackSettings);
+  const normalizedTrackSettings = buildTrackSettings(certifications?.students, certifications?.trackSettings, certifications?.tracks);
   const activeStudentTrack = String(loggedInStudent?.track || form.course || "").trim();
   // ── Studio track-type filtering ──
-  const studentTrackType = (() => {
-    if (!loggedInStudent?.track) return "";
-    const explicitTracks = certifications?.tracks || [];
-    const match = explicitTracks.find(t => String(t?.name||"").trim() === activeStudentTrack);
-    return match?.trackType || "";
-  })();
-  const visibleStudios = studios.filter(studio => !studio.studioTrackType || studio.studioTrackType === studentTrackType);
+  const studentTrackType = normalizedTrackSettings.find(s => s.name === activeStudentTrack)?.trackType || "";
+  const visibleStudios = studios.filter(studio => !studio.studioTrackType || !studentTrackType || studio.studioTrackType === studentTrackType);
   const allowedLoanTypes = activeStudentTrack
     ? (normalizedTrackSettings.find((setting) => setting.name === activeStudentTrack)?.loanTypes || [...SMART_LOAN_TYPES])
     : [...SMART_LOAN_TYPES];
