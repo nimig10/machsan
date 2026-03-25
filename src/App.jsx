@@ -1484,6 +1484,13 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   };
 
   const damagedCount = equipment.reduce((n,eq) => n + (eq.units||[]).filter(u=>u.status!=="תקין").length, 0);
+  const visibleCategories = [...new Set([...(categories || []), ...existingCategories])];
+  const filteredCategoryOptions = (typeFilter === "הכל"
+    ? visibleCategories
+    : visibleCategories.filter(c => getCatType(c) === typeFilter)
+  );
+  const groupedCategories = (selectedCats.length > 0 ? selectedCats : visibleCategories)
+    .filter(c => filtered.some(e => e.category === c));
 
   return (
     <div className="page">
@@ -1539,7 +1546,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
 
       {/* ── Category pills ── */}
       <div className="flex gap-2 mb-6" style={{flexWrap:"wrap",alignItems:"center"}}>
-        {(typeFilter === "הכל" ? categories : categories.filter(c => getCatType(c) === typeFilter)).map(c=>{
+        {filteredCategoryOptions.map(c=>{
           const active = selectedCats.includes(c);
           const isEmptyCategory = !equipment.some((item) => item.category === c);
           return (
@@ -1571,8 +1578,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
 
       {filtered.length===0 ? <div className="empty-state"><div className="emoji">📦</div><p>לא נמצא ציוד</p></div> : (
         <>
-          {(selectedCats.length>0?selectedCats:categories)
-            .filter(c=>filtered.some(e=>e.category===c)).map(c=>(
+          {groupedCategories.map(c=>(
             <div key={c} style={{marginBottom:32}}>
               <div style={{fontSize:13,fontWeight:800,color:"var(--text3)",textTransform:"uppercase",letterSpacing:1,marginBottom:12,paddingBottom:8,borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:8,justifyContent:"space-between",flexWrap:"wrap"}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
