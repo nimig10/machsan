@@ -12,12 +12,17 @@ const buildTrackSettings = (students = [], existingTrackSettings = [], explicitT
   const explicitNames = (Array.isArray(explicitTracks) ? explicitTracks : []).map(t => normalizeTrackName(t?.name)).filter(Boolean);
   const studentNames = (students || []).map(student => normalizeTrackName(student?.track)).filter(Boolean);
   const allNames = [...new Set([...explicitNames, ...studentNames])];
+  const explicit = Array.isArray(explicitTracks) ? explicitTracks : [];
   return allNames.map((name) => {
     const match = existing.find((setting) => normalizeTrackName(setting?.name) === name);
+    const explicitMatch = explicit.find(t => normalizeTrackName(t?.name) === name);
     const allowedLoanTypes = TRACK_LOAN_TYPES.filter((loanType) => Array.isArray(match?.loanTypes) && match.loanTypes.includes(loanType));
+    const trackType = explicitMatch?.trackType ?? match?.trackType
+      ?? (/סאונד|sound/i.test(name) ? "sound" : /קולנוע|cinema|film/i.test(name) ? "cinema" : "");
     return {
       name,
       loanTypes: allowedLoanTypes.length ? allowedLoanTypes : [...TRACK_LOAN_TYPES],
+      trackType,
     };
   });
 };

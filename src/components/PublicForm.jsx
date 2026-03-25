@@ -89,8 +89,9 @@ function buildTrackSettings(students = [], existingTrackSettings = [], explicitT
     const match = existing.find((setting) => String(setting?.name || "").trim() === name);
     const explicitMatch = explicit.find(t => String(t?.name || "").trim() === name);
     const allowedLoanTypes = SMART_LOAN_TYPES.filter((loanType) => Array.isArray(match?.loanTypes) && match.loanTypes.includes(loanType));
-    // infer trackType: from explicit tracks first, then from track name keywords
+    // infer trackType: explicit tracks → trackSettings cache → keyword fallback
     const inferredType = explicitMatch?.trackType
+      || match?.trackType
       || (/סאונד|sound/i.test(name) ? "sound" : /קולנוע|cinema|film/i.test(name) ? "cinema" : "");
     return {
       name,
