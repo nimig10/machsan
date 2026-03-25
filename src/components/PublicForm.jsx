@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE } from "../utils.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
+import AIChatBot from "./AIChatBot.jsx";
 
 const SMART_LOAN_TYPES = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
 
@@ -1999,6 +2000,7 @@ ${inventory}
         </div>
       </div>
     )}
+    <AIChatBot equipment={equipment} policies={policies} settings={siteSettings} />
     </>
   );
 }

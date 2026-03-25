@@ -197,6 +197,23 @@ export function SettingsPage({ siteSettings, setSiteSettings, showToast }) {
         </div>
       </div>
 
+      {/* AI Chatbot */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-header"><div className="card-title">🤖 עוזר AI לסטודנטים</div></div>
+        <div style={{ padding: "16px 20px" }}>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14 }}>
+            הגבלת מספר שאלות שסטודנט יכול לשאול את עוזר ה-AI ביום אחד.
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>הגבלת בקשות AI לסטודנט (ליום)</label>
+            <input type="number" min={1} max={50}
+              value={draft.aiMaxRequests ?? 5}
+              onChange={e => setDraft(p => ({ ...p, aiMaxRequests: Number(e.target.value) }))}
+              style={{ width: 80, padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: 14, textAlign: "center" }} />
+          </div>
+        </div>
+      </div>
+
       <button className="btn btn-primary" disabled={saving} onClick={save} style={{ fontSize: 15, padding: "12px 32px" }}>
         {saving ? "⏳ שומר..." : "💾 שמור הגדרות"}
       </button>
