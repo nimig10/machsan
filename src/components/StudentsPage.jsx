@@ -5,11 +5,14 @@ import { Modal } from "./ui.jsx";
 import SmartExcelImportButton from "./SmartExcelImportButton.jsx";
 
 const TRACK_LOAN_TYPES = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
+const TRACK_TYPE_LABELS = { sound: "🎧 הנדסאי סאונד", cinema: "🎬 הנדסאי קולנוע", "": "ללא סיווג" };
 const normalizeTrackName = (value = "") => String(value || "").trim();
-const buildTrackSettings = (students = [], existingTrackSettings = []) => {
+const buildTrackSettings = (students = [], existingTrackSettings = [], explicitTracks = []) => {
   const existing = Array.isArray(existingTrackSettings) ? existingTrackSettings : [];
-  const trackNames = [...new Set((students || []).map(student => normalizeTrackName(student?.track)).filter(Boolean))];
-  return trackNames.map((name) => {
+  const explicitNames = (Array.isArray(explicitTracks) ? explicitTracks : []).map(t => normalizeTrackName(t?.name)).filter(Boolean);
+  const studentNames = (students || []).map(student => normalizeTrackName(student?.track)).filter(Boolean);
+  const allNames = [...new Set([...explicitNames, ...studentNames])];
+  return allNames.map((name) => {
     const match = existing.find((setting) => normalizeTrackName(setting?.name) === name);
     const allowedLoanTypes = TRACK_LOAN_TYPES.filter((loanType) => Array.isArray(match?.loanTypes) && match.loanTypes.includes(loanType));
     return {
@@ -20,14 +23,17 @@ const buildTrackSettings = (students = [], existingTrackSettings = []) => {
 };
 
 export function StudentsPage({ certifications, setCertifications, showToast }) {
-  const { types = [], students = [] } = certifications;
-  const trackSettings = buildTrackSettings(students, certifications?.trackSettings);
+  const { types = [], students = [], tracks: explicitTracks = [] } = certifications;
+  const trackSettings = buildTrackSettings(students, certifications?.trackSettings, explicitTracks);
   const [addingStudent, setAddingStudent] = useState(false);
   const [studentForm, setStudentForm] = useState({ name:"", email:"", phone:"", track:"" });
   const [editStudent, setEditStudent] = useState(null);
   const [editForm, setEditForm] = useState({ name:"", email:"", phone:"", track:"" });
   const [editTrack, setEditTrack] = useState(null);
   const [editTrackName, setEditTrackName] = useState("");
+  const [editTrackType, setEditTrackType] = useState("");
+  const [addingTrack, setAddingTrack] = useState(false);
+  const [trackForm, setTrackForm] = useState({ name: "", trackType: "" });
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -37,12 +43,14 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
   const save = async (updatedPatch) => {
     const nextStudents = updatedPatch?.students ?? students;
     const nextTypes = updatedPatch?.types ?? types;
-    const nextTrackSettings = buildTrackSettings(nextStudents, updatedPatch?.trackSettings ?? certifications?.trackSettings);
+    const nextExplicitTracks = updatedPatch?.tracks ?? (certifications?.tracks ?? []);
+    const nextTrackSettings = buildTrackSettings(nextStudents, updatedPatch?.trackSettings ?? certifications?.trackSettings, nextExplicitTracks);
     const updated = {
       ...certifications,
       ...updatedPatch,
       types: nextTypes,
       students: nextStudents,
+      tracks: nextExplicitTracks,
       trackSettings: nextTrackSettings,
     };
     setSaving(true);
@@ -51,6 +59,32 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
     setSaving(false);
     if(!r.ok) showToast("error","❌ שגיאה בשמירה");
     return r.ok;
+  };
+
+  // ── Add track ──
+  const addTrack = async () => {
+    const name = trackForm.name.trim();
+    if (!name) return;
+    const currentTracks = certifications?.tracks || [];
+    if (currentTracks.some(t => normalizeTrackName(t.name) === name)) {
+      showToast("error", "מסלול לימודים בשם זה כבר קיים");
+      return;
+    }
+    if (await save({ tracks: [...currentTracks, { name, trackType: trackForm.trackType || "" }] })) {
+      showToast("success", `המסלול "${name}" נוסף`);
+      setTrackForm({ name: "", trackType: "" });
+      setAddingTrack(false);
+    }
+  };
+
+  // ── Delete track ──
+  const deleteTrack = async (trackName) => {
+    const studentsOnTrack = students.filter(s => normalizeTrackName(s.track) === trackName);
+    if (studentsOnTrack.length > 0 && !window.confirm(`למסלול "${trackName}" משויכים ${studentsOnTrack.length} סטודנטים. למחוק את המסלול בכל זאת?`)) return;
+    const currentTracks = certifications?.tracks || [];
+    if (await save({ tracks: currentTracks.filter(t => normalizeTrackName(t.name) !== trackName) })) {
+      showToast("success", `המסלול "${trackName}" הוסר`);
+    }
   };
 
   const handleAiImport = async (newStudents) => {
@@ -125,8 +159,10 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
   };
 
   const openTrackEditor = (trackName) => {
+    const trackObj = (certifications?.tracks || []).find(t => normalizeTrackName(t.name) === trackName);
     setEditTrack(trackName);
     setEditTrackName(trackName);
+    setEditTrackType(trackObj?.trackType || "");
   };
 
   const saveTrackEdit = async () => {
@@ -136,11 +172,7 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
       showToast("error", "יש למלא שם מסלול לימודים");
       return;
     }
-    if (previousTrackName === nextTrackName) {
-      setEditTrack(null);
-      return;
-    }
-    if (trackSettings.some((setting) => normalizeTrackName(setting.name) === nextTrackName)) {
+    if (previousTrackName !== nextTrackName && trackSettings.some((setting) => normalizeTrackName(setting.name) === nextTrackName)) {
       showToast("error", "מסלול לימודים בשם זה כבר קיים");
       return;
     }
@@ -154,14 +186,20 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
         ? { ...setting, name: nextTrackName }
         : setting
     ));
-    if (await save({ types, students: updatedStudents, trackSettings: updatedTrackSettings })) {
-      showToast("success", `שם המסלול עודכן ל־${nextTrackName}`);
+    const currentExplicitTracks = certifications?.tracks || [];
+    const existsInExplicit = currentExplicitTracks.some(t => normalizeTrackName(t.name) === previousTrackName);
+    const updatedExplicitTracks = existsInExplicit
+      ? currentExplicitTracks.map(t => normalizeTrackName(t.name) === previousTrackName ? { ...t, name: nextTrackName, trackType: editTrackType } : t)
+      : [...currentExplicitTracks, { name: nextTrackName, trackType: editTrackType }];
+    if (await save({ types, students: updatedStudents, trackSettings: updatedTrackSettings, tracks: updatedExplicitTracks })) {
+      showToast("success", `המסלול עודכן`);
       setTrackFilter((current) => {
         if (!Array.isArray(current) || !current.includes(previousTrackName)) return current;
-        return [...new Set(current.map((trackName) => trackName === previousTrackName ? nextTrackName : trackName))];
+        return [...new Set(current.map((tn) => tn === previousTrackName ? nextTrackName : tn))];
       });
       setEditTrack(null);
       setEditTrackName("");
+      setEditTrackType("");
     }
   };
 
@@ -303,10 +341,11 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
           <div className="form-group"><label className="form-label">טלפון</label>
             <input className="form-input" value={studentForm.phone} onChange={e=>setStudentForm(p=>({...p,phone:e.target.value}))} placeholder="05x-xxxxxxx"/></div>
           <div className="form-group"><label className="form-label">מסלול לימודים</label>
-            <datalist id="track-list-add">
-              {[...new Set(students.map(s=>s.track||"").filter(Boolean))].map(t=><option key={t} value={t}/>)}
-            </datalist>
-            <input className="form-input" list="track-list-add" value={studentForm.track||""} onChange={e=>setStudentForm(p=>({...p,track:e.target.value}))} placeholder='למשל: "הנדסאי קולנוע ב"'/></div>
+            <select className="form-input" value={studentForm.track||""} onChange={e=>setStudentForm(p=>({...p,track:e.target.value}))}>
+              <option value="">-- בחר מסלול --</option>
+              {trackSettings.map(s=><option key={s.name} value={s.name}>{s.name}</option>)}
+            </select>
+          </div>
           <div style={{marginTop:12,display:"flex",gap:8}}>
             <button className="btn btn-primary" disabled={!studentForm.name.trim()||!studentForm.email.trim()||saving} onClick={addStudent}>
               {saving?"⏳ שומר...":"✅ הוסף סטודנט"}
@@ -325,6 +364,7 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
         />
         <div style={{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap",alignItems:"center"}}>
           <button className="btn btn-primary" onClick={()=>setAddingStudent(true)}>➕ הוספת סטודנט</button>
+          <button className="btn btn-secondary" onClick={()=>setAddingTrack(true)}>🎓 הוסף מסלול</button>
           <button className="btn btn-secondary" onClick={()=>xlInputRef.current?.click()} disabled={xlImporting}>
             {xlImporting ? "⏳ מייבא..." : "📊 ייבוא מטבלה"}
           </button>
@@ -355,12 +395,19 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
           <div style={{marginBottom:16,padding:"12px 14px",background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)"}}>
             <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",marginBottom:8}}>ניהול מסלולי לימודים</div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-              {trackSettings.map((setting) => (
-                <div key={setting.name} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:20,border:"1px solid var(--border)",background:"var(--surface3)"}}>
-                  <span style={{fontSize:12,fontWeight:700,color:"var(--text2)"}}>🎓 {setting.name}</span>
-                  <button className="btn btn-secondary btn-sm" onClick={()=>openTrackEditor(setting.name)}>✏️</button>
-                </div>
-              ))}
+              {trackSettings.map((setting) => {
+                const tObj = (certifications?.tracks||[]).find(t=>normalizeTrackName(t.name)===setting.name);
+                const tType = tObj?.trackType||"";
+                const tLabel = tType==="sound"?"🎧 סאונד":tType==="cinema"?"🎬 קולנוע":null;
+                return (
+                  <div key={setting.name} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:20,border:"1px solid var(--border)",background:"var(--surface3)"}}>
+                    <span style={{fontSize:12,fontWeight:700,color:"var(--text2)"}}>🎓 {setting.name}</span>
+                    {tLabel && <span style={{fontSize:11,fontWeight:700,color:"var(--accent)",background:"rgba(99,102,241,0.12)",borderRadius:10,padding:"1px 7px"}}>{tLabel}</span>}
+                    <button className="btn btn-secondary btn-sm" onClick={()=>openTrackEditor(setting.name)}>✏️</button>
+                    <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>deleteTrack(setting.name)}>🗑️</button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -457,10 +504,11 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
               <div className="form-group"><label className="form-label">טלפון</label>
                 <input className="form-input" value={editForm.phone} onChange={e=>setEditForm(p=>({...p,phone:e.target.value}))}/></div>
               <div className="form-group"><label className="form-label">מסלול לימודים</label>
-                <datalist id="track-list-edit-stu">
-                  {[...new Set(students.map(s=>s.track||"").filter(Boolean))].map(t=><option key={t} value={t}/>)}
-                </datalist>
-                <input className="form-input" list="track-list-edit-stu" value={editForm.track||""} onChange={e=>setEditForm(p=>({...p,track:e.target.value}))} placeholder='למשל: "הנדסאי קולנוע ב"'/></div>
+                <select className="form-input" value={editForm.track||""} onChange={e=>setEditForm(p=>({...p,track:e.target.value}))}>
+                  <option value="">-- בחר מסלול --</option>
+                  {trackSettings.map(s=><option key={s.name} value={s.name}>{s.name}</option>)}
+                </select>
+              </div>
               <div style={{display:"flex",gap:8,marginTop:16}}>
                 <button className="btn btn-primary" disabled={!editForm.name.trim()||!editForm.email.trim()||saving} onClick={saveEdit}>
                   {saving?"⏳ שומר...":"💾 שמור שינויים"}
@@ -474,21 +522,59 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
       {editTrack && (
         <Modal
           title="✏️ עריכת מסלול לימודים"
-          onClose={()=>{ setEditTrack(null); setEditTrackName(""); }}
+          onClose={()=>{ setEditTrack(null); setEditTrackName(""); setEditTrackType(""); }}
           footer={(
             <>
               <button className="btn btn-primary" onClick={saveTrackEdit} disabled={!editTrackName.trim() || saving}>
                 {saving ? "⏳ שומר..." : "💾 שמור"}
               </button>
-              <button className="btn btn-secondary" onClick={()=>{ setEditTrack(null); setEditTrackName(""); }}>
+              <button className="btn btn-secondary" onClick={()=>{ setEditTrack(null); setEditTrackName(""); setEditTrackType(""); }}>
                 ביטול
               </button>
             </>
           )}
         >
-          <div className="form-group" style={{marginBottom:0}}>
+          <div className="form-group">
             <label className="form-label">שם מסלול לימודים</label>
             <input className="form-input" value={editTrackName} onChange={e=>setEditTrackName(e.target.value)} placeholder="שם המסלול"/>
+          </div>
+          <div className="form-group" style={{marginBottom:0}}>
+            <label className="form-label">סיווג מסלול</label>
+            <select className="form-input" value={editTrackType} onChange={e=>setEditTrackType(e.target.value)}>
+              <option value="">ללא סיווג</option>
+              <option value="sound">🎧 הנדסאי סאונד</option>
+              <option value="cinema">🎬 הנדסאי קולנוע</option>
+            </select>
+          </div>
+        </Modal>
+      )}
+      {addingTrack && (
+        <Modal
+          title="🎓 הוספת מסלול לימודים"
+          onClose={()=>{ setAddingTrack(false); setTrackForm({ name:"", trackType:"" }); }}
+          footer={(
+            <>
+              <button className="btn btn-primary" onClick={addTrack} disabled={!trackForm.name.trim() || saving}>
+                {saving ? "⏳ שומר..." : "✅ הוסף מסלול"}
+              </button>
+              <button className="btn btn-secondary" onClick={()=>{ setAddingTrack(false); setTrackForm({ name:"", trackType:"" }); }}>
+                ביטול
+              </button>
+            </>
+          )}
+        >
+          <div className="form-group">
+            <label className="form-label">שם מסלול לימודים *</label>
+            <input className="form-input" value={trackForm.name} onChange={e=>setTrackForm(p=>({...p,name:e.target.value}))} placeholder='למשל: "הנדסאי קולנוע ב"'/>
+          </div>
+          <div className="form-group" style={{marginBottom:0}}>
+            <label className="form-label">סיווג מסלול</label>
+            <select className="form-input" value={trackForm.trackType} onChange={e=>setTrackForm(p=>({...p,trackType:e.target.value}))}>
+              <option value="">ללא סיווג</option>
+              <option value="sound">🎧 הנדסאי סאונד</option>
+              <option value="cinema">🎬 הנדסאי קולנוע</option>
+            </select>
+            <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>הסיווג קובע לאיזה סטודנטים יוצגו אולפנים שמשויכים לסוג מסלול זה.</div>
           </div>
         </Modal>
       )}

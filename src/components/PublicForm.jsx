@@ -875,6 +875,14 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const todayStr = today();
   const normalizedTrackSettings = buildTrackSettings(certifications?.students, certifications?.trackSettings);
   const activeStudentTrack = String(loggedInStudent?.track || form.course || "").trim();
+  // ── Studio track-type filtering ──
+  const studentTrackType = (() => {
+    if (!loggedInStudent?.track) return "";
+    const explicitTracks = certifications?.tracks || [];
+    const match = explicitTracks.find(t => String(t?.name||"").trim() === activeStudentTrack);
+    return match?.trackType || "";
+  })();
+  const visibleStudios = studios.filter(studio => !studio.studioTrackType || studio.studioTrackType === studentTrackType);
   const allowedLoanTypes = activeStudentTrack
     ? (normalizedTrackSettings.find((setting) => setting.name === activeStudentTrack)?.loanTypes || [...SMART_LOAN_TYPES])
     : [...SMART_LOAN_TYPES];
@@ -1992,7 +2000,7 @@ ${inventory}
         </div>}
         {publicView==="studios" && <div className="form-card-body" style={{padding:0}}>
           <PublicStudioBooking
-            studios={studios} bookings={studioBookings} setBookings={setStudioBookings}
+            studios={visibleStudios} bookings={studioBookings} setBookings={setStudioBookings}
             student={loggedInStudent} showToast={showToast}
             weekOffset={studioWeekOffset} setWeekOffset={setStudioWeekOffset}
             modal={studioModal} setModal={setStudioModal}
