@@ -1,5 +1,5 @@
 // StudentsPage.jsx — student management page (CRUD + import)
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { storageSet } from "../utils.js";
 import { Modal } from "./ui.jsx";
 import SmartExcelImportButton from "./SmartExcelImportButton.jsx";
@@ -32,6 +32,7 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
   const [trackFilter, setTrackFilter] = useState([]);
   const [saving, setSaving] = useState(false);
   const [xlImporting, setXlImporting] = useState(false);
+  const xlInputRef = useRef(null);
 
   const save = async (updatedPatch) => {
     const nextStudents = updatedPatch?.students ?? students;
@@ -240,6 +241,21 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
     }
   };
 
+  const downloadSampleFile = () => {
+    const csv = [
+      "שם מלא,אימייל,טלפון,מסלול לימודים",
+      "נועה כהן,noa.cohen@example.com,0501234567,הנדסאי סאונד א",
+      "יואב לוי,yoav.levi@example.com,0527654321,הנדסאי קולנוע א",
+    ].join("\n");
+    const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "תבנית_ייבוא_סטודנטים.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   // ── Filtering ──
   const allTracks = ["הכל", ...trackSettings.map((setting) => setting.name)];
   const allTracksSelected = !trackFilter.length;
@@ -299,8 +315,22 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
         </div>
       ) : (
         <>
+        <input
+          ref={xlInputRef}
+          type="file"
+          accept=".csv,.xls,.xlsx"
+          style={{ display: "none" }}
+          onChange={importXL}
+          disabled={xlImporting}
+        />
         <div style={{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap",alignItems:"center"}}>
           <button className="btn btn-primary" onClick={()=>setAddingStudent(true)}>➕ הוספת סטודנט</button>
+          <button className="btn btn-secondary" onClick={()=>xlInputRef.current?.click()} disabled={xlImporting}>
+            {xlImporting ? "⏳ מייבא..." : "📊 ייבוא מטבלה"}
+          </button>
+          <button className="btn btn-secondary" type="button" onClick={downloadSampleFile}>
+            📥 קובץ לדוגמה
+          </button>
           <SmartExcelImportButton showToast={showToast} onImportSuccess={handleAiImport} />
           <div className="search-bar" style={{flex:1,minWidth:180}}><span>🔍</span>
             <input placeholder="חיפוש לפי שם, מייל או טלפון..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
