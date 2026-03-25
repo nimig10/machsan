@@ -47,16 +47,27 @@ function parseSmartBookingJson(text) {
   return JSON.parse(jsonText);
 }
 
-function matchesEquipmentLoanType(eq, loanType, privateFilter = "all", categoryLoanTypes = {}) {
-  const explicitlyAllowedLoanTypes = SMART_LOAN_TYPES.filter((allowedLoanType) => Array.isArray(categoryLoanTypes?.[eq?.category]) && categoryLoanTypes[eq.category].includes(allowedLoanType));
-  if (loanType && explicitlyAllowedLoanTypes.length && !explicitlyAllowedLoanTypes.includes(loanType)) {
-    return false;
-  }
-  const equipmentFilter = loanType === "סאונד" ? "sound" : loanType === "הפקה" ? "photo" : privateFilter;
-  const isGeneral = (!eq?.soundOnly && !eq?.photoOnly) || (eq?.soundOnly && eq?.photoOnly);
-  if (equipmentFilter === "sound") return !!eq?.soundOnly || isGeneral;
-  if (equipmentFilter === "photo") return !!eq?.photoOnly || isGeneral;
-  return true;
+const LOAN_TYPE_EQUIPMENT_CLASSIFICATIONS = ["סאונד", "צילום", "כללי"];
+const DEFAULT_LOAN_TYPE_EQUIPMENT_CLASSIFICATION = {
+  פרטית: "כללי",
+  הפקה: "צילום",
+  סאונד: "סאונד",
+  "קולנוע יומית": "צילום",
+};
+
+function getLoanTypeEquipmentClassification(loanType, categoryLoanTypes = {}) {
+  const raw = String(categoryLoanTypes?.[loanType] || "").trim();
+  return LOAN_TYPE_EQUIPMENT_CLASSIFICATIONS.includes(raw) ? raw : (DEFAULT_LOAN_TYPE_EQUIPMENT_CLASSIFICATION[loanType] || "כללי");
+}
+
+function matchesEquipmentLoanType(eq, loanType, categoryLoanTypes = {}) {
+  const requiredClassification = getLoanTypeEquipmentClassification(loanType, categoryLoanTypes);
+  const isSound = !!eq?.soundOnly;
+  const isPhoto = !!eq?.photoOnly;
+  const isGeneral = (!isSound && !isPhoto) || (isSound && isPhoto);
+  if (requiredClassification === "סאונד") return isSound;
+  if (requiredClassification === "צילום") return isPhoto;
+  return isGeneral;
 }
 
 function buildTrackSettings(students = [], existingTrackSettings = []) {
@@ -303,7 +314,6 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
 // ─── STEP 3 EQUIPMENT SELECTOR ───────────────────────────────────────────────
 function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equipment, setItems, getItem, setQty, canBorrowEq=()=>true, studentRecord, certificationTypes=[], categoryLoanTypes={} }) {
   const [activeKit, setActiveKit] = useState(null);
-  const [privateFilter, setPrivateFilter] = useState("all");
   const [selectedCats, setSelectedCats] = useState([]); // multi-select, empty = all
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
 
@@ -318,7 +328,9 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
     setActiveKit(kit);
     const newItems = [];
     for (const ki of kit.items||[]) {
-      const avail = availEq.find(e=>e.id==ki.equipment_id)?.avail||0;
+      const match = availEq.find(e=>e.id==ki.equipment_id);
+      if (!match || !matchesEquipmentLoanType(match, loanType, categoryLoanTypes)) continue;
+      const avail = match.avail || 0;
       if(avail<=0) continue;
       const qty = Math.min(ki.quantity, avail);
       const name = equipment.find(e=>e.id==ki.equipment_id)?.name||"";
@@ -333,7 +345,8 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
 
   // Equipment to display: if a kit is active, only show that kit's items
   const kitEqIds = activeKit ? new Set((activeKit.items||[]).map(i=>String(i.equipment_id))) : null;
-  const visibleAvailEq = availEq.filter((eq) => matchesEquipmentLoanType(eq, loanType, privateFilter, categoryLoanTypes));
+  const allowedEquipmentClassification = getLoanTypeEquipmentClassification(loanType, categoryLoanTypes);
+  const visibleAvailEq = availEq.filter((eq) => matchesEquipmentLoanType(eq, loanType, categoryLoanTypes));
   const baseCategories = categories.filter((category) => visibleAvailEq.some((eq) => eq.category === category));
   const filteredCategories = selectedCats.length===0 ? baseCategories : baseCategories.filter(c=>selectedCats.includes(c));
 
@@ -341,12 +354,12 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
     <>
       <div className="form-section-title">
         בחירת ציוד
-        {loanType==="סאונד"&&<span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>· מוצגים רק פריטים שסומנו כציוד סאונד</span>}
-        {loanType==="הפקה"&&<span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>· מוצגים רק פריטים שסומנו כציוד צילום</span>}
-        {loanType==="פרטית"&&<span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>· בהשאלה פרטית אפשר לראות את כל ציוד המחסן או לסנן לפי תיוג</span>}
+        <span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>
+          · מוצגים רק פריטים שסומנו כ{allowedEquipmentClassification === "סאונד" ? "ציוד סאונד" : allowedEquipmentClassification === "צילום" ? "ציוד צילום" : "כללי"}
+        </span>
       </div>
 
-      {loanType==="פרטית" && (
+      {false && (
         <div style={{marginBottom:18,padding:"14px 16px",background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
           <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",marginBottom:10,letterSpacing:0.5}}>סינון ציוד לפי מסלול לימודים</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
@@ -1187,7 +1200,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       if (!apiKey) throw new Error("חסר מפתח API עבור פענוח אוטומטי.");
 
       const todayStr = today();
-      const allowedEquipmentList = (equipmentList || []).filter((item) => matchesEquipmentLoanType(item, requestedLoanType, "all", categoryLoanTypes));
+      const allowedEquipmentList = (equipmentList || []).filter((item) => matchesEquipmentLoanType(item, requestedLoanType, categoryLoanTypes));
       if (!allowedEquipmentList.length) {
         throw new Error("לא נמצאו פריטי ציוד שמותרים לסוג ההשאלה הזה.");
       }
@@ -1267,7 +1280,7 @@ ${inventory}
 
       const visibleEquipmentIds = new Set(
         allowedEquipmentList
-          .filter((equipmentItem) => matchesEquipmentLoanType(equipmentItem, nextLoanType, "all", categoryLoanTypes))
+          .filter((equipmentItem) => matchesEquipmentLoanType(equipmentItem, nextLoanType, categoryLoanTypes))
           .map((equipmentItem) => String(equipmentItem.id))
       );
       const resolvedItems = (result?.items || [])
