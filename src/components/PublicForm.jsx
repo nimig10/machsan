@@ -49,25 +49,32 @@ function parseSmartBookingJson(text) {
 
 const LOAN_TYPE_EQUIPMENT_CLASSIFICATIONS = ["סאונד", "צילום", "כללי"];
 const DEFAULT_LOAN_TYPE_EQUIPMENT_CLASSIFICATION = {
-  פרטית: "כללי",
-  הפקה: "צילום",
-  סאונד: "סאונד",
-  "קולנוע יומית": "צילום",
+  פרטית: ["כללי"],
+  הפקה: ["צילום"],
+  סאונד: ["סאונד"],
+  "קולנוע יומית": ["צילום"],
 };
 
-function getLoanTypeEquipmentClassification(loanType, categoryLoanTypes = {}) {
-  const raw = String(categoryLoanTypes?.[loanType] || "").trim();
-  return LOAN_TYPE_EQUIPMENT_CLASSIFICATIONS.includes(raw) ? raw : (DEFAULT_LOAN_TYPE_EQUIPMENT_CLASSIFICATION[loanType] || "כללי");
+function getLoanTypeEquipmentClassifications(loanType, categoryLoanTypes = {}) {
+  const rawValue = categoryLoanTypes?.[loanType];
+  const normalized = Array.isArray(rawValue)
+    ? rawValue.filter((value) => LOAN_TYPE_EQUIPMENT_CLASSIFICATIONS.includes(String(value).trim()))
+    : LOAN_TYPE_EQUIPMENT_CLASSIFICATIONS.includes(String(rawValue || "").trim())
+      ? [String(rawValue).trim()]
+      : [];
+  return normalized.length ? [...new Set(normalized)] : [...(DEFAULT_LOAN_TYPE_EQUIPMENT_CLASSIFICATION[loanType] || ["כללי"])];
 }
 
 function matchesEquipmentLoanType(eq, loanType, categoryLoanTypes = {}) {
-  const requiredClassification = getLoanTypeEquipmentClassification(loanType, categoryLoanTypes);
+  const requiredClassifications = getLoanTypeEquipmentClassifications(loanType, categoryLoanTypes);
   const isSound = !!eq?.soundOnly;
   const isPhoto = !!eq?.photoOnly;
   const isGeneral = (!isSound && !isPhoto) || (isSound && isPhoto);
-  if (requiredClassification === "סאונד") return isSound;
-  if (requiredClassification === "צילום") return isPhoto;
-  return isGeneral;
+  return requiredClassifications.some((classification) => {
+    if (classification === "סאונד") return isSound;
+    if (classification === "צילום") return isPhoto;
+    return isGeneral;
+  });
 }
 
 function buildTrackSettings(students = [], existingTrackSettings = []) {
@@ -345,7 +352,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
 
   // Equipment to display: if a kit is active, only show that kit's items
   const kitEqIds = activeKit ? new Set((activeKit.items||[]).map(i=>String(i.equipment_id))) : null;
-  const allowedEquipmentClassification = getLoanTypeEquipmentClassification(loanType, categoryLoanTypes);
+  const allowedEquipmentClassifications = getLoanTypeEquipmentClassifications(loanType, categoryLoanTypes);
   const visibleAvailEq = availEq.filter((eq) => matchesEquipmentLoanType(eq, loanType, categoryLoanTypes));
   const baseCategories = categories.filter((category) => visibleAvailEq.some((eq) => eq.category === category));
   const filteredCategories = selectedCats.length===0 ? baseCategories : baseCategories.filter(c=>selectedCats.includes(c));
@@ -355,7 +362,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
       <div className="form-section-title">
         בחירת ציוד
         <span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>
-          · מוצגים רק פריטים שסומנו כ{allowedEquipmentClassification === "סאונד" ? "ציוד סאונד" : allowedEquipmentClassification === "צילום" ? "ציוד צילום" : "כללי"}
+          · מוצגים רק פריטים שסומנו כ{allowedEquipmentClassifications.map((classification) => classification === "סאונד" ? "ציוד סאונד" : classification === "צילום" ? "ציוד צילום" : "כללי").join(" + ")}
         </span>
       </div>
 

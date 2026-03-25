@@ -21,21 +21,26 @@ function statusBadge(s) {
 const CATEGORY_LOAN_TYPE_OPTIONS = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
 const EQUIPMENT_CLASSIFICATION_OPTIONS = ["סאונד", "צילום", "כללי"];
 const DEFAULT_LOAN_TYPE_CLASSIFICATIONS = {
-  פרטית: "כללי",
-  הפקה: "צילום",
-  סאונד: "סאונד",
-  "קולנוע יומית": "צילום",
+  פרטית: ["כללי"],
+  הפקה: ["צילום"],
+  סאונד: ["סאונד"],
+  "קולנוע יומית": ["צילום"],
 };
 
-function getLoanTypeEquipmentClassification(loanType, categoryLoanTypes = {}) {
-  const value = String(categoryLoanTypes?.[loanType] || "").trim();
-  return EQUIPMENT_CLASSIFICATION_OPTIONS.includes(value) ? value : (DEFAULT_LOAN_TYPE_CLASSIFICATIONS[loanType] || "כללי");
+function getLoanTypeEquipmentClassifications(loanType, categoryLoanTypes = {}) {
+  const rawValue = categoryLoanTypes?.[loanType];
+  const normalized = Array.isArray(rawValue)
+    ? rawValue.filter((value) => EQUIPMENT_CLASSIFICATION_OPTIONS.includes(String(value).trim()))
+    : EQUIPMENT_CLASSIFICATION_OPTIONS.includes(String(rawValue || "").trim())
+      ? [String(rawValue).trim()]
+      : [];
+  return normalized.length ? [...new Set(normalized)] : [...(DEFAULT_LOAN_TYPE_CLASSIFICATIONS[loanType] || ["כללי"])];
 }
 
 function buildCategoryLoanTypesMap(draft = {}) {
   const next = {};
   CATEGORY_LOAN_TYPE_OPTIONS.forEach((loanType) => {
-    next[loanType] = getLoanTypeEquipmentClassification(loanType, draft);
+    next[loanType] = getLoanTypeEquipmentClassifications(loanType, draft);
   });
   return next;
 }
@@ -44,7 +49,7 @@ function CategoryLoanTypesModal({ categoryLoanTypes = {}, onSave, onClose }) {
   const [draft, setDraft] = useState(() => {
     const initialDraft = {};
     CATEGORY_LOAN_TYPE_OPTIONS.forEach((loanType) => {
-      initialDraft[loanType] = getLoanTypeEquipmentClassification(loanType, categoryLoanTypes);
+      initialDraft[loanType] = getLoanTypeEquipmentClassifications(loanType, categoryLoanTypes);
     });
     return initialDraft;
   });
@@ -65,20 +70,27 @@ function CategoryLoanTypesModal({ categoryLoanTypes = {}, onSave, onClose }) {
           בחרו לכל סוג השאלה איזה סיווג ציוד מתוך המחסן יהיה זמין לסטודנט בטופס ההשאלה.
         </div>
         {CATEGORY_LOAN_TYPE_OPTIONS.map((loanType) => {
-          const selectedClassification = getLoanTypeEquipmentClassification(loanType, draft);
+          const selectedClassifications = getLoanTypeEquipmentClassifications(loanType, draft);
           return (
             <div key={loanType} style={{border:"1px solid var(--border)",borderRadius:12,padding:12,background:"var(--surface2)"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}>
                 <div style={{fontWeight:800,fontSize:14}}>{loanType === "הפקה" ? "השאלת הפקה" : loanType === "סאונד" ? "השאלת סאונד" : loanType === "קולנוע יומית" ? "השאלת קולנוע יומית" : "השאלה פרטית"}</div>
-                <div style={{fontSize:12,color:"var(--text3)"}}>זמין כרגע: {selectedClassification === "סאונד" ? "ציוד סאונד" : selectedClassification === "צילום" ? "ציוד צילום" : "כללי"}</div>
+                <div style={{fontSize:12,color:"var(--text3)"}}>זמין כרגע: {selectedClassifications.map((classification) => classification === "סאונד" ? "ציוד סאונד" : classification === "צילום" ? "ציוד צילום" : "כללי").join(" + ")}</div>
               </div>
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                 {EQUIPMENT_CLASSIFICATION_OPTIONS.map((classification) => (
                   <button
                     key={classification}
                     type="button"
-                    className={`btn btn-sm ${selectedClassification === classification ? "btn-primary" : "btn-secondary"}`}
-                    onClick={() => setDraft((prev) => ({ ...prev, [loanType]: classification }))}
+                    className={`btn btn-sm ${selectedClassifications.includes(classification) ? "btn-primary" : "btn-secondary"}`}
+                    onClick={() => setDraft((prev) => {
+                      const current = getLoanTypeEquipmentClassifications(loanType, prev);
+                      const nextSelection = current.includes(classification)
+                        ? current.filter((value) => value !== classification)
+                        : [...current, classification];
+                      if (!nextSelection.length) return prev;
+                      return { ...prev, [loanType]: nextSelection };
+                    })}
                   >
                     {classification === "סאונד" ? "ציוד סאונד" : classification === "צילום" ? "ציוד צילום" : "כללי"}
                   </button>
