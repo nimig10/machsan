@@ -961,33 +961,25 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
 
         {schedule.length>0 && (
           <div style={{marginBottom:16}}>
-            <div style={{fontWeight:700,fontSize:12,color:"#9b59b6",marginBottom:6}}>📅 {schedule.length} שיעורים בלוח:</div>
-            <div style={{maxHeight:260,overflow:"auto",display:"flex",flexDirection:"column",gap:4}}>
+            <div style={{fontWeight:700,fontSize:12,color:"#9b59b6",marginBottom:4}}>📅 {schedule.length} שיעורים בלוח:</div>
+            {/* header row */}
+            <div style={{display:"grid",gridTemplateColumns:"36px minmax(120px,1.1fr) 80px 80px minmax(160px,1.5fr) 28px",gap:6,fontSize:11,color:"var(--text-muted)",padding:"0 8px",marginBottom:2}}>
+              <div></div><div>תאריך</div><div>התחלה</div><div>סיום</div><div>נושא השיעור</div><div></div>
+            </div>
+            <div style={{maxHeight:300,overflow:"auto",display:"flex",flexDirection:"column",gap:2}}>
               {schedule.map((s,i)=>(
-                <div key={`${s.date}-${s.startTime}-${i}`} style={{display:"grid",gridTemplateColumns:"minmax(34px,40px) minmax(130px,1.1fr) minmax(90px,0.6fr) minmax(90px,0.6fr) minmax(180px,1.5fr) auto",alignItems:"end",gap:8,fontSize:12,padding:"10px 12px",background:"var(--surface2)",borderRadius:8,border:"1px solid rgba(155,89,182,0.14)"}}>
-                  <div style={{fontWeight:800,color:"#9b59b6",paddingBottom:10}}>#{i+1}</div>
-                  <div className="form-group" style={{margin:0}}>
-                    <label className="form-label">תאריך</label>
-                    <input className="form-input" type="date" value={s.date} onChange={e=>updateSessionField(i, "date", e.target.value)}/>
-                  </div>
-                  <div className="form-group" style={{margin:0}}>
-                    <label className="form-label">התחלה</label>
-                    <select className="form-select" value={s.startTime} onChange={e=>updateSessionField(i, "startTime", e.target.value)}>
-                      {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
-                  <div className="form-group" style={{margin:0}}>
-                    <label className="form-label">סיום</label>
-                    <select className="form-select" value={s.endTime} onChange={e=>updateSessionField(i, "endTime", e.target.value)}>
-                      {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
-                  <div className="form-group" style={{margin:0}}>
-                    <label className="form-label">נושא השיעור</label>
-                    <input className="form-input" placeholder="אופציונלי" value={s.topic||""} onChange={e=>updateSessionField(i, "topic", e.target.value)}/>
-                  </div>
+                <div key={`${s.date}-${s.startTime}-${i}`} style={{display:"grid",gridTemplateColumns:"36px minmax(120px,1.1fr) 80px 80px minmax(160px,1.5fr) 28px",alignItems:"center",gap:6,fontSize:12,padding:"4px 8px",background:"var(--surface2)",borderRadius:6,border:"1px solid rgba(155,89,182,0.14)"}}>
+                  <div style={{fontWeight:800,color:"#9b59b6",fontSize:11}}>#{i+1}</div>
+                  <input className="form-input" type="date" value={s.date} style={{padding:"3px 6px",fontSize:12,height:28}} onChange={e=>updateSessionField(i, "date", e.target.value)}/>
+                  <select className="form-select" value={s.startTime} style={{padding:"3px 4px",fontSize:12,height:28}} onChange={e=>updateSessionField(i, "startTime", e.target.value)}>
+                    {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <select className="form-select" value={s.endTime} style={{padding:"3px 4px",fontSize:12,height:28}} onChange={e=>updateSessionField(i, "endTime", e.target.value)}>
+                    {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <input className="form-input" placeholder="אופציונלי" value={s.topic||""} style={{padding:"3px 6px",fontSize:12,height:28}} onChange={e=>updateSessionField(i, "topic", e.target.value)}/>
                   <button onClick={()=>setSchedule(prev=>prev.filter((_,j)=>j!==i))}
-                    style={{background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:18,padding:"0 4px",alignSelf:"center"}} title="מחק מפגש">×</button>
+                    style={{background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:16,padding:0,lineHeight:1}} title="מחק מפגש">×</button>
                 </div>
               ))}
             </div>
