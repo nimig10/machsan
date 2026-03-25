@@ -2075,7 +2075,7 @@ ${inventory}
         </div>
       </div>
     )}
-    <AIChatBot equipment={equipment} reservations={reservations} policies={policies} settings={siteSettings} refreshInventory={syncInventory} />
+    <AIChatBot equipment={equipment} reservations={reservations} policies={policies} settings={siteSettings} currentUser={loggedInStudent} refreshInventory={syncInventory} />
     </>
   );
 }

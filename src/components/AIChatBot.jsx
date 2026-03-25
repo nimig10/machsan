@@ -29,6 +29,33 @@ const INVENTORY_STOPWORDS = new Set([
   'מה', 'מלאי', 'נשאר', 'נותר', 'אפשר', 'אפשרי'
 ]);
 
+const BLOCKED_EQUIPMENT_STATUSES = new Set(['פגום', 'בתיקון', 'נעלם', 'damaged', 'inspection', 'repair']);
+const ACTIVE_RESERVATION_STATUSES = new Set(['מאושר', 'באיחור', 'approved', 'out', 'overdue']);
+
+const normalizeStatusValue = (value = '') => String(value || '').trim().toLowerCase();
+const getItemAvailableCount = (item) => Number(item?.available ?? item?.totalAvail ?? 0);
+
+function isWorkingUnit(unit) {
+  const rawStatus = String(unit?.status || '').trim();
+  const normalizedStatus = normalizeStatusValue(rawStatus);
+  return rawStatus === 'תקין' || normalizedStatus === 'תקין' || normalizedStatus === 'available' || normalizedStatus === 'ok';
+}
+
+function getWorkingUnitCount(equipmentItem) {
+  if (Array.isArray(equipmentItem?.units)) {
+    return equipmentItem.units.filter(isWorkingUnit).length;
+  }
+  return Math.max(0, Number(equipmentItem?.total_quantity || 0));
+}
+
+function isBlockedEquipment(equipmentItem) {
+  return BLOCKED_EQUIPMENT_STATUSES.has(normalizeStatusValue(equipmentItem?.status));
+}
+
+function isActiveReservation(reservation) {
+  return ACTIVE_RESERVATION_STATUSES.has(normalizeStatusValue(reservation?.status));
+}
+
 function inferInventoryTags(item) {
   const nameText = normalizeInventoryText(item?.name);
   const categoryText = normalizeInventoryText(item?.category);
@@ -46,14 +73,16 @@ function inferInventoryTags(item) {
   const isMicrophoneCategory = categoryText.includes('מיקרופונ');
   const isKnownMicrophoneModel = /shure\s*(sm)?57|shure\s*(sm)?58|\bsm57\b|\bsm58\b|at2020|spirit black|rode ntg|ntg1|wireless go|dji mic/.test(nameText);
   const hasMicrophoneDescription = descriptionText.includes('מיקרופון') || descriptionText.includes('מיקרופונים');
-  const isMicrophoneLike = isMicrophoneCategory || (isKnownMicrophoneModel && hasMicrophoneDescription);
+  const hasMicrophoneKeyword = searchText.includes('מיקרופונ') || /\bmic\b/.test(nameText);
+  const isMicrophoneLike = isMicrophoneCategory || isKnownMicrophoneModel || hasMicrophoneDescription || hasMicrophoneKeyword;
   const isCondenserMicrophone = /at2020|spirit black/.test(nameText)
     || descriptionText.includes('מיקרופון קונדנסר')
     || descriptionText.includes('מיקרופון קונדנסור')
     || descriptionText.includes('קונדנסר');
   const isDynamicMicrophone = /shure\s*(sm)?57|shure\s*(sm)?58|\bsm57\b|\bsm58\b/.test(nameText)
     || descriptionText.includes('מיקרופון דינמי')
-    || descriptionText.includes('מיקרופונים דינמיים');
+    || descriptionText.includes('מיקרופונים דינמיים')
+    || (isMicrophoneLike && (searchText.includes('shure 57') || searchText.includes('shure 58') || searchText.includes('sm57') || searchText.includes('sm58')));
 
   if (isMicrophoneLike) tags.add('microphone');
   if (isMicrophoneLike && isDynamicMicrophone && !isCondenserMicrophone) {
@@ -72,16 +101,16 @@ function inferInventoryTags(item) {
 }
 
 function formatInventoryResponse(label, items) {
-  const availableItems = items.filter((item) => item.available > 0);
-  const total = availableItems.reduce((sum, item) => sum + item.available, 0);
+  const availableItems = items.filter((item) => getItemAvailableCount(item) > 0);
+  const total = availableItems.reduce((sum, item) => sum + getItemAvailableCount(item), 0);
 
   if (!total) {
     return `נכון לעכשיו אין ${label} זמינים במלאי.`;
   }
 
   const breakdown = availableItems
-    .sort((a, b) => b.available - a.available)
-    .map((item) => `${item.name}: ${item.available}`)
+    .sort((a, b) => getItemAvailableCount(b) - getItemAvailableCount(a))
+    .map((item) => `${item.name}: ${getItemAvailableCount(item)}`)
     .join(', ');
 
   return `נכון לעכשיו יש ${total} ${label} זמינים במלאי. ${breakdown}`;
@@ -99,7 +128,7 @@ function answerInventoryQuestion(question, inventoryItems) {
   const asksInventory = /כמה|יש|זמין|זמינים|במלאי|נשאר|נותר/.test(normalizedQuestion);
   if (!asksInventory) return null;
 
-  const availableInventory = inventoryItems.filter((item) => item.available > 0);
+  const availableInventory = inventoryItems.filter((item) => getItemAvailableCount(item) > 0);
 
   if (normalizedQuestion.includes('מיקרופונ') && normalizedQuestion.includes('דינמ')) {
     const matches = availableInventory.filter((item) => item.tags.includes('dynamic_microphone'));
@@ -132,13 +161,13 @@ function answerInventoryQuestion(question, inventoryItems) {
 
   if (matches.length === 1) {
     const [item] = matches;
-    return `נכון לעכשיו יש ${item.available} יחידות זמינות של ${item.name} במלאי.`;
+    return `נכון לעכשיו יש ${getItemAvailableCount(item)} יחידות זמינות של ${item.name} במלאי.`;
   }
 
   return formatInventoryResponse('פריטים תואמים', matches);
 }
 
-export default function AIChatBot({ equipment = [], reservations = [], policies = {}, settings = {}, refreshInventory = null }) {
+export default function AIChatBot({ equipment = [], reservations = [], policies = {}, settings = {}, currentUser = null, refreshInventory = null }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     { role: 'assistant', content: 'היי! אני העוזר החכם של המחסן. תאר לי מה אתה הולך לצלם/להקליט ואעזור לך להרכיב ערכה, או שאל אותי על נהלי המחסן.' }
@@ -208,11 +237,10 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
       const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
       const currentEndTime = `${String(oneMinuteLater.getHours()).padStart(2, '0')}:${String(oneMinuteLater.getMinutes()).padStart(2, '0')}`;
 
-      const compactEquipment = liveEquipment
-        .map((equipmentItem) => ({
-          name: equipmentItem.name,
-          category: equipmentItem.category,
-          available: getAvailable(
+      const inventorySnapshot = liveEquipment
+        .map((equipmentItem) => {
+          const workingCount = getWorkingUnitCount(equipmentItem);
+          const totalAvail = getAvailable(
             equipmentItem.id,
             currentDate,
             currentEndDate,
@@ -221,40 +249,89 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
             null,
             currentTime,
             currentEndTime
-          ),
-          description: equipmentItem.description || "",
-          technicalDetails: equipmentItem.technical_details || "",
-          searchText: normalizeInventoryText([
-            equipmentItem.name,
-            equipmentItem.category,
-            equipmentItem.description,
-            equipmentItem.technical_details,
-          ].join(' ')),
-          tags: inferInventoryTags({
+          );
+
+          if (!equipmentItem?.name || isBlockedEquipment(equipmentItem) || workingCount <= 0) {
+            return null;
+          }
+
+          return {
+            id: equipmentItem.id,
             name: equipmentItem.name,
             category: equipmentItem.category,
+            totalAvail,
+            available: totalAvail,
+            workingCount,
             description: equipmentItem.description || "",
             technicalDetails: equipmentItem.technical_details || "",
-          }),
-        }))
-        .filter((equipmentItem) => equipmentItem.name);
+            searchText: normalizeInventoryText([
+              equipmentItem.name,
+              equipmentItem.category,
+              equipmentItem.description,
+              equipmentItem.technical_details,
+            ].join(' ')),
+            tags: inferInventoryTags({
+              name: equipmentItem.name,
+              category: equipmentItem.category,
+              description: equipmentItem.description || "",
+              technicalDetails: equipmentItem.technical_details || "",
+            }),
+          };
+        })
+        .filter(Boolean);
 
-      const deterministicInventoryAnswer = answerInventoryQuestion(userMessage, compactEquipment);
+      const availableEquipment = inventorySnapshot.map((equipmentItem) => ({
+        id: equipmentItem.id,
+        name: equipmentItem.name,
+        category: equipmentItem.category,
+        totalAvail: equipmentItem.totalAvail,
+      }));
+
+      const activeReservations = (liveReservations || [])
+        .filter((reservation) => isActiveReservation(reservation))
+        .map((reservation) => ({
+          from: reservation.borrow_date || reservation.pickupDate || reservation.startDate || "",
+          fromTime: reservation.borrow_time || reservation.startTime || "",
+          to: reservation.return_date || reservation.returnDate || reservation.endDate || "",
+          toTime: reservation.return_time || reservation.endTime || "",
+          items: Array.isArray(reservation.items)
+            ? reservation.items.map((item) => {
+                const equipmentId = item?.equipment_id ?? item?.equipmentId ?? item?.id ?? "";
+                const equipmentMatch = liveEquipment.find((equipmentItem) => String(equipmentItem.id) === String(equipmentId));
+                return {
+                  name: item?.name || equipmentMatch?.name || String(equipmentId || "").trim() || "פריט לא מזוהה",
+                  amount: Number(item?.quantity) || 1,
+                };
+              })
+            : [],
+        }));
+
+      const deterministicInventoryAnswer = answerInventoryQuestion(userMessage, inventorySnapshot);
       if (deterministicInventoryAnswer) {
         setMessages(prev => [...prev, { role: 'assistant', content: deterministicInventoryAnswer }]);
         incrementRequestsCount();
         return;
       }
 
-      const systemPrompt = `אתה עוזר וירטואלי של מחסן השאלת ציוד אקדמי. עליך לענות אך ורק בעברית, בצורה תמציתית, מקצועית ואדיבה.
-יש לך 3 תפקידים:
-1. בונה ערכות: אם סטודנט מתאר הפקה, המלץ לו על ציוד רלוונטי *אך ורק* מתוך רשימת הציוד הזמין (avail > 0).
-2. מציע חלופות: אם סטודנט מבקש משהו שאינו במלאי, הצע לו חלופה הגיונית מהרשימה.
-3. תמיכת נהלים: ענה על שאלות לגבי חוקים ונהלים בהתבסס על אובייקט הנהלים.
-המלאי שלפניך הוא ספירת זמינות בזמן אמת, אחרי הפחתת פריטים שנמצאים כרגע בהשאלה או באיחור. אם פריט לא מופיע ברשימה, הוא לא קיים כרגע במחסן.
+      const systemPrompt = `אתה עוזר וירטואלי חכם של מחסן השאלת ציוד אקדמי. עליך לענות אך ורק בעברית, בצורה תמציתית, מקצועית ואדיבה.
 
+מידע קריטי על המערכת:
+שם הסטודנט שאתה מדבר איתו: ${currentUser?.name || 'סטודנט'}
 נהלי המחסן: ${JSON.stringify(policies)}
-מלאי הציוד הזמין כרגע: ${JSON.stringify(compactEquipment)}`;
+
+מלאי הציוד התקין במחסן:
+${JSON.stringify(availableEquipment)}
+
+יומן ההשאלות הפעילות:
+${JSON.stringify(activeReservations)}
+
+חוקי ברזל להמלצת ציוד:
+1. ציוד בחוץ: אם הסטודנט שואל על היום או לא מציין תאריך, הנח שהוא שואל על זמינות לעכשיו/להיום. הצלבת זמינות נעשית מול "מלאי הציוד התקין" ומול "יומן ההשאלות הפעילות".
+2. סטטוסים: ציוד תקול, בבדיקה, בתיקון או לא תקין הוסר מראש מ"מלאי הציוד התקין". אל תציע ציוד שלא מופיע שם.
+3. אם פריט מופיע במלאי עם totalAvail גדול מ-0, הוא זמין כרגע. אם totalAvail הוא 0, הוא כרגע לא זמין ויש להציע חלופה.
+4. אם פריט לא מופיע בכלל במלאי הציוד התקין, הוא לא קיים כרגע במחסן.
+5. כששואלים "כמה יש", התבסס על totalAvail בלבד ולא על ניחוש.
+6. אם יש מיקרופונים דינמיים זמינים כמו Shure sm57 או SHURE 58, ציין אותם במפורש בתשובה על מלאי.`;
 
       const history = messages.filter(m => m.role !== 'system').map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
