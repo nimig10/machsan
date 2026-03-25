@@ -62,6 +62,29 @@ const CRITICAL_KEYS_MIN = {
   reservations: null // no minimum — can legitimately be empty
 };
 
+// ─── HEBREW CORRUPTION GUARD: block writes with destroyed Unicode ────────────
+const HEBREW_RE = /[\u0590-\u05FF]/;
+const CORRUPTION_RE = /\?\?\?\?/;
+function hasHebrewCorruption(newValue, existingValue) {
+  if (!existingValue) return false;
+  const existingStr = JSON.stringify(existingValue);
+  const newStr = JSON.stringify(newValue);
+  // If existing data has real Hebrew but new data lost it → corruption
+  const existingHasHebrew = HEBREW_RE.test(existingStr);
+  const newHasHebrew = HEBREW_RE.test(newStr);
+  const newHasQuestionMarks = CORRUPTION_RE.test(newStr);
+  if (existingHasHebrew && !newHasHebrew && newHasQuestionMarks) {
+    return true;
+  }
+  // Even if both have some Hebrew, check if new data has suspiciously many ????
+  if (existingHasHebrew && newHasQuestionMarks) {
+    const existingQCount = (existingStr.match(/\?\?\?\?/g) || []).length;
+    const newQCount = (newStr.match(/\?\?\?\?/g) || []).length;
+    if (newQCount > existingQCount + 5) return true;
+  }
+  return false;
+}
+
 export async function storageSet(key, value) {
   // ── Sanity check: block writes that would destroy data ──
   const minItems = CRITICAL_KEYS_MIN[key];
@@ -71,6 +94,15 @@ export async function storageSet(key, value) {
     if (value.length < minItems && cachedLen >= minItems) {
       console.error(`🛑 storageSet BLOCKED: refusing to write ${key} with ${value.length} items (minimum: ${minItems}, current: ${cachedLen})`);
       return { ok: false, error: "blocked_sanity_check" };
+    }
+  }
+
+  // ── Hebrew corruption guard: block writes with destroyed Unicode ──
+  {
+    const cached = lsGet(key);
+    if (hasHebrewCorruption(value, cached)) {
+      console.error(`🛑 storageSet BLOCKED: Hebrew corruption detected in ${key}. New data has ???? where Hebrew text should be. Write refused.`);
+      return { ok: false, error: "blocked_hebrew_corruption" };
     }
   }
 
