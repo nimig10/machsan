@@ -1,5 +1,5 @@
 // PublicForm.jsx — public loan request form
-import { useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE } from "../utils.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 
@@ -53,6 +53,19 @@ function matchesEquipmentLoanType(eq, loanType, privateFilter = "all") {
   if (equipmentFilter === "sound") return !!eq?.soundOnly || isGeneral;
   if (equipmentFilter === "photo") return !!eq?.photoOnly || isGeneral;
   return true;
+}
+
+function buildTrackSettings(students = [], existingTrackSettings = []) {
+  const existing = Array.isArray(existingTrackSettings) ? existingTrackSettings : [];
+  const trackNames = [...new Set((students || []).map((student) => String(student?.track || "").trim()).filter(Boolean))];
+  return trackNames.map((name) => {
+    const match = existing.find((setting) => String(setting?.name || "").trim() === name);
+    const allowedLoanTypes = SMART_LOAN_TYPES.filter((loanType) => Array.isArray(match?.loanTypes) && match.loanTypes.includes(loanType));
+    return {
+      name,
+      loanTypes: allowedLoanTypes.length ? allowedLoanTypes : [...SMART_LOAN_TYPES],
+    };
+  });
 }
 
 const fetchWithRetry = async (url, options, maxRetries = 5) => {
@@ -793,6 +806,48 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [showEquipmentAiLoanTypePrompt, setShowEquipmentAiLoanTypePrompt] = useState(false);
   const [equipmentAiForcedLoanType, setEquipmentAiForcedLoanType] = useState("");
   const todayStr = today();
+  const normalizedTrackSettings = buildTrackSettings(certifications?.students, certifications?.trackSettings);
+  const activeStudentTrack = String(loggedInStudent?.track || form.course || "").trim();
+  const allowedLoanTypes = activeStudentTrack
+    ? (normalizedTrackSettings.find((setting) => setting.name === activeStudentTrack)?.loanTypes || [...SMART_LOAN_TYPES])
+    : [...SMART_LOAN_TYPES];
+  const visibleLoanTypeOptions = [
+    {val:"פרטית",icon:"👤",desc:"שימוש אישי / לימודי"},
+    {val:"הפקה",icon:"🎬",desc:"פרויקט הפקה מאורגן"},
+    {val:"סאונד",icon:"🎙️",desc:"לתרגול הקלטות באולפני המכללה (עבור הנדסאי סאונד בלבד)"},
+    {val:"קולנוע יומית",icon:"🎥",desc:"תרגול חופשי עם ציוד קולנוע למספר שעות — יש להזמין 24 שעות מראש"},
+  ].filter((option) => allowedLoanTypes.includes(option.val));
+
+  useEffect(() => {
+    if (!activeStudentTrack) return;
+    if (allowedLoanTypes.length === 1 && form.loan_type !== allowedLoanTypes[0]) {
+      setForm((prev) => ({
+        ...prev,
+        loan_type: allowedLoanTypes[0],
+        sound_day_loan: false,
+        borrow_date: "",
+        return_date: "",
+        borrow_time: "",
+        return_time: "",
+      }));
+      setItems([]);
+      setAgreed(false);
+      return;
+    }
+    if (form.loan_type && !allowedLoanTypes.includes(form.loan_type)) {
+      setForm((prev) => ({
+        ...prev,
+        loan_type: "",
+        sound_day_loan: false,
+        borrow_date: "",
+        return_date: "",
+        borrow_time: "",
+        return_time: "",
+      }));
+      setItems([]);
+      setAgreed(false);
+    }
+  }, [activeStudentTrack, allowedLoanTypes, form.loan_type]);
 
   // Load studios data when switching to studios view
   const loadStudiosData = async () => {
@@ -1103,9 +1158,20 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     const requestedLoanType = preselectedLoanType || forcedLoanType || promptLoanType;
     let shouldCloseEquipmentAiModal = false;
 
+    if (!allowedLoanTypes.length) {
+      showToast("error", "לא הוגדרו סוגי השאלה זמינים למסלול הלימודים שלך.");
+      return;
+    }
+
     if (!requestedLoanType) {
       setShowEquipmentAiLoanTypePrompt(true);
       showToast("error", "יש לבחור סוג השאלה או לציין אותו בתיאור.");
+      return;
+    }
+
+    if (!allowedLoanTypes.includes(requestedLoanType)) {
+      setShowEquipmentAiLoanTypePrompt(true);
+      showToast("error", "סוג ההשאלה שביקשת אינו זמין למסלול הלימודים שלך.");
       return;
     }
 
@@ -1599,20 +1665,20 @@ ${inventory}
                 type="button"
                 className="btn btn-primary"
                 onClick={()=>setShowEquipmentAiModal(true)}
-                disabled={equipmentAiLoading}
+                disabled={equipmentAiLoading || !visibleLoanTypeOptions.length}
                 style={{display:"inline-flex",alignItems:"center",gap:8,fontWeight:800}}
               >
                 ✨ השאלת ציוד חכמה
               </button>
             </div>
             <div className="form-section-title">סוג ההשאלה</div>
+            {!visibleLoanTypeOptions.length && (
+              <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>
+                🚫 לא הוגדרו סוגי השאלה זמינים למסלול הלימודים שלך. יש לפנות לצוות המחסן.
+              </div>
+            )}
             <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:24}}>
-              {[
-                {val:"פרטית",icon:"👤",desc:"שימוש אישי / לימודי"},
-                {val:"הפקה",icon:"🎬",desc:"פרויקט הפקה מאורגן"},
-                {val:"סאונד",icon:"🎙️",desc:"לתרגול הקלטות באולפני המכללה (עבור הנדסאי סאונד בלבד)"},
-                {val:"קולנוע יומית",icon:"🎥",desc:"תרגול חופשי עם ציוד קולנוע למספר שעות — יש להזמין 24 שעות מראש"},
-              ].map(opt=>(
+              {visibleLoanTypeOptions.map(opt=>(
                 <div key={opt.val} onClick={()=>{
                   setForm((prev) => ({
                     ...prev,
@@ -1860,7 +1926,7 @@ ${inventory}
                   {equipmentAiForcedLoanType ? `סוג ההשאלה שנבחר: ${equipmentAiForcedLoanType}` : "לא זיהינו סוג השאלה. בחרו סוג השאלה כדי להמשיך."}
                 </div>
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                  {SMART_LOAN_TYPES.map((loanTypeOption) => {
+                  {visibleLoanTypeOptions.map(({ val: loanTypeOption }) => {
                     const isActive = normalizeSmartLoanType(equipmentAiForcedLoanType) === loanTypeOption;
                     return (
                       <button

@@ -1,19 +1,48 @@
 // StudentsPage.jsx — student management page (CRUD + import)
 import { useState } from "react";
 import { storageSet } from "../utils.js";
+import { Modal } from "./ui.jsx";
+
+const TRACK_LOAN_TYPES = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
+const normalizeTrackName = (value = "") => String(value || "").trim();
+const buildTrackSettings = (students = [], existingTrackSettings = []) => {
+  const existing = Array.isArray(existingTrackSettings) ? existingTrackSettings : [];
+  const trackNames = [...new Set((students || []).map(student => normalizeTrackName(student?.track)).filter(Boolean))];
+  return trackNames.map((name) => {
+    const match = existing.find((setting) => normalizeTrackName(setting?.name) === name);
+    const allowedLoanTypes = TRACK_LOAN_TYPES.filter((loanType) => Array.isArray(match?.loanTypes) && match.loanTypes.includes(loanType));
+    return {
+      name,
+      loanTypes: allowedLoanTypes.length ? allowedLoanTypes : [...TRACK_LOAN_TYPES],
+    };
+  });
+};
 
 export function StudentsPage({ certifications, setCertifications, showToast }) {
-  const { types=[], students=[] } = certifications;
+  const { types = [], students = [] } = certifications;
+  const trackSettings = buildTrackSettings(students, certifications?.trackSettings);
   const [addingStudent, setAddingStudent] = useState(false);
   const [studentForm, setStudentForm] = useState({ name:"", email:"", phone:"", track:"" });
   const [editStudent, setEditStudent] = useState(null);
   const [editForm, setEditForm] = useState({ name:"", email:"", phone:"", track:"" });
+  const [editTrack, setEditTrack] = useState(null);
+  const [editTrackName, setEditTrackName] = useState("");
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState("הכל");
   const [saving, setSaving] = useState(false);
   const [xlImporting, setXlImporting] = useState(false);
 
-  const save = async (updated) => {
+  const save = async (updatedPatch) => {
+    const nextStudents = updatedPatch?.students ?? students;
+    const nextTypes = updatedPatch?.types ?? types;
+    const nextTrackSettings = buildTrackSettings(nextStudents, updatedPatch?.trackSettings ?? certifications?.trackSettings);
+    const updated = {
+      ...certifications,
+      ...updatedPatch,
+      types: nextTypes,
+      students: nextStudents,
+      trackSettings: nextTrackSettings,
+    };
     setSaving(true);
     setCertifications(updated);
     const r = await storageSet("certifications", updated);
@@ -54,6 +83,44 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
     if(dup) { showToast("error","מייל זה כבר קיים לסטודנט אחר"); return; }
     const updated = { types, students: students.map(s=>s.id===editStudent.id ? {...s,name,email,phone:editForm.phone.trim(),track:editForm.track?.trim()||""} : s) };
     if(await save(updated)) { showToast("success","פרטי הסטודנט עודכנו"); setEditStudent(null); }
+  };
+
+  const openTrackEditor = (trackName) => {
+    setEditTrack(trackName);
+    setEditTrackName(trackName);
+  };
+
+  const saveTrackEdit = async () => {
+    const previousTrackName = normalizeTrackName(editTrack);
+    const nextTrackName = normalizeTrackName(editTrackName);
+    if (!previousTrackName || !nextTrackName) {
+      showToast("error", "יש למלא שם מסלול לימודים");
+      return;
+    }
+    if (previousTrackName === nextTrackName) {
+      setEditTrack(null);
+      return;
+    }
+    if (trackSettings.some((setting) => normalizeTrackName(setting.name) === nextTrackName)) {
+      showToast("error", "מסלול לימודים בשם זה כבר קיים");
+      return;
+    }
+    const updatedStudents = students.map((student) => (
+      normalizeTrackName(student.track) === previousTrackName
+        ? { ...student, track: nextTrackName }
+        : student
+    ));
+    const updatedTrackSettings = trackSettings.map((setting) => (
+      normalizeTrackName(setting.name) === previousTrackName
+        ? { ...setting, name: nextTrackName }
+        : setting
+    ));
+    if (await save({ types, students: updatedStudents, trackSettings: updatedTrackSettings })) {
+      showToast("success", `שם המסלול עודכן ל־${nextTrackName}`);
+      if (trackFilter === previousTrackName) setTrackFilter(nextTrackName);
+      setEditTrack(null);
+      setEditTrackName("");
+    }
   };
 
   // ── Import XL ──
@@ -133,7 +200,7 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
   };
 
   // ── Filtering ──
-  const allTracks = ["הכל", ...new Set(students.map(s=>s.track||"").filter(Boolean))];
+  const allTracks = ["הכל", ...trackSettings.map((setting) => setting.name)];
   const filteredStudents = students
     .filter(s=>
       (trackFilter==="הכל" || (s.track||"")=== trackFilter) &&
@@ -198,6 +265,19 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
                 {t==="הכל"?"📦 כל המסלולים":"🎓 "+t}
               </button>
             ))}
+          </div>
+        )}
+        {trackSettings.length>0 && (
+          <div style={{marginBottom:16,padding:"12px 14px",background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)"}}>
+            <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",marginBottom:8}}>ניהול מסלולי לימודים</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {trackSettings.map((setting) => (
+                <div key={setting.name} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:20,border:"1px solid var(--border)",background:"var(--surface3)"}}>
+                  <span style={{fontSize:12,fontWeight:700,color:"var(--text2)"}}>🎓 {setting.name}</span>
+                  <button className="btn btn-secondary btn-sm" onClick={()=>openTrackEditor(setting.name)}>✏️</button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </>
@@ -306,6 +386,27 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
             </div>
           </div>
         </div>
+      )}
+      {editTrack && (
+        <Modal
+          title="✏️ עריכת מסלול לימודים"
+          onClose={()=>{ setEditTrack(null); setEditTrackName(""); }}
+          footer={(
+            <>
+              <button className="btn btn-primary" onClick={saveTrackEdit} disabled={!editTrackName.trim() || saving}>
+                {saving ? "⏳ שומר..." : "💾 שמור"}
+              </button>
+              <button className="btn btn-secondary" onClick={()=>{ setEditTrack(null); setEditTrackName(""); }}>
+                ביטול
+              </button>
+            </>
+          )}
+        >
+          <div className="form-group" style={{marginBottom:0}}>
+            <label className="form-label">שם מסלול לימודים</label>
+            <input className="form-input" value={editTrackName} onChange={e=>setEditTrackName(e.target.value)} placeholder="שם המסלול"/>
+          </div>
+        </Modal>
       )}
     </div>
   );

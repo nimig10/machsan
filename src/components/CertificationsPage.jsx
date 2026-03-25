@@ -6,9 +6,24 @@ import { Modal } from "./ui.jsx";
 const NIGHT_CERT_ID = "cert_night_studio";
 const NIGHT_CERT_NAME = "הסמכת לילה לאולפנים";
 const NIGHT_COLOR = "#2196f3";
+const TRACK_LOAN_TYPES = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
+const normalizeTrackName = (value = "") => String(value || "").trim();
+const buildTrackSettings = (students = [], existingTrackSettings = []) => {
+  const existing = Array.isArray(existingTrackSettings) ? existingTrackSettings : [];
+  const trackNames = [...new Set((students || []).map((student) => normalizeTrackName(student?.track)).filter(Boolean))];
+  return trackNames.map((name) => {
+    const match = existing.find((setting) => normalizeTrackName(setting?.name) === name);
+    const allowedLoanTypes = TRACK_LOAN_TYPES.filter((loanType) => Array.isArray(match?.loanTypes) && match.loanTypes.includes(loanType));
+    return {
+      name,
+      loanTypes: allowedLoanTypes.length ? allowedLoanTypes : [...TRACK_LOAN_TYPES],
+    };
+  });
+};
 
 export function CertificationsPage({ certifications, setCertifications, showToast, studios=[], setStudios, equipment=[], setEquipment }) {
-  const { types=[], students=[] } = certifications;
+  const { types = [], students = [] } = certifications;
+  const trackSettings = buildTrackSettings(students, certifications?.trackSettings);
   const [certMode, setCertMode] = useState("equipment");
   const [newTypeName, setNewTypeName] = useState("");
   const [newStudioIds, setNewStudioIds] = useState([]);
@@ -17,12 +32,23 @@ export function CertificationsPage({ certifications, setCertifications, showToas
   const [saving, setSaving] = useState(false);
   const [editCert, setEditCert] = useState(null); // {id, name, studioIds}
   const [editEquipmentCert, setEditEquipmentCert] = useState(null); // {id, name, equipmentIds}
+  const [editTrackLoanTypes, setEditTrackLoanTypes] = useState(null);
   const [eqTypeF, setEqTypeF] = useState("all");
   const [eqCatF, setEqCatF] = useState([]);
   const [eqSearch, setEqSearch] = useState("");
   const [eqShowSelected, setEqShowSelected] = useState(false);
 
-  const save = async (updated) => {
+  const save = async (updatedPatch) => {
+    const nextStudents = updatedPatch?.students ?? students;
+    const nextTypes = updatedPatch?.types ?? types;
+    const nextTrackSettings = buildTrackSettings(nextStudents, updatedPatch?.trackSettings ?? certifications?.trackSettings);
+    const updated = {
+      ...certifications,
+      ...updatedPatch,
+      types: nextTypes,
+      students: nextStudents,
+      trackSettings: nextTrackSettings,
+    };
     setSaving(true);
     setCertifications(updated);
     const r = await storageSet("certifications", updated);
@@ -130,6 +156,44 @@ export function CertificationsPage({ certifications, setCertifications, showToas
     }
   };
 
+  const openTrackLoanTypeEditor = (trackName) => {
+    const match = trackSettings.find((setting) => normalizeTrackName(setting.name) === normalizeTrackName(trackName));
+    if (!match) return;
+    setEditTrackLoanTypes({
+      name: match.name,
+      loanTypes: [...match.loanTypes],
+    });
+  };
+
+  const toggleTrackLoanType = (loanType) => {
+    setEditTrackLoanTypes((current) => {
+      if (!current) return current;
+      const nextLoanTypes = current.loanTypes.includes(loanType)
+        ? current.loanTypes.filter((item) => item !== loanType)
+        : [...current.loanTypes, loanType];
+      return { ...current, loanTypes: nextLoanTypes };
+    });
+  };
+
+  const saveTrackLoanTypes = async () => {
+    if (!editTrackLoanTypes) return;
+    const trackName = normalizeTrackName(editTrackLoanTypes.name);
+    if (!trackName) return;
+    if (!editTrackLoanTypes.loanTypes.length) {
+      showToast("error", "יש לבחור לפחות סוג השאלה אחד למסלול");
+      return;
+    }
+    const updatedTrackSettings = trackSettings.map((setting) => (
+      normalizeTrackName(setting.name) === trackName
+        ? { ...setting, loanTypes: TRACK_LOAN_TYPES.filter((loanType) => editTrackLoanTypes.loanTypes.includes(loanType)) }
+        : setting
+    ));
+    if (await save({ types, students, trackSettings: updatedTrackSettings })) {
+      showToast("success", `סוגי ההשאלה עודכנו למסלול ${trackName}`);
+      setEditTrackLoanTypes(null);
+    }
+  };
+
   const toggleNewStudioId = (id) => {
     setNewStudioIds(ids => ids.includes(id) ? ids.filter(i=>i!==id) : [...ids, id]);
   };
@@ -197,7 +261,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
     setEditEquipmentCert(ec => ({ ...ec, equipmentIds: ec.equipmentIds.includes(id) ? ec.equipmentIds.filter(i => i !== id) : [...ec.equipmentIds, id] }));
   };
 
-  const allTracks = ["הכל", ...new Set(students.map(s=>s.track||"").filter(Boolean))];
+  const allTracks = ["הכל", ...trackSettings.map((setting) => setting.name)];
   const filteredStudents = students
     .filter(s=>
       (trackFilter==="הכל" || (s.track||"")===trackFilter) &&
@@ -300,11 +364,16 @@ export function CertificationsPage({ certifications, setCertifications, showToas
           {allTracks.length>1&&(
             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
               {allTracks.map(t=>(
-                <button key={t} type="button" onClick={()=>setTrackFilter(t)}
+                <button key={t} type="button" onClick={()=>setTrackFilter(t)} onDoubleClick={()=>t!=="הכל"&&openTrackLoanTypeEditor(t)}
                   style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${trackFilter===t?"var(--accent)":"var(--border)"}`,background:trackFilter===t?"var(--accent-glow)":"transparent",color:trackFilter===t?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
                   {t==="הכל"?"📦 כל המסלולים":"🎓 "+t}
                 </button>
               ))}
+            </div>
+          )}
+          {trackSettings.length > 0 && (
+            <div style={{fontSize:11,color:"var(--text3)",marginTop:-4,marginBottom:12}}>
+              💡 דאבל קליק על מסלול לימודים כדי להגדיר אילו סוגי השאלה מותרים לסטודנטים של אותו מסלול.
             </div>
           )}
 
@@ -571,6 +640,41 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                 </div>
               </div>
             )}
+          </div>
+        </Modal>
+      )}
+      {editTrackLoanTypes && (
+        <Modal
+          title={`🎓 סיווג סוגי השאלה למסלול ${editTrackLoanTypes.name}`}
+          onClose={()=>setEditTrackLoanTypes(null)}
+          footer={(
+            <>
+              <button className="btn btn-secondary" onClick={()=>setEditTrackLoanTypes(null)}>ביטול</button>
+              <button className="btn btn-primary" onClick={saveTrackLoanTypes} disabled={!editTrackLoanTypes.loanTypes.length || saving}>
+                {saving ? "שומר..." : "💾 שמור"}
+              </button>
+            </>
+          )}
+        >
+          <div style={{display:"flex",flexDirection:"column",gap:14,direction:"rtl"}}>
+            <div style={{fontSize:13,color:"var(--text2)",lineHeight:1.6}}>
+              בחר אילו סוגי השאלה יוצגו לסטודנטים של המסלול הזה בטופס ההשאלה.
+            </div>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+              {TRACK_LOAN_TYPES.map((loanType) => {
+                const active = editTrackLoanTypes.loanTypes.includes(loanType);
+                return (
+                  <button
+                    key={loanType}
+                    type="button"
+                    onClick={()=>toggleTrackLoanType(loanType)}
+                    style={{padding:"8px 16px",borderRadius:24,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"var(--surface2)",color:active?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer"}}
+                  >
+                    {active ? "✅ " : ""}{loanType === "סאונד" ? "השאלת סאונד" : loanType === "הפקה" ? "השאלת הפקה" : loanType === "קולנוע יומית" ? "השאלת קולנוע יומית" : "השאלה פרטית"}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </Modal>
       )}

@@ -140,6 +140,8 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const [aiImporting, setAiImporting] = useState(false);
   const importInputRef = useRef(null);
   const aiImportInputRef = useRef(null);
+  const normalizedTrackOptions = [...new Set((trackOptions || []).map((option) => String(option || "").trim()).filter(Boolean))];
+  const isKnownTrack = (value = "") => normalizedTrackOptions.includes(String(value || "").trim());
 
   const lessonKits = kits.filter(k=>k.kitType==="lesson");
   const getLinkedKit = (lesson) => {
@@ -173,7 +175,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const allTrackFilters = [
     "הכל",
     ...new Set([
-      ...(trackOptions || []).map((option) => String(option || "").trim()).filter(Boolean),
+      ...normalizedTrackOptions,
       ...lessons.map((lesson) => String(lesson?.track || "").trim()).filter(Boolean),
       ...(lessons.some((lesson) => !String(lesson?.track || "").trim()) ? ["ללא מסלול"] : []),
     ]),
@@ -301,6 +303,17 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
       if (groups.size === 0) {
         showToast("error", "לא נמצאו קורסים תקינים לייבוא");
+        setXlImporting(false);
+        return;
+      }
+      const invalidTracks = [...new Set(
+        [...groups.values()]
+          .map((group) => String(group.track || "").trim())
+          .filter((track) => !isKnownTrack(track))
+          .map((track) => track || "ללא מסלול")
+      )];
+      if (invalidTracks.length) {
+        showToast("error", `מסלול לימודים לא קיים: ${invalidTracks.join(", ")}`);
         setXlImporting(false);
         return;
       }
@@ -455,6 +468,15 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
           if (cleanedLessons.length === 0) {
             throw new Error("Gemini לא החזיר שיעורים תקינים אחרי סינון חגים והערות.");
+          }
+          const invalidAiTracks = [...new Set(
+            cleanedLessons
+              .map((item) => String(item?.track || "").trim())
+              .filter((track) => !isKnownTrack(track))
+              .map((track) => track || "ללא מסלול")
+          )];
+          if (invalidAiTracks.length) {
+            throw new Error(`מסלול לימודים לא קיים: ${invalidAiTracks.join(", ")}`);
           }
 
           const groupedLessons = new Map();
@@ -759,6 +781,10 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
 
   const handleSave = async () => {
     if(!name.trim()) { setLocalMsg({type:"error",text:"חובה למלא שם קורס"}); return; }
+    if (!track.trim() || !normalizedTrackOptions.includes(track.trim())) {
+      setLocalMsg({type:"error",text:"מסלול לימודים לא קיים"});
+      return;
+    }
     let finalSchedule = [...schedule];
     if(manStartDate && finalSchedule.length===0) {
       const count = Math.max(1,Math.min(52,Number(manCount)||1));
@@ -827,10 +853,10 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
           </div>
           <div className="form-group">
             <label className="form-label">מסלול לימודים</label>
-            <datalist id="lesson-track-options">
-              {normalizedTrackOptions.map(option => <option key={option} value={option}/>)}
-            </datalist>
-            <input className="form-input" list="lesson-track-options" placeholder='למשל: "הנדסאי קולנוע ב"' value={track} onChange={e=>setTrack(e.target.value)}/>
+            <select className="form-select" value={normalizedTrackOptions.includes(track) ? track : ""} onChange={e=>setTrack(e.target.value)}>
+              <option value="">בחר מסלול לימודים קיים</option>
+              {normalizedTrackOptions.map(option => <option key={option} value={option}>{option}</option>)}
+            </select>
           </div>
         </div>
         <div className="form-group">
