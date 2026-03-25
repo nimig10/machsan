@@ -332,20 +332,19 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
     const [imgUploading, setImgUploading] = useState(false);
     const [imgError, setImgError]         = useState("");
     const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
+    const [isGeneratingTechDetails, setIsGeneratingTechDetails] = useState(false);
 
-    const generateAutoDescription = async (itemName) => {
+    const generateGeminiField = async ({ itemName, systemInstruction, onSuccess, setLoading, errorPrefix }) => {
       if (!itemName) {
         alert("נא להזין שם פריט קודם");
         return;
       }
 
-      setIsGeneratingDesc(true);
+      setLoading(true);
       try {
         const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
         if (!apiKey) throw new Error("חסר מפתח Gemini במשתני הסביבה");
-        const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
-
-        const systemInstruction = "You are a professional AV and film equipment expert. The user will provide an equipment name. Write a concise, professional technical description of this item in Hebrew (around 2-3 sentences), highlighting its main uses and features. Output ONLY the Hebrew text, without formatting or markdown.";
+        const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent";
 
         const response = await fetch(url, {
           method: "POST",
@@ -368,13 +367,33 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
         const generatedText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!generatedText) throw new Error("לא התקבל טקסט מה־API");
 
-        setF(prev => ({ ...prev, description: generatedText }));
+        onSuccess(generatedText);
       } catch (error) {
         console.error("Error generating description:", error);
-        alert(`שגיאה ביצירת התיאור. ${error?.message || "נסה שוב."}`);
+        alert(`${errorPrefix}. ${error?.message || "נסה שוב."}`);
       } finally {
-        setIsGeneratingDesc(false);
+        setLoading(false);
       }
+    };
+
+    const generateAutoDescription = async (itemName) => {
+      await generateGeminiField({
+        itemName,
+        systemInstruction: "You are a professional AV and film equipment expert. The user will provide an equipment name. Write a concise, professional description of this item in Hebrew (around 2-3 sentences), highlighting its main uses and features. Output ONLY the Hebrew text, without formatting or markdown.",
+        onSuccess: (generatedText) => setF(prev => ({ ...prev, description: generatedText })),
+        setLoading: setIsGeneratingDesc,
+        errorPrefix: "שגיאה ביצירת התיאור",
+      });
+    };
+
+    const generateAutoTechnicalDetails = async (itemName) => {
+      await generateGeminiField({
+        itemName,
+        systemInstruction: "You are a professional AV and film equipment technical specialist. The user will provide an equipment name. Write concise technical details in Hebrew for this item (around 3-5 short lines), focusing on relevant specs, connections, power or battery, compatibility, operating range, mounting, or practical setup details when appropriate. Output ONLY the Hebrew text, without formatting or markdown.",
+        onSuccess: (generatedText) => setF(prev => ({ ...prev, technical_details: generatedText })),
+        setLoading: setIsGeneratingTechDetails,
+        errorPrefix: "שגיאה ביצירת הפרטים הטכניים",
+      });
     };
 
     const handleImageUpload = async (e) => {
@@ -417,7 +436,7 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
           <div className="form-group"><label className="form-label">קטגוריה</label><select className="form-select" value={f.category} onChange={e=>s("category",e.target.value)}>{categories.map(c=><option key={c}>{c}</option>)}</select></div>
         </div>
         <div className="form-group">
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap",direction:"ltr"}}>
             <button
               type="button"
               className="btn btn-primary btn-sm"
@@ -428,12 +447,24 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
               <span aria-hidden="true">✨</span>
               {isGeneratingDesc ? "מייצר תיאור..." : "תיאור אוטומטי"}
             </button>
-            <label className="form-label" style={{margin:0}}>תיאור</label>
+            <label className="form-label" style={{margin:0,textAlign:"right"}}>תיאור</label>
           </div>
           <textarea className="form-textarea" rows={2} value={f.description} onChange={e=>s("description",e.target.value)}/>
         </div>
         <div className="form-group">
-          <label className="form-label">פרטים טכניים</label>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap",direction:"ltr"}}>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={()=>generateAutoTechnicalDetails(f.name)}
+              disabled={isGeneratingTechDetails}
+              style={{display:"inline-flex",alignItems:"center",gap:6,fontWeight:800}}
+            >
+              <span aria-hidden="true">✨</span>
+              {isGeneratingTechDetails ? "מייצר פרטים..." : "פרטים טכניים אוטומטיים"}
+            </button>
+            <label className="form-label" style={{margin:0,textAlign:"right"}}>פרטים טכניים</label>
+          </div>
           <textarea
             className="form-textarea"
             rows={3}
