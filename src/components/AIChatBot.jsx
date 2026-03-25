@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { getAvailable, formatLocalDateInput } from '../utils.js';
 
 const fetchWithRetry = async (url, options, maxRetries = 5) => {
   const delays = [2000, 5000, 10000, 20000, 32000];
@@ -16,7 +17,7 @@ const fetchWithRetry = async (url, options, maxRetries = 5) => {
   return fetch(url, options);
 };
 
-export default function AIChatBot({ equipment = [], policies = {}, settings = {} }) {
+export default function AIChatBot({ equipment = [], reservations = [], policies = {}, settings = {} }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     { role: 'assistant', content: 'היי! אני העוזר החכם של המחסן. תאר לי מה אתה הולך לצלם/להקליט ואעזור לך להרכיב ערכה, או שאל אותי על נהלי המחסן.' }
@@ -60,24 +61,41 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
         throw new Error('חסר מפתח Gemini במשתני הסביבה.');
       }
 
-      const compactEquipment = equipment.map(e => ({
-        name: e.name,
-        category: e.category,
-        available: Array.isArray(e.units)
-          ? e.units.filter((unit) => unit?.status === 'תקין').length
-          : Math.max(0, Number(e.total_quantity ?? e.avail ?? 0)),
-        description: e.description || "",
-        technicalDetails: e.technical_details || "",
-      }));
+      const now = new Date();
+      const oneMinuteLater = new Date(now.getTime() + 60000);
+      const currentDate = formatLocalDateInput(now);
+      const currentEndDate = formatLocalDateInput(oneMinuteLater);
+      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const currentEndTime = `${String(oneMinuteLater.getHours()).padStart(2, '0')}:${String(oneMinuteLater.getMinutes()).padStart(2, '0')}`;
+
+      const compactEquipment = equipment
+        .map((equipmentItem) => ({
+          name: equipmentItem.name,
+          category: equipmentItem.category,
+          available: getAvailable(
+            equipmentItem.id,
+            currentDate,
+            currentEndDate,
+            reservations,
+            equipment,
+            null,
+            currentTime,
+            currentEndTime
+          ),
+          description: equipmentItem.description || "",
+          technicalDetails: equipmentItem.technical_details || "",
+        }))
+        .filter((equipmentItem) => equipmentItem.name);
 
       const systemPrompt = `אתה עוזר וירטואלי של מחסן השאלת ציוד אקדמי. עליך לענות אך ורק בעברית, בצורה תמציתית, מקצועית ואדיבה.
 יש לך 3 תפקידים:
 1. בונה ערכות: אם סטודנט מתאר הפקה, המלץ לו על ציוד רלוונטי *אך ורק* מתוך רשימת הציוד הזמין (avail > 0).
 2. מציע חלופות: אם סטודנט מבקש משהו שאינו במלאי, הצע לו חלופה הגיונית מהרשימה.
 3. תמיכת נהלים: ענה על שאלות לגבי חוקים ונהלים בהתבסס על אובייקט הנהלים.
+המלאי שלפניך הוא ספירת זמינות בזמן אמת, אחרי הפחתת פריטים שנמצאים כרגע בהשאלה או באיחור. אם פריט לא מופיע ברשימה, הוא לא קיים כרגע במחסן.
 
 נהלי המחסן: ${JSON.stringify(policies)}
-מלאי הציוד הנוכחי: ${JSON.stringify(compactEquipment)}`;
+מלאי הציוד הזמין כרגע: ${JSON.stringify(compactEquipment)}`;
 
       const history = messages.filter(m => m.role !== 'system').map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',

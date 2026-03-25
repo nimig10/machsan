@@ -1174,6 +1174,30 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     });
   },[form.borrow_date,form.return_date,form.borrow_time,form.return_time,equipment,reservations]);
 
+  useEffect(() => {
+    setItems((currentItems) => {
+      const hasActiveAvailabilityWindow = !!form.borrow_date && !!form.return_date;
+      const nextItems = currentItems
+        .map((item) => {
+          const equipmentItem = equipment.find((entry) => entry.id == item.equipment_id);
+          if (!equipmentItem) return null;
+          const maxQuantity = hasActiveAvailabilityWindow
+            ? (availEq.find((entry) => entry.id == item.equipment_id)?.avail || 0)
+            : Number(item.quantity) || 0;
+          const nextQuantity = Math.max(0, Math.min(Number(item.quantity) || 0, maxQuantity));
+          if (!nextQuantity) return null;
+          return {
+            ...item,
+            name: equipmentItem.name || item.name,
+            quantity: nextQuantity,
+          };
+        })
+        .filter(Boolean);
+
+      return JSON.stringify(currentItems) === JSON.stringify(nextItems) ? currentItems : nextItems;
+    });
+  }, [availEq, equipment, form.borrow_date, form.return_date]);
+
   const getItem = id => items.find(i=>i.equipment_id==id)||{quantity:0};
   const setQty  = (id,qty) => {
     const avail = availEq.find(e=>e.id==id)?.avail||0;
@@ -2031,7 +2055,7 @@ ${inventory}
         </div>
       </div>
     )}
-    <AIChatBot equipment={equipment} policies={policies} settings={siteSettings} />
+    <AIChatBot equipment={equipment} reservations={reservations} policies={policies} settings={siteSettings} />
     </>
   );
 }

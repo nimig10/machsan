@@ -6505,6 +6505,7 @@ export default function App() {
   const isAdmin = window.location.pathname.startsWith("/admin");
   const isCalendarView = window.location.pathname.startsWith("/calendar");
   const isManagerCalendarView = window.location.pathname.startsWith("/manager-calendar");
+  const isPublicFormView = !isAdmin && !isCalendarView && !isManagerCalendarView;
   const urlToken = new URLSearchParams(window.location.search).get("token")||"";
   const [page, setPage]               = useState("dashboard");
   const [equipment, _setEquipment]     = useState([]);
@@ -6564,6 +6565,33 @@ export default function App() {
   policiesRef.current = policies;
   certificationsRef.current = certifications;
   siteSettingsRef.current = siteSettings;
+
+  const applyPublicLiveSync = (key, value) => {
+    if (key === "equipment" && Array.isArray(value)) {
+      const normalizedEquipment = normalizeEquipmentTagFlags(value).map(ensureUnits);
+      if (!dataEquals(equipmentRef.current, normalizedEquipment)) {
+        _setEquipment(normalizedEquipment);
+      }
+      return;
+    }
+
+    if (key === "reservations" && Array.isArray(value)) {
+      const normalizedReservations = normalizeReservationsForArchive(value);
+      if (!dataEquals(reservationsRef.current, normalizedReservations)) {
+        _setReservations(normalizedReservations);
+      }
+      return;
+    }
+
+    if (key === "categories" && Array.isArray(value) && !dataEquals(categoriesRef.current, value)) {
+      _setCategories(value);
+      return;
+    }
+
+    if (key === "categoryLoanTypes" && value && typeof value === "object" && !Array.isArray(value) && !dataEquals(categoryLoanTypesRef.current, value)) {
+      _setCategoryLoanTypes(value);
+    }
+  };
 
   const getUndoSnapshot = () => ({
     equipment: safeClone(equipmentRef.current),
@@ -6775,6 +6803,70 @@ export default function App() {
       setLoading(false);
     })();
   },[]);
+
+  useEffect(() => {
+    if (loading || !isPublicFormView) return undefined;
+    let cancelled = false;
+
+    const refreshPublicInventory = async () => {
+      try {
+        const [eqR, resR, catsR, catLoanTypesR] = await Promise.all([
+          storageGet("equipment"),
+          storageGet("reservations"),
+          storageGet("categories"),
+          storageGet("categoryLoanTypes"),
+        ]);
+        if (cancelled) return;
+        applyPublicLiveSync("equipment", eqR?.value);
+        applyPublicLiveSync("reservations", resR?.value);
+        applyPublicLiveSync("categories", catsR?.value);
+        applyPublicLiveSync("categoryLoanTypes", catLoanTypesR?.value);
+      } catch (error) {
+        console.warn("public inventory sync failed", error);
+      }
+    };
+
+    const handleFocus = () => {
+      void refreshPublicInventory();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshPublicInventory();
+      }
+    };
+
+    const handleStorage = (event) => {
+      if (event.storageArea !== window.localStorage || !event.key?.startsWith("cache_")) return;
+      const key = event.key.replace(/^cache_/, "");
+      if (!["equipment", "reservations", "categories", "categoryLoanTypes"].includes(key)) return;
+      try {
+        const parsedValue = event.newValue ? JSON.parse(event.newValue) : null;
+        applyPublicLiveSync(key, parsedValue);
+      } catch (error) {
+        console.warn("public inventory cache sync failed", error);
+        void refreshPublicInventory();
+      }
+    };
+
+    void refreshPublicInventory();
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      void refreshPublicInventory();
+    }, 10000);
+
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("storage", handleStorage);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("storage", handleStorage);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loading, isPublicFormView]);
 
   useEffect(() => {
     if (loading) return;
