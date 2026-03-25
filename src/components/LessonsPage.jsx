@@ -410,14 +410,21 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           }
 
           const systemInstruction = `
-          אתה מנהל מערכת חכם במכללת קולנוע וסאונד. מטרתך לחלץ שיעורים מקובץ CSV מבולגן ולהחזירם כ-JSON.
-          חוקים קריטיים:
-          1. התעלם לחלוטין משורות של חופשות, חגים או שבתות (למשל: 'פורים', 'שבת', '9 באב', 'יום השואה'). אל תיצור עבורם שיעור!
-          2. התעלם משורות של טקסט חופשי או הערות מנהלה.
-          3. חלץ שעות לפורמט HH:MM.
-          4. אם חסרה שעה - הגדר '00:00'.
-          5. נסה להבין את מסלול הלימודים מהכותרות. אם לא ברור, כתוב 'כללי'.
-          6. אם קיים תאריך מפורש בקובץ, החזר אותו בפורמט YYYY-MM-DD.
+אתה מנהל מערכת חכם במכללת קולנוע וסאונד. מטרתך לחלץ נתוני קורסים מקובץ CSV ולהחזירם כ-JSON.
+
+מבנה הטמפלייט הצפוי (ייתכנו שגיאות כתיב, מילים חלקיות, ניסוחים שונים — התמודד איתם):
+• כותרת קורס: "מסלול לימודים" / "מסלול", "שם" (=שם הקורס), "שיוך אולפן" / "אולפן" (=שם האולפן), "מפגשים" (=מספר מפגשים)
+• פרטי מרצה: "פרטי מרצה", "שם", "מייל" / "אימייל" / "email", "טלפון" / "נייד"
+• טבלת מפגשים: "מפגשים" / "מפגש" / "#", "תאריך", "שעת התחלה" / "שעה", "שעת סיום", "נושא המפגש" / "נושא" / "תיאור"
+
+חוקים:
+1. לכל שורת מפגש — חלץ: date, startTime, endTime, sessionTopic (נושא המפגש), dayOfWeek
+2. חלץ studioName בדיוק כמו שמופיע ב"שיוך אולפן" (גם אם הכתיב שגוי)
+3. חלץ instructorEmail ו-instructorPhone מסקשן "פרטי מרצה" — שייך אותם לאותו קורס
+4. חלץ שעות לפורמט HH:MM. אם חסרה שעה — כתוב '00:00'
+5. תאריך בפורמט YYYY-MM-DD. אם הוא מספר אקסל (כגון 46120) — המר ל-YYYY-MM-DD (בסיס: 1900-01-01)
+6. זהה מסלול לימודים מהכותרות. אם לא ברור — כתוב 'כללי'
+7. התעלם לחלוטין משורות של: חגים, שבתות, פגרות, הודעות מנהלה ("פורים", "שבת", "פגרה", "סגור" וכו')
         `;
 
           const requestBody = {
@@ -438,6 +445,10 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                     dayOfWeek: { type: "STRING" },
                     startTime: { type: "STRING" },
                     endTime: { type: "STRING" },
+                    studioName: { type: "STRING" },
+                    sessionTopic: { type: "STRING" },
+                    instructorEmail: { type: "STRING" },
+                    instructorPhone: { type: "STRING" },
                   },
                   required: ["id", "date", "courseName", "teacher", "track", "dayOfWeek", "startTime", "endTime"],
                 },
@@ -501,7 +512,17 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             const lessonDate = normalizeImportedLessonDate(item?.date, dayOfWeek);
             const startTime = normalizeImportedLessonTime(item?.startTime);
             const endTime = normalizeImportedLessonTime(item?.endTime);
+            const sessionTopic = String(item?.sessionTopic || "").trim();
+            const studioNameRaw = String(item?.studioName || "").trim();
+            const itemEmail = String(item?.instructorEmail || "").trim();
+            const itemPhone = String(item?.instructorPhone || "").trim();
             if (!courseName) return;
+
+            // fuzzy match studio by first word of studioName (case-insensitive)
+            const studioFirstWord = studioNameRaw.split(/\s+/)[0]?.toLowerCase();
+            const matchedStudio = studioFirstWord
+              ? studios.find(s => s.name?.toLowerCase().includes(studioFirstWord))
+              : null;
 
             const groupKey = `${courseName}__${teacher}__${track}`;
             if (!groupedLessons.has(groupKey)) {
@@ -509,22 +530,28 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                 id: `lesson_ai_${Date.now()}_${index}`,
                 name: courseName,
                 instructorName: teacher,
-                instructorPhone: "",
-                instructorEmail: "",
+                instructorPhone: itemPhone,
+                instructorEmail: itemEmail,
                 track,
                 description: "יובא באמצעות ייבוא אקסל חכם (AI)",
-                studioId: null,
+                studioId: matchedStudio?.id || null,
                 kitId: null,
                 created_at: new Date().toISOString(),
                 schedule: [],
               });
+            } else {
+              // enrich email/phone if not yet set
+              const g = groupedLessons.get(groupKey);
+              if (!g.instructorEmail && itemEmail) g.instructorEmail = itemEmail;
+              if (!g.instructorPhone && itemPhone) g.instructorPhone = itemPhone;
+              if (!g.studioId && matchedStudio?.id) g.studioId = matchedStudio.id;
             }
 
             groupedLessons.get(groupKey).schedule.push(normalizeScheduleEntry({
               date: lessonDate,
               startTime,
               endTime,
-              topic: dayOfWeek ? `מערכת קבועה · יום ${dayOfWeek}` : "",
+              topic: sessionTopic || (dayOfWeek ? `יום ${dayOfWeek}` : ""),
             }));
           });
 
