@@ -6075,7 +6075,7 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
 
 // ─── SETTINGS PAGE ───────────────────────────────────────────────────────────
 function SettingsPage({ siteSettings, setSiteSettings, showToast }) {
-  const [draft, setDraft] = useState({ ...siteSettings });
+  const [draft, setDraft] = useState({ aiMaxRequests: 5, ...siteSettings });
   const [saving, setSaving] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   const [soundLogoUploading, setSoundLogoUploading] = useState(false);
@@ -6265,6 +6265,26 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast }) {
               <button type="button" style={{ background: draft.adminAccentColor||"#f5a623", color: "#0a0c10", border: "none", borderRadius: 8, padding: "8px 18px", fontWeight: 800, cursor: "default", fontSize: "inherit" }}>כפתור לדוגמה</button>
               <span style={{ color: draft.adminAccentColor||"#f5a623", fontWeight: 800, fontSize: "inherit" }}>טקסט צבעוני</span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-header"><div className="card-title">🤖 עוזר AI לסטודנטים</div></div>
+        <div style={{ padding: "16px 20px" }}>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14 }}>
+            הגבלת מספר השאלות שכל סטודנט יכול לשאול את עוזר ה-AI ביום אחד.
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>הגבלת בקשות AI לסטודנט (ליום)</label>
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={draft.aiMaxRequests ?? 5}
+              onChange={e => setDraft(p => ({ ...p, aiMaxRequests: Number(e.target.value) }))}
+              style={{ width: 80, padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: 14, textAlign: "center" }}
+            />
           </div>
         </div>
       </div>
@@ -6500,7 +6520,7 @@ export default function App() {
   const [kits, _setKits]               = useState([]);
   const [policies, _setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"" });
   const [certifications, _setCertifications] = useState({ types:[], students:[] });
-  const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14 });
+  const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14, aiMaxRequests:5 });
   const [studios, _setStudios] = useState([]);
   const [studioBookings, _setStudioBookings] = useState([]);
   const [lessons, _setLessons] = useState([]);
