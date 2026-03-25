@@ -1,23 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { getAvailable, formatLocalDateInput, storageGet } from '../utils.js';
 
-const fetchWithRetry = async (url, options, maxRetries = 5) => {
-  const delays = [2000, 5000, 10000, 20000, 32000];
-  for (let i = 0; i < maxRetries; i += 1) {
-    const response = await fetch(url, options);
-    if (response.status === 429) {
-      const delay = delays[i] ?? delays[delays.length - 1];
-      console.warn(`AI chat rate limit hit. Retrying in ${delay / 1000} seconds...`);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      continue;
-    }
-    return response;
-  }
-  return fetch(url, options);
-};
-
-export default function AIChatBot({ equipment = [], reservations = [], policies = {}, settings = {}, refreshInventory = null }) {
+export default function AIChatBot({ equipment = [], reservations = [], policies = {}, settings = {} }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     { role: 'assistant', content: 'היי! אני העוזר החכם של המחסן. תאר לי מה אתה הולך לצלם/להקליט ואעזור לך להרכיב ערכה, או שאל אותי על נהלי המחסן.' }
@@ -32,7 +16,7 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
   const getRequestsCount = () => parseInt(localStorage.getItem(todayKey)) || 0;
   const incrementRequestsCount = () => localStorage.setItem(todayKey, getRequestsCount() + 1);
 
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.REACT_APP_GEMINI_API_KEY || "";
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -57,64 +41,32 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
     setIsTyping(true);
 
     try {
-      if (!apiKey) {
-        throw new Error('חסר מפתח Gemini במשתני הסביבה.');
-      }
-
-      let liveEquipment = equipment;
-      let liveReservations = reservations;
-      try {
-        if (typeof refreshInventory === 'function') {
-          const refreshed = await refreshInventory();
-          if (Array.isArray(refreshed?.equipment)) liveEquipment = refreshed.equipment;
-          if (Array.isArray(refreshed?.reservations)) liveReservations = refreshed.reservations;
-        } else {
-          const [freshEquipment, freshReservations] = await Promise.all([
-            storageGet('equipment'),
-            storageGet('reservations'),
-          ]);
-          if (Array.isArray(freshEquipment)) liveEquipment = freshEquipment;
-          if (Array.isArray(freshReservations)) liveReservations = freshReservations;
+      // חישוב מלאי אמיתי: total_quantity מינוס פריטים שמושאלים כרגע (מאושר/באיחור)
+      const compactEquipment = equipment.map(e => {
+        const total = Number(e.total_quantity) || 0;
+        // ספירת יחידות תקינות
+        const working = Array.isArray(e.units)
+          ? e.units.filter(u => u.status === "תקין").length
+          : total;
+        // ספירת פריטים מושאלים כרגע
+        let borrowed = 0;
+        for (const res of reservations) {
+          if (res.status !== "מאושר" && res.status !== "באיחור") continue;
+          const item = res.items?.find(i => i.equipment_id == e.id);
+          if (item) borrowed += Number(item.quantity) || 0;
         }
-      } catch (refreshError) {
-        console.warn('AI chat inventory refresh failed', refreshError);
-      }
-
-      const now = new Date();
-      const oneMinuteLater = new Date(now.getTime() + 60000);
-      const currentDate = formatLocalDateInput(now);
-      const currentEndDate = formatLocalDateInput(oneMinuteLater);
-      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-      const currentEndTime = `${String(oneMinuteLater.getHours()).padStart(2, '0')}:${String(oneMinuteLater.getMinutes()).padStart(2, '0')}`;
-
-      const compactEquipment = liveEquipment
-        .map((equipmentItem) => ({
-          name: equipmentItem.name,
-          category: equipmentItem.category,
-          available: getAvailable(
-            equipmentItem.id,
-            currentDate,
-            currentEndDate,
-            liveReservations,
-            liveEquipment,
-            null,
-            currentTime,
-            currentEndTime
-          ),
-          description: equipmentItem.description || "",
-          technicalDetails: equipmentItem.technical_details || "",
-        }))
-        .filter((equipmentItem) => equipmentItem.name);
+        return { name: e.name, category: e.category, total: working, borrowed, available: Math.max(0, working - borrowed) };
+      });
 
       const systemPrompt = `אתה עוזר וירטואלי של מחסן השאלת ציוד אקדמי. עליך לענות אך ורק בעברית, בצורה תמציתית, מקצועית ואדיבה.
 יש לך 3 תפקידים:
-1. בונה ערכות: אם סטודנט מתאר הפקה, המלץ לו על ציוד רלוונטי *אך ורק* מתוך רשימת הציוד הזמין (avail > 0).
-2. מציע חלופות: אם סטודנט מבקש משהו שאינו במלאי, הצע לו חלופה הגיונית מהרשימה.
+1. בונה ערכות: אם סטודנט מתאר הפקה, המלץ לו על ציוד רלוונטי *אך ורק* מתוך רשימת הציוד הזמין (available > 0). הערכים: total = כמות כוללת, borrowed = כמה מושאל כרגע, available = כמה זמין עכשיו.
+2. מציע חלופות: אם סטודנט מבקש משהו שאינו במלאי (available = 0), הצע לו חלופה הגיונית מאותה קטגוריה.
 3. תמיכת נהלים: ענה על שאלות לגבי חוקים ונהלים בהתבסס על אובייקט הנהלים.
-המלאי שלפניך הוא ספירת זמינות בזמן אמת, אחרי הפחתת פריטים שנמצאים כרגע בהשאלה או באיחור. אם פריט לא מופיע ברשימה, הוא לא קיים כרגע במחסן.
+חשוב: אם פריט לא מופיע ברשימה, הוא לא קיים במחסן. אל תמציא פריטים.
 
 נהלי המחסן: ${JSON.stringify(policies)}
-מלאי הציוד הזמין כרגע: ${JSON.stringify(compactEquipment)}`;
+מלאי הציוד הנוכחי: ${JSON.stringify(compactEquipment)}`;
 
       const history = messages.filter(m => m.role !== 'system').map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
@@ -122,37 +74,22 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
       }));
       history.push({ role: 'user', parts: [{ text: userMessage }] });
 
-      let result = null;
-      let lastError = null;
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: history,
+          systemInstruction: { parts: [{ text: systemPrompt }] }
+        })
+      });
 
-      for (const modelName of ['gemini-2.5-flash', 'gemini-2.5-flash-lite']) {
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-        const response = await fetchWithRetry(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: history,
-            systemInstruction: { parts: [{ text: systemPrompt }] }
-          })
-        });
-
-        if (!response.ok) {
-          const errText = await response.text();
-          lastError = new Error(errText || `שגיאה ${response.status}`);
-          if (response.status === 404 || response.status === 429 || response.status === 503) {
-            continue;
-          }
-          throw lastError;
-        }
-
-        result = await response.json();
-        if (result?.candidates?.length) break;
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        const errMsg = errJson?.error?.message || `שגיאה ${response.status}`;
+        throw new Error(errMsg);
       }
-
-      if (!result?.candidates?.length) {
-        throw lastError || new Error("לא התקבלה תשובה תקינה מעוזר ה־AI.");
-      }
-
+      const result = await response.json();
       const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text;
 
       setMessages(prev => [...prev, { role: 'assistant', content: aiText }]);
@@ -167,21 +104,17 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
   };
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 600;
-  const panelWidth = isMobile ? Math.min(300, window.innerWidth - 24) : 340;
-  const topOffset = isMobile ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : 20;
-  const rightOffset = isMobile ? 'calc(env(safe-area-inset-right, 0px) + 12px)' : 20;
-  const bubbleSize = isMobile ? 46 : 50;
-  const bubbleIconSize = isMobile ? 22 : 24;
+  const panelWidth = isMobile ? Math.min(300, window.innerWidth - 32) : 340;
 
   const widget = (
     <div style={{
       position: 'fixed',
-      top: topOffset,
-      right: rightOffset,
+      bottom: 20,
+      left: 20,
       zIndex: 2147483647,
       display: 'flex',
       flexDirection: 'column',
-      alignItems: 'flex-end',
+      alignItems: 'flex-start',
     }}>
 
       {/* Panel */}
@@ -323,11 +256,11 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
             background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
             border: 'none',
             borderRadius: '50%',
-            width: bubbleSize,
-            height: bubbleSize,
+            width: 56,
+            height: 56,
             cursor: 'pointer',
             boxShadow: '0 4px 20px rgba(99,102,241,0.55)',
-            fontSize: bubbleIconSize,
+            fontSize: 26,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
