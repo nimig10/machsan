@@ -116,6 +116,18 @@ function normalizeImportedLessonTime(timeValue = "") {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
+function buildLessonTimeOptions(startHour = 7, endHour = 23) {
+  const options = [];
+  for (let hour = startHour; hour <= endHour; hour += 1) {
+    ["00", "15", "30", "45"].forEach((minutes) => {
+      options.push(`${String(hour).padStart(2, "0")}:${minutes}`);
+    });
+  }
+  return options;
+}
+
+const LESSON_TIME_OPTIONS = buildLessonTimeOptions();
+
 function splitImportedLessonTimeRange(timeRangeValue = "") {
   const raw = String(timeRangeValue || "").trim();
   if (!raw) return { startTime: "", endTime: "" };
@@ -470,24 +482,21 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 7. התעלם לחלוטין משורות של: חגים, שבתות, פגרות, הודעות מנהלה ("פורים", "שבת", "פגרה", "סגור" וכו')
         `;
 
+          const csvText = csvData;
           const prompt = `
-אני מעביר לך תוכן גולמי (CSV) שחולץ מקובץ מערכת שעות של שיעורים וקורסים.
+  אני מעביר לך תוכן גולמי (CSV) שחולץ מקובץ מערכת שעות של שיעורים וקורסים.
 
-שים לב לדגשים הקריטיים הבאים:
-1. תאריכים: עמודת התאריכים מופיעה לרוב בפורמט DD/MM/YYYY (למשל 26/03/2026). עליך להמיר אותה ולהחזיר אותה בפורמט סטנדרטי בלבד: YYYY-MM-DD.
-2. שעות (קריטי): בעמודת "טווח שעות" מופיעות השעות במחובר (למשל "09:00-11:45"). עליך לפצל את הטווח הזה לשני שדות נפרדים לחלוטין:
-   - startTime: שעת ההתחלה המדויקת (למשל "09:00").
-   - endTime: שעת הסיום המדויקת (למשל "11:45").
-3. חלץ גם את נושא השיעור (title), מסלול (track), מורה (instructor) ושנה.
-4. אם מופיע נושא מפגש מפורט, שמור אותו גם תחת sessionTopic.
-5. אם מופיע יום בשבוע, חלץ גם dayOfWeek.
-6. אם מופיע שיוך אולפן, חלץ גם studioName.
-7. אם יש פרטי מרצה נוספים, חלץ גם instructorEmail ו-instructorPhone.
-8. אם התאריך מופיע כמספר אקסל, המר אותו ל-YYYY-MM-DD.
-9. התעלם לחלוטין משורות של חגים, שבתות, פגרות, טקסט חופשי או הודעות מנהלה.
+  חובה עליך ליישם את החוקים הבאים:
+  1. תאריכים: המר כל תאריך שמופיע (לרוב בפורמט DD/MM/YYYY) לפורמט סטנדרטי בלבד: YYYY-MM-DD (לדוגמה: 2026-03-26).
+  2. פיצול טווח שעות (קריטי!): תחת "טווח שעות" תמצא זמנים כמו "09:00-11:45" או "12:15-15:00".
+     חובה עליך לפצל אותם לשני שדות נפרדים לחלוטין:
+     - startTime: שעת ההתחלה בדיוק כפי שהיא מופיעה (למשל "09:00" או "12:15").
+     - endTime: שעת הסיום בדיוק כפי שהיא מופיעה (למשל "11:45" או "15:00").
+     אל תשנה או תעגל את הדקות, פשוט פצל את המחרוזת לפי המקף.
+  3. חלץ גם את נושא השיעור (title), מסלול (track), מורה (instructor) ושנה.
 
-הנתונים הגולמיים (CSV):
-${csvData}
+  הנתונים הגולמיים (CSV):
+  ${csvText}
           `;
 
           const requestBody = {
@@ -501,9 +510,9 @@ ${csvData}
                   type: "OBJECT",
                   properties: {
                     title: { type: "STRING", description: "נושא השיעור / שם הקורס" },
-                    date: { type: "STRING", description: "תאריך השיעור בפורמט YYYY-MM-DD (חובה להמיר לפורמט זה)" },
-                    startTime: { type: "STRING", description: "שעת התחלה מדויקת בפורמט HH:MM (למשל 09:00), חולץ מתוך 'טווח שעות'" },
-                    endTime: { type: "STRING", description: "שעת סיום מדויקת בפורמט HH:MM (למשל 11:45), חולץ מתוך 'טווח שעות'" },
+                    date: { type: "STRING", description: "תאריך השיעור בפורמט YYYY-MM-DD" },
+                    startTime: { type: "STRING", description: "שעת התחלה בפורמט HH:MM (למשל 09:00 או 12:15)" },
+                    endTime: { type: "STRING", description: "שעת סיום בפורמט HH:MM (למשל 11:45 או 15:00)" },
                     track: { type: "STRING", description: "מסלול לימודים" },
                     instructor: { type: "STRING", description: "שם המורה / מרצה" },
                     year: { type: "STRING", description: "שנה (א/ב/ג)" },
@@ -816,9 +825,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
   const [manEndTime, setManEndTime]     = useState("13:00");
   const [manCount, setManCount]         = useState(1);
 
-  const LESSON_TIMES = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30",
-    "13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30",
-    "17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30","22:00"];
+  const LESSON_TIMES = LESSON_TIME_OPTIONS;
 
   const buildAndAppendSchedule = () => {
     if(!manStartDate) { setLocalMsg({type:"error",text:"יש לבחור תאריך"}); return; }
