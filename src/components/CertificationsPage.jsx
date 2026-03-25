@@ -1,5 +1,5 @@
 // CertificationsPage.jsx — certifications management with equipment/studio modes
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { storageSet } from "../utils.js";
 import { Modal } from "./ui.jsx";
 
@@ -28,7 +28,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
   const [newTypeName, setNewTypeName] = useState("");
   const [newStudioIds, setNewStudioIds] = useState([]);
   const [search, setSearch] = useState("");
-  const [trackFilter, setTrackFilter] = useState("הכל");
+  const [trackFilter, setTrackFilter] = useState([]);
   const [saving, setSaving] = useState(false);
   const [editCert, setEditCert] = useState(null); // {id, name, studioIds}
   const [editEquipmentCert, setEditEquipmentCert] = useState(null); // {id, name, equipmentIds}
@@ -37,6 +37,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
   const [eqCatF, setEqCatF] = useState([]);
   const [eqSearch, setEqSearch] = useState("");
   const [eqShowSelected, setEqShowSelected] = useState(false);
+  const trackClickTimeoutRef = useRef(null);
 
   const save = async (updatedPatch) => {
     const nextStudents = updatedPatch?.students ?? students;
@@ -262,9 +263,36 @@ export function CertificationsPage({ certifications, setCertifications, showToas
   };
 
   const allTracks = ["הכל", ...trackSettings.map((setting) => setting.name)];
+  const allTracksSelected = !trackFilter.length;
+  const isTrackSelected = (trackName) => trackName === "הכל" ? allTracksSelected : trackFilter.includes(trackName);
+  const toggleTrackFilter = (trackName) => {
+    if (trackName === "הכל") {
+      setTrackFilter([]);
+      return;
+    }
+    setTrackFilter((current) => (
+      current.includes(trackName)
+        ? current.filter((item) => item !== trackName)
+        : [...current, trackName]
+    ));
+  };
+  const handleTrackChipClick = (trackName) => {
+    if (trackClickTimeoutRef.current) clearTimeout(trackClickTimeoutRef.current);
+    trackClickTimeoutRef.current = setTimeout(() => {
+      toggleTrackFilter(trackName);
+      trackClickTimeoutRef.current = null;
+    }, 220);
+  };
+  const handleTrackChipDoubleClick = (trackName) => {
+    if (trackClickTimeoutRef.current) {
+      clearTimeout(trackClickTimeoutRef.current);
+      trackClickTimeoutRef.current = null;
+    }
+    if (trackName !== "הכל") openTrackLoanTypeEditor(trackName);
+  };
   const filteredStudents = students
     .filter(s=>
-      (trackFilter==="הכל" || (s.track||"")===trackFilter) &&
+      (allTracksSelected || trackFilter.includes(s.track||"")) &&
       (!search || s.name?.includes(search) || s.email?.includes(search))
     )
     .sort((a, b) => {
@@ -364,8 +392,8 @@ export function CertificationsPage({ certifications, setCertifications, showToas
           {allTracks.length>1&&(
             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
               {allTracks.map(t=>(
-                <button key={t} type="button" onClick={()=>setTrackFilter(t)} onDoubleClick={()=>t!=="הכל"&&openTrackLoanTypeEditor(t)}
-                  style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${trackFilter===t?"var(--accent)":"var(--border)"}`,background:trackFilter===t?"var(--accent-glow)":"transparent",color:trackFilter===t?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                <button key={t} type="button" onClick={()=>handleTrackChipClick(t)} onDoubleClick={()=>handleTrackChipDoubleClick(t)}
+                  style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${isTrackSelected(t)?"var(--accent)":"var(--border)"}`,background:isTrackSelected(t)?"var(--accent-glow)":"transparent",color:isTrackSelected(t)?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
                   {t==="הכל"?"📦 כל המסלולים":"🎓 "+t}
                 </button>
               ))}
@@ -373,7 +401,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
           )}
           {trackSettings.length > 0 && (
             <div style={{fontSize:11,color:"var(--text3)",marginTop:-4,marginBottom:12}}>
-              💡 דאבל קליק על מסלול לימודים כדי להגדיר אילו סוגי השאלה מותרים לסטודנטים של אותו מסלול.
+              💡 אפשר לבחור כמה מסלולים יחד. דאבל קליק על מסלול לימודים פותח את הגדרת סוגי ההשאלה שלו.
             </div>
           )}
 

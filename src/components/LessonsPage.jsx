@@ -135,7 +135,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const [mode, setMode] = useState(null); // null | "add" | "edit"
   const [editTarget, setEditTarget] = useState(null);
   const [search, setSearch] = useState("");
-  const [trackFilter, setTrackFilter] = useState("הכל");
+  const [trackFilter, setTrackFilter] = useState([]);
   const [xlImporting, setXlImporting] = useState(false);
   const [aiImporting, setAiImporting] = useState(false);
   const importInputRef = useRef(null);
@@ -180,10 +180,23 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       ...(lessons.some((lesson) => !String(lesson?.track || "").trim()) ? ["ללא מסלול"] : []),
     ]),
   ];
+  const allTracksSelected = !trackFilter.length;
+  const isTrackSelected = (trackName) => trackName === "הכל" ? allTracksSelected : trackFilter.includes(trackName);
+  const toggleTrackFilter = (trackName) => {
+    if (trackName === "הכל") {
+      setTrackFilter([]);
+      return;
+    }
+    setTrackFilter((current) => (
+      current.includes(trackName)
+        ? current.filter((item) => item !== trackName)
+        : [...current, trackName]
+    ));
+  };
   const filtered = lessons.filter((lesson) => {
     const matchesSearch = !search || lesson.name?.includes(search) || lesson.instructorName?.includes(search);
     const trackLabel = getLessonTrackLabel(lesson);
-    const matchesTrack = trackFilter === "הכל" || trackLabel === trackFilter;
+    const matchesTrack = allTracksSelected || trackFilter.includes(trackLabel);
     return matchesSearch && matchesTrack;
   });
   const groupedLessons = filtered.reduce((groups, lesson) => {
@@ -610,12 +623,12 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           {allTrackFilters.length > 1 && (
             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
               {allTrackFilters.map((trackName) => {
-                const active = trackFilter === trackName;
+                const active = isTrackSelected(trackName);
                 return (
                   <button
                     key={trackName}
                     type="button"
-                    onClick={() => setTrackFilter(trackName)}
+                    onClick={() => toggleTrackFilter(trackName)}
                     style={{
                       padding:"5px 12px",
                       borderRadius:20,
@@ -633,9 +646,14 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
               })}
             </div>
           )}
+          {allTrackFilters.length > 1 && (
+            <div style={{fontSize:11,color:"var(--text3)",marginTop:-8,marginBottom:16}}>
+              💡 אפשר לבחור כמה מסלולי לימוד יחד כדי להציג אותם במקביל.
+            </div>
+          )}
 
           {filtered.length===0
-            ? <div className="empty-state"><div className="emoji">📽️</div><div>{lessons.length===0 ? "אין קורסים עדיין" : "לא נמצאו קורסים למסלול שנבחר"}</div><div style={{fontSize:13,color:"var(--text3)"}}>{lessons.length===0 ? 'לחץ "➕ קורס חדש" כדי להתחיל' : "נסה לשנות חיפוש או מסלול לימודים"}</div></div>
+            ? <div className="empty-state"><div className="emoji">📽️</div><div>{lessons.length===0 ? "אין קורסים עדיין" : "לא נמצאו קורסים למסלולים שנבחרו"}</div><div style={{fontSize:13,color:"var(--text3)"}}>{lessons.length===0 ? 'לחץ "➕ קורס חדש" כדי להתחיל' : "נסה לשנות חיפוש או מסלולי לימוד"}</div></div>
             : <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {Object.entries(groupedLessons)
                   .sort(([left], [right]) => left.localeCompare(right, "he"))

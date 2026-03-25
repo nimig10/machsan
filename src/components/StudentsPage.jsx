@@ -29,7 +29,7 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
   const [editTrack, setEditTrack] = useState(null);
   const [editTrackName, setEditTrackName] = useState("");
   const [search, setSearch] = useState("");
-  const [trackFilter, setTrackFilter] = useState("הכל");
+  const [trackFilter, setTrackFilter] = useState([]);
   const [saving, setSaving] = useState(false);
   const [xlImporting, setXlImporting] = useState(false);
 
@@ -155,7 +155,10 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
     ));
     if (await save({ types, students: updatedStudents, trackSettings: updatedTrackSettings })) {
       showToast("success", `שם המסלול עודכן ל־${nextTrackName}`);
-      if (trackFilter === previousTrackName) setTrackFilter(nextTrackName);
+      setTrackFilter((current) => {
+        if (!Array.isArray(current) || !current.includes(previousTrackName)) return current;
+        return [...new Set(current.map((trackName) => trackName === previousTrackName ? nextTrackName : trackName))];
+      });
       setEditTrack(null);
       setEditTrackName("");
     }
@@ -239,9 +242,22 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
 
   // ── Filtering ──
   const allTracks = ["הכל", ...trackSettings.map((setting) => setting.name)];
+  const allTracksSelected = !trackFilter.length;
+  const isTrackSelected = (trackName) => trackName === "הכל" ? allTracksSelected : trackFilter.includes(trackName);
+  const toggleTrackFilter = (trackName) => {
+    if (trackName === "הכל") {
+      setTrackFilter([]);
+      return;
+    }
+    setTrackFilter((current) => (
+      current.includes(trackName)
+        ? current.filter((item) => item !== trackName)
+        : [...current, trackName]
+    ));
+  };
   const filteredStudents = students
     .filter(s=>
-      (trackFilter==="הכל" || (s.track||"")=== trackFilter) &&
+      (allTracksSelected || trackFilter.includes(s.track||"")) &&
       (!search || s.name?.includes(search) || s.email?.includes(search) || s.phone?.includes(search))
     )
     .sort((a, b) => {
@@ -293,11 +309,16 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
         {allTracks.length>1&&(
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
             {allTracks.map(t=>(
-              <button key={t} type="button" onClick={()=>setTrackFilter(t)}
-                style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${trackFilter===t?"var(--accent)":"var(--border)"}`,background:trackFilter===t?"var(--accent-glow)":"transparent",color:trackFilter===t?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+              <button key={t} type="button" onClick={()=>toggleTrackFilter(t)}
+                style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${isTrackSelected(t)?"var(--accent)":"var(--border)"}`,background:isTrackSelected(t)?"var(--accent-glow)":"transparent",color:isTrackSelected(t)?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
                 {t==="הכל"?"📦 כל המסלולים":"🎓 "+t}
               </button>
             ))}
+          </div>
+        )}
+        {allTracks.length>1 && (
+          <div style={{fontSize:11,color:"var(--text3)",marginTop:-4,marginBottom:12}}>
+            💡 אפשר לבחור כמה מסלולי לימוד יחד כדי להציג אותם במקביל.
           </div>
         )}
         {trackSettings.length>0 && (
