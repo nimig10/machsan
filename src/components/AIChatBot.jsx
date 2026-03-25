@@ -17,6 +17,127 @@ const fetchWithRetry = async (url, options, maxRetries = 5) => {
   return fetch(url, options);
 };
 
+const normalizeInventoryText = (value = '') => String(value || '')
+  .toLowerCase()
+  .replace(/["'`.,/\\()\-_*:+]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const INVENTORY_STOPWORDS = new Set([
+  'כמה', 'יש', 'קיים', 'קיימים', 'קיימת', 'זמין', 'זמינים', 'זמינות', 'במלאי', 'במחסן',
+  'כרגע', 'עכשיו', 'של', 'על', 'עם', 'בלי', 'ישנם', 'ישנה', 'נא', 'לי', 'את', 'ה',
+  'מה', 'מלאי', 'נשאר', 'נותר', 'אפשר', 'אפשרי'
+]);
+
+function inferInventoryTags(item) {
+  const nameText = normalizeInventoryText(item?.name);
+  const categoryText = normalizeInventoryText(item?.category);
+  const descriptionText = normalizeInventoryText([
+    item?.description,
+    item?.technicalDetails,
+  ].join(' '));
+  const searchText = normalizeInventoryText([
+    item?.name,
+    item?.category,
+    item?.description,
+    item?.technicalDetails,
+  ].join(' '));
+  const tags = new Set();
+  const isMicrophoneCategory = categoryText.includes('מיקרופונ');
+  const isKnownMicrophoneModel = /shure\s*(sm)?57|shure\s*(sm)?58|\bsm57\b|\bsm58\b|at2020|spirit black|rode ntg|ntg1|wireless go|dji mic/.test(nameText);
+  const hasMicrophoneDescription = descriptionText.includes('מיקרופון') || descriptionText.includes('מיקרופונים');
+  const isMicrophoneLike = isMicrophoneCategory || (isKnownMicrophoneModel && hasMicrophoneDescription);
+  const isCondenserMicrophone = /at2020|spirit black/.test(nameText)
+    || descriptionText.includes('מיקרופון קונדנסר')
+    || descriptionText.includes('מיקרופון קונדנסור')
+    || descriptionText.includes('קונדנסר');
+  const isDynamicMicrophone = /shure\s*(sm)?57|shure\s*(sm)?58|\bsm57\b|\bsm58\b/.test(nameText)
+    || descriptionText.includes('מיקרופון דינמי')
+    || descriptionText.includes('מיקרופונים דינמיים');
+
+  if (isMicrophoneLike) tags.add('microphone');
+  if (isMicrophoneLike && isDynamicMicrophone && !isCondenserMicrophone) {
+    tags.add('dynamic_microphone');
+    tags.add('microphone');
+  }
+  if (isMicrophoneLike && isCondenserMicrophone) {
+    tags.add('condenser_microphone');
+    tags.add('microphone');
+  }
+  if (searchText.includes('xlr') && (searchText.includes('כבל') || searchText.includes('כבלים'))) {
+    tags.add('xlr_cable');
+  }
+
+  return [...tags];
+}
+
+function formatInventoryResponse(label, items) {
+  const availableItems = items.filter((item) => item.available > 0);
+  const total = availableItems.reduce((sum, item) => sum + item.available, 0);
+
+  if (!total) {
+    return `נכון לעכשיו אין ${label} זמינים במלאי.`;
+  }
+
+  const breakdown = availableItems
+    .sort((a, b) => b.available - a.available)
+    .map((item) => `${item.name}: ${item.available}`)
+    .join(', ');
+
+  return `נכון לעכשיו יש ${total} ${label} זמינים במלאי. ${breakdown}`;
+}
+
+function extractInventoryTokens(question) {
+  return normalizeInventoryText(question)
+    .split(' ')
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2 && !INVENTORY_STOPWORDS.has(token));
+}
+
+function answerInventoryQuestion(question, inventoryItems) {
+  const normalizedQuestion = normalizeInventoryText(question);
+  const asksInventory = /כמה|יש|זמין|זמינים|במלאי|נשאר|נותר/.test(normalizedQuestion);
+  if (!asksInventory) return null;
+
+  const availableInventory = inventoryItems.filter((item) => item.available > 0);
+
+  if (normalizedQuestion.includes('מיקרופונ') && normalizedQuestion.includes('דינמ')) {
+    const matches = availableInventory.filter((item) => item.tags.includes('dynamic_microphone'));
+    return formatInventoryResponse('מיקרופונים דינמיים', matches);
+  }
+
+  if (normalizedQuestion.includes('מיקרופונ') && normalizedQuestion.includes('קונדנס')) {
+    const matches = availableInventory.filter((item) => item.tags.includes('condenser_microphone'));
+    return formatInventoryResponse('מיקרופונים קונדנסר', matches);
+  }
+
+  if (normalizedQuestion.includes('xlr') && (normalizedQuestion.includes('כבל') || normalizedQuestion.includes('כבלים'))) {
+    const matches = availableInventory.filter((item) => item.tags.includes('xlr_cable'));
+    return formatInventoryResponse('כבלי XLR', matches);
+  }
+
+  if (normalizedQuestion.includes('מיקרופונ')) {
+    const matches = availableInventory.filter((item) => item.tags.includes('microphone'));
+    return formatInventoryResponse('מיקרופונים', matches);
+  }
+
+  const tokens = extractInventoryTokens(question);
+  if (!tokens.length) return null;
+
+  const matches = availableInventory.filter((item) =>
+    tokens.every((token) => item.searchText.includes(token))
+  );
+
+  if (!matches.length) return null;
+
+  if (matches.length === 1) {
+    const [item] = matches;
+    return `נכון לעכשיו יש ${item.available} יחידות זמינות של ${item.name} במלאי.`;
+  }
+
+  return formatInventoryResponse('פריטים תואמים', matches);
+}
+
 export default function AIChatBot({ equipment = [], reservations = [], policies = {}, settings = {}, refreshInventory = null }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
@@ -103,8 +224,27 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
           ),
           description: equipmentItem.description || "",
           technicalDetails: equipmentItem.technical_details || "",
+          searchText: normalizeInventoryText([
+            equipmentItem.name,
+            equipmentItem.category,
+            equipmentItem.description,
+            equipmentItem.technical_details,
+          ].join(' ')),
+          tags: inferInventoryTags({
+            name: equipmentItem.name,
+            category: equipmentItem.category,
+            description: equipmentItem.description || "",
+            technicalDetails: equipmentItem.technical_details || "",
+          }),
         }))
         .filter((equipmentItem) => equipmentItem.name);
+
+      const deterministicInventoryAnswer = answerInventoryQuestion(userMessage, compactEquipment);
+      if (deterministicInventoryAnswer) {
+        setMessages(prev => [...prev, { role: 'assistant', content: deterministicInventoryAnswer }]);
+        incrementRequestsCount();
+        return;
+      }
 
       const systemPrompt = `אתה עוזר וירטואלי של מחסן השאלת ציוד אקדמי. עליך לענות אך ורק בעברית, בצורה תמציתית, מקצועית ואדיבה.
 יש לך 3 תפקידים:
