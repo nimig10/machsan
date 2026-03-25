@@ -1,6 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
+const fetchWithRetry = async (url, options, maxRetries = 5) => {
+  const delays = [2000, 5000, 10000, 20000, 32000];
+  for (let i = 0; i < maxRetries; i += 1) {
+    const response = await fetch(url, options);
+    if (response.status === 429) {
+      const delay = delays[i] ?? delays[delays.length - 1];
+      console.warn(`AI chat rate limit hit. Retrying in ${delay / 1000} seconds...`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      continue;
+    }
+    return response;
+  }
+  return fetch(url, options);
+};
+
 export default function AIChatBot({ equipment = [], policies = {}, settings = {} }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
@@ -16,7 +31,7 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
   const getRequestsCount = () => parseInt(localStorage.getItem(todayKey)) || 0;
   const incrementRequestsCount = () => localStorage.setItem(todayKey, getRequestsCount() + 1);
 
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.REACT_APP_GEMINI_API_KEY || "";
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -41,8 +56,18 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
     setIsTyping(true);
 
     try {
+      if (!apiKey) {
+        throw new Error('חסר מפתח Gemini במשתני הסביבה.');
+      }
+
       const compactEquipment = equipment.map(e => ({
-        name: e.name, category: e.category, avail: e.avail
+        name: e.name,
+        category: e.category,
+        available: Array.isArray(e.units)
+          ? e.units.filter((unit) => unit?.status === 'תקין').length
+          : Math.max(0, Number(e.total_quantity ?? e.avail ?? 0)),
+        description: e.description || "",
+        technicalDetails: e.technical_details || "",
       }));
 
       const systemPrompt = `אתה עוזר וירטואלי של מחסן השאלת ציוד אקדמי. עליך לענות אך ורק בעברית, בצורה תמציתית, מקצועית ואדיבה.
@@ -60,22 +85,37 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
       }));
       history.push({ role: 'user', parts: [{ text: userMessage }] });
 
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: history,
-          systemInstruction: { parts: [{ text: systemPrompt }] }
-        })
-      });
+      let result = null;
+      let lastError = null;
 
-      if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}));
-        const errMsg = errJson?.error?.message || `שגיאה ${response.status}`;
-        throw new Error(errMsg);
+      for (const modelName of ['gemini-2.5-flash', 'gemini-2.5-flash-lite']) {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+        const response = await fetchWithRetry(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: history,
+            systemInstruction: { parts: [{ text: systemPrompt }] }
+          })
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          lastError = new Error(errText || `שגיאה ${response.status}`);
+          if (response.status === 404 || response.status === 429 || response.status === 503) {
+            continue;
+          }
+          throw lastError;
+        }
+
+        result = await response.json();
+        if (result?.candidates?.length) break;
       }
-      const result = await response.json();
+
+      if (!result?.candidates?.length) {
+        throw lastError || new Error("לא התקבלה תשובה תקינה מעוזר ה־AI.");
+      }
+
       const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text;
 
       setMessages(prev => [...prev, { role: 'assistant', content: aiText }]);
