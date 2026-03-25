@@ -493,7 +493,8 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
      - startTime: שעת ההתחלה בדיוק כפי שהיא מופיעה (למשל "09:00" או "12:15").
      - endTime: שעת הסיום בדיוק כפי שהיא מופיעה (למשל "11:45" או "15:00").
      אל תשנה או תעגל את הדקות, פשוט פצל את המחרוזת לפי המקף.
-  3. חלץ גם את נושא השיעור (title), מסלול (track), מורה (instructor) ושנה.
+  3. שם המרצה/מורה (הצלבה חכמה): עליך לחלץ את שם איש הצוות המעביר את השיעור. שים לב שהכותרת בקובץ עשויה להשתנות (למשל "מורה", "מרצה", "מדריך", "מורה/מרצה"). מצא את העמודה שמתארת את מעביר השיעור והכנס את השם לשדה instructor.
+  4. חלץ גם את נושא השיעור (title), מסלול (track) ושנה (year).
 
   הנתונים הגולמיים (CSV):
   ${csvText}
@@ -514,7 +515,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                     startTime: { type: "STRING", description: "שעת התחלה בפורמט HH:MM (למשל 09:00 או 12:15)" },
                     endTime: { type: "STRING", description: "שעת סיום בפורמט HH:MM (למשל 11:45 או 15:00)" },
                     track: { type: "STRING", description: "מסלול לימודים" },
-                    instructor: { type: "STRING", description: "שם המורה / מרצה" },
+                    instructor: { type: "STRING", description: "שם המורה / מרצה / מדריך המעביר את השיעור" },
                     year: { type: "STRING", description: "שנה (א/ב/ג)" },
                     dayOfWeek: { type: "STRING" },
                     timeRange: { type: "STRING", description: "טווח שעות מקורי אם קיים, למשל 09:00-11:45" },

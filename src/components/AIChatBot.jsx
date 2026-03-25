@@ -130,17 +130,21 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
   };
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 600;
-  const panelWidth = isMobile ? Math.min(300, window.innerWidth - 32) : 340;
+  const panelWidth = isMobile ? Math.min(300, window.innerWidth - 24) : 340;
+  const topOffset = isMobile ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : 20;
+  const rightOffset = isMobile ? 'calc(env(safe-area-inset-right, 0px) + 12px)' : 20;
+  const bubbleSize = isMobile ? 46 : 50;
+  const bubbleIconSize = isMobile ? 22 : 24;
 
   const widget = (
     <div style={{
       position: 'fixed',
-      bottom: 20,
-      left: 20,
+      top: topOffset,
+      right: rightOffset,
       zIndex: 2147483647,
       display: 'flex',
       flexDirection: 'column',
-      alignItems: 'flex-start',
+      alignItems: 'flex-end',
     }}>
 
       {/* Panel */}
@@ -282,11 +286,11 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
             background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
             border: 'none',
             borderRadius: '50%',
-            width: 56,
-            height: 56,
+            width: bubbleSize,
+            height: bubbleSize,
             cursor: 'pointer',
             boxShadow: '0 4px 20px rgba(99,102,241,0.55)',
-            fontSize: 26,
+            fontSize: bubbleIconSize,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
