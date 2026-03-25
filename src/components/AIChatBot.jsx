@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 export default function AIChatBot({ equipment = [], policies = {}, settings = {} }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -44,16 +45,14 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
         name: e.name, category: e.category, avail: e.avail
       }));
 
-      const systemPrompt = `
-        אתה עוזר וירטואלי של מחסן השאלת ציוד אקדמי. עליך לענות אך ורק בעברית, בצורה תמציתית, מקצועית ואדיבה.
-        יש לך 3 תפקידים:
-        1. בונה ערכות: אם סטודנט מתאר הפקה, המלץ לו על ציוד רלוונטי *אך ורק* מתוך רשימת הציוד הזמין (avail > 0).
-        2. מציע חלופות: אם סטודנט מבקש משהו שאינו במלאי, הצע לו חלופה הגיונית מהרשימה.
-        3. תמיכת נהלים: ענה על שאלות לגבי חוקים ונהלים בהתבסס על אובייקט הנהלים.
+      const systemPrompt = `אתה עוזר וירטואלי של מחסן השאלת ציוד אקדמי. עליך לענות אך ורק בעברית, בצורה תמציתית, מקצועית ואדיבה.
+יש לך 3 תפקידים:
+1. בונה ערכות: אם סטודנט מתאר הפקה, המלץ לו על ציוד רלוונטי *אך ורק* מתוך רשימת הציוד הזמין (avail > 0).
+2. מציע חלופות: אם סטודנט מבקש משהו שאינו במלאי, הצע לו חלופה הגיונית מהרשימה.
+3. תמיכת נהלים: ענה על שאלות לגבי חוקים ונהלים בהתבסס על אובייקט הנהלים.
 
-        נהלי המחסן: ${JSON.stringify(policies)}
-        מלאי הציוד הנוכחי: ${JSON.stringify(compactEquipment)}
-      `;
+נהלי המחסן: ${JSON.stringify(policies)}
+מלאי הציוד הנוכחי: ${JSON.stringify(compactEquipment)}`;
 
       const history = messages.filter(m => m.role !== 'system').map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
@@ -71,7 +70,11 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
         })
       });
 
-      if (!response.ok) throw new Error("API call failed");
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        const errMsg = errJson?.error?.message || `שגיאה ${response.status}`;
+        throw new Error(errMsg);
+      }
       const result = await response.json();
       const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text;
 
@@ -80,25 +83,33 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
 
     } catch (error) {
       console.error("ChatBot error:", error);
-      setMessages(prev => [...prev, { role: 'assistant', content: 'מצטער, חלה שגיאה בחיבור לשרת. אנא נסה שוב מאוחר יותר.' }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: `שגיאה: ${error.message}` }]);
     } finally {
       setIsTyping(false);
     }
   };
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 600;
-  const panelWidth = isMobile ? Math.min(320, window.innerWidth - 32) : 340;
+  const panelWidth = isMobile ? Math.min(300, window.innerWidth - 32) : 340;
 
-  return (
-    <div style={{ position: 'fixed', bottom: 20, left: 20, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+  const widget = (
+    <div style={{
+      position: 'fixed',
+      bottom: 20,
+      left: 20,
+      zIndex: 2147483647,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'flex-start',
+    }}>
 
       {/* Panel */}
       {isOpen && (
         <div dir="rtl" style={{
           background: '#1a1a2e',
           borderRadius: 16,
-          boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
-          border: '1px solid rgba(99,102,241,0.3)',
+          boxShadow: '0 8px 40px rgba(0,0,0,0.6)',
+          border: '1px solid rgba(99,102,241,0.35)',
           width: panelWidth,
           display: 'flex',
           flexDirection: 'column',
@@ -128,7 +139,8 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
               height: 28,
               cursor: 'pointer',
               color: '#fff',
-              fontSize: 16,
+              fontSize: 18,
+              lineHeight: 1,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -137,7 +149,7 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
 
           {/* Messages */}
           <div style={{
-            height: isMobile ? 250 : 300,
+            height: isMobile ? 240 : 290,
             overflowY: 'auto',
             padding: '12px',
             display: 'flex',
@@ -156,6 +168,7 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
                 background: msg.role === 'assistant' ? '#1e1e35' : '#4f46e5',
                 color: msg.role === 'assistant' ? '#e2e2f0' : '#fff',
                 border: msg.role === 'assistant' ? '1px solid rgba(99,102,241,0.2)' : 'none',
+                wordBreak: 'break-word',
               }}>
                 {msg.content}
               </div>
@@ -199,6 +212,7 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
                 color: '#e2e2f0',
                 outline: 'none',
                 direction: 'rtl',
+                minWidth: 0,
               }}
             />
             <button
@@ -212,7 +226,7 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
                 cursor: isTyping || !inputValue.trim() ? 'not-allowed' : 'pointer',
                 color: '#fff',
                 fontSize: 16,
-                transition: 'background 0.2s',
+                flexShrink: 0,
               }}
             >➤</button>
           </div>
@@ -223,6 +237,7 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
+          title="עוזר המחסן החכם"
           style={{
             background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
             border: 'none',
@@ -230,17 +245,16 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
             width: 56,
             height: 56,
             cursor: 'pointer',
-            boxShadow: '0 4px 20px rgba(99,102,241,0.5)',
+            boxShadow: '0 4px 20px rgba(99,102,241,0.55)',
             fontSize: 26,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             position: 'relative',
-            transition: 'transform 0.2s',
+            transition: 'transform 0.2s, box-shadow 0.2s',
           }}
-          onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
-          onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-          title="עוזר המחסן החכם"
+          onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = '0 6px 28px rgba(99,102,241,0.75)'; }}
+          onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(99,102,241,0.55)'; }}
         >
           🤖
           {getRequestsCount() < maxRequests && (
@@ -259,4 +273,6 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
       )}
     </div>
   );
+
+  return createPortal(widget, document.body);
 }
