@@ -60,7 +60,7 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
       }));
       history.push({ role: 'user', parts: [{ text: userMessage }] });
 
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
