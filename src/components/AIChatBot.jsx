@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
-export default function AIChatBot({ equipment = [], policies = {}, settings = {} }) {
+export default function AIChatBot({ equipment = [], reservations = [], policies = {}, settings = {} }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     { role: 'assistant', content: 'היי! אני העוזר החכם של המחסן. תאר לי מה אתה הולך לצלם/להקליט ואעזור לך להרכיב ערכה, או שאל אותי על נהלי המחסן.' }
@@ -41,15 +41,29 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
     setIsTyping(true);
 
     try {
-      const compactEquipment = equipment.map(e => ({
-        name: e.name, category: e.category, avail: e.avail
-      }));
+      // חישוב מלאי אמיתי: total_quantity מינוס פריטים שמושאלים כרגע (מאושר/באיחור)
+      const compactEquipment = equipment.map(e => {
+        const total = Number(e.total_quantity) || 0;
+        // ספירת יחידות תקינות
+        const working = Array.isArray(e.units)
+          ? e.units.filter(u => u.status === "תקין").length
+          : total;
+        // ספירת פריטים מושאלים כרגע
+        let borrowed = 0;
+        for (const res of reservations) {
+          if (res.status !== "מאושר" && res.status !== "באיחור") continue;
+          const item = res.items?.find(i => i.equipment_id == e.id);
+          if (item) borrowed += Number(item.quantity) || 0;
+        }
+        return { name: e.name, category: e.category, total: working, borrowed, available: Math.max(0, working - borrowed) };
+      });
 
       const systemPrompt = `אתה עוזר וירטואלי של מחסן השאלת ציוד אקדמי. עליך לענות אך ורק בעברית, בצורה תמציתית, מקצועית ואדיבה.
 יש לך 3 תפקידים:
-1. בונה ערכות: אם סטודנט מתאר הפקה, המלץ לו על ציוד רלוונטי *אך ורק* מתוך רשימת הציוד הזמין (avail > 0).
-2. מציע חלופות: אם סטודנט מבקש משהו שאינו במלאי, הצע לו חלופה הגיונית מהרשימה.
+1. בונה ערכות: אם סטודנט מתאר הפקה, המלץ לו על ציוד רלוונטי *אך ורק* מתוך רשימת הציוד הזמין (available > 0). הערכים: total = כמות כוללת, borrowed = כמה מושאל כרגע, available = כמה זמין עכשיו.
+2. מציע חלופות: אם סטודנט מבקש משהו שאינו במלאי (available = 0), הצע לו חלופה הגיונית מאותה קטגוריה.
 3. תמיכת נהלים: ענה על שאלות לגבי חוקים ונהלים בהתבסס על אובייקט הנהלים.
+חשוב: אם פריט לא מופיע ברשימה, הוא לא קיים במחסן. אל תמציא פריטים.
 
 נהלי המחסן: ${JSON.stringify(policies)}
 מלאי הציוד הנוכחי: ${JSON.stringify(compactEquipment)}`;

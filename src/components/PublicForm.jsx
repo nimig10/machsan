@@ -2000,7 +2000,7 @@ ${inventory}
         </div>
       </div>
     )}
-    <AIChatBot equipment={equipment} policies={policies} settings={siteSettings} />
+    <AIChatBot equipment={equipment} reservations={reservations} policies={policies} settings={siteSettings} />
     </>
   );
 }
