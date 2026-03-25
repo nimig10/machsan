@@ -12,6 +12,7 @@ import {
 import { Modal } from "./ui.jsx";
 import { ManageCategoriesModal } from "./ManageCategoriesModal.jsx";
 import { UnitsModal } from "./UnitsModal.jsx";
+import SmartEquipmentImportButton from "./SmartEquipmentImportButton.jsx";
 
 function statusBadge(s) {
   const m = { "תקין":"badge-green","פגום":"badge-red","בתיקון":"badge-yellow","נעלם":"badge-red" };
@@ -114,6 +115,7 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
   const [importModal, setImportModal] = useState(null);
   const csvInputRef = useRef(null);
   const equipmentCertTypes = (certifications?.types || []).filter(t => t.category !== "studio" && t.id !== "cert_night_studio");
+  const existingCategories = [...new Set((equipment || []).map((item) => item.category))].filter(Boolean);
 
   const parseCSVLine = (line) => {
     const result = []; let cur = ""; let inQ = false;
@@ -185,6 +187,20 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     a.download = "תבנית_ייבוא_ציוד.csv";
     a.click();
+  };
+
+  const handleAiEquipmentImport = async (newItems, approvedCategories = []) => {
+    const normalizedItems = ensureUnits(normalizeEquipmentTagFlags(newItems || []));
+    const updatedEquipment = [...(equipment || []), ...normalizedItems];
+    setEquipment(updatedEquipment);
+    const uniqueApprovedCategories = [...new Set((approvedCategories || []).map((item) => String(item || "").trim()).filter(Boolean))];
+    const updatedCategories = [...new Set([...(categories || []), ...uniqueApprovedCategories])];
+    const writes = [storageSet("equipment", updatedEquipment)];
+    if (typeof setCategories === "function" && updatedCategories.length !== (categories || []).length) {
+      setCategories(updatedCategories);
+      writes.push(storageSet("categories", updatedCategories));
+    }
+    await Promise.all(writes);
   };
 
   // Derive category effective type: explicit tag wins, else from items
@@ -528,6 +544,11 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
           <button className="btn btn-secondary" onClick={downloadTemplate} title="הורד תבנית CSV">📥 תבנית</button>
           <button className="btn btn-secondary" onClick={()=>csvInputRef.current?.click()}>📤 ייבוא CSV</button>
           <input ref={csvInputRef} type="file" accept=".csv,text/csv" style={{display:"none"}} onChange={handleCSVImport}/>
+          <SmartEquipmentImportButton
+            showToast={showToast}
+            existingCategories={existingCategories}
+            onImportSuccess={handleAiEquipmentImport}
+          />
           <button className="btn btn-primary" onClick={()=>setModal({type:"addcat"})}>📂 ניהול קטגוריות</button>
           <button className="btn btn-primary" onClick={()=>setModal({type:"loan-types"})}>🗂️ סיווג לסוגי ההשאלות</button>
           <button className="btn btn-primary" onClick={()=>setModal({type:"add"})}>➕ הוסף ציוד</button>
