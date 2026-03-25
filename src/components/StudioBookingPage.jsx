@@ -14,6 +14,7 @@ const STUDENT_COLOR = "var(--green)";
 const TEAM_COLOR = "#9b59b6";
 const LESSON_COLOR = "#f5a623";
 const RANGE_OPTIONS = [7, 30, 90];
+const DEFAULT_STUDIO_FUTURE_HOURS = 16;
 const STUDIO_MAINTENANCE_MESSAGE = "האולפן בתחזוקה, מקווים שישוב לעבוד בקרוב";
 
 function getTodayStr() {
@@ -73,18 +74,57 @@ function getBookingSortTime(booking) {
   return new Date(`${booking.date}T${booking.startTime || "00:00"}:00`).getTime();
 }
 
+function getStudioFutureHoursLimit(settings = {}) {
+  const parsed = Number(settings?.studioFutureHoursLimit);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_STUDIO_FUTURE_HOURS;
+}
+
+function formatStudioHoursValue(value = 0) {
+  const normalized = Math.max(0, Math.round((Number(value) || 0) * 10) / 10);
+  return Number.isInteger(normalized) ? String(normalized) : normalized.toFixed(1);
+}
+
+function buildStudioBookingInterval({ date, startTime, endTime, isNight = false }) {
+  if (!date) return null;
+  const normalizedStartTime = isNight ? NIGHT_START_TIME : String(startTime || "").trim();
+  const normalizedEndTime = isNight ? NIGHT_END_TIME : String(endTime || "").trim();
+  if (!normalizedStartTime || !normalizedEndTime) return null;
+  const start = new Date(`${date}T${normalizedStartTime}:00`);
+  const end = new Date(`${date}T${normalizedEndTime}:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  if (end <= start) end.setDate(end.getDate() + 1);
+  return { start, end };
+}
+
+function rangesOverlap(left, right) {
+  const leftInterval = buildStudioBookingInterval(left);
+  const rightInterval = buildStudioBookingInterval(right);
+  if (!leftInterval || !rightInterval) return false;
+  return leftInterval.start < rightInterval.end && rightInterval.start < leftInterval.end;
+}
+
+function addDaysToDateString(dateStr, daysToAdd = 0) {
+  const base = parseDate(dateStr);
+  if (!base) return dateStr;
+  base.setDate(base.getDate() + daysToAdd);
+  return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}-${String(base.getDate()).padStart(2, "0")}`;
+}
+
 const thStyle = { padding:"8px 10px", background:"var(--surface2)", fontSize:12, fontWeight:700, textAlign:"center", border:"1px solid var(--border)" };
 const tdStyle = { padding:"6px 8px", border:"1px solid var(--border)", textAlign:"center" };
 const labelStyle = { display:"flex", flexDirection:"column", gap:4, fontSize:13, fontWeight:600, color:"var(--text2)" };
 
 export default function StudioBookingPage(props) {
-  const { showToast, teamMembers = [], certifications = { types: [], students: [] }, role = "admin", studios: studiosProp, setStudios: setStudiosProp, bookings: bookingsProp, setBookings: setBookingsProp } = props;
+  const { showToast, teamMembers = [], certifications = { types: [], students: [] }, role = "admin", studios: studiosProp, setStudios: setStudiosProp, bookings: bookingsProp, setBookings: setBookingsProp, siteSettings: siteSettingsProp = {}, setSiteSettings: setSiteSettingsProp } = props;
   const [localStudios, setLocalStudios] = useState(() => lsGet("studios") || []);
   const [localBookings, setLocalBookings] = useState(() => lsGet("studio_bookings") || []);
+  const [localSiteSettings, setLocalSiteSettings] = useState(() => lsGet("siteSettings") || {});
   const studios = studiosProp ?? localStudios;
   const setStudios = setStudiosProp ?? setLocalStudios;
   const bookings = bookingsProp ?? localBookings;
   const setBookings = setBookingsProp ?? setLocalBookings;
+  const siteSettings = Object.keys(siteSettingsProp || {}).length ? siteSettingsProp : localSiteSettings;
+  const setSiteSettings = setSiteSettingsProp ?? setLocalSiteSettings;
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [todayOnly, setTodayOnly] = useState(false);
@@ -105,6 +145,7 @@ export default function StudioBookingPage(props) {
 
   const todayStr = getTodayStr();
   const weekDays = getWeekDays(weekOffset);
+  const studioFutureHoursLimit = getStudioFutureHoursLimit(siteSettings);
 
   const saveStudios = useCallback(async (nextStudios) => {
     setStudios(nextStudios);
@@ -115,6 +156,11 @@ export default function StudioBookingPage(props) {
     setBookings(nextBookings);
     await storageSet("studio_bookings", nextBookings);
   }, [setBookings]);
+
+  const saveSiteSettings = useCallback(async (nextSettings) => {
+    setSiteSettings(nextSettings);
+    await storageSet("siteSettings", nextSettings);
+  }, [setSiteSettings]);
 
   const teamMemberOptions = useMemo(() => {
     const names = new Set();
@@ -212,6 +258,24 @@ export default function StudioBookingPage(props) {
   const studentBookings = filteredBookings.filter((booking) => getBookingKind(booking) === "student" && !booking.isNight);
   const nightBookings = filteredBookings.filter((booking) => getBookingKind(booking) === "student" && booking.isNight);
   const teamBookings = filteredBookings.filter((booking) => getBookingKind(booking) === "team");
+
+  const findBookingConflict = useCallback((candidate, pendingBookings = [], excludeBookingId = null) => (
+    [...activeBookings, ...pendingBookings].find((booking) => (
+      (!excludeBookingId || String(booking.id) !== String(excludeBookingId))
+      && sameStudioId(booking.studioId, candidate.studioId)
+      && rangesOverlap(booking, candidate)
+    ))
+  ), [activeBookings]);
+
+  const getConflictMessage = useCallback((booking, date) => {
+    if (!booking) return "";
+    if (getBookingKind(booking) === "student") {
+      return `לא ניתן לקיים את ההזמנה בגלל שהיא תנגשת עם ההזמנה של סטודנט ${booking.studentName || ""}${date ? ` בתאריך ${date}` : ""}`.trim();
+    }
+    return date
+      ? `לא ניתן לקיים את ההזמנה בתאריך ${date} בגלל שהיא מתנגשת עם הזמנה קיימת`
+      : "לא ניתן לקיים את ההזמנה בגלל שהיא מתנגשת עם הזמנה קיימת";
+  }, [getBookingKind]);
 
   const bookingRequiredCert = useMemo(() => {
     if (!modal?.studioId) return [];
@@ -377,6 +441,19 @@ export default function StudioBookingPage(props) {
     closeModal();
   };
 
+  const updateStudioFutureHoursLimit = async (value) => {
+    const parsed = Math.max(0, Number(value) || 0);
+    const nextSettings = { ...siteSettings, studioFutureHoursLimit: parsed };
+    await saveSiteSettings(nextSettings);
+    showToast("success", "בנק השעות העתידיות עודכן");
+  };
+
+  const resetStudioFutureHoursLimit = async () => {
+    const nextSettings = { ...siteSettings, studioFutureHoursLimit: DEFAULT_STUDIO_FUTURE_HOURS };
+    await saveSiteSettings(nextSettings);
+    showToast("success", "בנק השעות העתידיות אופס ל־16 שעות");
+  };
+
   const deleteStudio = async (studioId) => {
     if (!window.confirm("למחוק את האולפן הזה ואת כל ההזמנות שלו?")) return;
     await saveStudios(studios.filter((studio) => studio.id !== studioId));
@@ -423,6 +500,8 @@ export default function StudioBookingPage(props) {
     const isNight = formData.get("isNight") === "on";
     const startTime = isNight ? NIGHT_START_TIME : String(formData.get("startTime") || "");
     const endTime = isNight ? NIGHT_END_TIME : String(formData.get("endTime") || "");
+    const repeatCount = Math.max(0, Math.min(24, Number(formData.get("repeatCount") || 0) || 0));
+    const recurringGroupId = repeatCount > 0 ? `team_repeat_${Date.now()}` : null;
 
     if (!memberName || !startTime || !endTime) {
       showToast("error", "נא לבחור איש צוות ולהשלים את פרטי הקביעה");
@@ -437,6 +516,42 @@ export default function StudioBookingPage(props) {
     if (!isNight && startTime >= endTime) {
       showToast("error", "שעת סיום חייבת להיות אחרי שעת התחלה");
       setSaving(false);
+      return;
+    }
+
+    if (repeatCount > 0) {
+      const pendingBookings = [];
+      for (let occurrence = 0; occurrence <= repeatCount; occurrence += 1) {
+        const occurrenceDate = addDaysToDateString(modal.date, occurrence * 7);
+        const candidateBooking = { studioId: modal.studioId, date: occurrenceDate, startTime, endTime, isNight };
+        const conflict = findBookingConflict(candidateBooking, pendingBookings);
+        if (conflict) {
+          showToast("error", getConflictMessage(conflict, occurrenceDate));
+          setSaving(false);
+          return;
+        }
+        pendingBookings.push({
+          id: Date.now() + occurrence,
+          bookingKind: "team",
+          ownerType: "team",
+          teamMemberId: selectedMember?.id ?? null,
+          teamMemberName: memberName,
+          studentName: memberName,
+          studioId: modal.studioId,
+          date: occurrenceDate,
+          startTime,
+          endTime,
+          notes,
+          isNight,
+          recurringGroupId,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      await saveBookings([...bookings, ...pendingBookings]);
+      setSaving(false);
+      closeModal();
+      showToast("success", `קביעת הצוות נשמרה עם ${repeatCount + 1} מופעים`);
       return;
     }
 
@@ -700,6 +815,17 @@ export default function StudioBookingPage(props) {
 
       {activeView === "manage" && role === "admin" && (
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          <div style={{ background:"var(--surface2)", borderRadius:10, padding:"14px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+            <div>
+              <div style={{ fontWeight:800 }}>בנק שעות עתידיות</div>
+              <div style={{ fontSize:12, color:"var(--text3)", marginTop:4 }}>מספר השעות העתידיות שכל סטודנט יכול להחזיק במקביל בלוח קביעת האולפנים.</div>
+            </div>
+            <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+              <input type="number" min="0" step="0.5" className="form-input" value={studioFutureHoursLimit} onChange={(event) => void updateStudioFutureHoursLimit(event.target.value)} style={{ width:120 }} />
+              <span style={{ fontSize:12, color:"var(--text3)", fontWeight:700 }}>שעות</span>
+              <button className="btn btn-secondary btn-sm" onClick={() => void resetStudioFutureHoursLimit()}>איפוס</button>
+            </div>
+          </div>
           {studios.length === 0 ? <div style={{ textAlign:"center", padding:48, color:"var(--text3)" }}>אין אולפנים עדיין</div> : studios.map((studio) => (
             <div key={studio.id} style={{ background:"var(--surface2)", borderRadius:10, padding:"12px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:8 }}>
               <div style={{ display:"flex", alignItems:"center", gap:12 }}>
@@ -759,6 +885,11 @@ export default function StudioBookingPage(props) {
       {modal?.type === "addBooking" && (
         <Modal title={`📅 קביעת אולפן לצוות — ${modal.studioName} · ${modal.dayName} ${modal.date}`} onClose={closeModal} footer={<><button className="btn btn-secondary" onClick={closeModal}>ביטול</button><button form="addBookingForm" type="submit" className="btn btn-primary" disabled={saving || !teamMemberOptions.length}>{saving ? "שומר..." : "שמור קביעה"}</button></>}>
           <form id="addBookingForm" onSubmit={submitBooking} style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            <label style={labelStyle}>
+              מופעים חוזרים שבועיים
+              <input name="repeatCount" type="number" min="0" max="24" defaultValue="0" className="form-input" />
+              <span style={{ fontSize:11, color:"var(--text3)", fontWeight:500 }}>0 = בלי שכפול. כל ערך אחר ייצור מופעים נוספים שבוע אחרי שבוע באותו יום ובאותן שעות.</span>
+            </label>
             {bookingRequiredCert.length > 0 && <div style={{ background:"rgba(52,152,219,0.08)", border:"1px solid rgba(52,152,219,0.2)", borderRadius:8, padding:"8px 12px", fontSize:12, color:"var(--blue)", fontWeight:600 }}>🎓 האולפן הזה דורש לסטודנטים הסמכה: {bookingRequiredCert.map((type) => type.name).join(" / ")}. קביעת צוות ממשיכה לעבוד גם בלי הסמכה.</div>}
             <label style={labelStyle}>איש צוות *{teamMemberOptions.length > 0 ? <select className="form-input" value={formTeamMember} onChange={(event) => setFormTeamMember(event.target.value)} required><option value="" disabled>בחר איש צוות...</option>{teamMemberOptions.map((member) => <option key={String(member.id)} value={String(member.id)}>{member.name}</option>)}</select> : <div style={{ background:"rgba(231,76,60,0.08)", border:"1px solid rgba(231,76,60,0.2)", borderRadius:8, padding:"10px 12px", color:"var(--red)", fontWeight:700 }}>אין כרגע אנשי צוות ברובריקת "צוות"</div>}</label>
             <div style={{ display:"flex", gap:8 }}>

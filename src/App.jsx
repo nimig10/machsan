@@ -6520,7 +6520,7 @@ export default function App() {
   const [kits, _setKits]               = useState([]);
   const [policies, _setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"" });
   const [certifications, _setCertifications] = useState({ types:[], students:[] });
-  const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14, aiMaxRequests:5 });
+  const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14, aiMaxRequests:5, studioFutureHoursLimit:16 });
   const [studios, _setStudios] = useState([]);
   const [studioBookings, _setStudioBookings] = useState([]);
   const [lessons, _setLessons] = useState([]);
@@ -7033,7 +7033,7 @@ export default function App() {
               {page==="students"       && <StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/>}
 
               {page==="settings"     && <SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast}/>}
-              {page==="studios"      && <StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin" studios={studios} setStudios={_setStudios} bookings={studioBookings} setBookings={_setStudioBookings}/>}
+              {page==="studios"      && <StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin" studios={studios} setStudios={_setStudios} bookings={studioBookings} setBookings={_setStudioBookings} siteSettings={siteSettings} setSiteSettings={setSiteSettings}/>}
             </>}
           </div>
         </div>

@@ -49,6 +49,7 @@ function parseSmartBookingJson(text) {
 }
 
 const LOAN_TYPE_EQUIPMENT_CLASSIFICATIONS = ["סאונד", "צילום", "כללי"];
+const DEFAULT_STUDIO_FUTURE_HOURS = 16;
 const DEFAULT_LOAN_TYPE_EQUIPMENT_CLASSIFICATION = {
   פרטית: ["כללי"],
   הפקה: ["צילום"],
@@ -104,6 +105,35 @@ const fetchWithRetry = async (url, options, maxRetries = 5) => {
   }
   return fetch(url, options);
 };
+
+function getStudioFutureHoursLimit(settings = {}) {
+  const parsed = Number(settings?.studioFutureHoursLimit);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_STUDIO_FUTURE_HOURS;
+}
+
+function formatStudioHoursValue(value = 0) {
+  const normalized = Math.max(0, Math.round((Number(value) || 0) * 10) / 10);
+  return Number.isInteger(normalized) ? String(normalized) : normalized.toFixed(1);
+}
+
+function buildStudioBookingInterval({ date, startTime, endTime, isNight = false, nightStartTime = "21:30", nightEndTime = "08:00" }) {
+  if (!date) return null;
+  const normalizedStartTime = isNight ? nightStartTime : String(startTime || "").trim();
+  const normalizedEndTime = isNight ? nightEndTime : String(endTime || "").trim();
+  if (!normalizedStartTime || !normalizedEndTime) return null;
+  const start = new Date(`${date}T${normalizedStartTime}:00`);
+  const end = new Date(`${date}T${normalizedEndTime}:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  if (end <= start) end.setDate(end.getDate() + 1);
+  return { start, end };
+}
+
+function getFutureStudioBookingHours(booking, now = new Date(), nightStartTime = "21:30", nightEndTime = "08:00") {
+  const interval = buildStudioBookingInterval({ ...booking, nightStartTime, nightEndTime });
+  if (!interval || interval.end <= now) return 0;
+  const futureStart = interval.start > now ? interval.start : now;
+  return Math.max(0, (interval.end.getTime() - futureStart.getTime()) / 3600000);
+}
 
 function PublicMiniCalendar({ reservations, initialLoanType="הכל", previewStart="", previewEnd="", previewName="" }) {
   const [calDate, setCalDate] = useState(new Date());
@@ -1923,6 +1953,7 @@ ${inventory}
             weekOffset={studioWeekOffset} setWeekOffset={setStudioWeekOffset}
             modal={studioModal} setModal={setStudioModal}
             certifications={certifications}
+            siteSettings={siteSettings}
           />
         </div>}
       </div>
@@ -2006,7 +2037,7 @@ ${inventory}
 }
 
 // ─── PUBLIC STUDIO BOOKING (student side) ────────────────────────────────────
-function PublicStudioBooking({ studios, bookings, setBookings, student, showToast, weekOffset, setWeekOffset, modal, setModal, certifications }) {
+function PublicStudioBooking({ studios, bookings, setBookings, student, showToast, weekOffset, setWeekOffset, modal, setModal, certifications, siteSettings = {} }) {
   const [saving, setSaving] = useState(false);
   const [dayView, setDayView] = useState(null); // { studioId, date, dayName }
   const [showAiAssistant, setShowAiAssistant] = useState(false);
@@ -2023,6 +2054,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
   const LESSON_COLOR = "#f5a623";
   const NIGHT_COLOR = "#2196f3";
 
+  const studioFutureHoursLimit = getStudioFutureHoursLimit(siteSettings);
   const normalizeStudioPhone = (value) => String(value || "").replace(/[^0-9]/g, "");
   // Check if student has night certification
   const studentRecord = (() => {
@@ -2075,6 +2107,20 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       .filter(Boolean);
     return names.length ? names.join(" / ") : null;
   };
+  const isBookingOwnedByStudent = (booking) => {
+    if (!booking || !student) return false;
+    if (booking.bookingKind && booking.bookingKind !== "student") return false;
+    if (student.id !== undefined && student.id !== null && booking.studentId !== undefined && booking.studentId !== null) {
+      return String(booking.studentId) === String(student.id);
+    }
+    const studentEmail = String(student.email || "").toLowerCase().trim();
+    const bookingEmail = String(booking.studentEmail || "").toLowerCase().trim();
+    if (studentEmail && bookingEmail) return studentEmail === bookingEmail;
+    const studentPhone = normalizeStudioPhone(student.phone);
+    const bookingPhone = normalizeStudioPhone(booking.studentPhone);
+    if (studentPhone && bookingPhone) return studentPhone === bookingPhone;
+    return normalizeName(booking.studentName) === normalizeName(student.name);
+  };
   const getBookingKind = (booking) => {
     if (!booking) return "student";
     if (booking.bookingKind === "lesson" || booking.lesson_auto || (booking.lesson_id !== null && booking.lesson_id !== undefined && String(booking.lesson_id).trim() !== "")) return "lesson";
@@ -2104,6 +2150,14 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     booking?.isNight ? NIGHT_BOOKING_LABEL : `${booking?.startTime || ""}–${booking?.endTime || ""}`
   );
   const isActiveStudioBooking = (booking) => booking?.status !== "נדחה";
+
+  const futureStudentBookedHours = useMemo(() => (
+    (bookings || []).reduce((sum, booking) => {
+      if (!isActiveStudioBooking(booking) || !isBookingOwnedByStudent(booking)) return sum;
+      return sum + getFutureStudioBookingHours(booking, new Date(), NIGHT_START_TIME, NIGHT_END_TIME);
+    }, 0)
+  ), [bookings, student]);
+  const remainingFutureHours = Math.max(0, studioFutureHoursLimit - futureStudentBookedHours);
 
   function getWeekDays(off=0) {
     const today = new Date();
@@ -2180,7 +2234,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     });
     return best;
   };
-  const getStudioBookingValidationError = ({ studioId, date, startTime, endTime, isNight=false, blockedMessage="" }) => {
+  const getStudioBookingValidationError = ({ studioId, date, startTime, endTime, isNight=false, blockedMessage="", excludeBookingId=null }) => {
     const normalizedStartTime = isNight ? NIGHT_START_TIME : startTime;
     const normalizedEndTime = isNight ? NIGHT_END_TIME : endTime;
     if (!studioId || !date || !normalizedStartTime || !normalizedEndTime) return "יש להשלים אולפן, תאריך ושעות לפני השליחה";
@@ -2188,10 +2242,21 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     if (isStudioDisabled(studioId)) return blockedMessage || STUDIO_MAINTENANCE_MESSAGE;
     if (!hasStudioCert(studioId) || (isNight && !hasNightCert)) return blockedMessage || "🔒 טרם עבר הסמכה — לא ניתן לקבוע אולפן זה";
     if (!isNight && normalizedStartTime >= normalizedEndTime) return "שעת סיום חייבת להיות אחרי שעת ההתחלה";
+    const currentFutureHours = (bookings || []).reduce((sum, booking) => {
+      if (!isActiveStudioBooking(booking) || !isBookingOwnedByStudent(booking)) return sum;
+      if (excludeBookingId !== null && String(booking.id) === String(excludeBookingId)) return sum;
+      return sum + getFutureStudioBookingHours(booking, new Date(), NIGHT_START_TIME, NIGHT_END_TIME);
+    }, 0);
+    const requestedFutureHours = getFutureStudioBookingHours({ date, startTime: normalizedStartTime, endTime: normalizedEndTime, isNight }, new Date(), NIGHT_START_TIME, NIGHT_END_TIME);
+    if ((currentFutureHours + requestedFutureHours) - studioFutureHoursLimit > 0.0001) {
+      const remainingHours = Math.max(0, studioFutureHoursLimit - currentFutureHours);
+      return `לא ניתן להשלים את הבקשה. נותרו לך ${formatStudioHoursValue(remainingHours)} שעות בבנק השעות העתידיות.`;
+    }
     const overlap = bookings.some((booking) => (
       sameStudioId(booking.studioId, studioId)
       && booking.date === date
       && isActiveStudioBooking(booking)
+      && (excludeBookingId === null || String(booking.id) !== String(excludeBookingId))
       && !(normalizedEndTime <= booking.startTime || normalizedStartTime >= booking.endTime)
     ));
     if (!isNight && overlap) return "⚠️ קיימת הזמנה חופפת";
@@ -2212,6 +2277,9 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       date,
       startTime: normalizedStartTime,
       endTime: normalizedEndTime,
+      studentId: student?.id ?? null,
+      studentEmail: student?.email || "",
+      studentPhone: student?.phone || "",
       studentName: student.name,
       notes,
       isNight,
@@ -2463,6 +2531,8 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     const { bookingId, studioId, date, isNight } = modal;
     const startTime = isNight ? NIGHT_START_TIME : String(fd.get("startTime") || modal?.defaultStart || "").trim();
     const endTime = isNight ? NIGHT_END_TIME : String(fd.get("endTime") || modal?.defaultEnd || "").trim();
+    const validationError = getStudioBookingValidationError({ studioId, date, startTime, endTime, isNight, excludeBookingId: bookingId });
+    if (validationError) { showToast("error", validationError); setSaving(false); return; }
     if (isStudioDisabled(studioId)) { showToast("error", STUDIO_MAINTENANCE_MESSAGE); setSaving(false); return; }
     if(!isNight && startTime >= endTime) { showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה"); setSaving(false); return; }
     const overlap = bookings.some(b => sameStudioId(b.studioId, studioId) && b.date===date && b.id!==bookingId && isActiveStudioBooking(b) && !(endTime<=b.startTime || startTime>=b.endTime));
@@ -2579,7 +2649,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                         {getBookingSubtitle(booking) && <span style={{fontSize:11,color:"var(--text3)"}}>{getBookingSubtitle(booking)}</span>}
                         <span style={{fontSize:11,color:"var(--text3)"}}>{booking.startTime}–{booking.endTime}</span>
                       </div>
-                      {getBookingKind(booking)==="student" && booking.studentName===student.name && !isHourPast && (
+                      {getBookingKind(booking)==="student" && isBookingOwnedByStudent(booking) && !isHourPast && (
                         <div style={{display:"flex",gap:4,flexShrink:0}}>
                           <button onClick={()=>setModal({type:"editBooking",bookingId:booking.id,studioId:dayView.studioId,date:dayView.date,dayName:dayView.dayName,isNight:false,defaultStart:booking.startTime,defaultEnd:booking.endTime,notes:booking.notes})} style={{background:"var(--accent)",color:"#000",border:"none",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
                             ✏️ ערוך
@@ -2617,7 +2687,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                       {getBookingSubtitle(b) && <span style={{fontSize:11,color:"var(--text3)"}}>{getBookingSubtitle(b)}</span>}
                       <span style={{fontSize:11,color:"var(--text3)"}}>{getStudioBookingTimeLabel(b)}</span>
                     </div>
-                    {getBookingKind(b)==="student" && b.studentName===student.name && !isDayPast && (
+                    {getBookingKind(b)==="student" && isBookingOwnedByStudent(b) && !isDayPast && (
                       <div style={{display:"flex",gap:4,flexShrink:0}}>
                         <button onClick={()=>setModal({type:"editBooking",bookingId:b.id,studioId:dayView.studioId,date:dayView.date,dayName:dayView.dayName,isNight:true,defaultStart:b.startTime,defaultEnd:b.endTime,notes:b.notes})} style={{background:NIGHT_COLOR,color:"#fff",border:"none",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
                           ✏️ ערוך
@@ -2750,6 +2820,14 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
           </div>
           <div style={{fontSize:13,color:"var(--text3)",textAlign:"center"}}>
             {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth()+1).padStart(2,"0")} — {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth()+1).padStart(2,"0")}
+          </div>
+          <div style={{display:"flex",justifyContent:"center",marginTop:2}}>
+            <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"12px 14px",display:"flex",flexDirection:"column",gap:4,minWidth:220,textAlign:"center"}}>
+              <div style={{fontWeight:800,fontSize:14,color:"var(--text)"}}>בנק שעות עתידיות</div>
+              <div style={{fontSize:22,fontWeight:900,color:"var(--accent)"}}>{formatStudioHoursValue(remainingFutureHours)}</div>
+              <div style={{fontSize:12,color:"var(--text3)"}}>מתוך {formatStudioHoursValue(studioFutureHoursLimit)} שעות זמינות</div>
+              <div style={{fontSize:11,color:"var(--text3)"}}>רק שעות עתידיות שעדיין לא הסתיימו נספרות בבנק.</div>
+            </div>
           </div>
           <div style={{display:"flex",justifyContent:"center",marginTop:6}}>
             <button
@@ -2885,10 +2963,10 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       )}
       {renderAddBookingModal()}
       {/* My bookings */}
-      {bookings.filter(b=>b.studentName===student.name).length > 0 && (
+      {bookings.filter((b)=>isBookingOwnedByStudent(b)).length > 0 && (
         <div style={{marginTop:20}}>
           <div style={{fontWeight:800,fontSize:14,marginBottom:8}}>📋 ההזמנות שלי</div>
-          {bookings.filter(b=>b.studentName===student.name).sort((a,b)=>(a.date||"").localeCompare(b.date||"")||(a.startTime||"").localeCompare(b.startTime||"")).map(b=>{
+          {bookings.filter((b)=>isBookingOwnedByStudent(b)).sort((a,b)=>(a.date||"").localeCompare(b.date||"")||(a.startTime||"").localeCompare(b.startTime||"")).map(b=>{
             const studio = studios.find(s=>sameStudioId(s.id, b.studioId));
             const color = getBookingColor(b);
             const canCancel = b.date >= todayStr;
