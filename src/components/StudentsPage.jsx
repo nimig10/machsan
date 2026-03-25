@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { storageSet } from "../utils.js";
 import { Modal } from "./ui.jsx";
+import SmartExcelImportButton from "./SmartExcelImportButton.jsx";
 
 const TRACK_LOAN_TYPES = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
 const normalizeTrackName = (value = "") => String(value || "").trim();
@@ -49,6 +50,43 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
     setSaving(false);
     if(!r.ok) showToast("error","❌ שגיאה בשמירה");
     return r.ok;
+  };
+
+  const handleAiImport = async (newStudents) => {
+    const currentStudents = certifications?.students || [];
+    const existingEmails = new Set(
+      currentStudents.map((student) => String(student?.email || "").trim().toLowerCase()).filter(Boolean)
+    );
+    const seenImportedEmails = new Set();
+    const baseId = Date.now();
+    const normalizedStudents = (Array.isArray(newStudents) ? newStudents : [])
+      .map((student, index) => ({
+        id: student?.id || `stu_ai_${baseId}_${index}`,
+        name: String(student?.name || student?.email || "").trim(),
+        email: String(student?.email || "").trim().toLowerCase(),
+        phone: String(student?.phone || "").trim(),
+        track: String(student?.track || "").trim(),
+        certs: typeof student?.certs === "object" && student?.certs ? student.certs : {},
+      }))
+      .filter((student) => {
+        if (!student.email || !student.email.includes("@")) return false;
+        if (existingEmails.has(student.email)) return false;
+        if (seenImportedEmails.has(student.email)) return false;
+        seenImportedEmails.add(student.email);
+        return true;
+      });
+
+    if (!normalizedStudents.length) {
+      showToast("error", "לא נמצאו סטודנטים חדשים לייבוא.");
+      return false;
+    }
+
+    const skippedCount = (Array.isArray(newStudents) ? newStudents.length : 0) - normalizedStudents.length;
+    if (await save({ types, students: [...currentStudents, ...normalizedStudents] })) {
+      showToast("success", `✅ יובאו ${normalizedStudents.length} סטודנטים${skippedCount > 0 ? ` · ${skippedCount} דולגו` : ""}`);
+      return true;
+    }
+    return false;
   };
 
   // ── Add student ──
@@ -247,12 +285,7 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
         <>
         <div style={{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap",alignItems:"center"}}>
           <button className="btn btn-primary" onClick={()=>setAddingStudent(true)}>➕ הוספת סטודנט</button>
-          <label style={{cursor:"pointer"}}>
-            <input type="file" accept=".csv,.tsv,.txt,.xls,.xlsx" style={{display:"none"}} onChange={importXL} disabled={xlImporting}/>
-            <span className="btn btn-secondary" style={{pointerEvents:"none"}}>
-              {xlImporting ? "⏳ מייבא..." : "📊 ייבוא מטבלה"}
-            </span>
-          </label>
+          <SmartExcelImportButton showToast={showToast} onImportSuccess={handleAiImport} />
           <div className="search-bar" style={{flex:1,minWidth:180}}><span>🔍</span>
             <input placeholder="חיפוש לפי שם, מייל או טלפון..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
           <span style={{fontSize:13,color:"var(--text3)"}}>סה״כ: <strong style={{color:"var(--text)"}}>{filteredStudents.length}</strong> / {students.length}</span>
