@@ -862,9 +862,8 @@ export default function StudioBookingPage(props) {
             <div style={{ fontSize:11, color:"var(--text3)", marginTop:-6 }}>שיוכים מרובים ממשיכים להתנהל מתוך רובריקת ההסמכות.</div>
             <label style={labelStyle}>סיווג מסלול לימודים
               <select name="studioTrackType" className="form-input" defaultValue="">
-                <option value="">ללא סיווג (גלוי לכל הסטודנטים)</option>
-                <option value="sound">🎧 הנדסאי סאונד בלבד</option>
-                <option value="cinema">🎬 הנדסאי קולנוע בלבד</option>
+                <option value="sound">🎧 הנדסאי סאונד</option>
+                <option value="cinema">🎬 הנדסאי קולנוע</option>
               </select>
             </label>
             <label style={labelStyle}>תמונה<input type="file" accept="image/*" onChange={(event) => void handleImageUpload(event, setStudioImage)} style={{ fontSize:13 }} disabled={imgUploading} />{imgUploading && <div style={{ fontSize:12, color:"var(--accent)", marginTop:4 }}>מעלה תמונה...</div>}{studioImage && <img src={studioImage} alt="תצוגה מקדימה" style={{ width:80, height:80, objectFit:"cover", borderRadius:8, marginTop:4 }} />}</label>
@@ -880,10 +879,9 @@ export default function StudioBookingPage(props) {
             <label style={labelStyle}>הסמכת אולפן<select name="studioCertId" className="form-input" defaultValue={modal.studio.studioCertId || modal.studio.studioCertIds?.[0] || ""}><option value="">ללא הסמכה</option>{studioCertTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select></label>
             <div style={{ fontSize:11, color:"var(--text3)", marginTop:-6 }}>שיוכים מרובים נשמרים מתוך רובריקת ההסמכות.</div>
             <label style={labelStyle}>סיווג מסלול לימודים
-              <select name="studioTrackType" className="form-input" defaultValue={modal.studio.studioTrackType || ""}>
-                <option value="">ללא סיווג (גלוי לכל הסטודנטים)</option>
-                <option value="sound">🎧 הנדסאי סאונד בלבד</option>
-                <option value="cinema">🎬 הנדסאי קולנוע בלבד</option>
+              <select name="studioTrackType" className="form-input" defaultValue={modal.studio.studioTrackType || "sound"}>
+                <option value="sound">🎧 הנדסאי סאונד</option>
+                <option value="cinema">🎬 הנדסאי קולנוע</option>
               </select>
             </label>
             <div style={{ fontSize:11, color:"var(--text3)", marginTop:-6 }}>בחירת סיווג תגביל את האולפן לסטודנטים ממסלול מאותו סוג בטופס ההשאלה.</div>
