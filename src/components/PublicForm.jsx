@@ -300,6 +300,12 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
                   <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"20px",direction:"rtl",minWidth:0}}>
                     <div style={{fontSize:12,fontWeight:800,color:"var(--text3)",letterSpacing:1,textTransform:"uppercase",marginBottom:12}}>{"\u05EA\u05D9\u05D0\u05D5\u05E8 \u05DE\u05DC\u05D0"}</div>
                     <div style={{fontSize:15,lineHeight:1.9,color:"var(--text)",whiteSpace:"pre-wrap"}}>{focusedEq.description || "\u05D0\u05D9\u05DF \u05EA\u05D9\u05D0\u05D5\u05E8 \u05D6\u05DE\u05D9\u05DF \u05DC\u05E4\u05E8\u05D9\u05D8 \u05D6\u05D4."}</div>
+                    {String(focusedEq.technical_details || "").trim() && (
+                      <div style={{marginTop:20,padding:"14px 16px",background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)"}}>
+                        <div style={{fontSize:12,fontWeight:800,color:"var(--text3)",marginBottom:6}}>פרטים טכניים</div>
+                        <div style={{fontSize:14,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{focusedEq.technical_details}</div>
+                      </div>
+                    )}
                     {focusedEq.notes && (
                       <div style={{marginTop:20,padding:"14px 16px",background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)"}}>
                         <div style={{fontSize:12,fontWeight:800,color:"var(--text3)",marginBottom:6}}>{"\u05D4\u05E2\u05E8\u05D5\u05EA"}</div>
@@ -699,6 +705,12 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                   <div style={{fontSize:14,color:"var(--accent)",fontWeight:700,marginBottom:14}}>{selectedEq.category}</div>
                   {selectedEq.description&&(
                     <div style={{fontSize:15,color:"var(--text2)",lineHeight:1.8,marginBottom:16,whiteSpace:"pre-wrap"}}>{selectedEq.description}</div>
+                  )}
+                  {String(selectedEq.technical_details || "").trim() && (
+                    <div style={{marginBottom:16,padding:"12px 14px",background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)"}}>
+                      <div style={{fontSize:12,fontWeight:800,color:"var(--text3)",marginBottom:8}}>פרטים טכניים</div>
+                      <div style={{fontSize:14,color:"var(--text2)",lineHeight:1.8,whiteSpace:"pre-wrap"}}>{selectedEq.technical_details}</div>
+                    </div>
                   )}
                   {selectedEq.notes&&(
                     <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 14px",fontSize:13,color:"var(--text3)",lineHeight:1.6}}>

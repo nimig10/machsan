@@ -1199,7 +1199,18 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     .reduce((s,r)=>s+(r.items?.find(i=>i.equipment_id==id)?.quantity||0),0);
 
   const EqForm = ({ initial }) => {
-    const [f, setF] = useState(initial||{name:"",category:"מצלמות",description:"",total_quantity:1,image:"📷",notes:"",status:"תקין",certification_id:""});
+    const [f, setF] = useState({
+      name:"",
+      category:"מצלמות",
+      description:"",
+      technical_details:"",
+      total_quantity:1,
+      image:"📷",
+      notes:"",
+      status:"תקין",
+      certification_id:"",
+      ...(initial || {}),
+    });
     const s = (k,v) => setF(p=>({...p,[k]:v}));
     const [imgUploading, setImgUploading] = useState(false);
     const [imgError, setImgError]         = useState("");
@@ -1303,6 +1314,16 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
             <label className="form-label" style={{margin:0}}>תיאור</label>
           </div>
           <textarea className="form-textarea" rows={2} value={f.description} onChange={e=>s("description",e.target.value)}/>
+        </div>
+        <div className="form-group">
+          <label className="form-label">פרטים טכניים</label>
+          <textarea
+            className="form-textarea"
+            rows={3}
+            placeholder="לדוגמה: טווחי עבודה, חיבורים, משקל, סוללה, פורמטים נתמכים..."
+            value={f.technical_details || ""}
+            onChange={e=>s("technical_details",e.target.value)}
+          />
         </div>
         <div className="grid-2">
           <div className="form-group"><label className="form-label">כמות *</label><input type="number" min="0" className="form-input" value={f.total_quantity} onChange={e=>s("total_quantity",Number(e.target.value))}/></div>
