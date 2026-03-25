@@ -200,6 +200,22 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
     showToast("success", shouldEnable ? `הקטגוריה "${categoryName}" הוחרגה ממגבלת השאלה פרטית` : `הוחזרה מגבלת השאלה פרטית לקטגוריה "${categoryName}"`);
   };
 
+  const deleteEmptyCategoryFromFilters = async (categoryName) => {
+    const hasItems = equipment.some((item) => item.category === categoryName);
+    if (hasItems) {
+      showToast("error", "לא ניתן למחוק — יש ציוד ברובריקה זו");
+      return;
+    }
+    const updatedCats = categories.filter((category) => category !== categoryName);
+    const updatedTypes = { ...categoryTypes };
+    delete updatedTypes[categoryName];
+    setSelectedCats((prev) => prev.filter((category) => category !== categoryName));
+    setCategories(updatedCats);
+    setCategoryTypes(updatedTypes);
+    await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes)]);
+    showToast("success", `הרובריקה "${categoryName}" נמחקה`);
+  };
+
   const todayStr2 = today();
   const used = (id) => reservations
     .filter(r=>{
@@ -391,6 +407,7 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
       <div className="flex gap-2 mb-6" style={{flexWrap:"wrap",alignItems:"center"}}>
         {(typeFilter === "הכל" ? categories : categories.filter(c => getCatType(c) === typeFilter)).map(c=>{
           const active = selectedCats.includes(c);
+          const isEmptyCategory = !equipment.some((item) => item.category === c);
           return (
             <div key={c} style={{display:"flex",alignItems:"center",borderRadius:8,overflow:"hidden",border:`1px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"var(--surface2)"}}>
               <button
@@ -399,6 +416,20 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
                 onClick={()=>setSelectedCats(prev=>active?prev.filter(x=>x!==c):[...prev,c])}>
                 {c}
               </button>
+              {isEmptyCategory && (
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  style={{borderRadius:0,border:"none",borderRight:"1px solid var(--border)",background:"transparent",color:"var(--red)",fontWeight:900,padding:"5px 8px"}}
+                  title="מחק רובריקה ריקה"
+                  onClick={(e)=>{
+                    e.stopPropagation();
+                    deleteEmptyCategoryFromFilters(c);
+                  }}
+                >
+                  ×
+                </button>
+              )}
             </div>
           );
         })}
