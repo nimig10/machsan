@@ -980,18 +980,20 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
 
   // Derive category effective type: explicit tag wins, else from items
   const getCatType = (catName) => {
-    if (categoryTypes[catName]) return categoryTypes[catName];
+    if (Object.prototype.hasOwnProperty.call(categoryTypes, catName)) {
+      return categoryTypes[catName] === "סאונד" || categoryTypes[catName] === "צילום" ? categoryTypes[catName] : "כללי";
+    }
     const catItems = equipment.filter(e => e.category === catName);
-    if (!catItems.length) return null;
+    if (!catItems.length) return "כללי";
     if (catItems.every(e => e.soundOnly)) return "סאונד";
     if (catItems.every(e => e.photoOnly)) return "צילום";
-    return null;
+    return "כללי";
   };
 
   const filtered = equipment.filter(e =>
     (selectedCats.length===0||selectedCats.includes(e.category)) &&
     e.name.includes(search) &&
-    (typeFilter==="הכל" || (()=>{const g=(!e.soundOnly&&!e.photoOnly)||(e.soundOnly&&e.photoOnly);return(typeFilter==="סאונד"&&(e.soundOnly||g))||(typeFilter==="צילום"&&(e.photoOnly||g));})())
+    (typeFilter==="הכל" || getCatType(e.category)===typeFilter)
   );
 
   const updateQty = async (eq, delta) => {
@@ -1041,28 +1043,23 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     setModal(null);
   };
 
-  const toggleCategorySoundOnly = async (categoryName) => {
-    const categoryItems = equipment.filter((item) => item.category === categoryName);
-    if (!categoryItems.length) return;
-    const shouldEnable = !categoryItems.every((item) => !!item.soundOnly);
-    const updated = equipment.map((item) =>
-      item.category === categoryName ? { ...item, soundOnly: shouldEnable } : item
-    );
+  const setCategoryClassification = async (categoryName, nextType) => {
+    const updated = equipment.map((item) => (
+      item.category === categoryName
+        ? { ...item, soundOnly: nextType === "סאונד", photoOnly: nextType === "צילום" }
+        : item
+    ));
+    const updatedTypes = { ...categoryTypes };
+    if (nextType === "סאונד" || nextType === "צילום") updatedTypes[categoryName] = nextType;
+    else delete updatedTypes[categoryName];
     setEquipment(updated);
-    await storageSet("equipment", updated);
-    showToast("success", shouldEnable ? `כל הפריטים בקטגוריית "${categoryName}" סומנו כציוד סאונד` : `הוסר סימון ציוד סאונד מקטגוריית "${categoryName}"`);
-  };
-
-  const toggleCategoryPhotoOnly = async (categoryName) => {
-    const categoryItems = equipment.filter((item) => item.category === categoryName);
-    if (!categoryItems.length) return;
-    const shouldEnable = !categoryItems.every((item) => !!item.photoOnly);
-    const updated = equipment.map((item) =>
-      item.category === categoryName ? { ...item, photoOnly: shouldEnable } : item
-    );
-    setEquipment(updated);
-    await storageSet("equipment", updated);
-    showToast("success", shouldEnable ? `כל הפריטים בקטגוריית "${categoryName}" סומנו כציוד צילום` : `הוסר סימון ציוד צילום מקטגוריית "${categoryName}"`);
+    setCategoryTypes(updatedTypes);
+    await Promise.all([storageSet("equipment", updated), storageSet("categoryTypes", updatedTypes)]);
+    showToast("success", nextType === "סאונד"
+      ? `כל הפריטים בקטגוריית "${categoryName}" סווגו כציוד סאונד`
+      : nextType === "צילום"
+        ? `כל הפריטים בקטגוריית "${categoryName}" סווגו כציוד צילום`
+        : `כל הפריטים בקטגוריית "${categoryName}" סווגו ככלליים`);
   };
 
   const toggleCategoryPrivateLoanUnlimited = async (categoryName) => {
@@ -1299,7 +1296,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
 
       {/* ── Type filter (sound / photo) ── */}
       <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
-        {[{k:"הכל",label:"📦 הכל"},{k:"סאונד",label:"🎙️ סאונד"},{k:"צילום",label:"🎥 צילום"}].map(({k,label})=>{
+        {[{k:"הכל",label:"📦 הכל"},{k:"סאונד",label:"🎙️ סאונד"},{k:"צילום",label:"🎥 צילום"},{k:"כללי",label:"🧩 כללי"}].map(({k,label})=>{
           const active=typeFilter===k;
           return <button key={k} type="button" onClick={()=>setTypeFilter(k)}
             style={{padding:"5px 14px",borderRadius:8,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
@@ -1352,20 +1349,20 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                 <span style={{fontSize:11,color:"var(--text3)",fontWeight:400}}>({filtered.filter(e=>e.category===c).length} פריטים)</span>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                  <button
-                    type="button"
-                    className={`btn btn-sm ${equipment.filter(e=>e.category===c).every(e=>e.soundOnly) ? "btn-primary" : "btn-secondary"}`}
-                    onClick={()=>toggleCategorySoundOnly(c)}
-                  >
-                    ציוד סאונד
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn btn-sm ${equipment.filter(e=>e.category===c).every(e=>e.photoOnly) ? "btn-primary" : "btn-secondary"}`}
-                    onClick={()=>toggleCategoryPhotoOnly(c)}
-                  >
-                    ציוד צילום
-                  </button>
+                  {[
+                    { key:"סאונד", label:"ציוד סאונד" },
+                    { key:"צילום", label:"ציוד צילום" },
+                    { key:"כללי", label:"כללי" },
+                  ].map(({ key, label }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`btn btn-sm ${getCatType(c) === key ? "btn-primary" : "btn-secondary"}`}
+                      onClick={()=>setCategoryClassification(c, key)}
+                    >
+                      {label}
+                    </button>
+                  ))}
                   <button
                     type="button"
                     className={`btn btn-sm ${equipment.filter(e=>e.category===c).every(e=>e.privateLoanUnlimited) ? "btn-purple" : "btn-secondary"}`}
