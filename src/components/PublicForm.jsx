@@ -886,7 +886,11 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const activeStudentTrack = String(loggedInStudent?.track || form.course || "").trim();
   // ── Studio track-type filtering ──
   const studentTrackType = normalizedTrackSettings.find(s => s.name === activeStudentTrack)?.trackType || "";
-  const visibleStudios = studios.filter(studio => !studio.studioTrackType || !studentTrackType || studio.studioTrackType === studentTrackType);
+  const visibleStudios = studios.filter(studio => {
+    // studioTrackType is the new field; fall back to legacy studio.type field
+    const sType = studio.studioTrackType || (studio.type === "sound" ? "sound" : studio.type === "cinema" ? "cinema" : "");
+    return !sType || !studentTrackType || sType === studentTrackType;
+  });
   const allowedLoanTypes = activeStudentTrack
     ? (normalizedTrackSettings.find((setting) => setting.name === activeStudentTrack)?.loanTypes || [...SMART_LOAN_TYPES])
     : [...SMART_LOAN_TYPES];
