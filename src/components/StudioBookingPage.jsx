@@ -864,6 +864,7 @@ export default function StudioBookingPage(props) {
               <select name="studioTrackType" className="form-input" defaultValue="">
                 <option value="sound">🎧 הנדסאי סאונד</option>
                 <option value="cinema">🎬 הנדסאי קולנוע</option>
+                <option value="all">🌐 זמין לכל</option>
               </select>
             </label>
             <label style={labelStyle}>תמונה<input type="file" accept="image/*" onChange={(event) => void handleImageUpload(event, setStudioImage)} style={{ fontSize:13 }} disabled={imgUploading} />{imgUploading && <div style={{ fontSize:12, color:"var(--accent)", marginTop:4 }}>מעלה תמונה...</div>}{studioImage && <img src={studioImage} alt="תצוגה מקדימה" style={{ width:80, height:80, objectFit:"cover", borderRadius:8, marginTop:4 }} />}</label>
@@ -882,6 +883,7 @@ export default function StudioBookingPage(props) {
               <select name="studioTrackType" className="form-input" defaultValue={modal.studio.studioTrackType || "sound"}>
                 <option value="sound">🎧 הנדסאי סאונד</option>
                 <option value="cinema">🎬 הנדסאי קולנוע</option>
+                <option value="all">🌐 זמין לכל</option>
               </select>
             </label>
             <div style={{ fontSize:11, color:"var(--text3)", marginTop:-6 }}>בחירת סיווג תגביל את האולפן לסטודנטים ממסלול מאותו סוג בטופס ההשאלה.</div>
