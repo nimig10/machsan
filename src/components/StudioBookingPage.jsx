@@ -2,8 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { storageSet, lsGet } from "../utils.js";
 import { Modal } from "./ui.jsx";
 
-const DAY_HOURS = ["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00"];
-const NIGHT_HOURS = ["21:00","22:00","23:00","00:00","01:00","02:00","03:00","04:00","05:00","06:00","07:00","08:00"];
+const DAY_HOURS = ["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00","21:30"];
+const DAY_BOOKING_HOURS = DAY_HOURS.slice(0, -1);
+const NIGHT_START_TIME = "21:30";
+const NIGHT_END_TIME = "08:00";
+const NIGHT_BOOKING_LABEL = `מ־${NIGHT_START_TIME} והלאה`;
 const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 const HE_DAYS_SHORT = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
 const NIGHT_COLOR = "#2196f3";
@@ -173,6 +176,9 @@ export default function StudioBookingPage(props) {
     if (kind === "team") return "צוות המחסן";
     return "";
   }, [getBookingKind]);
+  const getBookingTimeLabel = useCallback((booking) => (
+    booking?.isNight ? NIGHT_BOOKING_LABEL : `${booking?.startTime || ""}–${booking?.endTime || ""}`
+  ), []);
 
   const weekMiddle = new Date();
   weekMiddle.setDate(weekMiddle.getDate() + weekOffset * 7);
@@ -282,7 +288,7 @@ export default function StudioBookingPage(props) {
       return;
     }
     setFormTeamMember("");
-    setModal({ type:"addBooking", studioId, studioName, date, dayName });
+    setModal({ type:"addBooking", studioId, studioName, date, dayName, isNightTeam:false });
   };
 
   const openViewBookingModal = (booking, studioName) => {
@@ -413,13 +419,13 @@ export default function StudioBookingPage(props) {
     const memberName = selectedMember?.name || "";
     const formData = new FormData(event.target);
     const studio = studios.find((item) => sameStudioId(item.id, modal.studioId));
-    const startTime = String(formData.get("startTime") || "");
-    const endTime = String(formData.get("endTime") || "");
     const notes = String(formData.get("notes") || "").trim();
     const isNight = formData.get("isNight") === "on";
+    const startTime = isNight ? NIGHT_START_TIME : String(formData.get("startTime") || "");
+    const endTime = isNight ? NIGHT_END_TIME : String(formData.get("endTime") || "");
 
     if (!memberName || !startTime || !endTime) {
-      showToast("error", "נא לבחור איש צוות ושעות");
+      showToast("error", "נא לבחור איש צוות ולהשלים את פרטי הקביעה");
       setSaving(false);
       return;
     }
@@ -521,7 +527,7 @@ export default function StudioBookingPage(props) {
           </div>
           <div style={{ fontSize:14, fontWeight:700, color:"var(--text)" }}>{getBookingTitle(booking)}</div>
           {subtitle && <div style={{ fontSize:12, color:"var(--text2)", marginTop:2 }}>{subtitle}</div>}
-          <div style={{ fontSize:12, color:"var(--text3)", marginTop:2 }}>📅 {booking.date} · ⏰ {booking.startTime}–{booking.endTime}</div>
+          <div style={{ fontSize:12, color:"var(--text3)", marginTop:2 }}>📅 {booking.date} · ⏰ {getBookingTimeLabel(booking)}</div>
           {booking.notes && <div style={{ fontSize:11, color:"var(--text3)", marginTop:2 }}>📝 {booking.notes}</div>}
         </div>
         {canDeleteBooking(booking) && (
@@ -635,7 +641,7 @@ export default function StudioBookingPage(props) {
                               const subtitle = getBookingSubtitle(booking);
                               return (
                                 <div key={booking.id} style={{ background:`${color}20`, border:`1px solid ${color}`, borderRadius:6, padding:"4px 6px", marginBottom:4, fontSize:11, cursor:"pointer" }} onClick={(event) => { event.stopPropagation(); openViewBookingModal(booking, studio.name); }}>
-                                  <div style={{ fontWeight:800, color }}>{booking.startTime}–{booking.endTime}</div>
+                                  <div style={{ fontWeight:800, color }}>{getBookingTimeLabel(booking)}</div>
                                   <div style={{ color:"var(--text)", fontWeight:700 }}>{getBookingTitle(booking)}</div>
                                   {subtitle && <div style={{ color:"var(--text3)", fontSize:10 }}>{subtitle}</div>}
                                 </div>
@@ -756,10 +762,38 @@ export default function StudioBookingPage(props) {
             {bookingRequiredCert.length > 0 && <div style={{ background:"rgba(52,152,219,0.08)", border:"1px solid rgba(52,152,219,0.2)", borderRadius:8, padding:"8px 12px", fontSize:12, color:"var(--blue)", fontWeight:600 }}>🎓 האולפן הזה דורש לסטודנטים הסמכה: {bookingRequiredCert.map((type) => type.name).join(" / ")}. קביעת צוות ממשיכה לעבוד גם בלי הסמכה.</div>}
             <label style={labelStyle}>איש צוות *{teamMemberOptions.length > 0 ? <select className="form-input" value={formTeamMember} onChange={(event) => setFormTeamMember(event.target.value)} required><option value="" disabled>בחר איש צוות...</option>{teamMemberOptions.map((member) => <option key={String(member.id)} value={String(member.id)}>{member.name}</option>)}</select> : <div style={{ background:"rgba(231,76,60,0.08)", border:"1px solid rgba(231,76,60,0.2)", borderRadius:8, padding:"10px 12px", color:"var(--red)", fontWeight:700 }}>אין כרגע אנשי צוות ברובריקת "צוות"</div>}</label>
             <div style={{ display:"flex", gap:8 }}>
-              <label style={{ ...labelStyle, flex:1 }}>שעת התחלה *<select name="startTime" className="form-input" required defaultValue="09:00">{DAY_HOURS.map((hour) => <option key={hour}>{hour}</option>)}<optgroup label="שעות לילה">{NIGHT_HOURS.filter((hour) => hour !== "21:00").map((hour) => <option key={hour}>{hour}</option>)}</optgroup></select></label>
-              <label style={{ ...labelStyle, flex:1 }}>שעת סיום *<select name="endTime" className="form-input" required defaultValue="12:00">{DAY_HOURS.map((hour) => <option key={hour}>{hour}</option>)}<optgroup label="שעות לילה">{NIGHT_HOURS.filter((hour) => hour !== "21:00").map((hour) => <option key={hour}>{hour}</option>)}</optgroup></select></label>
+              <label style={{ ...labelStyle, flex:1 }}>
+                שעת התחלה *
+                {modal?.isNightTeam ? (
+                  <div className="form-input" style={{ display:"flex", alignItems:"center", minHeight:42, color:NIGHT_COLOR, fontWeight:700 }}>{NIGHT_BOOKING_LABEL}</div>
+                ) : (
+                  <select name="startTime" className="form-input" required defaultValue="09:00">
+                    {DAY_BOOKING_HOURS.map((hour) => <option key={hour}>{hour}</option>)}
+                  </select>
+                )}
+              </label>
+              <label style={{ ...labelStyle, flex:1 }}>
+                שעת סיום *
+                {modal?.isNightTeam ? (
+                  <div className="form-input" style={{ display:"flex", alignItems:"center", minHeight:42, color:NIGHT_COLOR, fontWeight:700 }}>קביעת לילה כללית</div>
+                ) : (
+                  <select name="endTime" className="form-input" required defaultValue="12:00">
+                    {DAY_HOURS.map((hour) => <option key={hour}>{hour}</option>)}
+                  </select>
+                )}
+              </label>
             </div>
-            <label style={labelStyle}><span style={{ color:NIGHT_COLOR }}>קביעת לילה לצוות</span><input type="checkbox" name="isNight" style={{ width:18, height:18, accentColor:NIGHT_COLOR }} /></label>
+            <label style={labelStyle}>
+              <span style={{ color:NIGHT_COLOR }}>קביעת לילה לצוות</span>
+              <input
+                type="checkbox"
+                name="isNight"
+                checked={Boolean(modal?.isNightTeam)}
+                onChange={(event) => setModal((prev) => prev?.type === "addBooking" ? { ...prev, isNightTeam: event.target.checked } : prev)}
+                style={{ width:18, height:18, accentColor:NIGHT_COLOR }}
+              />
+            </label>
+            {modal?.isNightTeam && <div style={{ fontSize:12, color:"var(--text2)", background:`${NIGHT_COLOR}12`, border:`1px solid ${NIGHT_COLOR}44`, borderRadius:8, padding:"10px 12px" }}>קביעת לילה לצוות נשמרת כטווח כללי {NIGHT_BOOKING_LABEL}.</div>}
             <label style={labelStyle}>הערות<textarea name="notes" className="form-input" rows={2} placeholder="למשל: הכנת אולפן / עבודה של איש צוות" /></label>
             <div style={{ fontSize:12, color:"var(--text3)" }}>קביעת צוות נשמרת ישירות בלוח, בלי סטטוס ובלי בדיקות הסמכה.</div>
           </form>
@@ -776,7 +810,7 @@ export default function StudioBookingPage(props) {
               <div style={{ display:"flex", flexDirection:"column", gap:10, direction:"rtl" }}>
                 <Row label="סוג" value={<span style={{ color, fontWeight:700 }}>{getBookingTypeLabel(booking)}</span>} />
                 <Row label="תאריך" value={booking.date} />
-                <Row label="חלון שעות" value={`${booking.startTime} – ${booking.endTime}`} />
+                <Row label="חלון שעות" value={getBookingTimeLabel(booking)} />
                 {kind === "lesson" && <><Row label="קורס" value={booking.courseName || "—"} /><Row label="מרצה" value={booking.instructorName || "—"} /><Row label="מסלול" value={booking.track || "—"} /><Row label="נושא השיעור" value={booking.subject || "—"} /></>}
                 {kind === "student" && <Row label="סטודנט" value={booking.studentName} />}
                 {kind === "team" && <Row label="איש צוות" value={booking.teamMemberName || booking.studentName} />}

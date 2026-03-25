@@ -2013,8 +2013,11 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
   const [smartBookingPrompt, setSmartBookingPrompt] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
 
-  const DAY_HOURS = ["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00"];
-  const NIGHT_HOURS = ["21:00","22:00","23:00","00:00","01:00","02:00","03:00","04:00","05:00","06:00","07:00","08:00"];
+  const DAY_HOURS = ["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00","21:30"];
+  const DAY_BOOKING_HOURS = DAY_HOURS.slice(0, -1);
+  const NIGHT_START_TIME = "21:30";
+  const NIGHT_END_TIME = "08:00";
+  const NIGHT_BOOKING_LABEL = `מ־${NIGHT_START_TIME} והלאה`;
   const STUDENT_COLOR = "var(--green)";
   const TEAM_COLOR = "#9b59b6";
   const LESSON_COLOR = "#f5a623";
@@ -2097,6 +2100,9 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     if (kind === "team") return "צוות המחסן";
     return "";
   };
+  const getStudioBookingTimeLabel = (booking) => (
+    booking?.isNight ? NIGHT_BOOKING_LABEL : `${booking?.startTime || ""}–${booking?.endTime || ""}`
+  );
   const isActiveStudioBooking = (booking) => booking?.status !== "נדחה";
 
   function getWeekDays(off=0) {
@@ -2125,8 +2131,8 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       defaultEnd,
       selectedStudioId: String(studioId ?? ""),
       selectedDate: date || "",
-      selectedStartTime: defaultStart || (isNight ? "21:00" : "09:00"),
-      selectedEndTime: defaultEnd || (isNight ? "08:00" : "12:00"),
+      selectedStartTime: defaultStart || (isNight ? NIGHT_START_TIME : "09:00"),
+      selectedEndTime: defaultEnd || (isNight ? NIGHT_END_TIME : "12:00"),
       notes: "",
     });
   };
@@ -2175,22 +2181,26 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     return best;
   };
   const getStudioBookingValidationError = ({ studioId, date, startTime, endTime, isNight=false, blockedMessage="" }) => {
-    if (!studioId || !date || !startTime || !endTime) return "יש להשלים אולפן, תאריך ושעות לפני השליחה";
+    const normalizedStartTime = isNight ? NIGHT_START_TIME : startTime;
+    const normalizedEndTime = isNight ? NIGHT_END_TIME : endTime;
+    if (!studioId || !date || !normalizedStartTime || !normalizedEndTime) return "יש להשלים אולפן, תאריך ושעות לפני השליחה";
     if (date < todayStr) return "לא ניתן להזמין תאריך שעבר";
     if (isStudioDisabled(studioId)) return blockedMessage || STUDIO_MAINTENANCE_MESSAGE;
     if (!hasStudioCert(studioId) || (isNight && !hasNightCert)) return blockedMessage || "🔒 טרם עבר הסמכה — לא ניתן לקבוע אולפן זה";
-    if (!isNight && startTime >= endTime) return "שעת סיום חייבת להיות אחרי שעת ההתחלה";
+    if (!isNight && normalizedStartTime >= normalizedEndTime) return "שעת סיום חייבת להיות אחרי שעת ההתחלה";
     const overlap = bookings.some((booking) => (
       sameStudioId(booking.studioId, studioId)
       && booking.date === date
       && isActiveStudioBooking(booking)
-      && !(endTime <= booking.startTime || startTime >= booking.endTime)
+      && !(normalizedEndTime <= booking.startTime || normalizedStartTime >= booking.endTime)
     ));
     if (!isNight && overlap) return "⚠️ קיימת הזמנה חופפת";
     return "";
   };
   const persistStudentBooking = async ({ studioId, date, startTime, endTime, notes="", isNight=false, blockedMessage="", successMessage="✅ האולפן הוזמן בהצלחה!" }) => {
-    const validationError = getStudioBookingValidationError({ studioId, date, startTime, endTime, isNight, blockedMessage });
+    const normalizedStartTime = isNight ? NIGHT_START_TIME : startTime;
+    const normalizedEndTime = isNight ? NIGHT_END_TIME : endTime;
+    const validationError = getStudioBookingValidationError({ studioId, date, startTime: normalizedStartTime, endTime: normalizedEndTime, isNight, blockedMessage });
     if (validationError) {
       showToast("error", validationError);
       return false;
@@ -2200,8 +2210,8 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       bookingKind: "student",
       studioId,
       date,
-      startTime,
-      endTime,
+      startTime: normalizedStartTime,
+      endTime: normalizedEndTime,
       studentName: student.name,
       notes,
       isNight,
@@ -2297,14 +2307,17 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       const parsedStartTime = String(result?.startTime || "").trim();
       const parsedEndTime = String(result?.endTime || "").trim();
       const inferredNightBooking = (
-        (parsedStartTime && parsedStartTime >= "21:00")
-        || (parsedEndTime && parsedEndTime <= "08:00")
+        (parsedStartTime && parsedStartTime >= NIGHT_START_TIME)
+        || (parsedEndTime && parsedEndTime <= NIGHT_END_TIME)
         || (parsedStartTime && parsedEndTime && parsedEndTime <= parsedStartTime)
       );
-      const timeOptions = inferredNightBooking ? NIGHT_HOURS : DAY_HOURS;
       const directSelectedDate = result?.date || today;
-      const directSelectedStartTime = getClosestTimeOption(result?.startTime, timeOptions, inferredNightBooking ? "21:00" : "09:00");
-      const directSelectedEndTime = getClosestTimeOption(result?.endTime, timeOptions, inferredNightBooking ? "08:00" : "12:00");
+      const directSelectedStartTime = inferredNightBooking
+        ? NIGHT_START_TIME
+        : getClosestTimeOption(result?.startTime, DAY_BOOKING_HOURS, "09:00");
+      const directSelectedEndTime = inferredNightBooking
+        ? NIGHT_END_TIME
+        : getClosestTimeOption(result?.endTime, DAY_HOURS, "12:00");
       const didSave = await persistStudentBooking({
         studioId: directResolvedStudio.id,
         date: directSelectedDate,
@@ -2374,24 +2387,36 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
             </div>
             <div style={{display:"flex",gap:8}}>
               <label style={{flex:1,fontSize:13,fontWeight:600}}>התחלה
-                <select
-                  name="startTime"
-                  className="form-input"
-                  value={modal.selectedStartTime || modal.defaultStart || "09:00"}
-                  onChange={(e) => updateAddBookingModal({ selectedStartTime: e.target.value, defaultStart: e.target.value })}
-                >
-                  {(modal.isNight ? NIGHT_HOURS : DAY_HOURS).map(h=><option key={h}>{h}</option>)}
-                </select>
+                {modal.isNight ? (
+                  <div className="form-input" style={{display:"flex",alignItems:"center",minHeight:42,color:NIGHT_COLOR,fontWeight:700}}>
+                    {NIGHT_BOOKING_LABEL}
+                  </div>
+                ) : (
+                  <select
+                    name="startTime"
+                    className="form-input"
+                    value={modal.selectedStartTime || modal.defaultStart || "09:00"}
+                    onChange={(e) => updateAddBookingModal({ selectedStartTime: e.target.value, defaultStart: e.target.value })}
+                  >
+                    {DAY_BOOKING_HOURS.map(h=><option key={h}>{h}</option>)}
+                  </select>
+                )}
               </label>
               <label style={{flex:1,fontSize:13,fontWeight:600}}>סיום
-                <select
-                  name="endTime"
-                  className="form-input"
-                  value={modal.selectedEndTime || modal.defaultEnd || (modal.isNight?"08:00":"12:00")}
-                  onChange={(e) => updateAddBookingModal({ selectedEndTime: e.target.value, defaultEnd: e.target.value })}
-                >
-                  {(modal.isNight ? NIGHT_HOURS : DAY_HOURS).map(h=><option key={h}>{h}</option>)}
-                </select>
+                {modal.isNight ? (
+                  <div className="form-input" style={{display:"flex",alignItems:"center",minHeight:42,color:NIGHT_COLOR,fontWeight:700}}>
+                    קביעת לילה כללית
+                  </div>
+                ) : (
+                  <select
+                    name="endTime"
+                    className="form-input"
+                    value={modal.selectedEndTime || modal.defaultEnd || "12:00"}
+                    onChange={(e) => updateAddBookingModal({ selectedEndTime: e.target.value, defaultEnd: e.target.value })}
+                  >
+                    {DAY_HOURS.map(h=><option key={h}>{h}</option>)}
+                  </select>
+                )}
               </label>
             </div>
             <label style={{fontSize:13,fontWeight:600}}>הערות
@@ -2421,10 +2446,10 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     const fd = new FormData(e.target);
     const studioId = String(fd.get("studioId") || modal?.selectedStudioId || modal?.studioId || "").trim();
     const date = String(fd.get("date") || modal?.selectedDate || modal?.date || "").trim();
-    const startTime = String(fd.get("startTime") || modal?.selectedStartTime || "").trim();
-    const endTime = String(fd.get("endTime") || modal?.selectedEndTime || "").trim();
     const notes = fd.get("notes")?.trim();
     const isNight = modal.isNight || false;
+    const startTime = isNight ? NIGHT_START_TIME : String(fd.get("startTime") || modal?.selectedStartTime || "").trim();
+    const endTime = isNight ? NIGHT_END_TIME : String(fd.get("endTime") || modal?.selectedEndTime || "").trim();
     const didSave = await persistStudentBooking({ studioId, date, startTime, endTime, notes, isNight });
     if (didSave) closeBookingModal();
     setSaving(false);
@@ -2434,8 +2459,10 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     e.preventDefault();
     setSaving(true);
     const fd = new FormData(e.target);
-    const startTime = fd.get("startTime"), endTime = fd.get("endTime"), notes = fd.get("notes")?.trim();
+    const notes = fd.get("notes")?.trim();
     const { bookingId, studioId, date, isNight } = modal;
+    const startTime = isNight ? NIGHT_START_TIME : String(fd.get("startTime") || modal?.defaultStart || "").trim();
+    const endTime = isNight ? NIGHT_END_TIME : String(fd.get("endTime") || modal?.defaultEnd || "").trim();
     if (isStudioDisabled(studioId)) { showToast("error", STUDIO_MAINTENANCE_MESSAGE); setSaving(false); return; }
     if(!isNight && startTime >= endTime) { showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה"); setSaving(false); return; }
     const overlap = bookings.some(b => sameStudioId(b.studioId, studioId) && b.date===date && b.id!==bookingId && isActiveStudioBooking(b) && !(endTime<=b.startTime || startTime>=b.endTime));
@@ -2535,11 +2562,11 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
         {!maintenanceBlocked && dayBlocked && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid var(--red)",borderRadius:8,padding:"12px 16px",fontSize:14,color:"var(--red)",marginBottom:12,textAlign:"center",fontWeight:700}}>⛔ טרם עבר הסמכה{dayCertName ? ` — ${dayCertName}` : ""}<br/><span style={{fontSize:12,fontWeight:500}}>לא ניתן לקבוע אולפן זה. יש לפנות לאיש צוות.</span></div>}
         {isDayPast && !dayBlocked && <div style={{background:"rgba(255,80,80,0.1)",border:"1px solid var(--red)",borderRadius:8,padding:"8px 12px",fontSize:13,color:"var(--red)",marginBottom:12,textAlign:"center"}}>⛔ לא ניתן להזמין תאריכים שעברו</div>}
 
-        {/* Day hours (09:00-21:00) */}
-        <div style={{fontWeight:800,fontSize:13,marginBottom:6,color:"var(--accent)"}}>☀️ שעות יום (09:00–21:00)</div>
+        {/* Day hours (09:00-21:30) */}
+        <div style={{fontWeight:800,fontSize:13,marginBottom:6,color:"var(--accent)"}}>☀️ שעות יום (09:00–21:30)</div>
         <div style={{display:"flex",flexDirection:"column",gap:2,marginBottom:16}}>
-          {DAY_HOURS.map((hour,i)=>{
-            const nextH = DAY_HOURS[i+1] || "21:00";
+          {DAY_BOOKING_HOURS.map((hour,i)=>{
+            const nextH = DAY_HOURS[i+1] || NIGHT_START_TIME;
             const booking = dayBookings.find(b=>!b.isNight && b.startTime<=hour && b.endTime>hour);
             const isHourPast = isDayPast || (dayView.date===todayStr && parseInt(hour)<nowHour);
             return (
@@ -2573,9 +2600,9 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
           })}
         </div>
 
-        {/* Night hours (21:00-08:00) */}
+        {/* Night booking */}
         <div style={{fontWeight:800,fontSize:13,marginBottom:6,color:NIGHT_COLOR,display:"flex",alignItems:"center",gap:6}}>
-          🌙 הזמנת לילה (21:00–08:00)
+          🌙 קביעת לילה ({NIGHT_BOOKING_LABEL})
           {!hasNightCert && <span style={{fontSize:11,fontWeight:500,color:"var(--text3)"}}>— טרם עבר/ה הסמכת לילה</span>}
         </div>
         {hasNightCert && !dayBlocked ? (
@@ -2588,7 +2615,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                     <div style={{display:"flex",flexDirection:"column",gap:2}}>
                       <span style={{fontWeight:700,fontSize:13}}>{getBookingTitle(b)}</span>
                       {getBookingSubtitle(b) && <span style={{fontSize:11,color:"var(--text3)"}}>{getBookingSubtitle(b)}</span>}
-                      <span style={{fontSize:11,color:"var(--text3)"}}>{b.startTime}–{b.endTime}</span>
+                      <span style={{fontSize:11,color:"var(--text3)"}}>{getStudioBookingTimeLabel(b)}</span>
                     </div>
                     {getBookingKind(b)==="student" && b.studentName===student.name && !isDayPast && (
                       <div style={{display:"flex",gap:4,flexShrink:0}}>
@@ -2606,7 +2633,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
             ) : (
               !isDayPast && (
                 <div style={{border:`1px dashed ${NIGHT_COLOR}`,borderRadius:6,padding:"12px 16px",textAlign:"center",cursor:"pointer",color:NIGHT_COLOR,fontSize:13}}
-                  onClick={()=>openAddBookingModal({studioId:dayView.studioId,date:dayView.date,dayName:dayView.dayName,isNight:true,defaultStart:"21:00",defaultEnd:"08:00"})}>
+                  onClick={()=>openAddBookingModal({studioId:dayView.studioId,date:dayView.date,dayName:dayView.dayName,isNight:true,defaultStart:NIGHT_START_TIME,defaultEnd:NIGHT_END_TIME})}>
                   + לחץ להזמנת לילה
                 </div>
               )
@@ -2631,14 +2658,26 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                 <div style={{fontSize:13,color:"var(--text3)"}}>👤 {student.name} · {modal.date}</div>
                 <div style={{display:"flex",gap:8}}>
                   <label style={{flex:1,fontSize:13,fontWeight:600}}>התחלה
-                    <select name="startTime" className="form-input" defaultValue={modal.defaultStart}>
-                      {(modal.isNight ? NIGHT_HOURS : DAY_HOURS).map(h=><option key={h}>{h}</option>)}
-                    </select>
+                    {modal.isNight ? (
+                      <div className="form-input" style={{display:"flex",alignItems:"center",minHeight:42,color:NIGHT_COLOR,fontWeight:700}}>
+                        {NIGHT_BOOKING_LABEL}
+                      </div>
+                    ) : (
+                      <select name="startTime" className="form-input" defaultValue={modal.defaultStart}>
+                        {DAY_BOOKING_HOURS.map(h=><option key={h}>{h}</option>)}
+                      </select>
+                    )}
                   </label>
                   <label style={{flex:1,fontSize:13,fontWeight:600}}>סיום
-                    <select name="endTime" className="form-input" defaultValue={modal.defaultEnd}>
-                      {(modal.isNight ? NIGHT_HOURS : DAY_HOURS).map(h=><option key={h}>{h}</option>)}
-                    </select>
+                    {modal.isNight ? (
+                      <div className="form-input" style={{display:"flex",alignItems:"center",minHeight:42,color:NIGHT_COLOR,fontWeight:700}}>
+                        קביעת לילה כללית
+                      </div>
+                    ) : (
+                      <select name="endTime" className="form-input" defaultValue={modal.defaultEnd}>
+                        {DAY_HOURS.map(h=><option key={h}>{h}</option>)}
+                      </select>
+                    )}
                   </label>
                 </div>
                 <label style={{fontSize:13,fontWeight:600}}>הערות
@@ -2826,7 +2865,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                           const color = getBookingColor(b);
                           return (
                             <div key={b.id} style={{background:color+"22",border:`1px solid ${color}`,borderRadius:4,padding:"2px 4px",marginBottom:2,fontSize:10}}>
-                              <div style={{fontWeight:700,color}}>{b.isNight?"🌙 ":""}{b.startTime}–{b.endTime}</div>
+                              <div style={{fontWeight:700,color}}>{b.isNight?"🌙 ":""}{getStudioBookingTimeLabel(b)}</div>
                               <div style={{color:"var(--text3)"}}>{getBookingTitle(b)}</div>
                               {getBookingSubtitle(b) && <div style={{color:"var(--text3)",fontSize:9}}>{getBookingSubtitle(b)}</div>}
                             </div>
@@ -2860,7 +2899,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                     {studio?.image?.startsWith("http") ? null : (studio?.image||"🎙️")} {studio?.name} · {b.date}
                     {b.isNight && <span style={{color:NIGHT_COLOR,marginRight:4}}> 🌙</span>}
                   </div>
-                  <div style={{fontSize:12,color:"var(--text3)"}}>{b.startTime}–{b.endTime}</div>
+                  <div style={{fontSize:12,color:"var(--text3)"}}>{getStudioBookingTimeLabel(b)}</div>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
                   {canCancel && (
