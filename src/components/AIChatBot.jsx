@@ -9,7 +9,6 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
 
-  // הגבלת בקשות מתוך ההגדרות (או 5 כברירת מחדל)
   const maxRequests = parseInt(settings?.aiMaxRequests) || 5;
   const todayKey = `ai_requests_${new Date().toISOString().split('T')[0]}`;
 
@@ -18,7 +17,6 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
 
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
 
-  // גלילה אוטומטית להודעה האחרונה
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
@@ -42,7 +40,6 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
     setIsTyping(true);
 
     try {
-      // הכנת מידע קומפקטי ל-AI כדי לחסוך טוקנים
       const compactEquipment = equipment.map(e => ({
         name: e.name, category: e.category, avail: e.avail
       }));
@@ -58,12 +55,10 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
         מלאי הציוד הנוכחי: ${JSON.stringify(compactEquipment)}
       `;
 
-      // בונים את היסטוריית השיחה בפורמט ש-Gemini מצפה לו
       const history = messages.filter(m => m.role !== 'system').map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: m.content }]
       }));
-
       history.push({ role: 'user', parts: [{ text: userMessage }] });
 
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
@@ -81,7 +76,7 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
       const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text;
 
       setMessages(prev => [...prev, { role: 'assistant', content: aiText }]);
-      incrementRequestsCount(); // מעדכן את המונה רק על תשובות מוצלחות
+      incrementRequestsCount();
 
     } catch (error) {
       console.error("ChatBot error:", error);
@@ -92,55 +87,131 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
   };
 
   return (
-    <div className="fixed bottom-6 left-6 z-50 flex flex-col items-start" dir="rtl">
+    <div style={{ position: 'fixed', bottom: 24, left: 24, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }} dir="rtl">
+
+      {/* Panel */}
       {isOpen && (
-        <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-80 sm:w-96 flex flex-col overflow-hidden mb-4 transition-all duration-300">
+        <div style={{
+          background: '#1a1a2e',
+          borderRadius: 16,
+          boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
+          border: '1px solid rgba(99,102,241,0.3)',
+          width: 340,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          marginBottom: 12,
+        }}>
           {/* Header */}
-          <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-4 flex justify-between items-center text-white">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">🤖</span>
+          <div style={{
+            background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+            padding: '12px 16px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 22 }}>🤖</span>
               <div>
-                <h3 className="font-bold text-sm">עוזר המחסן החכם</h3>
-                <p className="text-xs opacity-80">נותרו {maxRequests - getRequestsCount()} שאלות להיום</p>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#fff' }}>עוזר המחסן החכם</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>נותרו {maxRequests - getRequestsCount()} שאלות להיום</div>
               </div>
             </div>
-            <button onClick={() => setIsOpen(false)} className="hover:bg-white/20 p-1 rounded-full transition">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-            </button>
+            <button onClick={() => setIsOpen(false)} style={{
+              background: 'rgba(255,255,255,0.15)',
+              border: 'none',
+              borderRadius: '50%',
+              width: 28,
+              height: 28,
+              cursor: 'pointer',
+              color: '#fff',
+              fontSize: 16,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>×</button>
           </div>
 
           {/* Messages */}
-          <div className="flex-1 p-4 h-80 overflow-y-auto bg-gray-50 flex flex-col gap-3">
+          <div style={{
+            height: 300,
+            overflowY: 'auto',
+            padding: '12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            background: '#0f0f1a',
+          }}>
             {messages.map((msg, idx) => (
-              <div key={idx} className={`max-w-[85%] p-3 rounded-xl text-sm ${msg.role === 'assistant' ? 'bg-white border border-gray-200 text-gray-800 self-start rounded-tr-none' : 'bg-indigo-600 text-white self-end rounded-tl-none'}`}>
+              <div key={idx} style={{
+                maxWidth: '85%',
+                padding: '8px 12px',
+                borderRadius: msg.role === 'assistant' ? '4px 12px 12px 12px' : '12px 4px 12px 12px',
+                fontSize: 13,
+                lineHeight: 1.5,
+                alignSelf: msg.role === 'assistant' ? 'flex-start' : 'flex-end',
+                background: msg.role === 'assistant' ? '#1e1e35' : '#4f46e5',
+                color: msg.role === 'assistant' ? '#e2e2f0' : '#fff',
+                border: msg.role === 'assistant' ? '1px solid rgba(99,102,241,0.2)' : 'none',
+              }}>
                 {msg.content}
               </div>
             ))}
             {isTyping && (
-              <div className="bg-white border border-gray-200 text-gray-800 self-start rounded-xl rounded-tr-none p-3 max-w-[85%] text-sm flex gap-1">
-                <span className="animate-bounce">.</span><span className="animate-bounce delay-100">.</span><span className="animate-bounce delay-200">.</span>
-              </div>
+              <div style={{
+                alignSelf: 'flex-start',
+                background: '#1e1e35',
+                border: '1px solid rgba(99,102,241,0.2)',
+                borderRadius: '4px 12px 12px 12px',
+                padding: '8px 14px',
+                fontSize: 18,
+                color: '#a5b4fc',
+                letterSpacing: 4,
+              }}>···</div>
             )}
             <div ref={messagesEndRef} />
           </div>
 
           {/* Input */}
-          <div className="p-3 bg-white border-t border-gray-200 flex gap-2">
+          <div style={{
+            padding: '10px 12px',
+            background: '#1a1a2e',
+            borderTop: '1px solid rgba(99,102,241,0.2)',
+            display: 'flex',
+            gap: 8,
+          }}>
             <input
               type="text"
-              className="flex-1 bg-gray-100 border-transparent rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:bg-white transition"
               placeholder="שאל אותי משהו..."
               value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+              onChange={e => setInputValue(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSend()}
+              style={{
+                flex: 1,
+                background: '#0f0f1a',
+                border: '1px solid rgba(99,102,241,0.3)',
+                borderRadius: 8,
+                padding: '7px 12px',
+                fontSize: 13,
+                color: '#e2e2f0',
+                outline: 'none',
+                direction: 'rtl',
+              }}
             />
             <button
               onClick={handleSend}
               disabled={isTyping || !inputValue.trim()}
-              className="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
-            </button>
+              style={{
+                background: isTyping || !inputValue.trim() ? '#2d2d4e' : '#4f46e5',
+                border: 'none',
+                borderRadius: 8,
+                padding: '7px 12px',
+                cursor: isTyping || !inputValue.trim() ? 'not-allowed' : 'pointer',
+                color: '#fff',
+                fontSize: 16,
+                transition: 'background 0.2s',
+              }}
+            >➤</button>
           </div>
         </div>
       )}
@@ -149,14 +220,37 @@ export default function AIChatBot({ equipment = [], policies = {}, settings = {}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-4 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 flex items-center justify-center relative"
+          style={{
+            background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+            border: 'none',
+            borderRadius: '50%',
+            width: 56,
+            height: 56,
+            cursor: 'pointer',
+            boxShadow: '0 4px 20px rgba(99,102,241,0.5)',
+            fontSize: 26,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            position: 'relative',
+            transition: 'transform 0.2s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
+          onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+          title="עוזר המחסן החכם"
         >
-          <span className="text-3xl">🤖</span>
+          🤖
           {getRequestsCount() < maxRequests && (
-            <span className="absolute top-0 right-0 flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-            </span>
+            <span style={{
+              position: 'absolute',
+              top: 4,
+              right: 4,
+              width: 10,
+              height: 10,
+              background: '#22c55e',
+              borderRadius: '50%',
+              border: '2px solid #1a1a2e',
+            }} />
           )}
         </button>
       )}
