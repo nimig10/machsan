@@ -842,7 +842,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
 }
 
 // ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
-export function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], calendarToken="", siteSettings={}, categoryLoanTypes={} }) {
+export function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], calendarToken="", siteSettings={}, categoryLoanTypes={}, refreshInventory=async()=>({}) }) {
   const initialParams = new URLSearchParams(window.location.search);
   const initialLoanTypeParam = initialParams.get("loan_type");
   const initialStepParam = Number(initialParams.get("step"));
@@ -884,6 +884,23 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     {val:"סאונד",icon:"🎙️",desc:"לתרגול הקלטות באולפני המכללה (עבור הנדסאי סאונד בלבד)"},
     {val:"קולנוע יומית",icon:"🎥",desc:"תרגול חופשי עם ציוד קולנוע למספר שעות — יש להזמין 24 שעות מראש"},
   ].filter((option) => allowedLoanTypes.includes(option.val));
+
+  const syncInventory = async () => {
+    try {
+      const refreshed = await refreshInventory();
+      return {
+        equipment: Array.isArray(refreshed?.equipment) ? refreshed.equipment : equipment,
+        reservations: Array.isArray(refreshed?.reservations) ? refreshed.reservations : reservations,
+        categories: Array.isArray(refreshed?.categories) ? refreshed.categories : categories,
+        categoryLoanTypes: refreshed?.categoryLoanTypes && typeof refreshed.categoryLoanTypes === "object" && !Array.isArray(refreshed.categoryLoanTypes)
+          ? refreshed.categoryLoanTypes
+          : categoryLoanTypes,
+      };
+    } catch (error) {
+      console.warn("public form inventory refresh failed", error);
+      return { equipment, reservations, categories, categoryLoanTypes };
+    }
+  };
 
   useEffect(() => {
     if (!activeStudentTrack) return;
@@ -1243,6 +1260,8 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 
   const handleSmartEquipmentBooking = async (promptText, equipmentList) => {
     if (!promptText) return;
+    const refreshedInventory = await syncInventory();
+    const liveEquipmentList = Array.isArray(refreshedInventory?.equipment) ? refreshedInventory.equipment : equipmentList;
     const preselectedLoanType = normalizeSmartLoanType(form.loan_type);
     const promptLoanType = normalizeSmartLoanType(promptText);
     const forcedLoanType = normalizeSmartLoanType(equipmentAiForcedLoanType);
@@ -1274,7 +1293,8 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       if (!apiKey) throw new Error("חסר מפתח API עבור פענוח אוטומטי.");
 
       const todayStr = today();
-      const allowedEquipmentList = (equipmentList || []).filter((item) => matchesEquipmentLoanType(item, requestedLoanType, categoryLoanTypes));
+      const liveCategoryLoanTypes = refreshedInventory?.categoryLoanTypes || categoryLoanTypes;
+      const allowedEquipmentList = (liveEquipmentList || []).filter((item) => matchesEquipmentLoanType(item, requestedLoanType, liveCategoryLoanTypes));
       if (!allowedEquipmentList.length) {
         throw new Error("לא נמצאו פריטי ציוד שמותרים לסוג ההשאלה הזה.");
       }
@@ -1354,7 +1374,7 @@ ${inventory}
 
       const visibleEquipmentIds = new Set(
         allowedEquipmentList
-          .filter((equipmentItem) => matchesEquipmentLoanType(equipmentItem, nextLoanType, categoryLoanTypes))
+          .filter((equipmentItem) => matchesEquipmentLoanType(equipmentItem, nextLoanType, liveCategoryLoanTypes))
           .map((equipmentItem) => String(equipmentItem.id))
       );
       const resolvedItems = (result?.items || [])
@@ -1702,7 +1722,7 @@ ${inventory}
     <div className="form-page" style={{"--accent": siteSettings.accentColor||"#f5a623","--accent2": siteSettings.accentColor||"#f5a623","--accent-glow":`${siteSettings.accentColor||"#f5a623"}2e`}} onTouchStart={handleFormSwipeStart} onTouchEnd={handleFormSwipeEnd}>
       <div className="form-card">
         <div className="form-card-header" style={{position:"relative"}}>
-          <button type="button" onClick={()=>setShowInfoPanel(true)}
+          <button type="button" onClick={async()=>{ await syncInventory(); setShowInfoPanel(true); }}
             title="מידע כללי, נהלים וערכות"
             style={{position:"absolute",top:14,left:14,width:42,height:42,borderRadius:"50%",border:"none",background:"transparent",padding:0,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,color:"var(--accent)",opacity:0.9,transition:"opacity 0.15s"}}
             onMouseEnter={e=>e.currentTarget.style.opacity=1}
@@ -1759,7 +1779,7 @@ ${inventory}
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={()=>setShowEquipmentAiModal(true)}
+                onClick={async()=>{ await syncInventory(); setShowEquipmentAiModal(true); }}
                 disabled={equipmentAiLoading || !visibleLoanTypeOptions.length}
                 style={{display:"inline-flex",alignItems:"center",gap:8,fontWeight:800}}
               >
@@ -2055,7 +2075,7 @@ ${inventory}
         </div>
       </div>
     )}
-    <AIChatBot equipment={equipment} reservations={reservations} policies={policies} settings={siteSettings} />
+    <AIChatBot equipment={equipment} reservations={reservations} policies={policies} settings={siteSettings} refreshInventory={syncInventory} />
     </>
   );
 }

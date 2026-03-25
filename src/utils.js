@@ -16,6 +16,16 @@ export function lsGet(key) {
 export function lsSet(key, value) {
   try { localStorage.setItem(`cache_${key}`, JSON.stringify(value)); } catch {}
 }
+export function lsRemove(key) {
+  try { localStorage.removeItem(`cache_${key}`); } catch {}
+}
+function restoreCacheValue(key, value) {
+  if (value === null || value === undefined) {
+    lsRemove(key);
+    return;
+  }
+  lsSet(key, value);
+}
 
 export async function storageGet(key) {
   try {
@@ -85,6 +95,7 @@ export async function storageSet(key, value) {
     console.log(`📝 storageSet: ${key} — ${count} items, ${units} units`);
   }
 
+  const previousCachedValue = lsGet(key);
   lsSet(key, value); // cache immediately
   try {
     const res = await fetch(`${SB_URL}/rest/v1/store`, {
@@ -95,11 +106,13 @@ export async function storageSet(key, value) {
     if (!res.ok) {
       const err = await res.text();
       console.error("storageSet error", key, err);
+      restoreCacheValue(key, previousCachedValue);
       return { ok: false, error: err };
     }
     return { ok: true };
   } catch(e) {
     console.error("storageSet network error", key, e);
+    restoreCacheValue(key, previousCachedValue);
     return { ok: false, error: e.message };
   }
 }

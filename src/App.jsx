@@ -28,6 +28,16 @@ function lsGet(key) {
 function lsSet(key, value) {
   try { localStorage.setItem(`cache_${key}`, JSON.stringify(value)); } catch {}
 }
+function lsRemove(key) {
+  try { localStorage.removeItem(`cache_${key}`); } catch {}
+}
+function restoreCacheValue(key, value) {
+  if (value === null || value === undefined) {
+    lsRemove(key);
+    return;
+  }
+  lsSet(key, value);
+}
 
 // storageGet returns { value, source }
 //   source: "supabase" — row found in DB
@@ -95,6 +105,7 @@ async function autoBackup(key) {
 }
 
 async function storageSet(key, value) {
+  const previousCachedValue = lsGet(key);
   lsSet(key, value); // cache immediately
   try {
     await autoBackup(key);
@@ -106,11 +117,13 @@ async function storageSet(key, value) {
     if (!res.ok) {
       const err = await res.text();
       console.error("storageSet error", key, err);
+      restoreCacheValue(key, previousCachedValue);
       return { ok: false, error: err };
     }
     return { ok: true };
   } catch(e) {
     console.error("storageSet network error", key, e);
+    restoreCacheValue(key, previousCachedValue);
     return { ok: false, error: e.message };
   }
 }
@@ -984,6 +997,19 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   const csvInputRef = useRef(null);
   const existingCategories = [...new Set((equipment || []).map((item) => item.category))].filter(Boolean);
 
+  const persistEquipmentChange = async (nextEquipment, { successMessage, errorMessage = "שגיאה בשמירת הציוד. השינוי לא נשמר בשרת." } = {}) => {
+    const previousEquipment = equipment;
+    setEquipment(nextEquipment);
+    const result = await storageSet("equipment", nextEquipment);
+    if (!result?.ok) {
+      setEquipment(previousEquipment);
+      showToast("error", errorMessage);
+      return false;
+    }
+    if (successMessage) showToast("success", successMessage);
+    return true;
+  };
+
   const parseCSVLine = (line) => {
     const result = []; let cur = ""; let inQ = false;
     for (let i = 0; i < line.length; i++) {
@@ -1048,11 +1074,24 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       }])[0]));
       added++;
     });
+    const previousEquipment = equipment;
+    const previousCategories = categories;
     setEquipment(newEquipment);
-    await storageSet("equipment", newEquipment);
     if (setCategories && newCats.length) {
       setCategories(newCategories);
-      await storageSet("categories", newCategories);
+    }
+    const writeResults = await Promise.all([
+      storageSet("equipment", newEquipment),
+      ...(setCategories && newCats.length ? [storageSet("categories", newCategories)] : []),
+    ]);
+    if (writeResults.some((result) => !result?.ok)) {
+      setEquipment(previousEquipment);
+      if (setCategories && newCats.length) {
+        setCategories(previousCategories);
+      }
+      showToast("error", "שגיאה בשמירת הייבוא. הנתונים לא נשמרו בשרת.");
+      e.target.value = "";
+      return;
     }
     setImportModal({ added, skipped, newCats });
     e.target.value = "";
@@ -1069,6 +1108,8 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   const handleAiEquipmentImport = async (newItems, approvedCategories = []) => {
     const normalizedItems = ensureUnits(normalizeEquipmentTagFlags(newItems || []));
     const updatedEquipment = [...(equipment || []), ...normalizedItems];
+    const previousEquipment = equipment;
+    const previousCategories = categories;
     setEquipment(updatedEquipment);
     const uniqueApprovedCategories = [...new Set((approvedCategories || []).map((item) => String(item || "").trim()).filter(Boolean))];
     const updatedCategories = [...new Set([...(categories || []), ...uniqueApprovedCategories])];
@@ -1077,7 +1118,16 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       setCategories(updatedCategories);
       writes.push(storageSet("categories", updatedCategories));
     }
-    await Promise.all(writes);
+    const results = await Promise.all(writes);
+    if (results.some((result) => !result?.ok)) {
+      setEquipment(previousEquipment);
+      if (typeof setCategories === "function" && updatedCategories.length !== (categories || []).length) {
+        setCategories(previousCategories);
+      }
+      showToast("error", "שגיאה בשמירת הייבוא החכם. הנתונים לא נשמרו בשרת.");
+      return;
+    }
+    showToast("success", "הייבוא החכם נשמר במחסן");
   };
 
   // Derive category effective type: explicit tag wins, else from items
@@ -1113,9 +1163,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       });
     }
     const updated = equipment.map(e => e.id === eq.id ? { ...e, total_quantity: newTotal, units: updatedUnits } : e);
-    setEquipment(updated);
-    await storageSet("equipment", updated);
-    showToast("success", `כמות עודכנה: ${newTotal} יחידות`);
+    await persistEquipmentChange(updated, { successMessage: `כמות עודכנה: ${newTotal} יחידות` });
   };
 
   const save = async (form) => {
@@ -1129,20 +1177,21 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       const merged = ensureUnits({...equipment.find(e=>e.id===modal.item.id)||{}, ...normalizedForm});
       updated = equipment.map(e => e.id===modal.item.id ? merged : e);
     }
-    setEquipment(updated);
-    const _saveRes = await storageSet("equipment", updated);
-    if(_saveRes.ok) showToast("success", modal.type==="add" ? `"${form.name}" נוסף בהצלחה` : "הציוד עודכן בהצלחה");
-    else showToast("error", "❌ שגיאה בשמירה — נסה שוב");
+    const saved = await persistEquipmentChange(updated, {
+      successMessage: modal.type==="add" ? `"${form.name}" נוסף בהצלחה` : "הציוד עודכן בהצלחה",
+      errorMessage: "שגיאה בשמירת הציוד. השינוי לא נשמר בשרת.",
+    });
     setSaving(false);
-    setModal(null);
+    if (saved) setModal(null);
   };
 
   const del = async (eq) => {
     const updated = equipment.filter(e => e.id!==eq.id);
-    setEquipment(updated);
-    await storageSet("equipment", updated);
-    showToast("success", `"${eq.name}" נמחק`);
-    setModal(null);
+    const deleted = await persistEquipmentChange(updated, {
+      successMessage: `"${eq.name}" נמחק`,
+      errorMessage: `המחיקה של "${eq.name}" לא נשמרה בשרת.`,
+    });
+    if (deleted) setModal(null);
   };
 
   const setCategoryClassification = async (categoryName, nextType) => {
@@ -1154,9 +1203,17 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     const updatedTypes = { ...categoryTypes };
     if (nextType === "סאונד" || nextType === "צילום") updatedTypes[categoryName] = nextType;
     else delete updatedTypes[categoryName];
+    const previousEquipment = equipment;
+    const previousTypes = categoryTypes;
     setEquipment(updated);
     setCategoryTypes(updatedTypes);
-    await Promise.all([storageSet("equipment", updated), storageSet("categoryTypes", updatedTypes)]);
+    const results = await Promise.all([storageSet("equipment", updated), storageSet("categoryTypes", updatedTypes)]);
+    if (results.some((result) => !result?.ok)) {
+      setEquipment(previousEquipment);
+      setCategoryTypes(previousTypes);
+      showToast("error", "שגיאה בשמירת סיווג הקטגוריה. השינוי לא נשמר בשרת.");
+      return;
+    }
     showToast("success", nextType === "סאונד"
       ? `כל הפריטים בקטגוריית "${categoryName}" סווגו כציוד סאונד`
       : nextType === "צילום"
@@ -1171,14 +1228,21 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     const updated = equipment.map((item) =>
       item.category === categoryName ? { ...item, privateLoanUnlimited: shouldEnable } : item
     );
-    setEquipment(updated);
-    await storageSet("equipment", updated);
-    showToast("success", shouldEnable ? `הקטגוריה "${categoryName}" הוחרגה ממגבלת השאלה פרטית` : `הוחזרה מגבלת השאלה פרטית לקטגוריה "${categoryName}"`);
+    await persistEquipmentChange(updated, {
+      successMessage: shouldEnable ? `הקטגוריה "${categoryName}" הוחרגה ממגבלת השאלה פרטית` : `הוחזרה מגבלת השאלה פרטית לקטגוריה "${categoryName}"`,
+      errorMessage: "שגיאה בשמירת הגדרת הקטגוריה. השינוי לא נשמר בשרת.",
+    });
   };
 
   const saveCategoryLoanTypes = async (nextCategoryLoanTypes) => {
+    const previousCategoryLoanTypes = categoryLoanTypes;
     setCategoryLoanTypes(nextCategoryLoanTypes);
-    await storageSet("categoryLoanTypes", nextCategoryLoanTypes);
+    const result = await storageSet("categoryLoanTypes", nextCategoryLoanTypes);
+    if (!result?.ok) {
+      setCategoryLoanTypes(previousCategoryLoanTypes);
+      showToast("error", "שגיאה בשמירת סוגי ההשאלות. השינוי לא נשמר בשרת.");
+      return;
+    }
     showToast("success", "סיווג סוגי ההשאלות עודכן");
     setModal(null);
   };
@@ -5999,11 +6063,15 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
     setSaving(true);
     const updatedEq = {...eq, units, total_quantity: units.length};
     const updatedEquipment = equipment.map(e => e.id===eq.id ? updatedEq : e);
+    const previousEquipment = equipment;
     setEquipment(updatedEquipment);
     const r = await storageSet("equipment", updatedEquipment);
     setSaving(false);
     if(r.ok) { showToast("success", "היחידות עודכנו"); onClose(); }
-    else showToast("error","❌ שגיאה בשמירה");
+    else {
+      setEquipment(previousEquipment);
+      showToast("error","❌ שגיאה בשמירה");
+    }
   };
 
   const working = units.filter(u=>u.status==="תקין").length;
@@ -6352,6 +6420,7 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
     const updatedUnits = eq.units.map(u => u.id===unit.id ? {...u, ...editForm} : u);
     const updatedEq = ensureUnits({...eq, units: updatedUnits});
     const updatedEquipment = equipment.map(e => e.id===eq.id ? updatedEq : e);
+    const previousEquipment = equipment;
     setEquipment(updatedEquipment);
     const r = await storageSet("equipment", updatedEquipment);
     setSaving(false);
@@ -6359,7 +6428,10 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
       if(editForm.status==="תקין") showToast("success", `✅ ${eq.name} #${unit.id.split("_")[1]} חזר לציוד פעיל`);
       else showToast("success","הסטטוס עודכן");
       setEditUnit(null);
-    } else showToast("error","❌ שגיאה בשמירה");
+    } else {
+      setEquipment(previousEquipment);
+      showToast("error","❌ שגיאה בשמירה");
+    }
   };
 
   const STATUS_COLORS = { "פגום":"var(--red)","בתיקון":"var(--yellow)","נעלם":"#9b59b6" };
@@ -6593,6 +6665,43 @@ export default function App() {
     }
   };
 
+  const refreshPublicInventory = async () => {
+    try {
+      const [eqR, resR, catsR, catLoanTypesR] = await Promise.all([
+        storageGet("equipment"),
+        storageGet("reservations"),
+        storageGet("categories"),
+        storageGet("categoryLoanTypes"),
+      ]);
+
+      applyPublicLiveSync("equipment", eqR?.value);
+      applyPublicLiveSync("reservations", resR?.value);
+      applyPublicLiveSync("categories", catsR?.value);
+      applyPublicLiveSync("categoryLoanTypes", catLoanTypesR?.value);
+
+      return {
+        equipment: Array.isArray(eqR?.value)
+          ? normalizeEquipmentTagFlags(eqR.value).map(ensureUnits)
+          : equipmentRef.current,
+        reservations: Array.isArray(resR?.value)
+          ? normalizeReservationsForArchive(resR.value)
+          : reservationsRef.current,
+        categories: Array.isArray(catsR?.value) ? catsR.value : categoriesRef.current,
+        categoryLoanTypes: catLoanTypesR?.value && typeof catLoanTypesR.value === "object" && !Array.isArray(catLoanTypesR.value)
+          ? catLoanTypesR.value
+          : categoryLoanTypesRef.current,
+      };
+    } catch (error) {
+      console.warn("public inventory sync failed", error);
+      return {
+        equipment: equipmentRef.current,
+        reservations: reservationsRef.current,
+        categories: categoriesRef.current,
+        categoryLoanTypes: categoryLoanTypesRef.current,
+      };
+    }
+  };
+
   const getUndoSnapshot = () => ({
     equipment: safeClone(equipmentRef.current),
     reservations: safeClone(reservationsRef.current),
@@ -6806,25 +6915,6 @@ export default function App() {
 
   useEffect(() => {
     if (loading || !isPublicFormView) return undefined;
-    let cancelled = false;
-
-    const refreshPublicInventory = async () => {
-      try {
-        const [eqR, resR, catsR, catLoanTypesR] = await Promise.all([
-          storageGet("equipment"),
-          storageGet("reservations"),
-          storageGet("categories"),
-          storageGet("categoryLoanTypes"),
-        ]);
-        if (cancelled) return;
-        applyPublicLiveSync("equipment", eqR?.value);
-        applyPublicLiveSync("reservations", resR?.value);
-        applyPublicLiveSync("categories", catsR?.value);
-        applyPublicLiveSync("categoryLoanTypes", catLoanTypesR?.value);
-      } catch (error) {
-        console.warn("public inventory sync failed", error);
-      }
-    };
 
     const handleFocus = () => {
       void refreshPublicInventory();
@@ -6860,7 +6950,6 @@ export default function App() {
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      cancelled = true;
       window.clearInterval(intervalId);
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("storage", handleStorage);
@@ -7012,7 +7101,7 @@ export default function App() {
         </div>
       ) : !isAdmin && (
         <div className="public-page-shell">
-          {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes}/>}
+          {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes} refreshInventory={refreshPublicInventory}/>}
         </div>
       )}
 

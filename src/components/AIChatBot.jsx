@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { getAvailable, formatLocalDateInput } from '../utils.js';
+import { getAvailable, formatLocalDateInput, storageGet } from '../utils.js';
 
 const fetchWithRetry = async (url, options, maxRetries = 5) => {
   const delays = [2000, 5000, 10000, 20000, 32000];
@@ -17,7 +17,7 @@ const fetchWithRetry = async (url, options, maxRetries = 5) => {
   return fetch(url, options);
 };
 
-export default function AIChatBot({ equipment = [], reservations = [], policies = {}, settings = {} }) {
+export default function AIChatBot({ equipment = [], reservations = [], policies = {}, settings = {}, refreshInventory = null }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     { role: 'assistant', content: 'היי! אני העוזר החכם של המחסן. תאר לי מה אתה הולך לצלם/להקליט ואעזור לך להרכיב ערכה, או שאל אותי על נהלי המחסן.' }
@@ -61,6 +61,25 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
         throw new Error('חסר מפתח Gemini במשתני הסביבה.');
       }
 
+      let liveEquipment = equipment;
+      let liveReservations = reservations;
+      try {
+        if (typeof refreshInventory === 'function') {
+          const refreshed = await refreshInventory();
+          if (Array.isArray(refreshed?.equipment)) liveEquipment = refreshed.equipment;
+          if (Array.isArray(refreshed?.reservations)) liveReservations = refreshed.reservations;
+        } else {
+          const [freshEquipment, freshReservations] = await Promise.all([
+            storageGet('equipment'),
+            storageGet('reservations'),
+          ]);
+          if (Array.isArray(freshEquipment)) liveEquipment = freshEquipment;
+          if (Array.isArray(freshReservations)) liveReservations = freshReservations;
+        }
+      } catch (refreshError) {
+        console.warn('AI chat inventory refresh failed', refreshError);
+      }
+
       const now = new Date();
       const oneMinuteLater = new Date(now.getTime() + 60000);
       const currentDate = formatLocalDateInput(now);
@@ -68,7 +87,7 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
       const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
       const currentEndTime = `${String(oneMinuteLater.getHours()).padStart(2, '0')}:${String(oneMinuteLater.getMinutes()).padStart(2, '0')}`;
 
-      const compactEquipment = equipment
+      const compactEquipment = liveEquipment
         .map((equipmentItem) => ({
           name: equipmentItem.name,
           category: equipmentItem.category,
@@ -76,8 +95,8 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
             equipmentItem.id,
             currentDate,
             currentEndDate,
-            reservations,
-            equipment,
+            liveReservations,
+            liveEquipment,
             null,
             currentTime,
             currentEndTime
