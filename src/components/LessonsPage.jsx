@@ -86,6 +86,16 @@ function normalizeImportedLessonDate(dateValue = "", dayOfWeek = "") {
 
   if (isValidImportedDate(raw)) return raw;
 
+  if (/^\d{4,6}$/.test(raw)) {
+    const serial = Number(raw);
+    if (Number.isFinite(serial) && serial > 0) {
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      const parsedDate = new Date(excelEpoch.getTime() + serial * 24 * 60 * 60 * 1000);
+      const normalized = `${parsedDate.getUTCFullYear()}-${String(parsedDate.getUTCMonth() + 1).padStart(2, "0")}-${String(parsedDate.getUTCDate()).padStart(2, "0")}`;
+      if (isValidImportedDate(normalized)) return normalized;
+    }
+  }
+
   const localMatch = raw.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
   if (localMatch) {
     const [, day, month, yearRaw] = localMatch;
@@ -104,6 +114,39 @@ function normalizeImportedLessonTime(timeValue = "") {
   const hours = Math.max(0, Math.min(23, Number(match[1]) || 0));
   const minutes = Math.max(0, Math.min(59, Number(match[2]) || 0));
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function splitImportedLessonTimeRange(timeRangeValue = "") {
+  const raw = String(timeRangeValue || "").trim();
+  if (!raw) return { startTime: "", endTime: "" };
+  const matches = [...raw.matchAll(/(\d{1,2}):(\d{1,2})/g)];
+  if (matches.length < 2) return { startTime: "", endTime: "" };
+  return {
+    startTime: normalizeImportedLessonTime(`${matches[0][1]}:${matches[0][2]}`),
+    endTime: normalizeImportedLessonTime(`${matches[1][1]}:${matches[1][2]}`),
+  };
+}
+
+function resolveImportedLessonTimes(item = {}) {
+  const rawStartTime = String(item?.startTime || "").trim();
+  const rawEndTime = String(item?.endTime || "").trim();
+  const rangeCandidate = [
+    item?.timeRange,
+    item?.timeWindow,
+    item?.time_window,
+    item?.hoursRange,
+    item?.hourRange,
+    rawStartTime.includes("-") ? rawStartTime : "",
+    rawEndTime.includes("-") ? rawEndTime : "",
+  ].find((value) => String(value || "").trim());
+  const { startTime: rangeStartTime, endTime: rangeEndTime } = splitImportedLessonTimeRange(rangeCandidate);
+  const hasExplicitStartTime = /(\d{1,2}):(\d{1,2})/.test(rawStartTime) && !rawStartTime.includes("-");
+  const hasExplicitEndTime = /(\d{1,2}):(\d{1,2})/.test(rawEndTime) && !rawEndTime.includes("-");
+
+  return {
+    startTime: hasExplicitStartTime ? normalizeImportedLessonTime(rawStartTime) : (rangeStartTime || normalizeImportedLessonTime(rawStartTime)),
+    endTime: hasExplicitEndTime ? normalizeImportedLessonTime(rawEndTime) : (rangeEndTime || normalizeImportedLessonTime(rawEndTime)),
+  };
 }
 
 function parseGeneratedLessonsJson(text = "") {
@@ -427,9 +470,29 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 7. התעלם לחלוטין משורות של: חגים, שבתות, פגרות, הודעות מנהלה ("פורים", "שבת", "פגרה", "סגור" וכו')
         `;
 
+          const prompt = `
+אני מעביר לך תוכן גולמי (CSV) שחולץ מקובץ מערכת שעות של שיעורים וקורסים.
+
+שים לב לדגשים הקריטיים הבאים:
+1. תאריכים: עמודת התאריכים מופיעה לרוב בפורמט DD/MM/YYYY (למשל 26/03/2026). עליך להמיר אותה ולהחזיר אותה בפורמט סטנדרטי בלבד: YYYY-MM-DD.
+2. שעות (קריטי): בעמודת "טווח שעות" מופיעות השעות במחובר (למשל "09:00-11:45"). עליך לפצל את הטווח הזה לשני שדות נפרדים לחלוטין:
+   - startTime: שעת ההתחלה המדויקת (למשל "09:00").
+   - endTime: שעת הסיום המדויקת (למשל "11:45").
+3. חלץ גם את נושא השיעור (title), מסלול (track), מורה (instructor) ושנה.
+4. אם מופיע נושא מפגש מפורט, שמור אותו גם תחת sessionTopic.
+5. אם מופיע יום בשבוע, חלץ גם dayOfWeek.
+6. אם מופיע שיוך אולפן, חלץ גם studioName.
+7. אם יש פרטי מרצה נוספים, חלץ גם instructorEmail ו-instructorPhone.
+8. אם התאריך מופיע כמספר אקסל, המר אותו ל-YYYY-MM-DD.
+9. התעלם לחלוטין משורות של חגים, שבתות, פגרות, טקסט חופשי או הודעות מנהלה.
+
+הנתונים הגולמיים (CSV):
+${csvData}
+          `;
+
           const requestBody = {
-            contents: [{ parts: [{ text: csvData }] }],
-            systemInstruction: { parts: [{ text: systemInstruction }] },
+            contents: [{ parts: [{ text: prompt }] }],
+            systemInstruction: { parts: [{ text: "אתה עוזר חכם לניהול מערכת שעות. החזר אך ורק JSON חוקי של מערך אובייקטים, בלי טקסט נוסף ובלי Markdown." }] },
             generationConfig: {
               responseMimeType: "application/json",
               responseSchema: {
@@ -437,20 +500,21 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                 items: {
                   type: "OBJECT",
                   properties: {
-                    id: { type: "STRING" },
-                    date: { type: "STRING" },
-                    courseName: { type: "STRING" },
-                    teacher: { type: "STRING" },
-                    track: { type: "STRING" },
+                    title: { type: "STRING", description: "נושא השיעור / שם הקורס" },
+                    date: { type: "STRING", description: "תאריך השיעור בפורמט YYYY-MM-DD (חובה להמיר לפורמט זה)" },
+                    startTime: { type: "STRING", description: "שעת התחלה מדויקת בפורמט HH:MM (למשל 09:00), חולץ מתוך 'טווח שעות'" },
+                    endTime: { type: "STRING", description: "שעת סיום מדויקת בפורמט HH:MM (למשל 11:45), חולץ מתוך 'טווח שעות'" },
+                    track: { type: "STRING", description: "מסלול לימודים" },
+                    instructor: { type: "STRING", description: "שם המורה / מרצה" },
+                    year: { type: "STRING", description: "שנה (א/ב/ג)" },
                     dayOfWeek: { type: "STRING" },
-                    startTime: { type: "STRING" },
-                    endTime: { type: "STRING" },
+                    timeRange: { type: "STRING", description: "טווח שעות מקורי אם קיים, למשל 09:00-11:45" },
                     studioName: { type: "STRING" },
                     sessionTopic: { type: "STRING" },
                     instructorEmail: { type: "STRING" },
                     instructorPhone: { type: "STRING" },
                   },
-                  required: ["id", "date", "courseName", "teacher", "track", "dayOfWeek", "startTime", "endTime"],
+                  required: ["title", "date", "startTime", "endTime"],
                 },
               },
             },
@@ -484,7 +548,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           const blockedKeywords = ["פורים", "שבת", "9 באב", "יום השואה", "חופשה", "חג", "הערה", "מזכירות", "הודעה", "ביטול"];
           blockedKeywords.push("פגרה", "סגור", "בית הספר יהיה סגור");
           const cleanedLessons = parsedLessons.filter((item) => {
-            const mergedText = [item?.courseName, item?.teacher, item?.track, item?.dayOfWeek, item?.date]
+            const mergedText = [item?.title, item?.courseName, item?.instructor, item?.teacher, item?.track, item?.dayOfWeek, item?.date]
               .map((value) => String(value || ""))
               .join(" ");
             return !blockedKeywords.some((keyword) => mergedText.includes(keyword));
@@ -505,17 +569,17 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
           const groupedLessons = new Map();
           cleanedLessons.forEach((item, index) => {
-            const courseName = String(item?.courseName || "").trim();
-            const teacher = String(item?.teacher || "").trim() || "לא צוין";
+            const courseName = String(item?.title || item?.courseName || "").trim();
+            const teacher = String(item?.instructor || item?.teacher || "").trim() || "לא צוין";
             const track = String(item?.track || "").trim() || "כללי";
             const dayOfWeek = String(item?.dayOfWeek || "").trim();
             const lessonDate = normalizeImportedLessonDate(item?.date, dayOfWeek);
-            const startTime = normalizeImportedLessonTime(item?.startTime);
-            const endTime = normalizeImportedLessonTime(item?.endTime);
-            const sessionTopic = String(item?.sessionTopic || "").trim();
+            const { startTime, endTime } = resolveImportedLessonTimes(item);
+            const sessionTopic = String(item?.sessionTopic || item?.title || "").trim();
             const studioNameRaw = String(item?.studioName || "").trim();
             const itemEmail = String(item?.instructorEmail || "").trim();
             const itemPhone = String(item?.instructorPhone || "").trim();
+            const lessonYear = String(item?.year || "").trim();
             if (!courseName) return;
 
             // fuzzy match studio by first word of studioName (case-insensitive)
@@ -533,7 +597,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                 instructorPhone: itemPhone,
                 instructorEmail: itemEmail,
                 track,
-                description: "יובא באמצעות ייבוא אקסל חכם (AI)",
+                description: lessonYear ? `יובא באמצעות ייבוא אקסל חכם (AI) • שנה ${lessonYear}` : "יובא באמצעות ייבוא אקסל חכם (AI)",
                 studioId: matchedStudio?.id || null,
                 kitId: null,
                 created_at: new Date().toISOString(),
