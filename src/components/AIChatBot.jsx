@@ -327,7 +327,7 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
         })
         .join(' | ');
 
-      const systemPrompt = `אתה עוזר מחסן ציוד. ענה בעברית, קצר וענייני.
+      const systemPrompt = `אתה עוזר מחסן ציוד. ענה בעברית, קצר וענייני. אל תשתמש ב-markdown (אין **, אין ##, אין *). כשמפרטים רשימה, השתמש בשורות רגילות עם מקף בלבד.
 סטודנט: ${currentUser?.name || 'אנונימי'}
 מלאי פנוי: ${compactEquipment}
 השאלות פעילות: ${compactReservations}
@@ -374,7 +374,8 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
         throw lastError || new Error("לא התקבלה תשובה תקינה מעוזר ה־AI.");
       }
 
-      const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+      const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const aiText = rawText.replace(/\*\*/g, "").replace(/^#{1,3} /gm, "").replace(/\*/g, "");
 
       setMessages(prev => [...prev, { role: 'assistant', content: aiText }]);
       incrementRequestsCount();
