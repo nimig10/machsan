@@ -3044,9 +3044,9 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
           <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed"}}>
             <thead>
               <tr>
-                <th style={{padding:"8px 10px",background:"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",width:90,maxWidth:90,position:"sticky",top:44,zIndex:10}}>אולפן</th>
+                <th style={{padding:"8px 10px",background:"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",width:80,position:"sticky",top:44,zIndex:10}}>אולפן</th>
                 {weekDays.map(d=>(
-                  <th key={d.fullDate} style={{padding:"8px 10px",background:d.isToday?"rgba(245,166,35,0.15)":"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",width:100,maxWidth:100,position:"sticky",top:44,zIndex:10}}>
+                  <th key={d.fullDate} style={{padding:"8px 10px",background:d.isToday?"rgba(245,166,35,0.15)":"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",position:"sticky",top:44,zIndex:10}}>
                     <div>{d.name}</div><div style={{fontSize:11,color:d.isToday?"var(--accent)":"var(--text3)"}}>{d.date}/{String(new Date(d.fullDate).getMonth()+1).padStart(2,"0")}</div>
                   </th>
                 ))}
@@ -3075,7 +3075,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                     return (
                       <td key={day.fullDate}
                         style={{
-                          padding:"4px 6px",border:"1px solid var(--border)",verticalAlign:"top",overflow:"hidden",
+                          padding:"4px 6px",border:"1px solid var(--border)",verticalAlign:"top",
                           cursor: blocked ? "not-allowed" : isPast ? "not-allowed" : "pointer",
                           background: blocked ? "rgba(231,76,60,0.04)" : isPast ? "rgba(0,0,0,0.12)" : day.isToday ? "rgba(245,166,35,0.05)" : "transparent",
                           opacity: isPast ? 0.55 : 1

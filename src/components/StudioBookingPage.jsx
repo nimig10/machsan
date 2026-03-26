@@ -110,8 +110,8 @@ function addDaysToDateString(dateStr, daysToAdd = 0) {
   return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}-${String(base.getDate()).padStart(2, "0")}`;
 }
 
-const thStyle = { padding:"8px 10px", background:"var(--surface2)", fontSize:12, fontWeight:700, textAlign:"center", border:"1px solid var(--border)", width:110, maxWidth:110 };
-const tdStyle = { padding:"6px 8px", border:"1px solid var(--border)", textAlign:"center", width:110, maxWidth:110, overflow:"hidden" };
+const thStyle = { padding:"8px 10px", background:"var(--surface2)", fontSize:12, fontWeight:700, textAlign:"center", border:"1px solid var(--border)" };
+const tdStyle = { padding:"6px 8px", border:"1px solid var(--border)", textAlign:"center" };
 const labelStyle = { display:"flex", flexDirection:"column", gap:4, fontSize:13, fontWeight:600, color:"var(--text2)" };
 
 export default function StudioBookingPage(props) {
@@ -716,11 +716,11 @@ export default function StudioBookingPage(props) {
               <div style={{ fontWeight:700, fontSize:16, marginBottom:8 }}>אין אולפנים עדיין</div>
             </div>
           ) : (
-            <div style={{ overflowX:"auto" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", minWidth:760, tableLayout:"fixed" }}>
+            <div>
+              <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
                 <thead>
                   <tr>
-                    <th style={{ ...thStyle, width:120, maxWidth:120, position:"sticky", top:0, zIndex:10 }}>אולפן</th>
+                    <th style={{ ...thStyle, width:100, position:"sticky", top:0, zIndex:10 }}>אולפן</th>
                     {weekDays.map((day) => (
                       <th key={day.fullDate} style={{ ...thStyle, background:day.isToday ? "rgba(245,166,35,0.15)" : "var(--surface2)", position:"sticky", top:0, zIndex:10 }}>
                         <div style={{ fontWeight:700 }}>{day.name}</div>
