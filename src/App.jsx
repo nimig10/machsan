@@ -6627,6 +6627,9 @@ export default function App() {
   const policiesRef = useRef(policies);
   const certificationsRef = useRef(certifications);
   const siteSettingsRef = useRef(siteSettings);
+  const studiosRef = useRef(studios);
+  const studioBookingsRef = useRef(studioBookings);
+  const lessonsRef = useRef(lessons);
   const historySuspendedRef = useRef(true);
   const historyQueuedRef = useRef(false);
   const undoInFlightRef = useRef(false);
@@ -6644,6 +6647,9 @@ export default function App() {
   policiesRef.current = policies;
   certificationsRef.current = certifications;
   siteSettingsRef.current = siteSettings;
+  studiosRef.current = studios;
+  studioBookingsRef.current = studioBookings;
+  lessonsRef.current = lessons;
 
   const applyPublicLiveSync = (key, value) => {
     if (key === "equipment" && Array.isArray(value)) {
@@ -6722,6 +6728,9 @@ export default function App() {
     policies: safeClone(policiesRef.current),
     certifications: safeClone(certificationsRef.current),
     siteSettings: safeClone(siteSettingsRef.current),
+    studios: safeClone(studiosRef.current),
+    studioBookings: safeClone(studioBookingsRef.current),
+    lessons: safeClone(lessonsRef.current),
   });
 
   const persistUndoSnapshot = async (snapshot) => {
@@ -6738,6 +6747,9 @@ export default function App() {
       storageSet("policies", snapshot.policies),
       storageSet("certifications", snapshot.certifications),
       storageSet("siteSettings", snapshot.siteSettings),
+      storageSet("studios", snapshot.studios),
+      storageSet("studioBookings", snapshot.studioBookings),
+      storageSet("lessons", snapshot.lessons),
     ]);
     return results.every((result) => result?.ok);
   };
@@ -6776,6 +6788,9 @@ export default function App() {
   const setPolicies = createTrackedSetter(_setPolicies);
   const setCertifications = createTrackedSetter(_setCertifications);
   const setSiteSettings = createTrackedSetter(_setSiteSettings);
+  const setStudios = createTrackedSetter(_setStudios);
+  const setStudioBookings = createTrackedSetter(_setStudioBookings);
+  const setLessons = createTrackedSetter(_setLessons);
 
   const showToast = (type, msg) => {
     const id = Date.now();
@@ -6802,6 +6817,9 @@ export default function App() {
       _setPolicies(snapshot.policies);
       _setCertifications(snapshot.certifications);
       _setSiteSettings(snapshot.siteSettings);
+      if (snapshot.studios) _setStudios(snapshot.studios);
+      if (snapshot.studioBookings) _setStudioBookings(snapshot.studioBookings);
+      if (snapshot.lessons) _setLessons(snapshot.lessons);
       const ok = await persistUndoSnapshot(snapshot);
       setUndoStack((prev) => prev.slice(0, -1));
       showToast(ok ? "success" : "error", ok ? "הפעולה האחרונה בוטלה" : "הפעולה בוטלה מקומית, אך חלק מהשמירות נכשלו");
@@ -7213,15 +7231,15 @@ export default function App() {
                 initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings}/>}
               {page==="team"        && <TeamPage         teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/>}
               {page==="kits"        && <KitsPage         kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons}/>}
-              {page==="lessons"     && <LessonsPage      lessons={lessons} setLessons={_setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length
+              {page==="lessons"     && <LessonsPage      lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length
                 ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean)
                 : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/>}
               {page==="policies"    && <PoliciesPage     policies={policies} setPolicies={setPolicies} showToast={showToast}/>}
-              {page==="certifications" && <CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={_setStudios} equipment={equipment} setEquipment={setEquipment}/>}
+              {page==="certifications" && <CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment}/>}
               {page==="students"       && <StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/>}
 
               {page==="settings"     && <SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast}/>}
-              {page==="studios"      && <StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin" studios={studios} setStudios={_setStudios} bookings={studioBookings} setBookings={_setStudioBookings} siteSettings={siteSettings} setSiteSettings={setSiteSettings}/>}
+              {page==="studios"      && <StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin" studios={studios} setStudios={setStudios} bookings={studioBookings} setBookings={setStudioBookings} siteSettings={siteSettings} setSiteSettings={setSiteSettings}/>}
             </>}
           </div>
         </div>

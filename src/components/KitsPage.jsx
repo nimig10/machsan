@@ -40,6 +40,13 @@ export function KitsPage({ kits, setKits, equipment, categories, showToast, rese
     const [loanType, setLoanType] = useState(initial?.loanType||"הכל");
     const [kitItems, setKitItems] = useState(initial?.items||[]);
     const [saving, setSaving] = useState(false);
+    
+    // Filters for equipment picker
+    const [eqTypeF, setEqTypeF] = useState("all");
+    const [eqCatF, setEqCatF] = useState([]);
+    const [eqSearch, setEqSearch] = useState("");
+    const [showSelected, setShowSelected] = useState(false);
+
     const trimmedName = name.trim();
     const duplicateName = !!trimmedName && hasDuplicateKitName(trimmedName, initial?.id||null);
 
@@ -143,32 +150,87 @@ export function KitsPage({ kits, setKits, equipment, categories, showToast, rese
           <textarea className="form-textarea" rows={2} placeholder="תיאור קצר..." value={description} onChange={e=>setDescription(e.target.value)}/>
         </div>
         <div className="form-section-title">ציוד בערכה</div>
-        {categories.map(cat=>{
-          const catEq = equipment.filter(e=>e.category===cat);
-          if(!catEq.length) return null;
-          return (
-            <div key={cat} style={{marginBottom:12}}>
-              <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>{cat}</div>
-              {catEq.map(eq=>{
-                const max = maxQty(eq.id);
-                const qty = getQty(eq.id);
-                return (
-                  <div key={eq.id} className="item-row" style={{marginBottom:4,opacity:max===0?0.4:1}}>
-                    <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={eq.image} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||"📦"}</span>
-                    <div style={{flex:1,fontSize:13,fontWeight:600}}>{eq.name}<span style={{fontSize:11,color:"var(--text3)",marginRight:6,fontWeight:400}}>מלאי: {max}</span></div>
-                    {max>0
-                      ? <div className="qty-ctrl">
-                          <button className="qty-btn" onClick={()=>setItemQty(eq.id,qty-1)}>−</button>
-                          <span className="qty-num" style={{color:qty>0?"var(--accent)":"inherit"}}>{qty}</span>
-                          <button className="qty-btn" disabled={qty>=max} onClick={()=>setItemQty(eq.id,qty+1)} style={{opacity:qty>=max?0.3:1}}>+</button>
-                        </div>
-                      : <span style={{fontSize:11,color:"var(--red)",fontWeight:700}}>אין מלאי</span>}
-                  </div>
-                );
-              })}
-            </div>
+        {/* Filters */}
+        <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"12px 14px",marginBottom:12}}>
+          {/* Type filter */}
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
+            <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סינון:</span>
+            {[{k:"all",l:"📦 הכל"},{k:"sound",l:"🎙️ סאונד"},{k:"photo",l:"🎥 צילום"}].map(({k,l})=>{
+              const active=eqTypeF===k;
+              return <button key={k} type="button" onClick={()=>setEqTypeF(k)}
+                style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                {l}
+              </button>;
+            })}
+            <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
+            {/* Category multi-select */}
+            {(categories||[]).map(cat=>{
+              const active=eqCatF.includes(cat);
+              return <button key={cat} type="button" onClick={()=>setEqCatF(p=>active?p.filter(c=>c!==cat):[...p,cat])}
+                style={{padding:"4px 10px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>
+                {cat}
+              </button>;
+            })}
+            {eqCatF.length>0&&<button type="button" onClick={()=>setEqCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>✕ נקה</button>}
+          </div>
+          {/* Search + selected toggle */}
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <div className="search-bar" style={{flex:1,minWidth:150}}><span>🔍</span>
+              <input placeholder="חיפוש ציוד..." value={eqSearch} onChange={e=>setEqSearch(e.target.value)}/></div>
+            <button type="button" onClick={()=>setShowSelected(p=>!p)}
+              style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${showSelected?"var(--green)":"var(--border)"}`,background:showSelected?"rgba(46,204,113,0.12)":"transparent",color:showSelected?"var(--green)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>
+              {showSelected?"✅ נבחרים":"⬜ נבחרים בלבד"}
+            </button>
+          </div>
+        </div>
+
+        {/* Equipment list with filters applied */}
+        {(()=>{
+          const eqMatch = (e)=>{
+            const g=(!e.soundOnly&&!e.photoOnly)||(e.soundOnly&&e.photoOnly);
+            return eqTypeF==="all"||(eqTypeF==="sound"&&(e.soundOnly||g))||(eqTypeF==="photo"&&(e.photoOnly||g));
+          };
+          const visibleCats = (eqCatF.length>0 ? eqCatF : (categories||[])).filter(cat=>
+            equipment.some(e=>e.category===cat && eqMatch(e) &&
+              (!eqSearch||e.name.includes(eqSearch)) &&
+              (!showSelected||getQty(e.id)>0)
+            )
           );
-        })}
+          if(visibleCats.length===0) return <div style={{textAlign:"center",color:"var(--text3)",padding:"16px",fontSize:13}}>לא נמצא ציוד תואם</div>;
+          return visibleCats.map(cat=>{
+            const catEq = equipment.filter(e=>e.category===cat && eqMatch(e) &&
+              (!eqSearch||e.name.includes(eqSearch)) &&
+              (!showSelected||getQty(e.id)>0)
+            );
+            if(!catEq.length) return null;
+            return (
+              <div key={cat} style={{marginBottom:10}}>
+                <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:5,textTransform:"uppercase",letterSpacing:1}}>{cat}</div>
+                {catEq.map(eq=>{
+                  const max=maxQty(eq.id); const qty=getQty(eq.id);
+                  return (
+                    <div key={eq.id} className="item-row" style={{marginBottom:4,opacity:max===0?0.4:1,background:qty>0?"rgba(245,166,35,0.05)":"",border:qty>0?"1px solid rgba(245,166,35,0.2)":""}}>
+                      <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={eq.image} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||"📦"}</span>
+                      <div style={{flex:1,fontSize:13,fontWeight:600}}>
+                        {eq.name}
+                        <span style={{fontSize:11,color:"var(--text3)",marginRight:6,fontWeight:400}}>מלאי: {max}</span>
+                        {eq.soundOnly&&<span style={{fontSize:10,color:"var(--accent)",fontWeight:700,marginRight:4}}>🎙️</span>}
+                        {eq.photoOnly&&<span style={{fontSize:10,color:"var(--green)",fontWeight:700,marginRight:4}}>🎥</span>}
+                      </div>
+                      {max>0
+                        ? <div className="qty-ctrl">
+                            <button className="qty-btn" onClick={()=>setItemQty(eq.id,qty-1)}>−</button>
+                            <span className="qty-num" style={{color:qty>0?"var(--accent)":"inherit"}}>{qty}</span>
+                            <button className="qty-btn" disabled={qty>=max} onClick={()=>setItemQty(eq.id,qty+1)} style={{opacity:qty>=max?0.3:1}}>+</button>
+                          </div>
+                        : <span style={{fontSize:11,color:"var(--red)",fontWeight:700}}>אין מלאי</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          });
+        })()}
         {kitItems.length>0&&<div className="highlight-box" style={{marginTop:8}}>🎒 {kitItems.length} סוגי ציוד · {kitItems.reduce((s,i)=>s+i.quantity,0)} יחידות</div>}
         <div style={{marginTop:12,display:"flex",gap:8}}>
           <button className="btn btn-primary" disabled={!trimmedName||duplicateName||saving} onClick={save}>{saving?"⏳ שומר...":initial?"💾 שמור":"➕ צור ערכה"}</button>

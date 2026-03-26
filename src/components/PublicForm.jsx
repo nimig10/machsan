@@ -2785,7 +2785,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                         {getBookingSubtitle(booking) && <span style={{fontSize:11,color:"var(--text3)"}}>{getBookingSubtitle(booking)}</span>}
                         <span style={{fontSize:11,color:"var(--text3)"}}>{booking.startTime}–{booking.endTime}</span>
                         {getBookingKind(booking)==="student" && !isBookingOwnedByStudent(booking) && (booking.studentEmail||booking.studentPhone) && (
-                          <span style={{fontSize:11,color:"var(--text3)"}}>
+                          <span style={{fontSize:12,color:"var(--accent)",fontWeight:600}}>
                             {booking.studentEmail && <>{booking.studentEmail}</>}
                             {booking.studentEmail && booking.studentPhone && " · "}
                             {booking.studentPhone && <>{booking.studentPhone}</>}
@@ -2829,6 +2829,11 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                       <span style={{fontWeight:700,fontSize:13}}>{getBookingTitle(b)}</span>
                       {getBookingSubtitle(b) && <span style={{fontSize:11,color:"var(--text3)"}}>{getBookingSubtitle(b)}</span>}
                       <span style={{fontSize:11,color:"var(--text3)"}}>{getStudioBookingTimeLabel(b)}</span>
+                      {getBookingKind(b)==="student" && !isBookingOwnedByStudent(b) && (b.studentEmail||b.studentPhone) && (
+                        <span style={{fontSize:12,color:"var(--accent)",fontWeight:600}}>
+                          {b.studentEmail}{b.studentEmail && b.studentPhone && " · "}{b.studentPhone}
+                        </span>
+                      )}
                     </div>
                     {getBookingKind(b)==="student" && isBookingOwnedByStudent(b) && !isDayPast && (
                       <div style={{display:"flex",gap:4,flexShrink:0}}>
