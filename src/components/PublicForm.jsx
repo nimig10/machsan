@@ -1137,7 +1137,8 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const soundDayLoanDate = isSoundDayLoan ? getNextSoundDayLoanDate(TIME_SLOTS) : "";
   const activeBorrowDate = isSoundDayLoan ? soundDayLoanDate : form.borrow_date;
   const activeReturnDate = isSoundDayLoan ? soundDayLoanDate : form.return_date;
-  const availableBorrowSlots = getFutureTimeSlotsForDate(activeBorrowDate, TIME_SLOTS);
+  const nightLoanBorrowSlots = isSoundNightLoan ? TIME_SLOTS.filter(t => t <= "17:00") : TIME_SLOTS;
+  const availableBorrowSlots = getFutureTimeSlotsForDate(activeBorrowDate, nightLoanBorrowSlots);
   const availableReturnSlotsBase = getFutureTimeSlotsForDate(activeReturnDate, TIME_SLOTS);
   // Cinema: limit return time to max 6 hours after borrow time
   const cinemaMaxReturnSlots = (() => {
