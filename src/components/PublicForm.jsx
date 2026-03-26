@@ -1134,7 +1134,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const tooLong = loanDays > maxDays;
   const isSoundLoan = form.loan_type==="סאונד";
   const CINEMA_TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
-  const SOUND_DAY_TIME_SLOTS = ["09:00","09:15","09:30","09:45","10:00","10:15","10:30","10:45","11:00","11:15","11:30","11:45","12:00","12:15","12:30","12:45","13:00","13:15","13:30","13:45","14:00","14:15","14:30","14:45","15:00","15:15","15:30","15:45","16:00","16:15","16:30","16:45","17:00","17:15","17:30","17:45","18:00","18:15","18:30","18:45","19:00","19:15","19:30","19:45","20:00","20:15","20:30","20:45","21:00","21:15","21:30"];
+  const SOUND_DAY_TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30"];
   const TIME_SLOTS = isSoundLoan
     ? SOUND_DAY_TIME_SLOTS
     : isCinemaLoan ? CINEMA_TIME_SLOTS
@@ -1928,14 +1928,40 @@ ${inventory}
                 </div>
               )}
             </div>
-            {isSoundDayLoan && (
-              <div className="highlight-box" style={{marginBottom:16}}>
-                השאלת יום פעילה. התאריך חושב אוטומטית ל־{formatDate(soundDayLoanDate)} וניתן להזין שעות ידנית, אבל רק לזמן עתידי.
-              </div>
-            )}
-            {isSoundNightLoan && (
-              <div className="highlight-box" style={{marginBottom:16,background:"rgba(33,150,243,0.08)",border:"1px solid rgba(33,150,243,0.25)"}}>
-                🌙 השאלת לילה פעילה — הציוד חייב להיאסף עד 17:00. שעת החזרה ננעלה ל-09:30 למחרת.
+            {isSoundLoan && (
+              <div style={{marginBottom:16,background:"rgba(245,166,35,0.08)",border:"2px solid rgba(245,166,35,0.5)",borderRadius:"var(--r-sm)",padding:"14px 16px"}}>
+                <label style={{display:"block",fontWeight:800,fontSize:13,color:"#f5a623",marginBottom:8}}>🎙️ שיוך לקביעת אולפן *
+                  {!form.studio_booking_id && <span style={{fontWeight:400,fontSize:11,color:"var(--red)",marginRight:8}}>— חובה לשייך קביעת אולפן</span>}
+                </label>
+                <select className="form-select" value={form.studio_booking_id} onChange={e=>{
+                  const bId = e.target.value;
+                  set("studio_booking_id", bId);
+                  if (bId) {
+                    const linked = studioBookings.find(b=>String(b.id)===bId);
+                    if (linked) {
+                      if (linked.isNight) {
+                        const tomorrow = (() => { const d = new Date(linked.date); d.setDate(d.getDate()+1); while(d.getDay()===5||d.getDay()===6) d.setDate(d.getDate()+1); return formatLocalDateInput(d); })();
+                        setForm(prev=>({...prev, studio_booking_id:bId, borrow_date:linked.date, return_date:tomorrow, return_time:"09:30", sound_night_loan:true, sound_day_loan:false}));
+                      } else {
+                        setForm(prev=>({...prev, studio_booking_id:bId, borrow_date:linked.date, return_date:linked.date, sound_day_loan:true, sound_night_loan:false}));
+                      }
+                    }
+                  } else {
+                    setForm(prev=>({...prev, studio_booking_id:"", sound_day_loan:false, sound_night_loan:false}));
+                  }
+                }} style={{borderColor: form.studio_booking_id ? "var(--accent)" : "rgba(245,166,35,0.6)"}}>
+                  <option value="">-- בחר קביעת אולפן --</option>
+                  {studioBookings.filter(b=>{
+                    if (!b.studentName || b.studentName !== loggedInStudent?.name) return false;
+                    const endDate = b.isNight ? (() => { const d = new Date(b.date); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); })() : b.date;
+                    return new Date(`${endDate}T${b.endTime||"23:59"}:00`).getTime() > Date.now();
+                  }).map(b=>{
+                    const studio = visibleStudios?.find(s=>String(s.id)===String(b.studioId)) || studios?.find(s=>String(s.id)===String(b.studioId));
+                    const timeLabel = b.isNight ? `🌙 לילה מ-${b.startTime||"21:30"}` : `${b.startTime||""}–${b.endTime||""}`;
+                    return <option key={b.id} value={b.id}>{studio?.name||"אולפן"} · {b.date} · {timeLabel}</option>;
+                  })}
+                </select>
+                {!form.studio_booking_id && <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>אין לך קביעת אולפן? עבור לדף "קביעת אולפנים" וקבע אולפן תחילה.</div>}
               </div>
             )}
             {isCinemaLoan && (
@@ -1973,76 +1999,22 @@ ${inventory}
                 <div className="grid-2">
                   <div className="form-group"><label className="form-label">📅 תאריך השאלה *</label>{isSoundDayLoan ? <div className="form-input" style={{display:"flex",alignItems:"center",fontWeight:700}}>{formatDate(soundDayLoanDate)}</div> : <input type="date" className="form-input" min={minDate} value={form.borrow_date} onChange={e=>set("borrow_date",e.target.value)}/>}</div>
                   <div className="form-group"><label className="form-label">שעת איסוף *</label>
-                    {isSoundDayLoan ? (
-                      <input
-                        type="time"
-                        className="form-input"
-                        value={form.borrow_time}
-                        onChange={e=>set("borrow_time",e.target.value)}
-                        placeholder="הקלד שעה"
-                        min={soundDayLoanDate === todayStr ? new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }) : undefined}
-                      />
-                    ) : (
-                      <select className="form-select" value={form.borrow_time} onChange={e=>setForm(prev=>({...prev,borrow_time:e.target.value}))}>
-                        <option value="">-- בחר שעה --</option>
-                        {availableBorrowSlots.map(t=><option key={t} value={t}>{t}</option>)}
-                      </select>
-                    )}
+                    <select className="form-select" value={form.borrow_time} onChange={e=>setForm(prev=>({...prev,borrow_time:e.target.value}))}>
+                      <option value="">-- בחר שעה --</option>
+                      {availableBorrowSlots.map(t=><option key={t} value={t}>{t}</option>)}
+                    </select>
                   </div>
                 </div>
                 <div className="grid-2">
                   <div className="form-group"><label className="form-label">📅 תאריך החזרה *</label>{isSoundDayLoan ? <div className="form-input" style={{display:"flex",alignItems:"center",fontWeight:700}}>{formatDate(soundDayLoanDate)}</div> : <input type="date" className="form-input" min={form.borrow_date||today()} value={form.return_date} onChange={e=>set("return_date",e.target.value)}/>}</div>
                   <div className="form-group"><label className="form-label">שעת החזרה *</label>
-                    {isSoundDayLoan ? (
-                      <input
-                        type="time"
-                        className="form-input"
-                        value={form.return_time}
-                        onChange={e=>set("return_time",e.target.value)}
-                        placeholder="הקלד שעה"
-                        min={soundDayLoanDate === todayStr ? (form.borrow_time || new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false })) : undefined}
-                      />
-                    ) : (
-                      <select className="form-select" value={form.return_time} onChange={e=>set("return_time",e.target.value)}>
-                        <option value="">-- בחר שעה --</option>
-                        {availableReturnSlots.map(t=><option key={t} value={t}>{t}</option>)}
-                      </select>
-                    )}
+                    <select className="form-select" value={form.return_time} onChange={e=>set("return_time",e.target.value)} disabled={isSoundNightLoan}>
+                      <option value="">-- בחר שעה --</option>
+                      {availableReturnSlots.map(t=><option key={t} value={t}>{t}</option>)}
+                    </select>
                   </div>
                 </div>
               </>
-            )}
-            {isSoundLoan && (
-              <div className="form-group" style={{marginTop:12}}>
-                <label className="form-label">🎙️ שיוך לקביעת אולפן *</label>
-                <select className="form-select" value={form.studio_booking_id} onChange={e=>{
-                  const bId = e.target.value;
-                  set("studio_booking_id", bId);
-                  if (bId) {
-                    const linked = studioBookings.find(b=>String(b.id)===bId);
-                    if (linked) {
-                      if (linked.isNight) {
-                        const tomorrow = (() => { const d = new Date(linked.date); d.setDate(d.getDate()+1); while(d.getDay()===5||d.getDay()===6) d.setDate(d.getDate()+1); return formatLocalDateInput(d); })();
-                        setForm(prev=>({...prev, studio_booking_id:bId, borrow_date:linked.date, return_date:tomorrow, return_time:"09:30", sound_night_loan:true, sound_day_loan:false}));
-                      } else {
-                        setForm(prev=>({...prev, studio_booking_id:bId, borrow_date:linked.date, return_date:linked.date, sound_day_loan:true, sound_night_loan:false}));
-                      }
-                    }
-                  }
-                }}>
-                  <option value="">-- בחר קביעת אולפן --</option>
-                  {studioBookings.filter(b=>{
-                    if (!b.studentName || b.studentName !== loggedInStudent?.name) return false;
-                    const endDate = b.isNight ? (() => { const d = new Date(b.date); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); })() : b.date;
-                    return new Date(`${endDate}T${b.endTime||"23:59"}:00`).getTime() > Date.now();
-                  }).map(b=>{
-                    const studio = visibleStudios?.find(s=>String(s.id)===String(b.studioId)) || studios?.find(s=>String(s.id)===String(b.studioId));
-                    const timeLabel = b.isNight ? `🌙 לילה מ-${b.startTime||"21:30"}` : `${b.startTime||""}–${b.endTime||""}`;
-                    return <option key={b.id} value={b.id}>{studio?.name||"אולפן"} · {b.date} · {timeLabel}</option>;
-                  })}
-                </select>
-                {!form.studio_booking_id && <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>חובה לשייך קביעת אולפן להשאלת סאונד. אם אין לך קביעה, עבור לדף "קביעת אולפנים" וקבע אולפן.</div>}
-              </div>
             )}
             {(borrowWeekend||(returnWeekend&&!isCinemaLoan)) && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 המחסן אינו פעיל בימים שישי ושבת. נא לבחור ימים א׳–ה׳ בלבד.</div>}
             {tooSoon && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 {form.loan_type==="פרטית"?"השאלה פרטית דורשת התראה של 48 שעות לפחות.":"נדרשת התראה של שבוע לפחות."} תאריך מוקדם ביותר: <strong>{formatDate(minDate)}</strong></div>}
