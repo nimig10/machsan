@@ -735,7 +735,7 @@ export default function StudioBookingPage(props) {
               <button className="btn btn-secondary btn-sm" onClick={() => setCalendarFullscreen(f => !f)} title={calendarFullscreen ? "סגור מסך מלא" : "פתח מסך מלא"} style={{ marginInlineStart:"auto" }}>{calendarFullscreen ? "✕ סגור" : "⛶ מסך מלא"}</button>
             </div>
             <div style={{ overflowX:"auto", flex: calendarFullscreen ? 1 : undefined }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
+              <table style={{ width:"100%", minWidth:700, borderCollapse:"collapse", tableLayout:"fixed" }}>
                 <thead>
                   <tr>
                     <th style={{ ...thStyle, width:130 }}>אולפן</th>

@@ -3052,7 +3052,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
               </button>
           </div>
           <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch",flex:calendarFullscreen?1:undefined}}>
-          <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed"}}>
+          <table style={{width:"100%",minWidth:700,borderCollapse:"collapse",tableLayout:"fixed"}}>
             <thead>
               <tr>
                 <th style={{padding:"8px 6px",background:"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",width:80}}>אולפן</th>
