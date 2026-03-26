@@ -2411,8 +2411,9 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     return "";
   };
   const persistStudentBooking = async ({ studioId, date, startTime, endTime, notes="", isNight=false, blockedMessage="", successMessage="✅ האולפן הוזמן בהצלחה!" }) => {
-    // Night booking always requires consent (with or without policy text)
+    // Night booking always requires consent — close booking modal first, then show policy modal
     if (isNight) {
+      setModal(null); // close booking form so only the policy modal is visible
       setNightPolicyPending({ studioId, date, startTime, endTime, notes, isNight, blockedMessage, successMessage });
       setNightPolicyScrolled(false);
       setNightPolicyAgreed(false);
