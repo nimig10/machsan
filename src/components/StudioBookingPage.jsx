@@ -615,8 +615,6 @@ export default function StudioBookingPage(props) {
       showToast("info", "קביעת שיעור מנוהלת מתוך רובריקת שיעורים");
       return;
     }
-    const confirmText = kind === "student" ? "למחוק את הקביעה ולשלוח לסטודנט הודעת ביטול?" : "למחוק את קביעת הצוות הזאת?";
-    if (!window.confirm(confirmText)) return;
 
     await saveBookings(bookings.filter((item) => item.id !== bookingId));
     if (kind === "student") {
