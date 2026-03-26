@@ -2160,6 +2160,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
   const [nightPolicyPending, setNightPolicyPending] = useState(null); // booking args waiting for policy agreement
   const [nightPolicyScrolled, setNightPolicyScrolled] = useState(false);
   const [nightPolicyAgreed, setNightPolicyAgreed] = useState(false);
+  const [calendarFullscreen, setCalendarFullscreen] = useState(false);
   const [showAiAssistant, setShowAiAssistant] = useState(false);
   const [smartBookingPrompt, setSmartBookingPrompt] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -3037,18 +3038,21 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
         </div>
       ) : (
         <>
-          <div style={{padding:"6px 12px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"8px 8px 0 0"}}>
-            <div style={{display:"flex",gap:8,justifyContent:"center",alignItems:"center",flexWrap:"wrap"}}>
+          {calendarFullscreen && <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:8999}} onClick={()=>setCalendarFullscreen(false)}/>}
+          <div style={calendarFullscreen ? {position:"fixed",inset:8,zIndex:9000,background:"var(--bg)",borderRadius:16,border:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.6)"} : {}}>
+          <div style={{padding:"6px 12px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:calendarFullscreen?"16px 16px 0 0":"8px 8px 0 0",display:"flex",justifyContent:"center",alignItems:"center",gap:8,flexWrap:"wrap"}}>
               <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w-1)} disabled={weekOffset<=0} style={{opacity:weekOffset<=0?0.4:1,cursor:weekOffset<=0?"default":"pointer"}}>→ שבוע קודם</button>
               <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(0)}>היום</button>
               <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w+1)}>← שבוע הבא</button>
               <span style={{fontSize:12,color:"var(--text3)"}}>
                 {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth()+1).padStart(2,"0")} — {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth()+1).padStart(2,"0")}
               </span>
-            </div>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setCalendarFullscreen(f=>!f)} title={calendarFullscreen?"סגור מסך מלא":"פתח מסך מלא"} style={{marginInlineStart:"auto"}}>
+                {calendarFullscreen ? "✕ סגור" : "⛶ מסך מלא"}
+              </button>
           </div>
-          <div className="studio-calendar-scroll" style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-          <table style={{width:"100%",minWidth:700,borderCollapse:"collapse",tableLayout:"fixed"}}>
+          <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch",flex:calendarFullscreen?1:undefined}}>
+          <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed"}}>
             <thead>
               <tr>
                 <th style={{padding:"8px 6px",background:"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",width:80}}>אולפן</th>
@@ -3111,6 +3115,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
               })}
             </tbody>
           </table>
+          </div>
           </div>
         </>
       )}
