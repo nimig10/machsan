@@ -12,14 +12,36 @@ const DEFAULT_GUIDANCE = `אני מעביר לך תוכן גולמי (CSV) שח�
 const fetchWithRetry = async (url, options, maxRetries = 5) => {
   const delays = [2000, 5000, 10000, 20000, 32000];
   for (let i = 0; i < maxRetries; i += 1) {
-    const response = await fetch(url, options);
-    if (response.status === 429) {
-      await new Promise((resolve) => setTimeout(resolve, delays[i] ?? delays[delays.length - 1]));
-      continue;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
+    try {
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (response.status === 429) {
+        await new Promise((resolve) => setTimeout(resolve, delays[i] ?? delays[delays.length - 1]));
+        continue;
+      }
+      return response;
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err.name === "AbortError") {
+        if (i < maxRetries - 1) continue;
+        throw new Error("timeout — לא הגיב תוך 2 דקות");
+      }
+      throw err;
     }
-    return response;
   }
-  return fetch(url, options);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120000);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timeoutId);
+    return res;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === "AbortError") throw new Error("timeout — לא הגיב תוך 2 דקות");
+    throw err;
+  }
 };
 
 const notify = (showToast, type, message) => {
@@ -152,8 +174,10 @@ ${csvText}
         const ws = workbook.Sheets[name];
         if (!ws) continue;
         const csv = XLSX.utils.sheet_to_csv(ws);
-        if (String(csv || "").trim()) {
-          csvParts.push(`--- גיליון: ${name} ---\n${csv}`);
+        // filter out fully-empty rows (only commas)
+        const cleanLines = String(csv || "").split("\n").filter(line => line.replace(/,/g, "").trim());
+        if (cleanLines.length) {
+          csvParts.push(`--- גיליון: ${name} ---\n${cleanLines.join("\n")}`);
         }
       }
       csvData = csvParts.join("\n\n");
