@@ -169,24 +169,39 @@ ${csvText}
         throw new Error("לא נמצא גיליון תקין בקובץ.");
       }
 
-      const csvParts = [];
+      const sheets = [];
       for (const name of sheetNames) {
         const ws = workbook.Sheets[name];
         if (!ws) continue;
         const csv = XLSX.utils.sheet_to_csv(ws);
-        // filter out fully-empty rows (only commas)
         const cleanLines = String(csv || "").split("\n").filter(line => line.replace(/,/g, "").trim());
         if (cleanLines.length) {
-          csvParts.push(`--- גיליון: ${name} ---\n${cleanLines.join("\n")}`);
+          sheets.push({ name, csv: cleanLines.join("\n") });
         }
       }
-      csvData = csvParts.join("\n\n");
-      if (!csvData.trim()) {
+      if (!sheets.length) {
         throw new Error("לא נמצא תוכן לייבוא בקובץ.");
       }
 
-      notify(showToast, "info", "מנתח נתונים עם AI...");
-      const extractedStudents = await processWithGemini(csvData, DEFAULT_GUIDANCE);
+      // For single sheet — send as-is; for multiple sheets — process each separately and merge
+      let extractedStudents = [];
+      if (sheets.length === 1) {
+        csvData = sheets[0].csv;
+        notify(showToast, "info", "מנתח נתונים עם AI...");
+        extractedStudents = await processWithGemini(csvData, DEFAULT_GUIDANCE);
+      } else {
+        csvData = sheets.map(s => `--- גיליון: ${s.name} ---\n${s.csv}`).join("\n\n");
+        notify(showToast, "info", `מנתח ${sheets.length} גיליונות עם AI...`);
+        for (let i = 0; i < sheets.length; i += 1) {
+          notify(showToast, "info", `מנתח גיליון ${i + 1}/${sheets.length}: "${sheets[i].name}"...`);
+          try {
+            const result = await processWithGemini(sheets[i].csv, DEFAULT_GUIDANCE);
+            if (result?.length) extractedStudents.push(...result);
+          } catch (err) {
+            console.warn(`Sheet "${sheets[i].name}" failed:`, err);
+          }
+        }
+      }
 
       if (extractedStudents?.length > 0) {
         const importResult = await onImportSuccess?.(extractedStudents);
