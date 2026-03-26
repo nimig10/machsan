@@ -95,35 +95,49 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
   const handleAiImport = async (newStudents) => {
     const currentStudents = certifications?.students || [];
     const existingEmails = new Set(
-      currentStudents.map((student) => String(student?.email || "").trim().toLowerCase()).filter(Boolean)
+      currentStudents.map((s) => String(s?.email || "").trim().toLowerCase()).filter(Boolean)
     );
-    const seenImportedEmails = new Set();
+    const existingNames = new Set(
+      currentStudents.map((s) => String(s?.name || "").trim().toLowerCase()).filter(Boolean)
+    );
+    const seenKeys = new Set();
     const baseId = Date.now();
     const normalizedStudents = (Array.isArray(newStudents) ? newStudents : [])
       .map((student, index) => ({
         id: student?.id || `stu_ai_${baseId}_${index}`,
-        name: String(student?.name || student?.email || "").trim(),
+        name: String(student?.name || "").trim(),
         email: String(student?.email || "").trim().toLowerCase(),
         phone: String(student?.phone || "").trim(),
         track: String(student?.track || "").trim(),
         certs: typeof student?.certs === "object" && student?.certs ? student.certs : {},
       }))
       .filter((student) => {
-        if (!student.email || !student.email.includes("@")) return false;
-        if (existingEmails.has(student.email)) return false;
-        if (seenImportedEmails.has(student.email)) return false;
-        seenImportedEmails.add(student.email);
+        if (!student.name) return false;
+        // dedup key: prefer email, fallback to name
+        const key = student.email?.includes("@") ? student.email : student.name.toLowerCase();
+        if (seenKeys.has(key)) return false;
+        seenKeys.add(key);
+        // skip if already exists (by email OR by name)
+        if (student.email?.includes("@") && existingEmails.has(student.email)) return false;
+        if (!student.email?.includes("@") && existingNames.has(student.name.toLowerCase())) return false;
         return true;
       });
 
+    const total = Array.isArray(newStudents) ? newStudents.length : 0;
+    const skippedCount = total - normalizedStudents.length;
+
     if (!normalizedStudents.length) {
-      showToast("error", "לא נמצאו סטודנטים חדשים לייבוא.");
+      if (skippedCount > 0) {
+        showToast("warning", `כל ${skippedCount} הסטודנטים כבר קיימים במערכת.`);
+      } else {
+        showToast("error", "לא נמצאו סטודנטים תקינים לייבוא.");
+      }
       return false;
     }
 
-    const skippedCount = (Array.isArray(newStudents) ? newStudents.length : 0) - normalizedStudents.length;
     if (await save({ types, students: [...currentStudents, ...normalizedStudents] })) {
-      showToast("success", `✅ יובאו ${normalizedStudents.length} סטודנטים${skippedCount > 0 ? ` · ${skippedCount} דולגו` : ""}`);
+      const skippedMsg = skippedCount > 0 ? ` · ${skippedCount} דולגו (כבר קיימים)` : "";
+      showToast("success", `✅ יובאו ${normalizedStudents.length} סטודנטים${skippedMsg}`);
       return true;
     }
     return false;

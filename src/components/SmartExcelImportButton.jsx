@@ -155,9 +155,10 @@ ${csvText}
       const extractedStudents = await processWithGemini(csvData, DEFAULT_GUIDANCE);
 
       if (extractedStudents?.length > 0) {
-        notify(showToast, "success", `יובאו ${extractedStudents.length} סטודנטים בהצלחה!`);
-        await onImportSuccess?.(extractedStudents);
-        if (fileInputRef.current) fileInputRef.current.value = "";
+        const importResult = await onImportSuccess?.(extractedStudents);
+        if (importResult !== false) {
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        }
       } else {
         handleFailure(csvData, "לא זוהו סטודנטים בקובץ.");
       }
