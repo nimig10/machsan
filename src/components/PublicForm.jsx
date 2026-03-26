@@ -861,7 +861,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     : (Number.isInteger(initialStepParam) && initialStepParam >= 1 && initialStepParam <= 4 ? initialStepParam : 1);
   const [step, setStep]       = useState(initialStep);
   const swipeTouchRef = useRef(null);
-  const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""});
+  const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""});
   const [items, setItems]     = useState([]);
   const [agreed, setAgreed]   = useState(false);
   const [done, setDone]       = useState(false);
@@ -925,6 +925,8 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
         ...prev,
         loan_type: allowedLoanTypes[0],
         sound_day_loan: false,
+        sound_night_loan: false,
+        studio_booking_id: "",
         borrow_date: "",
         return_date: "",
         borrow_time: "",
@@ -939,6 +941,8 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
         ...prev,
         loan_type: "",
         sound_day_loan: false,
+        sound_night_loan: false,
+        studio_booking_id: "",
         borrow_date: "",
         return_date: "",
         borrow_time: "",
@@ -974,7 +978,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const setSoundDayLoan = (enabled) => {
     if (!enabled) {
-      setForm((prev) => ({ ...prev, sound_day_loan:false }));
+      setForm((prev) => ({ ...prev, sound_day_loan:false, sound_night_loan:false, studio_booking_id:"" }));
       return;
     }
     const targetDate = getNextSoundDayLoanDate(
@@ -983,10 +987,36 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     setForm((prev) => ({
       ...prev,
       sound_day_loan:true,
+      sound_night_loan:false,
+      studio_booking_id:"",
       borrow_date: targetDate,
       return_date: targetDate,
       borrow_time: "",
       return_time: "",
+    }));
+  };
+
+  const setSoundNightLoan = (enabled) => {
+    if (!enabled) {
+      setForm((prev) => ({ ...prev, sound_night_loan:false, studio_booking_id:"" }));
+      return;
+    }
+    const now = new Date();
+    if (now.getHours() >= 17) {
+      showToast("error", "לא ניתן להשאיל ציוד ללילה אחרי השעה 17:00.");
+      return;
+    }
+    const todayDate = today();
+    const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate()+1); while(d.getDay()===5||d.getDay()===6) d.setDate(d.getDate()+1); return formatLocalDateInput(d); })();
+    setForm((prev) => ({
+      ...prev,
+      sound_night_loan:true,
+      sound_day_loan:false,
+      borrow_date: todayDate,
+      return_date: tomorrow,
+      borrow_time: "",
+      return_time: "09:30",
+      studio_booking_id: "",
     }));
   };
 
@@ -1094,13 +1124,16 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     ? Math.ceil((parseLocalDate(form.return_date) - parseLocalDate(form.borrow_date)) / 86400000) + 1
     : 0;
   const tooLong = loanDays > maxDays;
-  const CINEMA_TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
-  const TIME_SLOTS = (form.loan_type==="סאונד" || isCinemaLoan)
-    ? CINEMA_TIME_SLOTS
-    : ["09:00","09:30","14:30","15:00","15:30","16:00","16:30","17:00","17:30"];
   const isSoundLoan = form.loan_type==="סאונד";
+  const CINEMA_TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
+  const SOUND_DAY_TIME_SLOTS = ["09:00","09:15","09:30","09:45","10:00","10:15","10:30","10:45","11:00","11:15","11:30","11:45","12:00","12:15","12:30","12:45","13:00","13:15","13:30","13:45","14:00","14:15","14:30","14:45","15:00","15:15","15:30","15:45","16:00","16:15","16:30","16:45","17:00","17:15","17:30","17:45","18:00","18:15","18:30","18:45","19:00","19:15","19:30","19:45","20:00","20:15","20:30","20:45","21:00","21:15","21:30"];
+  const TIME_SLOTS = isSoundLoan
+    ? SOUND_DAY_TIME_SLOTS
+    : isCinemaLoan ? CINEMA_TIME_SLOTS
+    : ["09:00","09:30","14:30","15:00","15:30","16:00","16:30","17:00","17:30"];
   const isProductionLoan = form.loan_type==="הפקה";
   const isSoundDayLoan = isSoundLoan && !!form.sound_day_loan;
+  const isSoundNightLoan = isSoundLoan && !!form.sound_night_loan;
   const soundDayLoanDate = isSoundDayLoan ? getNextSoundDayLoanDate(TIME_SLOTS) : "";
   const activeBorrowDate = isSoundDayLoan ? soundDayLoanDate : form.borrow_date;
   const activeReturnDate = isSoundDayLoan ? soundDayLoanDate : form.return_date;
@@ -1187,11 +1220,11 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const privateLoanLimitedQty = form.loan_type==="פרטית" ? getPrivateLoanLimitedQty(items, equipment) : 0;
   const privateLoanLimitExceeded = form.loan_type==="פרטית" && privateLoanLimitedQty > 4;
   const sameDay = form.borrow_date && form.return_date && form.borrow_date === form.return_date;
-  const timeOrderError = sameDay && form.borrow_time && form.return_time && toDateTime(form.return_date, form.return_time) <= toDateTime(form.borrow_date, form.borrow_time);
+  const timeOrderError = !isSoundNightLoan && sameDay && form.borrow_time && form.return_time && toDateTime(form.return_date, form.return_time) <= toDateTime(form.borrow_date, form.borrow_time);
   const returnBeforeBorrow = form.borrow_date && form.return_date && parseLocalDate(form.return_date) < parseLocalDate(form.borrow_date);
   const hasTimes = !!form.borrow_time && !!form.return_time;
   const pastLoanTimeError = getPastLoanTimeError(form);
-  const ok2 = !!form.borrow_date && !!form.return_date && hasTimes && !returnBeforeBorrow && !tooSoon && !cinemaTooSoon && !tooLong && !borrowWeekend && !returnWeekend && !timeOrderError && !pastLoanTimeError;
+  const ok2 = !!form.borrow_date && !!form.return_date && hasTimes && !returnBeforeBorrow && !tooSoon && !cinemaTooSoon && !tooLong && !borrowWeekend && !returnWeekend && !timeOrderError && !pastLoanTimeError && (!isSoundLoan || !!form.studio_booking_id);
   const ok3 = items.some(item => Number(item.quantity) > 0);
   const canSubmit = !!ok1 && !!ok2 && !!ok3 && !privateLoanLimitExceeded && !!agreed;
 
@@ -1425,6 +1458,8 @@ ${inventory}
         return_date: endDate,
         return_time: endTime,
         sound_day_loan: false,
+        sound_night_loan: false,
+        studio_booking_id: "",
       };
 
       if (nextLoanType === "הפקה" && !nextForm.crew_photographer_name) {
@@ -1663,7 +1698,7 @@ ${inventory}
     showToast("success","הבקשה נשלחה בהצלחה!");
   };
 
-  const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""}); setItems([]); setAgreed(false); };
+  const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""}); setItems([]); setAgreed(false); };
 
   const handleFormSwipeStart = (e) => {
     swipeTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -1815,6 +1850,8 @@ ${inventory}
                     ...prev,
                     loan_type: opt.val,
                     sound_day_loan: opt.val==="סאונד" ? prev.sound_day_loan : false,
+                    sound_night_loan: opt.val==="סאונד" ? prev.sound_night_loan : false,
+                    studio_booking_id: opt.val==="סאונד" ? prev.studio_booking_id : "",
                     borrow_date: opt.val==="סאונד" ? prev.borrow_date : "",
                     return_date: opt.val==="סאונד" ? prev.return_date : "",
                     borrow_time: opt.val==="סאונד" ? prev.borrow_time : "",
@@ -1872,18 +1909,24 @@ ${inventory}
             <div className="form-section-title" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
               <span>תאריכים ושעות</span>
               {isSoundLoan && (
-                <button
-                  type="button"
-                  className={`btn btn-sm ${isSoundDayLoan ? "btn-primary" : "btn-secondary"}`}
-                  onClick={()=>setSoundDayLoan(!isSoundDayLoan)}
-                >
-                  השאלת יום
-                </button>
+                <div style={{display:"flex",gap:6}}>
+                  <button type="button" className={`btn btn-sm ${isSoundDayLoan ? "btn-primary" : "btn-secondary"}`} onClick={()=>{setSoundDayLoan(!isSoundDayLoan); if(form.sound_night_loan) setSoundNightLoan(false);}}>
+                    ☀️ השאלת יום
+                  </button>
+                  <button type="button" className={`btn btn-sm ${isSoundNightLoan ? "btn-primary" : "btn-secondary"}`} onClick={()=>{setSoundNightLoan(!isSoundNightLoan); if(form.sound_day_loan) setSoundDayLoan(false);}}>
+                    🌙 השאלת לילה
+                  </button>
+                </div>
               )}
             </div>
             {isSoundDayLoan && (
               <div className="highlight-box" style={{marginBottom:16}}>
                 השאלת יום פעילה. התאריך חושב אוטומטית ל־{formatDate(soundDayLoanDate)} וניתן להזין שעות ידנית, אבל רק לזמן עתידי.
+              </div>
+            )}
+            {isSoundNightLoan && (
+              <div className="highlight-box" style={{marginBottom:16,background:"rgba(33,150,243,0.08)",border:"1px solid rgba(33,150,243,0.25)"}}>
+                🌙 השאלת לילה פעילה — הציוד חייב להיאסף עד 17:00. שעת החזרה ננעלה ל-09:30 למחרת.
               </div>
             )}
             {isCinemaLoan && (
@@ -1960,6 +2003,38 @@ ${inventory}
                 </div>
               </>
             )}
+            {isSoundLoan && (
+              <div className="form-group" style={{marginTop:12}}>
+                <label className="form-label">🎙️ שיוך לקביעת אולפן *</label>
+                <select className="form-select" value={form.studio_booking_id} onChange={e=>{
+                  const bId = e.target.value;
+                  set("studio_booking_id", bId);
+                  if (bId) {
+                    const linked = studioBookings.find(b=>String(b.id)===bId);
+                    if (linked) {
+                      if (linked.isNight) {
+                        const tomorrow = (() => { const d = new Date(linked.date); d.setDate(d.getDate()+1); while(d.getDay()===5||d.getDay()===6) d.setDate(d.getDate()+1); return formatLocalDateInput(d); })();
+                        setForm(prev=>({...prev, studio_booking_id:bId, borrow_date:linked.date, return_date:tomorrow, return_time:"09:30", sound_night_loan:true, sound_day_loan:false}));
+                      } else {
+                        setForm(prev=>({...prev, studio_booking_id:bId, borrow_date:linked.date, return_date:linked.date, sound_day_loan:true, sound_night_loan:false}));
+                      }
+                    }
+                  }
+                }}>
+                  <option value="">-- בחר קביעת אולפן --</option>
+                  {studioBookings.filter(b=>{
+                    if (!b.studentName || b.studentName !== loggedInStudent?.name) return false;
+                    const endDate = b.isNight ? (() => { const d = new Date(b.date); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); })() : b.date;
+                    return new Date(`${endDate}T${b.endTime||"23:59"}:00`).getTime() > Date.now();
+                  }).map(b=>{
+                    const studio = visibleStudios?.find(s=>String(s.id)===String(b.studioId)) || studios?.find(s=>String(s.id)===String(b.studioId));
+                    const timeLabel = b.isNight ? `🌙 לילה מ-${b.startTime||"21:30"}` : `${b.startTime||""}–${b.endTime||""}`;
+                    return <option key={b.id} value={b.id}>{studio?.name||"אולפן"} · {b.date} · {timeLabel}</option>;
+                  })}
+                </select>
+                {!form.studio_booking_id && <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>חובה לשייך קביעת אולפן להשאלת סאונד. אם אין לך קביעה, עבור לדף "קביעת אולפנים" וקבע אולפן.</div>}
+              </div>
+            )}
             {(borrowWeekend||(returnWeekend&&!isCinemaLoan)) && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 המחסן אינו פעיל בימים שישי ושבת. נא לבחור ימים א׳–ה׳ בלבד.</div>}
             {tooSoon && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 {form.loan_type==="פרטית"?"השאלה פרטית דורשת התראה של 48 שעות לפחות.":"נדרשת התראה של שבוע לפחות."} תאריך מוקדם ביותר: <strong>{formatDate(minDate)}</strong></div>}
             {cinemaTooSoon && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 השאלת קולנוע יומית דורשת הזמנה של 24 שעות מראש. תאריך מוקדם ביותר: <strong>{formatDate(minDate)}</strong></div>}
@@ -2014,6 +2089,7 @@ ${inventory}
             modal={studioModal} setModal={setStudioModal}
             certifications={certifications}
             siteSettings={siteSettings}
+            policies={policies}
           />
         </div>}
       </div>
@@ -2097,9 +2173,12 @@ ${inventory}
 }
 
 // ─── PUBLIC STUDIO BOOKING (student side) ────────────────────────────────────
-function PublicStudioBooking({ studios, bookings, setBookings, student, showToast, weekOffset, setWeekOffset, modal, setModal, certifications, siteSettings = {} }) {
+function PublicStudioBooking({ studios, bookings, setBookings, student, showToast, weekOffset, setWeekOffset, modal, setModal, certifications, siteSettings = {}, policies = {} }) {
   const [saving, setSaving] = useState(false);
   const [dayView, setDayView] = useState(null); // { studioId, date, dayName }
+  const [nightPolicyPending, setNightPolicyPending] = useState(null); // booking args waiting for policy agreement
+  const [nightPolicyScrolled, setNightPolicyScrolled] = useState(false);
+  const [nightPolicyAgreed, setNightPolicyAgreed] = useState(false);
   const [showAiAssistant, setShowAiAssistant] = useState(false);
   const [smartBookingPrompt, setSmartBookingPrompt] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -2323,6 +2402,13 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     return "";
   };
   const persistStudentBooking = async ({ studioId, date, startTime, endTime, notes="", isNight=false, blockedMessage="", successMessage="✅ האולפן הוזמן בהצלחה!" }) => {
+    // Night policies gate
+    if (isNight && policies?.לילה) {
+      setNightPolicyPending({ studioId, date, startTime, endTime, notes, isNight, blockedMessage, successMessage });
+      setNightPolicyScrolled(false);
+      setNightPolicyAgreed(false);
+      return false;
+    }
     const normalizedStartTime = isNight ? NIGHT_START_TIME : startTime;
     const normalizedEndTime = isNight ? NIGHT_END_TIME : endTime;
     const validationError = getStudioBookingValidationError({ studioId, date, startTime: normalizedStartTime, endTime: normalizedEndTime, isNight, blockedMessage });
@@ -3022,11 +3108,19 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
         </div>
       )}
       {renderAddBookingModal()}
-      {/* My bookings */}
-      {bookings.filter((b)=>isBookingOwnedByStudent(b)).length > 0 && (
+      {/* My bookings — hide past bookings */}
+      {bookings.filter((b)=>{
+        if (!isBookingOwnedByStudent(b)) return false;
+        const endDate = b.isNight ? (() => { const d = new Date(b.date); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); })() : b.date;
+        return new Date(`${endDate}T${b.endTime||"23:59"}:00`).getTime() > Date.now();
+      }).length > 0 && (
         <div style={{marginTop:20}}>
           <div style={{fontWeight:800,fontSize:14,marginBottom:8}}>📋 ההזמנות שלי</div>
-          {bookings.filter((b)=>isBookingOwnedByStudent(b)).sort((a,b)=>(a.date||"").localeCompare(b.date||"")||(a.startTime||"").localeCompare(b.startTime||"")).map(b=>{
+          {bookings.filter((b)=>{
+        if (!isBookingOwnedByStudent(b)) return false;
+        const endDate = b.isNight ? (() => { const d = new Date(b.date); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); })() : b.date;
+        return new Date(`${endDate}T${b.endTime||"23:59"}:00`).getTime() > Date.now();
+      }).sort((a,b)=>(a.date||"").localeCompare(b.date||"")||(a.startTime||"").localeCompare(b.startTime||"")).map(b=>{
             const studio = studios.find(s=>sameStudioId(s.id, b.studioId));
             const color = getBookingColor(b);
             const canCancel = b.date >= todayStr;
@@ -3055,6 +3149,54 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
               </div>
             );
           })}
+        </div>
+      )}
+      {/* Night policies modal */}
+      {nightPolicyPending && policies?.לילה && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <div style={{background:"var(--surface1)",borderRadius:12,maxWidth:500,width:"100%",maxHeight:"80vh",display:"flex",flexDirection:"column",border:"1px solid var(--border)"}}>
+            <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",fontWeight:800,fontSize:15,textAlign:"center"}}>🌙 נהלי קביעת אולפן לילה</div>
+            <div
+              style={{padding:"16px 20px",overflowY:"auto",flex:1,fontSize:13,lineHeight:1.7,whiteSpace:"pre-wrap",direction:"rtl"}}
+              onScroll={e=>{
+                const el = e.target;
+                if (el.scrollHeight - el.scrollTop - el.clientHeight < 30) setNightPolicyScrolled(true);
+              }}
+            >
+              {policies.לילה}
+            </div>
+            <div style={{padding:"16px 20px",borderTop:"1px solid var(--border)",display:"flex",flexDirection:"column",gap:10}}>
+              {!nightPolicyScrolled && <div style={{fontSize:11,color:"var(--text3)",textAlign:"center"}}>יש לגלול לתחתית הנהלים כדי להמשיך</div>}
+              <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,fontWeight:600,cursor:nightPolicyScrolled?"pointer":"not-allowed",opacity:nightPolicyScrolled?1:0.4}}>
+                <input type="checkbox" checked={nightPolicyAgreed} disabled={!nightPolicyScrolled} onChange={e=>setNightPolicyAgreed(e.target.checked)}/>
+                אני מתחייב/ת לעמוד בכל נהלי קביעת אולפן לילה
+              </label>
+              <div style={{display:"flex",gap:8,justifyContent:"center"}}>
+                <button className="btn btn-secondary" onClick={()=>setNightPolicyPending(null)}>ביטול</button>
+                <button
+                  className="btn btn-primary"
+                  disabled={!nightPolicyAgreed}
+                  onClick={async()=>{
+                    const args = nightPolicyPending;
+                    setNightPolicyPending(null);
+                    // Call the actual persist logic (bypass the gate by temporarily clearing policies)
+                    const normalizedStartTime = args.isNight ? NIGHT_START_TIME : args.startTime;
+                    const normalizedEndTime = args.isNight ? NIGHT_END_TIME : args.endTime;
+                    const validationError = getStudioBookingValidationError({ studioId:args.studioId, date:args.date, startTime:normalizedStartTime, endTime:normalizedEndTime, isNight:args.isNight, blockedMessage:args.blockedMessage });
+                    if (validationError) { showToast("error",validationError); return; }
+                    const newBooking = { id:Date.now(), studioId:args.studioId, date:args.date, startTime:normalizedStartTime, endTime:normalizedEndTime, studentName:student.name, studentEmail:student.email, studentPhone:student.phone, status:"מאושר", notes:args.notes, isNight:args.isNight };
+                    const next = [...bookings, newBooking];
+                    setBookings(next);
+                    await storageSet("studio_bookings", next);
+                    showToast("success", args.successMessage || "✅ האולפן הוזמן בהצלחה!");
+                    closeBookingModal();
+                  }}
+                >
+                  אני מאשר/ת ✅
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

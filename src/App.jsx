@@ -3241,6 +3241,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
     { key:"הפקה",  icon:"🎬", label:"השאלה להפקה" },
     { key:"סאונד", icon:"🎙️", label:"השאלת סאונד" },
     { key:"קולנוע יומית", icon:"🎥", label:"השאלת קולנוע יומית" },
+    { key:"לילה", icon:"🌙", label:"נהלי קביעת אולפן לילה" },
   ];
   const [draft, setDraft] = useState({ ...policies });
   const [saving, setSaving] = useState(false);
@@ -6597,7 +6598,7 @@ export default function App() {
   const [calendarToken, setCalendarToken] = useState("");
   const [managerToken, setManagerToken]   = useState("");
   const [kits, _setKits]               = useState([]);
-  const [policies, _setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"" });
+  const [policies, _setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"", לילה:"" });
   const [certifications, _setCertifications] = useState({ types:[], students:[] });
   const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14, aiMaxRequests:5, studioFutureHoursLimit:16 });
   const [studios, _setStudios] = useState([]);
@@ -6868,7 +6869,7 @@ export default function App() {
           _setCategoryLoanTypes(catLoanTypes || {});
         _setTeamMembers(tm || []);
         _setKits(kts || []);
-        _setPolicies(pol || { פרטית:"", הפקה:"", סאונד:"" });
+        _setPolicies(pol || { פרטית:"", הפקה:"", סאונד:"", לילה:"" });
         _setCertifications(certs || { types:[], students:[] });
         _setDeptHeads(Array.isArray(dhs) ? dhs : []);
           setCalendarToken(calTok || "");
@@ -6890,7 +6891,7 @@ export default function App() {
         if(!cats && catsSrc === "supabase_empty") await storageSet("categories",   DEFAULT_CATEGORIES);
         if(!tm && tmSrc === "supabase_empty")   await storageSet("teamMembers",  []);
         if(!kts && ktsSrc === "supabase_empty")  await storageSet("kits",         []);
-        if(!pol && polSrc === "supabase_empty")   await storageSet("policies",        { פרטית:"", הפקה:"", סאונד:"" });
+        if(!pol && polSrc === "supabase_empty")   await storageSet("policies",        { פרטית:"", הפקה:"", סאונד:"", לילה:"" });
         if(!certs && certsSrc === "supabase_empty") await storageSet("certifications", { types:[], students:[] });
         if(!dhs && dhsSrc === "supabase_empty")     await storageSet("deptHeads",       []);
         if(!calTok && calTokSrc === "supabase_empty") {
