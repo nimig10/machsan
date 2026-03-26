@@ -758,6 +758,7 @@ export default function StudioBookingPage(props) {
                             const certNames = getStudioCertNames(studio);
                             return certNames.length ? <span style={{ fontSize:9, color:"var(--accent)", lineHeight:1.2, wordBreak:"break-word", textAlign:"center" }}>🎓 {certNames.join(", ")}</span> : null;
                           })()}
+                          {studio.isClassroom && <div style={{ fontSize:9, color:"#3498db", fontWeight:800 }}>🏫 כיתה</div>}
                           {isStudioDisabled(studio) && <div style={{ fontSize:9, color:"var(--red)", fontWeight:800 }}>🔧 מושבת</div>}
                         </div>
                       </td>

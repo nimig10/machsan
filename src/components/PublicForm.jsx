@@ -3077,6 +3077,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                         : <span style={{fontSize:18,lineHeight:1}}>{studio.image||"🎙️"}</span>
                       }
                       <span style={{fontSize:10,fontWeight:800,lineHeight:1.2,wordBreak:"break-word",textAlign:"center"}}>{studio.name}</span>
+                      {studio.isClassroom && <div style={{fontSize:9,color:"#3498db",fontWeight:800}}>🏫 כיתה</div>}
                       {maintenanceBlocked && <div style={{fontSize:9,color:"var(--red)",fontWeight:800}}>🔧 בתחזוקה</div>}
                       {!maintenanceBlocked && blocked && <div style={{fontSize:9,color:"var(--red)",fontWeight:800}}>⛔ חסר הסמכה</div>}
                     </div>
