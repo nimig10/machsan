@@ -540,19 +540,32 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           let lastApiError = null;
           for (const modelName of ["gemini-2.5-flash", "gemini-2.5-flash-lite"]) {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-            const resp = await fetchWithRetry(url, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(requestBody),
-            });
-            if (!resp.ok) {
-              const errorText = await resp.text();
-              lastApiError = new Error(`API Error ${resp.status}: ${errorText}`);
-              if (resp.status === 404 || resp.status === 429 || resp.status === 503) continue;
-              throw lastApiError;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 25000);
+            try {
+              const resp = await fetchWithRetry(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(requestBody),
+                signal: controller.signal,
+              }, 2);
+              clearTimeout(timeoutId);
+              if (!resp.ok) {
+                const errorText = await resp.text();
+                lastApiError = new Error(`API Error ${resp.status}: ${errorText}`);
+                if (resp.status === 404 || resp.status === 429 || resp.status === 503) continue;
+                throw lastApiError;
+              }
+              jsonResponse = await resp.json();
+              if (jsonResponse?.candidates?.length) break;
+            } catch (fetchErr) {
+              clearTimeout(timeoutId);
+              if (fetchErr.name === "AbortError") {
+                lastApiError = new Error(`timeout — ${modelName} לא הגיב תוך 25 שניות`);
+                continue;
+              }
+              throw fetchErr;
             }
-            jsonResponse = await resp.json();
-            if (jsonResponse?.candidates?.length) break;
           }
           if (!jsonResponse) throw lastApiError || new Error("כל המודלים נכשלו. נסה שוב.");
           if (!jsonResponse?.candidates || jsonResponse.candidates.length === 0) {
