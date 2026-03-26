@@ -203,7 +203,7 @@ ${csvText}
         ref={fileInputRef}
         type="file"
         accept=".xlsx,.xls,.csv"
-        className="hidden"
+        style={{ display: "none" }}
         onChange={handleFileUpload}
       />
       <button
