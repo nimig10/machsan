@@ -3037,26 +3037,23 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
         </div>
       ) : (
         <>
-          <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed"}}>
+          <div style={{padding:"6px 12px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"8px 8px 0 0"}}>
+            <div style={{display:"flex",gap:8,justifyContent:"center",alignItems:"center",flexWrap:"wrap"}}>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w-1)} disabled={weekOffset<=0} style={{opacity:weekOffset<=0?0.4:1,cursor:weekOffset<=0?"default":"pointer"}}>→ שבוע קודם</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(0)}>היום</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w+1)}>← שבוע הבא</button>
+              <span style={{fontSize:12,color:"var(--text3)"}}>
+                {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth()+1).padStart(2,"0")} — {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth()+1).padStart(2,"0")}
+              </span>
+            </div>
+          </div>
+          <div className="studio-calendar-scroll" style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+          <table style={{width:"100%",minWidth:700,borderCollapse:"collapse",tableLayout:"fixed"}}>
             <thead>
-              {/* Nav row — sticky at top, right above the days row */}
               <tr>
-                <td colSpan={weekDays.length + 1} style={{padding:"6px 12px",background:"var(--surface)",border:"1px solid var(--border)",position:"sticky",top:0,zIndex:20}}>
-                  <div style={{display:"flex",gap:8,justifyContent:"center",alignItems:"center",flexWrap:"wrap"}}>
-                    <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w-1)} disabled={weekOffset<=0} style={{opacity:weekOffset<=0?0.4:1,cursor:weekOffset<=0?"default":"pointer"}}>→ שבוע קודם</button>
-                    <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(0)}>היום</button>
-                    <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w+1)}>← שבוע הבא</button>
-                    <span style={{fontSize:12,color:"var(--text3)"}}>
-                      {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth()+1).padStart(2,"0")} — {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth()+1).padStart(2,"0")}
-                    </span>
-                  </div>
-                </td>
-              </tr>
-              {/* Days row — sticky below the nav row */}
-              <tr>
-                <th style={{padding:"8px 6px",background:"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",width:80,position:"sticky",top:44,zIndex:10}}>אולפן</th>
+                <th style={{padding:"8px 6px",background:"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",width:80}}>אולפן</th>
                 {weekDays.map(d=>(
-                  <th key={d.fullDate} style={{padding:"8px 6px",background:d.isToday?"rgba(245,166,35,0.15)":"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",position:"sticky",top:44,zIndex:10}}>
+                  <th key={d.fullDate} style={{padding:"8px 6px",background:d.isToday?"rgba(245,166,35,0.15)":"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)"}}>
                     <div>{d.name}</div><div style={{fontSize:11,color:d.isToday?"var(--accent)":"var(--text3)"}}>{d.date}/{String(new Date(d.fullDate).getMonth()+1).padStart(2,"0")}</div>
                   </th>
                 ))}
@@ -3114,6 +3111,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
               })}
             </tbody>
           </table>
+          </div>
         </>
       )}
       {renderAddBookingModal()}
