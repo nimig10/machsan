@@ -3171,10 +3171,11 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       {/* Night policies modal — always shown for night bookings */}
       {nightPolicyPending && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-          <div style={{background:"var(--surface1)",borderRadius:12,maxWidth:500,width:"100%",maxHeight:"80vh",display:"flex",flexDirection:"column",border:"1px solid var(--border)"}}>
-            <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",fontWeight:800,fontSize:15,textAlign:"center"}}>🌙 נהלי קביעת אולפן לילה</div>
+          <div style={{background:"var(--surface, #1a1a2e)",borderRadius:12,maxWidth:500,width:"100%",maxHeight:"80vh",display:"flex",flexDirection:"column",border:"1px solid var(--border)",boxShadow:"0 8px 32px rgba(0,0,0,0.5)"}}>
+            <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",fontWeight:800,fontSize:15,textAlign:"center",color:"#f5a623"}}>🌙 נהלי קביעת אולפן לילה</div>
             {policies?.לילה ? (
               <div
+                ref={el=>{ if(el && el.scrollHeight <= el.clientHeight + 30) setNightPolicyScrolled(true); }}
                 style={{padding:"16px 20px",overflowY:"auto",flex:1,fontSize:13,lineHeight:1.7,whiteSpace:"pre-wrap",direction:"rtl"}}
                 onScroll={e=>{
                   const el = e.target;
