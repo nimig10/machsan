@@ -1244,11 +1244,16 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
         <div style={{fontWeight:800,fontSize:13,color:"#3498db",marginBottom:10}}>🔗 שיוך (אופציונלי)</div>
         <div className="grid-2">
           <div className="form-group">
-            <label className="form-label">🎙️ שיוך לאולפן</label>
+            <label className="form-label">🏫 שיוך לכיתת לימוד</label>
             <select className="form-select" value={studioId} onChange={e=>setStudioId(e.target.value)}>
               <option value="">ללא שיוך</option>
-              {studios.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+              {studios.filter(s => s.isClassroom || String(s.id) === String(studioId)).map(s=>(
+                <option key={s.id} value={s.id}>{s.name}{!s.isClassroom ? " (לא מסומן ככיתה)" : ""}</option>
+              ))}
             </select>
+            {studios.filter(s=>s.isClassroom).length === 0 && (
+              <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>💡 סמן אולפן כ"כיתת לימוד" ברובריקת אולפנים כדי שיופיע כאן.</div>
+            )}
           </div>
           <div className="form-group">
             <label className="form-label">🎒 שיוך לערכת שיעור</label>

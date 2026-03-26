@@ -418,7 +418,8 @@ export default function StudioBookingPage(props) {
     }
     const studioCertId = formData.get("studioCertId") || undefined;
     const studioTrackType = formData.get("studioTrackType") || "";
-    const nextStudios = [...studios, { id:Date.now(), name, studioCertId, studioCertIds:studioCertId ? [studioCertId] : [], image:studioImage || formData.get("emoji") || "🎙️", isDisabled:false, studioTrackType }];
+    const isClassroom = formData.get("isClassroom") === "on";
+    const nextStudios = [...studios, { id:Date.now(), name, studioCertId, studioCertIds:studioCertId ? [studioCertId] : [], image:studioImage || formData.get("emoji") || "🎙️", isDisabled:false, studioTrackType, isClassroom }];
     await saveStudios(nextStudios);
     setStudioImage("");
     closeModal();
@@ -433,11 +434,12 @@ export default function StudioBookingPage(props) {
     if (!name) return;
     const studioCertId = formData.get("studioCertId") || undefined;
     const isDisabled = formData.get("isDisabled") === "on";
+    const isClassroom = formData.get("isClassroom") === "on";
     const studioTrackType = formData.get("studioTrackType") || "";
     const image = editImage || String(formData.get("emoji") || "").trim() || modal.studio.image;
     const previousIds = getStudioCertIds(modal.studio);
     const nextStudioCertIds = !studioCertId ? [] : (previousIds.length > 1 && previousIds.includes(studioCertId) ? previousIds : [studioCertId]);
-    const nextStudios = studios.map((studio) => studio.id === modal.studio.id ? { ...studio, name, studioCertId, studioCertIds:nextStudioCertIds, image, isDisabled, studioTrackType } : studio);
+    const nextStudios = studios.map((studio) => studio.id === modal.studio.id ? { ...studio, name, studioCertId, studioCertIds:nextStudioCertIds, image, isDisabled, studioTrackType, isClassroom } : studio);
     await saveStudios(nextStudios);
     showToast("success", `האולפן "${name}" עודכן`);
     closeModal();
@@ -869,6 +871,11 @@ export default function StudioBookingPage(props) {
             </label>
             <label style={labelStyle}>תמונה<input type="file" accept="image/*" onChange={(event) => void handleImageUpload(event, setStudioImage)} style={{ fontSize:13 }} disabled={imgUploading} />{imgUploading && <div style={{ fontSize:12, color:"var(--accent)", marginTop:4 }}>מעלה תמונה...</div>}{studioImage && <img src={studioImage} alt="תצוגה מקדימה" style={{ width:80, height:80, objectFit:"cover", borderRadius:8, marginTop:4 }} />}</label>
             <label style={labelStyle}>או אימוג'י<input name="emoji" className="form-input" placeholder="🎙️" maxLength={4} /></label>
+            <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, fontWeight:700, color:"var(--text2)", background:"rgba(52,152,219,0.06)", border:"1px solid rgba(52,152,219,0.18)", borderRadius:8, padding:"10px 12px" }}>
+              <input type="checkbox" name="isClassroom" defaultChecked={false} style={{ width:18, height:18, accentColor:"#3498db" }} />
+              🏫 כיתת לימוד
+            </label>
+            <div style={{ fontSize:12, color:"var(--text3)", marginTop:-4 }}>כאשר מסומן, האולפן יופיע לשיוך קורסים ברובריקת "שיעורים".</div>
           </form>
         </Modal>
       )}
@@ -890,6 +897,11 @@ export default function StudioBookingPage(props) {
             <div style={{ fontSize:13, fontWeight:600, color:"var(--text2)" }}>תמונה נוכחית:<div style={{ marginTop:4 }}>{(editImage || modal.studio.image)?.startsWith("http") ? <img src={editImage || modal.studio.image} alt="תמונה" style={{ width:80, height:80, objectFit:"cover", borderRadius:8 }} /> : <span style={{ fontSize:32 }}>{modal.studio.image || "🎙️"}</span>}</div></div>
             <label style={labelStyle}>החלף תמונה<input type="file" accept="image/*" onChange={(event) => void handleImageUpload(event, setEditImage)} style={{ fontSize:13 }} disabled={imgUploading} />{imgUploading && <div style={{ fontSize:12, color:"var(--accent)", marginTop:4 }}>מעלה תמונה...</div>}</label>
             <label style={labelStyle}>או אימוג'י<input name="emoji" className="form-input" placeholder="🎙️" maxLength={4} /></label>
+            <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, fontWeight:700, color:"var(--text2)", background:"rgba(52,152,219,0.06)", border:"1px solid rgba(52,152,219,0.18)", borderRadius:8, padding:"10px 12px" }}>
+              <input type="checkbox" name="isClassroom" defaultChecked={Boolean(modal.studio.isClassroom)} style={{ width:18, height:18, accentColor:"#3498db" }} />
+              🏫 כיתת לימוד
+            </label>
+            <div style={{ fontSize:12, color:"var(--text3)", marginTop:-4 }}>כאשר מסומן, האולפן יופיע לשיוך קורסים ברובריקת "שיעורים".</div>
             <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, fontWeight:700, color:"var(--text2)", background:"rgba(231,76,60,0.06)", border:"1px solid rgba(231,76,60,0.14)", borderRadius:8, padding:"10px 12px" }}>
               <input type="checkbox" name="isDisabled" defaultChecked={Boolean(modal.studio.isDisabled)} style={{ width:18, height:18, accentColor:"var(--red)" }} />
               השבתת אולפן
