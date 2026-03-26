@@ -476,12 +476,21 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           const result = e?.target?.result;
           const data = new Uint8Array(result instanceof ArrayBuffer ? result : new ArrayBuffer(0));
           const workbook = XLSX.read(data, { type: "array" });
-          const firstSheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheetName];
-          if (!worksheet) throw new Error("לא נמצא גיליון ראשון בקובץ.");
+          const sheetNames = workbook.SheetNames || [];
+          if (!sheetNames.length) throw new Error("לא נמצא גיליון תקין בקובץ.");
 
-          const csvData = XLSX.utils.sheet_to_csv(worksheet);
-          if (!String(csvData || "").trim()) throw new Error("לא נמצא תוכן קריא בקובץ.");
+          const csvParts = [];
+          for (const sName of sheetNames) {
+            const ws = workbook.Sheets[sName];
+            if (!ws) continue;
+            const csv = XLSX.utils.sheet_to_csv(ws);
+            const cleanLines = String(csv || "").split("\n").filter(line => line.replace(/,/g, "").trim());
+            if (cleanLines.length) {
+              csvParts.push(`--- גיליון: ${sName} ---\n${cleanLines.join("\n")}`);
+            }
+          }
+          const csvData = csvParts.join("\n\n");
+          if (!csvData.trim()) throw new Error("לא נמצא תוכן קריא בקובץ.");
 
           const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.REACT_APP_GEMINI_API_KEY || "";
           if (!apiKey) {
@@ -565,7 +574,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           for (const modelName of ["gemini-2.5-flash", "gemini-2.5-flash-lite"]) {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 25000);
+            const timeoutId = setTimeout(() => controller.abort(), 120000);
             try {
               const resp = await fetchWithRetry(url, {
                 method: "POST",
@@ -585,7 +594,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             } catch (fetchErr) {
               clearTimeout(timeoutId);
               if (fetchErr.name === "AbortError") {
-                lastApiError = new Error(`timeout — ${modelName} לא הגיב תוך 25 שניות`);
+                lastApiError = new Error(`timeout — ${modelName} לא הגיב תוך 2 דקות`);
                 continue;
               }
               throw fetchErr;
