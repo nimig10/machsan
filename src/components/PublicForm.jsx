@@ -3040,12 +3040,12 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
         </div>
       ) : (
         <div style={{overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",minWidth:500}}>
+          <table style={{width:"100%",borderCollapse:"collapse",minWidth:500,tableLayout:"fixed"}}>
             <thead>
               <tr>
-                <th style={{padding:"8px 10px",background:"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",width:90}}>אולפן</th>
+                <th style={{padding:"8px 10px",background:"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",width:90,maxWidth:90}}>אולפן</th>
                 {weekDays.map(d=>(
-                  <th key={d.fullDate} style={{padding:"8px 10px",background:d.isToday?"rgba(245,166,35,0.15)":"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)"}}>
+                  <th key={d.fullDate} style={{padding:"8px 10px",background:d.isToday?"rgba(245,166,35,0.15)":"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",width:100,maxWidth:100}}>
                     <div>{d.name}</div><div style={{fontSize:11,color:d.isToday?"var(--accent)":"var(--text3)"}}>{d.date}/{String(new Date(d.fullDate).getMonth()+1).padStart(2,"0")}</div>
                   </th>
                 ))}
@@ -3074,7 +3074,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                     return (
                       <td key={day.fullDate}
                         style={{
-                          padding:"4px 6px",border:"1px solid var(--border)",verticalAlign:"top",
+                          padding:"4px 6px",border:"1px solid var(--border)",verticalAlign:"top",overflow:"hidden",
                           cursor: blocked ? "not-allowed" : isPast ? "not-allowed" : "pointer",
                           background: blocked ? "rgba(231,76,60,0.04)" : isPast ? "rgba(0,0,0,0.12)" : day.isToday ? "rgba(245,166,35,0.05)" : "transparent",
                           opacity: isPast ? 0.55 : 1
@@ -3085,10 +3085,10 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                         {!blocked && cells.map(b=>{
                           const color = getBookingColor(b);
                           return (
-                            <div key={b.id} style={{background:color+"22",border:`1px solid ${color}`,borderRadius:4,padding:"2px 4px",marginBottom:2,fontSize:10}}>
-                              <div style={{fontWeight:700,color}}>{b.isNight?"🌙 ":""}{getStudioBookingTimeLabel(b)}</div>
-                              <div style={{color:"var(--text3)"}}>{getBookingTitle(b)}</div>
-                              {getBookingSubtitle(b) && <div style={{color:"var(--text3)",fontSize:9}}>{getBookingSubtitle(b)}</div>}
+                            <div key={b.id} style={{background:color+"22",border:`1.5px solid ${color}`,borderRadius:4,padding:"4px 6px",marginBottom:3,fontSize:11,wordBreak:"break-word",whiteSpace:"normal",textAlign:"right"}}>
+                              <div style={{fontWeight:900,color,fontSize:11}}>{b.isNight?"🌙 ":""}{getStudioBookingTimeLabel(b)}</div>
+                              <div style={{color:"var(--text)",fontWeight:800,fontSize:11,lineHeight:1.35}}>{getBookingTitle(b)}</div>
+                              {getBookingSubtitle(b) && <div style={{color:"var(--text2)",fontSize:10,fontWeight:600,lineHeight:1.3,marginTop:1}}>{getBookingSubtitle(b)}</div>}
                             </div>
                           );
                         })}
