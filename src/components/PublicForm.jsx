@@ -2262,7 +2262,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
   };
   const getBookingSubtitle = (booking) => {
     const kind = getBookingKind(booking);
-    if (kind === "lesson") return [booking?.subject, booking?.instructorName, booking?.track].filter(Boolean).join(" · ");
+    if (kind === "lesson") return booking?.instructorName || "";
     if (kind === "team") return "צוות המחסן";
     return "";
   };
@@ -2956,14 +2956,6 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
 
         {/* Week navigation */}
         <div style={{flex:1,minWidth:280,display:"flex",flexDirection:"column",gap:10}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,justifyContent:"center"}}>
-            <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w-1)} disabled={weekOffset<=0} style={{opacity:weekOffset<=0?0.4:1,cursor:weekOffset<=0?"default":"pointer"}}>→ שבוע קודם</button>
-            <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(0)}>היום</button>
-            <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w+1)}>← שבוע הבא</button>
-          </div>
-          <div style={{fontSize:13,color:"var(--text3)",textAlign:"center"}}>
-            {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth()+1).padStart(2,"0")} — {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth()+1).padStart(2,"0")}
-          </div>
           <div style={{display:"flex",justifyContent:"center",marginTop:2}}>
             <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"12px 14px",display:"flex",flexDirection:"column",gap:4,minWidth:220,textAlign:"center"}}>
               <div style={{fontWeight:800,fontSize:14,color:"var(--text)"}}>בנק שעות עתידיות</div>
@@ -3039,13 +3031,22 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
           <div style={{fontWeight:700}}>אין אולפנים זמינים כרגע</div>
         </div>
       ) : (
-        <div style={{overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",minWidth:500,tableLayout:"fixed"}}>
+        <>
+          {/* Sticky week nav strip */}
+          <div style={{position:"sticky",top:0,zIndex:30,background:"var(--surface)",borderBottom:"1px solid var(--border)",padding:"8px 12px",display:"flex",alignItems:"center",gap:8,justifyContent:"center",flexWrap:"wrap",marginBottom:0}}>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w-1)} disabled={weekOffset<=0} style={{opacity:weekOffset<=0?0.4:1,cursor:weekOffset<=0?"default":"pointer"}}>→ שבוע קודם</button>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(0)}>היום</button>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w+1)}>← שבוע הבא</button>
+            <span style={{fontSize:12,color:"var(--text3)",marginRight:8}}>
+              {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth()+1).padStart(2,"0")} — {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth()+1).padStart(2,"0")}
+            </span>
+          </div>
+          <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed"}}>
             <thead>
               <tr>
-                <th style={{padding:"8px 10px",background:"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",width:90,maxWidth:90}}>אולפן</th>
+                <th style={{padding:"8px 10px",background:"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",width:90,maxWidth:90,position:"sticky",top:44,zIndex:10}}>אולפן</th>
                 {weekDays.map(d=>(
-                  <th key={d.fullDate} style={{padding:"8px 10px",background:d.isToday?"rgba(245,166,35,0.15)":"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",width:100,maxWidth:100}}>
+                  <th key={d.fullDate} style={{padding:"8px 10px",background:d.isToday?"rgba(245,166,35,0.15)":"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",width:100,maxWidth:100,position:"sticky",top:44,zIndex:10}}>
                     <div>{d.name}</div><div style={{fontSize:11,color:d.isToday?"var(--accent)":"var(--text3)"}}>{d.date}/{String(new Date(d.fullDate).getMonth()+1).padStart(2,"0")}</div>
                   </th>
                 ))}
@@ -3102,7 +3103,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
               })}
             </tbody>
           </table>
-        </div>
+        </>
       )}
       {renderAddBookingModal()}
       {/* My bookings — hide past bookings */}

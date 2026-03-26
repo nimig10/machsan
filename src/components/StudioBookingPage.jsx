@@ -720,9 +720,9 @@ export default function StudioBookingPage(props) {
               <table style={{ width:"100%", borderCollapse:"collapse", minWidth:760, tableLayout:"fixed" }}>
                 <thead>
                   <tr>
-                    <th style={{ ...thStyle, width:120, maxWidth:120 }}>אולפן</th>
+                    <th style={{ ...thStyle, width:120, maxWidth:120, position:"sticky", top:0, zIndex:10 }}>אולפן</th>
                     {weekDays.map((day) => (
-                      <th key={day.fullDate} style={{ ...thStyle, background:day.isToday ? "rgba(245,166,35,0.15)" : undefined }}>
+                      <th key={day.fullDate} style={{ ...thStyle, background:day.isToday ? "rgba(245,166,35,0.15)" : "var(--surface2)", position:"sticky", top:0, zIndex:10 }}>
                         <div style={{ fontWeight:700 }}>{day.name}</div>
                         <div style={{ fontSize:11, color:day.isToday ? "var(--accent)" : "var(--text3)" }}>{day.date}/{String(new Date(day.fullDate).getMonth() + 1).padStart(2, "0")}</div>
                       </th>
@@ -760,7 +760,7 @@ export default function StudioBookingPage(props) {
                                 <div key={booking.id} style={{ background:`${color}20`, border:`1.5px solid ${color}`, borderRadius:6, padding:"5px 7px", marginBottom:4, fontSize:12, cursor:"pointer", wordBreak:"break-word", whiteSpace:"normal", textAlign:"right" }} onClick={(event) => { event.stopPropagation(); openViewBookingModal(booking, studio.name); }}>
                                   <div style={{ fontWeight:900, color, fontSize:12 }}>{getBookingTimeLabel(booking)}</div>
                                   <div style={{ color:"var(--text)", fontWeight:800, fontSize:12, lineHeight:1.35 }}>{getBookingTitle(booking)}</div>
-                                  {subtitle && <div style={{ color:"var(--text2)", fontSize:11, fontWeight:600, lineHeight:1.3, marginTop:2 }}>{subtitle}</div>}
+                                  {booking.instructorName && <div style={{ color:"var(--text2)", fontSize:11, fontWeight:600, lineHeight:1.3, marginTop:2 }}>👨‍🏫 {booking.instructorName}</div>}
                                 </div>
                               );
                             })}
