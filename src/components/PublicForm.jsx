@@ -3032,21 +3032,26 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
         </div>
       ) : (
         <>
-          {/* Sticky week nav strip */}
-          <div style={{position:"sticky",top:0,zIndex:30,background:"var(--surface)",borderBottom:"1px solid var(--border)",padding:"8px 12px",display:"flex",alignItems:"center",gap:8,justifyContent:"center",flexWrap:"wrap",marginBottom:0}}>
-            <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w-1)} disabled={weekOffset<=0} style={{opacity:weekOffset<=0?0.4:1,cursor:weekOffset<=0?"default":"pointer"}}>→ שבוע קודם</button>
-            <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(0)}>היום</button>
-            <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w+1)}>← שבוע הבא</button>
-            <span style={{fontSize:12,color:"var(--text3)",marginRight:8}}>
-              {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth()+1).padStart(2,"0")} — {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth()+1).padStart(2,"0")}
-            </span>
-          </div>
           <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed"}}>
             <thead>
+              {/* Nav row — sticky at top, right above the days row */}
               <tr>
-                <th style={{padding:"8px 10px",background:"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",width:80,position:"sticky",top:44,zIndex:10}}>אולפן</th>
+                <td colSpan={weekDays.length + 1} style={{padding:"6px 12px",background:"var(--surface)",border:"1px solid var(--border)",position:"sticky",top:0,zIndex:20}}>
+                  <div style={{display:"flex",gap:8,justifyContent:"center",alignItems:"center",flexWrap:"wrap"}}>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w-1)} disabled={weekOffset<=0} style={{opacity:weekOffset<=0?0.4:1,cursor:weekOffset<=0?"default":"pointer"}}>→ שבוע קודם</button>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(0)}>היום</button>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>setWeekOffset(w=>w+1)}>← שבוע הבא</button>
+                    <span style={{fontSize:12,color:"var(--text3)"}}>
+                      {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth()+1).padStart(2,"0")} — {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth()+1).padStart(2,"0")}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+              {/* Days row — sticky below the nav row */}
+              <tr>
+                <th style={{padding:"8px 6px",background:"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",width:80,position:"sticky",top:44,zIndex:10}}>אולפן</th>
                 {weekDays.map(d=>(
-                  <th key={d.fullDate} style={{padding:"8px 10px",background:d.isToday?"rgba(245,166,35,0.15)":"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",position:"sticky",top:44,zIndex:10}}>
+                  <th key={d.fullDate} style={{padding:"8px 6px",background:d.isToday?"rgba(245,166,35,0.15)":"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",position:"sticky",top:44,zIndex:10}}>
                     <div>{d.name}</div><div style={{fontSize:11,color:d.isToday?"var(--accent)":"var(--text3)"}}>{d.date}/{String(new Date(d.fullDate).getMonth()+1).padStart(2,"0")}</div>
                   </th>
                 ))}
@@ -3059,15 +3064,16 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                 const certName = getStudioCertName(studio.id);
                 return (
                 <tr key={studio.id} style={{opacity:blocked?0.5:1}}>
-                  <td style={{padding:"6px 8px",border:"1px solid var(--border)",fontWeight:700,fontSize:12,background:blocked?"rgba(231,76,60,0.08)":"var(--surface2)",textAlign:"center"}}>
-                    {studio.image?.startsWith("data:") || studio.image?.startsWith("http")
-                      ? <img src={studio.image} alt={studio.name} style={{width:36,height:36,borderRadius:6,objectFit:"cover",display:"block",margin:"0 auto 4px"}}/>
-                      : <span style={{fontSize:18,display:"block"}}>{studio.image||"🎙️"}</span>
-                    }
-                    <span>{studio.name}</span>
-                    {maintenanceBlocked && <div style={{fontSize:10,color:"var(--red)",fontWeight:800,marginTop:2}}>🔧 בתחזוקה</div>}
-                    {!maintenanceBlocked && blocked && <div style={{fontSize:10,color:"var(--red)",fontWeight:800,marginTop:2}}>⛔ טרם עבר הסמכה</div>}
-                    {!maintenanceBlocked && blocked && certName && <div style={{fontSize:9,color:"var(--text3)"}}>{certName}</div>}
+                  <td style={{padding:"6px 4px",border:"1px solid var(--border)",background:blocked?"rgba(231,76,60,0.08)":"var(--surface2)",verticalAlign:"middle"}}>
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                      {studio.image?.startsWith("data:") || studio.image?.startsWith("http")
+                        ? <img src={studio.image} alt={studio.name} style={{width:32,height:32,borderRadius:6,objectFit:"cover"}}/>
+                        : <span style={{fontSize:18,lineHeight:1}}>{studio.image||"🎙️"}</span>
+                      }
+                      <span style={{fontSize:10,fontWeight:800,lineHeight:1.2,wordBreak:"break-word",textAlign:"center"}}>{studio.name}</span>
+                      {maintenanceBlocked && <div style={{fontSize:9,color:"var(--red)",fontWeight:800}}>🔧 בתחזוקה</div>}
+                      {!maintenanceBlocked && blocked && <div style={{fontSize:9,color:"var(--red)",fontWeight:800}}>⛔ חסר הסמכה</div>}
+                    </div>
                   </td>
                   {weekDays.map(day=>{
                     const cells = bookings.filter(b=>sameStudioId(b.studioId, studio.id) && b.date===day.fullDate && isActiveStudioBooking(b)).sort((a,b)=>(a.startTime||"").localeCompare(b.startTime||""));

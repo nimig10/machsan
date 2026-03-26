@@ -722,7 +722,7 @@ export default function StudioBookingPage(props) {
               <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
                 <thead>
                   <tr>
-                    <th style={{ ...thStyle, width:100, position:"sticky", top:0, zIndex:10 }}>אולפן</th>
+                    <th style={{ ...thStyle, width:130, position:"sticky", top:0, zIndex:10 }}>אולפן</th>
                     {weekDays.map((day) => (
                       <th key={day.fullDate} style={{ ...thStyle, background:day.isToday ? "rgba(245,166,35,0.15)" : "var(--surface2)", position:"sticky", top:0, zIndex:10 }}>
                         <div style={{ fontWeight:700 }}>{day.name}</div>
@@ -734,18 +734,16 @@ export default function StudioBookingPage(props) {
                 <tbody>
                   {studios.map((studio) => (
                     <tr key={studio.id}>
-                      <td style={{ ...tdStyle, fontWeight:700, fontSize:13, background:"var(--surface2)" }}>
-                        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                          <StudioImg studio={studio} size={32} />
-                          <span>{studio.name}</span>
-                        </div>
-                        <div style={{ fontSize:10, color:"var(--text3)", marginTop:2 }}>
+                      <td style={{ ...tdStyle, background:"var(--surface2)", verticalAlign:"middle", padding:"6px 4px" }}>
+                        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
+                          <StudioImg studio={studio} size={28} />
+                          <span style={{ fontSize:11, fontWeight:800, lineHeight:1.2, wordBreak:"break-word", textAlign:"center" }}>{studio.name}</span>
                           {(() => {
                             const certNames = getStudioCertNames(studio);
-                            return certNames.length ? <span style={{ color:"var(--accent)" }}>🎓 {certNames.join(", ")}</span> : "ללא הסמכת אולפן";
+                            return certNames.length ? <span style={{ fontSize:9, color:"var(--accent)", lineHeight:1.2, wordBreak:"break-word", textAlign:"center" }}>🎓 {certNames.join(", ")}</span> : null;
                           })()}
+                          {isStudioDisabled(studio) && <div style={{ fontSize:9, color:"var(--red)", fontWeight:800 }}>🔧 מושבת</div>}
                         </div>
-                        {isStudioDisabled(studio) && <div style={{ fontSize:10, color:"var(--red)", fontWeight:800, marginTop:4 }}>🔧 מושבת לתחזוקה</div>}
                       </td>
                       {isStudioDisabled(studio) ? (
                         <td colSpan={weekDays.length} style={{ ...tdStyle, background:"rgba(231,76,60,0.08)", color:"var(--red)", fontWeight:800, textAlign:"center", padding:"14px 18px" }}>
