@@ -142,13 +142,22 @@ ${csvText}
     try {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data, { type: "array" });
-      const worksheet = workbook.Sheets?.[workbook.SheetNames?.[0]];
-      if (!worksheet) {
+      const sheetNames = workbook.SheetNames || [];
+      if (!sheetNames.length) {
         throw new Error("לא נמצא גיליון תקין בקובץ.");
       }
 
-      csvData = XLSX.utils.sheet_to_csv(worksheet);
-      if (!String(csvData || "").trim()) {
+      const csvParts = [];
+      for (const name of sheetNames) {
+        const ws = workbook.Sheets[name];
+        if (!ws) continue;
+        const csv = XLSX.utils.sheet_to_csv(ws);
+        if (String(csv || "").trim()) {
+          csvParts.push(`--- גיליון: ${name} ---\n${csv}`);
+        }
+      }
+      csvData = csvParts.join("\n\n");
+      if (!csvData.trim()) {
         throw new Error("לא נמצא תוכן לייבוא בקובץ.");
       }
 
