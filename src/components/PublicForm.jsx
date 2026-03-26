@@ -2772,8 +2772,8 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
         {/* Day hours (09:00-21:30) */}
         <div style={{fontWeight:800,fontSize:13,marginBottom:6,color:"var(--accent)"}}>☀️ שעות יום (09:00–21:30)</div>
         <div style={{display:"flex",flexDirection:"column",gap:2,marginBottom:16}}>
-          {DAY_BOOKING_HOURS.map((hour,i)=>{
-            const nextH = DAY_HOURS[i+1] || NIGHT_START_TIME;
+          {DAY_BOOKING_HOURS.filter(h => h.endsWith(":00") || h === "21:00").map((hour,i,arr)=>{
+            const nextH = arr[i+1] || NIGHT_START_TIME;
             const booking = dayBookings.find(b=>!b.isNight && b.startTime<=hour && b.endTime>hour);
             const isHourPast = isDayPast || (dayView.date===todayStr && parseInt(hour)<nowHour);
             return (
