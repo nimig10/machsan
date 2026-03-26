@@ -193,6 +193,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState([]);
   const [sortMode, setSortMode] = useState("recent"); // "recent" | "urgency"
+  const [archiveView, setArchiveView] = useState(false);
   const [xlImporting, setXlImporting] = useState(false);
   const [aiImporting, setAiImporting] = useState(false);
   const importInputRef = useRef(null);
@@ -250,12 +251,22 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
         : [...current, trackName]
     ));
   };
+  const isArchived = (lesson) => {
+    const schedule = lesson.schedule || [];
+    if (!schedule.length) return false;
+    const lastDate = [...schedule].sort((a, b) => b.date.localeCompare(a.date))[0]?.date || "";
+    return lastDate < today();
+  };
+
   const filtered = lessons.filter((lesson) => {
     const matchesSearch = !search || lesson.name?.includes(search) || lesson.instructorName?.includes(search);
     const trackLabel = getLessonTrackLabel(lesson);
     const matchesTrack = allTracksSelected || trackFilter.includes(trackLabel);
-    return matchesSearch && matchesTrack;
+    const matchesArchive = archiveView ? isArchived(lesson) : !isArchived(lesson);
+    return matchesSearch && matchesTrack && matchesArchive;
   });
+
+  const archivedCount = lessons.filter(isArchived).length;
 
   const sortedFiltered = [...filtered].sort((a, b) => {
     if (sortMode === "urgency") {
@@ -783,13 +794,33 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
               ))}
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-              <input ref={aiImportInputRef} type="file" accept=".csv,.xlsx,.xls" style={{display:"none"}} onChange={importLessonsSmartAI} disabled={aiImporting}/>
-              <button className="btn btn-primary" style={{display:"inline-flex",alignItems:"center",gap:6}} onClick={()=>aiImportInputRef.current?.click()} disabled={aiImporting}>
-                {aiImporting ? "מפענח את קובץ האקסל..." : "✨ ייבוא אקסל חכם (AI)"}
+              <button
+                type="button"
+                onClick={() => { setArchiveView(v => !v); setSearch(""); setTrackFilter([]); }}
+                style={{
+                  padding: "6px 14px", borderRadius: 20, fontWeight: 700, fontSize: 13, cursor: "pointer",
+                  border: `2px solid ${archiveView ? "#e67e22" : "var(--border)"}`,
+                  background: archiveView ? "rgba(230,126,34,0.14)" : "transparent",
+                  color: archiveView ? "#e67e22" : "var(--text3)",
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                }}
+              >
+                📦 ארכיון
+                {archivedCount > 0 && (
+                  <span style={{ background: archiveView ? "#e67e22" : "rgba(230,126,34,0.25)", color: archiveView ? "#fff" : "#e67e22", borderRadius: 20, padding: "1px 7px", fontSize: 11, fontWeight: 800 }}>
+                    {archivedCount}
+                  </span>
+                )}
               </button>
-              <input ref={importInputRef} type="file" accept=".csv,.tsv,.xlsx,.xls" style={{display:"none"}} onChange={importLessonsXL} disabled={xlImporting}/>
-              <button className="btn btn-secondary" onClick={()=>importInputRef.current?.click()} disabled={xlImporting}>{xlImporting ? "מייבא..." : "ייבוא XL"}</button>
-              <button className="btn btn-primary" onClick={()=>{setMode("add");setEditTarget(null);}}>➕ קורס חדש</button>
+              {!archiveView && <>
+                <input ref={aiImportInputRef} type="file" accept=".csv,.xlsx,.xls" style={{display:"none"}} onChange={importLessonsSmartAI} disabled={aiImporting}/>
+                <button className="btn btn-primary" style={{display:"inline-flex",alignItems:"center",gap:6}} onClick={()=>aiImportInputRef.current?.click()} disabled={aiImporting}>
+                  {aiImporting ? "מפענח את קובץ האקסל..." : "✨ ייבוא אקסל חכם (AI)"}
+                </button>
+                <input ref={importInputRef} type="file" accept=".csv,.tsv,.xlsx,.xls" style={{display:"none"}} onChange={importLessonsXL} disabled={xlImporting}/>
+                <button className="btn btn-secondary" onClick={()=>importInputRef.current?.click()} disabled={xlImporting}>{xlImporting ? "מייבא..." : "ייבוא XL"}</button>
+                <button className="btn btn-primary" onClick={()=>{setMode("add");setEditTarget(null);}}>➕ קורס חדש</button>
+              </>}
             </div>
           </div>
 
@@ -880,8 +911,16 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             </div>
           )}
 
+          {archiveView && (
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"10px 16px",background:"rgba(230,126,34,0.08)",border:"1px solid rgba(230,126,34,0.25)",borderRadius:10}}>
+              <span style={{fontSize:18}}>📦</span>
+              <span style={{fontSize:13,color:"#e67e22",fontWeight:700}}>תצוגת ארכיון — קורסים שכל מפגשיהם הסתיימו</span>
+              <button type="button" onClick={()=>setArchiveView(false)} style={{marginRight:"auto",padding:"2px 10px",borderRadius:20,border:"1px solid rgba(230,126,34,0.5)",background:"transparent",color:"#e67e22",fontSize:12,cursor:"pointer",fontWeight:700}}>חזור לפעילים</button>
+            </div>
+          )}
+
           {sortedFiltered.length===0
-            ? <div className="empty-state"><div className="emoji">📽️</div><div>{lessons.length===0 ? "אין קורסים עדיין" : "לא נמצאו קורסים למסלולים שנבחרו"}</div><div style={{fontSize:13,color:"var(--text3)"}}>{lessons.length===0 ? 'לחץ "➕ קורס חדש" כדי להתחיל' : "נסה לשנות חיפוש או מסלולי לימוד"}</div></div>
+            ? <div className="empty-state"><div className="emoji">📦</div><div>{archiveView ? "אין קורסים בארכיון" : lessons.length===0 ? "אין קורסים עדיין" : "לא נמצאו קורסים למסלולים שנבחרו"}</div><div style={{fontSize:13,color:"var(--text3)"}}>{archiveView ? "קורסים עוברים לארכיון אוטומטית כשמפגשם האחרון מסתיים" : lessons.length===0 ? 'לחץ "➕ קורס חדש" כדי להתחיל' : "נסה לשנות חיפוש או מסלולי לימוד"}</div></div>
             : <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {Object.entries(groupedLessons)
                   .sort(([left], [right]) => left.localeCompare(right, "he"))
