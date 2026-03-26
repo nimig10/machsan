@@ -373,23 +373,9 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
         </div>
       ) : (
         <>
-        <input
-          ref={xlInputRef}
-          type="file"
-          accept=".csv,.xls,.xlsx"
-          style={{ display: "none" }}
-          onChange={importXL}
-          disabled={xlImporting}
-        />
         <div style={{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap",alignItems:"center"}}>
           <button className="btn btn-primary" onClick={()=>setAddingStudent(true)}>➕ הוספת סטודנט</button>
           <button className="btn btn-secondary" onClick={()=>setAddingTrack(true)}>🎓 הוסף מסלול</button>
-          <button className="btn btn-secondary" onClick={()=>xlInputRef.current?.click()} disabled={xlImporting}>
-            {xlImporting ? "⏳ מייבא..." : "📊 ייבוא מטבלה"}
-          </button>
-          <button className="btn btn-secondary" type="button" onClick={downloadSampleFile}>
-            📥 קובץ לדוגמה
-          </button>
           <SmartExcelImportButton showToast={showToast} onImportSuccess={handleAiImport} />
           <div className="search-bar" style={{flex:1,minWidth:180}}><span>🔍</span>
             <input placeholder="חיפוש לפי שם, מייל או טלפון..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
