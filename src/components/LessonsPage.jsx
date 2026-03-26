@@ -821,15 +821,13 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                   </span>
                 )}
               </button>
-              {!archiveView && <>
-                <input ref={aiImportInputRef} type="file" accept=".csv,.xlsx,.xls" style={{display:"none"}} onChange={importLessonsSmartAI} disabled={aiImporting}/>
-                <button className="btn btn-primary" style={{display:"inline-flex",alignItems:"center",gap:6}} onClick={()=>aiImportInputRef.current?.click()} disabled={aiImporting}>
-                  {aiImporting ? "מפענח את קובץ האקסל..." : "✨ ייבוא אקסל חכם (AI)"}
-                </button>
-                <input ref={importInputRef} type="file" accept=".csv,.tsv,.xlsx,.xls" style={{display:"none"}} onChange={importLessonsXL} disabled={xlImporting}/>
-                <button className="btn btn-secondary" onClick={()=>importInputRef.current?.click()} disabled={xlImporting}>{xlImporting ? "מייבא..." : "ייבוא XL"}</button>
-                <button className="btn btn-primary" onClick={()=>{setMode("add");setEditTarget(null);}}>➕ קורס חדש</button>
-              </>}
+              <input ref={aiImportInputRef} type="file" accept=".csv,.xlsx,.xls" style={{display:"none"}} onChange={importLessonsSmartAI} disabled={aiImporting}/>
+              <button className="btn btn-primary" style={{display:"inline-flex",alignItems:"center",gap:6}} onClick={()=>aiImportInputRef.current?.click()} disabled={aiImporting}>
+                {aiImporting ? "מפענח את קובץ האקסל..." : "✨ ייבוא אקסל חכם (AI)"}
+              </button>
+              <input ref={importInputRef} type="file" accept=".csv,.tsv,.xlsx,.xls" style={{display:"none"}} onChange={importLessonsXL} disabled={xlImporting}/>
+              <button className="btn btn-secondary" onClick={()=>importInputRef.current?.click()} disabled={xlImporting}>{xlImporting ? "מייבא..." : "ייבוא XL"}</button>
+              <button className="btn btn-primary" onClick={()=>{setMode("add");setEditTarget(null);}}>➕ קורס חדש</button>
             </div>
           </div>
 

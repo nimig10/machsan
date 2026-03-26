@@ -841,6 +841,7 @@ export default function StudioBookingPage(props) {
                     })()}
                     {" · "}
                     {activeBookings.filter((booking) => sameStudioId(booking.studioId, studio.id)).length} קביעות
+                    {studio.isClassroom && <span style={{ color:"#3498db", fontWeight:800 }}> · 🏫 כיתת לימוד</span>}
                     {isStudioDisabled(studio) && <span style={{ color:"var(--red)", fontWeight:800 }}> · מושבת לתחזוקה</span>}
                   </div>
                 </div>
