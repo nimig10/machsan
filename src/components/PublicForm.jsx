@@ -2164,8 +2164,8 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
   const [smartBookingPrompt, setSmartBookingPrompt] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
 
-  const DAY_HOURS = ["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00","21:30"];
-  const DAY_BOOKING_HOURS = DAY_HOURS.slice(0, -1);
+  const DAY_HOURS = (() => { const h = []; for (let hr = 9; hr <= 21; hr++) for (let m = 0; m < 60; m += 15) { if (hr === 21 && m > 30) break; h.push(`${String(hr).padStart(2,"0")}:${String(m).padStart(2,"0")}`); } return h; })();
+  const DAY_BOOKING_HOURS = DAY_HOURS.filter(t => t < "21:30");
   const NIGHT_START_TIME = "21:30";
   const NIGHT_END_TIME = "08:00";
   const NIGHT_BOOKING_LABEL = `מ־${NIGHT_START_TIME} והלאה`;

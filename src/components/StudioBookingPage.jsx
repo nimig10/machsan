@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { storageSet, lsGet } from "../utils.js";
 import { Modal } from "./ui.jsx";
 
-const DAY_HOURS = ["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00","21:30"];
-const DAY_BOOKING_HOURS = DAY_HOURS.slice(0, -1);
+const DAY_HOURS = (() => { const h = []; for (let hr = 9; hr <= 21; hr++) for (let m = 0; m < 60; m += 15) { if (hr === 21 && m > 30) break; h.push(`${String(hr).padStart(2,"0")}:${String(m).padStart(2,"0")}`); } return h; })();
+const DAY_BOOKING_HOURS = DAY_HOURS.filter(t => t < "21:30");
 const NIGHT_START_TIME = "21:30";
 const NIGHT_END_TIME = "08:00";
 const NIGHT_BOOKING_LABEL = `מ־${NIGHT_START_TIME} והלאה`;
@@ -570,26 +570,41 @@ export default function StudioBookingPage(props) {
       return;
     }
 
-    const nextBooking = {
-      id: Date.now(),
-      bookingKind: "team",
-      ownerType: "team",
-      teamMemberId: selectedMember?.id ?? null,
-      teamMemberName: memberName,
-      studentName: memberName,
-      studioId: modal.studioId,
-      date: modal.date,
-      startTime,
-      endTime,
-      notes,
-      isNight,
-      createdAt: new Date().toISOString(),
-    };
+    // Book all studios for tonight
+    const bookAllStudios = isNight && Boolean(modal?.allStudiosNight);
+    const targetStudioIds = bookAllStudios ? studios.map(s => s.id) : [modal.studioId];
+    const newBookings = [];
+    for (const sid of targetStudioIds) {
+      // skip if this studio already has a night booking for this date
+      const alreadyBooked = activeBookings.some(b => sameStudioId(b.studioId, sid) && b.date === modal.date && b.isNight);
+      if (bookAllStudios && alreadyBooked) continue;
+      newBookings.push({
+        id: Date.now() + newBookings.length,
+        bookingKind: "team",
+        ownerType: "team",
+        teamMemberId: selectedMember?.id ?? null,
+        teamMemberName: memberName,
+        studentName: memberName,
+        studioId: sid,
+        date: modal.date,
+        startTime,
+        endTime,
+        notes,
+        isNight,
+        createdAt: new Date().toISOString(),
+      });
+    }
 
-    await saveBookings([...bookings, nextBooking]);
+    if (newBookings.length === 0) {
+      showToast("info", "כל האולפנים כבר קבועים ללילה הזה");
+      setSaving(false);
+      return;
+    }
+
+    await saveBookings([...bookings, ...newBookings]);
     setSaving(false);
     closeModal();
-    showToast("success", "קביעת הצוות נשמרה בלוח האולפנים");
+    showToast("success", bookAllStudios ? `${newBookings.length} אולפנים נקבעו ללילה` : "קביעת הצוות נשמרה בלוח האולפנים");
   };
 
   const deleteBooking = async (bookingId) => {
@@ -952,7 +967,22 @@ export default function StudioBookingPage(props) {
                 style={{ width:18, height:18, accentColor:NIGHT_COLOR }}
               />
             </label>
-            {modal?.isNightTeam && <div style={{ fontSize:12, color:"var(--text2)", background:`${NIGHT_COLOR}12`, border:`1px solid ${NIGHT_COLOR}44`, borderRadius:8, padding:"10px 12px" }}>קביעת לילה לצוות נשמרת כטווח כללי {NIGHT_BOOKING_LABEL}.</div>}
+            {modal?.isNightTeam && (
+              <>
+                <div style={{ fontSize:12, color:"var(--text2)", background:`${NIGHT_COLOR}12`, border:`1px solid ${NIGHT_COLOR}44`, borderRadius:8, padding:"10px 12px" }}>קביעת לילה לצוות נשמרת כטווח כללי {NIGHT_BOOKING_LABEL}.</div>
+                <label style={labelStyle}>
+                  <span style={{ color:NIGHT_COLOR }}>קביעת כל האולפנים ללילה להיום</span>
+                  <input
+                    type="checkbox"
+                    name="allStudiosNight"
+                    checked={Boolean(modal?.allStudiosNight)}
+                    onChange={(event) => setModal((prev) => prev?.type === "addBooking" ? { ...prev, allStudiosNight: event.target.checked } : prev)}
+                    style={{ width:18, height:18, accentColor:NIGHT_COLOR }}
+                  />
+                </label>
+                {modal?.allStudiosNight && <div style={{ fontSize:12, color:NIGHT_COLOR, background:`${NIGHT_COLOR}12`, border:`1px solid ${NIGHT_COLOR}44`, borderRadius:8, padding:"10px 12px", fontWeight:700 }}>⚡ ייקבעו {studios.length} אולפנים ללילה של {modal.date}</div>}
+              </>
+            )}
             <label style={labelStyle}>הערות<textarea name="notes" className="form-input" rows={2} placeholder="למשל: הכנת אולפן / עבודה של איש צוות" /></label>
             <div style={{ fontSize:12, color:"var(--text3)" }}>קביעת צוות נשמרת ישירות בלוח, בלי סטטוס ובלי בדיקות הסמכה.</div>
           </form>
