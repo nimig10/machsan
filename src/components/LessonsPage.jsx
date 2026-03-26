@@ -532,7 +532,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
           let jsonResponse = null;
           let lastApiError = null;
-          for (const modelName of ["gemini-2.0-flash", "gemini-1.5-flash"]) {
+          for (const modelName of ["gemini-2.5-flash", "gemini-2.5-flash-lite"]) {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
             const resp = await fetchWithRetry(url, {
               method: "POST",
