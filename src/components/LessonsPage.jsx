@@ -196,8 +196,6 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const [archiveView, setArchiveView] = useState(false);
   const [xlImporting, setXlImporting] = useState(false);
   const [aiImporting, setAiImporting] = useState(false);
-  const [undoTarget, setUndoTarget] = useState(null); // { lesson, index }
-  const undoTimerRef = useRef(null);
   const importInputRef = useRef(null);
   const aiImportInputRef = useRef(null);
   const normalizedTrackOptions = [...new Set((trackOptions || []).map((option) => String(option || "").trim()).filter(Boolean))];
@@ -224,27 +222,10 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   };
 
   const del = async (id) => {
-    const index = lessons.findIndex(l => l.id === id);
-    if (index === -1) return;
-    const lesson = lessons[index];
     const updated = lessons.filter(l => l.id !== id);
     setLessons(updated);
     await storageSet("lessons", updated);
-    // set undo window (7 seconds)
-    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    setUndoTarget({ lesson, index });
-    undoTimerRef.current = setTimeout(() => setUndoTarget(null), 7000);
-  };
-
-  const handleUndo = async () => {
-    if (!undoTarget) return;
-    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    const restored = [...lessons];
-    restored.splice(undoTarget.index, 0, undoTarget.lesson);
-    setLessons(restored);
-    await storageSet("lessons", restored);
-    setUndoTarget(null);
-    showToast("success", `קורס "${undoTarget.lesson.name}" שוחזר`);
+    showToast("success", "הקורס נמחק. ניתן לשחזר עם לחצן ↩ בטל פעולה למעלה.");
   };
 
   const getLessonTrackLabel = (lesson) => String(lesson?.track || "").trim() || "ללא מסלול";
@@ -929,14 +910,6 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             </div>
           )}
 
-          {undoTarget && (
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,padding:"10px 16px",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.35)",borderRadius:10}}>
-              <span style={{fontSize:16}}>🗑️</span>
-              <span style={{fontSize:13,color:"var(--red)",fontWeight:700}}>קורס "{undoTarget.lesson.name}" נמחק</span>
-              <button type="button" onClick={handleUndo} style={{marginRight:"auto",padding:"4px 14px",borderRadius:20,border:"2px solid var(--red)",background:"var(--red)",color:"#fff",fontSize:13,cursor:"pointer",fontWeight:800}}>↩ בטל פעולה</button>
-              <button type="button" onClick={()=>{ clearTimeout(undoTimerRef.current); setUndoTarget(null); }} style={{padding:"2px 8px",borderRadius:20,border:"1px solid rgba(231,76,60,0.4)",background:"transparent",color:"var(--red)",fontSize:12,cursor:"pointer"}}>✕</button>
-            </div>
-          )}
 
           {archiveView && (
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"10px 16px",background:"rgba(230,126,34,0.08)",border:"1px solid rgba(230,126,34,0.25)",borderRadius:10}}>
