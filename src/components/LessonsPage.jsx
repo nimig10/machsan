@@ -464,6 +464,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             throw new Error("API Key is missing. Check your .env or Vercel settings.");
           }
 
+          const studioListStr = (studios || []).map(s => s.name).filter(Boolean).join(", ");
           const systemInstruction = `
 אתה מנהל מערכת חכם במכללת קולנוע וסאונד. מטרתך לחלץ נתוני קורסים מקובץ CSV ולהחזירם כ-JSON.
 
@@ -471,10 +472,14 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 • כותרת קורס: "מסלול לימודים" / "מסלול", "שם" (=שם הקורס), "שיוך אולפן" / "אולפן" (=שם האולפן), "מפגשים" (=מספר מפגשים)
 • פרטי מרצה: "פרטי מרצה", "שם", "מייל" / "אימייל" / "email", "טלפון" / "נייד"
 • טבלת מפגשים: "מפגשים" / "מפגש" / "#", "תאריך", "שעת התחלה" / "שעה", "שעת סיום", "נושא המפגש" / "נושא" / "תיאור"
+• עמודת כיתה/אולפן: עשויה להופיע בשמות שונים: "כיתה", "כיתת לימוד", "אולפן", "חדר", "שיוך אולפן", "studio" — כולם מתייחסים לאותו שדה (studioName).
+
+אולפנים קיימים במערכת: ${studioListStr || "לא צוין"}
+אם בעמודה "כיתה" / "כיתת לימוד" מופיע שם דומה לאחד מהאולפנים לעיל — כתוב studioName בדיוק כפי שהוא מופיע ברשימה. אחרת כתוב את הטקסט כפי שמופיע בקובץ.
 
 חוקים:
 1. לכל שורת מפגש — חלץ: date, startTime, endTime, sessionTopic (נושא המפגש), dayOfWeek
-2. חלץ studioName בדיוק כמו שמופיע ב"שיוך אולפן" (גם אם הכתיב שגוי)
+2. חלץ studioName מהעמודה "כיתה" / "אולפן" / "כיתת לימוד" (גם אם הכתיב שגוי) — נסה להתאים לרשימת האולפנים הנ"ל
 3. חלץ instructorEmail ו-instructorPhone מסקשן "פרטי מרצה" — שייך אותם לאותו קורס
 4. חלץ שעות לפורמט HH:MM. אם חסרה שעה — כתוב '00:00'
 5. תאריך בפורמט YYYY-MM-DD. אם הוא מספר אקסל (כגון 46120) — המר ל-YYYY-MM-DD (בסיס: 1900-01-01)
@@ -611,11 +616,23 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             const lessonYear = String(item?.year || "").trim();
             if (!courseName) return;
 
-            // fuzzy match studio by first word of studioName (case-insensitive)
-            const studioFirstWord = studioNameRaw.split(/\s+/)[0]?.toLowerCase();
-            const matchedStudio = studioFirstWord
-              ? studios.find(s => s.name?.toLowerCase().includes(studioFirstWord))
-              : null;
+            // fuzzy match studio to existing studios list
+            const fuzzyMatchStudio = (raw) => {
+              if (!raw || !studios?.length) return null;
+              const norm = s => String(s || "").toLowerCase().replace(/[\s\-_]/g, "");
+              const rawNorm = norm(raw);
+              // 1. exact match (case-insensitive)
+              let hit = studios.find(s => norm(s.name) === rawNorm);
+              if (hit) return hit;
+              // 2. one contains the other
+              hit = studios.find(s => norm(s.name).includes(rawNorm) || rawNorm.includes(norm(s.name)));
+              if (hit) return hit;
+              // 3. first significant word match
+              const firstWord = raw.split(/\s+/).find(w => w.length > 1)?.toLowerCase();
+              if (firstWord) hit = studios.find(s => norm(s.name).includes(firstWord) || firstWord.includes(norm(s.name)));
+              return hit || null;
+            };
+            const matchedStudio = fuzzyMatchStudio(studioNameRaw);
 
             const groupKey = `${courseName}__${teacher}__${track}`;
             if (!groupedLessons.has(groupKey)) {

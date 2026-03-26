@@ -1,11 +1,12 @@
 import { useRef, useState } from "react";
 import * as XLSX from "xlsx";
 
-const DEFAULT_GUIDANCE = `אני מעביר לך תוכן גולמי (CSV) שחולץ מקובץ אקסל.
+const DEFAULT_GUIDANCE = `אני מעביר לך תוכן גולמי (CSV) שחולץ מקובץ אקסל של סטודנטים.
 המשימה שלך:
-1. חלץ את הסטודנטים: שם מלא (name), טלפון או ת.ז (phone), אימייל (email).
-2. חפש טקסט כללי מעל הטבלה (למשל "מסלול לימודים: ...") ושייך את המסלול (track) לכל הסטודנטים בטבלה.
-3. התעלם משורות ריקות, כותרות לא רלוונטיות או מספרי סידורי.`;
+1. חלץ את הסטודנטים: שם מלא (name), טלפון (phone), אימייל (email).
+2. חפש מסלול לימודים — עשוי להופיע כ"מסלול", "תוכנית לימודים", "מחלקה", "קורס", "מגמה" — ושייך אותו (track) לכל הסטודנטים.
+3. זיהוי חכם של שמות עמודות: "תלמיד"/"סטודנט"/"שם" = name, "דוא"ל"/"מייל"/"email" = email, "נייד"/"סל"/"טל" = phone.
+4. התעלם משורות ריקות, כותרות לא רלוונטיות, מספרי סידורי ושורות סיכום.`;
 
 const fetchWithRetry = async (url, options, maxRetries = 5) => {
   const delays = [2000, 5000, 10000, 20000, 32000];
@@ -67,7 +68,6 @@ export default function SmartExcelImportButton({ onImportSuccess, showToast }) {
       throw new Error("מפתח Gemini API לא מוגדר.");
     }
 
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`;
     const prompt = `
 הנחיות חילוץ נתונים מותאמות:
 ${guidance}
@@ -76,41 +76,50 @@ ${guidance}
 ${csvText}
     `.trim();
 
-    const response = await fetchWithRetry(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        systemInstruction: {
-          parts: [{ text: "אתה מומחה לחילוץ נתונים. החזר אך ורק JSON של מערך אובייקטים לפי הסכמה, ללא טקסט נוסף או מסגרות Markdown." }],
-        },
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: "ARRAY",
-            items: {
-              type: "OBJECT",
-              properties: {
-                name: { type: "STRING" },
-                phone: { type: "STRING" },
-                email: { type: "STRING" },
-                track: { type: "STRING" },
-              },
-              required: ["name"],
+    const requestBody = {
+      contents: [{ parts: [{ text: prompt }] }],
+      systemInstruction: {
+        parts: [{ text: "אתה מומחה לחילוץ נתונים. החזר אך ורק JSON של מערך אובייקטים לפי הסכמה, ללא טקסט נוסף או מסגרות Markdown." }],
+      },
+      generationConfig: {
+        thinkingConfig: { thinkingBudget: 0 },
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              name: { type: "STRING" },
+              phone: { type: "STRING" },
+              email: { type: "STRING" },
+              track: { type: "STRING" },
             },
+            required: ["name"],
           },
         },
-      }),
-    });
+      },
+    };
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`API Error ${response.status}: ${errorText}`);
+    let lastError = null;
+    for (const modelName of ["gemini-2.5-flash", "gemini-2.5-flash-lite"]) {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+      const response = await fetchWithRetry(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        lastError = new Error(`API Error ${response.status}: ${errorText}`);
+        if (response.status === 404 || response.status === 429 || response.status === 503) continue;
+        throw lastError;
+      }
+      const result = await response.json();
+      if (!result?.candidates?.length) continue;
+      const textResponse = result.candidates[0]?.content?.parts?.[0]?.text || "";
+      return normalizeImportedStudents(parseGeneratedJson(textResponse));
     }
-
-    const result = await response.json();
-    const textResponse = result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    return normalizeImportedStudents(parseGeneratedJson(textResponse));
+    throw lastError || new Error("כל המודלים נכשלו. נסה שוב.");
   };
 
   const handleFailure = (csv, reason) => {
