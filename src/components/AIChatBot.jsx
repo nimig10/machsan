@@ -313,36 +313,40 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
         return;
       }
 
-      const systemPrompt = `אתה עוזר וירטואלי חכם של מחסן השאלת ציוד אקדמי. עליך לענות אך ורק בעברית, בצורה תמציתית, מקצועית ואדיבה.
+      // Compact inventory string: "שם(כמות), שם(כמות)"
+      const compactEquipment = availableEquipment
+        .filter(e => e.totalAvail > 0)
+        .map(e => `${e.name}(${e.totalAvail})`)
+        .join(', ');
 
-מידע קריטי על המערכת:
-שם הסטודנט שאתה מדבר איתו: ${currentUser?.name || 'סטודנט'}
-נהלי המחסן: ${JSON.stringify(policies)}
+      // Compact reservations: "תאריך:פריטים"
+      const compactReservations = activeReservations
+        .map(r => {
+          const items = r.items.map(i => `${i.name}x${i.amount}`).join('+');
+          return `${r.from}→${r.to}:${items}`;
+        })
+        .join(' | ');
 
-מלאי הציוד התקין במחסן:
-${JSON.stringify(availableEquipment)}
+      const systemPrompt = `אתה עוזר מחסן ציוד. ענה בעברית, קצר וענייני.
+סטודנט: ${currentUser?.name || 'אנונימי'}
+מלאי פנוי: ${compactEquipment}
+השאלות פעילות: ${compactReservations}
+חוקים: המלץ רק מהמלאי הפנוי. אם שואלים על נהלים, ענה: "אנא קרא את תקנון המחסן או פנה לצוות."`;
 
-יומן ההשאלות הפעילות:
-${JSON.stringify(activeReservations)}
-
-חוקי ברזל להמלצת ציוד:
-1. ציוד בחוץ: אם הסטודנט שואל על היום או לא מציין תאריך, הנח שהוא שואל על זמינות לעכשיו/להיום. הצלבת זמינות נעשית מול "מלאי הציוד התקין" ומול "יומן ההשאלות הפעילות".
-2. סטטוסים: ציוד תקול, בבדיקה, בתיקון או לא תקין הוסר מראש מ"מלאי הציוד התקין". אל תציע ציוד שלא מופיע שם.
-3. אם פריט מופיע במלאי עם totalAvail גדול מ-0, הוא זמין כרגע. אם totalAvail הוא 0, הוא כרגע לא זמין ויש להציע חלופה.
-4. אם פריט לא מופיע בכלל במלאי הציוד התקין, הוא לא קיים כרגע במחסן.
-5. כששואלים "כמה יש", התבסס על totalAvail בלבד ולא על ניחוש.
-6. אם יש מיקרופונים דינמיים זמינים כמו Shure sm57 או SHURE 58, ציין אותם במפורש בתשובה על מלאי.`;
-
-      const history = messages.filter(m => m.role !== 'system').map(m => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }]
-      }));
+      // שמור רק 2 הודעות אחרונות לחיסכון בטוקנים
+      const history = messages
+        .filter(m => m.role !== 'system')
+        .slice(-2)
+        .map(m => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }]
+        }));
       history.push({ role: 'user', parts: [{ text: userMessage }] });
 
       let result = null;
       let lastError = null;
 
-      for (const modelName of ['gemini-2.5-flash', 'gemini-2.5-flash-lite']) {
+      for (const modelName of ['gemini-1.5-flash-8b', 'gemini-2.0-flash']) {
         const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
         const response = await fetchWithRetry(endpoint, {
           method: "POST",
