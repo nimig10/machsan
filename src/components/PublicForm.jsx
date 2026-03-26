@@ -2411,40 +2411,41 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     return "";
   };
   const persistStudentBooking = async ({ studioId, date, startTime, endTime, notes="", isNight=false, blockedMessage="", successMessage="✅ האולפן הוזמן בהצלחה!" }) => {
-    // Night policies gate
-    if (isNight && policies?.לילה) {
+    // Night booking always requires consent (with or without policy text)
+    if (isNight) {
       setNightPolicyPending({ studioId, date, startTime, endTime, notes, isNight, blockedMessage, successMessage });
       setNightPolicyScrolled(false);
       setNightPolicyAgreed(false);
       return false;
     }
-    const normalizedStartTime = isNight ? NIGHT_START_TIME : startTime;
-    const normalizedEndTime = isNight ? NIGHT_END_TIME : endTime;
-    const validationError = getStudioBookingValidationError({ studioId, date, startTime: normalizedStartTime, endTime: normalizedEndTime, isNight, blockedMessage });
-    if (validationError) {
-      showToast("error", validationError);
+    try {
+      const normalizedStartTime = startTime;
+      const normalizedEndTime = endTime;
+      const validationError = getStudioBookingValidationError({ studioId, date, startTime: normalizedStartTime, endTime: normalizedEndTime, isNight, blockedMessage });
+      if (validationError) { showToast("error", validationError); return false; }
+      const newBooking = {
+        id: Date.now(),
+        bookingKind: "student",
+        studioId, date,
+        startTime: normalizedStartTime,
+        endTime: normalizedEndTime,
+        studentId: student?.id ?? null,
+        studentEmail: student?.email || "",
+        studentPhone: student?.phone || "",
+        studentName: student.name,
+        notes, isNight,
+        createdAt: new Date().toISOString(),
+      };
+      const updated = [...bookings, newBooking];
+      setBookings(updated);
+      await storageSet("studio_bookings", updated);
+      showToast("success", successMessage);
+      return true;
+    } catch(err) {
+      console.error("persistStudentBooking error", err);
+      showToast("error", "אירעה שגיאה בשמירת ההזמנה. נסה שוב.");
       return false;
     }
-    const newBooking = {
-      id: Date.now(),
-      bookingKind: "student",
-      studioId,
-      date,
-      startTime: normalizedStartTime,
-      endTime: normalizedEndTime,
-      studentId: student?.id ?? null,
-      studentEmail: student?.email || "",
-      studentPhone: student?.phone || "",
-      studentName: student.name,
-      notes,
-      isNight,
-      createdAt: new Date().toISOString(),
-    };
-    const updated = [...bookings, newBooking];
-    setBookings(updated);
-    await storageSet("studio_bookings", updated);
-    showToast("success", successMessage);
-    return true;
   };
 
   const handleSmartBooking = async (promptText, studiosList) => {
@@ -2666,16 +2667,22 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
   const submitBooking = async (e) => {
     e.preventDefault();
     setSaving(true);
-    const fd = new FormData(e.target);
-    const studioId = String(fd.get("studioId") || modal?.selectedStudioId || modal?.studioId || "").trim();
-    const date = String(fd.get("date") || modal?.selectedDate || modal?.date || "").trim();
-    const notes = fd.get("notes")?.trim();
-    const isNight = modal.isNight || false;
-    const startTime = isNight ? NIGHT_START_TIME : String(fd.get("startTime") || modal?.selectedStartTime || "").trim();
-    const endTime = isNight ? NIGHT_END_TIME : String(fd.get("endTime") || modal?.selectedEndTime || "").trim();
-    const didSave = await persistStudentBooking({ studioId, date, startTime, endTime, notes, isNight });
-    if (didSave) closeBookingModal();
-    setSaving(false);
+    try {
+      const fd = new FormData(e.target);
+      const studioId = String(fd.get("studioId") || modal?.selectedStudioId || modal?.studioId || "").trim();
+      const date = String(fd.get("date") || modal?.selectedDate || modal?.date || "").trim();
+      const notes = fd.get("notes")?.trim();
+      const isNight = modal.isNight || false;
+      const startTime = isNight ? NIGHT_START_TIME : String(fd.get("startTime") || modal?.selectedStartTime || "").trim();
+      const endTime = isNight ? NIGHT_END_TIME : String(fd.get("endTime") || modal?.selectedEndTime || "").trim();
+      const didSave = await persistStudentBooking({ studioId, date, startTime, endTime, notes, isNight });
+      if (didSave) closeBookingModal();
+    } catch(err) {
+      console.error("submitBooking error", err);
+      showToast("error", "אירעה שגיאה. נסה שוב.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const submitEditBooking = async (e) => {
@@ -3160,24 +3167,30 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
           })}
         </div>
       )}
-      {/* Night policies modal */}
-      {nightPolicyPending && policies?.לילה && (
+      {/* Night policies modal — always shown for night bookings */}
+      {nightPolicyPending && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
           <div style={{background:"var(--surface1)",borderRadius:12,maxWidth:500,width:"100%",maxHeight:"80vh",display:"flex",flexDirection:"column",border:"1px solid var(--border)"}}>
             <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",fontWeight:800,fontSize:15,textAlign:"center"}}>🌙 נהלי קביעת אולפן לילה</div>
-            <div
-              style={{padding:"16px 20px",overflowY:"auto",flex:1,fontSize:13,lineHeight:1.7,whiteSpace:"pre-wrap",direction:"rtl"}}
-              onScroll={e=>{
-                const el = e.target;
-                if (el.scrollHeight - el.scrollTop - el.clientHeight < 30) setNightPolicyScrolled(true);
-              }}
-            >
-              {policies.לילה}
-            </div>
+            {policies?.לילה ? (
+              <div
+                style={{padding:"16px 20px",overflowY:"auto",flex:1,fontSize:13,lineHeight:1.7,whiteSpace:"pre-wrap",direction:"rtl"}}
+                onScroll={e=>{
+                  const el = e.target;
+                  if (el.scrollHeight - el.scrollTop - el.clientHeight < 30) setNightPolicyScrolled(true);
+                }}
+              >
+                {policies.לילה}
+              </div>
+            ) : (
+              <div style={{padding:"16px 20px",flex:1,fontSize:13,lineHeight:1.7,direction:"rtl",color:"var(--text2)"}}>
+                קביעת אולפן לילה מחייבת עמידה בנהלי הלילה של המכללה.
+              </div>
+            )}
             <div style={{padding:"16px 20px",borderTop:"1px solid var(--border)",display:"flex",flexDirection:"column",gap:10}}>
-              {!nightPolicyScrolled && <div style={{fontSize:11,color:"var(--text3)",textAlign:"center"}}>יש לגלול לתחתית הנהלים כדי להמשיך</div>}
-              <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,fontWeight:600,cursor:nightPolicyScrolled?"pointer":"not-allowed",opacity:nightPolicyScrolled?1:0.4}}>
-                <input type="checkbox" checked={nightPolicyAgreed} disabled={!nightPolicyScrolled} onChange={e=>setNightPolicyAgreed(e.target.checked)}/>
+              {policies?.לילה && !nightPolicyScrolled && <div style={{fontSize:11,color:"var(--text3)",textAlign:"center"}}>יש לגלול לתחתית הנהלים כדי להמשיך</div>}
+              <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,fontWeight:600,cursor:(nightPolicyScrolled||!policies?.לילה)?"pointer":"not-allowed",opacity:(nightPolicyScrolled||!policies?.לילה)?1:0.4}}>
+                <input type="checkbox" checked={nightPolicyAgreed} disabled={!!(policies?.לילה && !nightPolicyScrolled)} onChange={e=>setNightPolicyAgreed(e.target.checked)}/>
                 אני מתחייב/ת לעמוד בכל נהלי קביעת אולפן לילה
               </label>
               <div style={{display:"flex",gap:8,justifyContent:"center"}}>
@@ -3188,17 +3201,21 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                   onClick={async()=>{
                     const args = nightPolicyPending;
                     setNightPolicyPending(null);
-                    // Call the actual persist logic (bypass the gate by temporarily clearing policies)
-                    const normalizedStartTime = args.isNight ? NIGHT_START_TIME : args.startTime;
-                    const normalizedEndTime = args.isNight ? NIGHT_END_TIME : args.endTime;
-                    const validationError = getStudioBookingValidationError({ studioId:args.studioId, date:args.date, startTime:normalizedStartTime, endTime:normalizedEndTime, isNight:args.isNight, blockedMessage:args.blockedMessage });
-                    if (validationError) { showToast("error",validationError); return; }
-                    const newBooking = { id:Date.now(), studioId:args.studioId, date:args.date, startTime:normalizedStartTime, endTime:normalizedEndTime, studentName:student.name, studentEmail:student.email, studentPhone:student.phone, status:"מאושר", notes:args.notes, isNight:args.isNight };
-                    const next = [...bookings, newBooking];
-                    setBookings(next);
-                    await storageSet("studio_bookings", next);
-                    showToast("success", args.successMessage || "✅ האולפן הוזמן בהצלחה!");
-                    closeBookingModal();
+                    try {
+                      const normalizedStartTime = args.isNight ? NIGHT_START_TIME : args.startTime;
+                      const normalizedEndTime = args.isNight ? NIGHT_END_TIME : args.endTime;
+                      const validationError = getStudioBookingValidationError({ studioId:args.studioId, date:args.date, startTime:normalizedStartTime, endTime:normalizedEndTime, isNight:args.isNight, blockedMessage:args.blockedMessage });
+                      if (validationError) { showToast("error",validationError); return; }
+                      const newBooking = { id:Date.now(), bookingKind:"student", studioId:args.studioId, date:args.date, startTime:normalizedStartTime, endTime:normalizedEndTime, studentName:student.name, studentEmail:student.email||"", studentPhone:student.phone||"", studentId:student?.id??null, notes:args.notes, isNight:args.isNight, createdAt:new Date().toISOString() };
+                      const next = [...bookings, newBooking];
+                      setBookings(next);
+                      await storageSet("studio_bookings", next);
+                      showToast("success", args.successMessage || "✅ האולפן הוזמן בהצלחה!");
+                      closeBookingModal();
+                    } catch(err) {
+                      console.error("night booking confirm error", err);
+                      showToast("error","אירעה שגיאה בשמירת ההזמנה. נסה שוב.");
+                    }
                   }}
                 >
                   אני מאשר/ת ✅
