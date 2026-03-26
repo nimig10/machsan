@@ -110,8 +110,8 @@ function addDaysToDateString(dateStr, daysToAdd = 0) {
   return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}-${String(base.getDate()).padStart(2, "0")}`;
 }
 
-const thStyle = { padding:"8px 10px", background:"var(--surface2)", fontSize:12, fontWeight:700, textAlign:"center", border:"1px solid var(--border)" };
-const tdStyle = { padding:"6px 8px", border:"1px solid var(--border)", textAlign:"center" };
+const thStyle = { padding:"8px 10px", background:"var(--surface2)", fontSize:12, fontWeight:700, textAlign:"center", border:"1px solid var(--border)", width:110, maxWidth:110 };
+const tdStyle = { padding:"6px 8px", border:"1px solid var(--border)", textAlign:"center", width:110, maxWidth:110, overflow:"hidden" };
 const labelStyle = { display:"flex", flexDirection:"column", gap:4, fontSize:13, fontWeight:600, color:"var(--text2)" };
 
 export default function StudioBookingPage(props) {
@@ -717,10 +717,10 @@ export default function StudioBookingPage(props) {
             </div>
           ) : (
             <div style={{ overflowX:"auto" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", minWidth:760 }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", minWidth:760, tableLayout:"fixed" }}>
                 <thead>
                   <tr>
-                    <th style={{ ...thStyle, width:120 }}>אולפן</th>
+                    <th style={{ ...thStyle, width:120, maxWidth:120 }}>אולפן</th>
                     {weekDays.map((day) => (
                       <th key={day.fullDate} style={{ ...thStyle, background:day.isToday ? "rgba(245,166,35,0.15)" : undefined }}>
                         <div style={{ fontWeight:700 }}>{day.name}</div>
@@ -757,10 +757,10 @@ export default function StudioBookingPage(props) {
                               const color = getBookingColor(booking);
                               const subtitle = getBookingSubtitle(booking);
                               return (
-                                <div key={booking.id} style={{ background:`${color}20`, border:`1px solid ${color}`, borderRadius:6, padding:"4px 6px", marginBottom:4, fontSize:11, cursor:"pointer" }} onClick={(event) => { event.stopPropagation(); openViewBookingModal(booking, studio.name); }}>
-                                  <div style={{ fontWeight:800, color }}>{getBookingTimeLabel(booking)}</div>
-                                  <div style={{ color:"var(--text)", fontWeight:700 }}>{getBookingTitle(booking)}</div>
-                                  {subtitle && <div style={{ color:"var(--text3)", fontSize:10 }}>{subtitle}</div>}
+                                <div key={booking.id} style={{ background:`${color}20`, border:`1.5px solid ${color}`, borderRadius:6, padding:"5px 7px", marginBottom:4, fontSize:12, cursor:"pointer", wordBreak:"break-word", whiteSpace:"normal", textAlign:"right" }} onClick={(event) => { event.stopPropagation(); openViewBookingModal(booking, studio.name); }}>
+                                  <div style={{ fontWeight:900, color, fontSize:12 }}>{getBookingTimeLabel(booking)}</div>
+                                  <div style={{ color:"var(--text)", fontWeight:800, fontSize:12, lineHeight:1.35 }}>{getBookingTitle(booking)}</div>
+                                  {subtitle && <div style={{ color:"var(--text2)", fontSize:11, fontWeight:600, lineHeight:1.3, marginTop:2 }}>{subtitle}</div>}
                                 </div>
                               );
                             })}
