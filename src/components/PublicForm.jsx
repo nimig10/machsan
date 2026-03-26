@@ -2784,6 +2784,13 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                         <span style={{fontWeight:700,fontSize:13}}>{getBookingTitle(booking)}</span>
                         {getBookingSubtitle(booking) && <span style={{fontSize:11,color:"var(--text3)"}}>{getBookingSubtitle(booking)}</span>}
                         <span style={{fontSize:11,color:"var(--text3)"}}>{booking.startTime}–{booking.endTime}</span>
+                        {getBookingKind(booking)==="student" && !isBookingOwnedByStudent(booking) && (booking.studentEmail||booking.studentPhone) && (
+                          <span style={{fontSize:11,color:"var(--text3)"}}>
+                            {booking.studentEmail && <>{booking.studentEmail}</>}
+                            {booking.studentEmail && booking.studentPhone && " · "}
+                            {booking.studentPhone && <>{booking.studentPhone}</>}
+                          </span>
+                        )}
                       </div>
                       {getBookingKind(booking)==="student" && isBookingOwnedByStudent(booking) && !isHourPast && (
                         <div style={{display:"flex",gap:4,flexShrink:0}}>

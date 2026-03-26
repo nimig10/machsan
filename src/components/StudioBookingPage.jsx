@@ -960,7 +960,11 @@ export default function StudioBookingPage(props) {
                 <Row label="תאריך" value={booking.date} />
                 <Row label="חלון שעות" value={getBookingTimeLabel(booking)} />
                 {kind === "lesson" && <><Row label="קורס" value={booking.courseName || "—"} /><Row label="מרצה" value={booking.instructorName || "—"} /><Row label="מסלול" value={booking.track || "—"} /><Row label="נושא השיעור" value={booking.subject || "—"} /></>}
-                {kind === "student" && <Row label="סטודנט" value={booking.studentName} />}
+                {kind === "student" && <>
+                  <Row label="סטודנט" value={booking.studentName} />
+                  {booking.studentEmail && <Row label="מייל" value={<a href={`mailto:${booking.studentEmail}`} style={{color:"var(--accent)"}}>{booking.studentEmail}</a>} />}
+                  {booking.studentPhone && <Row label="טלפון" value={<a href={`tel:${booking.studentPhone}`} style={{color:"var(--accent)"}}>{booking.studentPhone}</a>} />}
+                </>}
                 {kind === "team" && <Row label="איש צוות" value={booking.teamMemberName || booking.studentName} />}
                 {booking.isNight && kind !== "lesson" && <Row label="זמן" value={<span style={{ color:NIGHT_COLOR, fontWeight:700 }}>קביעת לילה</span>} />}
                 {booking.notes && <Row label="הערות" value={booking.notes} />}
