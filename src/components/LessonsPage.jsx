@@ -531,7 +531,8 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           };
 
           let jsonResponse = null;
-          for (const modelName of ["gemini-1.5-flash-8b", "gemini-2.0-flash"]) {
+          let lastApiError = null;
+          for (const modelName of ["gemini-2.0-flash", "gemini-1.5-flash"]) {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
             const resp = await fetchWithRetry(url, {
               method: "POST",
@@ -540,13 +541,14 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             });
             if (!resp.ok) {
               const errorText = await resp.text();
-              if (resp.status === 404 || resp.status === 503) continue;
-              throw new Error(`API Error ${resp.status}: ${errorText}`);
+              lastApiError = new Error(`API Error ${resp.status}: ${errorText}`);
+              if (resp.status === 404 || resp.status === 429 || resp.status === 503) continue;
+              throw lastApiError;
             }
             jsonResponse = await resp.json();
             if (jsonResponse?.candidates?.length) break;
           }
-          if (!jsonResponse) throw new Error("כל המודלים נכשלו. נסה שוב.");
+          if (!jsonResponse) throw lastApiError || new Error("כל המודלים נכשלו. נסה שוב.");
           if (!jsonResponse?.candidates || jsonResponse.candidates.length === 0) {
             throw new Error("Gemini לא החזיר תוצאות. נסה שוב.");
           }
