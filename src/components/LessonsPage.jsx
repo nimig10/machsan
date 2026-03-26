@@ -530,19 +530,23 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             },
           };
 
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`;
-          const response = await fetchWithRetry(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(requestBody),
-          });
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`API Error ${response.status}: ${errorText}`);
+          let jsonResponse = null;
+          for (const modelName of ["gemini-1.5-flash-8b", "gemini-2.0-flash"]) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+            const resp = await fetchWithRetry(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(requestBody),
+            });
+            if (!resp.ok) {
+              const errorText = await resp.text();
+              if (resp.status === 404 || resp.status === 503) continue;
+              throw new Error(`API Error ${resp.status}: ${errorText}`);
+            }
+            jsonResponse = await resp.json();
+            if (jsonResponse?.candidates?.length) break;
           }
-
-          const jsonResponse = await response.json();
+          if (!jsonResponse) throw new Error("כל המודלים נכשלו. נסה שוב.");
           if (!jsonResponse?.candidates || jsonResponse.candidates.length === 0) {
             throw new Error("Gemini לא החזיר תוצאות. נסה שוב.");
           }
@@ -567,14 +571,26 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           if (cleanedLessons.length === 0) {
             throw new Error("Gemini לא החזיר שיעורים תקינים אחרי סינון חגים והערות.");
           }
+          // fuzzy-match tracks: if AI returns a slightly different name, try to find the closest known track
+          const fuzzyMatchTrack = (aiTrack) => {
+            if (!aiTrack) return "";
+            if (isKnownTrack(aiTrack)) return aiTrack;
+            const lower = aiTrack.toLowerCase();
+            return normalizedTrackOptions.find(t => t.toLowerCase().includes(lower) || lower.includes(t.toLowerCase())) || aiTrack;
+          };
+          cleanedLessons.forEach(item => {
+            if (item?.track) item.track = fuzzyMatchTrack(String(item.track).trim());
+          });
           const invalidAiTracks = [...new Set(
             cleanedLessons
               .map((item) => String(item?.track || "").trim())
-              .filter((track) => !isKnownTrack(track))
-              .map((track) => track || "ללא מסלול")
+              .filter((track) => track && !isKnownTrack(track))
           )];
           if (invalidAiTracks.length) {
-            throw new Error(`מסלול לימודים לא קיים: ${invalidAiTracks.join(", ")}`);
+            // warn but don't block — set unrecognized tracks to empty
+            invalidAiTracks.forEach(bad => {
+              cleanedLessons.forEach(item => { if (String(item?.track||"").trim() === bad) item.track = ""; });
+            });
           }
 
           const groupedLessons = new Map();
