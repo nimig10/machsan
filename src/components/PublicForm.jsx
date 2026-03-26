@@ -138,6 +138,14 @@ function buildStudioBookingInterval({ date, startTime, endTime, isNight = false,
 }
 
 function getFutureStudioBookingHours(booking, now = new Date(), nightStartTime = "21:30", nightEndTime = "08:00") {
+  // Night bookings cost exactly 4 hours regardless of actual duration
+  if (booking?.isNight) {
+    const interval = buildStudioBookingInterval({ ...booking, nightStartTime, nightEndTime });
+    if (!interval || interval.end <= now) return 0;
+    const futureStart = interval.start > now ? interval.start : now;
+    const actualHours = Math.max(0, (interval.end.getTime() - futureStart.getTime()) / 3600000);
+    return Math.min(actualHours, 4);
+  }
   const interval = buildStudioBookingInterval({ ...booking, nightStartTime, nightEndTime });
   if (!interval || interval.end <= now) return 0;
   const futureStart = interval.start > now ? interval.start : now;
