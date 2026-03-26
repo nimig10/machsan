@@ -714,17 +714,6 @@ export default function StudioBookingPage(props) {
               <button onClick={() => { setWeekOffset(0); const now = new Date(); setMiniMonth({ year:now.getFullYear(), month:now.getMonth() }); }} style={{ width:"100%", marginTop:8, padding:"6px 0", borderRadius:6, border:"1px solid var(--accent)", background:"transparent", color:"var(--accent)", fontWeight:700, fontSize:12, cursor:"pointer" }}>📅 היום</button>
             </div>
 
-            <div style={{ flex:1, minWidth:280, display:"flex", flexDirection:"column", gap:10, justifyContent:"center" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8, justifyContent:"center", flexWrap:"wrap" }}>
-                <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current - 1)}>→ שבוע קודם</button>
-                <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(0)}>היום</button>
-                <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current + 1)}>← שבוע הבא</button>
-                <button className="btn btn-secondary btn-sm" onClick={() => setCalendarFullscreen(f => !f)} title={calendarFullscreen ? "סגור מסך מלא" : "פתח מסך מלא"}>{calendarFullscreen ? "✕ סגור" : "⛶ מסך מלא"}</button>
-              </div>
-              <div style={{ fontSize:13, color:"var(--text3)", textAlign:"center" }}>
-                {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth() + 1).padStart(2, "0")} – {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth() + 1).padStart(2, "0")}
-              </div>
-            </div>
           </div>
 
           {studios.length === 0 ? (
@@ -736,13 +725,22 @@ export default function StudioBookingPage(props) {
             <>
             {calendarFullscreen && <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:8999 }} onClick={() => setCalendarFullscreen(false)} />}
             <div style={calendarFullscreen ? { position:"fixed", inset:8, zIndex:9000, background:"var(--bg)", borderRadius:16, border:"1px solid var(--border)", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 20px 60px rgba(0,0,0,0.6)" } : {}}>
+            <div style={{ padding:"6px 12px", background:"var(--surface)", border:"1px solid var(--border)", borderRadius: calendarFullscreen ? "16px 16px 0 0" : "8px 8px 0 0", display:"flex", justifyContent:"center", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current - 1)}>→ שבוע קודם</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(0)}>היום</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current + 1)}>← שבוע הבא</button>
+              <span style={{ fontSize:12, color:"var(--text3)" }}>
+                {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth() + 1).padStart(2, "0")} – {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth() + 1).padStart(2, "0")}
+              </span>
+              <button className="btn btn-secondary btn-sm" onClick={() => setCalendarFullscreen(f => !f)} title={calendarFullscreen ? "סגור מסך מלא" : "פתח מסך מלא"} style={{ marginInlineStart:"auto" }}>{calendarFullscreen ? "✕ סגור" : "⛶ מסך מלא"}</button>
+            </div>
             <div style={{ overflowX:"auto", flex: calendarFullscreen ? 1 : undefined }}>
               <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
                 <thead>
                   <tr>
-                    <th style={{ ...thStyle, width:130, position:"sticky", top:0, zIndex:10 }}>אולפן</th>
+                    <th style={{ ...thStyle, width:130 }}>אולפן</th>
                     {weekDays.map((day) => (
-                      <th key={day.fullDate} style={{ ...thStyle, background:day.isToday ? "rgba(245,166,35,0.15)" : "var(--surface2)", position:"sticky", top:0, zIndex:10 }}>
+                      <th key={day.fullDate} style={{ ...thStyle, background:day.isToday ? "rgba(245,166,35,0.15)" : "var(--surface2)" }}>
                         <div style={{ fontWeight:700 }}>{day.name}</div>
                         <div style={{ fontSize:11, color:day.isToday ? "var(--accent)" : "var(--text3)" }}>{day.date}/{String(new Date(day.fullDate).getMonth() + 1).padStart(2, "0")}</div>
                       </th>
