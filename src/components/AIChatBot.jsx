@@ -177,7 +177,8 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
   const messagesEndRef = useRef(null);
 
   const maxRequests = parseInt(settings?.aiMaxRequests) || 5;
-  const todayKey = `ai_requests_${new Date().toISOString().split('T')[0]}`;
+  const userIdentifier = currentUser?.email || currentUser?.name || 'anonymous';
+  const todayKey = `ai_req_v2_${userIdentifier}_${new Date().toISOString().split('T')[0]}`;
 
   const getRequestsCount = () => parseInt(localStorage.getItem(todayKey)) || 0;
   const incrementRequestsCount = () => localStorage.setItem(todayKey, getRequestsCount() + 1);
