@@ -220,7 +220,7 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
     }
   };
 
-  // ── Import XL ──
+  // ── Import XL (AI) — used by SmartExcelImportButton ──
   const importXL = async (e) => {
     const file = e.target.files[0];
     if(!file) return;
@@ -293,6 +293,116 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
       console.error("importXL error:", err);
       showToast("error","שגיאה בייבוא הקובץ");
       setXlImporting(false);
+    }
+  };
+
+  // ── Import XL Basic (no AI) — supports multi-sheet ──
+  const [xlBasicImporting, setXlBasicImporting] = useState(false);
+
+  const importXLBasic = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = "";
+    setXlBasicImporting(true);
+
+    const ensureXLSX = () => !window.XLSX ? new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+      s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    }) : Promise.resolve();
+
+    const detectHeaders = (rows) => {
+      // Find the first row that looks like a header (contains recognizable column names)
+      for (let ri = 0; ri < Math.min(rows.length, 5); ri++) {
+        const normalized = rows[ri].map(h => String(h||"").trim().replace(/[\uFEFF\u200B-\u200D\u00A0]/g,"").toLowerCase());
+        const nameIdx  = normalized.findIndex(h=>h.includes("שם")||h.includes("name"));
+        const emailIdx = normalized.findIndex(h=>h.includes("מייל")||h.includes("mail")||h.includes("email")||h.includes("אימייל")||h.includes("e-mail"));
+        const phoneIdx = normalized.findIndex(h=>h.includes("טלפון")||h.includes("phone")||h.includes("tel")||h.includes("נייד")||h.includes("מספר"));
+        const trackIdx = normalized.findIndex(h=>h.includes("מסלול")||h.includes("קבוצה")||h.includes("כיתה")||h.includes("track")||h.includes("group")||h.includes("class"));
+        if (nameIdx >= 0 || emailIdx >= 0) {
+          return { headerRow: ri, nameIdx, emailIdx, phoneIdx, trackIdx };
+        }
+      }
+      return null;
+    };
+
+    const processSheet = (rows, sheetName, newStudents) => {
+      if (!rows.length) return { added: 0, skipped: 0 };
+      const detected = detectHeaders(rows);
+      if (!detected) return { added: 0, skipped: 0 };
+      const { headerRow, nameIdx, emailIdx, phoneIdx, trackIdx } = detected;
+
+      // Try to find email column by scanning data rows if not found in headers
+      let eIdx = emailIdx;
+      if (eIdx < 0 && rows[headerRow + 1]) {
+        eIdx = rows[headerRow + 1].findIndex(c => String(c||"").includes("@"));
+      }
+      if (eIdx < 0) return { added: 0, skipped: 0 };
+
+      let added = 0, skipped = 0;
+      for (let i = headerRow + 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.every(c => !String(c||"").trim())) continue; // skip empty rows
+        const email = String(row[eIdx]||"").toLowerCase().trim();
+        if (!email || !email.includes("@")) { skipped++; continue; }
+        if (newStudents.find(s => s.email === email)) { skipped++; continue; }
+        const name  = nameIdx >= 0 ? String(row[nameIdx]||"").trim() : "";
+        const phone = phoneIdx >= 0 ? String(row[phoneIdx]||"").trim() : "";
+        // Track: use cell value; fallback to sheet name if empty
+        let track = trackIdx >= 0 ? String(row[trackIdx]||"").trim() : "";
+        if (!track) track = sheetName || "";
+        newStudents.push({ id: `stu_${Date.now()}_${i}_${Math.random().toString(36).slice(2,6)}`, name: name || email, email, phone, track, certs: {} });
+        added++;
+      }
+      return { added, skipped };
+    };
+
+    try {
+      const isXlsx = /\.xlsx?$/i.test(file.name);
+      const newStudents = [...students];
+      let totalAdded = 0, totalSkipped = 0;
+
+      if (isXlsx) {
+        await ensureXLSX();
+        const buf = await file.arrayBuffer();
+        const wb = window.XLSX.read(buf, { type: "array" });
+        for (const sheetName of wb.SheetNames) {
+          const ws = wb.Sheets[sheetName];
+          const rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+          const { added, skipped } = processSheet(rows, sheetName, newStudents);
+          totalAdded += added;
+          totalSkipped += skipped;
+        }
+      } else {
+        // CSV / TSV — single sheet
+        const text = await new Promise((res, rej) => {
+          const reader = new FileReader();
+          reader.onload = ev => res(ev.target.result);
+          reader.onerror = rej;
+          reader.readAsText(file, "UTF-8");
+        });
+        const lines = text.split(/\r?\n/).filter(l => l.trim());
+        const sep = lines[0]?.includes("\t") ? "\t" : ",";
+        const rows = lines.map(l => l.split(sep).map(c => c.trim().replace(/^"|"$/g, "")));
+        const { added, skipped } = processSheet(rows, "", newStudents);
+        totalAdded += added;
+        totalSkipped += skipped;
+      }
+
+      if (totalAdded === 0 && totalSkipped === 0) {
+        showToast("error", "לא נמצאו שורות תקינות לייבוא — ודא שיש עמודת מייל בקובץ");
+      } else {
+        const updated = { types, students: newStudents };
+        if (await save(updated)) {
+          showToast("success", `✅ יובאו ${totalAdded} סטודנטים${totalSkipped > 0 ? ` · ${totalSkipped} דולגו` : ""}`);
+        }
+      }
+    } catch (err) {
+      console.error("importXLBasic error:", err);
+      showToast("error", "שגיאה בייבוא הקובץ");
+    } finally {
+      setXlBasicImporting(false);
     }
   };
 
@@ -374,6 +484,10 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
         <div style={{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap",alignItems:"center"}}>
           <button className="btn btn-primary" onClick={()=>setAddingStudent(true)}>➕ הוספת סטודנט</button>
           <button className="btn btn-secondary" onClick={()=>setAddingTrack(true)}>🎓 הוסף מסלול</button>
+          <label className="btn btn-secondary" style={{cursor:xlBasicImporting?"not-allowed":"pointer",opacity:xlBasicImporting?0.6:1,marginBottom:0}}>
+            {xlBasicImporting ? "⏳ מייבא..." : "📊 ייבוא XL"}
+            <input type="file" accept=".csv,.tsv,.xls,.xlsx" style={{display:"none"}} onChange={importXLBasic} disabled={xlBasicImporting}/>
+          </label>
           <SmartExcelImportButton showToast={showToast} onImportSuccess={handleAiImport} />
           <div className="search-bar" style={{flex:1,minWidth:180}}><span>🔍</span>
             <input placeholder="חיפוש לפי שם, מייל או טלפון..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
