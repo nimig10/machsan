@@ -7355,16 +7355,18 @@ export default function App() {
   const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד מחסן", reservations:"ניהול בקשות", team:"פרטי צוות", kits:"ערכות", lessons:"שיעורים", policies:"נהלים", certifications:"הסמכות", students:"ניהול סטודנטים", settings:"הגדרות", studios:"לוח אולפנים" };
 
   const handleSwipeTouchStart = (e) => {
-    swipeTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    swipeTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, target: e.target };
   };
   const handleSwipeTouchEnd = (e) => {
     if (!swipeTouchRef.current) return;
     const dx = e.changedTouches[0].clientX - swipeTouchRef.current.x;
     const dy = e.changedTouches[0].clientY - swipeTouchRef.current.y;
+    const startTarget = swipeTouchRef.current.target;
     swipeTouchRef.current = null;
     if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
-    // Don't navigate if the touch started inside a no-swipe-nav element
-    if (e.target?.closest?.('.no-swipe-nav')) return;
+    // Block page swipe only if touch started inside a scrollable container that actually has horizontal overflow
+    const scrollEl = startTarget?.closest?.('.no-swipe-nav');
+    if (scrollEl && scrollEl.scrollWidth > scrollEl.clientWidth) return;
     const idx = ADMIN_NAV_PAGES.indexOf(page);
     if (idx === -1) return;
     if (dx < 0 && idx < ADMIN_NAV_PAGES.length - 1) setPage(ADMIN_NAV_PAGES[idx + 1]);
