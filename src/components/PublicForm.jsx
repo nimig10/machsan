@@ -656,7 +656,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
     { id:"kits",      label:"🎒 ערכות" },
     { id:"contact",   label:"📞 צוות" },
   ];
-  const LOAN_ICONS = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥" };
+  const LOAN_ICONS = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥","לילה":"🌙" };
   const allCats = [...new Set((equipment||[]).map(e=>e.category).filter(Boolean))];
   const visibleEq = infoCatFilter.length===0
     ? (equipment||[])
@@ -778,7 +778,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
           {/* ── POLICIES TAB ── */}
           {tab==="policies" && (
             <div style={{maxWidth:720,margin:"0 auto"}}>
-              {["פרטית","הפקה","סאונד","קולנוע יומית"].map(lt=>{
+              {["פרטית","הפקה","סאונד","קולנוע יומית","לילה"].map(lt=>{
                 const text = policies[lt];
                 if(!text) return null;
                 return (
@@ -788,7 +788,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                   </div>
                 );
               })}
-              {!policies?.פרטית && !policies?.הפקה && !policies?.סאונד &&
+              {!policies?.פרטית && !policies?.הפקה && !policies?.סאונד && !policies?.לילה &&
                 <div style={{textAlign:"center",color:"var(--text3)",fontSize:14,padding:"40px 0"}}>לא הוגדרו נהלים עדיין</div>}
             </div>
           )}
