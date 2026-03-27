@@ -2105,7 +2105,10 @@ ${inventory}
                 }
               });
             });
-            sessions.sort((a,b) => (a.startTime||"").localeCompare(b.startTime||""));
+            sessions.sort((a,b) => {
+              const s = (a.startTime||"").localeCompare(b.startTime||"");
+              return s !== 0 ? s : (a.endTime||"").localeCompare(b.endTime||"");
+            });
             return <>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:8}}>
                 <button type="button" onClick={()=>setDailyDayOffset(o=>Math.max(0,o-1))} disabled={dailyDayOffset===0}
