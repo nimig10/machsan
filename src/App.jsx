@@ -434,10 +434,17 @@ function getLessonsLinkedToKit(kit, lessons = []) {
   if (!kit) return [];
   return lessons.filter((lesson) => {
     if (!lesson) return false;
-    if (hasLinkedValue(lesson.kitId)) {
-      return String(lesson.kitId) === String(kit.id);
+    // Global-level assignment
+    if (hasLinkedValue(lesson.kitId) && String(lesson.kitId) === String(kit.id)) return true;
+    // Old-style kit.lessonId assignment
+    if (hasLinkedValue(kit.lessonId) && String(kit.lessonId) === String(lesson.id)) return true;
+    // Per-session assignment: any session in this lesson has session.kitId === kit.id
+    if (Array.isArray(lesson.schedule)) {
+      return lesson.schedule.some(
+        (session) => hasLinkedValue(session?.kitId) && String(session.kitId) === String(kit.id)
+      );
     }
-    return hasLinkedValue(kit.lessonId) && String(kit.lessonId) === String(lesson.id);
+    return false;
   });
 }
 
