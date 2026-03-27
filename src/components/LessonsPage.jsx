@@ -1007,7 +1007,8 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
     resizingRef.current = { colIdx, startX: e.clientX, startWidth: colWidths[colIdx] };
     const onMove = (ev) => {
       if (!resizingRef.current) return;
-      const delta = ev.clientX - resizingRef.current.startX;
+      // RTL: גרירה שמאלה = הרחבה, גרירה ימינה = צמצום
+      const delta = resizingRef.current.startX - ev.clientX;
       const newW = Math.max(40, resizingRef.current.startWidth + delta);
       setColWidths(prev => prev.map((w,i) => i === resizingRef.current.colIdx ? newW : w));
     };
@@ -1185,11 +1186,13 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
                   {label}
                   {ci > 0 && ci < 7 && (
                     <div onMouseDown={e=>startColResize(e,ci)}
-                      style={{position:"absolute",left:0,top:0,width:4,height:"100%",cursor:"col-resize",zIndex:2,
-                        background:"transparent",transition:"background 0.15s"}}
-                      onMouseEnter={e=>e.currentTarget.style.background="rgba(155,89,182,0.4)"}
-                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}
-                    />
+                      style={{position:"absolute",left:0,top:0,width:6,height:"100%",cursor:"col-resize",zIndex:2,
+                        display:"flex",alignItems:"center",justifyContent:"center"}}
+                      onMouseEnter={e=>e.currentTarget.querySelector("span").style.background="rgba(155,89,182,0.9)"}
+                      onMouseLeave={e=>e.currentTarget.querySelector("span").style.background="rgba(155,89,182,0.25)"}
+                    >
+                      <span style={{display:"block",width:2,height:"70%",borderRadius:2,background:"rgba(155,89,182,0.25)",pointerEvents:"none",transition:"background 0.15s"}}/>
+                    </div>
                   )}
                 </div>
               ))}
