@@ -436,11 +436,12 @@ export default function StudioBookingPage(props) {
     const studioCertId = formData.get("studioCertId") || undefined;
     const isDisabled = formData.get("isDisabled") === "on";
     const isClassroom = formData.get("isClassroom") === "on";
+    const classroomOnly = formData.get("classroomOnly") === "on";
     const studioTrackType = formData.get("studioTrackType") || "";
     const image = editImage || String(formData.get("emoji") || "").trim() || modal.studio.image;
     const previousIds = getStudioCertIds(modal.studio);
     const nextStudioCertIds = !studioCertId ? [] : (previousIds.length > 1 && previousIds.includes(studioCertId) ? previousIds : [studioCertId]);
-    const nextStudios = studios.map((studio) => studio.id === modal.studio.id ? { ...studio, name, studioCertId, studioCertIds:nextStudioCertIds, image, isDisabled, studioTrackType, isClassroom } : studio);
+    const nextStudios = studios.map((studio) => studio.id === modal.studio.id ? { ...studio, name, studioCertId, studioCertIds:nextStudioCertIds, image, isDisabled, studioTrackType, isClassroom, classroomOnly } : studio);
     await saveStudios(nextStudios);
     showToast("success", `האולפן "${name}" עודכן`);
     closeModal();
@@ -919,6 +920,11 @@ export default function StudioBookingPage(props) {
               🏫 כיתת לימוד
             </label>
             <div style={{ fontSize:12, color:"var(--text3)", marginTop:-4 }}>כאשר מסומן, האולפן יופיע לשיוך קורסים ברובריקת "שיעורים".</div>
+            <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, fontWeight:700, color:"var(--text2)", background:"rgba(52,152,219,0.10)", border:"1px solid rgba(52,152,219,0.28)", borderRadius:8, padding:"10px 12px" }}>
+              <input type="checkbox" name="classroomOnly" defaultChecked={Boolean(modal.studio.classroomOnly)} style={{ width:18, height:18, accentColor:"#3498db" }} />
+              🔒 כיתה בלבד
+            </label>
+            <div style={{ fontSize:12, color:"var(--text3)", marginTop:-4 }}>כאשר מסומן, האולפן לא יופיע בטופס ההשאלה לסטודנטים — לקביעות שיעורים בלבד.</div>
             <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, fontWeight:700, color:"var(--text2)", background:"rgba(231,76,60,0.06)", border:"1px solid rgba(231,76,60,0.14)", borderRadius:8, padding:"10px 12px" }}>
               <input type="checkbox" name="isDisabled" defaultChecked={Boolean(modal.studio.isDisabled)} style={{ width:18, height:18, accentColor:"var(--red)" }} />
               השבתת אולפן

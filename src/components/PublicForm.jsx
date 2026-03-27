@@ -895,6 +895,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   // ── Studio track-type filtering ──
   const studentTrackType = normalizedTrackSettings.find(s => s.name === activeStudentTrack)?.trackType || "";
   const visibleStudios = studios.filter(studio => {
+    if (studio.classroomOnly) return false;
     // studioTrackType is the new field; fall back to legacy studio.type field
     const sType = studio.studioTrackType || (studio.type === "sound" ? "sound" : studio.type === "cinema" ? "cinema" : "");
     return !sType || sType === "all" || !studentTrackType || sType === studentTrackType;
