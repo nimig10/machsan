@@ -1718,14 +1718,17 @@ ${inventory}
   const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""}); setItems([]); setAgreed(false); };
 
   const handleFormSwipeStart = (e) => {
-    swipeTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    swipeTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, target: e.target };
   };
   const handleFormSwipeEnd = (e) => {
     if (!swipeTouchRef.current) return;
     const dx = e.changedTouches[0].clientX - swipeTouchRef.current.x;
     const dy = e.changedTouches[0].clientY - swipeTouchRef.current.y;
+    const startTarget = swipeTouchRef.current.target;
     swipeTouchRef.current = null;
     if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
+    const scrollEl = startTarget?.closest?.('.no-swipe-nav');
+    if (scrollEl && scrollEl.scrollWidth > scrollEl.clientWidth) return;
     const VIEWS = ["equipment", "studios", "daily"];
     const idx = VIEWS.indexOf(publicView);
     if (dx < 0 && idx < VIEWS.length - 1) setPublicView(VIEWS[idx + 1]);
