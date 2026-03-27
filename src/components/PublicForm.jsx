@@ -879,7 +879,9 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [loggedInStudent, setLoggedInStudent] = useState(null); // null = not logged in
   const [loginForm, setLoginForm] = useState({ name:"", email:"" });
   const [loginError, setLoginError] = useState("");
-  const [publicView, setPublicView] = useState("equipment"); // "equipment" | "studios"
+  const [publicView, setPublicView] = useState("equipment"); // "equipment" | "studios" | "daily"
+  const [dailyLessons, setDailyLessons] = useState([]);
+  const [dailyDayOffset, setDailyDayOffset] = useState(0);
   const [studioBookings, setStudioBookings] = useState([]);
   const [studios, setStudios] = useState([]);
   const [studioWeekOffset, setStudioWeekOffset] = useState(0);
@@ -967,6 +969,11 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     const [s, b] = await Promise.all([storageGet("studios"), storageGet("studio_bookings")]);
     if (Array.isArray(s)) setStudios(s);
     if (Array.isArray(b)) setStudioBookings(b);
+  };
+
+  const loadDailySchedule = async () => {
+    const lessons = await storageGet("lessons");
+    setDailyLessons(Array.isArray(lessons) ? lessons : []);
   };
 
   const handleStudentLogin = () => {
@@ -1814,6 +1821,10 @@ ${inventory}
               style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:publicView==="studios"?"var(--accent)":"transparent",color:publicView==="studios"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
               🎙️ קביעת אולפנים
             </button>
+            <button type="button" onClick={()=>{setPublicView("daily");setDailyDayOffset(0);loadDailySchedule();}}
+              style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:publicView==="daily"?"var(--accent)":"transparent",color:publicView==="daily"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              📅 לוז יומי
+            </button>
           </div>
           {publicView==="equipment" && <>
           {/* Clickable tab navigation — always free to navigate, validation only on submit */}
@@ -2073,6 +2084,56 @@ ${inventory}
             siteSettings={siteSettings}
             policies={policies}
           />
+        </div>}
+        {publicView==="daily" && <div className="form-card-body">
+          {(() => {
+            const offsetDate = new Date();
+            offsetDate.setDate(offsetDate.getDate() + dailyDayOffset);
+            const yyyy = offsetDate.getFullYear();
+            const mm = String(offsetDate.getMonth()+1).padStart(2,"0");
+            const dd = String(offsetDate.getDate()).padStart(2,"0");
+            const targetDate = `${yyyy}-${mm}-${dd}`;
+            const HE_DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
+            const dayName = HE_DAYS[offsetDate.getDay()];
+            const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+            const dateLabel = `יום ${dayName}, ${dd} ב${HE_MONTHS[offsetDate.getMonth()]} ${yyyy}`;
+            const sessions = [];
+            dailyLessons.forEach(lesson => {
+              (lesson.schedule||[]).forEach(s => {
+                if (s.date === targetDate) {
+                  sessions.push({ lessonName: lesson.name||"", instructorName: lesson.instructorName||"", topic: s.topic||"", startTime: s.startTime||"", endTime: s.endTime||"" });
+                }
+              });
+            });
+            sessions.sort((a,b) => (a.startTime||"").localeCompare(b.startTime||""));
+            return <>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:8}}>
+                <button type="button" onClick={()=>setDailyDayOffset(o=>Math.max(0,o-1))} disabled={dailyDayOffset===0}
+                  style={{padding:"6px 14px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface2)",cursor:dailyDayOffset===0?"not-allowed":"pointer",opacity:dailyDayOffset===0?0.4:1,fontSize:18,fontWeight:900}}>›</button>
+                <div style={{textAlign:"center",fontWeight:800,fontSize:14,color:"var(--text)"}}>
+                  {dateLabel}
+                  {dailyDayOffset===0 && <span style={{marginRight:6,fontSize:11,color:"var(--accent)",fontWeight:700}}>היום</span>}
+                </div>
+                <button type="button" onClick={()=>setDailyDayOffset(o=>Math.min(6,o+1))} disabled={dailyDayOffset===6}
+                  style={{padding:"6px 14px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface2)",cursor:dailyDayOffset===6?"not-allowed":"pointer",opacity:dailyDayOffset===6?0.4:1,fontSize:18,fontWeight:900}}>‹</button>
+              </div>
+              {sessions.length===0
+                ? <div style={{textAlign:"center",color:"var(--text3)",fontSize:14,padding:"32px 0"}}>אין שיעורים מתוכננים ליום זה</div>
+                : <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                    {sessions.map((s,i)=>(
+                      <div key={i} style={{background:"var(--surface2)",borderRadius:10,padding:"12px 14px",borderRight:"4px solid var(--accent)"}}>
+                        <div style={{fontWeight:800,fontSize:14,color:"var(--text)",marginBottom:2}}>{s.lessonName}</div>
+                        {s.topic && <div style={{fontSize:13,color:"var(--text2)",marginBottom:4}}>📖 {s.topic}</div>}
+                        <div style={{display:"flex",gap:12,fontSize:12,color:"var(--text3)"}}>
+                          {s.instructorName && <span>👤 {s.instructorName}</span>}
+                          {(s.startTime||s.endTime) && <span>🕐 {s.startTime}{s.endTime ? `–${s.endTime}` : ""}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+              }
+            </>;
+          })()}
         </div>}
       </div>
     </div>
