@@ -378,11 +378,15 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           if (!group.studioName && studioIdx >= 0) group.studioName = String(row[studioIdx] || "").trim();
           if (!group.kitName && kitIdx >= 0) group.kitName = String(row[kitIdx] || "").trim();
           if (!group.description && notesIdx >= 0) group.description = String(row[notesIdx] || "").trim();
+          const sessionStudioName = studioIdx >= 0 ? String(row[studioIdx] || "").trim() : "";
+          const sessionKitName = kitIdx >= 0 ? String(row[kitIdx] || "").trim() : "";
           group.schedule.push(normalizeScheduleEntry({
             date,
             startTime: startIdx >= 0 ? String(row[startIdx] || "").trim() || "09:00" : "09:00",
             endTime: endIdx >= 0 ? String(row[endIdx] || "").trim() || "12:00" : "12:00",
             topic: topicIdx >= 0 ? String(row[topicIdx] || "").trim() : "",
+            studioId: sessionStudioName ? (studios.find(s=>s.name===sessionStudioName)?.id || null) : null,
+            kitId: sessionKitName ? (lessonKits.find(k=>k.name===sessionKitName)?.id || null) : null,
           }));
         }
       }
@@ -1003,7 +1007,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
     const sessions = [];
     let d = parseLocalDate(manStartDate);
     for(let i=0;i<count;i++) {
-      sessions.push({ date: formatLocalDateInput(d), startTime: manStartTime, endTime: manEndTime, topic: "" });
+      sessions.push({ date: formatLocalDateInput(d), startTime: manStartTime, endTime: manEndTime, topic: "", studioId: studioId||null, kitId: kitId||null });
       d.setDate(d.getDate()+7);
     }
     setSchedule(prev => dedupeScheduleEntries([...prev, ...sessions]));
@@ -1021,6 +1025,8 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
       startTime: firstLesson.startTime||"09:00",
       endTime: firstLesson.endTime||"12:00",
       topic: "",
+      studioId: studioId||null,
+      kitId: kitId||null,
     }]));
   };
 
@@ -1165,12 +1171,12 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
                     {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
                   </select>
                   <input className="form-input" placeholder="אופציונלי" value={s.topic||""} style={{padding:"3px 6px",fontSize:12,height:28}} onChange={e=>updateSessionField(i, "topic", e.target.value)}/>
-                  <select className="form-select" value={s.studioId||""} style={{padding:"3px 4px",fontSize:11,height:28}} title="כיתת לימוד למפגש זה (עוקף את הקורס)" onChange={e=>updateSessionField(i,"studioId",e.target.value||null)}>
-                    <option value="">כמו הקורס</option>
+                  <select className="form-select" value={s.studioId||""} style={{padding:"3px 4px",fontSize:11,height:28}} title="כיתת לימוד למפגש זה" onChange={e=>updateSessionField(i,"studioId",e.target.value||null)}>
+                    <option value="">ללא שיוך</option>
                     {studios.filter(st=>st.isClassroom).map(st=><option key={st.id} value={st.id}>{st.name}</option>)}
                   </select>
-                  <select className="form-select" value={s.kitId||""} style={{padding:"3px 4px",fontSize:11,height:28}} title="ערכת שיעור למפגש זה (עוקף את הקורס)" onChange={e=>updateSessionField(i,"kitId",e.target.value||null)}>
-                    <option value="">כמו הקורס</option>
+                  <select className="form-select" value={s.kitId||""} style={{padding:"3px 4px",fontSize:11,height:28}} title="ערכת שיעור למפגש זה" onChange={e=>updateSessionField(i,"kitId",e.target.value||null)}>
+                    <option value="">ללא שיוך</option>
                     {lessonKits.map(k=><option key={k.id} value={k.id}>{k.name}</option>)}
                   </select>
                   <button onClick={()=>setSchedule(prev=>prev.filter((_,j)=>j!==i))}
@@ -1228,7 +1234,10 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
         <div className="grid-2">
           <div className="form-group">
             <label className="form-label">🏫 שיוך לכיתת לימוד</label>
-            <select className="form-select" value={studioId} onChange={e=>setStudioId(e.target.value)}>
+            <select className="form-select" value={studioId} onChange={e=>{
+              setStudioId(e.target.value);
+              setSchedule(prev=>prev.map(s=>({...s, studioId: e.target.value||null})));
+            }}>
               <option value="">ללא שיוך</option>
               {studios.filter(s => s.isClassroom || String(s.id) === String(studioId)).map(s=>(
                 <option key={s.id} value={s.id}>{s.name}{!s.isClassroom ? " (לא מסומן ככיתה)" : ""}</option>
@@ -1240,7 +1249,10 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
           </div>
           <div className="form-group">
             <label className="form-label">🎒 שיוך לערכת שיעור</label>
-            <select className="form-select" value={kitId} onChange={e=>setKitId(e.target.value)}>
+            <select className="form-select" value={kitId} onChange={e=>{
+              setKitId(e.target.value);
+              setSchedule(prev=>prev.map(s=>({...s, kitId: e.target.value||null})));
+            }}>
               <option value="">ללא שיוך</option>
               {lessonKits.map(k=><option key={k.id} value={k.id}>{k.name}</option>)}
             </select>
