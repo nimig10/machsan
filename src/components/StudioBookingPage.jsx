@@ -893,12 +893,12 @@ export default function StudioBookingPage(props) {
             <label style={labelStyle}>תמונה<input type="file" accept="image/*" onChange={(event) => void handleImageUpload(event, setStudioImage)} style={{ fontSize:13 }} disabled={imgUploading} />{imgUploading && <div style={{ fontSize:12, color:"var(--accent)", marginTop:4 }}>מעלה תמונה...</div>}{studioImage && <img src={studioImage} alt="תצוגה מקדימה" style={{ width:80, height:80, objectFit:"cover", borderRadius:8, marginTop:4 }} />}</label>
             <label style={labelStyle}>או אימוג'י<input name="emoji" className="form-input" placeholder="🎙️" maxLength={4} /></label>
             <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, fontWeight:700, color:"var(--text2)", background:"rgba(52,152,219,0.06)", border:"1px solid rgba(52,152,219,0.18)", borderRadius:8, padding:"10px 12px" }}>
-              <input type="checkbox" name="isClassroom" defaultChecked={false} style={{ width:18, height:18, accentColor:"#3498db" }} />
+              <input type="checkbox" name="isClassroom" defaultChecked={false} onChange={e=>{ if(e.target.checked) e.target.form.elements.classroomOnly.checked=false; }} style={{ width:18, height:18, accentColor:"#3498db" }} />
               🏫 כיתת לימוד
             </label>
             <div style={{ fontSize:12, color:"var(--text3)", marginTop:-4 }}>כאשר מסומן, האולפן יופיע לשיוך קורסים ברובריקת "שיעורים".</div>
             <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, fontWeight:700, color:"var(--text2)", background:"rgba(52,152,219,0.10)", border:"1px solid rgba(52,152,219,0.28)", borderRadius:8, padding:"10px 12px" }}>
-              <input type="checkbox" name="classroomOnly" defaultChecked={false} style={{ width:18, height:18, accentColor:"#3498db" }} />
+              <input type="checkbox" name="classroomOnly" defaultChecked={false} onChange={e=>{ if(e.target.checked) e.target.form.elements.isClassroom.checked=false; }} style={{ width:18, height:18, accentColor:"#3498db" }} />
               🔒 כיתה בלבד
             </label>
             <div style={{ fontSize:12, color:"var(--text3)", marginTop:-4 }}>כאשר מסומן, האולפן לא יופיע בטופס ההשאלה לסטודנטים — לקביעות שיעורים בלבד.</div>
@@ -924,12 +924,12 @@ export default function StudioBookingPage(props) {
             <label style={labelStyle}>החלף תמונה<input type="file" accept="image/*" onChange={(event) => void handleImageUpload(event, setEditImage)} style={{ fontSize:13 }} disabled={imgUploading} />{imgUploading && <div style={{ fontSize:12, color:"var(--accent)", marginTop:4 }}>מעלה תמונה...</div>}</label>
             <label style={labelStyle}>או אימוג'י<input name="emoji" className="form-input" placeholder="🎙️" maxLength={4} /></label>
             <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, fontWeight:700, color:"var(--text2)", background:"rgba(52,152,219,0.06)", border:"1px solid rgba(52,152,219,0.18)", borderRadius:8, padding:"10px 12px" }}>
-              <input type="checkbox" name="isClassroom" defaultChecked={Boolean(modal.studio.isClassroom)} style={{ width:18, height:18, accentColor:"#3498db" }} />
+              <input type="checkbox" name="isClassroom" defaultChecked={Boolean(modal.studio.isClassroom)} onChange={e=>{ if(e.target.checked) e.target.form.elements.classroomOnly.checked=false; }} style={{ width:18, height:18, accentColor:"#3498db" }} />
               🏫 כיתת לימוד
             </label>
             <div style={{ fontSize:12, color:"var(--text3)", marginTop:-4 }}>כאשר מסומן, האולפן יופיע לשיוך קורסים ברובריקת "שיעורים".</div>
             <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, fontWeight:700, color:"var(--text2)", background:"rgba(52,152,219,0.10)", border:"1px solid rgba(52,152,219,0.28)", borderRadius:8, padding:"10px 12px" }}>
-              <input type="checkbox" name="classroomOnly" defaultChecked={Boolean(modal.studio.classroomOnly)} style={{ width:18, height:18, accentColor:"#3498db" }} />
+              <input type="checkbox" name="classroomOnly" defaultChecked={Boolean(modal.studio.classroomOnly)} onChange={e=>{ if(e.target.checked) e.target.form.elements.isClassroom.checked=false; }} style={{ width:18, height:18, accentColor:"#3498db" }} />
               🔒 כיתה בלבד
             </label>
             <div style={{ fontSize:12, color:"var(--text3)", marginTop:-4 }}>כאשר מסומן, האולפן לא יופיע בטופס ההשאלה לסטודנטים — לקביעות שיעורים בלבד.</div>
