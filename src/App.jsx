@@ -449,6 +449,8 @@ function getLessonScheduleEntries(lesson) {
       startTime: session.startTime || "09:00",
       endTime: session.endTime || "12:00",
       topic: String(session.topic || "").trim(),
+      studioId: session.studioId || null,
+      kitId: session.kitId || null,
     }))
     .sort(compareDateTimeParts);
 }
@@ -459,16 +461,26 @@ function buildLessonReservations(lessons = [], kits = []) {
 
   lessons.forEach((lesson) => {
     const schedule = getLessonScheduleEntries(lesson);
-    const kit = getLinkedLessonKit(lesson, kits);
-    const items = (Array.isArray(kit?.items) ? kit.items : [])
-      .filter((item) => Number(item?.quantity) > 0)
-      .map((item) => ({ ...item }));
+    if (!schedule.length) return;
 
-    if (!kit || !items.length || !schedule.length) return;
-
-    linkedKitIds.add(String(kit.id));
+    // ערכה ברמת הקורס (fallback)
+    const lessonKit = getLinkedLessonKit(lesson, kits);
+    if (lessonKit) linkedKitIds.add(String(lessonKit.id));
 
     schedule.forEach((session, index) => {
+      // ערכה ברמת המפגש עוקפת את ערכת הקורס
+      let kit = lessonKit;
+      if (hasLinkedValue(session.kitId)) {
+        const sessionKit = kits.find(k => String(k.id) === String(session.kitId));
+        if (sessionKit) { kit = sessionKit; linkedKitIds.add(String(sessionKit.id)); }
+      }
+      if (!kit) return;
+
+      const items = (Array.isArray(kit?.items) ? kit.items : [])
+        .filter((item) => Number(item?.quantity) > 0)
+        .map((item) => ({ ...item }));
+      if (!items.length) return;
+
       reservations.push({
         id: `lesson_res_${lesson.id}_${index}`,
         lesson_id: lesson.id,
@@ -498,11 +510,15 @@ function buildLessonStudioBookings(lessons = []) {
   const bookings = [];
 
   lessons.forEach((lesson) => {
-    if (!hasLinkedValue(lesson?.studioId)) return;
     const schedule = getLessonScheduleEntries(lesson);
     if (!schedule.length) return;
 
     schedule.forEach((session, index) => {
+      // שיוך כיתה ברמת המפגש עוקף שיוך ברמת הקורס
+      const effectiveStudioId = hasLinkedValue(session.studioId) ? session.studioId
+        : hasLinkedValue(lesson.studioId) ? lesson.studioId : null;
+      if (!hasLinkedValue(effectiveStudioId)) return;
+
       const lessonName = String(lesson.name || "").trim();
       const instructorName = String(lesson.instructorName || "").trim();
       const track = String(lesson.track || "").trim();
@@ -511,7 +527,7 @@ function buildLessonStudioBookings(lessons = []) {
         lesson_id: lesson.id,
         lesson_auto: true,
         bookingKind: "lesson",
-        studioId: lesson.studioId,
+        studioId: effectiveStudioId,
         date: session.date,
         startTime: session.startTime,
         endTime: session.endTime,

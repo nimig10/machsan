@@ -17,6 +17,8 @@ function normalizeScheduleEntry(entry = {}) {
     startTime: entry?.startTime || "09:00",
     endTime: entry?.endTime || "12:00",
     topic: String(entry?.topic || "").trim(),
+    studioId: entry?.studioId || null,
+    kitId: entry?.kitId || null,
   };
 }
 
@@ -1148,12 +1150,12 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
         {schedule.length>0 && (
           <div style={{marginBottom:16}}>
             <div style={{fontWeight:700,fontSize:12,color:"#9b59b6",marginBottom:4}}>📅 {schedule.length} שיעורים בלוח:</div>
-            <div style={{display:"grid",gridTemplateColumns:"36px minmax(120px,1.1fr) 80px 80px minmax(160px,1.5fr) 28px",gap:6,fontSize:11,color:"var(--text-muted)",padding:"0 8px",marginBottom:2}}>
-              <div></div><div>תאריך</div><div>התחלה</div><div>סיום</div><div>נושא השיעור</div><div></div>
+            <div style={{display:"grid",gridTemplateColumns:"30px minmax(110px,1fr) 72px 72px minmax(120px,1.3fr) 85px 85px 28px",gap:5,fontSize:11,color:"var(--text-muted)",padding:"0 8px",marginBottom:2}}>
+              <div></div><div>תאריך</div><div>התחלה</div><div>סיום</div><div>נושא</div><div>🏫 כיתה</div><div>🎒 ערכה</div><div></div>
             </div>
             <div style={{maxHeight:300,overflow:"auto",display:"flex",flexDirection:"column",gap:2}}>
               {schedule.map((s,i)=>(
-                <div key={`${s.date}-${s.startTime}-${i}`} style={{display:"grid",gridTemplateColumns:"36px minmax(120px,1.1fr) 80px 80px minmax(160px,1.5fr) 28px",alignItems:"center",gap:6,fontSize:12,padding:"4px 8px",background:"var(--surface2)",borderRadius:6,border:"1px solid rgba(155,89,182,0.14)"}}>
+                <div key={`${s.date}-${s.startTime}-${i}`} style={{display:"grid",gridTemplateColumns:"30px minmax(110px,1fr) 72px 72px minmax(120px,1.3fr) 85px 85px 28px",alignItems:"center",gap:5,fontSize:12,padding:"4px 8px",background:"var(--surface2)",borderRadius:6,border:"1px solid rgba(155,89,182,0.14)"}}>
                   <div style={{fontWeight:800,color:"#9b59b6",fontSize:11}}>#{i+1}</div>
                   <input className="form-input" type="date" value={s.date} style={{padding:"3px 6px",fontSize:12,height:28}} onChange={e=>updateSessionField(i, "date", e.target.value)}/>
                   <select className="form-select" value={s.startTime} style={{padding:"3px 4px",fontSize:12,height:28}} onChange={e=>updateSessionField(i, "startTime", e.target.value)}>
@@ -1163,6 +1165,14 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
                     {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
                   </select>
                   <input className="form-input" placeholder="אופציונלי" value={s.topic||""} style={{padding:"3px 6px",fontSize:12,height:28}} onChange={e=>updateSessionField(i, "topic", e.target.value)}/>
+                  <select className="form-select" value={s.studioId||""} style={{padding:"3px 4px",fontSize:11,height:28}} title="כיתת לימוד למפגש זה (עוקף את הקורס)" onChange={e=>updateSessionField(i,"studioId",e.target.value||null)}>
+                    <option value="">כמו הקורס</option>
+                    {studios.filter(st=>st.isClassroom).map(st=><option key={st.id} value={st.id}>{st.name}</option>)}
+                  </select>
+                  <select className="form-select" value={s.kitId||""} style={{padding:"3px 4px",fontSize:11,height:28}} title="ערכת שיעור למפגש זה (עוקף את הקורס)" onChange={e=>updateSessionField(i,"kitId",e.target.value||null)}>
+                    <option value="">כמו הקורס</option>
+                    {lessonKits.map(k=><option key={k.id} value={k.id}>{k.name}</option>)}
+                  </select>
                   <button onClick={()=>setSchedule(prev=>prev.filter((_,j)=>j!==i))}
                     style={{background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:16,padding:0,lineHeight:1}} title="מחק מפגש">×</button>
                 </div>
