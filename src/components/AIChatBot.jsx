@@ -346,7 +346,7 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
       let result = null;
       let lastError = null;
 
-      for (const modelName of ['gemini-1.5-flash-8b', 'gemini-2.0-flash']) {
+      for (const modelName of ['gemini-1.5-flash-8b']) {
         const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
         const response = await fetchWithRetry(endpoint, {
           method: "POST",
