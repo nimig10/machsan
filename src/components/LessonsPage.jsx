@@ -1001,7 +1001,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
 
   // Resizable columns: [#, date, start, end, topic, studio, kit, ×]
   const [colWidths, setColWidths] = useState([30, 130, 72, 72, 180, 90, 90, 28]);
-  const resizingRef = React.useRef(null);
+  const resizingRef = useRef(null);
   const startColResize = (e, colIdx) => {
     e.preventDefault();
     resizingRef.current = { colIdx, startX: e.clientX, startWidth: colWidths[colIdx] };
