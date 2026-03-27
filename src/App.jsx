@@ -4904,87 +4904,108 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         <LessonKitForm initial={editTarget} onDone={()=>{setMode(null);setEditTarget(null);}}/>
       )}
 
-      {/* View lesson kit panel */}
-      {mode==="viewLesson"&&editTarget&&(()=>{
+      {/* Floating view kit panel (overlay) */}
+      {(mode==="viewLesson"||mode==="viewStudent")&&editTarget&&(()=>{
         const vKit = editTarget;
-        const vLinkedLessons = getLessonsLinkedToKit(vKit, lessons);
+        const isLessonKit = vKit.kitType==="lesson";
+        const vLinkedLessons = isLessonKit ? getLessonsLinkedToKit(vKit, lessons) : [];
         const vLinkedSchedule = vLinkedLessons.flatMap(getLessonScheduleEntries).sort(compareDateTimeParts);
         const vDisplaySchedule = vLinkedSchedule.length > 0 ? vLinkedSchedule : (vKit.schedule||[]);
         const vInstructorName = vKit.instructorName || vLinkedLessons[0]?.instructorName || "";
         const vInstructorEmail = vKit.instructorEmail || vLinkedLessons[0]?.instructorEmail || "";
         const vInstructorPhone = vKit.instructorPhone || vLinkedLessons[0]?.instructorPhone || "";
         return (
-          <div className="card" style={{marginBottom:20}}>
-            <div className="card-header">
-              <div className="card-title">🎬 {vKit.name}</div>
-              <div style={{display:"flex",gap:6}}>
-                <button className="btn btn-primary btn-sm" onClick={()=>{setMode("editLesson");}}>✏️ עריכה</button>
-                <button className="btn btn-secondary btn-sm" onClick={()=>{setMode(null);setEditTarget(null);}}>✕ סגור</button>
-              </div>
-            </div>
-
-            {/* Linked lessons */}
-            {vLinkedLessons.length > 0 && (
-              <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:"var(--r)",padding:14,marginBottom:14}}>
-                <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:8}}>📚 קורסים משויכים</div>
-                {vLinkedLessons.map(lesson => (
-                  <div key={lesson.id||lesson.name} style={{marginBottom:4}}>
-                    <span style={{fontWeight:700,fontSize:13}}>📖 {lesson.name}</span>
-                    {lesson.instructorName && <span style={{fontSize:12,color:"var(--text2)",marginRight:8}}>· 👨‍🏫 {lesson.instructorName}</span>}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Instructor info */}
-            {vInstructorName && (
-              <div style={{background:"rgba(52,152,219,0.06)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:14}}>
-                <div style={{fontWeight:700,fontSize:13,color:"#3498db",marginBottom:4}}>👨‍🏫 מרצה</div>
-                <div style={{fontSize:13}}>{vInstructorName}{vInstructorPhone?` · 📞 ${vInstructorPhone}`:""}{vInstructorEmail?` · ✉️ ${vInstructorEmail}`:""}</div>
-              </div>
-            )}
-
-            {/* Equipment list */}
-            <div style={{marginBottom:14}}>
-              <div style={{fontWeight:800,fontSize:13,color:"var(--accent)",marginBottom:8}}>🎒 ציוד בערכה · {(vKit.items||[]).length} סוגים · {(vKit.items||[]).reduce((s,i)=>s+i.quantity,0)} יחידות</div>
-              <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                {(vKit.items||[]).map((item,j)=>{
-                  const eq=equipment.find(e=>e.id==item.equipment_id);
-                  return (
-                    <div key={j} style={{display:"flex",alignItems:"center",gap:8,background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"6px 12px"}}>
-                      <span style={{fontSize:18}}>{eq?.image&&(eq.image.startsWith("data:")||eq.image.startsWith("http"))?<img src={eq.image} alt="" style={{width:22,height:22,objectFit:"cover",borderRadius:4}}/>:(eq?.image||"📦")}</span>
-                      <span style={{flex:1,fontSize:13,fontWeight:600}}>{eq?.name||item.name||"פריט"}</span>
-                      <span style={{fontSize:13,fontWeight:700,color:"var(--accent)"}}>×{item.quantity}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Schedule */}
-            {vDisplaySchedule.length > 0 && (
-              <div style={{marginBottom:14}}>
-                <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:8}}>📅 {vDisplaySchedule.length} מפגשים</div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                  {vDisplaySchedule.map((s,i)=>(
-                    <span key={i} style={{background:"rgba(155,89,182,0.1)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:12,padding:"3px 10px",fontSize:12,color:"#9b59b6",fontWeight:600}}>
-                      {formatDate(s.date)} {s.startTime||""}–{s.endTime||""}
-                    </span>
-                  ))}
+          <div onClick={()=>{setMode(null);setEditTarget(null);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+            <div onClick={e=>e.stopPropagation()} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"20px 24px",maxWidth:520,width:"100%",maxHeight:"85vh",overflowY:"auto",boxShadow:"0 12px 40px rgba(0,0,0,0.5)"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+                <div style={{fontWeight:900,fontSize:17}}>{isLessonKit?"🎬":"🎒"} {vKit.name}</div>
+                <div style={{display:"flex",gap:6}}>
+                  <button className="btn btn-primary btn-sm" onClick={()=>{setMode(isLessonKit?"editLesson":"editStudent");}}>✏️ עריכה</button>
+                  <button className="btn btn-secondary btn-sm" onClick={()=>{setMode(null);setEditTarget(null);}}>✕</button>
                 </div>
               </div>
-            )}
+
+              {/* Loan type for student kits */}
+              {!isLessonKit && vKit.loanType && (
+                <div style={{marginBottom:12}}>
+                  <span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"3px 10px",color:"var(--accent)",fontWeight:700,fontSize:12}}>{LOAN_ICONS[vKit.loanType]||"📦"} {vKit.loanType}</span>
+                </div>
+              )}
+
+              {/* Linked lessons */}
+              {vLinkedLessons.length > 0 && (
+                <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:"var(--r)",padding:12,marginBottom:12}}>
+                  <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:6}}>📚 קורסים משויכים</div>
+                  {vLinkedLessons.map(lesson => (
+                    <div key={lesson.id||lesson.name} style={{marginBottom:4}}>
+                      <span style={{fontWeight:700,fontSize:13}}>📖 {lesson.name}</span>
+                      {lesson.instructorName && <span style={{fontSize:12,color:"var(--text2)",marginRight:8}}>· 👨‍🏫 {lesson.instructorName}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Instructor info */}
+              {vInstructorName && (
+                <div style={{background:"rgba(52,152,219,0.06)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",padding:"8px 12px",marginBottom:12}}>
+                  <div style={{fontSize:13}}><span style={{fontWeight:700,color:"#3498db"}}>👨‍🏫</span> {vInstructorName}{vInstructorPhone?` · 📞 ${vInstructorPhone}`:""}{vInstructorEmail?` · ✉️ ${vInstructorEmail}`:""}</div>
+                </div>
+              )}
+
+              {/* Description */}
+              {vKit.description && (
+                <div style={{fontSize:13,color:"var(--text2)",marginBottom:12,padding:"6px 0",borderBottom:"1px solid var(--border)"}}>{vKit.description}</div>
+              )}
+
+              {/* Equipment list */}
+              <div style={{marginBottom:12}}>
+                <div style={{fontWeight:800,fontSize:13,color:"var(--accent)",marginBottom:8}}>🎒 ציוד · {(vKit.items||[]).length} סוגים · {(vKit.items||[]).reduce((s,i)=>s+i.quantity,0)} יחידות</div>
+                <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                  {(vKit.items||[]).map((item,j)=>{
+                    const eq=equipment.find(e=>e.id==item.equipment_id);
+                    return (
+                      <div key={j} style={{display:"flex",alignItems:"center",gap:8,background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"5px 10px"}}>
+                        <span style={{fontSize:16}}>{eq?.image&&(eq.image.startsWith("data:")||eq.image.startsWith("http"))?<img src={eq.image} alt="" style={{width:20,height:20,objectFit:"cover",borderRadius:4}}/>:(eq?.image||"📦")}</span>
+                        <span style={{flex:1,fontSize:13,fontWeight:600}}>{eq?.name||item.name||"פריט"}</span>
+                        <span style={{fontSize:13,fontWeight:700,color:"var(--accent)"}}>×{item.quantity}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Schedule */}
+              {vDisplaySchedule.length > 0 && (
+                <div>
+                  <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:8}}>📅 {vDisplaySchedule.length} מפגשים</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                    {vDisplaySchedule.map((s,i)=>(
+                      <span key={i} style={{background:"rgba(155,89,182,0.1)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:12,padding:"3px 10px",fontSize:12,color:"#9b59b6",fontWeight:600}}>
+                        {formatDate(s.date)} {s.startTime||""}–{s.endTime||""}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         );
       })()}
 
       {/* Student kits list */}
       {mode===null&&(
-        studentKits.length===0
+        <>
+        <div style={{fontWeight:900,fontSize:14,margin:"0 0 10px",color:"var(--accent)",display:"flex",alignItems:"center",gap:8}}>
+          🎒 ערכות סטודנטים
+          {studentKits.length>0&&<span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"1px 10px",fontSize:12,fontWeight:700,color:"var(--accent)"}}>{studentKits.length}</span>}
+        </div>
+        {studentKits.length===0
           ? <div className="empty-state"><div className="emoji">🎒</div><p>אין ערכות לסטודנטים</p><p style={{fontSize:13,color:"var(--text3)"}}>ערכות מוצגות בטופס ההשאלה</p></div>
           : <div style={{display:"flex",flexDirection:"column",gap:10}}>
             {studentKits.map(kit=>(
-              <div key={kit.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 18px"}}>
+              <div key={kit.id} onClick={()=>{setEditTarget(kit);setMode("viewStudent");}} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 18px",cursor:"pointer",transition:"border-color 0.15s"}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor="var(--accent)"}
+                onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
                   <div style={{display:"flex",alignItems:"center",gap:10}}>
                     <span style={{fontSize:28}}>🎒</span>
@@ -4997,7 +5018,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                       </div>
                     </div>
                   </div>
-                  <div style={{display:"flex",gap:6}}>
+                  <div style={{display:"flex",gap:6}} onClick={e=>e.stopPropagation()}>
                     <button className="btn btn-secondary btn-sm" onClick={()=>{setEditTarget(kit);setMode("editStudent");}}>✏️ ערוך</button>
                     <button className="btn btn-danger btn-sm" onClick={()=>del(kit.id,kit.name)}>🗑️</button>
                   </div>
@@ -5013,7 +5034,8 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                 </div>
               </div>
             ))}
-          </div>
+          </div>}
+        </>
       )}
 
       {/* Lesson kits list */}
