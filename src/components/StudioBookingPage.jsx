@@ -126,6 +126,8 @@ export default function StudioBookingPage(props) {
   const siteSettings = Object.keys(siteSettingsProp || {}).length ? siteSettingsProp : localSiteSettings;
   const setSiteSettings = setSiteSettingsProp ?? setLocalSiteSettings;
 
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth < 769);
+  const [mobileDayStart, setMobileDayStart] = useState(0);
   const [weekOffset, setWeekOffset] = useState(0);
   const [calendarFullscreen, setCalendarFullscreen] = useState(false);
   const [todayOnly, setTodayOnly] = useState(false);
@@ -144,8 +146,25 @@ export default function StudioBookingPage(props) {
   const [formTeamMember, setFormTeamMember] = useState("");
   const [cancelMessage, setCancelMessage] = useState("");
 
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 769);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+
+  // When week changes, reset mobile day window to start on today (or Sunday)
+  useEffect(() => {
+    const days = getWeekDays(weekOffset);
+    const todayIdx = days.findIndex(d => d.isToday);
+    setMobileDayStart(todayIdx >= 0 ? Math.max(0, Math.min(4, todayIdx - 1)) : 0);
+  }, [weekOffset]);
+
   const todayStr = getTodayStr();
   const weekDays = getWeekDays(weekOffset);
+  const MOBILE_DAYS = 3;
+  const visibleDays = isMobile && !calendarFullscreen
+    ? weekDays.slice(mobileDayStart, mobileDayStart + MOBILE_DAYS)
+    : weekDays;
   const studioFutureHoursLimit = getStudioFutureHoursLimit(siteSettings);
 
   const saveStudios = useCallback(async (nextStudios) => {
@@ -699,23 +718,24 @@ export default function StudioBookingPage(props) {
             <div style={{ fontSize:22, fontWeight:900, color:"var(--accent)" }}>{weekMonthLabel}</div>
           </div>
 
-          <div style={{ display:"flex", gap:20, marginBottom:20, flexWrap:"wrap", alignItems:"flex-start" }}>
-            <div style={{ minWidth:220, maxWidth:260, background:"var(--surface2)", borderRadius:"var(--r)", border:"1px solid var(--border)", padding:12 }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-                <button onClick={() => setMiniMonth((current) => current.month === 0 ? { year:current.year - 1, month:11 } : { year:current.year, month:current.month - 1 })} style={{ background:"none", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:16, padding:"2px 6px" }}>→</button>
-                <span style={{ fontWeight:800, fontSize:14, color:"var(--text)" }}>{HE_MONTHS[miniMonth.month]} {miniMonth.year}</span>
-                <button onClick={() => setMiniMonth((current) => current.month === 11 ? { year:current.year + 1, month:0 } : { year:current.year, month:current.month + 1 })} style={{ background:"none", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:16, padding:"2px 6px" }}>←</button>
+          {!isMobile && (
+            <div style={{ display:"flex", gap:20, marginBottom:20, flexWrap:"wrap", alignItems:"flex-start" }}>
+              <div style={{ minWidth:220, maxWidth:260, background:"var(--surface2)", borderRadius:"var(--r)", border:"1px solid var(--border)", padding:12 }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+                  <button onClick={() => setMiniMonth((current) => current.month === 0 ? { year:current.year - 1, month:11 } : { year:current.year, month:current.month - 1 })} style={{ background:"none", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:16, padding:"2px 6px" }}>→</button>
+                  <span style={{ fontWeight:800, fontSize:14, color:"var(--text)" }}>{HE_MONTHS[miniMonth.month]} {miniMonth.year}</span>
+                  <button onClick={() => setMiniMonth((current) => current.month === 11 ? { year:current.year + 1, month:0 } : { year:current.year, month:current.month + 1 })} style={{ background:"none", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:16, padding:"2px 6px" }}>←</button>
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:1, textAlign:"center" }}>
+                  {HE_DAYS_SHORT.map((day) => <div key={day} style={{ fontSize:10, fontWeight:700, color:"var(--text3)", padding:"4px 0" }}>{day}</div>)}
+                  {miniDays.map((day, index) => (
+                    <div key={index} onClick={() => day && jumpToDate(day)} style={{ fontSize:12, fontWeight:isInCurrentWeek(day) ? 800 : 500, padding:"5px 0", cursor:day ? "pointer" : "default", borderRadius:"50%", background:isTodayMini(day) ? "var(--accent)" : isInCurrentWeek(day) ? "rgba(245,166,35,0.15)" : "transparent", color:isTodayMini(day) ? "#000" : isInCurrentWeek(day) ? "var(--accent)" : day ? "var(--text)" : "transparent" }}>{day || ""}</div>
+                  ))}
+                </div>
+                <button onClick={() => { setWeekOffset(0); const now = new Date(); setMiniMonth({ year:now.getFullYear(), month:now.getMonth() }); }} style={{ width:"100%", marginTop:8, padding:"6px 0", borderRadius:6, border:"1px solid var(--accent)", background:"transparent", color:"var(--accent)", fontWeight:700, fontSize:12, cursor:"pointer" }}>📅 היום</button>
               </div>
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:1, textAlign:"center" }}>
-                {HE_DAYS_SHORT.map((day) => <div key={day} style={{ fontSize:10, fontWeight:700, color:"var(--text3)", padding:"4px 0" }}>{day}</div>)}
-                {miniDays.map((day, index) => (
-                  <div key={index} onClick={() => day && jumpToDate(day)} style={{ fontSize:12, fontWeight:isInCurrentWeek(day) ? 800 : 500, padding:"5px 0", cursor:day ? "pointer" : "default", borderRadius:"50%", background:isTodayMini(day) ? "var(--accent)" : isInCurrentWeek(day) ? "rgba(245,166,35,0.15)" : "transparent", color:isTodayMini(day) ? "#000" : isInCurrentWeek(day) ? "var(--accent)" : day ? "var(--text)" : "transparent" }}>{day || ""}</div>
-                ))}
-              </div>
-              <button onClick={() => { setWeekOffset(0); const now = new Date(); setMiniMonth({ year:now.getFullYear(), month:now.getMonth() }); }} style={{ width:"100%", marginTop:8, padding:"6px 0", borderRadius:6, border:"1px solid var(--accent)", background:"transparent", color:"var(--accent)", fontWeight:700, fontSize:12, cursor:"pointer" }}>📅 היום</button>
             </div>
-
-          </div>
+          )}
 
           {studios.length === 0 ? (
             <div style={{ textAlign:"center", padding:48, color:"var(--text3)" }}>
@@ -727,20 +747,34 @@ export default function StudioBookingPage(props) {
             {calendarFullscreen && <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:8999 }} onClick={() => setCalendarFullscreen(false)} />}
             <div style={calendarFullscreen ? { position:"fixed", inset:8, zIndex:9000, background:"var(--bg)", borderRadius:16, border:"1px solid var(--border)", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 20px 60px rgba(0,0,0,0.6)" } : {}}>
             <div style={{ padding:"6px 12px", background:"var(--surface)", border:"1px solid var(--border)", borderRadius: calendarFullscreen ? "16px 16px 0 0" : "8px 8px 0 0", display:"flex", justifyContent:"center", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-              <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current - 1)}>→ שבוע קודם</button>
-              <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(0)}>היום</button>
-              <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current + 1)}>← שבוע הבא</button>
-              <span style={{ fontSize:12, color:"var(--text3)" }}>
-                {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth() + 1).padStart(2, "0")} – {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth() + 1).padStart(2, "0")}
-              </span>
-              <button className="btn btn-secondary btn-sm" onClick={() => setCalendarFullscreen(f => !f)} title={calendarFullscreen ? "סגור מסך מלא" : "פתח מסך מלא"} style={{ marginInlineStart:"auto" }}>{calendarFullscreen ? "✕ סגור" : "⛶ מסך מלא"}</button>
+              {isMobile && !calendarFullscreen ? (
+                <>
+                  <button className="btn btn-secondary btn-sm" onClick={() => { if (mobileDayStart > 0) setMobileDayStart(s => s - MOBILE_DAYS); else setWeekOffset(w => w - 1); }}>→</button>
+                  <span style={{ fontSize:13, fontWeight:800, color:"var(--text)", flex:1, textAlign:"center" }}>
+                    {visibleDays[0]?.name} {visibleDays[0]?.date} — {visibleDays[visibleDays.length-1]?.name} {visibleDays[visibleDays.length-1]?.date}
+                  </span>
+                  <button className="btn btn-secondary btn-sm" onClick={() => { if (mobileDayStart + MOBILE_DAYS < 7) setMobileDayStart(s => s + MOBILE_DAYS); else setWeekOffset(w => w + 1); }}>←</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => { setWeekOffset(0); }} style={{ fontSize:11 }}>היום</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setCalendarFullscreen(true)} style={{ fontSize:11 }}>⛶</button>
+                </>
+              ) : (
+                <>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current - 1)}>→ שבוע קודם</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(0)}>היום</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current + 1)}>← שבוע הבא</button>
+                  <span style={{ fontSize:12, color:"var(--text3)" }}>
+                    {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth() + 1).padStart(2, "0")} – {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth() + 1).padStart(2, "0")}
+                  </span>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setCalendarFullscreen(f => !f)} title={calendarFullscreen ? "סגור מסך מלא" : "פתח מסך מלא"} style={{ marginInlineStart:"auto" }}>{calendarFullscreen ? "✕ סגור" : "⛶ מסך מלא"}</button>
+                </>
+              )}
             </div>
-            <div style={{ overflowX:"auto", flex: calendarFullscreen ? 1 : undefined }}>
-              <table style={{ width:"100%", minWidth:700, borderCollapse:"collapse", tableLayout:"fixed" }}>
+            <div className="no-swipe-nav" style={{ overflowX:"auto", flex: calendarFullscreen ? 1 : undefined }}>
+              <table style={{ width:"100%", minWidth: isMobile && !calendarFullscreen ? 260 : 700, borderCollapse:"collapse", tableLayout:"fixed" }}>
                 <thead>
                   <tr>
-                    <th style={{ ...thStyle, width:130 }}>אולפן</th>
-                    {weekDays.map((day) => (
+                    <th style={{ ...thStyle, width: isMobile && !calendarFullscreen ? 64 : 130 }}>אולפן</th>
+                    {visibleDays.map((day) => (
                       <th key={day.fullDate} style={{ ...thStyle, background:day.isToday ? "rgba(245,166,35,0.15)" : "var(--surface2)" }}>
                         <div style={{ fontWeight:700 }}>{day.name}</div>
                         <div style={{ fontSize:11, color:day.isToday ? "var(--accent)" : "var(--text3)" }}>{day.date}/{String(new Date(day.fullDate).getMonth() + 1).padStart(2, "0")}</div>
@@ -753,22 +787,22 @@ export default function StudioBookingPage(props) {
                     <tr key={studio.id}>
                       <td style={{ ...tdStyle, background:"var(--surface2)", verticalAlign:"middle", padding:"6px 4px" }}>
                         <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
-                          <StudioImg studio={studio} size={28} />
-                          <span style={{ fontSize:11, fontWeight:800, lineHeight:1.2, wordBreak:"break-word", textAlign:"center" }}>{studio.name}</span>
-                          {(() => {
+                          <StudioImg studio={studio} size={isMobile && !calendarFullscreen ? 22 : 28} />
+                          <span style={{ fontSize: isMobile && !calendarFullscreen ? 9 : 11, fontWeight:800, lineHeight:1.2, wordBreak:"break-word", textAlign:"center" }}>{studio.name}</span>
+                          {!isMobile && (() => {
                             const certNames = getStudioCertNames(studio);
                             return certNames.length ? <span style={{ fontSize:9, color:"var(--accent)", lineHeight:1.2, wordBreak:"break-word", textAlign:"center" }}>🎓 {certNames.join(", ")}</span> : null;
                           })()}
                           {studio.isClassroom && <div style={{ fontSize:9, color:"#3498db", fontWeight:800 }}>🏫 כיתה</div>}
-                          {studio.classroomOnly && <div style={{ fontSize:9, color:"#fff", fontWeight:800, background:"#3498db", borderRadius:4, padding:"1px 5px" }}>🔒 כיתה בלבד</div>}
-                          {isStudioDisabled(studio) && <div style={{ fontSize:9, color:"var(--red)", fontWeight:800 }}>🔧 מושבת</div>}
+                          {studio.classroomOnly && <div style={{ fontSize:9, color:"#fff", fontWeight:800, background:"#3498db", borderRadius:4, padding:"1px 5px" }}>🔒</div>}
+                          {isStudioDisabled(studio) && <div style={{ fontSize:9, color:"var(--red)", fontWeight:800 }}>🔧</div>}
                         </div>
                       </td>
                       {isStudioDisabled(studio) ? (
-                        <td colSpan={weekDays.length} style={{ ...tdStyle, background:"rgba(231,76,60,0.08)", color:"var(--red)", fontWeight:800, textAlign:"center", padding:"14px 18px" }}>
+                        <td colSpan={visibleDays.length} style={{ ...tdStyle, background:"rgba(231,76,60,0.08)", color:"var(--red)", fontWeight:800, textAlign:"center", padding:"14px 18px" }}>
                           {STUDIO_MAINTENANCE_MESSAGE}
                         </td>
-                      ) : weekDays.map((day) => {
+                      ) : visibleDays.map((day) => {
                         const dayBookings = cellBookings(studio.id, day.fullDate);
                         return (
                           <td key={day.fullDate} style={{ ...tdStyle, verticalAlign:"top", cursor:"pointer", minHeight:70, background:day.isToday ? "rgba(245,166,35,0.05)" : undefined }} onClick={() => openAddBookingModal(studio.id, studio.name, day.fullDate, day.name)}>
@@ -776,10 +810,10 @@ export default function StudioBookingPage(props) {
                               const color = getBookingColor(booking);
                               const subtitle = getBookingSubtitle(booking);
                               return (
-                                <div key={booking.id} style={{ background:`${color}20`, border:`1.5px solid ${color}`, borderRadius:6, padding:"5px 7px", marginBottom:4, fontSize:12, cursor:"pointer", wordBreak:"break-word", whiteSpace:"normal", textAlign:"right" }} onClick={(event) => { event.stopPropagation(); openViewBookingModal(booking, studio.name); }}>
-                                  <div style={{ fontWeight:900, color, fontSize:12 }}>{getBookingTimeLabel(booking)}</div>
-                                  <div style={{ color:"var(--text)", fontWeight:800, fontSize:12, lineHeight:1.35 }}>{getBookingTitle(booking)}</div>
-                                  {booking.instructorName && <div style={{ color:"var(--text2)", fontSize:11, fontWeight:600, lineHeight:1.3, marginTop:2 }}>👨‍🏫 {booking.instructorName}</div>}
+                                <div key={booking.id} style={{ background:`${color}20`, border:`1.5px solid ${color}`, borderRadius:6, padding: isMobile && !calendarFullscreen ? "3px 4px" : "5px 7px", marginBottom:4, fontSize: isMobile && !calendarFullscreen ? 10 : 12, cursor:"pointer", wordBreak:"break-word", whiteSpace:"normal", textAlign:"right" }} onClick={(event) => { event.stopPropagation(); openViewBookingModal(booking, studio.name); }}>
+                                  <div style={{ fontWeight:900, color, fontSize: isMobile && !calendarFullscreen ? 10 : 12 }}>{getBookingTimeLabel(booking)}</div>
+                                  <div style={{ color:"var(--text)", fontWeight:800, fontSize: isMobile && !calendarFullscreen ? 10 : 12, lineHeight:1.35 }}>{getBookingTitle(booking)}</div>
+                                  {!isMobile && booking.instructorName && <div style={{ color:"var(--text2)", fontSize:11, fontWeight:600, lineHeight:1.3, marginTop:2 }}>👨‍🏫 {booking.instructorName}</div>}
                                 </div>
                               );
                             })}

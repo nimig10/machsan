@@ -853,10 +853,11 @@ const css = `
   @media (max-width:768px) {
     .sidebar { position:fixed; bottom:0; top:auto; right:0; left:0; width:100%; flex-direction:row; height:60px; border-left:none; border-top:1px solid var(--border); z-index:200; }
     .sidebar-logo { display:none; }
-    .nav { display:flex; flex-direction:row; padding:0; flex:1; overflow-x:auto; }
+    .nav { display:flex; flex-direction:row; padding:0; flex:1; overflow-x:auto; scroll-behavior:smooth; scrollbar-width:none; }
+    .nav::-webkit-scrollbar { display:none; }
     .nav-section { display:none; }
-    .nav-item { flex:1; min-width:48px; flex-direction:column; gap:1px; padding:5px 2px; font-size:9px; border-right:none; border-top:3px solid transparent; justify-content:center; text-align:center; margin:0; }
-    .nav-label { display:none; }
+    .nav-item { flex:0 0 auto; min-width:54px; max-width:72px; flex-direction:column; gap:1px; padding:4px 2px; font-size:9px; border-right:none; border-top:3px solid transparent; justify-content:center; text-align:center; margin:0; }
+    .nav-label { display:block; font-size:8px; line-height:1.1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:0 2px; color:var(--text3); }
     .nav-item.active { border-right-color:transparent; border-top-color:var(--accent); background:var(--accent-glow); }
     .nav-item .icon { font-size:18px; width:auto; }
     .sidebar > div:last-child { display:none; }
@@ -7362,6 +7363,8 @@ export default function App() {
     const dy = e.changedTouches[0].clientY - swipeTouchRef.current.y;
     swipeTouchRef.current = null;
     if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
+    // Don't navigate if the touch started inside a no-swipe-nav element
+    if (e.target?.closest?.('.no-swipe-nav')) return;
     const idx = ADMIN_NAV_PAGES.indexOf(page);
     if (idx === -1) return;
     if (dx < 0 && idx < ADMIN_NAV_PAGES.length - 1) setPage(ADMIN_NAV_PAGES[idx + 1]);
@@ -7422,14 +7425,14 @@ export default function App() {
             <div className="nav">
               <div className="nav-section">ניהול</div>
               {[
-                {id:"studios",icon:"🎙️",label:"אולפנים"},
                 {id:"reservations",icon:"📋",label:"בקשות",badge:(pending||0)+(rejected||0)||null},
-                {id:"equipment",icon:"📦",label:"ציוד מחסן",badge:damagedCount||null},
-                {id:"students",icon:"👨‍🎓",label:"סטודנטים"},
+                {id:"equipment",icon:"📦",label:"ציוד",badge:damagedCount||null},
                 {id:"certifications",icon:"🎓",label:"הסמכות"},
+                {id:"studios",icon:"🎙️",label:"אולפנים"},
                 {id:"lessons",icon:"📽️",label:"שיעורים",badge:lessons.length||null},
                 {id:"kits",icon:"🎒",label:"ערכות"},
                 {id:"team",icon:"👥",label:"צוות"},
+                {id:"students",icon:"👨‍🎓",label:"סטודנטים"},
                 {id:"policies",icon:"📋",label:"נהלים"},
                 {id:"settings",icon:"⚙️",label:"הגדרות"},
               ].map(n=>(
