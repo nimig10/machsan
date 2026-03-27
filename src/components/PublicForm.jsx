@@ -1726,8 +1726,10 @@ ${inventory}
     const dy = e.changedTouches[0].clientY - swipeTouchRef.current.y;
     swipeTouchRef.current = null;
     if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
-    if (dx < 0) goToStep(Math.min(step + 1, 4));
-    else goToStep(Math.max(step - 1, 1));
+    const VIEWS = ["equipment", "studios", "daily"];
+    const idx = VIEWS.indexOf(publicView);
+    if (dx < 0 && idx < VIEWS.length - 1) setPublicView(VIEWS[idx + 1]);
+    else if (dx > 0 && idx > 0) setPublicView(VIEWS[idx - 1]);
   };
 
   if(emailError) return (
