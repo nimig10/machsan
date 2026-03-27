@@ -517,11 +517,13 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
                 const tType = tObj?.trackType||"";
                 const tLabel = tType==="sound"?"🎧 סאונד":tType==="cinema"?"🎬 קולנוע":null;
                 return (
-                  <div key={setting.name} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:20,border:"1px solid var(--border)",background:"var(--surface3)"}}>
+                  <div key={setting.name} onClick={()=>openTrackEditor(setting.name)}
+                    style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:20,border:"1px solid var(--border)",background:"var(--surface3)",cursor:"pointer",transition:"border-color 0.15s"}}
+                    onMouseEnter={e=>e.currentTarget.style.borderColor="var(--accent)"}
+                    onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
                     <span style={{fontSize:12,fontWeight:700,color:"var(--text2)"}}>🎓 {setting.name}</span>
                     {tLabel && <span style={{fontSize:11,fontWeight:700,color:"var(--accent)",background:"rgba(99,102,241,0.12)",borderRadius:10,padding:"1px 7px"}}>{tLabel}</span>}
-                    <button className="btn btn-secondary btn-sm" onClick={()=>openTrackEditor(setting.name)}>✏️</button>
-                    <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>deleteTrack(setting.name)}>🗑️</button>
+                    <span style={{fontSize:11,color:"var(--text3)"}}>✏️</span>
                   </div>
                 );
               })}
@@ -545,7 +547,6 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
                   <th style={thS}>אימייל</th>
                   <th style={thS}>טלפון</th>
                   <th style={thS}>מסלול לימודים</th>
-                  <th style={{...thS,textAlign:"center",width:90}}>פעולות</th>
                 </tr>
               </thead>
               <tbody>
@@ -554,10 +555,12 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
                   filteredStudents.forEach((s,i)=>{
                     const t=s.track||"";
                     if(t!==lastTrack){
-                      rows.push(<tr key={`grp_${i}`}><td colSpan={5} style={{background:"rgba(245,166,35,0.06)",padding:"5px 14px",fontWeight:800,fontSize:11,color:"var(--accent)",borderBottom:"1px solid var(--border)",letterSpacing:0.5}}>{t?"🎓 "+t:"📋 ללא מסלול"}</td></tr>);
+                      rows.push(<tr key={`grp_${i}`}><td colSpan={4} style={{background:"rgba(245,166,35,0.06)",padding:"5px 14px",fontWeight:800,fontSize:11,color:"var(--accent)",borderBottom:"1px solid var(--border)",letterSpacing:0.5}}>{t?"🎓 "+t:"📋 ללא מסלול"}</td></tr>);
                       lastTrack=t;
                     }
-                    rows.push(<tr key={s.id} style={{borderBottom:"1px solid var(--border)",background:i%2===0?"var(--surface)":"var(--surface2)"}}>
+                    rows.push(<tr key={s.id} onClick={()=>{setEditStudent(s);setEditForm({name:s.name,email:s.email,phone:s.phone||"",track:s.track||""}); }} style={{borderBottom:"1px solid var(--border)",background:i%2===0?"var(--surface)":"var(--surface2)",cursor:"pointer"}}
+                      onMouseEnter={e=>e.currentTarget.style.background="rgba(245,166,35,0.05)"}
+                      onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"var(--surface)":"var(--surface2)"}>
                       <td style={tdS}><div style={{fontWeight:700,fontSize:14}}>{s.name}</div></td>
                       <td style={{...tdS,fontSize:12,color:"var(--text3)"}}>{s.email}</td>
                       <td style={{...tdS,fontSize:12,color:"var(--text3)"}}>{s.phone||"—"}</td>
@@ -565,12 +568,6 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
                         {s.track
                           ? <span style={{background:"rgba(245,166,35,0.1)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:20,padding:"3px 10px",fontSize:11,color:"var(--accent)",fontWeight:700}}>🎓 {s.track}</span>
                           : <span style={{fontSize:11,color:"var(--text3)"}}>—</span>}
-                      </td>
-                      <td style={{...tdS,textAlign:"center"}}>
-                        <div style={{display:"flex",gap:4,justifyContent:"center"}}>
-                          <button className="btn btn-secondary btn-sm" onClick={()=>{setEditStudent(s);setEditForm({name:s.name,email:s.email,phone:s.phone||"",track:s.track||""});}}>✏️</button>
-                          <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>deleteStudent(s.id)}>🗑️</button>
-                        </div>
                       </td>
                     </tr>);
                   });
@@ -583,19 +580,15 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
           {/* Mobile — cards */}
           <div className="cert-mobile" style={{flexDirection:"column",gap:10}}>
             {filteredStudents.map(s=>(
-              <div key={s.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 16px"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                  <div>
-                    <div style={{fontWeight:800,fontSize:15}}>{s.name}</div>
-                    {s.track&&<div style={{fontSize:11,color:"var(--accent)",fontWeight:700}}>🎓 {s.track}</div>}
-                    <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{s.email}</div>
-                    {s.phone&&<div style={{fontSize:11,color:"var(--text3)"}}>{s.phone}</div>}
-                  </div>
-                  <div style={{display:"flex",gap:6}}>
-                    <button className="btn btn-secondary btn-sm" onClick={()=>{setEditStudent(s);setEditForm({name:s.name,email:s.email,phone:s.phone||"",track:s.track||""});}}>✏️</button>
-                    <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>deleteStudent(s.id)}>🗑️</button>
-                  </div>
+              <div key={s.id} onClick={()=>{setEditStudent(s);setEditForm({name:s.name,email:s.email,phone:s.phone||"",track:s.track||""}); }}
+                style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 16px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontWeight:800,fontSize:15}}>{s.name}</div>
+                  {s.track&&<div style={{fontSize:11,color:"var(--accent)",fontWeight:700}}>🎓 {s.track}</div>}
+                  <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{s.email}</div>
+                  {s.phone&&<div style={{fontSize:11,color:"var(--text3)"}}>{s.phone}</div>}
                 </div>
+                <span style={{fontSize:18,color:"var(--text3)"}}>›</span>
               </div>
             ))}
           </div>
@@ -626,11 +619,18 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
                   {trackSettings.map(s=><option key={s.name} value={s.name}>{s.name}</option>)}
                 </select>
               </div>
-              <div style={{display:"flex",gap:8,marginTop:16}}>
-                <button className="btn btn-primary" disabled={!editForm.name.trim()||!editForm.email.trim()||saving} onClick={saveEdit}>
-                  {saving?"⏳ שומר...":"💾 שמור שינויים"}
+              <div style={{display:"flex",gap:8,marginTop:16,justifyContent:"space-between",flexWrap:"wrap"}}>
+                <div style={{display:"flex",gap:8}}>
+                  <button className="btn btn-primary" disabled={!editForm.name.trim()||!editForm.email.trim()||saving} onClick={saveEdit}>
+                    {saving?"⏳ שומר...":"💾 שמור שינויים"}
+                  </button>
+                  <button className="btn btn-secondary" onClick={()=>setEditStudent(null)}>ביטול</button>
+                </div>
+                <button className="btn btn-secondary" style={{color:"var(--red)",borderColor:"var(--red)"}}
+                  disabled={saving}
+                  onClick={async()=>{ if(confirm(`למחוק את ${editStudent.name}?`)){await deleteStudent(editStudent.id);setEditStudent(null);} }}>
+                  🗑️ מחק סטודנט
                 </button>
-                <button className="btn btn-secondary" onClick={()=>setEditStudent(null)}>ביטול</button>
               </div>
             </div>
           </div>
@@ -641,14 +641,20 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
           title="✏️ עריכת מסלול לימודים"
           onClose={()=>{ setEditTrack(null); setEditTrackName(""); setEditTrackType(""); }}
           footer={(
-            <>
-              <button className="btn btn-primary" onClick={saveTrackEdit} disabled={!editTrackName.trim() || saving}>
-                {saving ? "⏳ שומר..." : "💾 שמור"}
+            <div style={{display:"flex",justifyContent:"space-between",width:"100%",flexWrap:"wrap",gap:8}}>
+              <div style={{display:"flex",gap:8}}>
+                <button className="btn btn-primary" onClick={saveTrackEdit} disabled={!editTrackName.trim() || saving}>
+                  {saving ? "⏳ שומר..." : "💾 שמור"}
+                </button>
+                <button className="btn btn-secondary" onClick={()=>{ setEditTrack(null); setEditTrackName(""); setEditTrackType(""); }}>
+                  ביטול
+                </button>
+              </div>
+              <button className="btn btn-secondary" style={{color:"var(--red)",borderColor:"var(--red)"}} disabled={saving}
+                onClick={async()=>{ if(confirm(`למחוק את המסלול "${editTrack}"?`)){await deleteTrack(editTrack);setEditTrack(null);setEditTrackName("");setEditTrackType("");} }}>
+                🗑️ מחק מסלול
               </button>
-              <button className="btn btn-secondary" onClick={()=>{ setEditTrack(null); setEditTrackName(""); setEditTrackType(""); }}>
-                ביטול
-              </button>
-            </>
+            </div>
           )}
         >
           <div className="form-group">
