@@ -4417,10 +4417,6 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         }
       }
 
-      if(finalSchedule.length===0) {
-        setLocalMsg({type:"error",text:"יש להוסיף לפחות שיעור אחד — בחר תאריך ושעות"});
-        return;
-      }
       if(!kitItems.length) {
         setLocalMsg({type:"error",text:"יש לבחור לפחות פריט ציוד אחד לערכה"});
         return;
@@ -4429,6 +4425,35 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       // ── Availability check: ensure no item goes to negative inventory ──
       const kitId = initial?.id||`lk_${Date.now()}`;
       const baseRes = (reservations||[]).filter(r=>r.lesson_kit_id!==kitId);
+
+      // If no schedule — just save kit without reservations
+      if (finalSchedule.length === 0) {
+        setSaving(true);
+        const kit = {
+          id: kitId, kitType:"lesson",
+          name: effectiveName || name.trim(),
+          instructorName: effectiveInstructorName || instructorName.trim(),
+          instructorPhone: effectiveInstructorPhone || instructorPhone.trim(),
+          instructorEmail: effectiveInstructorEmail || instructorEmail.trim(),
+          description: description.trim(),
+          items: kitItems, schedule: [],
+        };
+        const updatedKits = initial ? kits.map(k=>k.id===initial.id?kit:k) : [...kits, kit];
+        setKits(updatedKits);
+        // Remove old reservations for this kit
+        if(setReservations) setReservations(baseRes);
+        const [r1, r2] = await Promise.all([
+          storageSet("kits", updatedKits),
+          storageSet("reservations", baseRes),
+        ]);
+        setSaving(false);
+        if(r1.ok&&r2.ok) {
+          onDone();
+          showToast("success", `ערכת שיעור "${effectiveName || name.trim()}" נשמרה`);
+        } else setLocalMsg({type:"error",text:"❌ שגיאה בשמירה"});
+        return;
+      }
+
       const sessionConflicts = [];
       for (let si = 0; si < finalSchedule.length; si++) {
         const s = finalSchedule[si];
@@ -4790,6 +4815,30 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         </div>
         )}
 
+        {/* Show linked lessons info when kit is managed by lessons */}
+        {lessonManagedKit && (
+          <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:"var(--r)",padding:16,marginBottom:18}}>
+            <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:10}}>📚 קורסים ומפגשים משויכים</div>
+            {linkedLessons.map(lesson => (
+              <div key={lesson.id||lesson.name} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:8}}>
+                <div style={{fontWeight:700,fontSize:13,color:"var(--text1)",marginBottom:4}}>📖 {lesson.name}</div>
+                {(lesson.instructorName) && <div style={{fontSize:12,color:"var(--text2)"}}>👨‍🏫 {lesson.instructorName}{lesson.instructorPhone?` · 📞 ${lesson.instructorPhone}`:""}{lesson.instructorEmail?` · ✉️ ${lesson.instructorEmail}`:""}</div>}
+                {linkedSchedule.length > 0 && (
+                  <div style={{marginTop:6,display:"flex",flexWrap:"wrap",gap:4}}>
+                    {linkedSchedule.slice(0,6).map((s,i) => (
+                      <span key={i} style={{background:"rgba(155,89,182,0.1)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:12,padding:"2px 8px",fontSize:11,color:"#9b59b6",fontWeight:600}}>
+                        {formatDate(s.date)} {s.startTime||""}–{s.endTime||""}
+                      </span>
+                    ))}
+                    {linkedSchedule.length > 6 && <span style={{fontSize:11,color:"var(--text3)",alignSelf:"center"}}>...ועוד {linkedSchedule.length - 6}</span>}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {lessonManagedKit && (
         <div style={{background:"rgba(46,204,113,0.08)",border:"1px solid rgba(46,204,113,0.25)",borderRadius:"var(--r)",padding:16,marginBottom:18}}>
           <div style={{fontWeight:800,fontSize:13,color:"var(--green)",marginBottom:12}}>📧 שליחת ערכה למורה</div>
           <div style={{fontSize:12,color:"var(--text2)",marginBottom:10}}>
@@ -4819,20 +4868,16 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
             </span>
           </div>
         </div>
+        )}
 
         {/* Single CTA */}
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",paddingTop:4}}>
           <button className="btn btn-primary"
-            disabled={saving || !(effectiveName || name.trim()) || (!lessonManagedKit && scheduleMode==="xl" && schedule.length===0)}
+            disabled={saving || !(effectiveName || name.trim())}
             onClick={save}
             style={{fontSize:15,padding:"12px 28px"}}>
-            {saving ? "⏳ שומר ומשריין..." : initial ? "💾 שמור שינויים" : "🎬 צור ערכת שיעור"}
+            {saving ? "⏳ שומר..." : initial ? "💾 שמור שינויים" : "🎬 צור ערכת שיעור"}
           </button>
-          {!lessonManagedKit && scheduleMode==="manual" && manStartDate && schedule.length===0 && (
-            <span style={{fontSize:12,color:"var(--text3)"}}>
-              יפרוס {manCount} שיעורים ב-{formatDate(manStartDate)}
-            </span>
-          )}
           {effectiveSchedule.length>0 && (
             <span style={{fontSize:12,color:"#9b59b6",fontWeight:700}}>📅 {effectiveSchedule.length} שיעורים בלוח</span>
           )}
@@ -4858,6 +4903,80 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       {mode==="editLesson"&&(
         <LessonKitForm initial={editTarget} onDone={()=>{setMode(null);setEditTarget(null);}}/>
       )}
+
+      {/* View lesson kit panel */}
+      {mode==="viewLesson"&&editTarget&&(()=>{
+        const vKit = editTarget;
+        const vLinkedLessons = getLessonsLinkedToKit(vKit, lessons);
+        const vLinkedSchedule = vLinkedLessons.flatMap(getLessonScheduleEntries).sort(compareDateTimeParts);
+        const vDisplaySchedule = vLinkedSchedule.length > 0 ? vLinkedSchedule : (vKit.schedule||[]);
+        const vInstructorName = vKit.instructorName || vLinkedLessons[0]?.instructorName || "";
+        const vInstructorEmail = vKit.instructorEmail || vLinkedLessons[0]?.instructorEmail || "";
+        const vInstructorPhone = vKit.instructorPhone || vLinkedLessons[0]?.instructorPhone || "";
+        return (
+          <div className="card" style={{marginBottom:20}}>
+            <div className="card-header">
+              <div className="card-title">🎬 {vKit.name}</div>
+              <div style={{display:"flex",gap:6}}>
+                <button className="btn btn-primary btn-sm" onClick={()=>{setMode("editLesson");}}>✏️ עריכה</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>{setMode(null);setEditTarget(null);}}>✕ סגור</button>
+              </div>
+            </div>
+
+            {/* Linked lessons */}
+            {vLinkedLessons.length > 0 && (
+              <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:"var(--r)",padding:14,marginBottom:14}}>
+                <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:8}}>📚 קורסים משויכים</div>
+                {vLinkedLessons.map(lesson => (
+                  <div key={lesson.id||lesson.name} style={{marginBottom:4}}>
+                    <span style={{fontWeight:700,fontSize:13}}>📖 {lesson.name}</span>
+                    {lesson.instructorName && <span style={{fontSize:12,color:"var(--text2)",marginRight:8}}>· 👨‍🏫 {lesson.instructorName}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Instructor info */}
+            {vInstructorName && (
+              <div style={{background:"rgba(52,152,219,0.06)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:14}}>
+                <div style={{fontWeight:700,fontSize:13,color:"#3498db",marginBottom:4}}>👨‍🏫 מרצה</div>
+                <div style={{fontSize:13}}>{vInstructorName}{vInstructorPhone?` · 📞 ${vInstructorPhone}`:""}{vInstructorEmail?` · ✉️ ${vInstructorEmail}`:""}</div>
+              </div>
+            )}
+
+            {/* Equipment list */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontWeight:800,fontSize:13,color:"var(--accent)",marginBottom:8}}>🎒 ציוד בערכה · {(vKit.items||[]).length} סוגים · {(vKit.items||[]).reduce((s,i)=>s+i.quantity,0)} יחידות</div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                {(vKit.items||[]).map((item,j)=>{
+                  const eq=equipment.find(e=>e.id==item.equipment_id);
+                  return (
+                    <div key={j} style={{display:"flex",alignItems:"center",gap:8,background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"6px 12px"}}>
+                      <span style={{fontSize:18}}>{eq?.image&&(eq.image.startsWith("data:")||eq.image.startsWith("http"))?<img src={eq.image} alt="" style={{width:22,height:22,objectFit:"cover",borderRadius:4}}/>:(eq?.image||"📦")}</span>
+                      <span style={{flex:1,fontSize:13,fontWeight:600}}>{eq?.name||item.name||"פריט"}</span>
+                      <span style={{fontSize:13,fontWeight:700,color:"var(--accent)"}}>×{item.quantity}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Schedule */}
+            {vDisplaySchedule.length > 0 && (
+              <div style={{marginBottom:14}}>
+                <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:8}}>📅 {vDisplaySchedule.length} מפגשים</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                  {vDisplaySchedule.map((s,i)=>(
+                    <span key={i} style={{background:"rgba(155,89,182,0.1)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:12,padding:"3px 10px",fontSize:12,color:"#9b59b6",fontWeight:600}}>
+                      {formatDate(s.date)} {s.startTime||""}–{s.endTime||""}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Student kits list */}
       {mode===null&&(
@@ -4913,25 +5032,28 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
               const displayInstructorPhone = kit.instructorPhone || linkedKitLessons[0]?.instructorPhone || "";
               const displayInstructorEmail = kit.instructorEmail || linkedKitLessons[0]?.instructorEmail || "";
               return (
-                <div key={kit.id} style={{background:"var(--surface)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:"var(--r)",padding:"16px 18px"}}>
+                <div key={kit.id} onClick={()=>{setEditTarget(kit);setMode("viewLesson");}} style={{background:"var(--surface)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:"var(--r)",padding:"16px 18px",cursor:"pointer",transition:"border-color 0.15s"}}
+                  onMouseEnter={e=>e.currentTarget.style.borderColor="rgba(155,89,182,0.6)"}
+                  onMouseLeave={e=>e.currentTarget.style.borderColor="rgba(155,89,182,0.3)"}>
                   <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
                     <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
                       <span style={{fontSize:28}}>🎬</span>
                       <div>
                         <div style={{fontWeight:800,fontSize:15}}>{kit.name}</div>
+                        {linkedKitLessons.length>0&&<div style={{fontSize:11,color:"#9b59b6",marginTop:2}}>📚 משויך ל: {linkedKitLessons.map(l=>l.name).join(", ")}</div>}
                       {displayInstructorName&&<div style={{fontSize:12,color:"var(--text2)",marginTop:2}}>👨‍🏫 {displayInstructorName}{displayInstructorPhone?` · 📞 ${displayInstructorPhone}`:""}</div>}
                         {displayInstructorEmail&&<div style={{fontSize:11,color:"var(--text3)"}}>✉️ {displayInstructorEmail}</div>}
                         <div style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap"}}>
-                          <span style={{background:"rgba(155,89,182,0.15)",border:"1px solid rgba(155,89,182,0.35)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"#9b59b6",fontWeight:700}}>
+                          {displaySchedule.length>0&&<span style={{background:"rgba(155,89,182,0.15)",border:"1px solid rgba(155,89,182,0.35)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"#9b59b6",fontWeight:700}}>
                             📅 {displaySchedule.length} שיעורים
-                          </span>
+                          </span>}
                           {nextSession&&<span style={{background:"rgba(46,204,113,0.1)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"var(--green)",fontWeight:700}}>
                             הבא: {formatDate(nextSession.date)} {nextSession.startTime}
                           </span>}
                         </div>
                       </div>
                     </div>
-                    <div style={{display:"flex",gap:6}}>
+                    <div style={{display:"flex",gap:6}} onClick={e=>e.stopPropagation()}>
                       <button className="btn btn-secondary btn-sm" onClick={()=>{setEditTarget(kit);setMode("editLesson");}}>✏️ ערוך</button>
                       <button className="btn btn-danger btn-sm" onClick={()=>del(kit.id,kit.name)}>🗑️</button>
                     </div>
