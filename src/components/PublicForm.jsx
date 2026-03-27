@@ -1727,8 +1727,7 @@ ${inventory}
     const startTarget = swipeTouchRef.current.target;
     swipeTouchRef.current = null;
     if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
-    const scrollEl = startTarget?.closest?.('.no-swipe-nav');
-    if (scrollEl && scrollEl.scrollWidth > scrollEl.clientWidth) return;
+    if (startTarget?.closest?.('.no-swipe-nav')) return;
     const VIEWS = ["equipment", "studios", "daily"];
     const idx = VIEWS.indexOf(publicView);
     if (dx < 0 && idx < VIEWS.length - 1) setPublicView(VIEWS[idx + 1]);
