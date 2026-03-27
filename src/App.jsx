@@ -4571,30 +4571,11 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
           </div>
         )}
 
-        {/* Instructor details */}
-        {!lessonManagedKit && (
-        <div style={{background:"rgba(52,152,219,0.06)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
-          <div style={{fontWeight:800,fontSize:13,color:"#3498db",marginBottom:12}}>👨‍🏫 פרטי הקורס והמרצה</div>
-          <div className="form-group" style={{marginBottom:10}}>
-            <label className="form-label">שם הערכה / קורס *</label>
-            <input className="form-input" placeholder='לדוגמה: "אולפן טלוויזיה א"' value={name} onChange={e=>setName(e.target.value)}/>
-          </div>
-          <div className="grid-2" style={{marginBottom:10}}>
-            <div className="form-group"><label className="form-label">שם המרצה</label>
-              <input className="form-input" placeholder='ד"ר ישראל ישראלי' value={instructorName} onChange={e=>setInstructorName(e.target.value)}/></div>
-            <div className="form-group"><label className="form-label">טלפון מרצה</label>
-              <input className="form-input" placeholder="05x-xxxxxxx" value={instructorPhone} onChange={e=>setInstructorPhone(e.target.value)}/></div>
-          </div>
-          <div className="form-group" style={{marginBottom:10}}>
-            <label className="form-label">מייל מרצה</label>
-            <input className="form-input" type="email" placeholder="lecturer@college.ac.il" value={instructorEmail} onChange={e=>setInstructorEmail(e.target.value)}/>
-          </div>
-          <div className="form-group">
-            <label className="form-label">הערות</label>
-            <textarea className="form-textarea" rows={2} placeholder="הערות על הקורס או הערכה..." value={description} onChange={e=>setDescription(e.target.value)}/>
-          </div>
+        {/* Kit name field */}
+        <div className="form-group" style={{marginBottom:16}}>
+          <label className="form-label">שם הערכה *</label>
+          <input className="form-input" placeholder='לדוגמה: "ערכת אולפן טלוויזיה"' value={name} onChange={e=>setName(e.target.value)}/>
         </div>
-        )}
 
         {/* Equipment picker */}
         <div style={{marginBottom:16}}>
@@ -4682,8 +4663,8 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
           {kitItems.length>0&&<div className="highlight-box" style={{marginTop:8}}>🎒 {kitItems.length} סוגי ציוד · {kitItems.reduce((s,i)=>s+i.quantity,0)} יחידות</div>}
         </div>
 
-        {/* Schedule builder */}
-        {!lessonManagedKit && (
+        {/* Schedule builder — hidden; scheduling is managed through the Lessons section */}
+        {false && !lessonManagedKit && (
         <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:"var(--r)",padding:16,marginBottom:18}}>
           <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:12}}>📅 לוח שיעורים</div>
 
