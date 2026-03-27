@@ -6542,11 +6542,106 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast }) {
         </div>
       </div>
 
+      {/* XL Templates Download */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-header"><div className="card-title">📥 טמפלטים להורדה</div></div>
+        <div style={{ padding: "16px 20px" }}>
+          <div style={{ fontSize: 13, color: "var(--text2)", marginBottom: 16 }}>
+            הורד קבצי Excel לדוגמה עם המבנה הנכון לייבוא נתונים לאפליקציה.
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+            {/* Lessons template */}
+            <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>📚 טמפלט ייבוא שיעורים</div>
+                <div style={{ fontSize: 12, color: "var(--text3)" }}>
+                  קובץ עם מספר גליונות — כל גליון קורס אחד. עמודות: תאריך, שעת התחלה, שעת סיום, קורס, נושא, מסלול, מרצה, מייל מרצה, טלפון מרצה, כיתת לימוד.
+                </div>
+              </div>
+              <button className="btn btn-secondary" onClick={() => {
+                if (!window.XLSX) {
+                  const s = document.createElement("script");
+                  s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+                  s.onload = () => downloadLessonsTemplate();
+                  document.head.appendChild(s);
+                } else { downloadLessonsTemplate(); }
+              }} style={{ whiteSpace: "nowrap", flexShrink: 0 }}>
+                ⬇️ הורד טמפלט שיעורים
+              </button>
+            </div>
+
+            {/* Students template */}
+            <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>🎓 טמפלט ייבוא סטודנטים</div>
+                <div style={{ fontSize: 12, color: "var(--text3)" }}>
+                  קובץ עם מספר גליונות — כל גליון מסלול אחד. עמודות: שם, מייל, טלפון, מסלול.
+                </div>
+              </div>
+              <button className="btn btn-secondary" onClick={() => {
+                if (!window.XLSX) {
+                  const s = document.createElement("script");
+                  s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+                  s.onload = () => downloadStudentsTemplate();
+                  document.head.appendChild(s);
+                } else { downloadStudentsTemplate(); }
+              }} style={{ whiteSpace: "nowrap", flexShrink: 0 }}>
+                ⬇️ הורד טמפלט סטודנטים
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
       <button className="btn btn-primary" disabled={saving} onClick={save} style={{ fontSize: 15, padding: "12px 32px" }}>
         {saving ? "⏳ שומר..." : "💾 שמור הגדרות"}
       </button>
     </div>
   );
+}
+
+// ── Template download helpers ─────────────────────────────────────────────────
+function downloadLessonsTemplate() {
+  const wb = window.XLSX.utils.book_new();
+  const sheets = [
+    { name: "מבוא לסאונד", course: "מבוא לסאונד", track: "הנדסאי סאונד א", instructor: "אורי לוי", email: "ori.levy@example.com", phone: "052-555-0101", studio: "POST PRODUCTION",
+      sessions: [["2026-04-20","09:00","12:00","היכרות עם שרשרת האודיו"],["2026-04-27","09:00","12:00","מיקרופונים וסוגי קליטה"],["2026-05-04","09:00","12:00","גיין סטייג'ינג ובדיקות אות"]] },
+    { name: "Pro Tools בסיסי", course: "Pro Tools בסיסי", track: "הנדסאי סאונד א", instructor: "דנה כהן", email: "dana.cohen@example.com", phone: "052-555-0102", studio: "MASTERING",
+      sessions: [["2026-04-21","13:00","16:00","היכרות עם הממשק והסשן"],["2026-04-28","13:00","16:00","עריכה בסיסית וניווט"],["2026-05-05","13:00","16:00","הקלטה רב ערוצית"]] },
+    { name: "אקוסטיקה", course: "אקוסטיקה", track: "הנדסאי סאונד א", instructor: "רועי אמיר", email: "roi.amir@example.com", phone: "052-555-0103", studio: "סטודיו לצילום",
+      sessions: [["2026-04-22","10:00","13:00","גלים, תדרים ואורך גל"],["2026-04-29","10:00","13:00","החזרים, בליעה ופיזור"],["2026-05-06","10:00","13:00","מצבי חדר ובעיות עומדות"]] },
+    { name: "מיקס בסיסי", course: "מיקס בסיסי", track: "הנדסאי סאונד א", instructor: "מאיה ברק", email: "maya.barak@example.com", phone: "052-555-0104", studio: "סטודיו לצילום",
+      sessions: [["2026-04-23","17:00","20:00","איזון, פאן והיררכיה"],["2026-04-30","17:00","20:00","EQ בסיסי ותחומי תדר"],["2026-05-07","17:00","20:00","קומפרסיה ודינמיקה"]] },
+  ];
+  const headers = ["תאריך","שעת התחלה","שעת סיום","קורס","נושא","מסלול","מרצה","מייל מרצה","טלפון מרצה","כיתת לימוד"];
+  sheets.forEach(({ name, course, track, instructor, email, phone, studio, sessions }) => {
+    const rows = [headers, ...sessions.map(([date, start, end, topic]) => [date, start, end, course, topic, track, instructor, email, phone, studio])];
+    const ws = window.XLSX.utils.aoa_to_sheet(rows);
+    ws["!cols"] = headers.map((h) => ({ wch: h.length < 8 ? 12 : 20 }));
+    window.XLSX.utils.book_append_sheet(wb, ws, name);
+  });
+  window.XLSX.writeFile(wb, "טמפלט_ייבוא_שיעורים.xlsx");
+}
+
+function downloadStudentsTemplate() {
+  const wb = window.XLSX.utils.book_new();
+  const sheets = [
+    { name: "Students_Sound_A", track: "הנדסאי סאונד א", rows: [["אורי לוי","ori.levy11@example.com","052-100-0137"],["נועה ברק","noa.barak12@example.com","052-100-0274"],["דניאל כהן","daniel.cohen@example.com","052-100-0411"]] },
+    { name: "Students_Sound_B", track: "הנדסאי סאונד ב", rows: [["איתי חדד","itay.hadad11@example.com","052-200-0137"],["מאיה דנינו","maya.danino12@example.com","052-200-0274"],["רועי שמואלי","roi.shmoeli@example.com","052-200-0411"]] },
+    { name: "Students_Cinema_A", track: "הנדסאי קולנוע א", rows: [["אביב אברהם","aviv.avraham11@example.com","052-300-0137"],["רוני יצחק","roni.yitzhak12@example.com","052-300-0274"],["עומרי דיין","omri.dayan@example.com","052-300-0411"]] },
+    { name: "Students_Cinema_B", track: "הנדסאי קולנוע ב", rows: [["גיא אמסלם","guy.amsalem11@example.com","052-400-0137"],["מיכל אלחרר","michal.alharrar12@example.com","052-400-0274"],["עדי מרציאנו","adi.marciano@example.com","052-400-0411"]] },
+    { name: "Students_Mixed", track: "", rows: [["שני לוזון","shani.louzon11@example.com","052-500-0137","הנדסאי סאונד א"],["אריאל אטיאס","ariel.atias12@example.com","052-500-0274","הנדסאי סאונד ב"],["עמנואל ביטון","emanuel.biton@example.com","052-500-0411","הנדסאי קולנוע א"]] },
+  ];
+  const headers = ["שם","מייל","טלפון","מסלול"];
+  sheets.forEach(({ name, track, rows }) => {
+    const data = [headers, ...rows.map(r => r.length === 4 ? r : [...r, track])];
+    const ws = window.XLSX.utils.aoa_to_sheet(data);
+    ws["!cols"] = [{ wch: 20 }, { wch: 28 }, { wch: 14 }, { wch: 20 }];
+    window.XLSX.utils.book_append_sheet(wb, ws, name);
+  });
+  window.XLSX.writeFile(wb, "טמפלט_ייבוא_סטודנטים.xlsx");
 }
 
 // ─── DAMAGED EQUIPMENT PAGE ──────────────────────────────────────────────────
