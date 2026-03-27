@@ -1208,7 +1208,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
                   <input className="form-input" placeholder="אופציונלי" value={s.topic||""} style={{padding:"3px 6px",fontSize:12,height:28,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i, "topic", e.target.value)}/>
                   <select className="form-select" value={s.studioId||""} style={{padding:"3px 4px",fontSize:11,height:28,width:"100%",boxSizing:"border-box"}} title="כיתת לימוד למפגש זה" onChange={e=>updateSessionField(i,"studioId",e.target.value||null)}>
                     <option value="">ללא שיוך</option>
-                    {studios.filter(st=>st.isClassroom).map(st=><option key={st.id} value={st.id}>{st.name}</option>)}
+                    {studios.filter(st=>st.isClassroom||st.classroomOnly).map(st=><option key={st.id} value={st.id}>{st.name}</option>)}
                   </select>
                   <select className="form-select" value={s.kitId||""} style={{padding:"3px 4px",fontSize:11,height:28,width:"100%",boxSizing:"border-box"}} title="ערכת שיעור למפגש זה" onChange={e=>updateSessionField(i,"kitId",e.target.value||null)}>
                     <option value="">ללא שיוך</option>
@@ -1274,11 +1274,11 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
               setSchedule(prev=>prev.map(s=>({...s, studioId: e.target.value||null})));
             }}>
               <option value="">ללא שיוך</option>
-              {studios.filter(s => s.isClassroom || String(s.id) === String(studioId)).map(s=>(
-                <option key={s.id} value={s.id}>{s.name}{!s.isClassroom ? " (לא מסומן ככיתה)" : ""}</option>
+              {studios.filter(s => s.isClassroom || s.classroomOnly || String(s.id) === String(studioId)).map(s=>(
+                <option key={s.id} value={s.id}>{s.name}{(!s.isClassroom && !s.classroomOnly) ? " (לא מסומן ככיתה)" : ""}</option>
               ))}
             </select>
-            {studios.filter(s=>s.isClassroom).length === 0 && (
+            {studios.filter(s=>s.isClassroom||s.classroomOnly).length === 0 && (
               <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>💡 סמן אולפן כ"כיתת לימוד" ברובריקת אולפנים כדי שיופיע כאן.</div>
             )}
           </div>
