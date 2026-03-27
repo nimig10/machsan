@@ -420,7 +420,8 @@ export default function StudioBookingPage(props) {
     const studioCertId = formData.get("studioCertId") || undefined;
     const studioTrackType = formData.get("studioTrackType") || "";
     const isClassroom = formData.get("isClassroom") === "on";
-    const nextStudios = [...studios, { id:Date.now(), name, studioCertId, studioCertIds:studioCertId ? [studioCertId] : [], image:studioImage || formData.get("emoji") || "🎙️", isDisabled:false, studioTrackType, isClassroom }];
+    const classroomOnly = formData.get("classroomOnly") === "on";
+    const nextStudios = [...studios, { id:Date.now(), name, studioCertId, studioCertIds:studioCertId ? [studioCertId] : [], image:studioImage || formData.get("emoji") || "🎙️", isDisabled:false, studioTrackType, isClassroom, classroomOnly }];
     await saveStudios(nextStudios);
     setStudioImage("");
     closeModal();
@@ -896,6 +897,11 @@ export default function StudioBookingPage(props) {
               🏫 כיתת לימוד
             </label>
             <div style={{ fontSize:12, color:"var(--text3)", marginTop:-4 }}>כאשר מסומן, האולפן יופיע לשיוך קורסים ברובריקת "שיעורים".</div>
+            <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, fontWeight:700, color:"var(--text2)", background:"rgba(52,152,219,0.10)", border:"1px solid rgba(52,152,219,0.28)", borderRadius:8, padding:"10px 12px" }}>
+              <input type="checkbox" name="classroomOnly" defaultChecked={false} style={{ width:18, height:18, accentColor:"#3498db" }} />
+              🔒 כיתה בלבד
+            </label>
+            <div style={{ fontSize:12, color:"var(--text3)", marginTop:-4 }}>כאשר מסומן, האולפן לא יופיע בטופס ההשאלה לסטודנטים — לקביעות שיעורים בלבד.</div>
           </form>
         </Modal>
       )}
