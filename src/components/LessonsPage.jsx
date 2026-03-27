@@ -999,6 +999,28 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
   const [manEndTime, setManEndTime]     = useState("13:00");
   const [manCount, setManCount]         = useState(1);
 
+  // Resizable columns: [#, date, start, end, topic, studio, kit, ×]
+  const [colWidths, setColWidths] = useState([30, 130, 72, 72, 180, 90, 90, 28]);
+  const resizingRef = React.useRef(null);
+  const startColResize = (e, colIdx) => {
+    e.preventDefault();
+    resizingRef.current = { colIdx, startX: e.clientX, startWidth: colWidths[colIdx] };
+    const onMove = (ev) => {
+      if (!resizingRef.current) return;
+      const delta = ev.clientX - resizingRef.current.startX;
+      const newW = Math.max(40, resizingRef.current.startWidth + delta);
+      setColWidths(prev => prev.map((w,i) => i === resizingRef.current.colIdx ? newW : w));
+    };
+    const onUp = () => {
+      resizingRef.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+  const gridTemplate = colWidths.map(w => `${w}px`).join(" ");
+
   const LESSON_TIMES = LESSON_TIME_OPTIONS;
 
   const buildAndAppendSchedule = () => {
@@ -1156,31 +1178,46 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
         {schedule.length>0 && (
           <div style={{marginBottom:16}}>
             <div style={{fontWeight:700,fontSize:12,color:"#9b59b6",marginBottom:4}}>📅 {schedule.length} שיעורים בלוח:</div>
-            <div style={{display:"grid",gridTemplateColumns:"30px minmax(110px,1fr) 72px 72px minmax(120px,1.3fr) 85px 85px 28px",gap:5,fontSize:11,color:"var(--text-muted)",padding:"0 8px",marginBottom:2}}>
-              <div></div><div>תאריך</div><div>התחלה</div><div>סיום</div><div>נושא</div><div>🏫 כיתה</div><div>🎒 ערכה</div><div></div>
+            {/* Header row with resize handles */}
+            <div style={{display:"grid",gridTemplateColumns:gridTemplate,gap:0,fontSize:11,color:"var(--text-muted)",padding:"0 0",marginBottom:2,userSelect:"none"}}>
+              {["","תאריך","התחלה","סיום","נושא","🏫 כיתה","🎒 ערכה",""].map((label,ci)=>(
+                <div key={ci} style={{position:"relative",padding:"2px 8px",overflow:"hidden",whiteSpace:"nowrap"}}>
+                  {label}
+                  {ci > 0 && ci < 7 && (
+                    <div onMouseDown={e=>startColResize(e,ci)}
+                      style={{position:"absolute",left:0,top:0,width:4,height:"100%",cursor:"col-resize",zIndex:2,
+                        background:"transparent",transition:"background 0.15s"}}
+                      onMouseEnter={e=>e.currentTarget.style.background="rgba(155,89,182,0.4)"}
+                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+                    />
+                  )}
+                </div>
+              ))}
             </div>
             <div style={{maxHeight:300,overflow:"auto",display:"flex",flexDirection:"column",gap:2}}>
               {schedule.map((s,i)=>(
-                <div key={`${s.date}-${s.startTime}-${i}`} style={{display:"grid",gridTemplateColumns:"30px minmax(110px,1fr) 72px 72px minmax(120px,1.3fr) 85px 85px 28px",alignItems:"center",gap:5,fontSize:12,padding:"4px 8px",background:"var(--surface2)",borderRadius:6,border:"1px solid rgba(155,89,182,0.14)"}}>
-                  <div style={{fontWeight:800,color:"#9b59b6",fontSize:11}}>#{i+1}</div>
-                  <input className="form-input" type="date" value={s.date} style={{padding:"3px 6px",fontSize:12,height:28}} onChange={e=>updateSessionField(i, "date", e.target.value)}/>
-                  <select className="form-select" value={s.startTime} style={{padding:"3px 4px",fontSize:12,height:28}} onChange={e=>updateSessionField(i, "startTime", e.target.value)}>
+                <div key={`${s.date}-${s.startTime}-${i}`} style={{display:"grid",gridTemplateColumns:gridTemplate,alignItems:"center",gap:0,fontSize:12,padding:"4px 0",background:"var(--surface2)",borderRadius:6,border:"1px solid rgba(155,89,182,0.14)"}}>
+                  <div style={{fontWeight:800,color:"#9b59b6",fontSize:11,textAlign:"center"}}>#{i+1}</div>
+                  <input className="form-input" type="date" value={s.date} style={{padding:"3px 6px",fontSize:12,height:28,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i, "date", e.target.value)}/>
+                  <select className="form-select" value={s.startTime} style={{padding:"3px 4px",fontSize:12,height:28,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i, "startTime", e.target.value)}>
                     {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
                   </select>
-                  <select className="form-select" value={s.endTime} style={{padding:"3px 4px",fontSize:12,height:28}} onChange={e=>updateSessionField(i, "endTime", e.target.value)}>
+                  <select className="form-select" value={s.endTime} style={{padding:"3px 4px",fontSize:12,height:28,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i, "endTime", e.target.value)}>
                     {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
                   </select>
-                  <input className="form-input" placeholder="אופציונלי" value={s.topic||""} style={{padding:"3px 6px",fontSize:12,height:28}} onChange={e=>updateSessionField(i, "topic", e.target.value)}/>
-                  <select className="form-select" value={s.studioId||""} style={{padding:"3px 4px",fontSize:11,height:28}} title="כיתת לימוד למפגש זה" onChange={e=>updateSessionField(i,"studioId",e.target.value||null)}>
+                  <input className="form-input" placeholder="אופציונלי" value={s.topic||""} style={{padding:"3px 6px",fontSize:12,height:28,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i, "topic", e.target.value)}/>
+                  <select className="form-select" value={s.studioId||""} style={{padding:"3px 4px",fontSize:11,height:28,width:"100%",boxSizing:"border-box"}} title="כיתת לימוד למפגש זה" onChange={e=>updateSessionField(i,"studioId",e.target.value||null)}>
                     <option value="">ללא שיוך</option>
                     {studios.filter(st=>st.isClassroom).map(st=><option key={st.id} value={st.id}>{st.name}</option>)}
                   </select>
-                  <select className="form-select" value={s.kitId||""} style={{padding:"3px 4px",fontSize:11,height:28}} title="ערכת שיעור למפגש זה" onChange={e=>updateSessionField(i,"kitId",e.target.value||null)}>
+                  <select className="form-select" value={s.kitId||""} style={{padding:"3px 4px",fontSize:11,height:28,width:"100%",boxSizing:"border-box"}} title="ערכת שיעור למפגש זה" onChange={e=>updateSessionField(i,"kitId",e.target.value||null)}>
                     <option value="">ללא שיוך</option>
                     {lessonKits.map(k=><option key={k.id} value={k.id}>{k.name}</option>)}
                   </select>
-                  <button onClick={()=>setSchedule(prev=>prev.filter((_,j)=>j!==i))}
-                    style={{background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:16,padding:0,lineHeight:1}} title="מחק מפגש">×</button>
+                  <div style={{display:"flex",justifyContent:"center"}}>
+                    <button onClick={()=>setSchedule(prev=>prev.filter((_,j)=>j!==i))}
+                      style={{background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:16,padding:0,lineHeight:1}} title="מחק מפגש">×</button>
+                  </div>
                 </div>
               ))}
             </div>
