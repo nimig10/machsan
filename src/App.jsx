@@ -3330,7 +3330,6 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
   const [viewRes, setViewRes] = useState(null);
 
   const deleteRes = async (id) => {
-    if(!window.confirm("למחוק בקשה זו מהארכיון לצמיתות?")) return;
     const updated = reservations.filter(r=>r.id!==id);
     setReservations(updated);
     await storageSet("reservations", updated);
@@ -3577,7 +3576,6 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, cal
   };
 
   const delDh = async (id) => {
-    if(!window.confirm("למחוק ראש מחלקה זה?")) return;
     const updated = deptHeads.filter(dh=>dh.id!==id);
     setDeptHeads(updated);
     await storageSet("deptHeads", updated);
@@ -3878,7 +3876,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, cal
               </div>
               <div style={{display:"flex",gap:6}}>
                 <button className="btn btn-secondary btn-sm" onClick={()=>{setEditMember(m);setEditForm({name:m.name,email:m.email,phone:m.phone||"",loanTypes:m.loanTypes||[...LOAN_TYPES]});}}>✏️ ערוך</button>
-                <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את ${m.name}?`)) del(m.id); }}>🗑️</button>
+                <button className="btn btn-danger btn-sm" onClick={()=>del(m.id)}>🗑️</button>
               </div>
             </div>
           ))}
@@ -3941,7 +3939,6 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     kits.some(k=>k.id!==excludeId && normalizeKitName(k.name)===normalizeKitName(name));
 
   const del = async (id, name) => {
-    if(!window.confirm(`למחוק את הערכה "${name}"?`)) return;
     const updated = kits.filter(k=>k.id!==id);
     setKits(updated);
     // also remove associated lesson reservations
@@ -5114,7 +5111,6 @@ function CertificationsPage_REMOVED({ certifications, setCertifications, showToa
   };
 
   const deleteType = async (typeId) => {
-    if(!window.confirm("למחוק הסמכה זו? היא תוסר מכל הסטודנטים.")) return;
     const updated = {
       types: types.filter(t=>t.id!==typeId),
       students: students.map(s=>{ const c={...s.certs}; delete c[typeId]; return {...s,certs:c}; })
@@ -5139,7 +5135,6 @@ function CertificationsPage_REMOVED({ certifications, setCertifications, showToa
   };
 
   const deleteStudent = async (stuId) => {
-    if(!window.confirm("למחוק סטודנט זה?")) return;
     const updated = { types, students: students.filter(s=>s.id!==stuId) };
     if(await save(updated)) showToast("success","הסטודנט הוסר");
   };

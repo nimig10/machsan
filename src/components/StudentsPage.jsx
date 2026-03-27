@@ -85,7 +85,6 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
   // ── Delete track ──
   const deleteTrack = async (trackName) => {
     const studentsOnTrack = students.filter(s => normalizeTrackName(s.track) === trackName);
-    if (studentsOnTrack.length > 0 && !window.confirm(`למסלול "${trackName}" משויכים ${studentsOnTrack.length} סטודנטים. למחוק את המסלול בכל זאת?`)) return;
     const currentTracks = certifications?.tracks || [];
     if (await save({ tracks: currentTracks.filter(t => normalizeTrackName(t.name) !== trackName) })) {
       showToast("success", `המסלול "${trackName}" הוסר`);
@@ -161,7 +160,6 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
 
   // ── Delete student ──
   const deleteStudent = async (stuId) => {
-    if(!window.confirm("למחוק סטודנט זה?")) return;
     const updated = { types, students: students.filter(s=>s.id!==stuId) };
     if(await save(updated)) showToast("success","הסטודנט הוסר");
   };

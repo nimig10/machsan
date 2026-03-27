@@ -460,7 +460,6 @@ export default function StudioBookingPage(props) {
   };
 
   const deleteStudio = async (studioId) => {
-    if (!window.confirm("למחוק את האולפן הזה ואת כל ההזמנות שלו?")) return;
     await saveStudios(studios.filter((studio) => studio.id !== studioId));
     await saveBookings(bookings.filter((booking) => !sameStudioId(booking.studioId, studioId)));
     showToast("success", "האולפן נמחק");

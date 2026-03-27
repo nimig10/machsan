@@ -1224,9 +1224,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
             <div style={{display:"flex",gap:6,marginTop:8}}>
               <button className="btn btn-secondary btn-sm" onClick={appendLessonFromExisting}>➕ שיעור נוסף</button>
               <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>{
-                if(window.confirm("לנקות את כל לוח השיעורים?")) {
-                  setSchedule([]);
-                }
+                setSchedule([]);
               }}>🗑️ נקה הכל</button>
             </div>
           </div>
