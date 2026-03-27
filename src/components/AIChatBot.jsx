@@ -382,7 +382,11 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
 
     } catch (error) {
       console.error("ChatBot error:", error);
-      setMessages(prev => [...prev, { role: 'assistant', content: `שגיאה: ${error.message}` }]);
+      let errorMessage = "מצטער, חלה שגיאה בחיבור ל-AI. נסה שוב מאוחר יותר.";
+      if (error.message?.includes("429") || error.status === 429 || error.toString().toLowerCase().includes("quota")) {
+        errorMessage = "הגענו למכסת ה-AI היומית של המערכת (כדי לשמור על עלויות נמוכות). המערכת תתאפס ותחזור לפעול מחר בבוקר. תודה על ההבנה!";
+      }
+      setMessages(prev => [...prev, { role: 'assistant', content: errorMessage }]);
     } finally {
       setIsTyping(false);
     }
