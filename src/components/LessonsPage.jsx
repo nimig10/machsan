@@ -291,61 +291,29 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     event.target.value = "";
     setXlImporting(true);
     try {
-      const ensureXlsx = async () => {
-        if (window.XLSX) return window.XLSX;
-        await new Promise((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-          script.onload = resolve;
-          script.onerror = reject;
-          document.head.appendChild(script);
-        });
-        return window.XLSX;
-      };
-
-      const readRows = async () => {
+      // קריאת כל הגיליונות ללא AI
+      const readAllSheets = async () => {
         if (/\.xlsx?$/i.test(file.name)) {
-          const XLSX = await ensureXlsx();
           const buf = await file.arrayBuffer();
           const wb = XLSX.read(buf, { type:"array" });
-          const ws = wb.Sheets[wb.SheetNames[0]];
-          return XLSX.utils.sheet_to_json(ws, { header:1, defval:"" });
+          return wb.SheetNames
+            .map(name => ({ name, rows: XLSX.utils.sheet_to_json(wb.Sheets[name], { header:1, defval:"" }) }))
+            .filter(s => s.rows.length > 1);
         }
+        // CSV / TSV
         const text = await file.text();
         const lines = text.split(/\r?\n/).filter(line => line.trim());
         const sep = lines[0]?.includes("\t") ? "\t" : ",";
-        return lines.map(line => line.split(sep).map(cell => cell.trim().replace(/^"|"$/g, "")));
+        return [{ name: "sheet1", rows: lines.map(line => line.split(sep).map(cell => cell.trim().replace(/^"|"$/g, ""))) }];
       };
 
-      const rows = await readRows();
-      if (!rows.length) {
+      const sheets = await readAllSheets();
+      if (!sheets.length) {
         showToast("error", "קובץ ה־XL ריק");
         setXlImporting(false);
         return;
       }
 
-      const headers = rows[0].map((header) => String(header || "").trim().replace(/[\uFEFF\u200B-\u200D\u00A0]/g, "").toLowerCase());
-      const findHeader = (...patterns) => headers.findIndex((header) => patterns.some((pattern) => header.includes(pattern)));
-      const courseIdx = findHeader("קורס", "course", "שם קורס");
-      const dateIdx = findHeader("תאריך", "date");
-      const startIdx = findHeader("התחלה", "start", "שעת התחלה");
-      const endIdx = findHeader("סיום", "end", "שעת סיום");
-      if (courseIdx === -1 || dateIdx === -1) {
-        showToast("error", 'חסרות עמודות חובה: "קורס" ו-"תאריך"');
-        setXlImporting(false);
-        return;
-      }
-
-      const instructorIdx = findHeader("מרצה", "מורה", "lecturer", "teacher", "instructor");
-      const phoneIdx = findHeader("טלפון", "phone", "נייד");
-      const emailIdx = findHeader("מייל", "email", "mail");
-      const trackIdx = findHeader("מסלול", "track", "קבוצה", "class");
-      const studioIdx = findHeader("אולפן", "studio");
-      const kitIdx = findHeader("ערכה", "kit");
-      const topicIdx = findHeader("נושא", "topic", "subject");
-      const notesIdx = findHeader("הערות", "description", "notes", "תיאור");
-
-      const groups = new Map();
       const toIsoDate = (rawValue) => {
         let value = String(rawValue || "").trim();
         if (!value) return "";
@@ -359,38 +327,62 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
         return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
       };
 
-      for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
-        const row = rows[rowIndex];
-        const courseName = String(row[courseIdx] || "").trim();
-        const date = toIsoDate(row[dateIdx]);
-        if (!courseName || !date) continue;
-        if (!groups.has(courseName)) {
-          groups.set(courseName, {
-            name: courseName,
-            instructorName: instructorIdx >= 0 ? String(row[instructorIdx] || "").trim() : "",
-            instructorPhone: phoneIdx >= 0 ? String(row[phoneIdx] || "").trim() : "",
-            instructorEmail: emailIdx >= 0 ? String(row[emailIdx] || "").trim() : "",
-            track: trackIdx >= 0 ? String(row[trackIdx] || "").trim() : "",
-            studioName: studioIdx >= 0 ? String(row[studioIdx] || "").trim() : "",
-            kitName: kitIdx >= 0 ? String(row[kitIdx] || "").trim() : "",
-            description: notesIdx >= 0 ? String(row[notesIdx] || "").trim() : "",
-            schedule: [],
-          });
+      // עיבוד כל גיליון בנפרד — כל גיליון עם headers משלו
+      const groups = new Map();
+      for (const sheet of sheets) {
+        const rows = sheet.rows;
+        if (rows.length < 2) continue;
+        const headers = rows[0].map(h => String(h || "").trim().replace(/[\uFEFF\u200B-\u200D\u00A0]/g, "").toLowerCase());
+        const findH = (...patterns) => headers.findIndex(h => patterns.some(p => h.includes(p)));
+        const courseIdx = findH("קורס", "course", "שם קורס");
+        const dateIdx = findH("תאריך", "date");
+        const startIdx = findH("התחלה", "start", "שעת התחלה");
+        const endIdx = findH("סיום", "end", "שעת סיום");
+        const instructorIdx = findH("מרצה", "מורה", "lecturer", "teacher", "instructor");
+        const phoneIdx = findH("טלפון", "phone", "נייד");
+        const emailIdx = findH("מייל", "email", "mail");
+        const trackIdx = findH("מסלול", "track", "קבוצה", "class");
+        const studioIdx = findH("כיתת לימוד", "אולפן", "studio", "כיתה");
+        const kitIdx = findH("ערכה", "kit");
+        const topicIdx = findH("נושא", "topic", "subject");
+        const notesIdx = findH("הערות", "description", "notes", "תיאור");
+
+        if (courseIdx === -1 || dateIdx === -1) continue; // גיליון ללא עמודות חובה — דלג
+
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          // אם שם הקורס לא קיים בשורה, נסה לקחת אותו משם הגיליון
+          const courseName = String(row[courseIdx] || "").trim() || sheet.name.trim();
+          const date = toIsoDate(row[dateIdx]);
+          if (!courseName || !date) continue;
+          if (!groups.has(courseName)) {
+            groups.set(courseName, {
+              name: courseName,
+              instructorName: instructorIdx >= 0 ? String(row[instructorIdx] || "").trim() : "",
+              instructorPhone: phoneIdx >= 0 ? String(row[phoneIdx] || "").trim() : "",
+              instructorEmail: emailIdx >= 0 ? String(row[emailIdx] || "").trim() : "",
+              track: trackIdx >= 0 ? String(row[trackIdx] || "").trim() : "",
+              studioName: studioIdx >= 0 ? String(row[studioIdx] || "").trim() : "",
+              kitName: kitIdx >= 0 ? String(row[kitIdx] || "").trim() : "",
+              description: notesIdx >= 0 ? String(row[notesIdx] || "").trim() : "",
+              schedule: [],
+            });
+          }
+          const group = groups.get(courseName);
+          if (!group.instructorName && instructorIdx >= 0) group.instructorName = String(row[instructorIdx] || "").trim();
+          if (!group.instructorPhone && phoneIdx >= 0) group.instructorPhone = String(row[phoneIdx] || "").trim();
+          if (!group.instructorEmail && emailIdx >= 0) group.instructorEmail = String(row[emailIdx] || "").trim();
+          if (!group.track && trackIdx >= 0) group.track = String(row[trackIdx] || "").trim();
+          if (!group.studioName && studioIdx >= 0) group.studioName = String(row[studioIdx] || "").trim();
+          if (!group.kitName && kitIdx >= 0) group.kitName = String(row[kitIdx] || "").trim();
+          if (!group.description && notesIdx >= 0) group.description = String(row[notesIdx] || "").trim();
+          group.schedule.push(normalizeScheduleEntry({
+            date,
+            startTime: startIdx >= 0 ? String(row[startIdx] || "").trim() || "09:00" : "09:00",
+            endTime: endIdx >= 0 ? String(row[endIdx] || "").trim() || "12:00" : "12:00",
+            topic: topicIdx >= 0 ? String(row[topicIdx] || "").trim() : "",
+          }));
         }
-        const group = groups.get(courseName);
-        if (!group.instructorName && instructorIdx >= 0) group.instructorName = String(row[instructorIdx] || "").trim();
-        if (!group.instructorPhone && phoneIdx >= 0) group.instructorPhone = String(row[phoneIdx] || "").trim();
-        if (!group.instructorEmail && emailIdx >= 0) group.instructorEmail = String(row[emailIdx] || "").trim();
-        if (!group.track && trackIdx >= 0) group.track = String(row[trackIdx] || "").trim();
-        if (!group.studioName && studioIdx >= 0) group.studioName = String(row[studioIdx] || "").trim();
-        if (!group.kitName && kitIdx >= 0) group.kitName = String(row[kitIdx] || "").trim();
-        if (!group.description && notesIdx >= 0) group.description = String(row[notesIdx] || "").trim();
-        group.schedule.push(normalizeScheduleEntry({
-          date,
-          startTime: startIdx >= 0 ? String(row[startIdx] || "").trim() || "09:00" : "09:00",
-          endTime: endIdx >= 0 ? String(row[endIdx] || "").trim() || "12:00" : "12:00",
-          topic: topicIdx >= 0 ? String(row[topicIdx] || "").trim() : "",
-        }));
       }
 
       if (groups.size === 0) {
