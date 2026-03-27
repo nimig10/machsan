@@ -1180,27 +1180,24 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
           <div style={{marginBottom:16}}>
             <div style={{fontWeight:700,fontSize:12,color:"#9b59b6",marginBottom:4}}>📅 {schedule.length} שיעורים בלוח:</div>
             {/* Header row with resize handles */}
-            <div style={{display:"grid",gridTemplateColumns:gridTemplate,gap:0,fontSize:11,color:"var(--text-muted)",padding:"0 0",marginBottom:2,userSelect:"none"}}>
-              {["","תאריך","התחלה","סיום","נושא","🏫 כיתה","🎒 ערכה",""].map((label,ci)=>(
-                <div key={ci} style={{position:"relative",padding:"2px 8px",overflow:"hidden",whiteSpace:"nowrap"}}>
+            <div style={{display:"grid",gridTemplateColumns:gridTemplate,gap:0,fontSize:11,color:"var(--text-muted)",marginBottom:2,userSelect:"none",background:"var(--surface2)",borderRadius:"6px 6px 0 0",border:"1px solid rgba(155,89,182,0.2)"}}>
+              {["","תאריך","התחלה","סיום","נושא","🏫 כיתה","🎒 ערכה","🗑️"].map((label,ci)=>(
+                <div key={ci} style={{position:"relative",padding:"4px 8px",overflow:"hidden",whiteSpace:"nowrap",
+                  borderRight: ci < 7 ? "1px solid rgba(155,89,182,0.25)" : "none",
+                  fontWeight:700, textAlign: ci===0||ci===7 ? "center" : "right"}}>
                   {label}
                   {ci > 0 && ci < 7 && (
-                    <div onMouseDown={e=>startColResize(e,ci)}
-                      style={{position:"absolute",left:0,top:0,width:6,height:"100%",cursor:"col-resize",zIndex:2,
-                        display:"flex",alignItems:"center",justifyContent:"center"}}
-                      onMouseEnter={e=>e.currentTarget.querySelector("span").style.background="rgba(155,89,182,0.9)"}
-                      onMouseLeave={e=>e.currentTarget.querySelector("span").style.background="rgba(155,89,182,0.25)"}
-                    >
-                      <span style={{display:"block",width:2,height:"70%",borderRadius:2,background:"rgba(155,89,182,0.25)",pointerEvents:"none",transition:"background 0.15s"}}/>
-                    </div>
+                    <div onMouseDown={e=>{ e.preventDefault(); startColResize(e,ci); }}
+                      style={{position:"absolute",left:0,top:0,width:8,height:"100%",cursor:"col-resize",zIndex:2}}
+                    />
                   )}
                 </div>
               ))}
             </div>
             <div style={{maxHeight:300,overflow:"auto",display:"flex",flexDirection:"column",gap:2}}>
               {schedule.map((s,i)=>(
-                <div key={`${s.date}-${s.startTime}-${i}`} style={{display:"grid",gridTemplateColumns:gridTemplate,alignItems:"center",gap:0,fontSize:12,padding:"4px 0",background:"var(--surface2)",borderRadius:6,border:"1px solid rgba(155,89,182,0.14)"}}>
-                  <div style={{fontWeight:800,color:"#9b59b6",fontSize:11,textAlign:"center"}}>#{i+1}</div>
+                <div key={`${s.date}-${s.startTime}-${i}`} style={{display:"grid",gridTemplateColumns:gridTemplate,alignItems:"center",gap:0,fontSize:12,background:"var(--surface2)",border:"1px solid rgba(155,89,182,0.12)",borderTop:"none"}}>
+                  <div style={{fontWeight:800,color:"#9b59b6",fontSize:11,textAlign:"center",padding:"4px 2px",borderRight:"1px solid rgba(155,89,182,0.15)"}}>#{i+1}</div>
                   <input className="form-input" type="date" value={s.date} style={{padding:"3px 6px",fontSize:12,height:28,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i, "date", e.target.value)}/>
                   <select className="form-select" value={s.startTime} style={{padding:"3px 4px",fontSize:12,height:28,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i, "startTime", e.target.value)}>
                     {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
@@ -1217,9 +1214,9 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
                     <option value="">ללא שיוך</option>
                     {lessonKits.map(k=><option key={k.id} value={k.id}>{k.name}</option>)}
                   </select>
-                  <div style={{display:"flex",justifyContent:"center"}}>
+                  <div style={{display:"flex",justifyContent:"center",borderRight:"none",background:"rgba(255,80,80,0.04)"}}>
                     <button onClick={()=>setSchedule(prev=>prev.filter((_,j)=>j!==i))}
-                      style={{background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:16,padding:0,lineHeight:1}} title="מחק מפגש">×</button>
+                      style={{background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:16,padding:0,lineHeight:1,width:"100%",height:28}} title="מחק מפגש">×</button>
                   </div>
                 </div>
               ))}
