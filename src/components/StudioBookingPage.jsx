@@ -759,6 +759,7 @@ export default function StudioBookingPage(props) {
                             return certNames.length ? <span style={{ fontSize:9, color:"var(--accent)", lineHeight:1.2, wordBreak:"break-word", textAlign:"center" }}>🎓 {certNames.join(", ")}</span> : null;
                           })()}
                           {studio.isClassroom && <div style={{ fontSize:9, color:"#3498db", fontWeight:800 }}>🏫 כיתה</div>}
+                          {studio.classroomOnly && <div style={{ fontSize:9, color:"#fff", fontWeight:800, background:"#3498db", borderRadius:4, padding:"1px 5px" }}>🔒 כיתה בלבד</div>}
                           {isStudioDisabled(studio) && <div style={{ fontSize:9, color:"var(--red)", fontWeight:800 }}>🔧 מושבת</div>}
                         </div>
                       </td>
