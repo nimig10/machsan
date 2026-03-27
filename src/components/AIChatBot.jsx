@@ -3,12 +3,12 @@ import { createPortal } from 'react-dom';
 import { getAvailable, formatLocalDateInput, storageGet } from '../utils.js';
 
 const fetchWithRetry = async (url, options, maxRetries = 5) => {
-  const delays = [2000, 5000, 10000, 20000, 32000];
+  const delays = [1000, 2000, 5000, 10000, 20000];
   for (let i = 0; i < maxRetries; i += 1) {
     const response = await fetch(url, options);
-    if (response.status === 429) {
+    if (response.status === 429 || response.status === 503 || response.status === 500) {
       const delay = delays[i] ?? delays[delays.length - 1];
-      console.warn(`AI chat rate limit hit. Retrying in ${delay / 1000} seconds...`);
+      console.warn(`AI chat error ${response.status}. Retrying in ${delay / 1000}s (attempt ${i + 1}/${maxRetries})...`);
       await new Promise((resolve) => setTimeout(resolve, delay));
       continue;
     }
@@ -386,6 +386,8 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
       let errorMessage = "מצטער, חלה שגיאה בחיבור ל-AI. נסה שוב מאוחר יותר.";
       if (error.message?.includes("429") || error.status === 429 || error.toString().toLowerCase().includes("quota")) {
         errorMessage = "הגענו למכסת ה-AI היומית של המערכת (כדי לשמור על עלויות נמוכות). המערכת תתאפס ותחזור לפעול מחר בבוקר. תודה על ההבנה!";
+      } else if (error.message?.includes("503") || error.status === 503) {
+        errorMessage = "שרתי ה-AI של גוגל בעומס זמני. המערכת ניסתה להתחבר שוב אוטומטית — אנא נסה שוב בעוד דקה.";
       }
       setMessages(prev => [...prev, { role: 'assistant', content: errorMessage }]);
     } finally {

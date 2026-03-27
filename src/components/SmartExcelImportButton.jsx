@@ -17,7 +17,7 @@ const fetchWithRetry = async (url, options, maxRetries = 5) => {
     try {
       const response = await fetch(url, { ...options, signal: controller.signal });
       clearTimeout(timeoutId);
-      if (response.status === 429) {
+      if (response.status === 429 || response.status === 503 || response.status === 500) {
         await new Promise((resolve) => setTimeout(resolve, delays[i] ?? delays[delays.length - 1]));
         continue;
       }
