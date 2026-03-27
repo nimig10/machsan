@@ -4205,6 +4205,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     const [xlImporting, setXlImporting]     = useState(false);
     const [teacherMessage, setTeacherMessage] = useState("");
     const [teacherEmailSending, setTeacherEmailSending] = useState(false);
+    const [selectedRecipient, setSelectedRecipient] = useState("");
     const [kitConflicts, setKitConflicts] = useState(null); // {session, conflicts}[]
     const isEditMode = !!initial;
     const [localMsg, setLocalMsg] = useState(null); // {type:"success"|"error", text:""}
@@ -4343,7 +4344,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     };
 
     const sendTeacherKitEmail = async () => {
-      const recipient = effectiveInstructorEmail || String(instructorEmail || "").trim();
+      const recipient = selectedRecipient || effectiveInstructorEmail || String(instructorEmail || "").trim();
       if (!recipient) {
         setLocalMsg({type:"error",text:"יש להזין מייל למורה לפני השליחה"});
         return;
@@ -4845,37 +4846,71 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
           </div>
         )}
 
-        {lessonManagedKit && (
-        <div style={{background:"rgba(46,204,113,0.08)",border:"1px solid rgba(46,204,113,0.25)",borderRadius:"var(--r)",padding:16,marginBottom:18}}>
-          <div style={{fontWeight:800,fontSize:13,color:"var(--green)",marginBottom:12}}>📧 שליחת ערכה למורה</div>
-          <div style={{fontSize:12,color:"var(--text2)",marginBottom:10}}>
-            לאחר שצוות המחסן סיים להרכיב את הערכה, ניתן לשלוח למורה את נוסח ההודעה שלך יחד עם רשימת הציוד והמפגשים, כדי שיוכל לעבור ולבדוק את הערכה.
+        {lessonManagedKit && (()=>{
+          // Collect all unique instructor emails from linked lessons
+          const recipientOptions = linkedLessons
+            .filter(l => l.instructorEmail && String(l.instructorEmail).trim())
+            .map(l => ({ name: l.instructorName || l.name || "", email: String(l.instructorEmail).trim() }))
+            .filter((v,i,a) => a.findIndex(x=>x.email===v.email)===i); // unique by email
+          // Also add kit-level email if different
+          if (initial?.instructorEmail && String(initial.instructorEmail).trim()) {
+            const kitEmail = String(initial.instructorEmail).trim();
+            if (!recipientOptions.find(r=>r.email===kitEmail)) {
+              recipientOptions.unshift({ name: initial.instructorName || "", email: kitEmail });
+            }
+          }
+          const activeRecipient = selectedRecipient || effectiveInstructorEmail || String(instructorEmail||"").trim();
+          const hasMultiple = recipientOptions.length > 1;
+          return (
+          <div style={{background:"rgba(46,204,113,0.08)",border:"1px solid rgba(46,204,113,0.25)",borderRadius:"var(--r)",padding:16,marginBottom:18}}>
+            <div style={{fontWeight:800,fontSize:13,color:"var(--green)",marginBottom:12}}>📧 שליחת ערכה למורה</div>
+            <div style={{fontSize:12,color:"var(--text2)",marginBottom:10}}>
+              לאחר שצוות המחסן סיים להרכיב את הערכה, ניתן לשלוח למורה את נוסח ההודעה שלך יחד עם רשימת הציוד והמפגשים, כדי שיוכל לעבור ולבדוק את הערכה.
+            </div>
+            {/* Recipient selector when multiple instructors */}
+            {hasMultiple && (
+              <div className="form-group" style={{marginBottom:12}}>
+                <label className="form-label">שליחה אל</label>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {recipientOptions.map(r=>(
+                    <label key={r.email} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"6px 10px",borderRadius:"var(--r-sm)",
+                      background:activeRecipient===r.email?"rgba(46,204,113,0.15)":"var(--surface2)",
+                      border:`1px solid ${activeRecipient===r.email?"rgba(46,204,113,0.4)":"var(--border)"}`,transition:"all 0.15s"}}>
+                      <input type="radio" name="teacherRecipient" value={r.email} checked={activeRecipient===r.email}
+                        onChange={()=>setSelectedRecipient(r.email)}
+                        style={{accentColor:"var(--green)"}}/>
+                      <span style={{fontSize:13,fontWeight:600}}>{r.name?`👨‍🏫 ${r.name} · `:""}<span style={{fontWeight:400,color:"var(--text2)"}}>{r.email}</span></span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="form-group" style={{marginBottom:12}}>
+              <label className="form-label">נוסח ההודעה למורה</label>
+              <textarea
+                className="form-textarea"
+                rows={4}
+                placeholder="לדוגמה: שלום, הערכה מוכנה לבדיקה ומצורפת אליך רשימת הציוד והמפגשים."
+                value={teacherMessage}
+                onChange={e=>setTeacherMessage(e.target.value)}
+              />
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+              <button
+                type="button"
+                className="btn btn-success"
+                onClick={sendTeacherKitEmail}
+                disabled={teacherEmailSending || !activeRecipient}
+              >
+                {teacherEmailSending ? "⏳ שולח למורה..." : "📤 שליחת ערכה למורה"}
+              </button>
+              <span style={{fontSize:12,color:"var(--text3)"}}>
+                {activeRecipient ? `המייל יישלח אל ${activeRecipient}` : "יש להזין קודם כתובת מייל למורה"}
+              </span>
+            </div>
           </div>
-          <div className="form-group" style={{marginBottom:12}}>
-            <label className="form-label">נוסח ההודעה למורה</label>
-            <textarea
-              className="form-textarea"
-              rows={4}
-              placeholder="לדוגמה: שלום, הערכה מוכנה לבדיקה ומצורפת אליך רשימת הציוד והמפגשים."
-              value={teacherMessage}
-              onChange={e=>setTeacherMessage(e.target.value)}
-            />
-          </div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-            <button
-              type="button"
-              className="btn btn-success"
-              onClick={sendTeacherKitEmail}
-              disabled={teacherEmailSending || !(effectiveInstructorEmail || String(instructorEmail||"").trim())}
-            >
-              {teacherEmailSending ? "⏳ שולח למורה..." : "📤 שליחת ערכה למורה"}
-            </button>
-            <span style={{fontSize:12,color:"var(--text3)"}}>
-              {(effectiveInstructorEmail || String(instructorEmail||"").trim()) ? `המייל יישלח אל ${effectiveInstructorEmail || instructorEmail.trim()}` : "יש להזין קודם כתובת מייל למורה"}
-            </span>
-          </div>
-        </div>
-        )}
+          );
+        })()}
 
         {/* Single CTA */}
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",paddingTop:4}}>
