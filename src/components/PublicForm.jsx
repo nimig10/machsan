@@ -888,6 +888,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [studios, setStudios] = useState([]);
   const [studioWeekOffset, setStudioWeekOffset] = useState(0);
   const [studioModal, setStudioModal] = useState(null);
+  const [studioInfoPanel, setStudioInfoPanel] = useState(null); // studio object
   const [showEquipmentAiModal, setShowEquipmentAiModal] = useState(false);
   const [equipmentAiPrompt, setEquipmentAiPrompt] = useState("");
   const [equipmentAiLoading, setEquipmentAiLoading] = useState(false);
@@ -3159,7 +3160,8 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                 const certName = getStudioCertName(studio.id);
                 return (
                 <tr key={studio.id} style={{opacity:blocked?0.5:1}}>
-                  <td style={{padding:"6px 4px",border:"1px solid var(--border)",background:blocked?"rgba(231,76,60,0.08)":"var(--surface2)",verticalAlign:"middle",position:"sticky",right:0,zIndex:2,boxShadow:"-2px 0 6px rgba(0,0,0,0.18)"}}>
+                  <td style={{padding:"6px 4px",border:"1px solid var(--border)",background:blocked?"rgba(231,76,60,0.08)":"var(--surface2)",verticalAlign:"middle",position:"sticky",right:0,zIndex:2,boxShadow:"-2px 0 6px rgba(0,0,0,0.18)",cursor:"pointer"}}
+                    onClick={()=>setStudioInfoPanel(studio)}>
                     <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
                       {studio.image?.startsWith("data:") || studio.image?.startsWith("http")
                         ? <img src={studio.image} alt={studio.name} style={{width:32,height:32,borderRadius:6,objectFit:"cover"}}/>
@@ -3169,6 +3171,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                       {studio.isClassroom && <div style={{fontSize:9,color:"#3498db",fontWeight:800}}>🏫 כיתה</div>}
                       {maintenanceBlocked && <div style={{fontSize:9,color:"var(--red)",fontWeight:800}}>🔧 בתחזוקה</div>}
                       {!maintenanceBlocked && blocked && <div style={{fontSize:9,color:"var(--red)",fontWeight:800}}>⛔ חסר הסמכה</div>}
+                      <div style={{fontSize:9,color:"var(--accent)",fontWeight:700,marginTop:1}}>ℹ️</div>
                     </div>
                   </td>
                   {weekDays.map(day=>{
@@ -3208,6 +3211,27 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
           </div>
           </div>
         </>
+      )}
+      {studioInfoPanel && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}
+          onClick={e=>e.target===e.currentTarget&&setStudioInfoPanel(null)}>
+          <div style={{width:"100%",maxWidth:400,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl",overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",borderBottom:"1px solid var(--border)",background:"var(--surface2)"}}>
+              <div style={{fontWeight:900,fontSize:16}}>{studioInfoPanel.name}</div>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setStudioInfoPanel(null)}>✕</button>
+            </div>
+            <div style={{padding:"20px",display:"flex",flexDirection:"column",alignItems:"center",gap:16}}>
+              {studioInfoPanel.image?.startsWith("http") || studioInfoPanel.image?.startsWith("data:")
+                ? <img src={studioInfoPanel.image} alt={studioInfoPanel.name} style={{width:"100%",maxHeight:220,objectFit:"cover",borderRadius:10}}/>
+                : <div style={{fontSize:72,lineHeight:1}}>{studioInfoPanel.image||"🎙️"}</div>
+              }
+              {studioInfoPanel.description
+                ? <p style={{fontSize:14,color:"var(--text)",lineHeight:1.7,textAlign:"right",margin:0,whiteSpace:"pre-wrap"}}>{studioInfoPanel.description}</p>
+                : <p style={{fontSize:13,color:"var(--text3)",margin:0}}>אין תיאור לאולפן זה.</p>
+              }
+            </div>
+          </div>
+        </div>
       )}
       {renderAddBookingModal()}
       {/* My bookings — hide past bookings */}
