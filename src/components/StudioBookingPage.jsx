@@ -770,13 +770,13 @@ export default function StudioBookingPage(props) {
                 </>
               )}
             </div>
-            <div className="no-swipe-nav" style={{ flex: calendarFullscreen ? 1 : undefined, overflowX:"auto", minHeight:0 }}>
-              <table style={{ width:"100%", borderCollapse:"separate", borderSpacing:0, tableLayout:"fixed", minWidth: isMobile && !calendarFullscreen ? undefined : `${Math.max(570, visibleDays.length * 90 + 130)}px` }}>
+            <div className="no-swipe-nav" style={{ flex: calendarFullscreen ? 1 : undefined, overflowX:"auto", overflowY:"auto", maxHeight: calendarFullscreen ? undefined : "calc(100vh - 260px)", minHeight:0 }}>
+              <table style={{ width:"100%", borderCollapse:"separate", borderSpacing:0, tableLayout:"fixed", minWidth: isMobile ? `${visibleDays.length * 110 + 70}px` : `${Math.max(570, visibleDays.length * 90 + 130)}px` }}>
                 <thead>
                   <tr>
-                    <th style={{ ...thStyle, position:"sticky", right:0, zIndex:3, width: isMobile ? 70 : 130, boxShadow:"-2px 0 6px rgba(0,0,0,0.18)" }}>אולפן</th>
+                    <th style={{ ...thStyle, position:"sticky", top:0, right:0, zIndex:5, width: isMobile ? 70 : 130, boxShadow:"-2px 0 6px rgba(0,0,0,0.18)" }}>אולפן</th>
                     {visibleDays.map((day) => (
-                      <th key={day.fullDate} style={{ ...thStyle, background:day.isToday ? "rgba(245,166,35,0.15)" : "var(--surface2)" }}>
+                      <th key={day.fullDate} style={{ ...thStyle, position:"sticky", top:0, zIndex:3, background:day.isToday ? "rgba(245,166,35,0.15)" : "var(--surface2)" }}>
                         <div style={{ fontWeight:700 }}>{day.name}</div>
                         <div style={{ fontSize:11, color:day.isToday ? "var(--accent)" : "var(--text3)" }}>{day.date}/{String(new Date(day.fullDate).getMonth() + 1).padStart(2, "0")}</div>
                       </th>
