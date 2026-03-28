@@ -3148,7 +3148,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                 <th style={{padding:"8px 6px",background:"var(--surface2)",fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",width:80,position:"sticky",top:calendarFullscreen?0:undefined,right:0,zIndex:calendarFullscreen?5:3,boxShadow:"-2px 0 6px rgba(0,0,0,0.18)"}}>אולפן</th>
                 {weekDays.map(d=>(
                   <th key={d.fullDate} style={{padding:"8px 6px",background:d.isToday?"var(--accent)":"var(--surface2)",color:d.isToday?"#000":undefined,fontSize:12,fontWeight:700,textAlign:"center",border:"1px solid var(--border)",position:calendarFullscreen?"sticky":undefined,top:0,zIndex:3}}>
-                    <div>{d.name}</div><div style={{fontSize:11,color:d.isToday?"var(--accent)":"var(--text3)"}}>{d.date}/{String(new Date(d.fullDate).getMonth()+1).padStart(2,"0")}</div>
+                    <div>{d.name}</div><div style={{fontSize:11,color:d.isToday?"#000":"var(--text3)"}}>{d.date}/{String(new Date(d.fullDate).getMonth()+1).padStart(2,"0")}</div>
                   </th>
                 ))}
               </tr>
