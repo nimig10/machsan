@@ -198,8 +198,8 @@ function buildEmail({
           ${showDetails ? `<tr><td style="padding:4px 0;width:130px;text-align:right">👤 שם:</td><td style="color:#e8eaf0;font-weight:bold;text-align:right">${student_name}</td></tr>` : ""}
           ${(lesson_kit_name || (isLessonKitReady && project_name)) ? `<tr><td style="padding:4px 0;text-align:right">📚 ערכה:</td><td style="color:#e8eaf0;font-weight:bold;text-align:right">${lesson_kit_name || project_name}</td></tr>` : ""}
           ${loan_type ? `<tr><td style="padding:4px 0;text-align:right">🏷️ סוג:</td><td style="color:#e8eaf0;font-weight:bold;text-align:right">${loan_type}</td></tr>` : ""}
-          ${borrow_date ? `<tr><td style="padding:4px 0;text-align:right;white-space:nowrap">📅 תאריך השאלה:</td><td style="color:#e8eaf0;font-weight:bold;text-align:right;white-space:nowrap">${borrow_date}${borrow_time ? " 🕐 " + borrow_time : ""}</td></tr>` : ""}
-          ${return_date ? `<tr><td style="padding:4px 0;text-align:right;white-space:nowrap">↩ תאריך החזרה:</td><td style="color:#e8eaf0;font-weight:bold;text-align:right;white-space:nowrap">${return_date}${return_time ? " 🕐 " + return_time : ""}</td></tr>` : ""}
+          ${borrow_date ? `<tr><td style="padding:4px 0;text-align:right;white-space:nowrap">📅 תאריך השאלה:</td><td style="color:#e8eaf0;font-weight:bold;text-align:right"><span style="white-space:nowrap">${borrow_date}</span>${borrow_time ? ` <span style="white-space:nowrap">🕐 ${borrow_time}</span>` : ""}</td></tr>` : ""}
+          ${return_date ? `<tr><td style="padding:4px 0;text-align:right;white-space:nowrap">↩ תאריך החזרה:</td><td style="color:#e8eaf0;font-weight:bold;text-align:right"><span style="white-space:nowrap">${return_date}</span>${return_time ? ` <span style="white-space:nowrap">🕐 ${return_time}</span>` : ""}</td></tr>` : ""}
         </table>
         ${items_list ? `
         <div style="margin-top:14px">
