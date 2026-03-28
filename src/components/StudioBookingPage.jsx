@@ -747,7 +747,7 @@ export default function StudioBookingPage(props) {
             <>
             {calendarFullscreen && <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:8999 }} onClick={() => setCalendarFullscreen(false)} />}
             <div style={calendarFullscreen ? { position:"fixed", inset:8, zIndex:9000, background:"var(--bg)", borderRadius:16, border:"1px solid var(--border)", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 20px 60px rgba(0,0,0,0.6)" } : {}}>
-            <div style={{ padding:"6px 12px", background:"var(--surface)", border:"1px solid var(--border)", borderRadius: calendarFullscreen ? "16px 16px 0 0" : "8px 8px 0 0", display:"flex", justifyContent:"center", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+            <div style={{ padding:"6px 12px", background:"var(--surface)", border:"1px solid var(--border)", borderRadius: calendarFullscreen ? "16px 16px 0 0" : "8px 8px 0 0", display:"flex", justifyContent:"center", alignItems:"center", gap:6, flexWrap:"nowrap" }}>
               {isMobile && !calendarFullscreen ? (
                 <>
                   <button className="btn btn-secondary btn-sm" onClick={() => { if (mobileDayStart > 0) setMobileDayStart(s => s - MOBILE_DAYS); else setWeekOffset(w => w - 1); }}>→</button>
@@ -760,13 +760,13 @@ export default function StudioBookingPage(props) {
                 </>
               ) : (
                 <>
-                  <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current - 1)}>→ שבוע קודם</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current - 1)}>{isMobile ? "→" : "→ שבוע קודם"}</button>
                   <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(0)}>היום</button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current + 1)}>← שבוע הבא</button>
-                  <span style={{ fontSize:12, color:"var(--text3)" }}>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current + 1)}>{isMobile ? "←" : "← שבוע הבא"}</button>
+                  <span style={{ fontSize:12, color:"var(--text3)", whiteSpace:"nowrap" }}>
                     {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth() + 1).padStart(2, "0")} – {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth() + 1).padStart(2, "0")}
                   </span>
-                  <button className="btn btn-secondary btn-sm" onClick={() => setCalendarFullscreen(f => !f)} title={calendarFullscreen ? "סגור מסך מלא" : "פתח מסך מלא"} style={{ marginInlineStart:"auto" }}>{calendarFullscreen ? "✕ סגור" : "⛶ מסך מלא"}</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setCalendarFullscreen(f => !f)} title={calendarFullscreen ? "סגור מסך מלא" : "פתח מסך מלא"} style={{ marginInlineStart:"auto", whiteSpace:"nowrap" }}>{calendarFullscreen ? "✕ סגור" : "⛶ מסך מלא"}</button>
                 </>
               )}
             </div>
