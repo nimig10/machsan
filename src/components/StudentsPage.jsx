@@ -572,7 +572,7 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
                       </td>
                       <td style={{...tdS,width:48,textAlign:"center"}} onClick={e=>e.stopPropagation()}>
                         <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)",padding:"3px 8px"}}
-                          onClick={()=>{if(confirm(`למחוק את ${s.name}?`))deleteStudent(s.id);}}>🗑️</button>
+                          onClick={()=>deleteStudent(s.id)}>🗑️</button>
                       </td>
                     </tr>);
                   });
@@ -595,7 +595,7 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
                   <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)",padding:"4px 8px",fontSize:15}}
-                    onClick={e=>{e.stopPropagation();if(confirm(`למחוק את ${s.name}?`))deleteStudent(s.id);}}>🗑️</button>
+                    onClick={e=>{e.stopPropagation();deleteStudent(s.id);}}>🗑️</button>
                   <span style={{fontSize:18,color:"var(--text3)"}}>›</span>
                 </div>
               </div>
