@@ -43,11 +43,13 @@ function buildEmail({
   const isLessonKitReady  = type === "lesson_kit_ready";
   const isStudioApproved  = type === "studio_approved";
   const isStudioDeleted   = type === "studio_deleted";
+  const isLessonConflict  = type === "studio_lesson_conflict";
 
   const finalTeacherMessage =
     teacher_message || custom_message || lesson_message || report_note || "";
 
-  const color = isStudioApproved ? "#2ecc71"
+  const color = isLessonConflict ? "#e74c3c"
+    : isStudioApproved ? "#2ecc71"
     : isStudioDeleted ? "#e74c3c"
     : isApproved ? "#2ecc71"
     : isDeptHead ? "#9b59b6"
@@ -57,7 +59,8 @@ function buildEmail({
     : (isNew || isTeamNotify) ? "#f5a623"
     : "#e74c3c";
 
-  const icon = isStudioApproved ? "🎙️"
+  const icon = isLessonConflict ? "❌"
+    : isStudioApproved ? "🎙️"
     : isStudioDeleted ? "❌"
     : isApproved ? "✅"
     : isDeptHead ? "🎓"
@@ -67,7 +70,8 @@ function buildEmail({
     : (isNew || isTeamNotify) ? "⏳"
     : "❌";
 
-  const title = isStudioApproved ? "קביעת האולפן אושרה! 🎙️"
+  const title = isLessonConflict ? "קביעת האולפן בוטלה לטובת שיעור"
+    : isStudioApproved ? "קביעת האולפן אושרה! 🎙️"
     : isStudioDeleted ? "קביעת האולפן בוטלה"
     : isApproved ? "הבקשה אושרה!"
     : isDeptHead ? "בקשת השאלת הפקה ממתינה לאישורך"
@@ -84,7 +88,11 @@ function buildEmail({
     : isLessonKitReady ? (recipient_name || student_name || "המורה")
     : student_name;
 
-  const body = isStudioApproved
+  const body = isLessonConflict
+    ? `אנו מתנצלים, אך המכללה נאלצה לבטל את קביעת האולפן שלך לטובת שיעור.<br/><br/>
+       קביעת האולפן <strong style="color:#e8eaf0">${project_name || "האולפן"}</strong>${borrow_date ? ` בתאריך <strong style="color:#e8eaf0">${borrow_date}</strong>` : ""}${borrow_time ? ` בין השעות <strong style="color:#e8eaf0">${borrow_time}–${return_time || ""}</strong>` : ""} <strong style="color:#e74c3c">בוטלה</strong>.<br/><br/>
+       אתה מוזמן לנסות ולקבוע אולפן חלופי בלוח קביעת האולפנים, או לנסות ולקבוע את האולפן <strong style="color:#e8eaf0">${project_name || "האולפן"}</strong> ביום אחר.`
+    : isStudioApproved
     ? `קביעת האולפן שלך עברה את אישורו של איש הצוות בהצלחה 🎉<br/><br/>
        ניתן להגיע בשמחה ולעבוד באולפן <strong style="color:#2ecc71">${project_name || "האולפן"}</strong>.`
     : isStudioDeleted

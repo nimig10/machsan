@@ -188,9 +188,12 @@ const fetchWithRetry = async (url, options, maxRetries = 5) => {
   return fetch(url, options);
 };
 
-export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[], trackOptions=[] }) {
+export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[], trackOptions=[], studioBookings=[], setStudioBookings, certifications={} }) {
   const [mode, setMode] = useState(null); // null | "add" | "edit"
   const [editTarget, setEditTarget] = useState(null);
+  const [pendingLesson, setPendingLesson] = useState(null);
+  const [conflicts, setConflicts] = useState([]);
+  const [conflictSending, setConflictSending] = useState(false);
   const [detailTarget, setDetailTarget] = useState(null); // course detail modal
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState([]);
@@ -212,7 +215,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     return lessonKits.find(k=>k.lessonId !== null && k.lessonId !== undefined && String(k.lessonId).trim() !== "" && String(k.lessonId)===String(lesson.id)) || null;
   };
 
-  const save = async (lesson) => {
+  const doSaveLesson = async (lesson) => {
     const updated = editTarget
       ? lessons.map(l=>l.id===editTarget.id?lesson:l)
       : [...lessons, lesson];
@@ -221,6 +224,76 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     showToast("success", `קורס "${lesson.name}" ${editTarget?"עודכן":"נוצר"}`);
     setMode(null);
     setEditTarget(null);
+  };
+
+  const findBookingConflicts = (lesson) => {
+    const found = [];
+    const seenIds = new Set();
+    for (const session of (lesson.schedule || [])) {
+      const stId = String(session.studioId || lesson.studioId || "");
+      if (!stId) continue;
+      for (const b of studioBookings) {
+        if (seenIds.has(String(b.id))) continue;
+        const kind = b.bookingKind || (b.lesson_id ? "lesson" : b.teamMemberId ? "team" : "student");
+        if (kind !== "student") continue;
+        if (String(b.studioId) !== stId) continue;
+        if (b.date !== session.date) continue;
+        const bS = b.startTime || "00:00", bE = b.endTime || "23:59";
+        const sS = session.startTime || "00:00", sE = session.endTime || "23:59";
+        if (bS < sE && bE > sS) {
+          const studio = studios.find(s => String(s.id) === stId);
+          found.push({ booking: b, session, studioName: studio?.name || "האולפן" });
+          seenIds.add(String(b.id));
+        }
+      }
+    }
+    return found;
+  };
+
+  const save = async (lesson) => {
+    const found = findBookingConflicts(lesson);
+    if (found.length > 0) {
+      setPendingLesson(lesson);
+      setConflicts(found);
+      return;
+    }
+    await doSaveLesson(lesson);
+  };
+
+  const confirmConflictAndSend = async () => {
+    if (!pendingLesson) return;
+    setConflictSending(true);
+    try {
+      const conflictIds = new Set(conflicts.map(c => String(c.booking.id)));
+      const newBookings = studioBookings.filter(b => !conflictIds.has(String(b.id)));
+      if (setStudioBookings) setStudioBookings(newBookings);
+      await storageSet("studio_bookings", newBookings);
+      await Promise.all(conflicts.map(async ({ booking, studioName }) => {
+        const studentRecord = (certifications?.students || []).find(s => s.name === booking.studentName);
+        const email = studentRecord?.email || booking.email;
+        if (!email) return;
+        try {
+          await fetch("/api/send-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              to: email,
+              type: "studio_lesson_conflict",
+              student_name: booking.studentName,
+              project_name: studioName,
+              borrow_date: booking.date,
+              borrow_time: booking.startTime,
+              return_time: booking.endTime,
+            }),
+          });
+        } catch(e) { console.error("conflict email failed", e); }
+      }));
+      await doSaveLesson(pendingLesson);
+    } finally {
+      setConflictSending(false);
+      setPendingLesson(null);
+      setConflicts([]);
+    }
   };
 
   const del = async (id) => {
@@ -772,6 +845,35 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
   return (
     <div className="page">
+      {conflicts.length > 0 && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:4000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}>
+          <div style={{width:"100%",maxWidth:520,background:"var(--surface)",borderRadius:16,border:"1px solid rgba(231,76,60,0.5)",direction:"rtl",maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
+            <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"rgba(231,76,60,0.08)",borderRadius:"16px 16px 0 0"}}>
+              <div style={{fontWeight:900,fontSize:17,color:"var(--red)"}}>⚠️ התנגשות עם קביעות סטודנטים</div>
+              <div style={{fontSize:13,color:"var(--text2)",marginTop:4}}>{conflicts.length} קביעות סטודנטים חופפות עם שיעורי הקורס החדש</div>
+            </div>
+            <div style={{overflowY:"auto",flex:1,padding:"16px 20px",display:"flex",flexDirection:"column",gap:10}}>
+              {conflicts.map(({ booking, studioName }, i) => (
+                <div key={i} style={{background:"var(--surface2)",borderRadius:10,padding:"12px 14px",border:"1px solid rgba(231,76,60,0.2)"}}>
+                  <div style={{fontWeight:800,fontSize:14,marginBottom:6}}>{booking.studentName}</div>
+                  <div style={{fontSize:12,color:"var(--text2)"}}>🎙️ {studioName}</div>
+                  <div style={{fontSize:12,color:"var(--text2)"}}>📅 {booking.date}</div>
+                  <div style={{fontSize:12,color:"var(--text2)"}}>🕐 {booking.startTime} – {booking.endTime}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{padding:"14px 20px",borderTop:"1px solid var(--border)",display:"flex",gap:10,justifyContent:"flex-end",flexWrap:"wrap"}}>
+              <button className="btn btn-secondary" disabled={conflictSending}
+                onClick={()=>{ setConflicts([]); setPendingLesson(null); }}>
+                ✕ בטל שיוך
+              </button>
+              <button className="btn btn-danger" disabled={conflictSending} onClick={confirmConflictAndSend}>
+                {conflictSending ? "⏳ שולח..." : "✅ אשר ושלח מייל"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {mode ? (
         <LessonForm
           initial={editTarget}
