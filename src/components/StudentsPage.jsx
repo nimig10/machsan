@@ -547,6 +547,7 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
                   <th style={thS}>אימייל</th>
                   <th style={thS}>טלפון</th>
                   <th style={thS}>מסלול לימודים</th>
+                  <th style={{...thS,width:48}}></th>
                 </tr>
               </thead>
               <tbody>
@@ -568,6 +569,10 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
                         {s.track
                           ? <span style={{background:"rgba(245,166,35,0.1)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:20,padding:"3px 10px",fontSize:11,color:"var(--accent)",fontWeight:700}}>🎓 {s.track}</span>
                           : <span style={{fontSize:11,color:"var(--text3)"}}>—</span>}
+                      </td>
+                      <td style={{...tdS,width:48,textAlign:"center"}} onClick={e=>e.stopPropagation()}>
+                        <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)",padding:"3px 8px"}}
+                          onClick={()=>{if(confirm(`למחוק את ${s.name}?`))deleteStudent(s.id);}}>🗑️</button>
                       </td>
                     </tr>);
                   });
