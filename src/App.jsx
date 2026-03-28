@@ -748,7 +748,7 @@ const css = `
   .badge-purple { background:rgba(155,89,182,0.15); color:#9b59b6; border:1px solid rgba(155,89,182,0.3); }
   .badge-orange { background:rgba(230,126,34,0.18); color:#e67e22; border:1px solid rgba(230,126,34,0.4); }
   .badge-gray { background:var(--surface2); color:var(--text2); border:1px solid var(--border); }
-  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; z-index:1000; padding:20px; backdrop-filter:blur(4px); animation:fadeIn 0.15s; }
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; z-index:10000; padding:20px; backdrop-filter:blur(4px); animation:fadeIn 0.15s; }
   .modal { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); width:100%; max-width:580px; max-height:90vh; overflow-y:auto; animation:slideUp 0.2s; }
   .modal-lg { max-width:800px; }
   .modal-header { padding:20px 24px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; background:var(--surface); z-index:1; }
