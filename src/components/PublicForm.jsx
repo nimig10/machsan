@@ -888,7 +888,6 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [studios, setStudios] = useState([]);
   const [studioWeekOffset, setStudioWeekOffset] = useState(0);
   const [studioModal, setStudioModal] = useState(null);
-  const [studioInfoPanel, setStudioInfoPanel] = useState(null); // studio object
   const [showEquipmentAiModal, setShowEquipmentAiModal] = useState(false);
   const [equipmentAiPrompt, setEquipmentAiPrompt] = useState("");
   const [equipmentAiLoading, setEquipmentAiLoading] = useState(false);
@@ -2246,6 +2245,7 @@ ${inventory}
 // ─── PUBLIC STUDIO BOOKING (student side) ────────────────────────────────────
 function PublicStudioBooking({ studios, bookings, setBookings, student, showToast, weekOffset, setWeekOffset, modal, setModal, certifications, siteSettings = {}, policies = {} }) {
   const [saving, setSaving] = useState(false);
+  const [studioInfoPanel, setStudioInfoPanel] = useState(null); // studio object for info modal
   const [dayView, setDayView] = useState(null); // { studioId, date, dayName }
   const [nightPolicyPending, setNightPolicyPending] = useState(null); // booking args waiting for policy agreement
   const [nightPolicyScrolled, setNightPolicyScrolled] = useState(false);
