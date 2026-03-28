@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { storageSet, lsGet } from "../utils.js";
 import { Modal } from "./ui.jsx";
 
@@ -796,7 +796,7 @@ export default function StudioBookingPage(props) {
                 </>
               )}
             </div>
-            <div style={{ display:"flex", overflow:"hidden", flex: calendarFullscreen ? 1 : undefined }}>
+            <div style={{ display:"flex", flex: calendarFullscreen ? 1 : undefined, minHeight:0 }}>
               {/* Studio name column — fixed, never scrolls */}
               <table ref={studioColRef} style={{ flexShrink:0, width: isMobile && !calendarFullscreen ? 64 : 130, borderCollapse:"separate", borderSpacing:0, background:"var(--surface2)", zIndex:2, boxShadow:"2px 0 6px rgba(0,0,0,0.25)" }}>
                 <thead>
