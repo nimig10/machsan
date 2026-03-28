@@ -111,6 +111,8 @@ function addDaysToDateString(dateStr, daysToAdd = 0) {
 }
 
 const thStyle = { padding:"8px 10px", background:"var(--surface2)", fontSize:12, fontWeight:700, textAlign:"center", border:"1px solid var(--border)" };
+const thStickyStyle = { ...thStyle, position:"sticky", right:0, zIndex:2 };
+const tdStickyStyle = { padding:"6px 4px", border:"1px solid var(--border)", textAlign:"center", background:"var(--surface2)", position:"sticky", right:0, zIndex:1 };
 const tdStyle = { padding:"6px 8px", border:"1px solid var(--border)", textAlign:"center" };
 const labelStyle = { display:"flex", flexDirection:"column", gap:4, fontSize:13, fontWeight:600, color:"var(--text2)" };
 
@@ -771,7 +773,7 @@ export default function StudioBookingPage(props) {
               <table style={{ width:"100%", minWidth: isMobile && !calendarFullscreen ? 260 : 700, borderCollapse:"collapse", tableLayout:"fixed" }}>
                 <thead>
                   <tr>
-                    <th style={{ ...thStyle, width: isMobile && !calendarFullscreen ? 64 : 130 }}>אולפן</th>
+                    <th style={{ ...thStickyStyle, width: isMobile && !calendarFullscreen ? 64 : 130 }}>אולפן</th>
                     {visibleDays.map((day) => (
                       <th key={day.fullDate} style={{ ...thStyle, background:day.isToday ? "rgba(245,166,35,0.15)" : "var(--surface2)" }}>
                         <div style={{ fontWeight:700 }}>{day.name}</div>
@@ -783,7 +785,7 @@ export default function StudioBookingPage(props) {
                 <tbody>
                   {studios.map((studio) => (
                     <tr key={studio.id}>
-                      <td style={{ ...tdStyle, background:"var(--surface2)", verticalAlign:"middle", padding:"6px 4px" }}>
+                      <td style={{ ...tdStickyStyle, verticalAlign:"middle" }}>
                         <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
                           <StudioImg studio={studio} size={isMobile && !calendarFullscreen ? 22 : 28} />
                           <span style={{ fontSize: isMobile && !calendarFullscreen ? 9 : 11, fontWeight:800, lineHeight:1.2, wordBreak:"break-word", textAlign:"center" }}>{studio.name}</span>
