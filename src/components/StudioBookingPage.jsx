@@ -760,12 +760,12 @@ export default function StudioBookingPage(props) {
                 </>
               ) : (
                 <>
-                  <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current - 1)}>{isMobile ? "→" : "→ שבוע קודם"}</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current - 1)}>{calendarFullscreen ? "→" : "→ שבוע קודם"}</button>
                   <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(0)}>היום</button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current + 1)}>{isMobile ? "←" : "← שבוע הבא"}</button>
-                  <span style={{ fontSize:12, color:"var(--text3)", whiteSpace:"nowrap" }}>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current + 1)}>{calendarFullscreen ? "←" : "← שבוע הבא"}</button>
+                  {!calendarFullscreen && <span style={{ fontSize:12, color:"var(--text3)", whiteSpace:"nowrap" }}>
                     {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth() + 1).padStart(2, "0")} – {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth() + 1).padStart(2, "0")}
-                  </span>
+                  </span>}
                   <button className="btn btn-secondary btn-sm" onClick={() => setCalendarFullscreen(f => !f)} title={calendarFullscreen ? "סגור מסך מלא" : "פתח מסך מלא"} style={{ marginInlineStart:"auto", whiteSpace:"nowrap" }}>{calendarFullscreen ? "✕ סגור" : "⛶ מסך מלא"}</button>
                 </>
               )}
