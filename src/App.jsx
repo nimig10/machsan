@@ -872,8 +872,8 @@ const css = `
     .responsive-split { grid-template-columns:1fr; }
     .eq-grid { grid-template-columns:1fr 1fr; gap:12px; }
     .eq-card { padding:12px; }
-    .modal { max-width:100%; max-height:95vh; border-radius:var(--r) var(--r) 0 0; }
-    .modal-overlay { align-items:flex-end; padding:0; }
+    .modal { max-width:100%; max-height:calc(100dvh - 60px); border-radius:var(--r) var(--r) 0 0; }
+    .modal-overlay { align-items:flex-end; padding:60px 0 0 0; }
     .modal-lg { max-width:100%; }
     .search-bar { min-width:0; flex:1; }
     .flex-between { flex-wrap:wrap; gap:10px; }
