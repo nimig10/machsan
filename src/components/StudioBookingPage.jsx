@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { storageSet, lsGet } from "../utils.js";
 import { Modal } from "./ui.jsx";
 
@@ -129,8 +129,6 @@ export default function StudioBookingPage(props) {
   const setSiteSettings = setSiteSettingsProp ?? setLocalSiteSettings;
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth < 769);
-  const studioColRef = useRef(null);
-  const daysColRef = useRef(null);
   const [mobileDayStart, setMobileDayStart] = useState(0);
   const [weekOffset, setWeekOffset] = useState(0);
   const [calendarFullscreen, setCalendarFullscreen] = useState(false);
@@ -163,30 +161,6 @@ export default function StudioBookingPage(props) {
     setMobileDayStart(todayIdx >= 0 ? Math.max(0, Math.min(4, todayIdx - 1)) : 0);
   }, [weekOffset]);
 
-  // Sync row heights between studio column and days column
-  useEffect(() => {
-    const sc = studioColRef.current;
-    const dc = daysColRef.current;
-    if (!sc || !dc) return;
-    const syncHeights = () => {
-      const sr = Array.from(sc.querySelectorAll("tr"));
-      const dr = Array.from(dc.querySelectorAll("tr"));
-      sr.forEach(r => { r.style.height = ""; });
-      dr.forEach(r => { r.style.height = ""; });
-      requestAnimationFrame(() => {
-        for (let i = 0; i < Math.max(sr.length, dr.length); i++) {
-          const s = sr[i], d = dr[i];
-          if (!s && !d) continue;
-          const sh = s ? s.getBoundingClientRect().height : 0;
-          const dh = d ? d.getBoundingClientRect().height : 0;
-          const h = Math.max(sh, dh);
-          if (s) s.style.height = h + "px";
-          if (d) d.style.height = h + "px";
-        }
-      });
-    };
-    syncHeights();
-  }, [studios, visibleDays, bookings, isMobile, calendarFullscreen]);
 
   const todayStr = getTodayStr();
   const weekDays = getWeekDays(weekOffset);
@@ -796,18 +770,23 @@ export default function StudioBookingPage(props) {
                 </>
               )}
             </div>
-            <div style={{ display:"flex", flex: calendarFullscreen ? 1 : undefined, minHeight:0 }}>
-              {/* Studio name column — fixed, never scrolls */}
-              <table ref={studioColRef} style={{ flexShrink:0, width: isMobile && !calendarFullscreen ? 64 : 130, borderCollapse:"separate", borderSpacing:0, background:"var(--surface2)", zIndex:2, boxShadow:"2px 0 6px rgba(0,0,0,0.25)" }}>
+            <div className="no-swipe-nav" style={{ flex: calendarFullscreen ? 1 : undefined, overflowX:"auto", minHeight:0 }}>
+              <table style={{ width:"100%", borderCollapse:"separate", borderSpacing:0, tableLayout:"fixed", minWidth: isMobile && !calendarFullscreen ? undefined : `${Math.max(570, visibleDays.length * 90 + 130)}px` }}>
                 <thead>
                   <tr>
-                    <th style={{ ...thStyle, width: isMobile && !calendarFullscreen ? 64 : 130 }}>אולפן</th>
+                    <th style={{ ...thStyle, position:"sticky", right:0, zIndex:3, width: isMobile && !calendarFullscreen ? 70 : 130, boxShadow:"-2px 0 6px rgba(0,0,0,0.18)" }}>אולפן</th>
+                    {visibleDays.map((day) => (
+                      <th key={day.fullDate} style={{ ...thStyle, background:day.isToday ? "rgba(245,166,35,0.15)" : "var(--surface2)" }}>
+                        <div style={{ fontWeight:700 }}>{day.name}</div>
+                        <div style={{ fontSize:11, color:day.isToday ? "var(--accent)" : "var(--text3)" }}>{day.date}/{String(new Date(day.fullDate).getMonth() + 1).padStart(2, "0")}</div>
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {studios.map((studio) => (
                     <tr key={studio.id}>
-                      <td style={{ ...tdStyle, background:"var(--surface2)", verticalAlign:"middle", padding:"6px 4px" }}>
+                      <td style={{ ...tdStyle, position:"sticky", right:0, zIndex:2, background:"var(--surface2)", verticalAlign:"middle", padding:"6px 4px", boxShadow:"-2px 0 6px rgba(0,0,0,0.18)", width: isMobile && !calendarFullscreen ? 70 : 130 }}>
                         <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
                           <StudioImg studio={studio} size={isMobile && !calendarFullscreen ? 22 : 28} />
                           <span style={{ fontSize: isMobile && !calendarFullscreen ? 9 : 11, fontWeight:800, lineHeight:1.2, wordBreak:"break-word", textAlign:"center" }}>{studio.name}</span>
@@ -820,53 +799,32 @@ export default function StudioBookingPage(props) {
                           {isStudioDisabled(studio) && <div style={{ fontSize:9, color:"var(--red)", fontWeight:800 }}>🔧</div>}
                         </div>
                       </td>
+                      {isStudioDisabled(studio) ? (
+                        <td colSpan={visibleDays.length} style={{ ...tdStyle, background:"rgba(231,76,60,0.08)", color:"var(--red)", fontWeight:800, textAlign:"center", padding:"14px 18px" }}>
+                          {STUDIO_MAINTENANCE_MESSAGE}
+                        </td>
+                      ) : visibleDays.map((day) => {
+                        const dayBookings = cellBookings(studio.id, day.fullDate);
+                        return (
+                          <td key={day.fullDate} style={{ ...tdStyle, verticalAlign:"top", cursor:"pointer", minHeight:70, background:day.isToday ? "rgba(245,166,35,0.05)" : undefined }} onClick={() => openAddBookingModal(studio.id, studio.name, day.fullDate, day.name)}>
+                            {dayBookings.map((booking) => {
+                              const color = getBookingColor(booking);
+                              return (
+                                <div key={booking.id} style={{ background:`${color}20`, border:`1.5px solid ${color}`, borderRadius:6, padding: isMobile && !calendarFullscreen ? "3px 4px" : "5px 7px", marginBottom:4, fontSize: isMobile && !calendarFullscreen ? 10 : 12, cursor:"pointer", wordBreak:"break-word", whiteSpace:"normal", textAlign:"right" }} onClick={(event) => { event.stopPropagation(); openViewBookingModal(booking, studio.name); }}>
+                                  <div style={{ fontWeight:900, color, fontSize: isMobile && !calendarFullscreen ? 10 : 12 }}>{getBookingTimeLabel(booking)}</div>
+                                  <div style={{ color:"var(--text)", fontWeight:800, fontSize: isMobile && !calendarFullscreen ? 10 : 12, lineHeight:1.35 }}>{getBookingTitle(booking)}</div>
+                                  {!isMobile && booking.instructorName && <div style={{ color:"var(--text2)", fontSize:11, fontWeight:600, lineHeight:1.3, marginTop:2 }}>👨‍🏫 {booking.instructorName}</div>}
+                                </div>
+                              );
+                            })}
+                            {dayBookings.length === 0 && <div style={{ color:"var(--text3)", fontSize:11, textAlign:"center", paddingTop:12 }}>+ הוסף</div>}
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {/* Days columns — scrollable */}
-              <div className="no-swipe-nav" style={{ flex:1, overflowX:"auto" }}>
-                <table ref={daysColRef} style={{ borderCollapse:"separate", borderSpacing:0, tableLayout:"fixed", minWidth: isMobile && !calendarFullscreen ? `${visibleDays.length * 90}px` : `${Math.max(570, visibleDays.length * 90)}px` }}>
-                  <thead>
-                    <tr>
-                      {visibleDays.map((day) => (
-                        <th key={day.fullDate} style={{ ...thStyle, background:day.isToday ? "rgba(245,166,35,0.15)" : "var(--surface2)" }}>
-                          <div style={{ fontWeight:700 }}>{day.name}</div>
-                          <div style={{ fontSize:11, color:day.isToday ? "var(--accent)" : "var(--text3)" }}>{day.date}/{String(new Date(day.fullDate).getMonth() + 1).padStart(2, "0")}</div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {studios.map((studio) => (
-                      <tr key={studio.id}>
-                        {isStudioDisabled(studio) ? (
-                          <td colSpan={visibleDays.length} style={{ ...tdStyle, background:"rgba(231,76,60,0.08)", color:"var(--red)", fontWeight:800, textAlign:"center", padding:"14px 18px" }}>
-                            {STUDIO_MAINTENANCE_MESSAGE}
-                          </td>
-                        ) : visibleDays.map((day) => {
-                          const dayBookings = cellBookings(studio.id, day.fullDate);
-                          return (
-                            <td key={day.fullDate} style={{ ...tdStyle, verticalAlign:"top", cursor:"pointer", minHeight:70, background:day.isToday ? "rgba(245,166,35,0.05)" : undefined }} onClick={() => openAddBookingModal(studio.id, studio.name, day.fullDate, day.name)}>
-                              {dayBookings.map((booking) => {
-                                const color = getBookingColor(booking);
-                                return (
-                                  <div key={booking.id} style={{ background:`${color}20`, border:`1.5px solid ${color}`, borderRadius:6, padding: isMobile && !calendarFullscreen ? "3px 4px" : "5px 7px", marginBottom:4, fontSize: isMobile && !calendarFullscreen ? 10 : 12, cursor:"pointer", wordBreak:"break-word", whiteSpace:"normal", textAlign:"right" }} onClick={(event) => { event.stopPropagation(); openViewBookingModal(booking, studio.name); }}>
-                                    <div style={{ fontWeight:900, color, fontSize: isMobile && !calendarFullscreen ? 10 : 12 }}>{getBookingTimeLabel(booking)}</div>
-                                    <div style={{ color:"var(--text)", fontWeight:800, fontSize: isMobile && !calendarFullscreen ? 10 : 12, lineHeight:1.35 }}>{getBookingTitle(booking)}</div>
-                                    {!isMobile && booking.instructorName && <div style={{ color:"var(--text2)", fontSize:11, fontWeight:600, lineHeight:1.3, marginTop:2 }}>👨‍🏫 {booking.instructorName}</div>}
-                                  </div>
-                                );
-                              })}
-                              {dayBookings.length === 0 && <div style={{ color:"var(--text3)", fontSize:11, textAlign:"center", paddingTop:12 }}>+ הוסף</div>}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
             </div>
             </div>
             </>
