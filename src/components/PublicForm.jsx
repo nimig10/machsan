@@ -876,10 +876,12 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [emailError, setEmailError] = useState(false);
   const [submitting, setSub]  = useState(false);
   const [showInfoPanel, setShowInfoPanel] = useState(false);
-  const [loggedInStudent, setLoggedInStudent] = useState(null); // null = not logged in
+  const [loggedInStudent, setLoggedInStudent] = useState(() => {
+    try { const s = sessionStorage.getItem("public_student"); return s ? JSON.parse(s) : null; } catch { return null; }
+  });
   const [loginForm, setLoginForm] = useState({ name:"", email:"" });
   const [loginError, setLoginError] = useState("");
-  const [publicView, setPublicView] = useState("equipment"); // "equipment" | "studios" | "daily"
+  const [publicView, setPublicView] = useState(() => sessionStorage.getItem("public_view") || "equipment"); // "equipment" | "studios" | "daily"
   const [dailyLessons, setDailyLessons] = useState([]);
   const [dailyDayOffset, setDailyDayOffset] = useState(0);
   const [studioBookings, setStudioBookings] = useState([]);
@@ -928,6 +930,38 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       return { equipment, reservations, categories, categoryLoanTypes };
     }
   };
+
+  // ─── שמירת מצב כניסת סטודנט ב-sessionStorage ───────────────────────────────
+  useEffect(() => {
+    if (loggedInStudent) {
+      sessionStorage.setItem("public_student", JSON.stringify(loggedInStudent));
+      setForm(p => ({
+        ...p,
+        student_name: loggedInStudent.name || p.student_name,
+        email: loggedInStudent.email || p.email,
+        ...(loggedInStudent.phone ? { phone: loggedInStudent.phone } : {}),
+        ...(loggedInStudent.track ? { course: loggedInStudent.track } : {}),
+      }));
+    } else {
+      sessionStorage.removeItem("public_student");
+      sessionStorage.removeItem("public_view");
+    }
+  }, [loggedInStudent]);
+
+  useEffect(() => {
+    if (loggedInStudent) sessionStorage.setItem("public_view", publicView);
+  }, [publicView, loggedInStudent]);
+
+  // ─── טיימר חוסר פעילות — 60 שניות ─────────────────────────────────────────
+  useEffect(() => {
+    if (!loggedInStudent) return;
+    const TIMEOUT_MS = 60 * 1000;
+    let timer = setTimeout(() => setLoggedInStudent(null), TIMEOUT_MS);
+    const reset = () => { clearTimeout(timer); timer = setTimeout(() => setLoggedInStudent(null), TIMEOUT_MS); };
+    const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"];
+    events.forEach(e => window.addEventListener(e, reset, { passive: true }));
+    return () => { clearTimeout(timer); events.forEach(e => window.removeEventListener(e, reset)); };
+  }, [loggedInStudent]);
 
   useEffect(() => {
     if (!activeStudentTrack) return;
