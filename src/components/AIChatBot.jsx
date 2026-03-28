@@ -402,7 +402,7 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
 
   // Draggable button position (default: top-left)
   const [btnPos, setBtnPos] = useState(() => {
-    try { const s = localStorage.getItem('ai_btn_pos'); return s ? JSON.parse(s) : { x: 12, y: 12 }; } catch { return { x: 12, y: 12 }; }
+    try { const s = localStorage.getItem('ai_btn_pos'); return s ? JSON.parse(s) : { x: typeof window !== 'undefined' ? window.innerWidth - 62 : 12, y: 12 }; } catch { return { x: typeof window !== 'undefined' ? window.innerWidth - 62 : 12, y: 12 }; }
   });
   const posRef = useRef(btnPos);
   useEffect(() => { posRef.current = btnPos; }, [btnPos]);
