@@ -219,6 +219,8 @@ const STATUSES    = ["תקין","פגום","בתיקון","נעלם"];
 const PHOTO_CATEGORIES = ["מצלמות","עדשות","תאורה","חצובות","אביזרים","אביזרי צילום","מייצבי מצלמה","גימבלים","רחפנים","מוניטורים"];
 const RESEND_API_KEY = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_RESEND_KEY : "";
 const ADMIN_NAV_PAGES = ["dashboard","reservations","equipment","certifications","studios","lessons","kits","team","students","policies","settings"];
+const SECRETARY_NAV_PAGES = ["studios","lessons","students","policies","settings"];
+const WAREHOUSE_NAV_PAGES = ["reservations","kits","equipment","certifications","policies","settings"];
 const NIMROD_PHONE     = "972521234567"; // ← החלף במספר של נמרוד
 const EMAIL_TYPO_DOMAINS = ["gmai.com","gmial.com","gmail.co","gamil.com","gmaill.com","yahooo.com","yahho.com","outlok.com","hotmai.com","outllook.com"];
 const TERMS = `הסטודנט מתחייב להחזיר את הציוד במועד שנקבע ובמצב תקין.
@@ -7511,6 +7513,34 @@ export default function App() {
     if (dx < 0 && idx < ADMIN_NAV_PAGES.length - 1) setPage(ADMIN_NAV_PAGES[idx + 1]);
     else if (dx > 0 && idx > 0) setPage(ADMIN_NAV_PAGES[idx - 1]);
   };
+  const handleSecretarySwipeTouchEnd = (e) => {
+    if (!swipeTouchRef.current) return;
+    const dx = e.changedTouches[0].clientX - swipeTouchRef.current.x;
+    const dy = e.changedTouches[0].clientY - swipeTouchRef.current.y;
+    const startTarget = swipeTouchRef.current.target;
+    swipeTouchRef.current = null;
+    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
+    const scrollEl = startTarget?.closest?.('.no-swipe-nav');
+    if (scrollEl && scrollEl.scrollWidth > scrollEl.clientWidth) return;
+    const idx = SECRETARY_NAV_PAGES.indexOf(secretaryPage);
+    if (idx === -1) return;
+    if (dx < 0 && idx < SECRETARY_NAV_PAGES.length - 1) setSecretaryPage(SECRETARY_NAV_PAGES[idx + 1]);
+    else if (dx > 0 && idx > 0) setSecretaryPage(SECRETARY_NAV_PAGES[idx - 1]);
+  };
+  const handleWarehouseSwipeTouchEnd = (e) => {
+    if (!swipeTouchRef.current) return;
+    const dx = e.changedTouches[0].clientX - swipeTouchRef.current.x;
+    const dy = e.changedTouches[0].clientY - swipeTouchRef.current.y;
+    const startTarget = swipeTouchRef.current.target;
+    swipeTouchRef.current = null;
+    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
+    const scrollEl = startTarget?.closest?.('.no-swipe-nav');
+    if (scrollEl && scrollEl.scrollWidth > scrollEl.clientWidth) return;
+    const idx = WAREHOUSE_NAV_PAGES.indexOf(warehousePage);
+    if (idx === -1) return;
+    if (dx < 0 && idx < WAREHOUSE_NAV_PAGES.length - 1) setWarehousePage(WAREHOUSE_NAV_PAGES[idx + 1]);
+    else if (dx > 0 && idx > 0) setWarehousePage(WAREHOUSE_NAV_PAGES[idx - 1]);
+  };
 
   return (
     <>
@@ -7697,10 +7727,25 @@ export default function App() {
               <button className="btn btn-secondary btn-sm" onClick={()=>setSecretaryAuthed(false)}>🚪 יציאה</button>
             </div>
           </nav>
-          <div className="main">
+          <div className="main" onTouchStart={handleSwipeTouchStart} onTouchEnd={handleSecretarySwipeTouchEnd}>
             <div className="topbar" style={{flexWrap:"wrap",gap:8}}>
               <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
                 <span className="topbar-title" style={{flex:1}}>{{studios:"לוח חדרים",lessons:"שיעורים",students:"סטודנטים",policies:"נהלים",settings:"הגדרות"}[secretaryPage]||"מזכירות"}</span>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleUndo}
+                  disabled={!undoStack.length || undoInFlightRef.current}
+                  style={{
+                    flexShrink:0,
+                    borderColor: undoStack.length ? "rgba(46,204,113,0.45)" : "var(--border)",
+                    color: undoStack.length ? "#d9ffe6" : "var(--text3)",
+                    background: undoStack.length ? "rgba(46,204,113,0.12)" : "transparent",
+                    opacity: undoInFlightRef.current ? 0.7 : 1
+                  }}
+                  title={undoStack.length ? `אפשר לבטל ${undoStack.length} פעולות אחרונות` : "אין פעולות לביטול"}
+                >
+                  ↩ בטל פעולה{undoStack.length ? ` (${undoStack.length})` : ""}
+                </button>
               </div>
             </div>
             {loading ? <Loading/> : <>
@@ -7754,13 +7799,28 @@ export default function App() {
               <button className="btn btn-secondary btn-sm" onClick={()=>setWarehouseAuthed(false)}>🚪 יציאה</button>
             </div>
           </nav>
-          <div className="main" >
+          <div className="main" onTouchStart={handleSwipeTouchStart} onTouchEnd={handleWarehouseSwipeTouchEnd}>
             <div className="topbar" style={{flexWrap:"wrap",gap:8}}>
               <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
                 <span className="topbar-title" style={{flex:1}}>{{reservations:"בקשות",kits:"ערכות",equipment:"ציוד",certifications:"הסמכות",policies:"נהלים",settings:"הגדרות"}[warehousePage]||"מחסן"}</span>
                 {warehousePage==="reservations"&&pending>0&&<div style={{background:"rgba(241,196,15,0.12)",border:"1px solid rgba(241,196,15,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--yellow)",flexShrink:0}}>⏳ {pending}</div>}
                 {warehousePage==="reservations"&&overdueCount>0&&<div style={{background:"rgba(230,126,34,0.15)",border:"1px solid rgba(230,126,34,0.4)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"#e67e22",flexShrink:0,cursor:"pointer"}} onClick={()=>{setReservationsInitialSubView("rejected");setWarehousePage("reservations");}}>⚠️ {overdueCount} באיחור</div>}
                 {warehousePage==="reservations"&&rejectedCount>0&&<div style={{background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--red)",flexShrink:0}}>❌ {rejectedCount}</div>}
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleUndo}
+                  disabled={!undoStack.length || undoInFlightRef.current}
+                  style={{
+                    flexShrink:0,
+                    borderColor: undoStack.length ? "rgba(46,204,113,0.45)" : "var(--border)",
+                    color: undoStack.length ? "#d9ffe6" : "var(--text3)",
+                    background: undoStack.length ? "rgba(46,204,113,0.12)" : "transparent",
+                    opacity: undoInFlightRef.current ? 0.7 : 1
+                  }}
+                  title={undoStack.length ? `אפשר לבטל ${undoStack.length} פעולות אחרונות` : "אין פעולות לביטול"}
+                >
+                  ↩ בטל פעולה{undoStack.length ? ` (${undoStack.length})` : ""}
+                </button>
               </div>
               {warehousePage==="reservations" && (
                 <div style={{display:"flex",gap:6,width:"100%",flexWrap:"wrap",alignItems:"center"}}>
