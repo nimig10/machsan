@@ -774,7 +774,7 @@ export default function StudioBookingPage(props) {
               <table style={{ width:"100%", borderCollapse:"separate", borderSpacing:0, tableLayout:"fixed", minWidth: isMobile && !calendarFullscreen ? undefined : `${Math.max(570, visibleDays.length * 90 + 130)}px` }}>
                 <thead>
                   <tr>
-                    <th style={{ ...thStyle, position:"sticky", right:0, zIndex:3, width: isMobile && !calendarFullscreen ? 70 : 130, boxShadow:"-2px 0 6px rgba(0,0,0,0.18)" }}>אולפן</th>
+                    <th style={{ ...thStyle, position:"sticky", right:0, zIndex:3, width: isMobile ? 70 : 130, boxShadow:"-2px 0 6px rgba(0,0,0,0.18)" }}>אולפן</th>
                     {visibleDays.map((day) => (
                       <th key={day.fullDate} style={{ ...thStyle, background:day.isToday ? "rgba(245,166,35,0.15)" : "var(--surface2)" }}>
                         <div style={{ fontWeight:700 }}>{day.name}</div>
@@ -786,10 +786,10 @@ export default function StudioBookingPage(props) {
                 <tbody>
                   {studios.map((studio) => (
                     <tr key={studio.id}>
-                      <td style={{ ...tdStyle, position:"sticky", right:0, zIndex:2, background:"var(--surface2)", verticalAlign:"middle", padding:"6px 4px", boxShadow:"-2px 0 6px rgba(0,0,0,0.18)", width: isMobile && !calendarFullscreen ? 70 : 130 }}>
+                      <td style={{ ...tdStyle, position:"sticky", right:0, zIndex:2, background:"var(--surface2)", verticalAlign:"middle", padding:"6px 4px", boxShadow:"-2px 0 6px rgba(0,0,0,0.18)", width: isMobile ? 70 : 130 }}>
                         <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
-                          <StudioImg studio={studio} size={isMobile && !calendarFullscreen ? 22 : 28} />
-                          <span style={{ fontSize: isMobile && !calendarFullscreen ? 9 : 11, fontWeight:800, lineHeight:1.2, wordBreak:"break-word", textAlign:"center" }}>{studio.name}</span>
+                          <StudioImg studio={studio} size={isMobile ? 22 : 28} />
+                          <span style={{ fontSize: isMobile ? 9 : 11, fontWeight:800, lineHeight:1.2, wordBreak:"break-word", textAlign:"center" }}>{studio.name}</span>
                           {!isMobile && (() => {
                             const certNames = getStudioCertNames(studio);
                             return certNames.length ? <span style={{ fontSize:9, color:"var(--accent)", lineHeight:1.2, wordBreak:"break-word", textAlign:"center" }}>🎓 {certNames.join(", ")}</span> : null;

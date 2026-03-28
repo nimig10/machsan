@@ -690,7 +690,7 @@ const css = `
     padding:0 !important;
     text-align:initial !important;
   }
-  body { font-family:'Heebo',sans-serif; background:var(--bg); color:var(--text); direction:rtl; min-height:100vh; overflow-x:hidden; overflow-y:scroll; scrollbar-gutter:stable; }
+  body { font-family:'Heebo',sans-serif; background:var(--bg); color:var(--text); direction:rtl; min-height:100vh; overflow-x:clip; overflow-y:scroll; scrollbar-gutter:stable; }
   .app { display:flex; min-height:100vh; }
   .sidebar { width:240px; min-width:240px; background:var(--surface); border-left:1px solid var(--border); display:flex; flex-direction:column; position:fixed; right:0; top:0; bottom:0; z-index:100; }
   .sidebar-logo { padding:24px 20px 20px; border-bottom:1px solid var(--border); }
