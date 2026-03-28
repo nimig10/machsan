@@ -6330,7 +6330,7 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
 }
 
 // ─── SETTINGS PAGE ───────────────────────────────────────────────────────────
-function SettingsPage({ siteSettings, setSiteSettings, showToast }) {
+function SettingsPage({ siteSettings, setSiteSettings, showToast, passwordRole = "all" }) {
   const [draft, setDraft] = useState({ aiMaxRequests: 5, ...siteSettings });
   const [saving, setSaving] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
@@ -6599,25 +6599,46 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast }) {
       </div>
 
       {/* Sub-page passwords */}
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div className="card-header"><div className="card-title">🔐 סיסמאות תת-דפים</div></div>
-        <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
-          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 4 }}>
-            סיסמאות לגישה לדפי המזכירות והמחסן. ברירת מחדל: <code>secretary</code> / <code>warehouse</code>
+      {(passwordRole === "all" || passwordRole === "secretary") && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-header"><div className="card-title">🔐 {passwordRole === "all" ? "סיסמאות תת-דפים" : "סיסמת כניסה — מזכירות"}</div></div>
+          <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
+            {passwordRole === "all" && (
+              <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 4 }}>
+                סיסמאות לגישה לדפי המזכירות והמחסן. ברירת מחדל: <code>secretary</code> / <code>warehouse</code>
+              </div>
+            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {passwordRole === "all" && <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>📋 סיסמת מזכירות (<code>/admin/secretary</code>)</label>}
+              <input
+                type="text"
+                className="form-input"
+                value={draft.secretaryPassword || ""}
+                onChange={e => setDraft(p => ({ ...p, secretaryPassword: e.target.value }))}
+                placeholder="secretary"
+                style={{ maxWidth: 300 }}
+              />
+            </div>
+            {passwordRole === "all" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>📦 סיסמת מחסן (<code>/admin/warehouse</code>)</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={draft.warehousePassword || ""}
+                  onChange={e => setDraft(p => ({ ...p, warehousePassword: e.target.value }))}
+                  placeholder="warehouse"
+                  style={{ maxWidth: 300 }}
+                />
+              </div>
+            )}
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>📋 סיסמת מזכירות (<code>/admin/secretary</code>)</label>
-            <input
-              type="text"
-              className="form-input"
-              value={draft.secretaryPassword || ""}
-              onChange={e => setDraft(p => ({ ...p, secretaryPassword: e.target.value }))}
-              placeholder="secretary"
-              style={{ maxWidth: 300 }}
-            />
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>📦 סיסמת מחסן (<code>/admin/warehouse</code>)</label>
+        </div>
+      )}
+      {passwordRole === "warehouse" && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-header"><div className="card-title">🔐 סיסמת כניסה — מחסן</div></div>
+          <div style={{ padding: "16px 20px" }}>
             <input
               type="text"
               className="form-input"
@@ -6628,7 +6649,7 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast }) {
             />
           </div>
         </div>
-      </div>
+      )}
 
       <button className="btn btn-primary" disabled={saving} onClick={save} style={{ fontSize: 15, padding: "12px 32px" }}>
         {saving ? "⏳ שומר..." : "💾 שמור הגדרות"}
@@ -7753,7 +7774,7 @@ export default function App() {
               <div style={{display:secretaryPage==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean) : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
               <div style={{display:secretaryPage==="students"?"block":"none"}}><StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/></div>
               <div style={{display:secretaryPage==="policies"?"block":"none"}}><PoliciesPage policies={policies} setPolicies={setPolicies} showToast={showToast}/></div>
-              <div style={{display:secretaryPage==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast}/></div>
+              <div style={{display:secretaryPage==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} passwordRole="secretary"/></div>
             </>}
           </div>
         </div>
@@ -7846,7 +7867,7 @@ export default function App() {
               <div style={{display:warehousePage==="equipment"?"block":"none"}}><EquipmentPage equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} categoryLoanTypes={categoryLoanTypes} setCategoryLoanTypes={setCategoryLoanTypes} certifications={certifications} studios={studios} collegeManager={collegeManager} managerToken={managerToken}/></div>
               <div style={{display:warehousePage==="certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment}/></div>
               <div style={{display:warehousePage==="policies"?"block":"none"}}><PoliciesPage policies={policies} setPolicies={setPolicies} showToast={showToast}/></div>
-              <div style={{display:warehousePage==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast}/></div>
+              <div style={{display:warehousePage==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} passwordRole="warehouse"/></div>
             </>}
           </div>
         </div>
