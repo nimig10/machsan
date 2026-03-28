@@ -7127,7 +7127,7 @@ export default function App() {
   // ─── טיימר חוסר פעילות — 60 שניות ─────────────────────────────────────────
   useEffect(() => {
     if (!isAdmin || !authed) return;
-    const TIMEOUT_MS = 60 * 1000;
+    const TIMEOUT_MS = 7 * 60 * 1000;
     let timer = setTimeout(() => { setAuthed(false); }, TIMEOUT_MS);
     const reset = () => { clearTimeout(timer); timer = setTimeout(() => { setAuthed(false); }, TIMEOUT_MS); };
     const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"];
