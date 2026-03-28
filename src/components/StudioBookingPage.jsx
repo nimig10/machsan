@@ -770,7 +770,7 @@ export default function StudioBookingPage(props) {
                 </>
               )}
             </div>
-            <div className="no-swipe-nav" style={{ flex: calendarFullscreen ? 1 : undefined, overflowX:"auto", overflowY: (calendarFullscreen || !isMobile) ? "auto" : undefined, maxHeight: (calendarFullscreen || !isMobile) ? "calc(100vh - 260px)" : undefined, minHeight:0 }}>
+            <div className="no-swipe-nav" style={{ flex: calendarFullscreen ? 1 : undefined, overflowX:"auto", overflowY: (calendarFullscreen || !isMobile) ? "auto" : undefined, maxHeight: (!isMobile && !calendarFullscreen) ? "calc(100vh - 260px)" : undefined, minHeight:0 }}>
               <table style={{ width:"100%", borderCollapse:"separate", borderSpacing:0, tableLayout:"fixed", minWidth: isMobile && !calendarFullscreen ? undefined : `${Math.max(570, visibleDays.length * 90 + 130)}px` }}>
                 <thead>
                   <tr>
