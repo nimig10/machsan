@@ -581,14 +581,18 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
           <div className="cert-mobile" style={{flexDirection:"column",gap:10}}>
             {filteredStudents.map(s=>(
               <div key={s.id} onClick={()=>{setEditStudent(s);setEditForm({name:s.name,email:s.email,phone:s.phone||"",track:s.track||""}); }}
-                style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 16px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div>
+                style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 16px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                <div style={{flex:1,minWidth:0}}>
                   <div style={{fontWeight:800,fontSize:15}}>{s.name}</div>
                   {s.track&&<div style={{fontSize:11,color:"var(--accent)",fontWeight:700}}>🎓 {s.track}</div>}
                   <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{s.email}</div>
                   {s.phone&&<div style={{fontSize:11,color:"var(--text3)"}}>{s.phone}</div>}
                 </div>
-                <span style={{fontSize:18,color:"var(--text3)"}}>›</span>
+                <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                  <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)",padding:"4px 8px",fontSize:15}}
+                    onClick={e=>{e.stopPropagation();if(confirm(`למחוק את ${s.name}?`))deleteStudent(s.id);}}>🗑️</button>
+                  <span style={{fontSize:18,color:"var(--text3)"}}>›</span>
+                </div>
               </div>
             ))}
           </div>
