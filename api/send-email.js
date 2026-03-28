@@ -70,9 +70,9 @@ function buildEmail({
     : (isNew || isTeamNotify) ? "⏳"
     : "❌";
 
-  const title = isLessonConflict ? "קביעת האולפן בוטלה לטובת שיעור"
-    : isStudioApproved ? "קביעת האולפן אושרה! 🎙️"
-    : isStudioDeleted ? "קביעת האולפן בוטלה"
+  const title = isLessonConflict ? "קביעת החדר בוטלה לטובת שיעור"
+    : isStudioApproved ? "קביעת החדר אושרה! 🎙️"
+    : isStudioDeleted ? "קביעת החדר בוטלה"
     : isApproved ? "הבקשה אושרה!"
     : isDeptHead ? "בקשת השאלת הפקה ממתינה לאישורך"
     : isManagerReport ? "דיווח מצוות המחסן"
@@ -89,14 +89,14 @@ function buildEmail({
     : student_name;
 
   const body = isLessonConflict
-    ? `אנו מתנצלים, אך המכללה נאלצה לבטל את קביעת האולפן שלך לטובת שיעור.<br/><br/>
-       קביעת האולפן <strong style="color:#e8eaf0">${project_name || "האולפן"}</strong>${borrow_date ? ` בתאריך <strong style="color:#e8eaf0">${borrow_date}</strong>` : ""}${borrow_time ? ` בין השעות <strong style="color:#e8eaf0">${borrow_time}–${return_time || ""}</strong>` : ""} <strong style="color:#e74c3c">בוטלה</strong>.<br/><br/>
-       אתה מוזמן לנסות ולקבוע אולפן חלופי בלוח קביעת האולפנים, או לנסות ולקבוע את האולפן <strong style="color:#e8eaf0">${project_name || "האולפן"}</strong> ביום אחר.`
+    ? `אנו מתנצלים, אך המכללה נאלצה לבטל את קביעת החדר שלך לטובת שיעור.<br/><br/>
+       קביעת החדר <strong style="color:#e8eaf0">${project_name || "החדר"}</strong>${borrow_date ? ` בתאריך <strong style="color:#e8eaf0">${borrow_date}</strong>` : ""}${borrow_time ? ` בין השעות <strong style="color:#e8eaf0">${borrow_time}–${return_time || ""}</strong>` : ""} <strong style="color:#e74c3c">בוטלה</strong>.<br/><br/>
+       אתה מוזמן לנסות ולקבוע חדר חלופי בלוח קביעת החדרים, או לנסות ולקבוע את החדר <strong style="color:#e8eaf0">${project_name || "החדר"}</strong> ביום אחר.`
     : isStudioApproved
-    ? `קביעת האולפן שלך עברה את אישורו של איש הצוות בהצלחה 🎉<br/><br/>
-       ניתן להגיע בשמחה ולעבוד באולפן <strong style="color:#2ecc71">${project_name || "האולפן"}</strong>.`
+    ? `קביעת החדר שלך עברה את אישורו של איש הצוות בהצלחה 🎉<br/><br/>
+       ניתן להגיע בשמחה ולעבוד בחדר <strong style="color:#2ecc71">${project_name || "החדר"}</strong>.`
     : isStudioDeleted
-    ? `לצערנו לא ניתן לקבוע את האולפן <strong style="color:#e8eaf0">${project_name || "האולפן"}</strong>${borrow_date ? ` בתאריך <strong style="color:#e8eaf0">${borrow_date}</strong>${borrow_time ? ` בשעה <strong style="color:#e8eaf0">${borrow_time}</strong>` : ""}` : ""}.<br/><br/>
+    ? `לצערנו לא ניתן לקבוע את החדר <strong style="color:#e8eaf0">${project_name || "החדר"}</strong>${borrow_date ? ` בתאריך <strong style="color:#e8eaf0">${borrow_date}</strong>${borrow_time ? ` בשעה <strong style="color:#e8eaf0">${borrow_time}</strong>` : ""}` : ""}.<br/><br/>
        מתנצלים על אי הנוחות, ומזמנים אותך לנסות ולקבוע אותו במועד אחר.`
     : isApproved
     ? `בקשת ההשאלה של <strong>${student_name}</strong> <strong style="color:#2ecc71">אושרה</strong>.`
@@ -269,8 +269,8 @@ export default async function handler(req, res) {
   if (!to || !type) return res.status(400).json({ error: "חסרים שדות חובה" });
 
   const subjects = {
-    studio_approved:   "🎙️ קביעת האולפן שלך אושרה – מחסן ציוד קמרה אובסקורה וסאונד",
-    studio_deleted:    "❌ קביעת האולפן בוטלה – מחסן ציוד קמרה אובסקורה וסאונד",
+    studio_approved:   "🎙️ קביעת החדר שלך אושרה – מחסן ציוד קמרה אובסקורה וסאונד",
+    studio_deleted:    "❌ קביעת החדר בוטלה – מחסן ציוד קמרה אובסקורה וסאונד",
     new:               "⏳ קיבלנו את הבקשה שלך – מחסן ציוד קמרה אובסקורה וסאונד",
     approved:          "✅ הבקשה שלך אושרה – מחסן ציוד קמרה אובסקורה וסאונד",
     rejected:          "עדכון לגבי בקשת ההשאלה – מחסן ציוד קמרה אובסקורה וסאונד",

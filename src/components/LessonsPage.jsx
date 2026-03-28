@@ -242,7 +242,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
         const sS = session.startTime || "00:00", sE = session.endTime || "23:59";
         if (bS < sE && bE > sS) {
           const studio = studios.find(s => String(s.id) === stId);
-          found.push({ booking: b, session, studioName: studio?.name || "האולפן" });
+          found.push({ booking: b, session, studioName: studio?.name || "החדר" });
           seenIds.add(String(b.id));
         }
       }
@@ -1393,7 +1393,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
         <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:12}}>👨‍🏫 פרטי הקורס והמרצה</div>
         <div className="form-group" style={{marginBottom:10}}>
           <label className="form-label">שם הקורס *</label>
-          <input className="form-input" placeholder='לדוגמה: "אולפן טלוויזיה א"' value={name} onChange={e=>setName(e.target.value)}/>
+          <input className="form-input" placeholder='לדוגמה: "חדר טלוויזיה א"' value={name} onChange={e=>setName(e.target.value)}/>
         </div>
         <div className="grid-2" style={{marginBottom:10}}>
           <div className="form-group"><label className="form-label">שם המרצה</label>
@@ -1436,7 +1436,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
               ))}
             </select>
             {studios.filter(s=>s.isClassroom||s.classroomOnly).length === 0 && (
-              <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>💡 סמן אולפן כ"כיתת לימוד" ברובריקת אולפנים כדי שיופיע כאן.</div>
+              <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>💡 סמן חדר כ"כיתת לימוד" ברובריקת חדרים כדי שיופיע כאן.</div>
             )}
           </div>
           <div className="form-group">

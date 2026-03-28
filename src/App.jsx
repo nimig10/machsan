@@ -3265,7 +3265,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
     { key:"הפקה",  icon:"🎬", label:"השאלה להפקה" },
     { key:"סאונד", icon:"🎙️", label:"השאלת סאונד" },
     { key:"קולנוע יומית", icon:"🎥", label:"השאלת קולנוע יומית" },
-    { key:"לילה", icon:"🌙", label:"נהלי קביעת אולפן לילה" },
+    { key:"לילה", icon:"🌙", label:"נהלי קביעת חדר לילה" },
   ];
   const [draft, setDraft] = useState({ ...policies });
   const [saving, setSaving] = useState(false);
@@ -4608,7 +4608,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         {/* Kit name field */}
         <div className="form-group" style={{marginBottom:16}}>
           <label className="form-label">שם הערכה *</label>
-          <input className="form-input" placeholder='לדוגמה: "ערכת אולפן טלוויזיה"' value={name} onChange={e=>setName(e.target.value)}/>
+          <input className="form-input" placeholder='לדוגמה: "ערכת חדר טלוויזיה"' value={name} onChange={e=>setName(e.target.value)}/>
         </div>
 
         {/* Equipment picker */}
@@ -7379,7 +7379,7 @@ export default function App() {
   const overdueCount = reservations.filter(r=>r.status==="באיחור").length;
   const rejectedCount = reservations.filter(r=>r.status==="נדחה").length;
   const rejected = rejectedCount + overdueCount;
-  const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד מחסן", reservations:"ניהול בקשות", team:"פרטי צוות", kits:"ערכות", lessons:"שיעורים", policies:"נהלים", certifications:"הסמכות", students:"ניהול סטודנטים", settings:"הגדרות", studios:"לוח אולפנים" };
+  const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד מחסן", reservations:"ניהול בקשות", team:"פרטי צוות", kits:"ערכות", lessons:"שיעורים", policies:"נהלים", certifications:"הסמכות", students:"ניהול סטודנטים", settings:"הגדרות", studios:"לוח חדרים" };
 
   const handleSwipeTouchStart = (e) => {
     swipeTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, target: e.target };
@@ -7457,7 +7457,7 @@ export default function App() {
                 {id:"reservations",icon:"📋",label:"בקשות",badge:(pending||0)+(rejected||0)||null},
                 {id:"equipment",icon:"📦",label:"ציוד",badge:damagedCount||null},
                 {id:"certifications",icon:"🎓",label:"הסמכות"},
-                {id:"studios",icon:"🎙️",label:"אולפנים"},
+                {id:"studios",icon:"🎙️",label:"חדרים"},
                 {id:"lessons",icon:"📽️",label:"שיעורים",badge:lessons.length||null},
                 {id:"kits",icon:"🎒",label:"ערכות"},
                 {id:"team",icon:"👥",label:"צוות"},
