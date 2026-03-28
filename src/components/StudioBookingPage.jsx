@@ -111,8 +111,8 @@ function addDaysToDateString(dateStr, daysToAdd = 0) {
 }
 
 const thStyle = { padding:"8px 10px", background:"var(--surface2)", fontSize:12, fontWeight:700, textAlign:"center", border:"1px solid var(--border)" };
-const thStickyStyle = { ...thStyle, position:"sticky", right:0, zIndex:2 };
-const tdStickyStyle = { padding:"6px 4px", border:"1px solid var(--border)", textAlign:"center", background:"var(--surface2)", position:"sticky", right:0, zIndex:1 };
+const thStickyStyle = { ...thStyle, position:"sticky", right:0, zIndex:2, boxShadow:"-2px 0 4px rgba(0,0,0,0.3)" };
+const tdStickyStyle = { padding:"6px 4px", border:"1px solid var(--border)", textAlign:"center", background:"var(--surface2)", position:"sticky", right:0, zIndex:1, boxShadow:"-2px 0 4px rgba(0,0,0,0.15)" };
 const tdStyle = { padding:"6px 8px", border:"1px solid var(--border)", textAlign:"center" };
 const labelStyle = { display:"flex", flexDirection:"column", gap:4, fontSize:13, fontWeight:600, color:"var(--text2)" };
 
@@ -770,7 +770,7 @@ export default function StudioBookingPage(props) {
               )}
             </div>
             <div className="no-swipe-nav" style={{ overflowX:"auto", flex: calendarFullscreen ? 1 : undefined }}>
-              <table style={{ width:"100%", minWidth: isMobile && !calendarFullscreen ? 260 : 700, borderCollapse:"collapse", tableLayout:"fixed" }}>
+              <table style={{ width:"100%", minWidth: isMobile && !calendarFullscreen ? 260 : 700, borderCollapse:"separate", borderSpacing:0, tableLayout:"fixed" }}>
                 <thead>
                   <tr>
                     <th style={{ ...thStickyStyle, width: isMobile && !calendarFullscreen ? 64 : 130 }}>אולפן</th>
