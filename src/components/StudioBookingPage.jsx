@@ -779,9 +779,9 @@ export default function StudioBookingPage(props) {
                   <tr>
                     <th style={{ ...thStyle, position:"sticky", top: (calendarFullscreen || !isMobile) ? 0 : undefined, right:0, zIndex: (calendarFullscreen || !isMobile) ? 5 : 3, width: isMobile ? 70 : 130, boxShadow:"-2px 0 6px rgba(0,0,0,0.18)" }}>אולפן</th>
                     {visibleDays.map((day) => (
-                      <th key={day.fullDate} style={{ ...thStyle, position: (calendarFullscreen || !isMobile) ? "sticky" : undefined, top:0, zIndex:3, background:day.isToday ? "rgba(245,166,35,0.15)" : "var(--surface2)" }}>
-                        <div style={{ fontWeight:700 }}>{day.name}</div>
-                        <div style={{ fontSize:11, color:day.isToday ? "var(--accent)" : "var(--text3)" }}>{day.date}/{String(new Date(day.fullDate).getMonth() + 1).padStart(2, "0")}</div>
+                      <th key={day.fullDate} style={{ ...thStyle, position: (calendarFullscreen || !isMobile) ? "sticky" : undefined, top:0, zIndex:3, background:day.isToday ? "var(--accent)" : "var(--surface2)" }}>
+                        <div style={{ fontWeight:700, color:day.isToday ? "#000" : undefined }}>{day.name}</div>
+                        <div style={{ fontSize:11, color:day.isToday ? "#000" : "var(--text3)" }}>{day.date}/{String(new Date(day.fullDate).getMonth() + 1).padStart(2, "0")}</div>
                       </th>
                     ))}
                   </tr>
