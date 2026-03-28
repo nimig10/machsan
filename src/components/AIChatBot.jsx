@@ -397,192 +397,217 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 600;
   const panelWidth = isMobile ? Math.min(300, window.innerWidth - 24) : 340;
-  const topOffset = isMobile ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : 20;
-  const rightOffset = isMobile ? 'calc(env(safe-area-inset-right, 0px) + 12px)' : 20;
   const bubbleSize = isMobile ? 46 : 50;
   const bubbleIconSize = isMobile ? 22 : 24;
 
-  const widget = (
-    <div style={{
-      position: 'fixed',
-      top: topOffset,
-      right: rightOffset,
-      zIndex: 2147483647,
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'flex-end',
-    }}>
+  // Draggable button position (default: top-left)
+  const [btnPos, setBtnPos] = useState(() => {
+    try { const s = localStorage.getItem('ai_btn_pos'); return s ? JSON.parse(s) : { x: 12, y: 12 }; } catch { return { x: 12, y: 12 }; }
+  });
+  const posRef = useRef(btnPos);
+  useEffect(() => { posRef.current = btnPos; }, [btnPos]);
+  const dragRef = useRef(null);
 
-      {/* Panel */}
-      {isOpen && (
-        <div dir="rtl" style={{
-          background: '#1a1a2e',
-          borderRadius: 16,
-          boxShadow: '0 8px 40px rgba(0,0,0,0.6)',
-          border: '1px solid rgba(99,102,241,0.35)',
-          width: panelWidth,
+  const handleTouchStart = (e) => {
+    const t = e.touches[0];
+    dragRef.current = { startX: t.clientX, startY: t.clientY, btnX: posRef.current.x, btnY: posRef.current.y, moved: false };
+  };
+  const handleTouchMove = (e) => {
+    if (!dragRef.current) return;
+    const t = e.touches[0];
+    const dx = t.clientX - dragRef.current.startX;
+    const dy = t.clientY - dragRef.current.startY;
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) dragRef.current.moved = true;
+    if (!dragRef.current.moved) return;
+    const newX = Math.max(4, Math.min(window.innerWidth - bubbleSize - 4, dragRef.current.btnX + dx));
+    const newY = Math.max(4, Math.min(window.innerHeight - bubbleSize - 4, dragRef.current.btnY + dy));
+    setBtnPos({ x: newX, y: newY });
+  };
+  const handleTouchEnd = (e) => {
+    if (!dragRef.current) return;
+    const moved = dragRef.current.moved;
+    dragRef.current = null;
+    if (moved) {
+      e.preventDefault();
+      try { localStorage.setItem('ai_btn_pos', JSON.stringify(posRef.current)); } catch {}
+    }
+    // if not moved, click fires naturally via onClick
+  };
+
+  const panel = isOpen && (
+    <div style={{ position: 'fixed', top: 12, right: 12, zIndex: 2147483647, display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+      <div dir="rtl" style={{
+        background: '#1a1a2e',
+        borderRadius: 16,
+        boxShadow: '0 8px 40px rgba(0,0,0,0.6)',
+        border: '1px solid rgba(99,102,241,0.35)',
+        width: panelWidth,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}>
+        {/* Header */}
+        <div style={{
+          background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+          padding: '12px 16px',
           display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          marginBottom: 12,
+          justifyContent: 'space-between',
+          alignItems: 'center',
         }}>
-          {/* Header */}
-          <div style={{
-            background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
-            padding: '12px 16px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 22 }}>🤖</span>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 13, color: '#fff' }}>עוזר המחסן החכם</div>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>נותרו {maxRequests - getRequestsCount()} שאלות להיום</div>
-              </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 22 }}>🤖</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 13, color: '#fff' }}>עוזר המחסן החכם</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>נותרו {maxRequests - getRequestsCount()} שאלות להיום</div>
             </div>
-            <button onClick={() => setIsOpen(false)} style={{
-              background: 'rgba(255,255,255,0.15)',
-              border: 'none',
-              borderRadius: '50%',
-              width: 28,
-              height: 28,
-              cursor: 'pointer',
-              color: '#fff',
-              fontSize: 18,
-              lineHeight: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>×</button>
           </div>
-
-          {/* Messages */}
-          <div style={{
-            height: isMobile ? 240 : 290,
-            overflowY: 'auto',
-            padding: '12px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8,
-            background: '#0f0f1a',
-          }}>
-            {messages.map((msg, idx) => (
-              <div key={idx} style={{
-                maxWidth: '85%',
-                padding: '8px 12px',
-                borderRadius: msg.role === 'assistant' ? '4px 12px 12px 12px' : '12px 4px 12px 12px',
-                fontSize: 13,
-                lineHeight: 1.5,
-                alignSelf: msg.role === 'assistant' ? 'flex-start' : 'flex-end',
-                background: msg.role === 'assistant' ? '#1e1e35' : '#4f46e5',
-                color: msg.role === 'assistant' ? '#e2e2f0' : '#fff',
-                border: msg.role === 'assistant' ? '1px solid rgba(99,102,241,0.2)' : 'none',
-                wordBreak: 'break-word',
-              }}>
-                {msg.content}
-              </div>
-            ))}
-            {isTyping && (
-              <div style={{
-                alignSelf: 'flex-start',
-                background: '#1e1e35',
-                border: '1px solid rgba(99,102,241,0.2)',
-                borderRadius: '4px 12px 12px 12px',
-                padding: '8px 14px',
-                fontSize: 18,
-                color: '#a5b4fc',
-                letterSpacing: 4,
-              }}>···</div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input */}
-          <div style={{
-            padding: '10px 12px',
-            background: '#1a1a2e',
-            borderTop: '1px solid rgba(99,102,241,0.2)',
-            display: 'flex',
-            gap: 8,
-          }}>
-            <input
-              type="text"
-              placeholder="שאל אותי משהו..."
-              value={inputValue}
-              onChange={e => setInputValue(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSend()}
-              style={{
-                flex: 1,
-                background: '#0f0f1a',
-                border: '1px solid rgba(99,102,241,0.3)',
-                borderRadius: 8,
-                padding: '7px 12px',
-                fontSize: 13,
-                color: '#e2e2f0',
-                outline: 'none',
-                direction: 'rtl',
-                minWidth: 0,
-              }}
-            />
-            <button
-              onClick={handleSend}
-              disabled={isTyping || !inputValue.trim()}
-              style={{
-                background: isTyping || !inputValue.trim() ? '#2d2d4e' : '#4f46e5',
-                border: 'none',
-                borderRadius: 8,
-                padding: '7px 12px',
-                cursor: isTyping || !inputValue.trim() ? 'not-allowed' : 'pointer',
-                color: '#fff',
-                fontSize: 16,
-                flexShrink: 0,
-              }}
-            >➤</button>
-          </div>
-        </div>
-      )}
-
-      {/* Floating Button */}
-      {!isOpen && (
-        <button
-          onClick={() => setIsOpen(true)}
-          title="עוזר המחסן החכם"
-          style={{
-            background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+          <button onClick={() => setIsOpen(false)} style={{
+            background: 'rgba(255,255,255,0.15)',
             border: 'none',
             borderRadius: '50%',
-            width: bubbleSize,
-            height: bubbleSize,
+            width: 28,
+            height: 28,
             cursor: 'pointer',
-            boxShadow: '0 4px 20px rgba(99,102,241,0.55)',
-            fontSize: bubbleIconSize,
+            color: '#fff',
+            fontSize: 18,
+            lineHeight: 1,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            position: 'relative',
-            transition: 'transform 0.2s, box-shadow 0.2s',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = '0 6px 28px rgba(99,102,241,0.75)'; }}
-          onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(99,102,241,0.55)'; }}
-        >
-          🤖
-          {getRequestsCount() < maxRequests && (
-            <span style={{
-              position: 'absolute',
-              top: 4,
-              right: 4,
-              width: 10,
-              height: 10,
-              background: '#22c55e',
-              borderRadius: '50%',
-              border: '2px solid #1a1a2e',
-            }} />
+          }}>×</button>
+        </div>
+
+        {/* Messages */}
+        <div style={{
+          height: isMobile ? 240 : 290,
+          overflowY: 'auto',
+          padding: '12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          background: '#0f0f1a',
+        }}>
+          {messages.map((msg, idx) => (
+            <div key={idx} style={{
+              maxWidth: '85%',
+              padding: '8px 12px',
+              borderRadius: msg.role === 'assistant' ? '4px 12px 12px 12px' : '12px 4px 12px 12px',
+              fontSize: 13,
+              lineHeight: 1.5,
+              alignSelf: msg.role === 'assistant' ? 'flex-start' : 'flex-end',
+              background: msg.role === 'assistant' ? '#1e1e35' : '#4f46e5',
+              color: msg.role === 'assistant' ? '#e2e2f0' : '#fff',
+              border: msg.role === 'assistant' ? '1px solid rgba(99,102,241,0.2)' : 'none',
+              wordBreak: 'break-word',
+            }}>
+              {msg.content}
+            </div>
+          ))}
+          {isTyping && (
+            <div style={{
+              alignSelf: 'flex-start',
+              background: '#1e1e35',
+              border: '1px solid rgba(99,102,241,0.2)',
+              borderRadius: '4px 12px 12px 12px',
+              padding: '8px 14px',
+              fontSize: 18,
+              color: '#a5b4fc',
+              letterSpacing: 4,
+            }}>···</div>
           )}
-        </button>
-      )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input */}
+        <div style={{
+          padding: '10px 12px',
+          background: '#1a1a2e',
+          borderTop: '1px solid rgba(99,102,241,0.2)',
+          display: 'flex',
+          gap: 8,
+        }}>
+          <input
+            type="text"
+            placeholder="שאל אותי משהו..."
+            value={inputValue}
+            onChange={e => setInputValue(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSend()}
+            style={{
+              flex: 1,
+              background: '#0f0f1a',
+              border: '1px solid rgba(99,102,241,0.3)',
+              borderRadius: 8,
+              padding: '7px 12px',
+              fontSize: 13,
+              color: '#e2e2f0',
+              outline: 'none',
+              direction: 'rtl',
+              minWidth: 0,
+            }}
+          />
+          <button
+            onClick={handleSend}
+            disabled={isTyping || !inputValue.trim()}
+            style={{
+              background: isTyping || !inputValue.trim() ? '#2d2d4e' : '#4f46e5',
+              border: 'none',
+              borderRadius: 8,
+              padding: '7px 12px',
+              cursor: isTyping || !inputValue.trim() ? 'not-allowed' : 'pointer',
+              color: '#fff',
+              fontSize: 16,
+              flexShrink: 0,
+            }}
+          >➤</button>
+        </div>
+      </div>
     </div>
   );
 
-  return createPortal(widget, document.body);
+  const floatingBtn = !isOpen && (
+    <button
+      onClick={() => setIsOpen(true)}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      title="עוזר המחסן החכם"
+      style={{
+        position: 'fixed',
+        top: btnPos.y,
+        left: btnPos.x,
+        zIndex: 2147483647,
+        touchAction: 'none',
+        background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+        border: 'none',
+        borderRadius: '50%',
+        width: bubbleSize,
+        height: bubbleSize,
+        cursor: 'grab',
+        boxShadow: '0 4px 20px rgba(99,102,241,0.55)',
+        fontSize: bubbleIconSize,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        transition: 'box-shadow 0.2s',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 6px 28px rgba(99,102,241,0.75)'; }}
+      onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 4px 20px rgba(99,102,241,0.55)'; }}
+    >
+      🤖
+      {getRequestsCount() < maxRequests && (
+        <span style={{
+          position: 'absolute',
+          top: 4,
+          right: 4,
+          width: 10,
+          height: 10,
+          background: '#22c55e',
+          borderRadius: '50%',
+          border: '2px solid #1a1a2e',
+        }} />
+      )}
+    </button>
+  );
+
+  return createPortal(<>{panel}{floatingBtn}</>, document.body);
 }
