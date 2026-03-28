@@ -6860,7 +6860,7 @@ export default function App() {
   const isManagerCalendarView = window.location.pathname.startsWith("/manager-calendar");
   const isPublicFormView = !isAdmin && !isCalendarView && !isManagerCalendarView;
   const urlToken = new URLSearchParams(window.location.search).get("token")||"";
-  const [page, setPage]               = useState("dashboard");
+  const [page, setPage]               = useState(() => sessionStorage.getItem("admin_page") || "dashboard");
   const [equipment, _setEquipment]     = useState([]);
   const [reservations, _setReservations] = useState([]);
   const [categories, _setCategories]   = useState(DEFAULT_CATEGORIES);
@@ -6880,7 +6880,7 @@ export default function App() {
   const [lessons, _setLessons] = useState([]);
   const [loading, setLoading]         = useState(true);
   const [toasts, setToasts]           = useState([]);
-  const [authed, setAuthed]           = useState(false);
+  const [authed, setAuthed]           = useState(() => isAdmin && sessionStorage.getItem("admin_authed") === "1");
   const [undoStack, setUndoStack]     = useState([]);
   // Reservations filter state (in AdminApp so topbar can render them)
   const [resSearch, setResSearch]       = useState("");
@@ -7107,6 +7107,33 @@ export default function App() {
       }, 0);
     }
   };
+
+  // ─── שמירת מצב התחברות ודף ב-sessionStorage ────────────────────────────────
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (authed) {
+      sessionStorage.setItem("admin_authed", "1");
+    } else {
+      sessionStorage.removeItem("admin_authed");
+      sessionStorage.removeItem("admin_page");
+    }
+  }, [authed]);
+
+  useEffect(() => {
+    if (!isAdmin || !authed) return;
+    sessionStorage.setItem("admin_page", page);
+  }, [page, authed]);
+
+  // ─── טיימר חוסר פעילות — 60 שניות ─────────────────────────────────────────
+  useEffect(() => {
+    if (!isAdmin || !authed) return;
+    const TIMEOUT_MS = 60 * 1000;
+    let timer = setTimeout(() => { setAuthed(false); }, TIMEOUT_MS);
+    const reset = () => { clearTimeout(timer); timer = setTimeout(() => { setAuthed(false); }, TIMEOUT_MS); };
+    const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"];
+    events.forEach(e => window.addEventListener(e, reset, { passive: true }));
+    return () => { clearTimeout(timer); events.forEach(e => window.removeEventListener(e, reset)); };
+  }, [authed]);
 
   useEffect(()=>{
     (async()=>{
