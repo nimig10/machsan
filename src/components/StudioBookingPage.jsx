@@ -746,7 +746,7 @@ export default function StudioBookingPage(props) {
           ) : (
             <>
             {calendarFullscreen && <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:8999 }} onClick={() => setCalendarFullscreen(false)} />}
-            <div onTouchStart={e => e.stopPropagation()} style={calendarFullscreen ? { position:"fixed", inset:8, zIndex:9000, background:"var(--bg)", borderRadius:16, border:"1px solid var(--border)", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 20px 60px rgba(0,0,0,0.6)" } : {}}>
+            <div style={calendarFullscreen ? { position:"fixed", inset:8, zIndex:9000, background:"var(--bg)", borderRadius:16, border:"1px solid var(--border)", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 20px 60px rgba(0,0,0,0.6)" } : {}}>
             <div style={{ padding:"6px 12px", background:"var(--surface)", border:"1px solid var(--border)", borderRadius: calendarFullscreen ? "16px 16px 0 0" : "8px 8px 0 0", display:"flex", justifyContent:"center", alignItems:"center", gap:8, flexWrap:"wrap" }}>
               {isMobile && !calendarFullscreen ? (
                 <>
