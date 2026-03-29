@@ -236,7 +236,10 @@ export function PublicDisplayPage() {
               ) : (
                 <div style={{display:"flex",flexDirection:"column",gap:8,width:"100%"}}>
                   {currentView.items.map((s,i) => {
-                    const roomName = studioName(s.studioId);
+                    const studio  = (studios||[]).find(st => st.id === s.studioId);
+                    const roomName = studio ? studio.name : "";
+                    const roomImg  = studio?.image || "";
+                    const hasImg   = roomImg.startsWith("http") || roomImg.startsWith("data:");
                     return (
                       <div key={i} style={{
                         width:"100%",
@@ -288,6 +291,24 @@ export function PublicDisplayPage() {
                             )}
                           </div>
                         </div>
+                        {/* Studio image block (left side) */}
+                        {(hasImg || (!hasImg && roomImg)) && (
+                          <div style={{
+                            flexShrink:0,
+                            width:110,
+                            display:"flex",
+                            alignItems:"center",
+                            justifyContent:"center",
+                            background:"var(--surface2)",
+                            borderRight:"1px solid var(--border)",
+                            overflow:"hidden",
+                          }}>
+                            {hasImg
+                              ? <img src={roomImg} alt={roomName} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                              : <span style={{fontSize:42}}>{roomImg}</span>
+                            }
+                          </div>
+                        )}
                       </div>
                     );
                   })}
