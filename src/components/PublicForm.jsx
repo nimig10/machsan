@@ -2140,13 +2140,15 @@ ${inventory}
               : allSessions;
             return <>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,gap:8}}>
+                {/* כפתור שמאלי — קדימה בזמן (יום הבא) */}
                 <button type="button" onClick={()=>setDailyDayOffset(o=>Math.min(6,o+1))} disabled={dailyDayOffset===6}
-                  style={{padding:"6px 14px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface2)",cursor:dailyDayOffset===6?"not-allowed":"pointer",opacity:dailyDayOffset===6?0.4:1,fontSize:18,fontWeight:900}}>‹</button>
+                  style={{padding:"6px 14px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface2)",cursor:dailyDayOffset===6?"not-allowed":"pointer",opacity:dailyDayOffset===6?0.4:1,fontSize:18,fontWeight:900}}>›</button>
                 <div style={{textAlign:"center",fontWeight:800,fontSize:14,color:"var(--text)"}}>
                   {dateLabel}
                 </div>
+                {/* כפתור ימיני — אחורה בזמן (יום קודם) */}
                 <button type="button" onClick={()=>setDailyDayOffset(o=>Math.max(0,o-1))} disabled={dailyDayOffset===0}
-                  style={{padding:"6px 14px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface2)",cursor:dailyDayOffset===0?"not-allowed":"pointer",opacity:dailyDayOffset===0?0.4:1,fontSize:18,fontWeight:900}}>›</button>
+                  style={{padding:"6px 14px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface2)",cursor:dailyDayOffset===0?"not-allowed":"pointer",opacity:dailyDayOffset===0?0.4:1,fontSize:18,fontWeight:900}}>‹</button>
               </div>
               <div style={{display:"flex",gap:8,marginBottom:14,justifyContent:"center",flexWrap:"wrap"}}>
                 {dailyDayOffset!==0 && (
@@ -2166,13 +2168,29 @@ ${inventory}
                 ? <div style={{textAlign:"center",color:"var(--text3)",fontSize:14,padding:"32px 0"}}>אין שיעורים מתוכננים ליום זה</div>
                 : <div style={{display:"flex",flexDirection:"column",gap:10}}>
                     {sessions.map((s,i)=>(
-                      <div key={i} style={{background:"var(--surface2)",borderRadius:10,padding:"12px 14px",borderRight:"4px solid var(--accent)"}}>
-                        <div style={{fontWeight:800,fontSize:14,color:"var(--text)",marginBottom:2}}>{s.lessonName}</div>
-                        {s.topic && <div style={{fontSize:13,color:"var(--text2)",marginBottom:4}}>📖 {s.topic}</div>}
-                        <div style={{display:"flex",gap:12,fontSize:12,color:"var(--text3)"}}>
-                          {s.instructorName && <span>👤 {s.instructorName}</span>}
-                          {(s.startTime||s.endTime) && <span>🕐 {s.startTime}{s.endTime ? `–${s.endTime}` : ""}</span>}
-                        </div>
+                      <div key={i} style={{background:"var(--surface2)",borderRadius:10,padding:"14px 16px",borderRight:"4px solid var(--accent)"}}>
+                        {/* שם השיעור */}
+                        <div style={{fontWeight:900,fontSize:17,color:"var(--text)",marginBottom:6}}>{s.lessonName}</div>
+                        {/* שעות — בולטות */}
+                        {(s.startTime||s.endTime) && (
+                          <div style={{fontWeight:800,fontSize:16,color:"var(--accent)",marginBottom:6}}>
+                            🕐 {s.startTime}{s.endTime ? `–${s.endTime}` : ""}
+                          </div>
+                        )}
+                        {/* שם מרצה — גדול וברור */}
+                        {s.instructorName && (
+                          <div style={{fontWeight:700,fontSize:15,color:"var(--text2)",marginBottom:s.track||s.topic?4:0}}>
+                            👤 {s.instructorName}
+                          </div>
+                        )}
+                        {/* מסלול */}
+                        {s.track && (
+                          <div style={{display:"inline-block",fontSize:12,fontWeight:700,color:"var(--accent)",background:"var(--accent-glow)",borderRadius:20,padding:"2px 10px",marginBottom:s.topic?4:0}}>
+                            🎓 {s.track}
+                          </div>
+                        )}
+                        {/* נושא */}
+                        {s.topic && <div style={{fontSize:12,color:"var(--text3)"}}>📖 {s.topic}</div>}
                       </div>
                     ))}
                   </div>
