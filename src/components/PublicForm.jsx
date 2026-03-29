@@ -884,6 +884,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [publicView, setPublicView] = useState(() => sessionStorage.getItem("public_view") || "equipment"); // "equipment" | "studios" | "daily"
   const [dailyLessons, setDailyLessons] = useState([]);
   const [dailyDayOffset, setDailyDayOffset] = useState(0);
+  const [dailyMyLessons, setDailyMyLessons] = useState(false);
   const [studioBookings, setStudioBookings] = useState([]);
   const [studios, setStudios] = useState([]);
   const [studioWeekOffset, setStudioWeekOffset] = useState(0);
@@ -955,7 +956,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   // ─── טיימר חוסר פעילות — 60 שניות ─────────────────────────────────────────
   useEffect(() => {
     if (!loggedInStudent) return;
-    const TIMEOUT_MS = 60 * 1000;
+    const TIMEOUT_MS = 7 * 60 * 1000;
     let timer = setTimeout(() => setLoggedInStudent(null), TIMEOUT_MS);
     const reset = () => { clearTimeout(timer); timer = setTimeout(() => setLoggedInStudent(null), TIMEOUT_MS); };
     const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"];
@@ -2121,28 +2122,45 @@ ${inventory}
             const dayName = HE_DAYS[offsetDate.getDay()];
             const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
             const dateLabel = `יום ${dayName}, ${dd} ב${HE_MONTHS[offsetDate.getMonth()]} ${yyyy}`;
-            const sessions = [];
+            const allSessions = [];
             dailyLessons.forEach(lesson => {
               (lesson.schedule||[]).forEach(s => {
                 if (s.date === targetDate) {
-                  sessions.push({ lessonName: lesson.name||"", instructorName: lesson.instructorName||"", topic: s.topic||"", startTime: s.startTime||"", endTime: s.endTime||"" });
+                  allSessions.push({ lessonName: lesson.name||"", instructorName: lesson.instructorName||"", topic: s.topic||"", startTime: s.startTime||"", endTime: s.endTime||"", track: lesson.track||"" });
                 }
               });
             });
-            sessions.sort((a,b) => {
+            allSessions.sort((a,b) => {
               const s = (a.startTime||"").localeCompare(b.startTime||"");
               return s !== 0 ? s : (a.endTime||"").localeCompare(b.endTime||"");
             });
+            const studentTrack = (loggedInStudent?.track||"").trim();
+            const sessions = dailyMyLessons && studentTrack
+              ? allSessions.filter(s => (s.track||"").trim() === studentTrack)
+              : allSessions;
             return <>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:8}}>
-                <button type="button" onClick={()=>setDailyDayOffset(o=>Math.max(0,o-1))} disabled={dailyDayOffset===0}
-                  style={{padding:"6px 14px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface2)",cursor:dailyDayOffset===0?"not-allowed":"pointer",opacity:dailyDayOffset===0?0.4:1,fontSize:18,fontWeight:900}}>›</button>
-                <div style={{textAlign:"center",fontWeight:800,fontSize:14,color:"var(--text)"}}>
-                  {dateLabel}
-                  {dailyDayOffset===0 && <span style={{marginRight:6,fontSize:11,color:"var(--accent)",fontWeight:700}}>היום</span>}
-                </div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,gap:8}}>
                 <button type="button" onClick={()=>setDailyDayOffset(o=>Math.min(6,o+1))} disabled={dailyDayOffset===6}
                   style={{padding:"6px 14px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface2)",cursor:dailyDayOffset===6?"not-allowed":"pointer",opacity:dailyDayOffset===6?0.4:1,fontSize:18,fontWeight:900}}>‹</button>
+                <div style={{textAlign:"center",fontWeight:800,fontSize:14,color:"var(--text)"}}>
+                  {dateLabel}
+                </div>
+                <button type="button" onClick={()=>setDailyDayOffset(o=>Math.max(0,o-1))} disabled={dailyDayOffset===0}
+                  style={{padding:"6px 14px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface2)",cursor:dailyDayOffset===0?"not-allowed":"pointer",opacity:dailyDayOffset===0?0.4:1,fontSize:18,fontWeight:900}}>›</button>
+              </div>
+              <div style={{display:"flex",gap:8,marginBottom:14,justifyContent:"center",flexWrap:"wrap"}}>
+                {dailyDayOffset!==0 && (
+                  <button type="button" onClick={()=>setDailyDayOffset(0)}
+                    style={{padding:"5px 14px",borderRadius:20,border:"1px solid var(--accent)",background:"transparent",color:"var(--accent)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                    היום
+                  </button>
+                )}
+                {studentTrack && (
+                  <button type="button" onClick={()=>setDailyMyLessons(v=>!v)}
+                    style={{padding:"5px 14px",borderRadius:20,border:`1px solid ${dailyMyLessons?"var(--accent)":"var(--border)"}`,background:dailyMyLessons?"var(--accent)":"transparent",color:dailyMyLessons?"#000":"var(--text2)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                    השיעורים שלי
+                  </button>
+                )}
               </div>
               {sessions.length===0
                 ? <div style={{textAlign:"center",color:"var(--text3)",fontSize:14,padding:"32px 0"}}>אין שיעורים מתוכננים ליום זה</div>
