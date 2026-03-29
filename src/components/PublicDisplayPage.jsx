@@ -83,12 +83,12 @@ export function PublicDisplayPage() {
       .sort((a,b) => (a.startTime||"").localeCompare(b.startTime||"") || (a.endTime||"").localeCompare(b.endTime||""));
   }, [bookings, today]);
 
-  // ── Studio name resolver (returns "" if not found) ────────────────────────
-  const studioName = id => {
-    if (!id) return "";
-    const found = (studios || []).find(s => s.id === id);
-    return found ? found.name : "";
+  // ── Studio lookup helpers (string-coerced ID to avoid type mismatches) ──────
+  const findStudio = id => {
+    if (id == null || id === "") return null;
+    return (studios || []).find(s => String(s.id) === String(id)) || null;
   };
+  const studioName = id => findStudio(id)?.name || "";
 
   // ── Paginated views array ──────────────────────────────────────────────────
   const views = useMemo(() => {
@@ -236,8 +236,8 @@ export function PublicDisplayPage() {
               ) : (
                 <div style={{display:"flex",flexDirection:"column",gap:8,width:"100%"}}>
                   {currentView.items.map((s,i) => {
-                    const studio  = (studios||[]).find(st => st.id === s.studioId);
-                    const roomName = studio ? studio.name : "";
+                    const studio   = findStudio(s.studioId);
+                    const roomName = studio?.name || "";
                     const roomImg  = studio?.image || "";
                     const hasImg   = roomImg.startsWith("http") || roomImg.startsWith("data:");
                     return (
