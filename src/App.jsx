@@ -6601,18 +6601,16 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, passwordRole =
         </div>
       </div>}
 
-      {/* Sub-page passwords */}
-      {(passwordRole === "all" || passwordRole === "secretary") && (
+      {/* Sub-page passwords — only in main admin */}
+      {passwordRole === "all" && (
         <div className="card" style={{ marginBottom: 20 }}>
-          <div className="card-header"><div className="card-title">🔐 {passwordRole === "all" ? "סיסמאות תת-דפים" : "סיסמת כניסה — מזכירות"}</div></div>
+          <div className="card-header"><div className="card-title">🔐 סיסמאות תת-דפים</div></div>
           <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
-            {passwordRole === "all" && (
-              <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 4 }}>
-                סיסמאות לגישה לדפי המזכירות והמחסן. ברירת מחדל: <code>secretary</code> / <code>warehouse</code>
-              </div>
-            )}
+            <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 4 }}>
+              סיסמאות לגישה לדפי המזכירות והמחסן. ברירת מחדל: <code>secretary</code> / <code>warehouse</code>
+            </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {passwordRole === "all" && <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>📋 סיסמת מזכירות (<code>/admin/secretary</code>)</label>}
+              <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>📋 סיסמת מזכירות (<code>/admin/secretary</code>)</label>
               <input
                 type="text"
                 className="form-input"
@@ -6622,34 +6620,17 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, passwordRole =
                 style={{ maxWidth: 300 }}
               />
             </div>
-            {passwordRole === "all" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>📦 סיסמת מחסן (<code>/admin/warehouse</code>)</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={draft.warehousePassword || ""}
-                  onChange={e => setDraft(p => ({ ...p, warehousePassword: e.target.value }))}
-                  placeholder="warehouse"
-                  style={{ maxWidth: 300 }}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-      {passwordRole === "warehouse" && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <div className="card-header"><div className="card-title">🔐 סיסמת כניסה — מחסן</div></div>
-          <div style={{ padding: "16px 20px" }}>
-            <input
-              type="text"
-              className="form-input"
-              value={draft.warehousePassword || ""}
-              onChange={e => setDraft(p => ({ ...p, warehousePassword: e.target.value }))}
-              placeholder="warehouse"
-              style={{ maxWidth: 300 }}
-            />
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>📦 סיסמת מחסן (<code>/admin/warehouse</code>)</label>
+              <input
+                type="text"
+                className="form-input"
+                value={draft.warehousePassword || ""}
+                onChange={e => setDraft(p => ({ ...p, warehousePassword: e.target.value }))}
+                placeholder="warehouse"
+                style={{ maxWidth: 300 }}
+              />
+            </div>
           </div>
         </div>
       )}
