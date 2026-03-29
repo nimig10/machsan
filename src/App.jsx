@@ -220,7 +220,7 @@ const PHOTO_CATEGORIES = ["מצלמות","עדשות","תאורה","חצובות
 const RESEND_API_KEY = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_RESEND_KEY : "";
 const ADMIN_NAV_PAGES = ["dashboard","reservations","equipment","certifications","studios","lessons","kits","team","students","policies","settings"];
 const SECRETARY_NAV_PAGES = ["studios","lessons","students","policies","settings"];
-const WAREHOUSE_NAV_PAGES = ["reservations","kits","equipment","certifications","policies","settings"];
+const WAREHOUSE_NAV_PAGES = ["dashboard","reservations","kits","equipment","certifications","policies","settings"];
 const NIMROD_PHONE     = "972521234567"; // ← החלף במספר של נמרוד
 const EMAIL_TYPO_DOMAINS = ["gmai.com","gmial.com","gmail.co","gamil.com","gmaill.com","yahooo.com","yahho.com","outlok.com","hotmai.com","outllook.com"];
 const TERMS = `הסטודנט מתחייב להחזיר את הציוד במועד שנקבע ובמצב תקין.
@@ -6975,7 +6975,7 @@ export default function App() {
   const [secretaryAuthed, setSecretaryAuthed] = useState(() => isSecretaryView && sessionStorage.getItem("secretary_authed") === "1");
   const [warehouseAuthed, setWarehouseAuthed] = useState(() => isWarehouseView && sessionStorage.getItem("warehouse_authed") === "1");
   const [secretaryPage, setSecretaryPage] = useState(() => sessionStorage.getItem("secretary_page") || "studios");
-  const [warehousePage, setWarehousePage] = useState(() => sessionStorage.getItem("warehouse_page") || "reservations");
+  const [warehousePage, setWarehousePage] = useState(() => sessionStorage.getItem("warehouse_page") || "dashboard");
   const [undoStack, setUndoStack]     = useState([]);
   // Reservations filter state (in AdminApp so topbar can render them)
   const [resSearch, setResSearch]       = useState("");
@@ -7798,6 +7798,7 @@ export default function App() {
             <div className="nav">
               <div className="nav-section">ניהול</div>
               {[
+                {id:"dashboard",icon:"📊",label:"סטטוס מחסן"},
                 {id:"reservations",icon:"📋",label:"בקשות",badge:(pending||0)+(rejected||0)||null},
                 {id:"kits",icon:"🎒",label:"ערכות"},
                 {id:"equipment",icon:"📦",label:"ציוד",badge:damagedCount||null},
@@ -7808,7 +7809,7 @@ export default function App() {
                 <div key={n.id} className={`nav-item ${warehousePage===n.id?"active":""}`}
                   onClick={() => {
                     if (n.id === "reservations") setReservationsInitialSubView("active");
-                    setWarehousePage(p=>p===n.id?"reservations":n.id);
+                    setWarehousePage(p=>p===n.id?"dashboard":n.id);
                   }} title={n.label}>
                   <span className="icon">{n.icon}</span>
                   <span className="nav-label">{n.label}</span>
@@ -7823,7 +7824,7 @@ export default function App() {
           <div className="main" onTouchStart={handleSwipeTouchStart} onTouchEnd={handleWarehouseSwipeTouchEnd}>
             <div className="topbar" style={{flexWrap:"wrap",gap:8}}>
               <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
-                <span className="topbar-title" style={{flex:1}}>{{reservations:"בקשות",kits:"ערכות",equipment:"ציוד",certifications:"הסמכות",policies:"נהלים",settings:"הגדרות"}[warehousePage]||"מחסן"}</span>
+                <span className="topbar-title" style={{flex:1}}>{{dashboard:"סטטוס מחסן",reservations:"בקשות",kits:"ערכות",equipment:"ציוד",certifications:"הסמכות",policies:"נהלים",settings:"הגדרות"}[warehousePage]||"מחסן"}</span>
                 {warehousePage==="reservations"&&pending>0&&<div style={{background:"rgba(241,196,15,0.12)",border:"1px solid rgba(241,196,15,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--yellow)",flexShrink:0}}>⏳ {pending}</div>}
                 {warehousePage==="reservations"&&overdueCount>0&&<div style={{background:"rgba(230,126,34,0.15)",border:"1px solid rgba(230,126,34,0.4)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"#e67e22",flexShrink:0,cursor:"pointer"}} onClick={()=>{setReservationsInitialSubView("rejected");setWarehousePage("reservations");}}>⚠️ {overdueCount} באיחור</div>}
                 {warehousePage==="reservations"&&rejectedCount>0&&<div style={{background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--red)",flexShrink:0}}>❌ {rejectedCount}</div>}
@@ -7862,6 +7863,7 @@ export default function App() {
               )}
             </div>
             {loading ? <Loading/> : <>
+              <div style={{display:warehousePage==="dashboard"?"block":"none"}}><DashboardPage equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast}/></div>
               <div style={{display:warehousePage==="reservations"?"block":"none"}}><ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast} search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF} loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken} initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings}/></div>
               <div style={{display:warehousePage==="kits"?"block":"none"}}><KitsPage kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons}/></div>
               <div style={{display:warehousePage==="equipment"?"block":"none"}}><EquipmentPage equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} categoryLoanTypes={categoryLoanTypes} setCategoryLoanTypes={setCategoryLoanTypes} certifications={certifications} studios={studios} collegeManager={collegeManager} managerToken={managerToken}/></div>
