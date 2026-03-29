@@ -6331,7 +6331,9 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
 }
 
 // ─── SETTINGS PAGE ───────────────────────────────────────────────────────────
-function SettingsPage({ siteSettings, setSiteSettings, showToast, passwordRole = "all" }) {
+function SettingsPage({ siteSettings, setSiteSettings, showToast, passwordRole = "all", settingsRole = "all" }) {
+  const colorKey = settingsRole === "secretary" ? "secretaryAccentColor" : settingsRole === "warehouse" ? "warehouseAccentColor" : "adminAccentColor";
+  const fontKey  = settingsRole === "secretary" ? "secretaryFontSize"   : settingsRole === "warehouse" ? "warehouseFontSize"   : "adminFontSize";
   const [draft, setDraft] = useState({ aiMaxRequests: 5, ...siteSettings });
   const [saving, setSaving] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
@@ -6491,15 +6493,15 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, passwordRole =
         <div className="card-header"><div className="card-title">🖥️ בחירת צבע לחצים / טקסט לוח בקרה</div></div>
         <div style={{ padding: "16px 20px" }}>
           <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14 }}>
-            הצבע יוחל על הלחצנים, הכותרות והטקסטים הצבעוניים בלוח הבקרה (בנפרד מטופס ההשאלה).
+            הצבע יוחל על הלחצנים, הכותרות והטקסטים הצבעוניים בלוח בקרה זה בלבד.
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: 20 }}>
-            <input type="color" value={draft.adminAccentColor||"#f5a623"}
-              onChange={e => setDraft(p => ({ ...p, adminAccentColor: e.target.value }))}
+            <input type="color" value={draft[colorKey]||"#f5a623"}
+              onChange={e => setDraft(p => ({ ...p, [colorKey]: e.target.value }))}
               style={{ width: 52, height: 40, borderRadius: 8, border: "2px solid var(--border)", background: "none", cursor: "pointer", padding: 2 }} />
-            <span style={{ fontSize: 13, color: "var(--text2)", fontFamily: "monospace" }}>{draft.adminAccentColor||"#f5a623"}</span>
+            <span style={{ fontSize: 13, color: "var(--text2)", fontFamily: "monospace" }}>{draft[colorKey]||"#f5a623"}</span>
             <button type="button" className="btn btn-secondary" style={{ fontSize: 12 }}
-              onClick={() => setDraft(p => ({ ...p, adminAccentColor: "#f5a623" }))}>
+              onClick={() => setDraft(p => ({ ...p, [colorKey]: "#f5a623" }))}>
               ↩ איפוס לברירת מחדל
             </button>
           </div>
@@ -6507,26 +6509,26 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, passwordRole =
           <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 10 }}>גודל פונט (דסקטופ בלבד)</div>
           <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
             <input type="range" min={11} max={20} step={1}
-              value={draft.adminFontSize||14}
-              onChange={e => setDraft(p => ({ ...p, adminFontSize: Number(e.target.value) }))}
-              style={{ width: 180, accentColor: draft.adminAccentColor||"#f5a623" }} />
-            <span style={{ fontSize: 14, fontWeight: 700, minWidth: 32, color: "var(--text2)" }}>{draft.adminFontSize||14}px</span>
+              value={draft[fontKey]||14}
+              onChange={e => setDraft(p => ({ ...p, [fontKey]: Number(e.target.value) }))}
+              style={{ width: 180, accentColor: draft[colorKey]||"#f5a623" }} />
+            <span style={{ fontSize: 14, fontWeight: 700, minWidth: 32, color: "var(--text2)" }}>{draft[fontKey]||14}px</span>
             <button type="button" className="btn btn-secondary" style={{ fontSize: 12 }}
-              onClick={() => setDraft(p => ({ ...p, adminFontSize: 14 }))}>
+              onClick={() => setDraft(p => ({ ...p, [fontKey]: 14 }))}>
               ↩ איפוס
             </button>
           </div>
           <div style={{ marginTop: 14, padding: "12px 16px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border)" }}>
             <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 8 }}>תצוגה מקדימה:</div>
-            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", fontSize: draft.adminFontSize||14 }}>
-              <button type="button" style={{ background: draft.adminAccentColor||"#f5a623", color: "#0a0c10", border: "none", borderRadius: 8, padding: "8px 18px", fontWeight: 800, cursor: "default", fontSize: "inherit" }}>כפתור לדוגמה</button>
-              <span style={{ color: draft.adminAccentColor||"#f5a623", fontWeight: 800, fontSize: "inherit" }}>טקסט צבעוני</span>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", fontSize: draft[fontKey]||14 }}>
+              <button type="button" style={{ background: draft[colorKey]||"#f5a623", color: "#0a0c10", border: "none", borderRadius: 8, padding: "8px 18px", fontWeight: 800, cursor: "default", fontSize: "inherit" }}>כפתור לדוגמה</button>
+              <span style={{ color: draft[colorKey]||"#f5a623", fontWeight: 800, fontSize: "inherit" }}>טקסט צבעוני</span>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: 20 }}>
+      {settingsRole === "all" && <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-header"><div className="card-title">🤖 עוזר AI לסטודנטים</div></div>
         <div style={{ padding: "16px 20px" }}>
           <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14 }}>
@@ -6544,10 +6546,10 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, passwordRole =
             />
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* XL Templates Download */}
-      <div className="card" style={{ marginBottom: 20 }}>
+      {settingsRole !== "warehouse" && <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-header"><div className="card-title">📥 טמפלטים להורדה</div></div>
         <div style={{ padding: "16px 20px" }}>
           <div style={{ fontSize: 13, color: "var(--text2)", marginBottom: 16 }}>
@@ -6597,7 +6599,7 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, passwordRole =
 
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Sub-page passwords */}
       {(passwordRole === "all" || passwordRole === "secretary") && (
@@ -7716,7 +7718,7 @@ export default function App() {
       {/* ── מזכירות ── */}
       {isSecretaryView && !secretaryAuthed && (loading ? <div style={{minHeight:"100vh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center"}}><Loading/></div> : <SubAdminLogin role="secretary" password={siteSettings.secretaryPassword||"secretary"} onSuccess={()=>setSecretaryAuthed(true)}/>)}
       {isSecretaryView && secretaryAuthed && (
-        <div className="app" style={{"--accent":siteSettings.adminAccentColor||"#f5a623","--accent-glow":`${siteSettings.adminAccentColor||"#f5a623"}2e`,"--admin-fs":`${siteSettings.adminFontSize||14}px`}}>
+        <div className="app" style={{"--accent":siteSettings.secretaryAccentColor||siteSettings.adminAccentColor||"#f5a623","--accent-glow":`${siteSettings.secretaryAccentColor||siteSettings.adminAccentColor||"#f5a623"}2e`,"--admin-fs":`${siteSettings.secretaryFontSize||siteSettings.adminFontSize||14}px`}}>
           <nav className="sidebar">
             <div className="sidebar-logo">
               {siteSettings.logo
@@ -7776,7 +7778,7 @@ export default function App() {
               <div style={{display:secretaryPage==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean) : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
               <div style={{display:secretaryPage==="students"?"block":"none"}}><StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/></div>
               <div style={{display:secretaryPage==="policies"?"block":"none"}}><PoliciesPage policies={policies} setPolicies={setPolicies} showToast={showToast}/></div>
-              <div style={{display:secretaryPage==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} passwordRole="secretary"/></div>
+              <div style={{display:secretaryPage==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} passwordRole="secretary" settingsRole="secretary"/></div>
             </>}
           </div>
         </div>
@@ -7785,7 +7787,7 @@ export default function App() {
       {/* ── מחסן ── */}
       {isWarehouseView && !warehouseAuthed && (loading ? <div style={{minHeight:"100vh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center"}}><Loading/></div> : <SubAdminLogin role="warehouse" password={siteSettings.warehousePassword||"warehouse"} onSuccess={()=>setWarehouseAuthed(true)}/>)}
       {isWarehouseView && warehouseAuthed && (
-        <div className="app" style={{"--accent":siteSettings.adminAccentColor||"#f5a623","--accent-glow":`${siteSettings.adminAccentColor||"#f5a623"}2e`,"--admin-fs":`${siteSettings.adminFontSize||14}px`}}>
+        <div className="app" style={{"--accent":siteSettings.warehouseAccentColor||siteSettings.adminAccentColor||"#f5a623","--accent-glow":`${siteSettings.warehouseAccentColor||siteSettings.adminAccentColor||"#f5a623"}2e`,"--admin-fs":`${siteSettings.warehouseFontSize||siteSettings.adminFontSize||14}px`}}>
           <nav className="sidebar">
             <div className="sidebar-logo">
               {siteSettings.logo
@@ -7870,7 +7872,7 @@ export default function App() {
               <div style={{display:warehousePage==="equipment"?"block":"none"}}><EquipmentPage equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} categoryLoanTypes={categoryLoanTypes} setCategoryLoanTypes={setCategoryLoanTypes} certifications={certifications} studios={studios} collegeManager={collegeManager} managerToken={managerToken}/></div>
               <div style={{display:warehousePage==="certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment}/></div>
               <div style={{display:warehousePage==="policies"?"block":"none"}}><PoliciesPage policies={policies} setPolicies={setPolicies} showToast={showToast}/></div>
-              <div style={{display:warehousePage==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} passwordRole="warehouse"/></div>
+              <div style={{display:warehousePage==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} passwordRole="warehouse" settingsRole="warehouse"/></div>
             </>}
           </div>
         </div>
