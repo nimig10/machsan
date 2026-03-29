@@ -184,8 +184,8 @@ export function PublicDisplayPage() {
 
           {/* View 0: Lessons */}
           {viewIndex === 0 && (
-            <div>
-              <div style={{fontSize:14,fontWeight:700,color:"var(--text3)",marginBottom:20,textAlign:"center"}}>
+            <div style={{width:"100%"}}>
+              <div style={{fontSize:14,fontWeight:700,color:"var(--text3)",marginBottom:16,textAlign:"center"}}>
                 📚 שיעורים מתוכננים להיום
                 {todayLessons.length > 0 && (
                   <span style={{marginRight:8,color:accent,fontWeight:900}}>{todayLessons.length} שיעורים</span>
@@ -194,46 +194,58 @@ export function PublicDisplayPage() {
               {todayLessons.length === 0 ? (
                 <div style={{textAlign:"center",color:"var(--text3)",fontSize:20,padding:"60px 0"}}>אין שיעורים מתוכננים להיום</div>
               ) : (
-                <div style={{
-                  display:"grid",
-                  gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",
-                  gap:16,
-                  justifyContent:"center",
-                }}>
+                <div style={{display:"flex",flexDirection:"column",gap:12,width:"100%"}}>
                   {todayLessons.map((s,i) => (
                     <div key={i} style={{
+                      width:"100%",
                       background:"var(--surface)",
                       border:"1px solid var(--border)",
-                      borderRight:`5px solid ${accent}`,
-                      borderRadius:12,
-                      padding:"18px 20px",
+                      borderRadius:14,
+                      display:"flex",
+                      alignItems:"stretch",
+                      overflow:"hidden",
                     }}>
-                      <div style={{fontWeight:900,fontSize:24,color:accent,marginBottom:8}}>
-                        {s.startTime}–{s.endTime}
-                      </div>
-                      <div style={{fontWeight:800,fontSize:18,color:"var(--text)",marginBottom:6}}>
-                        {s.courseName}
-                      </div>
-                      {s.instructorName && (
-                        <div style={{fontSize:15,fontWeight:700,color:"var(--text2)",marginBottom:8}}>
-                          👤 {s.instructorName}
+                      {/* Time block */}
+                      <div style={{
+                        background:`${accent}18`,
+                        borderRight:`5px solid ${accent}`,
+                        padding:"18px 24px",
+                        display:"flex",
+                        alignItems:"center",
+                        justifyContent:"center",
+                        flexShrink:0,
+                        minWidth:160,
+                      }}>
+                        <div style={{fontWeight:900,fontSize:26,color:accent,textAlign:"center",whiteSpace:"nowrap"}}>
+                          {s.startTime}<br/><span style={{fontSize:16,opacity:0.7}}>—</span><br/>{s.endTime}
                         </div>
-                      )}
-                      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                        {s.track && (
-                          <span style={{fontSize:12,fontWeight:700,color:accent,background:`${accent}1a`,borderRadius:20,padding:"3px 12px",border:`1px solid ${accent}55`}}>
-                            🎓 {s.track}
-                          </span>
-                        )}
-                        {s.studioId && (
-                          <span style={{fontSize:12,fontWeight:700,color:"var(--text3)",background:"var(--surface2)",borderRadius:20,padding:"3px 12px",border:"1px solid var(--border)"}}>
-                            📍 {studioName(s.studioId)}
-                          </span>
-                        )}
                       </div>
-                      {s.topic && (
-                        <div style={{fontSize:12,color:"var(--text3)",marginTop:8}}>📖 {s.topic}</div>
-                      )}
+                      {/* Info block */}
+                      <div style={{flex:1,padding:"16px 24px",display:"flex",flexDirection:"column",justifyContent:"center",gap:6}}>
+                        <div style={{fontWeight:900,fontSize:22,color:"var(--text)",lineHeight:1.2}}>
+                          {s.courseName}
+                        </div>
+                        {s.instructorName && (
+                          <div style={{fontSize:17,fontWeight:700,color:"var(--text2)"}}>
+                            👤 {s.instructorName}
+                          </div>
+                        )}
+                        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:2}}>
+                          {s.track && (
+                            <span style={{fontSize:13,fontWeight:700,color:accent,background:`${accent}1a`,borderRadius:20,padding:"3px 14px",border:`1px solid ${accent}55`}}>
+                              🎓 {s.track}
+                            </span>
+                          )}
+                          {s.studioId && (
+                            <span style={{fontSize:13,fontWeight:700,color:"var(--text3)",background:"var(--surface2)",borderRadius:20,padding:"3px 14px",border:"1px solid var(--border)"}}>
+                              📍 {studioName(s.studioId)}
+                            </span>
+                          )}
+                          {s.topic && (
+                            <span style={{fontSize:13,color:"var(--text3)"}}>📖 {s.topic}</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -243,8 +255,8 @@ export function PublicDisplayPage() {
 
           {/* View 1: Room bookings (students & team only) */}
           {viewIndex === 1 && (
-            <div>
-              <div style={{fontSize:14,fontWeight:700,color:"var(--text3)",marginBottom:20,textAlign:"center"}}>
+            <div style={{width:"100%"}}>
+              <div style={{fontSize:14,fontWeight:700,color:"var(--text3)",marginBottom:16,textAlign:"center"}}>
                 🎙️ קביעות חדרים להיום
                 {todayRoomBookings.length > 0 && (
                   <span style={{marginRight:8,color:accent,fontWeight:900}}>{todayRoomBookings.length} קביעות</span>
@@ -253,12 +265,7 @@ export function PublicDisplayPage() {
               {todayRoomBookings.length === 0 ? (
                 <div style={{textAlign:"center",color:"var(--text3)",fontSize:20,padding:"60px 0"}}>אין קביעות חדרים להיום</div>
               ) : (
-                <div style={{
-                  display:"grid",
-                  gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",
-                  gap:16,
-                  justifyContent:"center",
-                }}>
+                <div style={{display:"flex",flexDirection:"column",gap:12,width:"100%"}}>
                   {todayRoomBookings.map((b,i) => {
                     const kind  = getBookingKind(b);
                     const name  = kind === "team" ? (b.teamMemberName||"איש צוות") : (b.studentName||"סטודנט");
@@ -267,22 +274,41 @@ export function PublicDisplayPage() {
                     const icon  = kind === "team" ? "👥" : "👤";
                     return (
                       <div key={i} style={{
+                        width:"100%",
                         background:"var(--surface)",
                         border:"1px solid var(--border)",
-                        borderRight:`5px solid ${color}`,
-                        borderRadius:12,
-                        padding:"16px 18px",
+                        borderRadius:14,
+                        display:"flex",
+                        alignItems:"stretch",
+                        overflow:"hidden",
                       }}>
-                        <div style={{fontWeight:900,fontSize:22,color,marginBottom:6}}>{time}</div>
-                        <div style={{fontWeight:800,fontSize:17,color:"var(--text)",marginBottom:6}}>
-                          {icon} {name}
+                        {/* Time block */}
+                        <div style={{
+                          background:`${color}18`,
+                          borderRight:`5px solid ${color}`,
+                          padding:"16px 24px",
+                          display:"flex",
+                          alignItems:"center",
+                          justifyContent:"center",
+                          flexShrink:0,
+                          minWidth:160,
+                        }}>
+                          <div style={{fontWeight:900,fontSize:24,color,textAlign:"center",whiteSpace:"nowrap"}}>
+                            {b.isNight ? "לילה" : <>{b.startTime}<br/><span style={{fontSize:15,opacity:0.7}}>—</span><br/>{b.endTime}</>}
+                          </div>
                         </div>
-                        <div style={{fontSize:13,color:"var(--text3)",fontWeight:600}}>
-                          📍 {studioName(b.studioId)}
+                        {/* Info block */}
+                        <div style={{flex:1,padding:"16px 24px",display:"flex",flexDirection:"column",justifyContent:"center",gap:6}}>
+                          <div style={{fontWeight:900,fontSize:20,color:"var(--text)"}}>
+                            {icon} {name}
+                          </div>
+                          <div style={{fontSize:16,fontWeight:700,color:"var(--text3)"}}>
+                            📍 {studioName(b.studioId)}
+                          </div>
+                          {b.notes && (
+                            <div style={{fontSize:12,color:"var(--text3)"}}>💬 {b.notes}</div>
+                          )}
                         </div>
-                        {b.notes && (
-                          <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>💬 {b.notes}</div>
-                        )}
                       </div>
                     );
                   })}
