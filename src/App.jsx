@@ -220,7 +220,7 @@ const PHOTO_CATEGORIES = ["מצלמות","עדשות","תאורה","חצובות
 const RESEND_API_KEY = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_RESEND_KEY : "";
 const ADMIN_NAV_PAGES = ["dashboard","reservations","equipment","certifications","studios","lessons","kits","team","students","policies","settings"];
 const SECRETARY_NAV_PAGES = ["studios","lessons","students","policies","settings"];
-const WAREHOUSE_NAV_PAGES = ["dashboard","reservations","kits","equipment","certifications","policies","settings"];
+const WAREHOUSE_NAV_PAGES = ["reservations","kits","equipment","certifications","policies","settings"];
 const NIMROD_PHONE     = "972521234567"; // ← החלף במספר של נמרוד
 const EMAIL_TYPO_DOMAINS = ["gmai.com","gmial.com","gmail.co","gamil.com","gmaill.com","yahooo.com","yahho.com","outlok.com","hotmai.com","outllook.com"];
 const TERMS = `הסטודנט מתחייב להחזיר את הציוד במועד שנקבע ובמצב תקין.
@@ -7798,7 +7798,6 @@ export default function App() {
             <div className="nav">
               <div className="nav-section">ניהול</div>
               {[
-                {id:"dashboard",icon:"📊",label:"סטטוס מחסן"},
                 {id:"reservations",icon:"📋",label:"בקשות",badge:(pending||0)+(rejected||0)||null},
                 {id:"kits",icon:"🎒",label:"ערכות"},
                 {id:"equipment",icon:"📦",label:"ציוד",badge:damagedCount||null},
