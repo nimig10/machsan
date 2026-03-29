@@ -7612,7 +7612,7 @@ export default function App() {
               {siteSettings.soundLogo && (
                 <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:90,height:90,objectFit:"contain",borderRadius:8,marginTop:2,display:"block"}}/>
               )}
-              <div className="app-name">ADMIN<br/>קמרה אובסקורה וסאונד</div>
+              <div className="app-name">ADMIN</div>
               <div className="app-sub">💾 נתונים נשמרים תמיד</div>
             </div>
             <div className="nav">
@@ -7725,7 +7725,7 @@ export default function App() {
               {siteSettings.soundLogo && (
                 <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:90,height:90,objectFit:"contain",borderRadius:8,marginTop:2,display:"block"}}/>
               )}
-              <div className="app-name">מבט אדמיניסטרציה<br/>קמרה אובסקורה וסאונד</div>
+              <div className="app-name">מבט אדמיניסטרציה</div>
               <div className="app-sub">📋 אדמיניסטרציה</div>
             </div>
             <div className="nav">
@@ -7794,7 +7794,7 @@ export default function App() {
               {siteSettings.soundLogo && (
                 <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:90,height:90,objectFit:"contain",borderRadius:8,marginTop:2,display:"block"}}/>
               )}
-              <div className="app-name">מבט מחסן<br/>קמרה אובסקורה וסאונד</div>
+              <div className="app-name">מבט מחסן</div>
               <div className="app-sub">📦 מחסן</div>
             </div>
             <div className="nav">
