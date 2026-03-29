@@ -6943,6 +6943,21 @@ function SubAdminLogin({ role, password, onSuccess }) {
   );
 }
 
+// ─── הפניה חזרה לאדמין בלחיצה על כפתור "חזרה" בדפדפן ─────────────────────
+(function redirectAdminOnBack() {
+  const currentPath = window.location.pathname;
+  if (currentPath.startsWith("/admin")) return; // כבר באדמין
+  const savedAdmin = sessionStorage.getItem("admin_redirect");
+  if (!savedAdmin) return;
+  // בדוק שזו ניווט "חזרה/קדימה" ולא ניווט ישיר
+  const navEntry = (performance?.getEntriesByType?.("navigation") ?? [])[0];
+  const isBackForward = navEntry?.type === "back_forward" ||
+                        performance?.navigation?.type === 2;
+  if (isBackForward) {
+    window.location.replace(savedAdmin);
+  }
+})();
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const pathname = window.location.pathname;
@@ -7242,14 +7257,9 @@ export default function App() {
     sessionStorage.setItem("warehouse_page", warehousePage);
   }, [warehousePage, warehouseAuthed]);
 
-  // ─── כלא כפתור "חזרה" בדפדפן על ה-URL הנוכחי של האדמין ─────────────────
+  // ─── שמור נתיב האדמין לצורך הפניה חזרה בלחיצת "חזרה" ─────────────────────
   useEffect(() => {
-    if (!isAdmin) return;
-    const adminPath = pathname;
-    history.pushState(null, "", adminPath);
-    const handlePop = () => { history.pushState(null, "", adminPath); };
-    window.addEventListener("popstate", handlePop);
-    return () => window.removeEventListener("popstate", handlePop);
+    if (isAdmin) sessionStorage.setItem("admin_redirect", pathname);
   }, []);
 
   // ─── טיימר חוסר פעילות — 20 דקות ───────────────────────────────────────
