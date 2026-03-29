@@ -12,6 +12,7 @@ import { PublicForm } from "./components/PublicForm.jsx";
 import { LessonsPage } from "./components/LessonsPage.jsx";
 import SmartEquipmentImportButton from "./components/SmartEquipmentImportButton.jsx";
 import { SecretaryDashboardPage } from "./components/SecretaryDashboardPage.jsx";
+import { PublicDisplayPage } from "./components/PublicDisplayPage.jsx";
 
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
 // v3.1
@@ -3694,6 +3695,23 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, cal
         <button className="btn btn-primary" disabled={!mgrForm.name.trim()||!mgrForm.email.trim()||mgrSaving} onClick={saveMgr}>
           {mgrSaving?"⏳ שומר...":"💾 שמור פרטי מנהל"}
         </button>
+        {/* Public daily display link */}
+        <div style={{marginTop:14,background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",fontSize:12}}>
+          <div style={{fontWeight:700,marginBottom:6,color:"#f5a623"}}>📺 לינק לוח לוז יומי ציבורי</div>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            <code style={{fontSize:11,background:"var(--surface3)",padding:"3px 8px",borderRadius:4,flex:1,wordBreak:"break-all",color:"var(--text2)"}}>
+              {window.location.origin}/daily
+            </code>
+            <button className="btn btn-secondary btn-sm" onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/daily`);showToast("success","הקישור הועתק!");}}>
+              📋 העתק
+            </button>
+            <a href="/daily" target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm" style={{textDecoration:"none"}}>
+              🔗 פתח
+            </a>
+          </div>
+          <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>הצג על מסך/טלוויזיה בלובי — מתחלף אוטומטית בין לוז שיעורים לקביעות חדרים</div>
+        </div>
+
         {managerToken&&(
           <div style={{marginTop:14,background:"rgba(52,152,219,0.08)",border:"1px solid rgba(52,152,219,0.25)",borderRadius:"var(--r-sm)",padding:"10px 14px",fontSize:12}}>
             <div style={{fontWeight:700,marginBottom:6,color:"#3498db"}}>🔗 קישור לוח שנה למנהל המכללה</div>
@@ -6529,6 +6547,28 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, passwordRole =
       </div>
 
       {settingsRole === "all" && <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-header"><div className="card-title">📺 לוח לוז יומי ציבורי</div></div>
+        <div style={{ padding: "16px 20px" }}>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14 }}>
+            דף ציבורי לתצוגת לוז יומי על מסך/צג. הקישור:{" "}
+            <code style={{background:"var(--surface3)",padding:"2px 6px",borderRadius:4}}>{typeof window !== "undefined" ? window.location.origin : ""}/daily</code>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>זמן חילוף תצוגה (שניות)</label>
+            <input
+              type="number"
+              min={5}
+              max={300}
+              value={draft.publicDisplayInterval ?? 18}
+              onChange={e => setDraft(p => ({ ...p, publicDisplayInterval: Number(e.target.value) }))}
+              style={{ width: 80, padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: 14, textAlign: "center" }}
+            />
+            <span style={{ fontSize: 12, color: "var(--text3)" }}>ברירת מחדל: 18 שניות</span>
+          </div>
+        </div>
+      </div>}
+
+      {settingsRole === "all" && <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-header"><div className="card-title">🤖 עוזר AI לסטודנטים</div></div>
         <div style={{ padding: "16px 20px" }}>
           <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14 }}>
@@ -6948,7 +6988,8 @@ export default function App() {
   const isAdmin = pathname.startsWith("/admin");
   const isCalendarView = pathname.startsWith("/calendar");
   const isManagerCalendarView = pathname.startsWith("/manager-calendar");
-  const isPublicFormView = !isAdmin && !isCalendarView && !isManagerCalendarView;
+  const isPublicDisplayView = pathname === "/daily";
+  const isPublicFormView = !isAdmin && !isCalendarView && !isManagerCalendarView && !isPublicDisplayView;
   const urlToken = new URLSearchParams(window.location.search).get("token")||"";
   const [page, setPage]               = useState(() => sessionStorage.getItem("admin_page") || "dashboard");
   const [equipment, _setEquipment]     = useState([]);
@@ -6964,7 +7005,7 @@ export default function App() {
   const [kits, _setKits]               = useState([]);
   const [policies, _setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"", לילה:"" });
   const [certifications, _setCertifications] = useState({ types:[], students:[] });
-  const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14, aiMaxRequests:5, studioFutureHoursLimit:16 });
+  const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14, aiMaxRequests:5, studioFutureHoursLimit:16, publicDisplayInterval:18 });
   const [studios, _setStudios] = useState([]);
   const [studioBookings, _setStudioBookings] = useState([]);
   const [lessons, _setLessons] = useState([]);
@@ -7570,6 +7611,9 @@ export default function App() {
   return (
     <>
       <style>{css}</style>
+
+      {/* ── דף לוז יומי ציבורי ── */}
+      {isPublicDisplayView && <PublicDisplayPage/>}
 
       {/* ── טופס ציבורי ── */}
       {isManagerCalendarView ? (
