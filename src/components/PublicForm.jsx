@@ -951,6 +951,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 
   useEffect(() => {
     if (loggedInStudent) sessionStorage.setItem("public_view", publicView);
+    if (loggedInStudent && publicView === "daily") loadDailySchedule();
   }, [publicView, loggedInStudent]);
 
   // ─── טיימר חוסר פעילות — 60 שניות ─────────────────────────────────────────
@@ -2140,15 +2141,15 @@ ${inventory}
               : allSessions;
             return <>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,gap:8}}>
-                {/* כפתור שמאלי — קדימה בזמן (יום הבא) */}
-                <button type="button" onClick={()=>setDailyDayOffset(o=>Math.min(6,o+1))} disabled={dailyDayOffset===6}
-                  style={{padding:"6px 14px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface2)",cursor:dailyDayOffset===6?"not-allowed":"pointer",opacity:dailyDayOffset===6?0.4:1,fontSize:18,fontWeight:900}}>›</button>
+                {/* כפתור ימיני — אחורה בזמן (יום קודם) */}
+                <button type="button" onClick={()=>setDailyDayOffset(o=>Math.max(0,o-1))} disabled={dailyDayOffset===0}
+                  style={{padding:"6px 14px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface2)",cursor:dailyDayOffset===0?"not-allowed":"pointer",opacity:dailyDayOffset===0?0.4:1,fontSize:18,fontWeight:900}}>›</button>
                 <div style={{textAlign:"center",fontWeight:800,fontSize:14,color:"var(--text)"}}>
                   {dateLabel}
                 </div>
-                {/* כפתור ימיני — אחורה בזמן (יום קודם) */}
-                <button type="button" onClick={()=>setDailyDayOffset(o=>Math.max(0,o-1))} disabled={dailyDayOffset===0}
-                  style={{padding:"6px 14px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface2)",cursor:dailyDayOffset===0?"not-allowed":"pointer",opacity:dailyDayOffset===0?0.4:1,fontSize:18,fontWeight:900}}>‹</button>
+                {/* כפתור שמאלי — קדימה בזמן (יום הבא) */}
+                <button type="button" onClick={()=>setDailyDayOffset(o=>Math.min(6,o+1))} disabled={dailyDayOffset===6}
+                  style={{padding:"6px 14px",borderRadius:6,border:"1px solid var(--border)",background:"var(--surface2)",cursor:dailyDayOffset===6?"not-allowed":"pointer",opacity:dailyDayOffset===6?0.4:1,fontSize:18,fontWeight:900}}>‹</button>
               </div>
               <div style={{display:"flex",gap:8,marginBottom:14,justifyContent:"center",flexWrap:"wrap"}}>
                 {dailyDayOffset!==0 && (
