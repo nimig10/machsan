@@ -166,12 +166,13 @@ export function PublicDisplayPage() {
         padding: "10px 32px",
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between",
-        gap: 16,
+        justifyContent: "center",
+        gap: 24,
         flexShrink: 0,
+        position: "relative",
       }}>
         {/* View tabs */}
-        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",position:"absolute",right:24}}>
           {views.map((view, i) => {
             const label = view.type === "lessons"
               ? (view.total > 1 ? `📚 שיעורים ${view.page}/${view.total}` : "📚 שיעורים")
@@ -194,12 +195,12 @@ export function PublicDisplayPage() {
 
         {/* Date + logo */}
         <div style={{display:"flex",alignItems:"center",gap:14,flexShrink:0}}>
-          <div style={{textAlign:"left"}}>
-            <div style={{fontSize:11,color:"var(--text3)",fontWeight:600}}>לוז יומי — מכללת קמרה אובסקורה וסאונד</div>
-            <div style={{fontSize:16,fontWeight:900,color:"var(--text)"}}>{dateLabel}</div>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:15,color:"var(--text3)",fontWeight:700}}>לוז יומי — מכללת קמרה אובסקורה וסאונד</div>
+            <div style={{fontSize:22,fontWeight:900,color:"var(--text)"}}>{dateLabel}</div>
           </div>
           {siteSettings.logo && (
-            <img src={siteSettings.logo} alt="לוגו" style={{height:40,objectFit:"contain",borderRadius:6}}/>
+            <img src={siteSettings.logo} alt="לוגו" style={{height:44,objectFit:"contain",borderRadius:6}}/>
           )}
         </div>
       </div>
@@ -226,7 +227,7 @@ export function PublicDisplayPage() {
           {/* Lessons view */}
           {currentView?.type === "lessons" && (
             <div style={{width:"100%"}}>
-              <div style={{fontSize:13,fontWeight:700,color:"var(--text3)",marginBottom:10,textAlign:"center"}}>
+              <div style={{fontSize:20,fontWeight:900,color:"var(--text)",marginBottom:14,textAlign:"center"}}>
                 📚 שיעורים מתוכננים להיום
                 {todayLessons.length > 0 && (
                   <span style={{marginRight:8,color:accent,fontWeight:900}}>{todayLessons.length} שיעורים</span>
@@ -323,7 +324,7 @@ export function PublicDisplayPage() {
           {/* Rooms view */}
           {currentView?.type === "rooms" && (
             <div style={{width:"100%"}}>
-              <div style={{fontSize:13,fontWeight:700,color:"var(--text3)",marginBottom:10,textAlign:"center"}}>
+              <div style={{fontSize:20,fontWeight:900,color:"var(--text)",marginBottom:14,textAlign:"center"}}>
                 🎙️ קביעות חדרים להיום
                 {todayRoomBookings.length > 0 && (
                   <span style={{marginRight:8,color:accent,fontWeight:900}}>{todayRoomBookings.length} קביעות</span>
