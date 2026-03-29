@@ -50,7 +50,8 @@ export function PublicDisplayPage() {
   useEffect(() => {
     loadData();
     const dataRefresh = setInterval(loadData, 5 * 60 * 1000);
-    return () => clearInterval(dataRefresh);
+    const pageReload  = setInterval(() => window.location.reload(), 5 * 60 * 1000);
+    return () => { clearInterval(dataRefresh); clearInterval(pageReload); };
   }, []);
 
   // ── Today's lessons ────────────────────────────────────────────────────────
