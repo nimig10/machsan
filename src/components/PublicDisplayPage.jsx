@@ -174,7 +174,7 @@ export function PublicDisplayPage() {
           {views.map((view, i) => {
             const label = view.type === "lessons"
               ? (view.total > 1 ? `📚 שיעורים ${view.page}/${view.total}` : "📚 שיעורים")
-              : (view.total > 1 ? `🎙️ חדרים ${view.page}/${view.total}` : "🎙️ חדרים");
+              : (view.total > 1 ? `🎙️ קביעות חדרים ${view.page}/${view.total}` : "🎙️ קביעות חדרים");
             return (
               <div key={i} style={{
                 padding: "5px 14px",
@@ -264,7 +264,7 @@ export function PublicDisplayPage() {
                         </div>
                         {/* Info block */}
                         <div style={{flex:1,padding:"10px 18px",display:"flex",flexDirection:"column",justifyContent:"center",gap:4}}>
-                          <div style={{fontWeight:900,fontSize:19,color:"var(--text)",lineHeight:1.2}}>
+                          <div style={{fontWeight:900,fontSize:23,color:"var(--text)",lineHeight:1.2}}>
                             {s.courseName}
                           </div>
                           {s.instructorName && (
@@ -272,15 +272,15 @@ export function PublicDisplayPage() {
                               👤 {s.instructorName}
                             </div>
                           )}
+                          {roomName && (
+                            <div style={{fontSize:14,fontWeight:800,color:"var(--text2)"}}>
+                              🏫 כיתת לימוד: {roomName}
+                            </div>
+                          )}
                           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:2}}>
                             {s.track && (
                               <span style={{fontSize:12,fontWeight:700,color:accent,background:`${accent}1a`,borderRadius:20,padding:"2px 12px",border:`1px solid ${accent}55`}}>
                                 🎓 {s.track}
-                              </span>
-                            )}
-                            {roomName && (
-                              <span style={{fontSize:12,fontWeight:700,color:"var(--text3)",background:"var(--surface2)",borderRadius:20,padding:"2px 12px",border:"1px solid var(--border)"}}>
-                                🏫 {roomName}
                               </span>
                             )}
                             {s.topic && (
