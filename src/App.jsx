@@ -11,6 +11,7 @@ import { CertificationsPage } from "./components/CertificationsPage.jsx";
 import { PublicForm } from "./components/PublicForm.jsx";
 import { LessonsPage } from "./components/LessonsPage.jsx";
 import SmartEquipmentImportButton from "./components/SmartEquipmentImportButton.jsx";
+import { SecretaryDashboardPage } from "./components/SecretaryDashboardPage.jsx";
 
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
 // v3.1
@@ -219,7 +220,7 @@ const STATUSES    = ["תקין","פגום","בתיקון","נעלם"];
 const PHOTO_CATEGORIES = ["מצלמות","עדשות","תאורה","חצובות","אביזרים","אביזרי צילום","מייצבי מצלמה","גימבלים","רחפנים","מוניטורים"];
 const RESEND_API_KEY = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_RESEND_KEY : "";
 const ADMIN_NAV_PAGES = ["dashboard","reservations","equipment","certifications","studios","lessons","kits","team","students","policies","settings"];
-const SECRETARY_NAV_PAGES = ["studios","lessons","students","policies","settings"];
+const SECRETARY_NAV_PAGES = ["dashboard","studios","lessons","students","policies","settings"];
 const WAREHOUSE_NAV_PAGES = ["reservations","kits","equipment","certifications","policies","settings"];
 const NIMROD_PHONE     = "972521234567"; // ← החלף במספר של נמרוד
 const EMAIL_TYPO_DOMAINS = ["gmai.com","gmial.com","gmail.co","gamil.com","gmaill.com","yahooo.com","yahho.com","outlok.com","hotmai.com","outllook.com"];
@@ -6974,7 +6975,7 @@ export default function App() {
   const [authed, setAuthed]           = useState(() => isMainAdmin && sessionStorage.getItem("admin_authed") === "1");
   const [secretaryAuthed, setSecretaryAuthed] = useState(() => isSecretaryView && sessionStorage.getItem("secretary_authed") === "1");
   const [warehouseAuthed, setWarehouseAuthed] = useState(() => isWarehouseView && sessionStorage.getItem("warehouse_authed") === "1");
-  const [secretaryPage, setSecretaryPage] = useState(() => sessionStorage.getItem("secretary_page") || "studios");
+  const [secretaryPage, setSecretaryPage] = useState(() => sessionStorage.getItem("secretary_page") || "dashboard");
   const [warehousePage, setWarehousePage] = useState(() => sessionStorage.getItem("warehouse_page") || "dashboard");
   const [undoStack, setUndoStack]     = useState([]);
   // Reservations filter state (in AdminApp so topbar can render them)
@@ -7737,7 +7738,7 @@ export default function App() {
                 {id:"settings",icon:"⚙️",label:"הגדרות"},
               ].map(n=>(
                 <div key={n.id} className={`nav-item ${secretaryPage===n.id?"active":""}`}
-                  onClick={() => setSecretaryPage(p=>p===n.id?"studios":n.id)} title={n.label}>
+                  onClick={() => setSecretaryPage(p=>p===n.id?"dashboard":n.id)} title={n.label}>
                   <span className="icon">{n.icon}</span>
                   <span className="nav-label">{n.label}</span>
                   {n.badge&&<span style={{background:"var(--accent)",color:"#000",borderRadius:"50%",width:16,height:16,fontSize:10,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",position:"absolute",top:4,left:"50%",transform:"translateX(-50%) translateX(10px)"}}>{n.badge}</span>}
@@ -7751,7 +7752,7 @@ export default function App() {
           <div className="main" onTouchStart={handleSwipeTouchStart} onTouchEnd={handleSecretarySwipeTouchEnd}>
             <div className="topbar" style={{flexWrap:"wrap",gap:8}}>
               <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
-                <span className="topbar-title" style={{flex:1}}>{{studios:"לוח חדרים",lessons:"שיעורים",students:"סטודנטים",policies:"נהלים",settings:"הגדרות"}[secretaryPage]||"מזכירות"}</span>
+                <span className="topbar-title" style={{flex:1}}>{{dashboard:"סטטוס מכללה",studios:"לוח חדרים",lessons:"שיעורים",students:"סטודנטים",policies:"נהלים",settings:"הגדרות"}[secretaryPage]||"סטטוס מכללה"}</span>
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={handleUndo}
@@ -7770,6 +7771,7 @@ export default function App() {
               </div>
             </div>
             {loading ? <Loading/> : <>
+              <div style={{display:secretaryPage==="dashboard"?"block":"none"}}><SecretaryDashboardPage certifications={certifications} studios={studios} studioBookings={studioBookings} lessons={lessons}/></div>
               <div style={{display:secretaryPage==="studios"?"block":"none"}}><StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin" studios={studios} setStudios={setStudios} bookings={studioBookings} setBookings={setStudioBookings} siteSettings={siteSettings} setSiteSettings={setSiteSettings}/></div>
               <div style={{display:secretaryPage==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean) : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
               <div style={{display:secretaryPage==="students"?"block":"none"}}><StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/></div>
