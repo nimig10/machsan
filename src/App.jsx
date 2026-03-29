@@ -7640,7 +7640,7 @@ export default function App() {
                 </div>
           )}
         </div>
-      ) : !isAdmin && (
+      ) : isPublicFormView && (
         <div className="public-page-shell">
           {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes} refreshInventory={refreshPublicInventory}/>}
         </div>
