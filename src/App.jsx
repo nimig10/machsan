@@ -3031,7 +3031,7 @@ function PublicForm_REMOVED({ equipment, reservations, setReservations, showToas
             {siteSettings.soundLogo && (
               <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:82,height:82,objectFit:"contain",borderRadius:12,marginBottom:12}}/>
             )}
-            <div style={{fontSize:24,fontWeight:900,color:"var(--accent)"}}>מחסן השאלת ציוד קמרה אובסקורה וסאונד</div>
+            <div style={{fontSize:22,fontWeight:900,color:"var(--accent)"}}>מערכת פניות לסטודנט — מכללת קמרה אובסקורה וסאונד</div>
             <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>טופס השאלת ציוד</div>
           </div>
           {/* Clickable tab navigation — always free to navigate, validation only on submit */}
@@ -6891,8 +6891,8 @@ function AdminLogin({ onSuccess }) {
     <div style={{minHeight:"100vh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"40px 48px",width:360,textAlign:"center"}}>
         <div style={{fontSize:48,marginBottom:16}}>🔐</div>
-        <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>כניסת מנהל</div>
-        <div style={{fontSize:13,color:"var(--text3)",marginBottom:28}}>מחסן השאלת ציוד קמרה אובסקורה וסאונד</div>
+        <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>כניסת ADMIN</div>
+        <div style={{fontSize:13,color:"var(--text3)",marginBottom:28}}>מכללת קמרה אובסקורה וסאונד</div>
         <input
           className="form-input"
           type="password"
@@ -6917,14 +6917,14 @@ function SubAdminLogin({ role, password, onSuccess }) {
     if (pw === password) { onSuccess(); }
     else { setErr(true); setTimeout(()=>setErr(false), 2000); }
   };
-  const titles = { secretary: "כניסת מזכירות", warehouse: "כניסת מחסנאי" };
+  const titles = { secretary: "כניסת אדמיניסטרציה", warehouse: "כניסת מחסן" };
   const icons  = { secretary: "📋", warehouse: "📦" };
   return (
     <div style={{minHeight:"100vh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"40px 48px",width:360,textAlign:"center"}}>
         <div style={{fontSize:48,marginBottom:16}}>{icons[role]||"🔐"}</div>
         <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>{titles[role]||"כניסה"}</div>
-        <div style={{fontSize:13,color:"var(--text3)",marginBottom:28}}>מחסן השאלת ציוד קמרה אובסקורה וסאונד</div>
+        <div style={{fontSize:13,color:"var(--text3)",marginBottom:28}}>מכללת קמרה אובסקורה וסאונד</div>
         <input
           className="form-input"
           type="password"
@@ -7612,7 +7612,7 @@ export default function App() {
               {siteSettings.soundLogo && (
                 <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:90,height:90,objectFit:"contain",borderRadius:8,marginTop:2,display:"block"}}/>
               )}
-              <div className="app-name">מחסן השאלת ציוד<br/>קמרה אובסקורה וסאונד</div>
+              <div className="app-name">ADMIN<br/>קמרה אובסקורה וסאונד</div>
               <div className="app-sub">💾 נתונים נשמרים תמיד</div>
             </div>
             <div className="nav">
@@ -7725,8 +7725,8 @@ export default function App() {
               {siteSettings.soundLogo && (
                 <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:90,height:90,objectFit:"contain",borderRadius:8,marginTop:2,display:"block"}}/>
               )}
-              <div className="app-name">מחסן השאלת ציוד<br/>קמרה אובסקורה וסאונד</div>
-              <div className="app-sub">📋 מזכירות</div>
+              <div className="app-name">מבט אדמיניסטרציה<br/>קמרה אובסקורה וסאונד</div>
+              <div className="app-sub">📋 אדמיניסטרציה</div>
             </div>
             <div className="nav">
               <div className="nav-section">ניהול</div>
@@ -7752,7 +7752,7 @@ export default function App() {
           <div className="main" onTouchStart={handleSwipeTouchStart} onTouchEnd={handleSecretarySwipeTouchEnd}>
             <div className="topbar" style={{flexWrap:"wrap",gap:8}}>
               <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
-                <span className="topbar-title" style={{flex:1}}>{{dashboard:"סטטוס מכללה",studios:"לוח חדרים",lessons:"שיעורים",students:"סטודנטים",policies:"נהלים",settings:"הגדרות"}[secretaryPage]||"סטטוס מכללה"}</span>
+                <span className="topbar-title" style={{flex:1}}>{{dashboard:"סטטוס אדמיניסטרציה",studios:"לוח חדרים",lessons:"שיעורים",students:"סטודנטים",policies:"נהלים",settings:"הגדרות"}[secretaryPage]||"סטטוס אדמיניסטרציה"}</span>
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={handleUndo}
@@ -7794,7 +7794,7 @@ export default function App() {
               {siteSettings.soundLogo && (
                 <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:90,height:90,objectFit:"contain",borderRadius:8,marginTop:2,display:"block"}}/>
               )}
-              <div className="app-name">מחסן השאלת ציוד<br/>קמרה אובסקורה וסאונד</div>
+              <div className="app-name">מבט מחסן<br/>קמרה אובסקורה וסאונד</div>
               <div className="app-sub">📦 מחסן</div>
             </div>
             <div className="nav">
@@ -7825,7 +7825,7 @@ export default function App() {
           <div className="main" onTouchStart={handleSwipeTouchStart} onTouchEnd={handleWarehouseSwipeTouchEnd}>
             <div className="topbar" style={{flexWrap:"wrap",gap:8}}>
               <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
-                <span className="topbar-title" style={{flex:1}}>{{dashboard:"סטטוס מחסן",reservations:"בקשות",kits:"ערכות",equipment:"ציוד",certifications:"הסמכות",policies:"נהלים",settings:"הגדרות"}[warehousePage]||"מחסן"}</span>
+                <span className="topbar-title" style={{flex:1}}>{{dashboard:"סטטוס מחסן",reservations:"בקשות",kits:"ערכות",equipment:"ציוד",certifications:"הסמכות",policies:"נהלים",settings:"הגדרות"}[warehousePage]||"סטטוס מחסן"}</span>
                 {warehousePage==="reservations"&&pending>0&&<div style={{background:"rgba(241,196,15,0.12)",border:"1px solid rgba(241,196,15,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--yellow)",flexShrink:0}}>⏳ {pending}</div>}
                 {warehousePage==="reservations"&&overdueCount>0&&<div style={{background:"rgba(230,126,34,0.15)",border:"1px solid rgba(230,126,34,0.4)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"#e67e22",flexShrink:0,cursor:"pointer"}} onClick={()=>{setReservationsInitialSubView("rejected");setWarehousePage("reservations");}}>⚠️ {overdueCount} באיחור</div>}
                 {warehousePage==="reservations"&&rejectedCount>0&&<div style={{background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--red)",flexShrink:0}}>❌ {rejectedCount}</div>}

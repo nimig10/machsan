@@ -79,7 +79,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       @media print{body{padding:20px}}
     </style></head><body>
     <h1>📋 אישור בקשת השאלה</h1>
-    <div class="sub">מחסן השאלת ציוד קמרה אובסקורה וסאונד — הופק ב-${new Date().toLocaleDateString("he-IL")}</div>
+    <div class="sub">מכללת קמרה אובסקורה וסאונד — הופק ב-${new Date().toLocaleDateString("he-IL")}</div>
     <div class="section">
       <div class="section-title">פרטי סטודנט</div>
       <div class="row"><span class="label">שם מלא:</span><strong>${r.student_name}</strong></div>

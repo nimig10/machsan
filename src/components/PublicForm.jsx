@@ -1776,8 +1776,8 @@ ${inventory}
         {siteSettings.logo
           ? <img src={siteSettings.logo} alt="לוגו" style={{width:82,height:82,objectFit:"contain",borderRadius:12,marginBottom:16,display:"block",marginInline:"auto"}}/>
           : <div style={{fontSize:48,marginBottom:16}}>🎬</div>}
-        <h2 style={{fontSize:22,fontWeight:900,color:"var(--accent)",marginBottom:4}}>מחסן השאלת ציוד</h2>
-        <div style={{fontSize:13,color:"var(--text3)",marginBottom:24}}>קמרה אובסקורה וסאונד</div>
+        <h2 style={{fontSize:20,fontWeight:900,color:"var(--accent)",marginBottom:4}}>מערכת פניות לסטודנט</h2>
+        <div style={{fontSize:13,color:"var(--text3)",marginBottom:24}}>מכללת קמרה אובסקורה וסאונד</div>
         <div style={{textAlign:"right",marginBottom:12}}>
           <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>שם מלא</label>
           <input className="form-input" placeholder="הקלד/י שם מלא" value={loginForm.name}
@@ -1832,7 +1832,7 @@ ${inventory}
             {siteSettings.soundLogo && (
               <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:82,height:82,objectFit:"contain",borderRadius:12,marginBottom:12}}/>
             )}
-            <div style={{fontSize:24,fontWeight:900,color:"var(--accent)"}}>מחסן השאלת ציוד קמרה אובסקורה וסאונד</div>
+            <div style={{fontSize:22,fontWeight:900,color:"var(--accent)"}}>מערכת פניות לסטודנט — מכללת קמרה אובסקורה וסאונד</div>
             <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>שלום, {loggedInStudent.name}</div>
           </div>
           {/* ── View toggle: equipment vs studios ── */}

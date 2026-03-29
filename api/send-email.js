@@ -186,7 +186,7 @@ function buildEmail({
         ? `<img src="${logo_url}" alt="לוגו" style="width:80px;height:80px;object-fit:contain;border-radius:10px;margin-bottom:${sound_logo_url ? "6px" : "12px"}"/>`
         : `<div style="font-size:48px;margin-bottom:10px">${isLessonKitReady ? "📚" : "🎬"}</div>`}
       ${sound_logo_url ? `<img src="${sound_logo_url}" alt="לוגו סאונד" style="width:60px;height:60px;object-fit:contain;border-radius:8px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto"/>` : ""}
-      <h1 style="color:#f5a623;font-size:22px;margin:0;text-align:center">מחסן השאלת ציוד קמרה אובסקורה וסאונד</h1>
+      <h1 style="color:#f5a623;font-size:22px;margin:0;text-align:center">מכללת קמרה אובסקורה וסאונד</h1>
     </div>
     <div style="padding:32px;direction:rtl;text-align:right">
       <div style="background:${color}1a;border:1px solid ${color};border-radius:10px;padding:20px;text-align:center;margin-bottom:24px">
@@ -229,7 +229,7 @@ function buildEmail({
       </div>` : ""}
     </div>
     <div style="padding:16px 32px;border-top:1px solid #252b38;text-align:center;font-size:11px;color:#555f72">
-      מחסן השאלת ציוד קמרה אובסקורה וסאונד · מכללה
+      מכללת קמרה אובסקורה וסאונד · מכללה
     </div>
   </div>
 </body>
@@ -269,11 +269,11 @@ export default async function handler(req, res) {
   if (!to || !type) return res.status(400).json({ error: "חסרים שדות חובה" });
 
   const subjects = {
-    studio_approved:   "🎙️ קביעת החדר שלך אושרה – מחסן ציוד קמרה אובסקורה וסאונד",
-    studio_deleted:    "❌ קביעת החדר בוטלה – מחסן ציוד קמרה אובסקורה וסאונד",
-    new:               "⏳ קיבלנו את הבקשה שלך – מחסן ציוד קמרה אובסקורה וסאונד",
-    approved:          "✅ הבקשה שלך אושרה – מחסן ציוד קמרה אובסקורה וסאונד",
-    rejected:          "עדכון לגבי בקשת ההשאלה – מחסן ציוד קמרה אובסקורה וסאונד",
+    studio_approved:   "🎙️ קביעת החדר שלך אושרה – מכללת קמרה אובסקורה וסאונד",
+    studio_deleted:    "❌ קביעת החדר בוטלה – מכללת קמרה אובסקורה וסאונד",
+    new:               "⏳ קיבלנו את הבקשה שלך – מכללת קמרה אובסקורה וסאונד",
+    approved:          "✅ הבקשה שלך אושרה – מכללת קמרה אובסקורה וסאונד",
+    rejected:          "עדכון לגבי בקשת ההשאלה – מכללת קמרה אובסקורה וסאונד",
     team_notify:       `📬 בקשת השאלה חדשה (${loan_type || ""}) – ${student_name || ""}`,
     dept_head_notify:  `🎓 בקשת השאלת הפקה לאישורך — ${student_name || ""}`,
     manager_report:    `📋 דיווח מצוות המחסן — ${student_name || ""}`,
@@ -284,7 +284,7 @@ export default async function handler(req, res) {
 
   try {
     await transporter.sendMail({
-      from:    `"מחסן קמרה אובסקורה וסאונד" <${GMAIL_USER}>`,
+      from:    `"מכללת קמרה אובסקורה וסאונד" <${GMAIL_USER}>`,
       to,
       subject: subjects[type] || "עדכון מהמחסן",
       html:    buildEmail({
