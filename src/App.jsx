@@ -7242,10 +7242,20 @@ export default function App() {
     sessionStorage.setItem("warehouse_page", warehousePage);
   }, [warehousePage, warehouseAuthed]);
 
-  // ─── טיימר חוסר פעילות — 60 שניות ─────────────────────────────────────────
+  // ─── כלא כפתור "חזרה" בדפדפן על ה-URL הנוכחי של האדמין ─────────────────
+  useEffect(() => {
+    if (!isAdmin) return;
+    const adminPath = pathname;
+    history.pushState(null, "", adminPath);
+    const handlePop = () => { history.pushState(null, "", adminPath); };
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, []);
+
+  // ─── טיימר חוסר פעילות — 20 דקות ───────────────────────────────────────
   useEffect(() => {
     if (!isMainAdmin || !authed) return;
-    const TIMEOUT_MS = 7 * 60 * 1000;
+    const TIMEOUT_MS = 20 * 60 * 1000;
     let timer = setTimeout(() => { setAuthed(false); }, TIMEOUT_MS);
     const reset = () => { clearTimeout(timer); timer = setTimeout(() => { setAuthed(false); }, TIMEOUT_MS); };
     const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"];
@@ -7255,7 +7265,7 @@ export default function App() {
 
   useEffect(() => {
     if (!isSecretaryView || !secretaryAuthed) return;
-    const TIMEOUT_MS = 7 * 60 * 1000;
+    const TIMEOUT_MS = 20 * 60 * 1000;
     let timer = setTimeout(() => { setSecretaryAuthed(false); }, TIMEOUT_MS);
     const reset = () => { clearTimeout(timer); timer = setTimeout(() => { setSecretaryAuthed(false); }, TIMEOUT_MS); };
     const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"];
@@ -7265,7 +7275,7 @@ export default function App() {
 
   useEffect(() => {
     if (!isWarehouseView || !warehouseAuthed) return;
-    const TIMEOUT_MS = 7 * 60 * 1000;
+    const TIMEOUT_MS = 20 * 60 * 1000;
     let timer = setTimeout(() => { setWarehouseAuthed(false); }, TIMEOUT_MS);
     const reset = () => { clearTimeout(timer); timer = setTimeout(() => { setWarehouseAuthed(false); }, TIMEOUT_MS); };
     const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"];
