@@ -7612,7 +7612,7 @@ export default function App() {
               {siteSettings.soundLogo && (
                 <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:90,height:90,objectFit:"contain",borderRadius:8,marginTop:2,display:"block"}}/>
               )}
-              <div className="app-name">ADMIN</div>
+              <div className="app-name">מנהל מערכת</div>
               <div className="app-sub">💾 נתונים נשמרים תמיד</div>
             </div>
             <div className="nav">
