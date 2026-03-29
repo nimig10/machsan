@@ -1,5 +1,9 @@
 import { useState, useMemo } from "react";
 
+const NIGHT_COLOR   = "#2196f3";
+const STUDENT_COLOR = "#2ecc71";
+const LESSON_COLOR  = "#f5a623";
+
 function fmtDate(d) {
   return `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,"0")}-${d.getDate().toString().padStart(2,"0")}`;
 }
@@ -7,11 +11,30 @@ function todayStr() { return fmtDate(new Date()); }
 
 function displayDate(dateStr) {
   if (!dateStr) return "";
-  const [y,m,d] = dateStr.split("-").map(Number);
+  const [,m,d] = dateStr.split("-").map(Number);
   return `${(d||1).toString().padStart(2,"0")}/${(m||1).toString().padStart(2,"0")}`;
 }
 
 const HE_DAYS = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
+
+function getBookingKind(b) {
+  if (b.bookingKind === "lesson" || b.lesson_auto || (b.lesson_id != null && b.lesson_id !== "")) return "lesson";
+  if (b.bookingKind === "team" || b.teamMemberId || b.teamMemberName) return "team";
+  return "student";
+}
+
+function bookingColor(b) {
+  const kind = getBookingKind(b);
+  if (kind === "lesson") return LESSON_COLOR;
+  if (b.isNight) return NIGHT_COLOR;
+  return STUDENT_COLOR;
+}
+
+function bookingLabel(b) {
+  const kind = getBookingKind(b);
+  if (kind === "lesson") return b.courseName || "שיעור";
+  return b.studentName || "סטודנט";
+}
 
 export function SecretaryDashboardPage({ certifications, studios, studioBookings, lessons }) {
   const today = todayStr();
@@ -37,12 +60,10 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
         if (session.date === today) {
           rows.push({
             startTime: session.startTime || "",
-            endTime: session.endTime || "",
-            topic: session.topic || "",
+            endTime:   session.endTime   || "",
+            topic:     session.topic     || "",
             courseName: lesson.courseName || lesson.name || "",
-            instructor: lesson.instructor || "",
-            studioId: session.studioId || lesson.studioId || "",
-            classroomOnly: session.classroomOnly || lesson.classroomOnly || false,
+            studioId:  session.studioId || lesson.studioId || "",
           });
         }
       });
@@ -71,12 +92,10 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
 
   const weekLabel = useMemo(() => {
     if (!weekDays.length) return "";
-    const first = weekDays[0].date.split("-");
-    const last  = weekDays[6].date.split("-");
-    return `${parseInt(first[2])}/${parseInt(first[1])} – ${parseInt(last[2])}/${parseInt(last[1])}`;
+    return `${displayDate(weekDays[0].date)} – ${displayDate(weekDays[6].date)}`;
   }, [weekDays]);
 
-  // ── Studio bookings map ────────────────────────────────────────────
+  // ── Bookings map (by studioId_date) ───────────────────────────────
   const bMap = useMemo(() => {
     const m = {};
     (studioBookings || []).forEach(b => {
@@ -86,21 +105,6 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
     });
     return m;
   }, [studioBookings]);
-
-  // ── Lesson bookings in studios per day ────────────────────────────
-  const lessonMap = useMemo(() => {
-    const m = {};
-    (lessons || []).forEach(lesson => {
-      (lesson.schedule || []).forEach(session => {
-        const sid = session.studioId || lesson.studioId;
-        if (!sid || !session.date) return;
-        const k = `${sid}_${session.date}`;
-        if (!m[k]) m[k] = [];
-        m[k].push({ startTime: session.startTime, endTime: session.endTime, courseName: lesson.courseName || lesson.name || "" });
-      });
-    });
-    return m;
-  }, [lessons]);
 
   const studioName = id => (studios || []).find(s => s.id === id)?.name || id;
 
@@ -118,8 +122,8 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
           rows.push({
             date: session.date,
             startTime: session.startTime || "",
+            endTime:   session.endTime   || "",
             courseName: lesson.courseName || lesson.name || "",
-            instructor: lesson.instructor || "",
             studioId: session.studioId || lesson.studioId || "",
           });
         }
@@ -134,10 +138,10 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
       {/* ── Stats ── */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:12,marginBottom:20}}>
         {[
-          { icon:"👨‍🎓", value: students.length,       label:"סטודנטים" },
-          { icon:"🎓",   value: tracks.length,          label:"מסלולים" },
-          { icon:"🎙️",  value:(studios||[]).length,    label:"חדרים" },
-          { icon:"📽️",  value: todayLessons.length,    label:"שיעורים היום" },
+          { icon:"👨‍🎓", value: students.length,    label:"סטודנטים" },
+          { icon:"🎓",   value: tracks.length,       label:"מסלולים" },
+          { icon:"🎙️",  value:(studios||[]).length, label:"חדרים" },
+          { icon:"📽️",  value: todayLessons.length, label:"שיעורים היום" },
         ].map(s => (
           <div key={s.label} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 16px",textAlign:"center"}}>
             <div style={{fontSize:26,marginBottom:4}}>{s.icon}</div>
@@ -158,7 +162,7 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
               ? <div style={{color:"var(--text3)",fontSize:13,padding:"12px 0"}}>אין נתונים</div>
               : tracks.map(([track, count]) => (
                 <div key={track} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
-                  <span style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>{track}</span>
+                  <span style={{fontSize:13,fontWeight:600}}>{track}</span>
                   <span style={{background:"var(--accent)",color:"#000",borderRadius:20,padding:"2px 11px",fontSize:12,fontWeight:900}}>{count}</span>
                 </div>
               ))}
@@ -174,11 +178,11 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
               : todayLessons.map((s, i) => (
                 <div key={i} style={{padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
                   <div style={{display:"flex",gap:10,alignItems:"center"}}>
-                    <span style={{fontSize:12,fontWeight:800,color:"var(--accent)",whiteSpace:"nowrap"}}>{s.startTime}–{s.endTime}</span>
+                    <span style={{fontSize:12,fontWeight:800,color:LESSON_COLOR,whiteSpace:"nowrap"}}>{s.startTime}–{s.endTime}</span>
                     <span style={{fontSize:13,fontWeight:700,flex:1}}>{s.courseName}</span>
                   </div>
                   {(s.topic || s.studioId) && (
-                    <div style={{fontSize:11,color:"var(--text3)",marginTop:2,paddingRight:0}}>
+                    <div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>
                       {s.topic && <span>{s.topic}</span>}
                       {s.topic && s.studioId && <span> · </span>}
                       {s.studioId && <span>{studioName(s.studioId)}</span>}
@@ -207,15 +211,10 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
                 <th style={{padding:"8px 10px",textAlign:"right",fontWeight:700,color:"var(--text2)",borderBottom:"2px solid var(--border)",whiteSpace:"nowrap",minWidth:90}}>חדר</th>
                 {weekDays.map(d => (
                   <th key={d.date} style={{
-                    padding:"7px 6px",
-                    textAlign:"center",
-                    fontWeight:700,
+                    padding:"7px 6px",textAlign:"center",fontWeight:700,
                     color: d.isToday ? "#000" : "var(--text2)",
                     background: d.isToday ? "var(--accent)" : "var(--surface2)",
-                    borderBottom:"2px solid var(--border)",
-                    whiteSpace:"nowrap",
-                    minWidth:72,
-                    fontSize:11,
+                    borderBottom:"2px solid var(--border)",whiteSpace:"nowrap",minWidth:80,fontSize:11,
                   }}>
                     {d.label}
                   </th>
@@ -230,52 +229,35 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
                 <tr key={studio.id}>
                   <td style={{padding:"6px 10px",fontWeight:700,borderBottom:"1px solid var(--border)",whiteSpace:"nowrap",fontSize:12}}>{studio.name}</td>
                   {weekDays.map(d => {
-                    const studentBookings = bMap[`${studio.id}_${d.date}`] || [];
-                    const lessonSlots    = lessonMap[`${studio.id}_${d.date}`] || [];
-                    const isEmpty = studentBookings.length === 0 && lessonSlots.length === 0;
+                    const bookings = bMap[`${studio.id}_${d.date}`] || [];
                     return (
                       <td key={d.date} style={{
-                        padding:"4px 4px",
-                        borderBottom:"1px solid var(--border)",
-                        verticalAlign:"top",
+                        padding:"3px 3px",borderBottom:"1px solid var(--border)",
+                        verticalAlign:"top",minWidth:80,
                         background: d.isToday ? "rgba(245,166,35,0.04)" : "transparent",
-                        minWidth:72,
                       }}>
-                        {isEmpty && <div style={{height:24}}/>}
-                        {studentBookings.map((b, i) => (
-                          <div key={`s${i}`} title={`${b.studentName||""} ${b.startTime}–${b.endTime}`} style={{
-                            background:"rgba(46,204,113,0.15)",
-                            border:"1px solid rgba(46,204,113,0.4)",
-                            borderRadius:4,
-                            padding:"2px 5px",
-                            fontSize:10,
-                            marginBottom:2,
-                            whiteSpace:"nowrap",
-                            overflow:"hidden",
-                            textOverflow:"ellipsis",
-                            color:"#2ecc71",
-                            fontWeight:700,
-                          }}>
-                            {b.startTime}–{b.endTime}
-                          </div>
-                        ))}
-                        {lessonSlots.map((l, i) => (
-                          <div key={`l${i}`} title={`${l.courseName} ${l.startTime}–${l.endTime}`} style={{
-                            background:"var(--accent-glow)",
-                            border:"1px solid var(--accent)",
-                            borderRadius:4,
-                            padding:"2px 5px",
-                            fontSize:10,
-                            marginBottom:2,
-                            whiteSpace:"nowrap",
-                            overflow:"hidden",
-                            textOverflow:"ellipsis",
-                            color:"var(--accent)",
-                            fontWeight:700,
-                          }}>
-                            {l.startTime}–{l.endTime}
-                          </div>
-                        ))}
+                        {bookings.length === 0 && <div style={{height:22}}/>}
+                        {bookings.map((b, i) => {
+                          const col = bookingColor(b);
+                          const label = bookingLabel(b);
+                          const time = b.isNight ? "לילה" : `${b.startTime||""}–${b.endTime||""}`;
+                          return (
+                            <div key={i} title={`${label} · ${time}`} style={{
+                              background:`${col}1a`,
+                              border:`1px solid ${col}88`,
+                              borderRadius:4,
+                              padding:"3px 5px",
+                              fontSize:10,
+                              marginBottom:2,
+                              color: col,
+                              fontWeight:700,
+                              overflow:"hidden",
+                            }}>
+                              <div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>
+                              <div style={{fontSize:9,opacity:0.85,whiteSpace:"nowrap"}}>{time}</div>
+                            </div>
+                          );
+                        })}
                       </td>
                     );
                   })}
@@ -283,9 +265,11 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
               ))}
             </tbody>
           </table>
-          <div style={{display:"flex",gap:16,marginTop:10,fontSize:11,color:"var(--text3)"}}>
-            <span><span style={{display:"inline-block",width:10,height:10,background:"rgba(46,204,113,0.4)",borderRadius:2,marginLeft:4}}/>קביעת סטודנט</span>
-            <span><span style={{display:"inline-block",width:10,height:10,background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:2,marginLeft:4}}/>שיעור</span>
+          {/* Legend */}
+          <div style={{display:"flex",gap:16,marginTop:10,fontSize:11,color:"var(--text3)",flexWrap:"wrap"}}>
+            <span><span style={{display:"inline-block",width:10,height:10,background:`${STUDENT_COLOR}33`,border:`1px solid ${STUDENT_COLOR}`,borderRadius:2,marginLeft:4}}/>סטודנט יום</span>
+            <span><span style={{display:"inline-block",width:10,height:10,background:`${NIGHT_COLOR}33`,border:`1px solid ${NIGHT_COLOR}`,borderRadius:2,marginLeft:4}}/>סטודנט לילה</span>
+            <span><span style={{display:"inline-block",width:10,height:10,background:`${LESSON_COLOR}33`,border:`1px solid ${LESSON_COLOR}`,borderRadius:2,marginLeft:4}}/>שיעור</span>
           </div>
         </div>
       </div>
@@ -298,7 +282,7 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
             {upcoming.map((s, i) => (
               <div key={i} style={{display:"flex",gap:12,alignItems:"center",padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
                 <span style={{fontSize:12,fontWeight:800,color:"var(--text3)",whiteSpace:"nowrap",minWidth:44}}>{displayDate(s.date)}</span>
-                <span style={{fontSize:12,color:"var(--accent)",fontWeight:700,whiteSpace:"nowrap",minWidth:80}}>{s.startTime}–{s.endTime}</span>
+                <span style={{fontSize:12,color:LESSON_COLOR,fontWeight:700,whiteSpace:"nowrap",minWidth:80}}>{s.startTime}–{s.endTime}</span>
                 <span style={{fontSize:13,fontWeight:700,flex:1}}>{s.courseName}</span>
                 {s.studioId && <span style={{fontSize:11,color:"var(--text3)",whiteSpace:"nowrap"}}>{studioName(s.studioId)}</span>}
               </div>
