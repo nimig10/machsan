@@ -271,13 +271,18 @@ export function PublicDisplayPage() {
                             {s.courseName}
                           </div>
                           {s.instructorName && (
-                            <div style={{fontSize:15,fontWeight:700,color:"var(--text2)"}}>
-                              👤 {s.instructorName}
+                            <div style={{fontSize:16,fontWeight:700,color:"var(--text2)"}}>
+                              👤 שם המורה: {s.instructorName}
                             </div>
                           )}
                           {roomName && (
-                            <div style={{fontSize:14,fontWeight:800,color:"var(--text2)"}}>
+                            <div style={{fontSize:15,fontWeight:800,color:"var(--text2)"}}>
                               🏫 כיתת לימוד: {roomName}
+                            </div>
+                          )}
+                          {s.topic && (
+                            <div style={{fontSize:15,fontWeight:700,color:"var(--text3)"}}>
+                              📖 נושא השיעור: {s.topic}
                             </div>
                           )}
                           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:2}}>
@@ -285,9 +290,6 @@ export function PublicDisplayPage() {
                               <span style={{fontSize:12,fontWeight:700,color:accent,background:`${accent}1a`,borderRadius:20,padding:"2px 12px",border:`1px solid ${accent}55`}}>
                                 🎓 {s.track}
                               </span>
-                            )}
-                            {s.topic && (
-                              <span style={{fontSize:12,color:"var(--text3)"}}>📖 {s.topic}</span>
                             )}
                           </div>
                         </div>
