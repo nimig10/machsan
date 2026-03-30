@@ -225,8 +225,8 @@ const STATUSES    = ["תקין","פגום","בתיקון","נעלם"];
 const PHOTO_CATEGORIES = ["מצלמות","עדשות","תאורה","חצובות","אביזרים","אביזרי צילום","מייצבי מצלמה","גימבלים","רחפנים","מוניטורים"];
 const RESEND_API_KEY = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_RESEND_KEY : "";
 const ADMIN_NAV_PAGES = ["dashboard","reservations","equipment","certifications","studios","lessons","kits","team","students","policies","settings"];
-const SECRETARY_NAV_PAGES = ["dashboard","studios","lessons","students","policies","settings"];
-const WAREHOUSE_NAV_PAGES = ["reservations","kits","equipment","certifications","policies","settings"];
+const SECRETARY_NAV_PAGES = ["dashboard","studios","studio-certifications","lessons","students","policies","settings"];
+const WAREHOUSE_NAV_PAGES = ["reservations","equipment","certifications","kits","policies","settings"];
 const NIMROD_PHONE     = "972521234567"; // ← החלף במספר של נמרוד
 const EMAIL_TYPO_DOMAINS = ["gmai.com","gmial.com","gmail.co","gamil.com","gmaill.com","yahooo.com","yahho.com","outlok.com","hotmai.com","outllook.com"];
 const TERMS = `הסטודנט מתחייב להחזיר את הציוד במועד שנקבע ובמצב תקין.
@@ -7372,10 +7372,10 @@ export default function App() {
     if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
     const scrollEl = startTarget?.closest?.('.no-swipe-nav');
     if (scrollEl && scrollEl.scrollWidth > scrollEl.clientWidth) return;
-    const idx = WAREHOUSE_NAV_PAGES.indexOf(warehousePage);
+    const idx = WAREHOUSE_NAV_PAGES.indexOf(page);
     if (idx === -1) return;
-    if (dx < 0 && idx < WAREHOUSE_NAV_PAGES.length - 1) setWarehousePage(WAREHOUSE_NAV_PAGES[idx + 1]);
-    else if (dx > 0 && idx > 0) setWarehousePage(WAREHOUSE_NAV_PAGES[idx - 1]);
+    if (dx < 0 && idx < WAREHOUSE_NAV_PAGES.length - 1) setPage(WAREHOUSE_NAV_PAGES[idx + 1]);
+    else if (dx > 0 && idx > 0) setPage(WAREHOUSE_NAV_PAGES[idx - 1]);
   };
 
   return (
@@ -7515,7 +7515,7 @@ export default function App() {
               <button className="btn btn-secondary btn-sm" onClick={()=>setStaffView("hub")}>← Staff Hub</button>
             </div>
           </nav>
-          <div className="main" onTouchStart={handleSwipeTouchStart} onTouchEnd={handleSwipeTouchEnd}>
+          <div className="main" onTouchStart={handleSwipeTouchStart} onTouchEnd={handleWarehouseSwipeTouchEnd}>
             <div className="topbar" style={{flexWrap:"wrap",gap:8}}>
               <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
                 <span className="topbar-title" style={{flex:1}}>{pageTitle[page]}</span>
