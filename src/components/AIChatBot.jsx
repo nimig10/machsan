@@ -330,9 +330,10 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
 חוקים: המלץ רק מהמלאי הפנוי. אם שואלים על נהלים, ענה: "אנא קרא את תקנון המחסן או פנה לצוות."`;
 
       // שמור רק 2 הודעות אחרונות לחיסכון בטוקנים
-      // Gemini דורש שה-history יתחיל עם 'user' — מסיר הודעות assistant בראש
+      // מסנן הודעות שגיאה כדי שלא ייכנסו ל-history ויבלבלו את Gemini
+      // Gemini דורש שה-history יתחיל עם 'user'
       let history = messages
-        .filter(m => m.role !== 'system')
+        .filter(m => m.role !== 'system' && !m.isError)
         .slice(-2)
         .map(m => ({
           role: m.role === 'assistant' ? 'model' : 'user',
@@ -376,7 +377,7 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
       } else if (error.message?.includes("503") || error.status === 503) {
         errorMessage = "שרתי ה-AI של גוגל בעומס זמני. המערכת ניסתה להתחבר שוב אוטומטית — אנא נסה שוב בעוד דקה.";
       }
-      setMessages(prev => [...prev, { role: 'assistant', content: errorMessage }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: errorMessage, isError: true }]);
     } finally {
       setIsTyping(false);
     }
