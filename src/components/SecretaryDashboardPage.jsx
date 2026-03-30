@@ -181,7 +181,7 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
     <div className="page">
 
       {/* ── Stats ── */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:12,marginBottom:20}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
         {[
           { icon:"👨‍🎓", value: students.length,    label:"סטודנטים" },
           { icon:"🎓",   value: tracks.length,       label:"מסלולים" },
@@ -262,8 +262,8 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
           </div>
         )}
 
-        <div style={{padding:"0 16px 16px",overflowX: isMobile ? "hidden" : "auto"}} className="no-swipe-nav">
-          <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:12,minWidth: isMobile ? undefined : 520}}>
+        <div style={{padding:"0 16px 16px",overflowX:"auto",maxWidth:"100%"}} className="no-swipe-nav">
+          <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:12,tableLayout:"fixed",minWidth: isMobile ? undefined : 520}}>
             <thead>
               <tr>
                 <th style={{padding: isMobile ? "8px 6px" : "8px 10px",textAlign:"right",fontWeight:700,color:"var(--text2)",borderBottom:"2px solid var(--border)",whiteSpace:"nowrap",width: isMobile ? 60 : 90}}>חדר</th>
