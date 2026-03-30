@@ -15,6 +15,7 @@ import { SecretaryDashboardPage } from "./components/SecretaryDashboardPage.jsx"
 import { PublicDisplayPage } from "./components/PublicDisplayPage.jsx";
 import { StaffHub } from "./components/StaffHub.jsx";
 import { StaffManagementPage } from "./components/StaffManagementPage.jsx";
+import { SystemSettingsPage } from "./components/SystemSettingsPage.jsx";
 
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
 // v3.1
@@ -6344,43 +6345,11 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
 }
 
 // ─── SETTINGS PAGE ───────────────────────────────────────────────────────────
-function SettingsPage({ siteSettings, setSiteSettings, showToast, passwordRole = "all", settingsRole = "all" }) {
-  const colorKey = settingsRole === "secretary" ? "secretaryAccentColor" : settingsRole === "warehouse" ? "warehouseAccentColor" : "adminAccentColor";
-  const fontKey  = settingsRole === "secretary" ? "secretaryFontSize"   : settingsRole === "warehouse" ? "warehouseFontSize"   : "adminFontSize";
-  const [draft, setDraft] = useState({ aiMaxRequests: 5, ...siteSettings });
+function SettingsPage({ siteSettings, setSiteSettings, showToast, settingsRole = "administration" }) {
+  const colorKey = settingsRole === "warehouse" ? "warehouseAccentColor" : "adminAccentColor";
+  const fontKey  = settingsRole === "warehouse" ? "warehouseFontSize"   : "adminFontSize";
+  const [draft, setDraft] = useState({ ...siteSettings });
   const [saving, setSaving] = useState(false);
-  const [logoUploading, setLogoUploading] = useState(false);
-  const [soundLogoUploading, setSoundLogoUploading] = useState(false);
-
-  const handleLogoUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    e.target.value = "";
-    if (file.size > 500000) { showToast("error", "הקובץ גדול מדי — עד 500KB"); return; }
-    setLogoUploading(true);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setDraft(p => ({ ...p, logo: ev.target.result }));
-      setLogoUploading(false);
-    };
-    reader.onerror = () => { showToast("error", "שגיאה בקריאת הקובץ"); setLogoUploading(false); };
-    reader.readAsDataURL(file);
-  };
-
-  const handleSoundLogoUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    e.target.value = "";
-    if (file.size > 500000) { showToast("error", "הקובץ גדול מדי — עד 500KB"); return; }
-    setSoundLogoUploading(true);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setDraft(p => ({ ...p, soundLogo: ev.target.result }));
-      setSoundLogoUploading(false);
-    };
-    reader.onerror = () => { showToast("error", "שגיאה בקריאת הקובץ"); setSoundLogoUploading(false); };
-    reader.readAsDataURL(file);
-  };
 
   const toggleTheme = (theme) => {
     setDraft(p => ({ ...p, theme }));
@@ -6414,105 +6383,18 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, passwordRole =
         </div>
       </div>
 
-      {/* Logo */}
+      {/* Accent Color + Font Size */}
       <div className="card" style={{ marginBottom: 20 }}>
-        <div className="card-header"><div className="card-title">🏫 לוגו המכללה</div></div>
-        <div style={{ padding: "16px 20px" }}>
-          {/* לוגו ראשי */}
-          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 8 }}>לוגו ראשי</div>
-          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}>
-            יוצג בסרגל הצדדי של לוח הבקרה ובראש טופס ההשאלה. מומלץ תמונה מרובעת עד 500KB.
-          </div>
-          <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", marginBottom: 20 }}>
-            <div style={{ width: 80, height: 80, borderRadius: 12, border: "2px dashed var(--border)", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface2)", overflow: "hidden", flexShrink: 0 }}>
-              {draft.logo
-                ? <img src={draft.logo} alt="לוגו" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                : <span style={{ fontSize: 32, color: "var(--text3)" }}>🎬</span>}
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <label className="btn btn-secondary" style={{ cursor: logoUploading ? "not-allowed" : "pointer", opacity: logoUploading ? 0.6 : 1 }}>
-                {logoUploading ? "⏳ מעלה..." : "📷 העלה לוגו"}
-                <input type="file" accept="image/*" style={{ display: "none" }} onChange={handleLogoUpload} disabled={logoUploading} />
-              </label>
-              {draft.logo && (
-                <button type="button" className="btn btn-secondary" onClick={() => setDraft(p => ({ ...p, logo: "" }))} style={{ fontSize: 12 }}>
-                  🗑️ הסר לוגו
-                </button>
-              )}
-            </div>
-          </div>
-          {/* מפריד */}
-          <div style={{ borderTop: "1px solid var(--border)", marginBottom: 16 }} />
-          {/* לוגו סאונד */}
-          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 8 }}>🎙️ לוגו סאונד (לוגו נוסף)</div>
-          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}>
-            לוגו נוסף שיוצג מתחת ללוגו הראשי בסרגל לוח הבקרה ובטופס ההשאלה. מומלץ עד 500KB.
-          </div>
-          <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ width: 80, height: 80, borderRadius: 12, border: "2px dashed var(--border)", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface2)", overflow: "hidden", flexShrink: 0 }}>
-              {draft.soundLogo
-                ? <img src={draft.soundLogo} alt="לוגו סאונד" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                : <span style={{ fontSize: 32, color: "var(--text3)" }}>🎙️</span>}
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <label className="btn btn-secondary" style={{ cursor: soundLogoUploading ? "not-allowed" : "pointer", opacity: soundLogoUploading ? 0.6 : 1 }}>
-                {soundLogoUploading ? "⏳ מעלה..." : "📷 העלה לוגו סאונד"}
-                <input type="file" accept="image/*" style={{ display: "none" }} onChange={handleSoundLogoUpload} disabled={soundLogoUploading} />
-              </label>
-              {draft.soundLogo && (
-                <button type="button" className="btn btn-secondary" onClick={() => setDraft(p => ({ ...p, soundLogo: "" }))} style={{ fontSize: 12 }}>
-                  🗑️ הסר לוגו סאונד
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Accent Color */}
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div className="card-header"><div className="card-title">🎨 בחירת צבע לחצנים / טקסט</div></div>
-        <div style={{ padding: "16px 20px" }}>
-          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14 }}>
-            הצבע יוחל על הלחצנים, הכותרות והטקסטים הצבעוניים בטופס השאלת הציוד ועל אייקון המידע.
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-            <input type="color" value={draft.accentColor||"#f5a623"}
-              onChange={e => setDraft(p => ({ ...p, accentColor: e.target.value }))}
-              style={{ width: 52, height: 40, borderRadius: 8, border: "2px solid var(--border)", background: "none", cursor: "pointer", padding: 2 }} />
-            <span style={{ fontSize: 13, color: "var(--text2)", fontFamily: "monospace" }}>{draft.accentColor||"#f5a623"}</span>
-            <button type="button" className="btn btn-secondary" style={{ fontSize: 12 }}
-              onClick={() => setDraft(p => ({ ...p, accentColor: "#f5a623" }))}>
-              ↩ איפוס לברירת מחדל
-            </button>
-          </div>
-          <div style={{ marginTop: 14, padding: "12px 16px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border)" }}>
-            <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 8 }}>תצוגה מקדימה:</div>
-            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-              <button type="button" style={{ background: draft.accentColor||"#f5a623", color: "#0a0c10", border: "none", borderRadius: 8, padding: "8px 18px", fontWeight: 800, cursor: "default", fontSize: 13 }}>כפתור לדוגמה</button>
-              <span style={{ color: draft.accentColor||"#f5a623", fontWeight: 800, fontSize: 14 }}>טקסט צבעוני</span>
-              <svg width="32" height="32" viewBox="0 0 42 42" fill="none" style={{ color: draft.accentColor||"#f5a623" }}>
-                <circle cx="21" cy="21" r="19" stroke="currentColor" strokeWidth="2.2"/>
-                <circle cx="21" cy="14.5" r="2.2" fill="currentColor"/>
-                <rect x="19.4" y="19.5" width="3.2" height="10.5" rx="1.6" fill="currentColor"/>
-              </svg>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Admin Accent Color + Font Size */}
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div className="card-header"><div className="card-title">🖥️ בחירת צבע לחצים / טקסט לוח בקרה</div></div>
+        <div className="card-header"><div className="card-title">🖥️ בחירת צבע לחצנים / טקסט לוח בקרה</div></div>
         <div style={{ padding: "16px 20px" }}>
           <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14 }}>
             הצבע יוחל על הלחצנים, הכותרות והטקסטים הצבעוניים בלוח בקרה זה בלבד.
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: 20 }}>
-            <input type="color" value={draft[colorKey]||"#f5a623"}
+            <input type="color" value={draft[colorKey] || "#f5a623"}
               onChange={e => setDraft(p => ({ ...p, [colorKey]: e.target.value }))}
               style={{ width: 52, height: 40, borderRadius: 8, border: "2px solid var(--border)", background: "none", cursor: "pointer", padding: 2 }} />
-            <span style={{ fontSize: 13, color: "var(--text2)", fontFamily: "monospace" }}>{draft[colorKey]||"#f5a623"}</span>
+            <span style={{ fontSize: 13, color: "var(--text2)", fontFamily: "monospace" }}>{draft[colorKey] || "#f5a623"}</span>
             <button type="button" className="btn btn-secondary" style={{ fontSize: 12 }}
               onClick={() => setDraft(p => ({ ...p, [colorKey]: "#f5a623" }))}>
               ↩ איפוס לברירת מחדל
@@ -6522,10 +6404,10 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, passwordRole =
           <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 10 }}>גודל פונט (דסקטופ בלבד)</div>
           <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
             <input type="range" min={11} max={20} step={1}
-              value={draft[fontKey]||14}
+              value={draft[fontKey] || 14}
               onChange={e => setDraft(p => ({ ...p, [fontKey]: Number(e.target.value) }))}
-              style={{ width: 180, accentColor: draft[colorKey]||"#f5a623" }} />
-            <span style={{ fontSize: 14, fontWeight: 700, minWidth: 32, color: "var(--text2)" }}>{draft[fontKey]||14}px</span>
+              style={{ width: 180, accentColor: draft[colorKey] || "#f5a623" }} />
+            <span style={{ fontSize: 14, fontWeight: 700, minWidth: 32, color: "var(--text2)" }}>{draft[fontKey] || 14}px</span>
             <button type="button" className="btn btn-secondary" style={{ fontSize: 12 }}
               onClick={() => setDraft(p => ({ ...p, [fontKey]: 14 }))}>
               ↩ איפוס
@@ -6533,142 +6415,13 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, passwordRole =
           </div>
           <div style={{ marginTop: 14, padding: "12px 16px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border)" }}>
             <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 8 }}>תצוגה מקדימה:</div>
-            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", fontSize: draft[fontKey]||14 }}>
-              <button type="button" style={{ background: draft[colorKey]||"#f5a623", color: "#0a0c10", border: "none", borderRadius: 8, padding: "8px 18px", fontWeight: 800, cursor: "default", fontSize: "inherit" }}>כפתור לדוגמה</button>
-              <span style={{ color: draft[colorKey]||"#f5a623", fontWeight: 800, fontSize: "inherit" }}>טקסט צבעוני</span>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", fontSize: draft[fontKey] || 14 }}>
+              <button type="button" style={{ background: draft[colorKey] || "#f5a623", color: "#0a0c10", border: "none", borderRadius: 8, padding: "8px 18px", fontWeight: 800, cursor: "default", fontSize: "inherit" }}>כפתור לדוגמה</button>
+              <span style={{ color: draft[colorKey] || "#f5a623", fontWeight: 800, fontSize: "inherit" }}>טקסט צבעוני</span>
             </div>
           </div>
         </div>
       </div>
-
-      {settingsRole === "all" && <div className="card" style={{ marginBottom: 20 }}>
-        <div className="card-header"><div className="card-title">📺 לוח לוז יומי ציבורי</div></div>
-        <div style={{ padding: "16px 20px" }}>
-          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14 }}>
-            דף ציבורי לתצוגת לוז יומי על מסך/צג. הקישור:{" "}
-            <code style={{background:"var(--surface3)",padding:"2px 6px",borderRadius:4}}>{typeof window !== "undefined" ? window.location.origin : ""}/daily</code>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>זמן חילוף תצוגה (שניות)</label>
-            <input
-              type="number"
-              min={5}
-              max={300}
-              value={draft.publicDisplayInterval ?? 18}
-              onChange={e => setDraft(p => ({ ...p, publicDisplayInterval: Number(e.target.value) }))}
-              style={{ width: 80, padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: 14, textAlign: "center" }}
-            />
-            <span style={{ fontSize: 12, color: "var(--text3)" }}>ברירת מחדל: 18 שניות</span>
-          </div>
-        </div>
-      </div>}
-
-      {settingsRole === "all" && <div className="card" style={{ marginBottom: 20 }}>
-        <div className="card-header"><div className="card-title">🤖 עוזר AI לסטודנטים</div></div>
-        <div style={{ padding: "16px 20px" }}>
-          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14 }}>
-            הגבלת מספר השאלות שכל סטודנט יכול לשאול את עוזר ה-AI ביום אחד.
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>הגבלת בקשות AI לסטודנט (ליום)</label>
-            <input
-              type="number"
-              min={1}
-              max={50}
-              value={draft.aiMaxRequests ?? 5}
-              onChange={e => setDraft(p => ({ ...p, aiMaxRequests: Number(e.target.value) }))}
-              style={{ width: 80, padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: 14, textAlign: "center" }}
-            />
-          </div>
-        </div>
-      </div>}
-
-      {/* XL Templates Download */}
-      {settingsRole !== "warehouse" && <div className="card" style={{ marginBottom: 20 }}>
-        <div className="card-header"><div className="card-title">📥 טמפלטים להורדה</div></div>
-        <div style={{ padding: "16px 20px" }}>
-          <div style={{ fontSize: 13, color: "var(--text2)", marginBottom: 16 }}>
-            הורד קבצי Excel לדוגמה עם המבנה הנכון לייבוא נתונים לאפליקציה.
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-
-            {/* Lessons template */}
-            <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-              <div>
-                <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>📚 טמפלט ייבוא שיעורים</div>
-                <div style={{ fontSize: 12, color: "var(--text3)" }}>
-                  קובץ עם מספר גליונות — כל גליון קורס אחד. עמודות: תאריך, שעת התחלה, שעת סיום, קורס, נושא, מסלול, מרצה, מייל מרצה, טלפון מרצה, כיתת לימוד.
-                </div>
-              </div>
-              <button className="btn btn-secondary" onClick={() => {
-                if (!window.XLSX) {
-                  const s = document.createElement("script");
-                  s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-                  s.onload = () => downloadLessonsTemplate();
-                  document.head.appendChild(s);
-                } else { downloadLessonsTemplate(); }
-              }} style={{ whiteSpace: "nowrap", flexShrink: 0 }}>
-                ⬇️ הורד טמפלט שיעורים
-              </button>
-            </div>
-
-            {/* Students template */}
-            <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-              <div>
-                <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>🎓 טמפלט ייבוא סטודנטים</div>
-                <div style={{ fontSize: 12, color: "var(--text3)" }}>
-                  קובץ עם מספר גליונות — כל גליון מסלול אחד. עמודות: שם, מייל, טלפון, מסלול.
-                </div>
-              </div>
-              <button className="btn btn-secondary" onClick={() => {
-                if (!window.XLSX) {
-                  const s = document.createElement("script");
-                  s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-                  s.onload = () => downloadStudentsTemplate();
-                  document.head.appendChild(s);
-                } else { downloadStudentsTemplate(); }
-              }} style={{ whiteSpace: "nowrap", flexShrink: 0 }}>
-                ⬇️ הורד טמפלט סטודנטים
-              </button>
-            </div>
-
-          </div>
-        </div>
-      </div>}
-
-      {/* Sub-page passwords — only in main admin */}
-      {passwordRole === "all" && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <div className="card-header"><div className="card-title">🔐 סיסמאות תת-דפים</div></div>
-          <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
-            <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 4 }}>
-              סיסמאות לגישה לדפי המזכירות והמחסן. ברירת מחדל: <code>secretary</code> / <code>warehouse</code>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>📋 סיסמת מזכירות (<code>/admin/secretary</code>)</label>
-              <input
-                type="text"
-                className="form-input"
-                value={draft.secretaryPassword || ""}
-                onChange={e => setDraft(p => ({ ...p, secretaryPassword: e.target.value }))}
-                placeholder="secretary"
-                style={{ maxWidth: 300 }}
-              />
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>📦 סיסמת מחסן (<code>/admin/warehouse</code>)</label>
-              <input
-                type="text"
-                className="form-input"
-                value={draft.warehousePassword || ""}
-                onChange={e => setDraft(p => ({ ...p, warehousePassword: e.target.value }))}
-                placeholder="warehouse"
-                style={{ maxWidth: 300 }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       <button className="btn btn-primary" disabled={saving} onClick={save} style={{ fontSize: 15, padding: "12px 32px" }}>
         {saving ? "⏳ שומר..." : "💾 שמור הגדרות"}
@@ -7648,6 +7401,21 @@ export default function App() {
         </div>
       )}
 
+      {/* ── הגדרות מערכת (admin only) ── */}
+      {isAdmin && authed && staffView === "system-settings" && staffUser?.role === "admin" && (
+        <div className="app" style={{"--accent":siteSettings.adminAccentColor||"#f5a623","--accent-glow":`${siteSettings.adminAccentColor||"#f5a623"}2e`,"--admin-fs":`${siteSettings.adminFontSize||14}px`}}>
+          <div className="main" style={{marginRight:0,width:"100%"}}>
+            <div className="topbar">
+              <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setStaffView("hub")}>← חזרה</button>
+                <span className="topbar-title" style={{flex:1}}>הגדרות מערכת</span>
+              </div>
+            </div>
+            <SystemSettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} storageSet={storageSet}/>
+          </div>
+        </div>
+      )}
+
       {/* ── תפעול מחסן (warehouse view) ── */}
       {isAdmin && authed && staffView === "warehouse" && (
         <div className="app" style={{"--accent":siteSettings.warehouseAccentColor||siteSettings.adminAccentColor||"#f5a623","--accent-glow":`${siteSettings.warehouseAccentColor||siteSettings.adminAccentColor||"#f5a623"}2e`,"--admin-fs":`${siteSettings.warehouseFontSize||siteSettings.adminFontSize||14}px`}}>
@@ -7751,7 +7519,7 @@ export default function App() {
                 : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
               <div style={{display:page==="policies"?"block":"none"}}><PoliciesPage policies={policies} setPolicies={setPolicies} showToast={showToast}/></div>
               <div style={{display:page==="certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment} onlyMode="equipment"/></div>
-              <div style={{display:page==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast}/></div>
+              <div style={{display:page==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} settingsRole="warehouse"/></div>
             </>}
           </div>
         </div>
@@ -7824,7 +7592,7 @@ export default function App() {
               <div style={{display:secretaryPage==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean) : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
               <div style={{display:secretaryPage==="students"?"block":"none"}}><StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/></div>
               <div style={{display:secretaryPage==="policies"?"block":"none"}}><PoliciesPage policies={policies} setPolicies={setPolicies} showToast={showToast}/></div>
-              <div style={{display:secretaryPage==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} passwordRole="secretary" settingsRole="secretary"/></div>
+              <div style={{display:secretaryPage==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} settingsRole="administration"/></div>
             </>}
           </div>
         </div>

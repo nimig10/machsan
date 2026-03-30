@@ -58,24 +58,42 @@ export function StaffHub({ user, onNavigate, onLogout }) {
       </div>
 
       {user?.role === "admin" && (
-        <button
-          onClick={() => onNavigate("staff-management")}
-          style={{
-            marginTop: 24,
-            padding: "10px 24px",
-            border: "1px solid var(--border)",
-            borderRadius: 10,
-            background: "var(--surface)",
-            cursor: "pointer",
-            fontSize: 14,
-            color: "var(--text2)",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-          }}
-        >
-          <span>⚙️</span> ניהול צוות
-        </button>
+        <div style={{ marginTop: 24, display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+          <button
+            onClick={() => onNavigate("staff-management")}
+            style={{
+              padding: "10px 24px",
+              border: "1px solid var(--border)",
+              borderRadius: 10,
+              background: "var(--surface)",
+              cursor: "pointer",
+              fontSize: 14,
+              color: "var(--text2)",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <span>👥</span> ניהול צוות
+          </button>
+          <button
+            onClick={() => onNavigate("system-settings")}
+            style={{
+              padding: "10px 24px",
+              border: "1px solid var(--border)",
+              borderRadius: 10,
+              background: "var(--surface)",
+              cursor: "pointer",
+              fontSize: 14,
+              color: "var(--text2)",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <span>⚙️</span> הגדרות מערכת
+          </button>
+        </div>
       )}
 
       <button
