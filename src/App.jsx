@@ -1338,7 +1338,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [{ parts: [{ text: itemName }] }],
-            system_instruction: { parts: [{ text: systemInstruction }] },
+            systemInstruction: { parts: [{ text: systemInstruction }] },
           }),
         });
 

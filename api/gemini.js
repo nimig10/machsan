@@ -8,13 +8,13 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "GEMINI_API_KEY not configured on server" });
   }
 
-  const { contents, system_instruction, generationConfig } = req.body || {};
+  const { contents, systemInstruction, generationConfig } = req.body || {};
   if (!contents) {
     return res.status(400).json({ error: "Missing required field: contents" });
   }
 
   const requestBody = { contents };
-  if (system_instruction) requestBody.system_instruction = system_instruction;
+  if (systemInstruction) requestBody.systemInstruction = systemInstruction;
   if (generationConfig) {
     // Strip thinkingConfig — not supported in gemini-1.5-flash
     const { thinkingConfig, ...restConfig } = generationConfig;
@@ -22,7 +22,7 @@ export default async function handler(req, res) {
   }
 
   const model = "gemini-1.5-flash";
-  const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   try {
     const response = await fetch(url, {

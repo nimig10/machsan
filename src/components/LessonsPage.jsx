@@ -608,7 +608,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
           const requestBody = {
             contents: [{ parts: [{ text: prompt }] }],
-            system_instruction: { parts: [{ text: "אתה עוזר חכם לניהול מערכת שעות. החזר אך ורק JSON חוקי של מערך אובייקטים, בלי טקסט נוסף ובלי Markdown." }] },
+            systemInstruction: { parts: [{ text: "אתה עוזר חכם לניהול מערכת שעות. החזר אך ורק JSON חוקי של מערך אובייקטים, בלי טקסט נוסף ובלי Markdown." }] },
             generationConfig: {
               thinkingConfig: { thinkingBudget: 0 },
               responseMimeType: "application/json",

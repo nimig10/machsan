@@ -346,7 +346,7 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: history,
-          system_instruction: { parts: [{ text: systemPrompt }] }
+          systemInstruction: { parts: [{ text: systemPrompt }] }
         })
       });
 

@@ -1414,7 +1414,7 @@ ${inventory}
 
       const requestBody = {
         contents: [{ parts: [{ text: promptText }] }],
-        system_instruction: { parts: [{ text: systemInstruction }] },
+        systemInstruction: { parts: [{ text: systemInstruction }] },
         generationConfig: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -2600,7 +2600,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
 
       const requestBody = {
         contents: [{ parts: [{ text: promptText }] }],
-        system_instruction: { parts: [{ text: systemInstruction }] },
+        systemInstruction: { parts: [{ text: systemInstruction }] },
         generationConfig: {
           responseMimeType: "application/json",
           responseSchema: {

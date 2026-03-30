@@ -95,7 +95,7 @@ ${csvText}
 
     const requestBody = {
       contents: [{ parts: [{ text: prompt }] }],
-      system_instruction: {
+      systemInstruction: {
         parts: [{ text: "אתה מומחה לחילוץ נתונים. החזר אך ורק JSON של מערך אובייקטים לפי הסכמה, ללא טקסט נוסף או מסגרות Markdown." }],
       },
       generationConfig: {
