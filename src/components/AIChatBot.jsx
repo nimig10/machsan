@@ -335,13 +335,15 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
 חוקים: המלץ רק מהמלאי הפנוי. אם שואלים על נהלים, ענה: "אנא קרא את תקנון המחסן או פנה לצוות."`;
 
       // שמור רק 2 הודעות אחרונות לחיסכון בטוקנים
-      const history = messages
+      // Gemini דורש שה-history יתחיל עם 'user' — מסיר הודעות assistant בראש
+      let history = messages
         .filter(m => m.role !== 'system')
         .slice(-2)
         .map(m => ({
           role: m.role === 'assistant' ? 'model' : 'user',
           parts: [{ text: m.content }]
         }));
+      if (history.length > 0 && history[0].role === 'model') history = history.slice(1);
       history.push({ role: 'user', parts: [{ text: userMessage }] });
 
       let result = null;
@@ -400,13 +402,15 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
   const bubbleSize = isMobile ? 46 : 50;
   const bubbleIconSize = isMobile ? 22 : 24;
 
-  // Draggable button position (default: top-left)
+  // Draggable button position (default: top-right)
+  const defaultBtnPos = { x: typeof window !== 'undefined' ? window.innerWidth - 62 : 12, y: 12 };
   const [btnPos, setBtnPos] = useState(() => {
-    try { const s = localStorage.getItem('ai_btn_pos'); return s ? JSON.parse(s) : { x: typeof window !== 'undefined' ? window.innerWidth - 62 : 12, y: 12 }; } catch { return { x: typeof window !== 'undefined' ? window.innerWidth - 62 : 12, y: 12 }; }
+    try { const s = localStorage.getItem('ai_btn_pos_v2'); return s ? JSON.parse(s) : defaultBtnPos; } catch { return defaultBtnPos; }
   });
   const posRef = useRef(btnPos);
   useEffect(() => { posRef.current = btnPos; }, [btnPos]);
   const dragRef = useRef(null);
+  const isDraggingRef = useRef(false);
 
   const handleTouchStart = (e) => {
     const t = e.touches[0];
@@ -429,9 +433,39 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
     dragRef.current = null;
     if (moved) {
       e.preventDefault();
-      try { localStorage.setItem('ai_btn_pos', JSON.stringify(posRef.current)); } catch {}
+      try { localStorage.setItem('ai_btn_pos_v2', JSON.stringify(posRef.current)); } catch {}
     }
     // if not moved, click fires naturally via onClick
+  };
+
+  const handleMouseDown = (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    isDraggingRef.current = false;
+    const startX = e.clientX, startY = e.clientY;
+    const btnX = posRef.current.x, btnY = posRef.current.y;
+
+    const onMouseMove = (moveEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) isDraggingRef.current = true;
+      if (!isDraggingRef.current) return;
+      const newX = Math.max(4, Math.min(window.innerWidth - bubbleSize - 4, btnX + dx));
+      const newY = Math.max(4, Math.min(window.innerHeight - bubbleSize - 4, btnY + dy));
+      setBtnPos({ x: newX, y: newY });
+      posRef.current = { x: newX, y: newY };
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      if (isDraggingRef.current) {
+        try { localStorage.setItem('ai_btn_pos_v2', JSON.stringify(posRef.current)); } catch {}
+      }
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
   };
 
   const panel = isOpen && (
@@ -566,7 +600,8 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
 
   const floatingBtn = !isOpen && (
     <button
-      onClick={() => setIsOpen(true)}
+      onClick={() => { if (!isDraggingRef.current) setIsOpen(true); }}
+      onMouseDown={handleMouseDown}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
