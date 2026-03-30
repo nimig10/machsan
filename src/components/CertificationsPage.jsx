@@ -21,10 +21,10 @@ const buildTrackSettings = (students = [], existingTrackSettings = []) => {
   });
 };
 
-export function CertificationsPage({ certifications, setCertifications, showToast, studios=[], setStudios, equipment=[], setEquipment }) {
+export function CertificationsPage({ certifications, setCertifications, showToast, studios=[], setStudios, equipment=[], setEquipment, onlyMode=null }) {
   const { types = [], students = [] } = certifications;
   const trackSettings = buildTrackSettings(students, certifications?.trackSettings);
-  const [certMode, setCertMode] = useState("equipment");
+  const [certMode, setCertMode] = useState(onlyMode || "equipment");
   const [newTypeName, setNewTypeName] = useState("");
   const [newStudioIds, setNewStudioIds] = useState([]);
   const [search, setSearch] = useState("");
@@ -307,16 +307,18 @@ export function CertificationsPage({ certifications, setCertifications, showToas
   return (
     <div className="page" style={{direction:"rtl"}}>
       {/* Mode Toggle */}
-      <div style={{display:"flex",gap:0,marginBottom:16,borderRadius:10,overflow:"hidden",border:"1px solid var(--border)",width:"fit-content"}}>
-        <button onClick={()=>setCertMode("equipment")}
-          style={{padding:"10px 24px",border:"none",background:certMode==="equipment"?"var(--accent)":"var(--surface2)",color:certMode==="equipment"?"#000":"var(--text3)",fontWeight:800,fontSize:14,cursor:"pointer",transition:"all 0.15s"}}>
-          📦 הסמכת ציוד
-        </button>
-        <button onClick={()=>setCertMode("studio")}
-          style={{padding:"10px 24px",border:"none",borderRight:"1px solid var(--border)",background:certMode==="studio"?"var(--accent)":"var(--surface2)",color:certMode==="studio"?"#000":"var(--text3)",fontWeight:800,fontSize:14,cursor:"pointer",transition:"all 0.15s"}}>
-          🎙️ הסמכת אולפן
-        </button>
-      </div>
+      {!onlyMode && (
+        <div style={{display:"flex",gap:0,marginBottom:16,borderRadius:10,overflow:"hidden",border:"1px solid var(--border)",width:"fit-content"}}>
+          <button onClick={()=>setCertMode("equipment")}
+            style={{padding:"10px 24px",border:"none",background:certMode==="equipment"?"var(--accent)":"var(--surface2)",color:certMode==="equipment"?"#000":"var(--text3)",fontWeight:800,fontSize:14,cursor:"pointer",transition:"all 0.15s"}}>
+            📦 הסמכת ציוד
+          </button>
+          <button onClick={()=>setCertMode("studio")}
+            style={{padding:"10px 24px",border:"none",borderRight:"1px solid var(--border)",background:certMode==="studio"?"var(--accent)":"var(--surface2)",color:certMode==="studio"?"#000":"var(--text3)",fontWeight:800,fontSize:14,cursor:"pointer",transition:"all 0.15s"}}>
+            🎙️ הסמכת אולפן
+          </button>
+        </div>
+      )}
 
       {/* Certification types panel */}
       <div className="card" style={{marginBottom:20}}>

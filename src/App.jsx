@@ -7534,7 +7534,7 @@ export default function App() {
   const overdueCount = reservations.filter(r=>r.status==="באיחור").length;
   const rejectedCount = reservations.filter(r=>r.status==="נדחה").length;
   const rejected = rejectedCount + overdueCount;
-  const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד מחסן", reservations:"ניהול בקשות", team:"פרטי צוות", kits:"ערכות", lessons:"שיעורים", policies:"נהלים", certifications:"הסמכות", students:"ניהול סטודנטים", settings:"הגדרות", studios:"לוח חדרים" };
+  const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד מחסן", reservations:"ניהול בקשות", team:"פרטי צוות", kits:"ערכות", lessons:"שיעורים", policies:"נהלים", certifications:"הסמכת ציוד", students:"ניהול סטודנטים", settings:"הגדרות", studios:"לוח חדרים" };
 
   const handleSwipeTouchStart = (e) => {
     swipeTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, target: e.target };
@@ -7667,12 +7667,8 @@ export default function App() {
               {[
                 {id:"reservations",icon:"📋",label:"בקשות",badge:(pending||0)+(rejected||0)||null},
                 {id:"equipment",icon:"📦",label:"ציוד",badge:damagedCount||null},
-                {id:"certifications",icon:"🎓",label:"הסמכות"},
-                {id:"studios",icon:"🎙️",label:"חדרים"},
-                {id:"lessons",icon:"📽️",label:"שיעורים",badge:lessons.length||null},
+                {id:"certifications",icon:"🎓",label:"הסמכת ציוד"},
                 {id:"kits",icon:"🎒",label:"ערכות"},
-                {id:"team",icon:"👥",label:"צוות"},
-                {id:"students",icon:"👨‍🎓",label:"סטודנטים"},
                 {id:"policies",icon:"📋",label:"נהלים"},
                 {id:"settings",icon:"⚙️",label:"הגדרות"},
               ].map(n=>(
@@ -7751,10 +7747,8 @@ export default function App() {
                 ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean)
                 : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
               <div style={{display:page==="policies"?"block":"none"}}><PoliciesPage policies={policies} setPolicies={setPolicies} showToast={showToast}/></div>
-              <div style={{display:page==="certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment}/></div>
-              <div style={{display:page==="students"?"block":"none"}}><StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/></div>
+              <div style={{display:page==="certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment} onlyMode="equipment"/></div>
               <div style={{display:page==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast}/></div>
-              <div style={{display:page==="studios"?"block":"none"}}><StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin" studios={studios} setStudios={setStudios} bookings={studioBookings} setBookings={setStudioBookings} siteSettings={siteSettings} setSiteSettings={setSiteSettings}/></div>
             </>}
           </div>
         </div>
@@ -7777,11 +7771,13 @@ export default function App() {
             <div className="nav">
               <div className="nav-section">ניהול</div>
               {[
-                {id:"studios",icon:"🎙️",label:"חדרים"},
+                {id:"studios",icon:"🎙️",label:"ניהול חדרים"},
+                {id:"studio-certifications",icon:"🎓",label:"הסמכת אולפן"},
                 {id:"lessons",icon:"📽️",label:"שיעורים",badge:lessons.length||null},
                 {id:"students",icon:"👨‍🎓",label:"סטודנטים"},
                 {id:"policies",icon:"📋",label:"נהלים"},
                 {id:"settings",icon:"⚙️",label:"הגדרות"},
+                ...(staffUser?.role==="admin"?[{id:"team",icon:"👥",label:"ניהול צוות"}]:[]),
               ].map(n=>(
                 <div key={n.id} className={`nav-item ${secretaryPage===n.id?"active":""}`}
                   onClick={() => setSecretaryPage(p=>p===n.id?"dashboard":n.id)} title={n.label}>
@@ -7798,7 +7794,7 @@ export default function App() {
           <div className="main" onTouchStart={handleSwipeTouchStart} onTouchEnd={handleSecretarySwipeTouchEnd}>
             <div className="topbar" style={{flexWrap:"wrap",gap:8}}>
               <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
-                <span className="topbar-title" style={{flex:1}}>{{dashboard:"סטטוס אדמיניסטרציה",studios:"לוח חדרים",lessons:"שיעורים",students:"סטודנטים",policies:"נהלים",settings:"הגדרות"}[secretaryPage]||"סטטוס אדמיניסטרציה"}</span>
+                <span className="topbar-title" style={{flex:1}}>{{dashboard:"סטטוס אדמיניסטרציה",studios:"ניהול חדרים","studio-certifications":"הסמכת אולפן",lessons:"שיעורים",students:"סטודנטים",policies:"נהלים",settings:"הגדרות",team:"ניהול צוות"}[secretaryPage]||"סטטוס אדמיניסטרציה"}</span>
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={handleUndo}
@@ -7819,10 +7815,12 @@ export default function App() {
             {loading ? <Loading/> : <>
               <div style={{display:secretaryPage==="dashboard"?"block":"none"}}><SecretaryDashboardPage certifications={certifications} studios={studios} studioBookings={studioBookings} lessons={lessons}/></div>
               <div style={{display:secretaryPage==="studios"?"block":"none"}}><StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin" studios={studios} setStudios={setStudios} bookings={studioBookings} setBookings={setStudioBookings} siteSettings={siteSettings} setSiteSettings={setSiteSettings}/></div>
+              <div style={{display:secretaryPage==="studio-certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment} onlyMode="studio"/></div>
               <div style={{display:secretaryPage==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean) : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
               <div style={{display:secretaryPage==="students"?"block":"none"}}><StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/></div>
               <div style={{display:secretaryPage==="policies"?"block":"none"}}><PoliciesPage policies={policies} setPolicies={setPolicies} showToast={showToast}/></div>
               <div style={{display:secretaryPage==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} passwordRole="secretary" settingsRole="secretary"/></div>
+              {staffUser?.role==="admin" && <div style={{display:secretaryPage==="team"?"block":"none"}}><TeamPage teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/></div>}
             </>}
           </div>
         </div>
