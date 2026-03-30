@@ -358,16 +358,9 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
 
       setLoading(true);
       try {
-        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-        if (!apiKey) throw new Error("חסר מפתח Gemini במשתני הסביבה");
-        const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent";
-
-        const response = await fetch(url, {
+        const response = await fetch('/api/gemini', {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": apiKey,
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [{ parts: [{ text: itemName }] }],
             systemInstruction: { parts: [{ text: systemInstruction }] },

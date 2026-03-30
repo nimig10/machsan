@@ -54,7 +54,6 @@ export default function SmartEquipmentImportButton({
   const [newCategoriesToApprove, setNewCategoriesToApprove] = useState([]);
   const fileInputRef = useRef(null);
 
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.REACT_APP_GEMINI_API_KEY || "";
 
   const notify = (type, msg) => {
     if (typeof showToast === "function") showToast(type, msg);
@@ -67,9 +66,7 @@ export default function SmartEquipmentImportButton({
   };
 
   const processWithGemini = async (csvText, categories) => {
-    if (!apiKey) throw new Error("חסר מפתח Gemini במשתני הסביבה.");
-
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`;
+    const endpoint = '/api/gemini';
     const prompt = `
 אני מעביר לך תוכן גולמי (CSV) מקובץ ייבוא של ציוד מחסן. הקובץ מכיל כנראה רק שמות פריטים וכמויות.
 

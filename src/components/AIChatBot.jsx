@@ -183,7 +183,6 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
   const getRequestsCount = () => parseInt(localStorage.getItem(todayKey)) || 0;
   const incrementRequestsCount = () => localStorage.setItem(todayKey, getRequestsCount() + 1);
 
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.REACT_APP_GEMINI_API_KEY || "";
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -346,36 +345,23 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
       if (history.length > 0 && history[0].role === 'model') history = history.slice(1);
       history.push({ role: 'user', parts: [{ text: userMessage }] });
 
-      let result = null;
-      let lastError = null;
+      const response = await fetchWithRetry('/api/gemini', {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: history,
+          systemInstruction: { parts: [{ text: systemPrompt }] }
+        })
+      });
 
-      for (const modelName of ['gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-lite-001']) {
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-        const response = await fetchWithRetry(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: history,
-            systemInstruction: { parts: [{ text: systemPrompt }] }
-          })
-        });
-
-        if (!response.ok) {
-          const errText = await response.text();
-          lastError = new Error(errText || `שגיאה ${response.status}`);
-          console.warn(`Model ${modelName} failed (${response.status}):`, errText);
-          if (response.status === 404 || response.status === 400 || response.status === 429 || response.status === 503) {
-            continue;
-          }
-          throw lastError;
-        }
-
-        result = await response.json();
-        if (result?.candidates?.length) break;
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || `שגיאה ${response.status}`);
       }
 
+      const result = await response.json();
       if (!result?.candidates?.length) {
-        throw lastError || new Error("לא התקבלה תשובה תקינה מעוזר ה־AI.");
+        throw new Error("לא התקבלה תשובה תקינה מעוזר ה־AI.");
       }
 
       const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || "";

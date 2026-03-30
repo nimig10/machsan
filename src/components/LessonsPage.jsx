@@ -563,10 +563,6 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           const csvData = csvParts.join("\n\n");
           if (!csvData.trim()) throw new Error("לא נמצא תוכן קריא בקובץ.");
 
-          const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.REACT_APP_GEMINI_API_KEY || "";
-          if (!apiKey) {
-            throw new Error("API Key is missing. Check your .env or Vercel settings.");
-          }
 
           const studioListStr = (studios || []).map(s => s.name).filter(Boolean).join(", ");
           const systemInstruction = `
@@ -642,38 +638,27 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           };
 
           let jsonResponse = null;
-          let lastApiError = null;
-          for (const modelName of ["gemini-2.5-flash", "gemini-2.5-flash-lite"]) {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 120000);
-            try {
-              const resp = await fetchWithRetry(url, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(requestBody),
-                signal: controller.signal,
-              }, 2);
-              clearTimeout(timeoutId);
-              if (!resp.ok) {
-                const errorText = await resp.text();
-                lastApiError = new Error(`API Error ${resp.status}: ${errorText}`);
-                if (resp.status === 404 || resp.status === 429 || resp.status === 503) continue;
-                throw lastApiError;
-              }
-              jsonResponse = await resp.json();
-              if (jsonResponse?.candidates?.length) break;
-            } catch (fetchErr) {
-              clearTimeout(timeoutId);
-              if (fetchErr.name === "AbortError") {
-                lastApiError = new Error(`timeout — ${modelName} לא הגיב תוך 2 דקות`);
-                continue;
-              }
-              throw fetchErr;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 120000);
+          try {
+            const resp = await fetchWithRetry('/api/gemini', {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(requestBody),
+              signal: controller.signal,
+            }, 2);
+            clearTimeout(timeoutId);
+            if (!resp.ok) {
+              const errorText = await resp.text();
+              throw new Error(`API Error ${resp.status}: ${errorText}`);
             }
+            jsonResponse = await resp.json();
+          } catch (fetchErr) {
+            clearTimeout(timeoutId);
+            if (fetchErr.name === "AbortError") throw new Error("timeout — השרת לא הגיב תוך 2 דקות");
+            throw fetchErr;
           }
-          if (!jsonResponse) throw lastApiError || new Error("כל המודלים נכשלו. נסה שוב.");
-          if (!jsonResponse?.candidates || jsonResponse.candidates.length === 0) {
+          if (!jsonResponse?.candidates?.length) {
             throw new Error("Gemini לא החזיר תוצאות. נסה שוב.");
           }
 

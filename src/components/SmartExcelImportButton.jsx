@@ -84,13 +84,7 @@ export default function SmartExcelImportButton({ onImportSuccess, showToast }) {
   const [failedCsvData, setFailedCsvData] = useState("");
   const [customGuidance, setCustomGuidance] = useState(DEFAULT_GUIDANCE);
 
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.REACT_APP_GEMINI_API_KEY || "";
-
   const processWithGemini = async (csvText, guidance) => {
-    if (!apiKey) {
-      throw new Error("מפתח Gemini API לא מוגדר.");
-    }
-
     const prompt = `
 הנחיות חילוץ נתונים מותאמות:
 ${guidance}
@@ -123,26 +117,19 @@ ${csvText}
       },
     };
 
-    let lastError = null;
-    for (const modelName of ["gemini-2.5-flash", "gemini-2.5-flash-lite"]) {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-      const response = await fetchWithRetry(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-      });
-      if (!response.ok) {
-        const errorText = await response.text();
-        lastError = new Error(`API Error ${response.status}: ${errorText}`);
-        if (response.status === 404 || response.status === 429 || response.status === 503) continue;
-        throw lastError;
-      }
-      const result = await response.json();
-      if (!result?.candidates?.length) continue;
-      const textResponse = result.candidates[0]?.content?.parts?.[0]?.text || "";
-      return normalizeImportedStudents(parseGeneratedJson(textResponse));
+    const response = await fetchWithRetry('/api/gemini', {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API Error ${response.status}: ${errorText}`);
     }
-    throw lastError || new Error("כל המודלים נכשלו. נסה שוב.");
+    const result = await response.json();
+    if (!result?.candidates?.length) throw new Error("לא התקבלה תשובה מה-AI. נסה שוב.");
+    const textResponse = result.candidates[0]?.content?.parts?.[0]?.text || "";
+    return normalizeImportedStudents(parseGeneratedJson(textResponse));
   };
 
   const handleFailure = (csv, reason) => {

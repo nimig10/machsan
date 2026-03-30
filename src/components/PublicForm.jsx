@@ -1391,9 +1391,6 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     setEquipmentAiLoading(true);
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.REACT_APP_GEMINI_API_KEY || "";
-      if (!apiKey) throw new Error("חסר מפתח API עבור פענוח אוטומטי.");
-
       const todayStr = today();
       const liveCategoryLoanTypes = refreshedInventory?.categoryLoanTypes || categoryLoanTypes;
       const allowedEquipmentList = (liveEquipmentList || []).filter((item) => matchesEquipmentLoanType(item, requestedLoanType, liveCategoryLoanTypes));
@@ -1445,8 +1442,7 @@ ${inventory}
         },
       };
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-      const response = await fetchWithRetry(url, {
+      const response = await fetchWithRetry('/api/gemini', {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
@@ -2581,9 +2577,6 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     setIsAiLoading(true);
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.REACT_APP_GEMINI_API_KEY;
-      if (!apiKey) throw new Error("API Key missing");
-
       const today = todayStr;
       const activeStudios = (studiosList || []).filter((studio) => !isStudioDisabled(studio?.id));
       const certifiedStudios = activeStudios.filter((studio) => hasStudioCert(studio?.id));
@@ -2624,10 +2617,8 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       };
 
       let jsonResponse = null;
-      let lastError = null;
-      for (const modelName of ["gemini-2.5-flash", "gemini-2.5-flash-lite"]) {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-        const response = await fetchWithRetry(url, {
+      {
+        const response = await fetchWithRetry('/api/gemini', {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(requestBody),
@@ -2635,19 +2626,12 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
 
         if (!response.ok) {
           const errText = await response.text();
-          if (response.status === 503) {
-            lastError = new Error("Gemini עמוס כרגע. נסה שוב בעוד כמה דקות.");
-            continue;
-          }
           throw new Error(`API Error: ${response.status} - ${errText}`);
         }
 
         jsonResponse = await response.json();
-        lastError = null;
-        break;
       }
 
-      if (lastError) throw lastError;
       if (!jsonResponse?.candidates?.length) {
         throw new Error("No response from Gemini API.");
       }
