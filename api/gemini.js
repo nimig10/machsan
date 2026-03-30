@@ -34,19 +34,36 @@ export default async function handler(req, res) {
     if (Object.keys(restConfig).length > 0) requestBody.generationConfig = restConfig;
   }
 
-  const model = "gemini-2.0-flash";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const models = [
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-preview-04-17",
+    "gemini-2.0-flash-001",
+    "gemini-2.0-flash-exp",
+  ];
 
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody),
-    });
+  let lastStatus = 500;
+  let lastData = { error: "All models failed" };
 
-    const data = await response.json();
-    return res.status(response.status).json(data);
-  } catch (error) {
-    return res.status(500).json({ error: error.message || "Internal server error" });
+  for (const model of models) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+      const data = await response.json();
+      if (response.status === 404 || response.status === 429) {
+        lastStatus = response.status;
+        lastData = data;
+        continue;
+      }
+      return res.status(response.status).json(data);
+    } catch (error) {
+      lastData = { error: error.message || "Internal server error" };
+      continue;
+    }
   }
+
+  return res.status(lastStatus).json(lastData);
 }
