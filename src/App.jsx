@@ -703,7 +703,7 @@ const css = `
   .sidebar { width:240px; min-width:240px; background:var(--surface); border-left:1px solid var(--border); display:flex; flex-direction:column; position:fixed; right:0; top:0; bottom:0; z-index:100; }
   .sidebar-logo { padding:24px 20px 20px; border-bottom:1px solid var(--border); }
   .sidebar-logo .app-name { font-size:20px; font-weight:900; color:var(--accent); line-height:1.1; }
-  .sidebar-logo .app-sub { font-size:11px; color:var(--text3); margin-top:3px; }
+  .sidebar-logo .app-sub { font-size:13px; font-weight:600; color:var(--text2); margin-top:5px; }
   .logo-icon { font-size:46px; margin-bottom:8px; display:block; }
   .nav { flex:1; padding:12px 0; overflow-y:auto; }
   .nav-section { padding:10px 18px 6px; font-size:12px; font-weight:900; color:var(--text2); text-transform:uppercase; letter-spacing:1px; }
@@ -7453,7 +7453,7 @@ export default function App() {
                 <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:90,height:90,objectFit:"contain",borderRadius:8,marginTop:2,display:"block"}}/>
               )}
               <div className="app-name">תפעול מחסן</div>
-              <div className="app-sub">📦 {staffUser?.full_name || "צוות"}</div>
+              <div className="app-sub">שלום, {staffUser?.full_name || "צוות"}</div>
             </div>
             <div className="nav">
               <div className="nav-section">ניהול</div>
@@ -7562,7 +7562,7 @@ export default function App() {
                 <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:90,height:90,objectFit:"contain",borderRadius:8,marginTop:2,display:"block"}}/>
               )}
               <div className="app-name">אדמיניסטרציה</div>
-              <div className="app-sub">📋 {staffUser?.full_name || "צוות"}</div>
+              <div className="app-sub">שלום, {staffUser?.full_name || "צוות"}</div>
             </div>
             <div className="nav">
               <div className="nav-section">ניהול</div>
