@@ -59,57 +59,36 @@ export function StaffHub({ user, onNavigate, onLogout }) {
 
       {user?.role === "admin" && (
         <div style={{ marginTop: 24, display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
-          <button
-            onClick={() => onNavigate("staff-management")}
-            style={{
-              padding: "10px 24px",
-              border: "1px solid var(--border)",
-              borderRadius: 10,
-              background: "var(--surface)",
-              cursor: "pointer",
-              fontSize: 14,
-              color: "var(--text2)",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            <span>👥</span> ניהול צוות
-          </button>
-          <button
-            onClick={() => onNavigate("system-settings")}
-            style={{
-              padding: "10px 24px",
-              border: "1px solid var(--border)",
-              borderRadius: 10,
-              background: "var(--surface)",
-              cursor: "pointer",
-              fontSize: 14,
-              color: "var(--text2)",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            <span>⚙️</span> הגדרות מערכת
-          </button>
-          <button
-            onClick={() => onNavigate("activity-logs")}
-            style={{
-              padding: "10px 24px",
-              border: "1px solid var(--border)",
-              borderRadius: 10,
-              background: "var(--surface)",
-              cursor: "pointer",
-              fontSize: 14,
-              color: "var(--text2)",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            <span>📊</span> יומן פעילות
-          </button>
+          {[
+            { key: "staff-management", icon: "👥", label: "ניהול צוות",     color: "#22c55e" },
+            { key: "system-settings",  icon: "⚙️", label: "הגדרות מערכת",  color: "#f5a623" },
+            { key: "activity-logs",    icon: "📊", label: "יומן פעילות",    color: "#3b82f6" },
+          ].map(btn => (
+            <button
+              key={btn.key}
+              onClick={() => onNavigate(btn.key)}
+              onMouseEnter={() => setHovered(btn.key)}
+              onMouseLeave={() => setHovered(null)}
+              style={{
+                padding: "10px 24px",
+                border: `1.5px solid ${hovered === btn.key ? btn.color : "var(--border)"}`,
+                borderRadius: 10,
+                background: hovered === btn.key ? `${btn.color}12` : "var(--surface)",
+                cursor: "pointer",
+                fontSize: 14,
+                color: hovered === btn.key ? btn.color : "var(--text2)",
+                fontWeight: hovered === btn.key ? 700 : 400,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                transition: "all 0.2s",
+                transform: hovered === btn.key ? "translateY(-2px)" : "none",
+                boxShadow: hovered === btn.key ? `0 6px 18px ${btn.color}25` : "none",
+              }}
+            >
+              <span>{btn.icon}</span> {btn.label}
+            </button>
+          ))}
         </div>
       )}
 
