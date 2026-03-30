@@ -7622,7 +7622,7 @@ export default function App() {
       )}
 
       {/* ── כניסת צוות ── */}
-      {isAdmin && !authed && <StaffLogin onSuccess={(user)=>{ setStaffUser(user); setStaffView("hub"); }}/>}
+      {isAdmin && !authed && <StaffLogin onSuccess={(user)=>{ setStaffUser(user); const v = user?.role!=="admin" && user?.permissions?.views; setStaffView(v?.length===1 ? v[0] : "hub"); }}/>}
 
       {/* ── Staff Hub ── */}
       {isAdmin && authed && staffView === "hub" && (
@@ -7671,7 +7671,10 @@ export default function App() {
                 {id:"kits",icon:"🎒",label:"ערכות"},
                 {id:"policies",icon:"📋",label:"נהלים"},
                 {id:"settings",icon:"⚙️",label:"הגדרות"},
-              ].map(n=>(
+              ].filter(n => {
+                const allowed = staffUser?.role === "admin" ? [] : (staffUser?.permissions?.warehouseSections || []);
+                return !allowed.length || allowed.includes(n.id);
+              }).map(n=>(
                 <div key={n.id} className={`nav-item ${page===n.id?"active":""}`}
                   onClick={() => {
                     if (n.id === "reservations") setReservationsInitialSubView("active");
@@ -7777,8 +7780,10 @@ export default function App() {
                 {id:"students",icon:"👨‍🎓",label:"סטודנטים"},
                 {id:"policies",icon:"📋",label:"נהלים"},
                 {id:"settings",icon:"⚙️",label:"הגדרות"},
-                ...(staffUser?.role==="admin"?[{id:"team",icon:"👥",label:"ניהול צוות"}]:[]),
-              ].map(n=>(
+              ].filter(n => {
+                const allowed = staffUser?.role === "admin" ? [] : (staffUser?.permissions?.administrationSections || []);
+                return !allowed.length || allowed.includes(n.id);
+              }).map(n=>(
                 <div key={n.id} className={`nav-item ${secretaryPage===n.id?"active":""}`}
                   onClick={() => setSecretaryPage(p=>p===n.id?"dashboard":n.id)} title={n.label}>
                   <span className="icon">{n.icon}</span>
@@ -7820,7 +7825,6 @@ export default function App() {
               <div style={{display:secretaryPage==="students"?"block":"none"}}><StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/></div>
               <div style={{display:secretaryPage==="policies"?"block":"none"}}><PoliciesPage policies={policies} setPolicies={setPolicies} showToast={showToast}/></div>
               <div style={{display:secretaryPage==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} passwordRole="secretary" settingsRole="secretary"/></div>
-              {staffUser?.role==="admin" && <div style={{display:secretaryPage==="team"?"block":"none"}}><TeamPage teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/></div>}
             </>}
           </div>
         </div>

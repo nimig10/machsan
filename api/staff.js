@@ -10,6 +10,13 @@ const headers = {
   Prefer: "return=representation",
 };
 
+const DEFAULT_PERMISSIONS = {
+  views: [],               // [] = all views; or ["warehouse","administration"]
+  warehouseSections: [],   // [] = all; or specific section ids
+  administrationSections: [],
+  notifyLoanTypes: [],     // [] = none; or ["פרטית","הפקה","סאונד","קולנוע יומית","שיעור"]
+};
+
 async function sbFetch(path, options = {}) {
   const res = await fetch(`${SB_URL}/rest/v1/${path}`, { headers, ...options });
   const text = await res.text();
@@ -20,14 +27,13 @@ export default async function handler(req, res) {
   const { method } = req;
   const { action, callerRole } = req.body || {};
 
-  // Only admins can manage staff
   if (callerRole !== "admin") {
     return res.status(403).json({ error: "Forbidden — admin only" });
   }
 
   // LIST
   if (method === "GET" || action === "list") {
-    const result = await sbFetch("staff_members?select=id,full_name,email,role,created_at&order=created_at.asc");
+    const result = await sbFetch("staff_members?select=id,full_name,email,role,permissions,created_at&order=created_at.asc");
     return res.status(result.ok ? 200 : 500).json(result.data || []);
   }
 
@@ -37,7 +43,7 @@ export default async function handler(req, res) {
 
   // CREATE
   if (action === "create") {
-    const { full_name, email, role, password } = req.body;
+    const { full_name, email, role, password, permissions } = req.body;
     if (!full_name || !email || !password) {
       return res.status(400).json({ error: "Missing required fields" });
     }
@@ -49,6 +55,7 @@ export default async function handler(req, res) {
         email: email.trim().toLowerCase(),
         role: role === "admin" ? "admin" : "staff",
         password_hash,
+        permissions: { ...DEFAULT_PERMISSIONS, ...(permissions || {}) },
       }),
     });
     if (!result.ok) {
@@ -56,18 +63,19 @@ export default async function handler(req, res) {
       return res.status(result.status).json({ error: msg });
     }
     const user = Array.isArray(result.data) ? result.data[0] : result.data;
-    return res.status(201).json({ success: true, user: { id: user.id, full_name: user.full_name, email: user.email, role: user.role } });
+    return res.status(201).json({ success: true, user: { id: user.id, full_name: user.full_name, email: user.email, role: user.role, permissions: user.permissions } });
   }
 
   // UPDATE
   if (action === "update") {
-    const { id, full_name, email, role, password } = req.body;
+    const { id, full_name, email, role, password, permissions } = req.body;
     if (!id) return res.status(400).json({ error: "Missing id" });
     const updates = { updated_at: new Date().toISOString() };
     if (full_name) updates.full_name = full_name.trim();
     if (email) updates.email = email.trim().toLowerCase();
     if (role) updates.role = role === "admin" ? "admin" : "staff";
     if (password) updates.password_hash = await bcrypt.hash(password, 10);
+    if (permissions !== undefined) updates.permissions = { ...DEFAULT_PERMISSIONS, ...permissions };
     const result = await sbFetch(`staff_members?id=eq.${id}`, {
       method: "PATCH",
       body: JSON.stringify(updates),

@@ -3,22 +3,15 @@ import { useState } from "react";
 export function StaffHub({ user, onNavigate, onLogout }) {
   const [hovered, setHovered] = useState(null);
 
-  const options = [
-    {
-      key: "warehouse",
-      icon: "📦",
-      title: "תפעול מחסן",
-      desc: "ניהול ציוד, הזמנות, קיטים והסמכות",
-      color: "#3b82f6",
-    },
-    {
-      key: "administration",
-      icon: "📋",
-      title: "אדמיניסטרציה",
-      desc: "ניהול סטודנטים, אולפנים, שיעורים ודוחות",
-      color: "#8b5cf6",
-    },
+  const allowedViews = user?.role === "admin" ? [] : (user?.permissions?.views || []);
+
+  const allOptions = [
+    { key: "warehouse",       icon: "📦", title: "תפעול מחסן",     desc: "ניהול ציוד, הזמנות, קיטים והסמכות",              color: "#3b82f6" },
+    { key: "administration",  icon: "📋", title: "אדמיניסטרציה",   desc: "ניהול סטודנטים, אולפנים, שיעורים ודוחות",        color: "#8b5cf6" },
   ];
+
+  // Filter views based on permissions (empty = all allowed)
+  const options = allOptions.filter(o => !allowedViews.length || allowedViews.includes(o.key));
 
   return (
     <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, background: "var(--bg)" }}>
