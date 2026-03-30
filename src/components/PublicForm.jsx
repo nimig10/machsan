@@ -1753,8 +1753,34 @@ ${inventory}
 
   const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""}); setItems([]); setAgreed(false); };
 
-  const handleFormSwipeStart = (_e) => {};
-  const handleFormSwipeEnd = (_e) => {};
+  const VIEWS = ["equipment", "studios", "daily"];
+  const handleFormSwipeStart = (e) => {
+    const touch = e.touches[0];
+    const blocked = !!e.target.closest('[data-no-swipe]');
+    swipeTouchRef.current = { startX: touch.clientX, startY: touch.clientY, blocked };
+  };
+  const handleFormSwipeEnd = (e) => {
+    if (!swipeTouchRef.current) return;
+    const { startX, startY, blocked } = swipeTouchRef.current;
+    swipeTouchRef.current = null;
+    if (blocked) return;
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - startX;
+    const dy = touch.clientY - startY;
+    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const idx = VIEWS.indexOf(publicView);
+    if (dx < 0 && idx < VIEWS.length - 1) {
+      const next = VIEWS[idx + 1];
+      setPublicView(next);
+      sessionStorage.setItem("public_view", next);
+      if (next === "studios") loadStudiosData();
+      if (next === "daily") { setDailyDayOffset(0); loadDailySchedule(); }
+    } else if (dx > 0 && idx > 0) {
+      const prev = VIEWS[idx - 1];
+      setPublicView(prev);
+      sessionStorage.setItem("public_view", prev);
+    }
+  };
 
   if(emailError) return (
     <div className="form-page">
@@ -3178,7 +3204,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                 {calendarFullscreen ? "✕ סגור" : "⛶ מסך מלא"}
               </button>
           </div>
-          <div style={{overflowX:"auto",overflowY:calendarFullscreen?"auto":undefined,WebkitOverflowScrolling:"touch",flex:calendarFullscreen?1:undefined,maxHeight:calendarFullscreen?"calc(100vh - 120px)":undefined}}>
+          <div data-no-swipe="true" style={{overflowX:"auto",overflowY:calendarFullscreen?"auto":undefined,WebkitOverflowScrolling:"touch",flex:calendarFullscreen?1:undefined,maxHeight:calendarFullscreen?"calc(100vh - 120px)":undefined}}>
           <table style={{width:"100%",minWidth:700,borderCollapse:"separate",borderSpacing:0,tableLayout:"fixed"}}>
             <thead>
               <tr>
