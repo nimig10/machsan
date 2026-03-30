@@ -14,9 +14,8 @@ export async function logActivity({ user_id, user_name, action, entity, entity_i
 }
 
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
-// v3.1
-export const SB_URL = "https://wxkyqgwwraojnbmyyfco.supabase.co";
-export const SB_KEY = "sb_publishable_n-mkSq7xABjj58ZBBwk6BA_RbpVS2SU";
+export const SB_URL = import.meta.env.VITE_SUPABASE_URL;
+export const SB_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const SB_HEADERS = {
   "apikey":        SB_KEY,
   "Authorization": `Bearer ${SB_KEY}`,

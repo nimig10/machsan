@@ -2,8 +2,8 @@
 // Called when dept head clicks "אשר הפקה" button in email
 // Updates reservation status from "ממתין לאישור ראש המחלקה" → "ממתין"
 
-const SB_URL = process.env.VITE_SUPABASE_URL || "https://wxkyqgwwraojnbmyyfco.supabase.co";
-const SB_KEY = process.env.VITE_SUPABASE_KEY || "sb_publishable_n-mkSq7xABjj58ZBBwk6BA_RbpVS2SU";
+const SB_URL = process.env.SUPABASE_URL;
+const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const SB_HEADERS = {
   "apikey":        SB_KEY,

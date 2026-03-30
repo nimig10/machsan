@@ -1,6 +1,6 @@
 // activity-log.js — write + read activity logs
-const SB_URL = process.env.SUPABASE_URL || "https://wxkyqgwwraojnbmyyfco.supabase.co";
-const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || "sb_publishable_n-mkSq7xABjj58ZBBwk6BA_RbpVS2SU";
+const SB_URL = process.env.SUPABASE_URL;
+const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const headers = {
   apikey: SB_KEY,

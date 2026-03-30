@@ -2,8 +2,8 @@
 // Checks for overdue reservations and sends reminder emails
 // No browser required
 
-const SB_URL = "https://wxkyqgwwraojnbmyyfco.supabase.co";
-const SB_KEY = "sb_publishable_n-mkSq7xABjj58ZBBwk6BA_RbpVS2SU";
+const SB_URL = process.env.SUPABASE_URL;
+const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SB_HEADERS = {
   apikey: SB_KEY,
   Authorization: `Bearer ${SB_KEY}`,

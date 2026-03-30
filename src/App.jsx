@@ -20,9 +20,8 @@ import { SystemSettingsPage } from "./components/SystemSettingsPage.jsx";
 import { ActivityLogsPage } from "./components/ActivityLogsPage.jsx";
 
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
-// v3.1
-const SB_URL = "https://wxkyqgwwraojnbmyyfco.supabase.co";
-const SB_KEY = "sb_publishable_n-mkSq7xABjj58ZBBwk6BA_RbpVS2SU";
+const SB_URL = import.meta.env.VITE_SUPABASE_URL;
+const SB_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const SB_HEADERS = {
   "apikey":        SB_KEY,
   "Authorization": `Bearer ${SB_KEY}`,
