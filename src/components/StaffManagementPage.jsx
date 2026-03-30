@@ -280,7 +280,6 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
   const [editDhForm, setEditDhForm] = useState(emptyDhForm);
   const [dhSaving, setDhSaving] = useState(false);
 
-  const [addForm, setAddForm]   = useState(emptyForm);
   const [editMember, setEditMember] = useState(null);
   const [editForm, setEditForm] = useState(emptyForm);
 
@@ -332,21 +331,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
   const hasDuplicateEmail = (email, excludeId=null) =>
     (teamMembers||[]).some(m => m.id!==excludeId && normalizeEmail(m.email)===normalizeEmail(email));
 
-  const addEmail = normalizeEmail(addForm.email);
   const editEmail = normalizeEmail(editForm?.email);
-
-  const saveNew = async () => {
-    const name = addForm.name.trim(); const email = addEmail;
-    if (!name || !email) return;
-    if (!isValidEmailAddress(email)) { showToast("error","כתובת המייל אינה תקינה"); return; }
-    if (hasDuplicateEmail(email)) { showToast("error","כתובת המייל הזו כבר קיימת"); return; }
-    const updated = [...(teamMembers||[]), { ...addForm, id:Date.now(), name, email, phone:addForm.phone?.trim()||"" }];
-    setTeamMembers(updated);
-    const r = await storageSet("teamMembers", updated);
-    if (!r.ok) showToast("error","❌ שגיאה בשמירה");
-    else showToast("success", `${name} נוסף לצוות`);
-    setAddForm(emptyForm);
-  };
 
   const saveEdit = async () => {
     if (!editMember) return;
@@ -534,30 +519,6 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
           </div>
         </div>
       )}
-
-      {/* ── Add team member ── */}
-      <div className="card" style={{marginBottom:24}}>
-        <div className="card-header"><div className="card-title">➕ הוספת איש צוות (ישן)</div></div>
-        <div style={{padding:"0 20px 20px"}}>
-          <div className="responsive-split" style={{marginBottom:14}}>
-            <div className="form-group"><label className="form-label">שם מלא *</label><input className="form-input" placeholder="שם" value={addForm.name} onChange={e=>setAddForm(p=>({...p,name:e.target.value}))}/></div>
-            <div className="form-group"><label className="form-label">כתובת מייל *</label><input className="form-input" type="email" value={addForm.email} onChange={e=>setAddForm(p=>({...p,email:e.target.value}))}/></div>
-          </div>
-          <div className="form-group" style={{marginBottom:14}}>
-            <label className="form-label">טלפון</label>
-            <input className="form-input" placeholder="05x-xxxxxxx" value={addForm.phone||""} onChange={e=>setAddForm(p=>({...p,phone:e.target.value}))}/>
-          </div>
-          <div className="form-group">
-            <label className="form-label">📩 קבלת התראות עבור סוגי השאלה</label>
-            <LoanButtons form={addForm} setForm={setAddForm} types={LOAN_TYPES} icons={LOAN_ICONS}/>
-            {addEmail && !isValidEmailAddress(addEmail) && <div style={{fontSize:12,color:"var(--red)",marginTop:6}}>כתובת המייל אינה תקינה.</div>}
-            {addEmail && isValidEmailAddress(addEmail) && hasDuplicateEmail(addEmail) && <div style={{fontSize:12,color:"var(--red)",marginTop:6}}>כתובת המייל כבר קיימת.</div>}
-          </div>
-          <div style={{marginTop:10}}>
-            <button className="btn btn-primary" disabled={!addForm.name.trim()||!addEmail||!isValidEmailAddress(addEmail)||hasDuplicateEmail(addEmail)} onClick={saveNew}>➕ הוסף לצוות</button>
-          </div>
-        </div>
-      </div>
 
       {/* ── Team list ── */}
       {(teamMembers||[]).length === 0
