@@ -6893,14 +6893,27 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
   );
 }
 
-// ─── ADMIN PASSWORD SCREEN ────────────────────────────────────────────────────
-const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || "changeme";
+// ─── SHARED AUTH HELPER ──────────────────────────────────────────────────────
+async function verifyPassword(role, password) {
+  const res = await fetch('/api/auth', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role, password }),
+  });
+  return res.ok;
+}
 
+// ─── ADMIN PASSWORD SCREEN ────────────────────────────────────────────────────
 function AdminLogin({ onSuccess }) {
   const [pw, setPw] = useState("");
   const [err, setErr] = useState(false);
-  const attempt = () => {
-    if (pw === ADMIN_PASSWORD) { onSuccess(); }
+  const [loading, setLoading] = useState(false);
+  const attempt = async () => {
+    if (!pw.trim()) return;
+    setLoading(true);
+    const ok = await verifyPassword('admin', pw);
+    setLoading(false);
+    if (ok) { onSuccess(); }
     else { setErr(true); setTimeout(()=>setErr(false), 2000); }
   };
   return (
@@ -6917,20 +6930,28 @@ function AdminLogin({ onSuccess }) {
           onChange={e=>setPw(e.target.value)}
           onKeyDown={e=>e.key==="Enter"&&attempt()}
           style={{marginBottom:12,textAlign:"center",fontSize:18,letterSpacing:4}}
+          disabled={loading}
         />
         {err && <div style={{color:"var(--red)",fontSize:13,marginBottom:8}}>❌ סיסמה שגויה</div>}
-        <button className="btn btn-primary" style={{width:"100%"}} onClick={attempt}>כניסה</button>
+        <button className="btn btn-primary" style={{width:"100%"}} onClick={attempt} disabled={loading}>
+          {loading ? "מאמת..." : "כניסה"}
+        </button>
       </div>
     </div>
   );
 }
 
 // ─── SUB-ADMIN LOGIN ──────────────────────────────────────────────────────────
-function SubAdminLogin({ role, password, onSuccess }) {
+function SubAdminLogin({ role, onSuccess }) {
   const [pw, setPw] = useState("");
   const [err, setErr] = useState(false);
-  const attempt = () => {
-    if (pw === password) { onSuccess(); }
+  const [loading, setLoading] = useState(false);
+  const attempt = async () => {
+    if (!pw.trim()) return;
+    setLoading(true);
+    const ok = await verifyPassword(role, pw);
+    setLoading(false);
+    if (ok) { onSuccess(); }
     else { setErr(true); setTimeout(()=>setErr(false), 2000); }
   };
   const titles = { secretary: "כניסת אדמיניסטרציה", warehouse: "כניסת מחסן" };
@@ -6949,9 +6970,12 @@ function SubAdminLogin({ role, password, onSuccess }) {
           onChange={e=>setPw(e.target.value)}
           onKeyDown={e=>e.key==="Enter"&&attempt()}
           style={{marginBottom:12,textAlign:"center",fontSize:18,letterSpacing:4}}
+          disabled={loading}
         />
         {err && <div style={{color:"var(--red)",fontSize:13,marginBottom:8}}>❌ סיסמה שגויה</div>}
-        <button className="btn btn-primary" style={{width:"100%"}} onClick={attempt}>כניסה</button>
+        <button className="btn btn-primary" style={{width:"100%"}} onClick={attempt} disabled={loading}>
+          {loading ? "מאמת..." : "כניסה"}
+        </button>
       </div>
     </div>
   );
@@ -7754,7 +7778,7 @@ export default function App() {
       )}
 
       {/* ── מזכירות ── */}
-      {isSecretaryView && !secretaryAuthed && (loading ? <div style={{minHeight:"100vh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center"}}><Loading/></div> : <SubAdminLogin role="secretary" password={siteSettings.secretaryPassword||"secretary"} onSuccess={()=>setSecretaryAuthed(true)}/>)}
+      {isSecretaryView && !secretaryAuthed && (loading ? <div style={{minHeight:"100vh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center"}}><Loading/></div> : <SubAdminLogin role="secretary" onSuccess={()=>setSecretaryAuthed(true)}/>)}
       {isSecretaryView && secretaryAuthed && (
         <div className="app" style={{"--accent":siteSettings.secretaryAccentColor||siteSettings.adminAccentColor||"#f5a623","--accent-glow":`${siteSettings.secretaryAccentColor||siteSettings.adminAccentColor||"#f5a623"}2e`,"--admin-fs":`${siteSettings.secretaryFontSize||siteSettings.adminFontSize||14}px`}}>
           <nav className="sidebar">
@@ -7823,7 +7847,7 @@ export default function App() {
       )}
 
       {/* ── מחסן ── */}
-      {isWarehouseView && !warehouseAuthed && (loading ? <div style={{minHeight:"100vh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center"}}><Loading/></div> : <SubAdminLogin role="warehouse" password={siteSettings.warehousePassword||"warehouse"} onSuccess={()=>setWarehouseAuthed(true)}/>)}
+      {isWarehouseView && !warehouseAuthed && (loading ? <div style={{minHeight:"100vh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center"}}><Loading/></div> : <SubAdminLogin role="warehouse" onSuccess={()=>setWarehouseAuthed(true)}/>)}
       {isWarehouseView && warehouseAuthed && (
         <div className="app" style={{"--accent":siteSettings.warehouseAccentColor||siteSettings.adminAccentColor||"#f5a623","--accent-glow":`${siteSettings.warehouseAccentColor||siteSettings.adminAccentColor||"#f5a623"}2e`,"--admin-fs":`${siteSettings.warehouseFontSize||siteSettings.adminFontSize||14}px`}}>
           <nav className="sidebar">
