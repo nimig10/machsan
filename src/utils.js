@@ -1,5 +1,18 @@
 // utils.js — shared constants, storage helpers, and utility functions
 
+// ─── ACTIVITY LOGGING ────────────────────────────────────────────────────────
+export async function logActivity({ user_id, user_name, action, entity, entity_id, details }) {
+  try {
+    fetch("/api/activity-log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "write", user_id, user_name, activity: action, entity, entity_id, details }),
+    });
+  } catch (e) {
+    console.warn("logActivity failed:", e);
+  }
+}
+
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
 // v3.1
 export const SB_URL = "https://wxkyqgwwraojnbmyyfco.supabase.co";

@@ -1,6 +1,6 @@
 // ReservationsPage.jsx — admin reservations management page (includes rejected + archive tabs)
 import { useEffect, useState } from "react";
-import { storageSet, storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate } from "../utils.js";
+import { storageSet, storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
@@ -151,6 +151,8 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
     await storageSet("reservations", updated);
     await sendStatusEmail({ ...reservationToApprove, status: "מאושר" }, "מאושר");
     showToast("success", "הבקשה אושרה");
+    const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+    logActivity({ user_id: caller.id, user_name: caller.full_name, action: "reservation_approve", entity: "reservation", entity_id: String(reservationToApprove.id), details: { student: reservationToApprove.student_name, loan_type: reservationToApprove.loan_type } });
     setSelected(null);
     setConsecutiveWarning(null);
     return true;

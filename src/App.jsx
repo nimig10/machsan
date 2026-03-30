@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { logActivity } from "./utils.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
 import { CalendarGrid } from "./components/CalendarGrid.jsx";
@@ -16,6 +17,7 @@ import { PublicDisplayPage } from "./components/PublicDisplayPage.jsx";
 import { StaffHub } from "./components/StaffHub.jsx";
 import { StaffManagementPage } from "./components/StaffManagementPage.jsx";
 import { SystemSettingsPage } from "./components/SystemSettingsPage.jsx";
+import { ActivityLogsPage } from "./components/ActivityLogsPage.jsx";
 
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
 // v3.1
@@ -1213,7 +1215,11 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       errorMessage: "שגיאה בשמירת הציוד. השינוי לא נשמר בשרת.",
     });
     setSaving(false);
-    if (saved) setModal(null);
+    if (saved) {
+      const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+      logActivity({ user_id: caller.id, user_name: caller.full_name, action: modal.type==="add" ? "equipment_add" : "equipment_edit", entity: "equipment", entity_id: String(form.id||form.name), details: { name: form.name, category: form.category } });
+      setModal(null);
+    }
   };
 
   const del = async (eq) => {
@@ -1222,7 +1228,11 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       successMessage: `"${eq.name}" נמחק`,
       errorMessage: `המחיקה של "${eq.name}" לא נשמרה בשרת.`,
     });
-    if (deleted) setModal(null);
+    if (deleted) {
+      const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+      logActivity({ user_id: caller.id, user_name: caller.full_name, action: "equipment_delete", entity: "equipment", entity_id: String(eq.id), details: { name: eq.name } });
+      setModal(null);
+    }
   };
 
   const setCategoryClassification = async (categoryName, nextType) => {
@@ -6666,6 +6676,7 @@ function StaffLogin({ onSuccess }) {
       });
       const data = await res.json();
       if (res.ok && data.user) {
+        logActivity({ user_id: data.user.id, user_name: data.user.full_name, action: "login", entity: "session", details: { email: data.user.email } });
         onSuccess(data.user);
       } else {
         setErr("אימייל או סיסמה שגויים");
@@ -7412,6 +7423,21 @@ export default function App() {
               </div>
             </div>
             <SystemSettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} storageSet={storageSet}/>
+          </div>
+        </div>
+      )}
+
+      {/* ── יומן פעילות (admin only) ── */}
+      {isAdmin && authed && staffView === "activity-logs" && staffUser?.role === "admin" && (
+        <div className="app" style={{"--accent":siteSettings.adminAccentColor||"#f5a623","--accent-glow":`${siteSettings.adminAccentColor||"#f5a623"}2e`,"--admin-fs":`${siteSettings.adminFontSize||14}px`}}>
+          <div className="main" style={{marginRight:0,width:"100%"}}>
+            <div className="topbar">
+              <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setStaffView("hub")}>← חזרה</button>
+                <span className="topbar-title" style={{flex:1}}>יומן פעילות</span>
+              </div>
+            </div>
+            <ActivityLogsPage showToast={showToast}/>
           </div>
         </div>
       )}

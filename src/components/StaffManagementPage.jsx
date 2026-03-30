@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Modal } from "./ui.jsx";
-import { storageSet, isValidEmailAddress } from "../utils.js";
+import { storageSet, isValidEmailAddress, logActivity } from "../utils.js";
 
 const WAREHOUSE_SECTIONS = [
   { id: "reservations", label: "📋 בקשות" },
@@ -88,7 +88,11 @@ function StaffTab({ showToast }) {
       if (password?.trim()) body.password = password.trim();
       const res = await fetch("/api/staff", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
-      if (res.ok) { showToast?.("success", id ? "המשתמש עודכן" : "המשתמש נוצר"); setEditUser(null); fetchStaff(); }
+      if (res.ok) {
+        const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+        logActivity({ user_id: caller.id, user_name: caller.full_name, action: id ? "staff_update" : "staff_create", entity: "staff_member", entity_id: id || data.user?.id, details: { full_name, email, role } });
+        showToast?.("success", id ? "המשתמש עודכן" : "המשתמש נוצר"); setEditUser(null); fetchStaff();
+      }
       else showToast?.("error", data.error || "שגיאה בשמירה");
     } catch { showToast?.("error", "שגיאת רשת"); }
     finally { setSaving(false); }

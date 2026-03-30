@@ -93,6 +93,23 @@ export function StaffHub({ user, onNavigate, onLogout }) {
           >
             <span>⚙️</span> הגדרות מערכת
           </button>
+          <button
+            onClick={() => onNavigate("activity-logs")}
+            style={{
+              padding: "10px 24px",
+              border: "1px solid var(--border)",
+              borderRadius: 10,
+              background: "var(--surface)",
+              cursor: "pointer",
+              fontSize: 14,
+              color: "var(--text2)",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <span>📊</span> יומן פעילות
+          </button>
         </div>
       )}
 
