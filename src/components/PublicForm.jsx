@@ -1679,6 +1679,20 @@ ${inventory}
           }),
         });
       }));
+      // Notify staff_members with matching notifyLoanTypes
+      fetch("/api/notify-staff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          loan_type:      res.loan_type,
+          student_name:   res.student_name,
+          items_list:     itemsList,
+          borrow_date:    formatDate(res.borrow_date),
+          return_date:    formatDate(res.return_date),
+          logo_url:       siteSettings.logo || "",
+          sound_logo_url: siteSettings.soundLogo || "",
+        }),
+      }).catch(() => {});
       // Notify dept heads for this loan type
       const relevantDeptHeads = (deptHeads||[]).filter(dh =>
         dh?.email && isValidEmailAddress(dh.email) &&
