@@ -496,6 +496,8 @@ function buildLessonReservations(lessons = [], kits = []) {
         .map((item) => ({ ...item }));
       if (!items.length) return;
 
+      const returnTs = toDateTime(session.date, session.endTime || "23:59");
+      const isPast = returnTs && Date.now() >= returnTs;
       reservations.push({
         id: `lesson_res_${lesson.id}_${index}`,
         lesson_id: lesson.id,
@@ -514,6 +516,8 @@ function buildLessonReservations(lessons = [], kits = []) {
         items,
         created_at: lesson.created_at || new Date().toISOString(),
         overdue_notified: true,
+        status: isPast ? "הוחזר" : "מאושר",
+        returned_at: isPast ? new Date(returnTs).toISOString() : undefined,
       });
     });
   });
