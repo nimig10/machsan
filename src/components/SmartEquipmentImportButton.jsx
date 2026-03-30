@@ -87,7 +87,7 @@ ${csvText}
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        systemInstruction: {
+        system_instruction: {
           parts: [{ text: "אתה עוזר למנהל מחסן ציוד. החזר אך ורק JSON חוקי של מערך, ללא טקסט נוסף או Markdown." }],
         },
         generationConfig: {

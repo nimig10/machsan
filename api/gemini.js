@@ -8,13 +8,13 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "GEMINI_API_KEY not configured on server" });
   }
 
-  const { contents, systemInstruction, generationConfig } = req.body || {};
+  const { contents, system_instruction, generationConfig } = req.body || {};
   if (!contents) {
     return res.status(400).json({ error: "Missing required field: contents" });
   }
 
   const requestBody = { contents };
-  if (systemInstruction) requestBody.systemInstruction = systemInstruction;
+  if (system_instruction) requestBody.system_instruction = system_instruction;
   if (generationConfig) {
     // Strip thinkingConfig — not supported in gemini-1.5-flash
     const { thinkingConfig, ...restConfig } = generationConfig;

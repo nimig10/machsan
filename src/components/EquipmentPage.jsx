@@ -363,7 +363,7 @@ export function EquipmentPage({ equipment, reservations, setEquipment, showToast
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [{ parts: [{ text: itemName }] }],
-            systemInstruction: { parts: [{ text: systemInstruction }] },
+            system_instruction: { parts: [{ text: systemInstruction }] },
           }),
         });
 
