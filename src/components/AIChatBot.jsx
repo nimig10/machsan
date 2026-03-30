@@ -468,8 +468,22 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
     document.addEventListener('mouseup', onMouseUp);
   };
 
+  const panelHeight = isMobile ? 380 : 430;
+  const panelPos = (() => {
+    const margin = 8;
+    const bx = btnPos.x;
+    const by = btnPos.y;
+    const left = bx + bubbleSize / 2 > window.innerWidth / 2
+      ? Math.max(margin, bx + bubbleSize - panelWidth)
+      : Math.min(window.innerWidth - panelWidth - margin, bx);
+    const top = by + bubbleSize / 2 > window.innerHeight / 2
+      ? Math.max(margin, by - panelHeight - margin)
+      : by + bubbleSize + margin;
+    return { top, left };
+  })();
+
   const panel = isOpen && (
-    <div style={{ position: 'fixed', top: 12, right: 12, zIndex: 2147483647, display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+    <div style={{ position: 'fixed', top: panelPos.top, left: panelPos.left, zIndex: 2147483647, display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
       <div dir="rtl" style={{
         background: '#1a1a2e',
         borderRadius: 16,
