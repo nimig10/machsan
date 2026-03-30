@@ -28,7 +28,7 @@ export default async function handler(req, res) {
 
   try {
     const rows = await sbQuery(
-      `staff_members?email=eq.${encodeURIComponent(email.trim().toLowerCase())}&select=id,full_name,email,role,password_hash&limit=1`
+      `staff_members?email=eq.${encodeURIComponent(email.trim().toLowerCase())}&select=id,full_name,email,role,password_hash,permissions&limit=1`
     );
 
     if (!rows || rows.length === 0) {
@@ -49,6 +49,7 @@ export default async function handler(req, res) {
         full_name: user.full_name,
         email: user.email,
         role: user.role,
+        permissions: user.permissions || {},
       },
     });
   } catch (err) {
