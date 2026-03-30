@@ -719,12 +719,9 @@ export default function StudioBookingPage(props) {
 
       {activeView === "calendar" && (
         <div>
-          <div style={{ textAlign:"center", marginBottom:16 }}>
-            <div style={{ fontSize:22, fontWeight:900, color:"var(--accent)" }}>{weekMonthLabel}</div>
-          </div>
-
-          <div style={{ display:"flex", gap:20, marginBottom:20, flexWrap:"wrap", alignItems:"flex-start" }}>
-            <div style={{ width: isMobile ? "100%" : undefined, minWidth: isMobile ? 0 : 220, maxWidth: isMobile ? "100%" : 260, background:"var(--surface2)", borderRadius:"var(--r)", border:"1px solid var(--border)", padding:12 }}>
+          {/* Mobile only: mini calendar above the grid */}
+          {isMobile && (
+            <div style={{ marginBottom:16, background:"var(--surface2)", borderRadius:"var(--r)", border:"1px solid var(--border)", padding:12 }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
                 <button onClick={() => setMiniMonth((current) => current.month === 0 ? { year:current.year - 1, month:11 } : { year:current.year, month:current.month - 1 })} style={{ background:"none", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:16, padding:"2px 6px" }}>→</button>
                 <span style={{ fontWeight:800, fontSize:14, color:"var(--text)" }}>{HE_MONTHS[miniMonth.month]} {miniMonth.year}</span>
@@ -738,7 +735,7 @@ export default function StudioBookingPage(props) {
               </div>
               <button onClick={() => { setWeekOffset(0); const now = new Date(); setMiniMonth({ year:now.getFullYear(), month:now.getMonth() }); }} style={{ width:"100%", marginTop:8, padding:"6px 0", borderRadius:6, border:"1px solid var(--accent)", background:"transparent", color:"var(--accent)", fontWeight:700, fontSize:12, cursor:"pointer" }}>📅 היום</button>
             </div>
-          </div>
+          )}
 
           {studios.length === 0 ? (
             <div style={{ textAlign:"center", padding:48, color:"var(--text3)" }}>
@@ -768,6 +765,7 @@ export default function StudioBookingPage(props) {
                   {!calendarFullscreen && <span style={{ fontSize:12, color:"var(--text3)", whiteSpace:"nowrap" }}>
                     {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth() + 1).padStart(2, "0")} – {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth() + 1).padStart(2, "0")}
                   </span>}
+                  {!calendarFullscreen && <span style={{ fontSize:15, fontWeight:900, color:"var(--accent)", marginRight:4 }}>{weekMonthLabel}</span>}
                   <div style={{ flex:1 }} />
                   <button className="btn btn-secondary btn-sm" onClick={() => setCalendarFullscreen(f => !f)} title={calendarFullscreen ? "סגור מסך מלא" : "פתח מסך מלא"} style={{ whiteSpace:"nowrap" }}>{calendarFullscreen ? "✕ סגור" : "⛶ מסך מלא"}</button>
                 </>
@@ -830,6 +828,25 @@ export default function StudioBookingPage(props) {
               </table>
             </div>
             </div>
+            {/* Desktop only: mini calendar below the grid, aligned under the studio names column */}
+            {!isMobile && !calendarFullscreen && (
+              <div style={{ display:"flex", justifyContent:"flex-start", marginTop:12 }}>
+                <div style={{ width:220, background:"var(--surface2)", borderRadius:"var(--r)", border:"1px solid var(--border)", padding:12, flexShrink:0 }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+                    <button onClick={() => setMiniMonth((current) => current.month === 0 ? { year:current.year - 1, month:11 } : { year:current.year, month:current.month - 1 })} style={{ background:"none", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:16, padding:"2px 6px" }}>→</button>
+                    <span style={{ fontWeight:800, fontSize:14, color:"var(--text)" }}>{HE_MONTHS[miniMonth.month]} {miniMonth.year}</span>
+                    <button onClick={() => setMiniMonth((current) => current.month === 11 ? { year:current.year + 1, month:0 } : { year:current.year, month:current.month + 1 })} style={{ background:"none", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:16, padding:"2px 6px" }}>←</button>
+                  </div>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:1, textAlign:"center" }}>
+                    {HE_DAYS_SHORT.map((day) => <div key={day} style={{ fontSize:10, fontWeight:700, color:"var(--text3)", padding:"4px 0" }}>{day}</div>)}
+                    {miniDays.map((day, index) => (
+                      <div key={index} onClick={() => day && jumpToDate(day)} style={{ fontSize:12, fontWeight:isInCurrentWeek(day) ? 800 : 500, padding:"5px 0", cursor:day ? "pointer" : "default", borderRadius:"50%", background:isTodayMini(day) ? "var(--accent)" : isInCurrentWeek(day) ? "rgba(245,166,35,0.15)" : "transparent", color:isTodayMini(day) ? "#000" : isInCurrentWeek(day) ? "var(--accent)" : day ? "var(--text)" : "transparent" }}>{day || ""}</div>
+                    ))}
+                  </div>
+                  <button onClick={() => { setWeekOffset(0); const now = new Date(); setMiniMonth({ year:now.getFullYear(), month:now.getMonth() }); }} style={{ width:"100%", marginTop:8, padding:"6px 0", borderRadius:6, border:"1px solid var(--accent)", background:"transparent", color:"var(--accent)", fontWeight:700, fontSize:12, cursor:"pointer" }}>📅 היום</button>
+                </div>
+              </div>
+            )}
             </>
           )}
         </div>
