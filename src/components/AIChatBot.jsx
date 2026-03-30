@@ -349,7 +349,7 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
       let result = null;
       let lastError = null;
 
-      for (const modelName of ['gemini-1.5-flash-8b']) {
+      for (const modelName of ['gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-flash-8b']) {
         const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
         const response = await fetchWithRetry(endpoint, {
           method: "POST",
@@ -363,7 +363,8 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
         if (!response.ok) {
           const errText = await response.text();
           lastError = new Error(errText || `שגיאה ${response.status}`);
-          if (response.status === 404 || response.status === 429 || response.status === 503) {
+          console.warn(`Model ${modelName} failed (${response.status}):`, errText);
+          if (response.status === 404 || response.status === 400 || response.status === 429 || response.status === 503) {
             continue;
           }
           throw lastError;
@@ -386,7 +387,9 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
     } catch (error) {
       console.error("ChatBot error:", error);
       let errorMessage = "מצטער, חלה שגיאה בחיבור ל-AI. נסה שוב מאוחר יותר.";
-      if (error.message?.includes("429") || error.status === 429 || error.toString().toLowerCase().includes("quota")) {
+      if (error.message?.includes("חסר מפתח") || error.message?.includes("API_KEY")) {
+        errorMessage = "שגיאת הגדרות: מפתח ה-AI לא מוגדר במערכת. יש לפנות למנהל.";
+      } else if (error.message?.includes("429") || error.status === 429 || error.toString().toLowerCase().includes("quota")) {
         errorMessage = "הגענו למכסת ה-AI היומית של המערכת (כדי לשמור על עלויות נמוכות). המערכת תתאפס ותחזור לפעול מחר בבוקר. תודה על ההבנה!";
       } else if (error.message?.includes("503") || error.status === 503) {
         errorMessage = "שרתי ה-AI של גוגל בעומס זמני. המערכת ניסתה להתחבר שוב אוטומטית — אנא נסה שוב בעוד דקה.";
