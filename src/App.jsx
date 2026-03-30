@@ -13,6 +13,8 @@ import { LessonsPage } from "./components/LessonsPage.jsx";
 import SmartEquipmentImportButton from "./components/SmartEquipmentImportButton.jsx";
 import { SecretaryDashboardPage } from "./components/SecretaryDashboardPage.jsx";
 import { PublicDisplayPage } from "./components/PublicDisplayPage.jsx";
+import { StaffHub } from "./components/StaffHub.jsx";
+import { StaffManagementPage } from "./components/StaffManagementPage.jsx";
 
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
 // v3.1
@@ -6893,35 +6895,53 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
   );
 }
 
-// ─── SHARED AUTH HELPER ──────────────────────────────────────────────────────
-async function verifyPassword(role, password) {
-  const res = await fetch('/api/auth', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ role, password }),
-  });
-  return res.ok;
-}
-
-// ─── ADMIN PASSWORD SCREEN ────────────────────────────────────────────────────
-function AdminLogin({ onSuccess }) {
+// ─── STAFF LOGIN ─────────────────────────────────────────────────────────────
+function StaffLogin({ onSuccess }) {
+  const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
-  const [err, setErr] = useState(false);
+  const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const attempt = async () => {
-    if (!pw.trim()) return;
+    if (!email.trim() || !pw.trim()) return;
     setLoading(true);
-    const ok = await verifyPassword('admin', pw);
-    setLoading(false);
-    if (ok) { onSuccess(); }
-    else { setErr(true); setTimeout(()=>setErr(false), 2000); }
+    setErr("");
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password: pw }),
+      });
+      const data = await res.json();
+      if (res.ok && data.user) {
+        onSuccess(data.user);
+      } else {
+        setErr("אימייל או סיסמה שגויים");
+        setTimeout(() => setErr(""), 3000);
+      }
+    } catch {
+      setErr("שגיאת רשת, נסה שוב");
+      setTimeout(() => setErr(""), 3000);
+    } finally {
+      setLoading(false);
+    }
   };
   return (
     <div style={{minHeight:"100vh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"40px 48px",width:360,textAlign:"center"}}>
-        <div style={{fontSize:48,marginBottom:16}}>🔐</div>
-        <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>כניסת ADMIN</div>
+      <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"40px 48px",width:380,textAlign:"center"}}>
+        <div style={{fontSize:48,marginBottom:16}}>🏠</div>
+        <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>כניסת צוות</div>
         <div style={{fontSize:13,color:"var(--text3)",marginBottom:28}}>מכללת קמרה אובסקורה וסאונד</div>
+        <input
+          className="form-input"
+          type="email"
+          placeholder="אימייל"
+          dir="ltr"
+          value={email}
+          onChange={e=>setEmail(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&attempt()}
+          style={{marginBottom:10,textAlign:"center",fontSize:15}}
+          disabled={loading}
+        />
         <input
           className="form-input"
           type="password"
@@ -6932,47 +6952,7 @@ function AdminLogin({ onSuccess }) {
           style={{marginBottom:12,textAlign:"center",fontSize:18,letterSpacing:4}}
           disabled={loading}
         />
-        {err && <div style={{color:"var(--red)",fontSize:13,marginBottom:8}}>❌ סיסמה שגויה</div>}
-        <button className="btn btn-primary" style={{width:"100%"}} onClick={attempt} disabled={loading}>
-          {loading ? "מאמת..." : "כניסה"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── SUB-ADMIN LOGIN ──────────────────────────────────────────────────────────
-function SubAdminLogin({ role, onSuccess }) {
-  const [pw, setPw] = useState("");
-  const [err, setErr] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const attempt = async () => {
-    if (!pw.trim()) return;
-    setLoading(true);
-    const ok = await verifyPassword(role, pw);
-    setLoading(false);
-    if (ok) { onSuccess(); }
-    else { setErr(true); setTimeout(()=>setErr(false), 2000); }
-  };
-  const titles = { secretary: "כניסת אדמיניסטרציה", warehouse: "כניסת מחסן" };
-  const icons  = { secretary: "📋", warehouse: "📦" };
-  return (
-    <div style={{minHeight:"100vh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"40px 48px",width:360,textAlign:"center"}}>
-        <div style={{fontSize:48,marginBottom:16}}>{icons[role]||"🔐"}</div>
-        <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>{titles[role]||"כניסה"}</div>
-        <div style={{fontSize:13,color:"var(--text3)",marginBottom:28}}>מכללת קמרה אובסקורה וסאונד</div>
-        <input
-          className="form-input"
-          type="password"
-          placeholder="סיסמה"
-          value={pw}
-          onChange={e=>setPw(e.target.value)}
-          onKeyDown={e=>e.key==="Enter"&&attempt()}
-          style={{marginBottom:12,textAlign:"center",fontSize:18,letterSpacing:4}}
-          disabled={loading}
-        />
-        {err && <div style={{color:"var(--red)",fontSize:13,marginBottom:8}}>❌ סיסמה שגויה</div>}
+        {err && <div style={{color:"var(--red)",fontSize:13,marginBottom:8}}>❌ {err}</div>}
         <button className="btn btn-primary" style={{width:"100%"}} onClick={attempt} disabled={loading}>
           {loading ? "מאמת..." : "כניסה"}
         </button>
@@ -6984,24 +6964,20 @@ function SubAdminLogin({ role, onSuccess }) {
 // ─── הפניה חזרה לאדמין בלחיצה על כפתור "חזרה" בדפדפן ─────────────────────
 (function redirectAdminOnBack() {
   const currentPath = window.location.pathname;
-  if (currentPath.startsWith("/admin")) return; // כבר באדמין
+  if (currentPath.startsWith("/admin")) return;
   const savedAdmin = sessionStorage.getItem("admin_redirect");
   if (!savedAdmin) return;
-  // בדוק שזו ניווט "חזרה/קדימה" ולא ניווט ישיר
   const navEntry = (performance?.getEntriesByType?.("navigation") ?? [])[0];
   const isBackForward = navEntry?.type === "back_forward" ||
                         performance?.navigation?.type === 2;
   if (isBackForward) {
-    window.location.replace(savedAdmin);
+    window.location.replace("/admin");
   }
 })();
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const pathname = window.location.pathname;
-  const isSecretaryView = pathname === "/admin/secretary";
-  const isWarehouseView = pathname === "/admin/warehouse";
-  const isMainAdmin = !isSecretaryView && !isWarehouseView && pathname.startsWith("/admin");
   const isAdmin = pathname.startsWith("/admin");
   const isCalendarView = pathname.startsWith("/calendar");
   const isManagerCalendarView = pathname.startsWith("/manager-calendar");
@@ -7028,9 +7004,14 @@ export default function App() {
   const [lessons, _setLessons] = useState([]);
   const [loading, setLoading]         = useState(true);
   const [toasts, setToasts]           = useState([]);
-  const [authed, setAuthed]           = useState(() => isMainAdmin && sessionStorage.getItem("admin_authed") === "1");
-  const [secretaryAuthed, setSecretaryAuthed] = useState(() => isSecretaryView && sessionStorage.getItem("secretary_authed") === "1");
-  const [warehouseAuthed, setWarehouseAuthed] = useState(() => isWarehouseView && sessionStorage.getItem("warehouse_authed") === "1");
+  // Staff auth: unified login
+  const [staffUser, setStaffUser] = useState(() => {
+    try { const s = sessionStorage.getItem("staff_user"); return s ? JSON.parse(s) : null; } catch { return null; }
+  });
+  const [staffView, setStaffView] = useState(() => sessionStorage.getItem("staff_view") || "hub"); // hub | warehouse | administration | staff-management
+  const authed = !!staffUser;
+  const isMainAdmin = isAdmin && authed;
+  // Compat aliases for warehouse/secretary page navigation
   const [secretaryPage, setSecretaryPage] = useState(() => sessionStorage.getItem("secretary_page") || "dashboard");
   const [warehousePage, setWarehousePage] = useState(() => sessionStorage.getItem("warehouse_page") || "dashboard");
   const [undoStack, setUndoStack]     = useState([]);
@@ -7262,39 +7243,36 @@ export default function App() {
 
   // ─── שמירת מצב התחברות ודף ב-sessionStorage ────────────────────────────────
   useEffect(() => {
-    if (!isMainAdmin) return;
-    if (authed) {
-      sessionStorage.setItem("admin_authed", "1");
+    if (staffUser) {
+      sessionStorage.setItem("staff_user", JSON.stringify(staffUser));
     } else {
-      sessionStorage.removeItem("admin_authed");
+      sessionStorage.removeItem("staff_user");
+      sessionStorage.removeItem("staff_view");
       sessionStorage.removeItem("admin_page");
+      sessionStorage.removeItem("secretary_page");
+      sessionStorage.removeItem("warehouse_page");
     }
-  }, [authed]);
+  }, [staffUser]);
 
   useEffect(() => {
-    if (!isMainAdmin || !authed) return;
+    if (!authed) return;
+    sessionStorage.setItem("staff_view", staffView);
+  }, [staffView, authed]);
+
+  useEffect(() => {
+    if (!authed) return;
     sessionStorage.setItem("admin_page", page);
   }, [page, authed]);
 
   useEffect(() => {
-    if (secretaryAuthed) sessionStorage.setItem("secretary_authed", "1");
-    else { sessionStorage.removeItem("secretary_authed"); sessionStorage.removeItem("secretary_page"); }
-  }, [secretaryAuthed]);
-
-  useEffect(() => {
-    if (warehouseAuthed) sessionStorage.setItem("warehouse_authed", "1");
-    else { sessionStorage.removeItem("warehouse_authed"); sessionStorage.removeItem("warehouse_page"); }
-  }, [warehouseAuthed]);
-
-  useEffect(() => {
-    if (!isSecretaryView || !secretaryAuthed) return;
+    if (!authed) return;
     sessionStorage.setItem("secretary_page", secretaryPage);
-  }, [secretaryPage, secretaryAuthed]);
+  }, [secretaryPage, authed]);
 
   useEffect(() => {
-    if (!isWarehouseView || !warehouseAuthed) return;
+    if (!authed) return;
     sessionStorage.setItem("warehouse_page", warehousePage);
-  }, [warehousePage, warehouseAuthed]);
+  }, [warehousePage, authed]);
 
   // ─── שמור נתיב האדמין לצורך הפניה חזרה בלחיצת "חזרה" ─────────────────────
   useEffect(() => {
@@ -7303,34 +7281,14 @@ export default function App() {
 
   // ─── טיימר חוסר פעילות — 20 דקות ───────────────────────────────────────
   useEffect(() => {
-    if (!isMainAdmin || !authed) return;
+    if (!isAdmin || !authed) return;
     const TIMEOUT_MS = 20 * 60 * 1000;
-    let timer = setTimeout(() => { setAuthed(false); }, TIMEOUT_MS);
-    const reset = () => { clearTimeout(timer); timer = setTimeout(() => { setAuthed(false); }, TIMEOUT_MS); };
+    let timer = setTimeout(() => { setStaffUser(null); }, TIMEOUT_MS);
+    const reset = () => { clearTimeout(timer); timer = setTimeout(() => { setStaffUser(null); }, TIMEOUT_MS); };
     const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"];
     events.forEach(e => window.addEventListener(e, reset, { passive: true }));
     return () => { clearTimeout(timer); events.forEach(e => window.removeEventListener(e, reset)); };
   }, [authed]);
-
-  useEffect(() => {
-    if (!isSecretaryView || !secretaryAuthed) return;
-    const TIMEOUT_MS = 20 * 60 * 1000;
-    let timer = setTimeout(() => { setSecretaryAuthed(false); }, TIMEOUT_MS);
-    const reset = () => { clearTimeout(timer); timer = setTimeout(() => { setSecretaryAuthed(false); }, TIMEOUT_MS); };
-    const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"];
-    events.forEach(e => window.addEventListener(e, reset, { passive: true }));
-    return () => { clearTimeout(timer); events.forEach(e => window.removeEventListener(e, reset)); };
-  }, [secretaryAuthed]);
-
-  useEffect(() => {
-    if (!isWarehouseView || !warehouseAuthed) return;
-    const TIMEOUT_MS = 20 * 60 * 1000;
-    let timer = setTimeout(() => { setWarehouseAuthed(false); }, TIMEOUT_MS);
-    const reset = () => { clearTimeout(timer); timer = setTimeout(() => { setWarehouseAuthed(false); }, TIMEOUT_MS); };
-    const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"];
-    events.forEach(e => window.addEventListener(e, reset, { passive: true }));
-    return () => { clearTimeout(timer); events.forEach(e => window.removeEventListener(e, reset)); };
-  }, [warehouseAuthed]);
 
   useEffect(()=>{
     (async()=>{
@@ -7663,11 +7621,36 @@ export default function App() {
         </div>
       )}
 
-      {/* ── לוח ניהול עם סיסמה ── */}
-      {isMainAdmin && !authed && <AdminLogin onSuccess={()=>setAuthed(true)}/>}
+      {/* ── כניסת צוות ── */}
+      {isAdmin && !authed && <StaffLogin onSuccess={(user)=>{ setStaffUser(user); setStaffView("hub"); }}/>}
 
-      {isMainAdmin && authed && (
+      {/* ── Staff Hub ── */}
+      {isAdmin && authed && staffView === "hub" && (
+        <StaffHub
+          user={staffUser}
+          onNavigate={(view) => setStaffView(view)}
+          onLogout={() => setStaffUser(null)}
+        />
+      )}
+
+      {/* ── ניהול צוות (admin only) ── */}
+      {isAdmin && authed && staffView === "staff-management" && staffUser?.role === "admin" && (
         <div className="app" style={{"--accent":siteSettings.adminAccentColor||"#f5a623","--accent-glow":`${siteSettings.adminAccentColor||"#f5a623"}2e`,"--admin-fs":`${siteSettings.adminFontSize||14}px`}}>
+          <div className="main" style={{marginRight:0,width:"100%"}}>
+            <div className="topbar">
+              <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setStaffView("hub")}>← חזרה</button>
+                <span className="topbar-title" style={{flex:1}}>ניהול צוות</span>
+              </div>
+            </div>
+            {loading ? <Loading/> : <StaffManagementPage showToast={showToast}/>}
+          </div>
+        </div>
+      )}
+
+      {/* ── תפעול מחסן (warehouse view) ── */}
+      {isAdmin && authed && staffView === "warehouse" && (
+        <div className="app" style={{"--accent":siteSettings.warehouseAccentColor||siteSettings.adminAccentColor||"#f5a623","--accent-glow":`${siteSettings.warehouseAccentColor||siteSettings.adminAccentColor||"#f5a623"}2e`,"--admin-fs":`${siteSettings.warehouseFontSize||siteSettings.adminFontSize||14}px`}}>
           <nav className="sidebar">
             <div className="sidebar-logo">
               {siteSettings.logo
@@ -7676,8 +7659,8 @@ export default function App() {
               {siteSettings.soundLogo && (
                 <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:90,height:90,objectFit:"contain",borderRadius:8,marginTop:2,display:"block"}}/>
               )}
-              <div className="app-name">מנהל מערכת</div>
-              <div className="app-sub">💾 נתונים נשמרים תמיד</div>
+              <div className="app-name">תפעול מחסן</div>
+              <div className="app-sub">📦 {staffUser?.full_name || "צוות"}</div>
             </div>
             <div className="nav">
               <div className="nav-section">ניהול</div>
@@ -7705,7 +7688,7 @@ export default function App() {
               ))}
             </div>
             <div style={{padding:"10px 20px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end"}}>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setAuthed(false)}>🚪 יציאה</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setStaffView("hub")}>← Staff Hub</button>
             </div>
           </nav>
           <div className="main" onTouchStart={handleSwipeTouchStart} onTouchEnd={handleSwipeTouchEnd}>
@@ -7777,9 +7760,8 @@ export default function App() {
         </div>
       )}
 
-      {/* ── מזכירות ── */}
-      {isSecretaryView && !secretaryAuthed && (loading ? <div style={{minHeight:"100vh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center"}}><Loading/></div> : <SubAdminLogin role="secretary" onSuccess={()=>setSecretaryAuthed(true)}/>)}
-      {isSecretaryView && secretaryAuthed && (
+      {/* ── אדמיניסטרציה ── */}
+      {isAdmin && authed && staffView === "administration" && (
         <div className="app" style={{"--accent":siteSettings.secretaryAccentColor||siteSettings.adminAccentColor||"#f5a623","--accent-glow":`${siteSettings.secretaryAccentColor||siteSettings.adminAccentColor||"#f5a623"}2e`,"--admin-fs":`${siteSettings.secretaryFontSize||siteSettings.adminFontSize||14}px`}}>
           <nav className="sidebar">
             <div className="sidebar-logo">
@@ -7789,8 +7771,8 @@ export default function App() {
               {siteSettings.soundLogo && (
                 <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:90,height:90,objectFit:"contain",borderRadius:8,marginTop:2,display:"block"}}/>
               )}
-              <div className="app-name">מבט אדמיניסטרציה</div>
-              <div className="app-sub">📋 אדמיניסטרציה</div>
+              <div className="app-name">אדמיניסטרציה</div>
+              <div className="app-sub">📋 {staffUser?.full_name || "צוות"}</div>
             </div>
             <div className="nav">
               <div className="nav-section">ניהול</div>
@@ -7810,7 +7792,7 @@ export default function App() {
               ))}
             </div>
             <div style={{padding:"10px 20px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end"}}>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setSecretaryAuthed(false)}>🚪 יציאה</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setStaffView("hub")}>← Staff Hub</button>
             </div>
           </nav>
           <div className="main" onTouchStart={handleSwipeTouchStart} onTouchEnd={handleSecretarySwipeTouchEnd}>
@@ -7846,99 +7828,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ── מחסן ── */}
-      {isWarehouseView && !warehouseAuthed && (loading ? <div style={{minHeight:"100vh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center"}}><Loading/></div> : <SubAdminLogin role="warehouse" onSuccess={()=>setWarehouseAuthed(true)}/>)}
-      {isWarehouseView && warehouseAuthed && (
-        <div className="app" style={{"--accent":siteSettings.warehouseAccentColor||siteSettings.adminAccentColor||"#f5a623","--accent-glow":`${siteSettings.warehouseAccentColor||siteSettings.adminAccentColor||"#f5a623"}2e`,"--admin-fs":`${siteSettings.warehouseFontSize||siteSettings.adminFontSize||14}px`}}>
-          <nav className="sidebar">
-            <div className="sidebar-logo">
-              {siteSettings.logo
-                ? <img src={siteSettings.logo} alt="לוגו" style={{width:90,height:90,objectFit:"contain",borderRadius:8}}/>
-                : <span className="logo-icon">🎬</span>}
-              {siteSettings.soundLogo && (
-                <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:90,height:90,objectFit:"contain",borderRadius:8,marginTop:2,display:"block"}}/>
-              )}
-              <div className="app-name">מבט מחסן</div>
-              <div className="app-sub">📦 מחסן</div>
-            </div>
-            <div className="nav">
-              <div className="nav-section">ניהול</div>
-              {[
-                {id:"reservations",icon:"📋",label:"בקשות",badge:(pending||0)+(rejected||0)||null},
-                {id:"kits",icon:"🎒",label:"ערכות"},
-                {id:"equipment",icon:"📦",label:"ציוד",badge:damagedCount||null},
-                {id:"certifications",icon:"🎓",label:"הסמכות"},
-                {id:"policies",icon:"📋",label:"נהלים"},
-                {id:"settings",icon:"⚙️",label:"הגדרות"},
-              ].map(n=>(
-                <div key={n.id} className={`nav-item ${warehousePage===n.id?"active":""}`}
-                  onClick={() => {
-                    if (n.id === "reservations") setReservationsInitialSubView("active");
-                    setWarehousePage(p=>p===n.id?"dashboard":n.id);
-                  }} title={n.label}>
-                  <span className="icon">{n.icon}</span>
-                  <span className="nav-label">{n.label}</span>
-                  {n.badge&&<span style={{background:"var(--accent)",color:"#000",borderRadius:"50%",width:16,height:16,fontSize:10,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",position:"absolute",top:4,left:"50%",transform:"translateX(-50%) translateX(10px)"}}>{n.badge}</span>}
-                </div>
-              ))}
-            </div>
-            <div style={{padding:"10px 20px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end"}}>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setWarehouseAuthed(false)}>🚪 יציאה</button>
-            </div>
-          </nav>
-          <div className="main" onTouchStart={handleSwipeTouchStart} onTouchEnd={handleWarehouseSwipeTouchEnd}>
-            <div className="topbar" style={{flexWrap:"wrap",gap:8}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
-                <span className="topbar-title" style={{flex:1}}>{{dashboard:"סטטוס מחסן",reservations:"בקשות",kits:"ערכות",equipment:"ציוד",certifications:"הסמכות",policies:"נהלים",settings:"הגדרות"}[warehousePage]||"סטטוס מחסן"}</span>
-                {warehousePage==="reservations"&&pending>0&&<div style={{background:"rgba(241,196,15,0.12)",border:"1px solid rgba(241,196,15,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--yellow)",flexShrink:0}}>⏳ {pending}</div>}
-                {warehousePage==="reservations"&&overdueCount>0&&<div style={{background:"rgba(230,126,34,0.15)",border:"1px solid rgba(230,126,34,0.4)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"#e67e22",flexShrink:0,cursor:"pointer"}} onClick={()=>{setReservationsInitialSubView("rejected");setWarehousePage("reservations");}}>⚠️ {overdueCount} באיחור</div>}
-                {warehousePage==="reservations"&&rejectedCount>0&&<div style={{background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--red)",flexShrink:0}}>❌ {rejectedCount}</div>}
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={handleUndo}
-                  disabled={!undoStack.length || undoInFlightRef.current}
-                  style={{
-                    flexShrink:0,
-                    borderColor: undoStack.length ? "rgba(46,204,113,0.45)" : "var(--border)",
-                    color: undoStack.length ? "#d9ffe6" : "var(--text3)",
-                    background: undoStack.length ? "rgba(46,204,113,0.12)" : "transparent",
-                    opacity: undoInFlightRef.current ? 0.7 : 1
-                  }}
-                  title={undoStack.length ? `אפשר לבטל ${undoStack.length} פעולות אחרונות` : "אין פעולות לביטול"}
-                >
-                  ↩ בטל פעולה{undoStack.length ? ` (${undoStack.length})` : ""}
-                </button>
-              </div>
-              {warehousePage==="reservations" && (
-                <div style={{display:"flex",gap:6,width:"100%",flexWrap:"wrap",alignItems:"center"}}>
-                  <div className="search-bar" style={{flex:"1 1 130px",minWidth:120}}><span>🔍</span><input placeholder="חיפוש..." value={resSearch} onChange={e=>setResSearch(e.target.value)}/></div>
-                  <select className="form-select" style={{flex:"1 1 100px",minWidth:95,fontSize:12,padding:"6px 8px"}} value={["הכל","ממתין","אישור ראש מחלקה","מאושר"].includes(resStatusF) ? resStatusF : "הכל"} onChange={e=>setResStatusF(e.target.value)}>
-                    <option value="הכל">כל הסטטוסים</option>
-                    {["ממתין","אישור ראש מחלקה","מאושר"].map(s=><option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <select className="form-select" style={{flex:"1 1 90px",minWidth:85,fontSize:12,padding:"6px 8px"}} value={resLoanTypeF} onChange={e=>setResLoanTypeF(e.target.value)}>
-                    <option value="הכל">כל הסוגים</option>
-                    {["פרטית","הפקה","סאונד","קולנוע יומית","שיעור"].map(t=><option key={t} value={t}>{t==="שיעור"?"השאלת שיעור":t==="קולנוע יומית"?"קולנוע יומית":t}</option>)}
-                  </select>
-                  <select className="form-select" style={{flex:"1 1 110px",minWidth:100,fontSize:12,padding:"6px 8px"}} value={resSortBy} onChange={e=>setResSortBy(e.target.value)}>
-                    <option value="received">🕐 קבלה</option>
-                    <option value="urgency">🔥 דחיפות</option>
-                  </select>
-                </div>
-              )}
-            </div>
-            {loading ? <Loading/> : <>
-              <div style={{display:warehousePage==="dashboard"?"block":"none"}}><DashboardPage equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast}/></div>
-              <div style={{display:warehousePage==="reservations"?"block":"none"}}><ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast} search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF} loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken} initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings}/></div>
-              <div style={{display:warehousePage==="kits"?"block":"none"}}><KitsPage kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons}/></div>
-              <div style={{display:warehousePage==="equipment"?"block":"none"}}><EquipmentPage equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} categoryLoanTypes={categoryLoanTypes} setCategoryLoanTypes={setCategoryLoanTypes} certifications={certifications} studios={studios} collegeManager={collegeManager} managerToken={managerToken}/></div>
-              <div style={{display:warehousePage==="certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment}/></div>
-              <div style={{display:warehousePage==="policies"?"block":"none"}}><PoliciesPage policies={policies} setPolicies={setPolicies} showToast={showToast}/></div>
-              <div style={{display:warehousePage==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} passwordRole="warehouse" settingsRole="warehouse"/></div>
-            </>}
-          </div>
-        </div>
-      )}
+      {/* old warehouse standalone section removed — now accessed via staffView === "warehouse" above */}
 
       <Toast toasts={toasts}/>
     </>

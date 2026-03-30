@@ -1,28 +1,58 @@
-export default function handler(req, res) {
+import bcrypt from "bcryptjs";
+
+const SB_URL = process.env.SUPABASE_URL || "https://wxkyqgwwraojnbmyyfco.supabase.co";
+const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || "sb_publishable_n-mkSq7xABjj58ZBBwk6BA_RbpVS2SU";
+
+async function sbQuery(path) {
+  const res = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    headers: {
+      apikey: SB_KEY,
+      Authorization: `Bearer ${SB_KEY}`,
+      "Content-Type": "application/json",
+    },
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { role, password } = req.body || {};
+  const { email, password } = req.body || {};
 
-  if (!role || !password) {
-    return res.status(400).json({ error: "Missing role or password" });
+  if (!email || !password) {
+    return res.status(400).json({ error: "Missing email or password" });
   }
 
-  const passwords = {
-    admin: process.env.ADMIN_PASSWORD,
-    secretary: process.env.SECRETARY_PASSWORD,
-    warehouse: process.env.WAREHOUSE_PASSWORD,
-  };
+  try {
+    const rows = await sbQuery(
+      `staff_members?email=eq.${encodeURIComponent(email.trim().toLowerCase())}&select=id,full_name,email,role,password_hash&limit=1`
+    );
 
-  const expected = passwords[role];
-  if (!expected) {
-    return res.status(400).json({ error: "Unknown role" });
+    if (!rows || rows.length === 0) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const user = rows[0];
+    const match = await bcrypt.compare(password, user.password_hash);
+
+    if (!match) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      user: {
+        id: user.id,
+        full_name: user.full_name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (err) {
+    console.error("Auth error:", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
-
-  if (password === expected) {
-    return res.status(200).json({ success: true });
-  }
-
-  return res.status(401).json({ error: "Unauthorized" });
 }
