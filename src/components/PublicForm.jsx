@@ -2280,6 +2280,17 @@ ${inventory}
             </>;
           })()}
         </div>}
+        <div style={{padding:"16px 24px",borderTop:"1px solid var(--border)",textAlign:"center"}}>
+          <button
+            type="button"
+            onClick={() => { setLoggedInStudent(null); sessionStorage.removeItem("public_view"); }}
+            style={{background:"transparent",border:"none",color:"var(--text3)",fontSize:13,cursor:"pointer",padding:"6px 12px",borderRadius:8,transition:"color 0.15s"}}
+            onMouseEnter={e=>e.currentTarget.style.color="var(--text)"}
+            onMouseLeave={e=>e.currentTarget.style.color="var(--text3)"}
+          >
+            ← חזרה לדף הכניסה
+          </button>
+        </div>
       </div>
     </div>
     {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor}/>}
