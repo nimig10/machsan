@@ -207,10 +207,6 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
     setIsTyping(true);
 
     try {
-      if (!apiKey) {
-        throw new Error('חסר מפתח Gemini במשתני הסביבה.');
-      }
-
       let liveEquipment = equipment;
       let liveReservations = reservations;
       try {
