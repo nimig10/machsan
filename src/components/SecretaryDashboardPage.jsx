@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 
 const NIGHT_COLOR   = "#2196f3";
 const STUDENT_COLOR = "#2ecc71";
@@ -39,6 +39,16 @@ function bookingLabel(b) {
 export function SecretaryDashboardPage({ certifications, studios, studioBookings, lessons }) {
   const today = todayStr();
   const [weekOffset, setWeekOffset] = useState(0);
+  const [mobileDayStart, setMobileDayStart] = useState(0);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth < 769);
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 769);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+
+  const MOBILE_DAYS = 3;
 
   // ── Students & tracks ──────────────────────────────────────────────
   const students = certifications?.students || [];
@@ -90,10 +100,27 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
     return days;
   }, [weekOffset, today]);
 
+  // ── Reset mobileDayStart when week changes ─────────────────────────
+  useEffect(() => {
+    const todayIdx = weekDays.findIndex(d => d.isToday);
+    if (todayIdx >= 0) {
+      setMobileDayStart(Math.min(todayIdx, weekDays.length - MOBILE_DAYS));
+    } else {
+      setMobileDayStart(0);
+    }
+  }, [weekOffset]);
+
+  const visibleDays = isMobile ? weekDays.slice(mobileDayStart, mobileDayStart + MOBILE_DAYS) : weekDays;
+
   const weekLabel = useMemo(() => {
     if (!weekDays.length) return "";
     return `${displayDate(weekDays[0].date)} – ${displayDate(weekDays[6].date)}`;
   }, [weekDays]);
+
+  const mobileDayLabel = useMemo(() => {
+    if (!visibleDays.length) return "";
+    return `${visibleDays[0].label} — ${visibleDays[visibleDays.length - 1].label}`;
+  }, [visibleDays]);
 
   // ── Bookings map (by studioId_date) ───────────────────────────────
   const bMap = useMemo(() => {
@@ -132,6 +159,24 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
     return rows.sort((a,b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)).slice(0, 8);
   }, [lessons]);
 
+  // ── Mobile day navigation ─────────────────────────────────────────
+  const goMobilePrev = () => {
+    if (mobileDayStart > 0) {
+      setMobileDayStart(s => s - MOBILE_DAYS);
+    } else {
+      setWeekOffset(w => w - 1);
+      setMobileDayStart(7 - MOBILE_DAYS);
+    }
+  };
+  const goMobileNext = () => {
+    if (mobileDayStart + MOBILE_DAYS < 7) {
+      setMobileDayStart(s => s + MOBILE_DAYS);
+    } else {
+      setWeekOffset(w => w + 1);
+      setMobileDayStart(0);
+    }
+  };
+
   return (
     <div className="page">
 
@@ -152,7 +197,7 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
       </div>
 
       {/* ── Tracks + Today ── */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:16,marginBottom:20}}>
 
         {/* Tracks */}
         <div className="card">
@@ -198,23 +243,38 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
       <div className="card" style={{marginBottom:20}}>
         <div className="card-header" style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
           <div className="card-title">🎙️ לוח חדרים שבועי — {weekLabel}</div>
-          <div style={{display:"flex",gap:6}}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(w => w - 1)}>›</button>
-            <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(0)}>השבוע</button>
-            <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(w => w + 1)}>‹</button>
-          </div>
+          {!isMobile && (
+            <div style={{display:"flex",gap:6}}>
+              <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(w => w - 1)}>›</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(0)}>השבוע</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(w => w + 1)}>‹</button>
+            </div>
+          )}
         </div>
-        <div style={{padding:"0 16px 16px",overflowX:"auto"}} className="no-swipe-nav">
-          <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:12,minWidth:520}}>
+
+        {/* Mobile day nav */}
+        {isMobile && (
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 16px",borderBottom:"1px solid var(--border)",gap:8}}>
+            <button className="btn btn-secondary btn-sm" onClick={goMobilePrev}>›</button>
+            <span style={{fontSize:12,fontWeight:700,color:"var(--text)",textAlign:"center",flex:1}}>{mobileDayLabel}</span>
+            <button className="btn btn-secondary btn-sm" onClick={goMobileNext}>‹</button>
+            <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={() => { setWeekOffset(0); setMobileDayStart(0); }}>היום</button>
+          </div>
+        )}
+
+        <div style={{padding:"0 16px 16px",overflowX: isMobile ? "hidden" : "auto"}} className="no-swipe-nav">
+          <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:12,minWidth: isMobile ? undefined : 520}}>
             <thead>
               <tr>
-                <th style={{padding:"8px 10px",textAlign:"right",fontWeight:700,color:"var(--text2)",borderBottom:"2px solid var(--border)",whiteSpace:"nowrap",minWidth:90}}>חדר</th>
-                {weekDays.map(d => (
+                <th style={{padding: isMobile ? "8px 6px" : "8px 10px",textAlign:"right",fontWeight:700,color:"var(--text2)",borderBottom:"2px solid var(--border)",whiteSpace:"nowrap",width: isMobile ? 60 : 90}}>חדר</th>
+                {visibleDays.map(d => (
                   <th key={d.date} style={{
-                    padding:"7px 6px",textAlign:"center",fontWeight:700,
+                    padding: isMobile ? "7px 4px" : "7px 6px",
+                    textAlign:"center",fontWeight:700,
                     color: d.isToday ? "#000" : "var(--text2)",
                     background: d.isToday ? "var(--accent)" : "var(--surface2)",
-                    borderBottom:"2px solid var(--border)",whiteSpace:"nowrap",minWidth:80,fontSize:11,
+                    borderBottom:"2px solid var(--border)",whiteSpace:"nowrap",
+                    fontSize: isMobile ? 10 : 11,
                   }}>
                     {d.label}
                   </th>
@@ -223,17 +283,17 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
             </thead>
             <tbody>
               {(studios || []).length === 0 && (
-                <tr><td colSpan={8} style={{textAlign:"center",color:"var(--text3)",padding:20,fontSize:13}}>אין חדרים מוגדרים</td></tr>
+                <tr><td colSpan={visibleDays.length + 1} style={{textAlign:"center",color:"var(--text3)",padding:20,fontSize:13}}>אין חדרים מוגדרים</td></tr>
               )}
               {(studios || []).map(studio => (
                 <tr key={studio.id}>
-                  <td style={{padding:"6px 10px",fontWeight:700,borderBottom:"1px solid var(--border)",whiteSpace:"nowrap",fontSize:12}}>{studio.name}</td>
-                  {weekDays.map(d => {
+                  <td style={{padding: isMobile ? "6px 4px" : "6px 10px",fontWeight:700,borderBottom:"1px solid var(--border)",whiteSpace:"nowrap",fontSize: isMobile ? 10 : 12}}>{studio.name}</td>
+                  {visibleDays.map(d => {
                     const bookings = bMap[`${studio.id}_${d.date}`] || [];
                     return (
                       <td key={d.date} style={{
                         padding:"3px 3px",borderBottom:"1px solid var(--border)",
-                        verticalAlign:"top",minWidth:80,
+                        verticalAlign:"top",
                         background: d.isToday ? "rgba(245,166,35,0.04)" : "transparent",
                       }}>
                         {bookings.length === 0 && <div style={{height:22}}/>}
@@ -247,14 +307,14 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
                               border:`1px solid ${col}88`,
                               borderRadius:4,
                               padding:"3px 5px",
-                              fontSize:10,
+                              fontSize: isMobile ? 9 : 10,
                               marginBottom:2,
                               color: col,
                               fontWeight:700,
                               overflow:"hidden",
                             }}>
                               <div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>
-                              <div style={{fontSize:9,opacity:0.85,whiteSpace:"nowrap"}}>{time}</div>
+                              <div style={{fontSize: isMobile ? 8 : 9,opacity:0.85,whiteSpace:"nowrap"}}>{time}</div>
                             </div>
                           );
                         })}
@@ -266,7 +326,7 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
             </tbody>
           </table>
           {/* Legend */}
-          <div style={{display:"flex",gap:16,marginTop:10,fontSize:11,color:"var(--text3)",flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:12,marginTop:10,fontSize:11,color:"var(--text3)",flexWrap:"wrap"}}>
             <span><span style={{display:"inline-block",width:10,height:10,background:`${STUDENT_COLOR}33`,border:`1px solid ${STUDENT_COLOR}`,borderRadius:2,marginLeft:4}}/>סטודנט יום</span>
             <span><span style={{display:"inline-block",width:10,height:10,background:`${NIGHT_COLOR}33`,border:`1px solid ${NIGHT_COLOR}`,borderRadius:2,marginLeft:4}}/>סטודנט לילה</span>
             <span><span style={{display:"inline-block",width:10,height:10,background:`${LESSON_COLOR}33`,border:`1px solid ${LESSON_COLOR}`,borderRadius:2,marginLeft:4}}/>שיעור</span>
@@ -280,9 +340,9 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
           <div className="card-header"><div className="card-title">📅 שיעורים קרובים (7 ימים)</div></div>
           <div style={{padding:"0 16px 12px"}}>
             {upcoming.map((s, i) => (
-              <div key={i} style={{display:"flex",gap:12,alignItems:"center",padding:"9px 0",borderBottom:"1px solid var(--border)"}}>
+              <div key={i} style={{display:"flex",gap:isMobile ? 8 : 12,alignItems:"center",padding:"9px 0",borderBottom:"1px solid var(--border)",flexWrap: isMobile ? "wrap" : "nowrap"}}>
                 <span style={{fontSize:12,fontWeight:800,color:"var(--text3)",whiteSpace:"nowrap",minWidth:44}}>{displayDate(s.date)}</span>
-                <span style={{fontSize:12,color:LESSON_COLOR,fontWeight:700,whiteSpace:"nowrap",minWidth:80}}>{s.startTime}–{s.endTime}</span>
+                <span style={{fontSize:12,color:LESSON_COLOR,fontWeight:700,whiteSpace:"nowrap"}}>{s.startTime}–{s.endTime}</span>
                 <span style={{fontSize:13,fontWeight:700,flex:1}}>{s.courseName}</span>
                 {s.studioId && <span style={{fontSize:11,color:"var(--text3)",whiteSpace:"nowrap"}}>{studioName(s.studioId)}</span>}
               </div>
