@@ -1209,13 +1209,20 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       for (const g of groups) {
         const last = g.bookings[g.bookings.length - 1];
         const lastEnd = getEnd(last);
-        if (String(last.studioId) === String(bk.studioId) &&
-            lastEnd.date === bk.date && lastEnd.time === (bk.startTime || "00:00")) {
-          g.bookings.push(bk);
-          const newEnd = getEnd(bk);
-          g.endDate = newEnd.date; g.endTime = newEnd.time;
-          g.isMultiDay = g.startDate !== newEnd.date;
-          merged = true; break;
+        if (String(last.studioId) === String(bk.studioId)) {
+          const lastEndTs = new Date(`${lastEnd.date}T${lastEnd.time}:00`).getTime();
+          const bkStartTs = new Date(`${bk.date}T${bk.startTime || "00:00"}:00`).getTime();
+          if (bkStartTs <= lastEndTs) {
+            g.bookings.push(bk);
+            const newEnd = getEnd(bk);
+            // keep the later end time
+            const newEndTs = new Date(`${newEnd.date}T${newEnd.time}:00`).getTime();
+            if (newEndTs > lastEndTs) {
+              g.endDate = newEnd.date; g.endTime = newEnd.time;
+            }
+            g.isMultiDay = g.startDate !== g.endDate;
+            merged = true; break;
+          }
         }
       }
       if (!merged) {
