@@ -2284,9 +2284,9 @@ ${inventory}
           <button
             type="button"
             onClick={() => { setLoggedInStudent(null); sessionStorage.removeItem("public_view"); }}
-            style={{background:"transparent",border:"none",color:"var(--text3)",fontSize:13,cursor:"pointer",padding:"6px 12px",borderRadius:8,transition:"color 0.15s"}}
-            onMouseEnter={e=>e.currentTarget.style.color="var(--text)"}
-            onMouseLeave={e=>e.currentTarget.style.color="var(--text3)"}
+            style={{background:"var(--surface2)",border:"1px solid var(--border)",color:"var(--text2)",fontSize:13,cursor:"pointer",padding:"8px 20px",borderRadius:8,transition:"all 0.15s",fontWeight:600}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor="var(--accent)";e.currentTarget.style.color="var(--accent)";}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--border)";e.currentTarget.style.color="var(--text2)";}}
           >
             ← חזרה לדף הכניסה
           </button>
