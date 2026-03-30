@@ -7396,7 +7396,7 @@ export default function App() {
                 <span className="topbar-title" style={{flex:1}}>ניהול צוות</span>
               </div>
             </div>
-            {loading ? <Loading/> : <StaffManagementPage showToast={showToast}/>}
+            {loading ? <Loading/> : <StaffManagementPage showToast={showToast} teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} managerToken={managerToken}/>}
           </div>
         </div>
       )}
