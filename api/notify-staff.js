@@ -36,6 +36,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           to: m.email,
           type: "team_notify",
+          recipient_name: m.full_name,
           student_name,
           items_list,
           borrow_date,

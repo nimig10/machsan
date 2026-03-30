@@ -83,7 +83,7 @@ function buildEmail({
     : isNew ? "הבקשה שלך התקבלה!"
     : "לצערנו הבקשה נדחתה";
 
-  const greetingName = (isDeptHead || isManagerReport) ? (recipient_name || student_name)
+  const greetingName = (isDeptHead || isManagerReport || isTeamNotify) ? (recipient_name || student_name)
     : isOverdueTeam ? (recipient_name || "צוות המחסן")
     : isLessonKitReady ? (recipient_name || student_name || "המורה")
     : student_name;
@@ -282,11 +282,32 @@ export default async function handler(req, res) {
     lesson_kit_ready:  `📚 ערכת שיעור מוכנה לבדיקה — ${lesson_kit_name || project_name || student_name || ""}`,
   };
 
+  // Convert base64 data URIs to inline CID attachments (email clients block data: URIs)
+  const attachments = [];
+  let finalLogoUrl = logo_url || "";
+  let finalSoundLogoUrl = sound_logo_url || "";
+
+  if (finalLogoUrl.startsWith("data:")) {
+    const m = finalLogoUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (m) {
+      attachments.push({ filename: "logo.png", content: Buffer.from(m[2], "base64"), contentType: m[1], cid: "logo@machsan" });
+      finalLogoUrl = "cid:logo@machsan";
+    }
+  }
+  if (finalSoundLogoUrl.startsWith("data:")) {
+    const m = finalSoundLogoUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (m) {
+      attachments.push({ filename: "sound_logo.png", content: Buffer.from(m[2], "base64"), contentType: m[1], cid: "sound_logo@machsan" });
+      finalSoundLogoUrl = "cid:sound_logo@machsan";
+    }
+  }
+
   try {
     await transporter.sendMail({
       from:    `"מכללת קמרה אובסקורה וסאונד" <${GMAIL_USER}>`,
       to,
       subject: subjects[type] || "עדכון מהמחסן",
+      attachments,
       html:    buildEmail({
         type,
         recipient_name,
@@ -309,8 +330,8 @@ export default async function handler(req, res) {
         teacher_message,
         lesson_message,
         lesson_kit_name,
-        logo_url,
-        sound_logo_url,
+        logo_url:       finalLogoUrl,
+        sound_logo_url: finalSoundLogoUrl,
       }),
     });
     res.json({ ok: true });
