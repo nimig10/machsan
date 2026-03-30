@@ -2,16 +2,22 @@
 import { useState, useEffect } from "react";
 
 const ACTION_LABELS = {
-  login:            "🔑 כניסה למערכת",
-  equipment_add:    "📦 הוספת ציוד",
-  equipment_edit:   "✏️ עריכת ציוד",
-  equipment_delete: "🗑️ מחיקת ציוד",
-  staff_create:     "👤 יצירת איש צוות",
-  staff_update:     "✏️ עדכון איש צוות",
-  staff_delete:     "🗑️ מחיקת איש צוות",
-  reservation_approve: "✅ אישור בקשה",
-  reservation_reject:  "❌ דחיית בקשה",
-  settings_save:    "⚙️ שמירת הגדרות",
+  login:                "🔑 כניסה למערכת",
+  equipment_add:        "📦 הוספת ציוד",
+  equipment_edit:       "✏️ עריכת ציוד",
+  equipment_delete:     "🗑️ מחיקת ציוד",
+  equipment_qty_update: "🔢 עדכון כמות ציוד",
+  staff_create:         "👤 יצירת איש צוות",
+  staff_update:         "✏️ עדכון איש צוות",
+  staff_delete:         "🗑️ מחיקת איש צוות",
+  student_add:          "🎓 הוספת סטודנט",
+  student_edit:         "✏️ עריכת סטודנט",
+  student_delete:       "🗑️ מחיקת סטודנט",
+  reservation_approve:  "✅ אישור השאלה",
+  reservation_reject:   "❌ דחיית השאלה",
+  reservation_return:   "🔄 החזרת ציוד",
+  reservation_delete:   "🗑️ מחיקת בקשה",
+  settings_save:        "⚙️ שמירת הגדרות",
 };
 
 function formatDate(iso) {

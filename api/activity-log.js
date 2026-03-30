@@ -20,7 +20,7 @@ export default async function handler(req, res) {
 
   const { action } = req.body || {};
 
-  // WRITE — fire-and-forget from frontend
+  // WRITE — returns created log id
   if (action === "write") {
     const { user_id, user_name, activity, entity, entity_id, details } = req.body;
     if (!activity) return res.status(400).json({ error: "Missing activity" });
@@ -35,7 +35,16 @@ export default async function handler(req, res) {
         details: details || {},
       }),
     });
-    return res.status(result.ok ? 201 : 500).json({ ok: result.ok });
+    const id = result.data?.[0]?.id || null;
+    return res.status(result.ok ? 201 : 500).json({ ok: result.ok, id });
+  }
+
+  // DELETE — remove a log entry by id (used when undo reverts the action)
+  if (action === "delete") {
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: "Missing id" });
+    const result = await sbFetch(`activity_logs?id=eq.${encodeURIComponent(id)}`, { method: "DELETE" });
+    return res.status(result.ok ? 200 : 500).json({ ok: result.ok });
   }
 
   // LIST — admin only

@@ -1,6 +1,6 @@
 // StudentsPage.jsx — student management page (CRUD + import)
 import { useRef, useState } from "react";
-import { storageSet } from "../utils.js";
+import { storageSet, logActivity } from "../utils.js";
 import { Modal } from "./ui.jsx";
 import SmartExcelImportButton from "./SmartExcelImportButton.jsx";
 
@@ -27,7 +27,7 @@ const buildTrackSettings = (students = [], existingTrackSettings = [], explicitT
   });
 };
 
-export function StudentsPage({ certifications, setCertifications, showToast }) {
+export function StudentsPage({ certifications, setCertifications, showToast, onLogCreated = () => {} }) {
   const { types = [], students = [], tracks: explicitTracks = [] } = certifications;
   const trackSettings = buildTrackSettings(students, certifications?.trackSettings, explicitTracks);
   const [addingStudent, setAddingStudent] = useState(false);
@@ -150,18 +150,27 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
       showToast("error","סטודנט עם מייל זה כבר קיים"); return;
     }
     const id = `stu_${Date.now()}`;
-    const updated = { types, students:[...students,{id,name:name.trim(),email:email.toLowerCase().trim(),phone:phone.trim(),track:studentForm.track.trim(),certs:{}}] };
+    const newStu = {id,name:name.trim(),email:email.toLowerCase().trim(),phone:phone.trim(),track:studentForm.track.trim(),certs:{}};
+    const updated = { types, students:[...students, newStu] };
     if(await save(updated)) {
       showToast("success",`${name} נוסף/ה`);
       setStudentForm({name:"",email:"",phone:"",track:""});
       setAddingStudent(false);
+      const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+      logActivity({ user_id: caller.id, user_name: caller.full_name, action: "student_add", entity: "student", entity_id: id, details: { name: newStu.name, email: newStu.email } });
     }
   };
 
   // ── Delete student ──
   const deleteStudent = async (stuId) => {
+    const stu = students.find(s => s.id === stuId);
     const updated = { types, students: students.filter(s=>s.id!==stuId) };
-    if(await save(updated)) showToast("success","הסטודנט הוסר");
+    if(await save(updated)) {
+      showToast("success","הסטודנט הוסר");
+      const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+      const logId = await logActivity({ user_id: caller.id, user_name: caller.full_name, action: "student_delete", entity: "student", entity_id: String(stuId), details: { name: stu?.name || stuId } });
+      onLogCreated(logId);
+    }
   };
 
   // ── Edit student ──
@@ -172,7 +181,12 @@ export function StudentsPage({ certifications, setCertifications, showToast }) {
     const dup = students.find(s=>s.email===email && s.id!==editStudent.id);
     if(dup) { showToast("error","מייל זה כבר קיים לסטודנט אחר"); return; }
     const updated = { types, students: students.map(s=>s.id===editStudent.id ? {...s,name,email,phone:editForm.phone.trim(),track:editForm.track?.trim()||""} : s) };
-    if(await save(updated)) { showToast("success","פרטי הסטודנט עודכנו"); setEditStudent(null); }
+    if(await save(updated)) {
+      showToast("success","פרטי הסטודנט עודכנו");
+      setEditStudent(null);
+      const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+      logActivity({ user_id: caller.id, user_name: caller.full_name, action: "student_edit", entity: "student", entity_id: String(editStudent.id), details: { name } });
+    }
   };
 
   const openTrackEditor = (trackName) => {

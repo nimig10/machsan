@@ -7,7 +7,7 @@ import { ArchivePage } from "./ArchivePage.jsx";
 
 export function ReservationsPage({ reservations, setReservations, equipment, showToast,
     search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy, mode="active", initialSubView="active", collegeManager={}, managerToken="",
-    categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], calendarToken="", siteSettings={} }) {
+    categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], calendarToken="", siteSettings={}, onLogCreated = () => {} }) {
   const [subView, setSubView] = useState("active"); // "active" | "rejected" | "archive"
   const [selected, setSelected] = useState(null);
   const [editing, setEditing]   = useState(null);
@@ -110,10 +110,14 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
   };
 
   const deleteReservation = async (id) => {
+    const res = reservations.find(r => r.id === id);
     const updated = reservations.filter(r => r.id !== id);
     setReservations(updated);
     await storageSet("reservations", updated);
     showToast("success", "הבקשה נמחקה");
+    const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+    const logId = await logActivity({ user_id: caller.id, user_name: caller.full_name, action: "reservation_delete", entity: "reservation", entity_id: String(id), details: { student: res?.student_name, loan_type: res?.loan_type } });
+    onLogCreated(logId);
     setSelected(null);
   };
 
@@ -194,6 +198,11 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
     await storageSet("reservations", updated);
     showToast("success", `סטטוס עודכן ל-${status}`);
     if (status === "נדחה") await sendStatusEmail({ ...res, status: "נדחה" }, "נדחה");
+    const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+    const actionMap = { "נדחה": "reservation_reject", "הוחזר": "reservation_return" };
+    if (actionMap[status]) {
+      logActivity({ user_id: caller.id, user_name: caller.full_name, action: actionMap[status], entity: "reservation", entity_id: String(id), details: { student: res.student_name, loan_type: res.loan_type } });
+    }
     setSelected(null);
     return true;
   };

@@ -3,13 +3,16 @@
 // ─── ACTIVITY LOGGING ────────────────────────────────────────────────────────
 export async function logActivity({ user_id, user_name, action, entity, entity_id, details }) {
   try {
-    fetch("/api/activity-log", {
+    const res = await fetch("/api/activity-log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "write", user_id, user_name, activity: action, entity, entity_id, details }),
     });
+    const data = await res.json();
+    return data.id || null;
   } catch (e) {
     console.warn("logActivity failed:", e);
+    return null;
   }
 }
 

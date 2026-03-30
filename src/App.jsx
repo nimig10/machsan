@@ -1017,7 +1017,7 @@ function CategoryLoanTypesModal({ categoryLoanTypes = {}, onSave, onClose }) {
   );
 }
 
-function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories, categoryTypes={}, setCategoryTypes, categoryLoanTypes={}, setCategoryLoanTypes=()=>{}, certifications={types:[],students:[]}, studios=[], collegeManager={}, managerToken="" }) {
+function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories, categoryTypes={}, setCategoryTypes, categoryLoanTypes={}, setCategoryLoanTypes=()=>{}, certifications={types:[],students:[]}, studios=[], collegeManager={}, managerToken="", onLogCreated=()=>{} }) {
   const [eqSubView, setEqSubView] = useState("active"); // "active" | "damaged"
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState("הכל");
@@ -1195,7 +1195,12 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       });
     }
     const updated = equipment.map(e => e.id === eq.id ? { ...e, total_quantity: newTotal, units: updatedUnits } : e);
-    await persistEquipmentChange(updated, { successMessage: `כמות עודכנה: ${newTotal} יחידות` });
+    const saved = await persistEquipmentChange(updated, { successMessage: `כמות עודכנה: ${newTotal} יחידות` });
+    if (saved) {
+      const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+      const logId = await logActivity({ user_id: caller.id, user_name: caller.full_name, action: "equipment_qty_update", entity: "equipment", entity_id: String(eq.id), details: { name: eq.name, delta, new_qty: newTotal } });
+      onLogCreated(logId);
+    }
   };
 
   const save = async (form) => {
@@ -1216,7 +1221,8 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     setSaving(false);
     if (saved) {
       const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
-      logActivity({ user_id: caller.id, user_name: caller.full_name, action: modal.type==="add" ? "equipment_add" : "equipment_edit", entity: "equipment", entity_id: String(form.id||form.name), details: { name: form.name, category: form.category } });
+      const logId = await logActivity({ user_id: caller.id, user_name: caller.full_name, action: modal.type==="add" ? "equipment_add" : "equipment_edit", entity: "equipment", entity_id: String(form.id||form.name), details: { name: form.name, category: form.category } });
+      onLogCreated(logId);
       setModal(null);
     }
   };
@@ -1229,7 +1235,8 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     });
     if (deleted) {
       const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
-      logActivity({ user_id: caller.id, user_name: caller.full_name, action: "equipment_delete", entity: "equipment", entity_id: String(eq.id), details: { name: eq.name } });
+      const logId = await logActivity({ user_id: caller.id, user_name: caller.full_name, action: "equipment_delete", entity: "equipment", entity_id: String(eq.id), details: { name: eq.name } });
+      onLogCreated(logId);
       setModal(null);
     }
   };
@@ -6968,6 +6975,26 @@ export default function App() {
     setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)), 3500);
   };
 
+  const attachLogIdToUndo = (logId) => {
+    if (!logId) return;
+    setUndoStack(prev => {
+      if (!prev.length) return prev;
+      const last = prev[prev.length - 1];
+      if (last.logId) return prev;
+      return [...prev.slice(0, -1), { ...last, logId }];
+    });
+  };
+
+  const deleteActivityLog = async (logId) => {
+    try {
+      await fetch("/api/activity-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete", id: logId }),
+      });
+    } catch {}
+  };
+
   const handleUndo = async () => {
     const lastEntry = undoStack[undoStack.length - 1];
     if (!lastEntry || undoInFlightRef.current) return;
@@ -6991,6 +7018,7 @@ export default function App() {
       if (snapshot.studioBookings) _setStudioBookings(snapshot.studioBookings);
       if (snapshot.lessons) _setLessons(snapshot.lessons);
       const ok = await persistUndoSnapshot(snapshot);
+      if (ok && lastEntry.logId) deleteActivityLog(lastEntry.logId);
       setUndoStack((prev) => prev.slice(0, -1));
       showToast(ok ? "success" : "error", ok ? "הפעולה האחרונה בוטלה" : "הפעולה בוטלה מקומית, אך חלק מהשמירות נכשלו");
     } catch (error) {
@@ -7532,11 +7560,11 @@ export default function App() {
             </div>
             {loading ? <Loading/> : <>
               <div style={{display:page==="dashboard"?"block":"none"}}><DashboardPage equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast}/></div>
-              <div style={{display:page==="equipment"?"block":"none"}}><EquipmentPage equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} categoryLoanTypes={categoryLoanTypes} setCategoryLoanTypes={setCategoryLoanTypes} certifications={certifications} studios={studios} collegeManager={collegeManager} managerToken={managerToken}/></div>
+              <div style={{display:page==="equipment"?"block":"none"}}><EquipmentPage equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} categoryLoanTypes={categoryLoanTypes} setCategoryLoanTypes={setCategoryLoanTypes} certifications={certifications} studios={studios} collegeManager={collegeManager} managerToken={managerToken} onLogCreated={attachLogIdToUndo}/></div>
               <div style={{display:page==="reservations"?"block":"none"}}><ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}
-                initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings}/></div>
+                initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings} onLogCreated={attachLogIdToUndo}/></div>
               <div style={{display:page==="team"?"block":"none"}}><TeamPage teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/></div>
               <div style={{display:page==="kits"?"block":"none"}}><KitsPage kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons}/></div>
               <div style={{display:page==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length
@@ -7615,7 +7643,7 @@ export default function App() {
               <div style={{display:secretaryPage==="studios"?"block":"none"}}><StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin" studios={studios} setStudios={setStudios} bookings={studioBookings} setBookings={setStudioBookings} siteSettings={siteSettings} setSiteSettings={setSiteSettings}/></div>
               <div style={{display:secretaryPage==="studio-certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment} onlyMode="studio"/></div>
               <div style={{display:secretaryPage==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean) : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
-              <div style={{display:secretaryPage==="students"?"block":"none"}}><StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast}/></div>
+              <div style={{display:secretaryPage==="students"?"block":"none"}}><StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} onLogCreated={attachLogIdToUndo}/></div>
               <div style={{display:secretaryPage==="policies"?"block":"none"}}><PoliciesPage policies={policies} setPolicies={setPolicies} showToast={showToast}/></div>
               <div style={{display:secretaryPage==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} settingsRole="administration"/></div>
             </>}
