@@ -7613,6 +7613,7 @@ export default function App() {
                 </div>
               ))}
             </div>
+            <div id="sidebar-mini-cal" />
             <div style={{padding:"10px 20px",borderTop:"1px solid var(--border)",display:"flex",justifyContent:"flex-end"}}>
               <button className="btn btn-secondary btn-sm" onClick={()=>setStaffView("hub")}>← Staff Hub</button>
             </div>
@@ -7640,7 +7641,7 @@ export default function App() {
             </div>
             {loading ? <Loading/> : <>
               <div style={{display:secretaryPage==="dashboard"?"block":"none"}}><SecretaryDashboardPage certifications={certifications} studios={studios} studioBookings={studioBookings} lessons={lessons}/></div>
-              <div style={{display:secretaryPage==="studios"?"block":"none"}}><StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin" studios={studios} setStudios={setStudios} bookings={studioBookings} setBookings={setStudioBookings} siteSettings={siteSettings} setSiteSettings={setSiteSettings}/></div>
+              <div style={{display:secretaryPage==="studios"?"block":"none"}}><StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin" studios={studios} setStudios={setStudios} bookings={studioBookings} setBookings={setStudioBookings} siteSettings={siteSettings} setSiteSettings={setSiteSettings} isActive={secretaryPage==="studios"}/></div>
               <div style={{display:secretaryPage==="studio-certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment} onlyMode="studio"/></div>
               <div style={{display:secretaryPage==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean) : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
               <div style={{display:secretaryPage==="students"?"block":"none"}}><StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} onLogCreated={attachLogIdToUndo}/></div>

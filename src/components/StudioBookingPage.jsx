@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { storageSet, lsGet } from "../utils.js";
 import { Modal } from "./ui.jsx";
 
@@ -117,7 +118,7 @@ const tdStyle = { padding:"6px 8px", border:"1px solid var(--border)", textAlign
 const labelStyle = { display:"flex", flexDirection:"column", gap:4, fontSize:13, fontWeight:600, color:"var(--text2)" };
 
 export default function StudioBookingPage(props) {
-  const { showToast, teamMembers = [], certifications = { types: [], students: [] }, role = "admin", studios: studiosProp, setStudios: setStudiosProp, bookings: bookingsProp, setBookings: setBookingsProp, siteSettings: siteSettingsProp = {}, setSiteSettings: setSiteSettingsProp } = props;
+  const { showToast, teamMembers = [], certifications = { types: [], students: [] }, role = "admin", studios: studiosProp, setStudios: setStudiosProp, bookings: bookingsProp, setBookings: setBookingsProp, siteSettings: siteSettingsProp = {}, setSiteSettings: setSiteSettingsProp, isActive = true } = props;
   const [localStudios, setLocalStudios] = useState(() => lsGet("studios") || []);
   const [localBookings, setLocalBookings] = useState(() => lsGet("studio_bookings") || []);
   const [localSiteSettings, setLocalSiteSettings] = useState(() => lsGet("siteSettings") || {});
@@ -824,28 +825,6 @@ export default function StudioBookingPage(props) {
                       })}
                     </tr>
                   ))}
-                  {/* Desktop only: mini calendar as last row inside the studio names column */}
-                  {!isMobile && !calendarFullscreen && (
-                    <tr>
-                      <td style={{ ...tdStyle, position:"sticky", right:0, zIndex:2, background:"var(--surface2)", verticalAlign:"top", padding:8, boxShadow:"-2px 0 6px rgba(0,0,0,0.18)", width:130 }}>
-                        <div style={{ padding:4 }}>
-                          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
-                            <button onClick={() => setMiniMonth((current) => current.month === 0 ? { year:current.year - 1, month:11 } : { year:current.year, month:current.month - 1 })} style={{ background:"none", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:14, padding:"2px 4px" }}>→</button>
-                            <span style={{ fontWeight:800, fontSize:11, color:"var(--text)" }}>{HE_MONTHS[miniMonth.month]} {miniMonth.year}</span>
-                            <button onClick={() => setMiniMonth((current) => current.month === 11 ? { year:current.year + 1, month:0 } : { year:current.year, month:current.month + 1 })} style={{ background:"none", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:14, padding:"2px 4px" }}>←</button>
-                          </div>
-                          <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:0, textAlign:"center" }}>
-                            {HE_DAYS_SHORT.map((day) => <div key={day} style={{ fontSize:8, fontWeight:700, color:"var(--text3)", padding:"2px 0" }}>{day}</div>)}
-                            {miniDays.map((day, index) => (
-                              <div key={index} onClick={() => day && jumpToDate(day)} style={{ fontSize:10, fontWeight:isInCurrentWeek(day) ? 800 : 500, padding:"3px 0", cursor:day ? "pointer" : "default", borderRadius:"50%", background:isTodayMini(day) ? "var(--accent)" : isInCurrentWeek(day) ? "rgba(245,166,35,0.15)" : "transparent", color:isTodayMini(day) ? "#000" : isInCurrentWeek(day) ? "var(--accent)" : day ? "var(--text)" : "transparent" }}>{day || ""}</div>
-                            ))}
-                          </div>
-                          <button onClick={() => { setWeekOffset(0); const now = new Date(); setMiniMonth({ year:now.getFullYear(), month:now.getMonth() }); }} style={{ width:"100%", marginTop:6, padding:"4px 0", borderRadius:6, border:"1px solid var(--accent)", background:"transparent", color:"var(--accent)", fontWeight:700, fontSize:10, cursor:"pointer" }}>📅 היום</button>
-                        </div>
-                      </td>
-                      {visibleDays.map((day) => <td key={day.fullDate} style={{ ...tdStyle, background:day.isToday ? "rgba(245,166,35,0.05)" : undefined }} />)}
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
@@ -1092,6 +1071,29 @@ export default function StudioBookingPage(props) {
           })()}
         </Modal>
       )}
+
+      {/* Desktop sidebar mini-calendar via portal */}
+      {!isMobile && isActive && activeView === "calendar" && (() => {
+        const target = document.getElementById("sidebar-mini-cal");
+        if (!target) return null;
+        return createPortal(
+          <div style={{ padding:"12px 16px", borderTop:"1px solid var(--border)" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+              <button onClick={() => setMiniMonth((c) => c.month === 0 ? { year:c.year - 1, month:11 } : { year:c.year, month:c.month - 1 })} style={{ background:"none", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:16, padding:"2px 6px" }}>→</button>
+              <span style={{ fontWeight:800, fontSize:13, color:"var(--text)" }}>{HE_MONTHS[miniMonth.month]} {miniMonth.year}</span>
+              <button onClick={() => setMiniMonth((c) => c.month === 11 ? { year:c.year + 1, month:0 } : { year:c.year, month:c.month + 1 })} style={{ background:"none", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:16, padding:"2px 6px" }}>←</button>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:1, textAlign:"center" }}>
+              {HE_DAYS_SHORT.map((d) => <div key={d} style={{ fontSize:9, fontWeight:700, color:"var(--text3)", padding:"3px 0" }}>{d}</div>)}
+              {miniDays.map((day, i) => (
+                <div key={i} onClick={() => day && jumpToDate(day)} style={{ fontSize:11, fontWeight:isInCurrentWeek(day) ? 800 : 500, padding:"4px 0", cursor:day ? "pointer" : "default", borderRadius:"50%", background:isTodayMini(day) ? "var(--accent)" : isInCurrentWeek(day) ? "rgba(245,166,35,0.15)" : "transparent", color:isTodayMini(day) ? "#000" : isInCurrentWeek(day) ? "var(--accent)" : day ? "var(--text)" : "transparent" }}>{day || ""}</div>
+              ))}
+            </div>
+            <button onClick={() => { setWeekOffset(0); const now = new Date(); setMiniMonth({ year:now.getFullYear(), month:now.getMonth() }); }} style={{ width:"100%", marginTop:8, padding:"5px 0", borderRadius:6, border:"1px solid var(--accent)", background:"transparent", color:"var(--accent)", fontWeight:700, fontSize:11, cursor:"pointer" }}>📅 היום</button>
+          </div>,
+          target
+        );
+      })()}
     </div>
   );
 }
