@@ -4,7 +4,14 @@ import { storageSet, formatDate, getLoanDurationDays, formatLocalDateInput, toda
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 
-export function DashboardPage({ equipment, reservations, setReservations, showToast }) {
+const HE_DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
+function getDayName(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr + "T00:00:00");
+  return HE_DAYS[d.getDay()] || "";
+}
+
+export function DashboardPage({ equipment, reservations, setReservations, showToast, siteSettings = {} }) {
   const todayStr = today();
   const nowMs = Date.now();
 
@@ -450,7 +457,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
             </div>
             <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:14}}>
               <div style={{background:"var(--accent-glow)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:"var(--r-sm)",padding:14}}>
-                {[["📅 השאלה",`${formatDate(dashViewRes.borrow_date)}${dashViewRes.borrow_time?" · "+dashViewRes.borrow_time:""}`],["↩ החזרה",`${formatDate(dashViewRes.return_date)}${dashViewRes.return_time?" · "+dashViewRes.return_time:""}`],["📚 קורס",dashViewRes.course],["🎬 סוג",dashViewRes.loan_type]].map(([l,v])=>(
+                {[["📅 השאלה",`${getDayName(dashViewRes.borrow_date)} · ${formatDate(dashViewRes.borrow_date)}${dashViewRes.borrow_time?" · "+dashViewRes.borrow_time:""}`],["↩ החזרה",`${getDayName(dashViewRes.return_date)} · ${formatDate(dashViewRes.return_date)}${dashViewRes.return_time?" · "+dashViewRes.return_time:""}`],["📚 קורס",dashViewRes.course],["🎬 סוג",dashViewRes.loan_type]].map(([l,v])=>(
                   <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"4px 0",borderBottom:"1px solid rgba(245,166,35,0.15)"}}>
                     <span style={{color:"var(--text3)"}}>{l}</span>
                     <strong>{v}</strong>
@@ -515,6 +522,14 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                       setReservations(updated);
                       await storageSet("reservations",updated);
                       if(showToast) showToast("success",`הבקשה של ${res.student_name} אושרה ✅`);
+                      // Send approval email
+                      if (res.email) {
+                        const itemsList = res.items?.map(i=>`<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${equipment.find(e=>e.id==i.equipment_id)?.name||i.name||"?"}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${i.quantity}</td></tr>`).join("")||"";
+                        try {
+                          await fetch("/api/send-email",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:res.email,type:"approved",student_name:res.student_name,items_list:itemsList,borrow_date:formatDate(res.borrow_date),return_date:formatDate(res.return_date),borrow_time:res.borrow_time||"",return_time:res.return_time||"",sound_logo_url:siteSettings.soundLogo||""})});
+                          if(showToast) showToast("success",`📧 מייל אישור נשלח ל-${res.email}`);
+                        } catch { if(showToast) showToast("error","שגיאה בשליחת המייל"); }
+                      }
                       setDashViewRes(null);
                     }}>
                     ✅ אשר בקשה
