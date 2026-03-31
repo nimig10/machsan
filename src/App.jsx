@@ -6914,26 +6914,7 @@ export default function App() {
     lessons: safeClone(lessonsRef.current),
   });
 
-  const persistUndoSnapshot = async (snapshot) => {
-    const results = await Promise.all([
-      storageSet("equipment", snapshot.equipment),
-      storageSet("reservations", snapshot.reservations),
-      storageSet("categories", snapshot.categories),
-      storageSet("categoryTypes", snapshot.categoryTypes),
-      storageSet("categoryLoanTypes", snapshot.categoryLoanTypes),
-      storageSet("teamMembers", snapshot.teamMembers),
-      storageSet("deptHeads", snapshot.deptHeads),
-      storageSet("collegeManager", snapshot.collegeManager),
-      storageSet("kits", snapshot.kits),
-      storageSet("policies", snapshot.policies),
-      storageSet("certifications", snapshot.certifications),
-      storageSet("siteSettings", snapshot.siteSettings),
-      storageSet("studios", snapshot.studios),
-      storageSet("studioBookings", snapshot.studioBookings),
-      storageSet("lessons", snapshot.lessons),
-    ]);
-    return results.every((result) => result?.ok);
-  };
+
 
   const queueUndoSnapshot = () => {
     if (historySuspendedRef.current || undoInFlightRef.current || historyQueuedRef.current) return;
@@ -7006,6 +6987,21 @@ export default function App() {
     historySuspendedRef.current = true;
     try {
       const snapshot = lastEntry.snapshot;
+      const currentState = getUndoSnapshot();
+
+      const keysToUpdate = [
+        "equipment", "reservations", "categories", "categoryTypes", "categoryLoanTypes",
+        "teamMembers", "deptHeads", "collegeManager", "kits", "policies",
+        "certifications", "siteSettings", "studios", "studioBookings", "lessons"
+      ];
+      
+      const promises = [];
+      for (const key of keysToUpdate) {
+        if (snapshot[key] !== undefined && !dataEquals(currentState[key], snapshot[key])) {
+          promises.push(storageSet(key, snapshot[key]));
+        }
+      }
+
       _setEquipment(snapshot.equipment);
       _setReservations(snapshot.reservations);
       _setCategories(snapshot.categories);
@@ -7021,7 +7017,13 @@ export default function App() {
       if (snapshot.studios) _setStudios(snapshot.studios);
       if (snapshot.studioBookings) _setStudioBookings(snapshot.studioBookings);
       if (snapshot.lessons) _setLessons(snapshot.lessons);
-      const ok = await persistUndoSnapshot(snapshot);
+
+      let ok = true;
+      if (promises.length > 0) {
+        const results = await Promise.all(promises);
+        ok = results.every((r) => r?.ok);
+      }
+
       if (ok && lastEntry.logId) deleteActivityLog(lastEntry.logId);
       setUndoStack((prev) => prev.slice(0, -1));
       showToast(ok ? "success" : "error", ok ? "הפעולה האחרונה בוטלה" : "הפעולה בוטלה מקומית, אך חלק מהשמירות נכשלו");
