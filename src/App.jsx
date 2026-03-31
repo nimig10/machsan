@@ -6750,7 +6750,23 @@ function StaffLogin({ onSuccess }) {
   }
 })();
 
+
+// ─── PROTECTED ROUTE ──────────────────────────────────────────────────────────
+// Wraps any admin-only subtree. If a visitor lands on /admin/* without an
+// authenticated staffUser session they are silently redirected to the root (/).
+// Usage: <ProtectedRoute authed={authed}>{...children}</ProtectedRoute>
+function ProtectedRoute({ authed, children }) {
+  const isAdminPath = window.location.pathname.startsWith("/admin");
+  if (isAdminPath && !authed) {
+    // Redirect to public form without adding a history entry
+    window.history.replaceState(null, "", "/");
+    return null;
+  }
+  return children;
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
+
 export default function App() {
   const pathname = window.location.pathname;
   const isAdmin = pathname.startsWith("/admin");
@@ -7419,6 +7435,8 @@ export default function App() {
         </div>
       )}
 
+      {/* ── אזור ניהול (מוגן מפני גישה ישירה) ── */}
+      <ProtectedRoute authed={authed}>
       {/* ── כניסת צוות ── */}
       {isAdmin && !authed && <StaffLogin onSuccess={(user)=>{ setStaffUser(user); const v = user?.role!=="admin" && user?.permissions?.views; setStaffView(v?.length===1 ? v[0] : "hub"); }}/>}
 
@@ -7660,6 +7678,8 @@ export default function App() {
       )}
 
       {/* old warehouse standalone section removed — now accessed via staffView === "warehouse" above */}
+
+      </ProtectedRoute>
 
       <InstallPrompt />
       <Toast toasts={toasts}/>
