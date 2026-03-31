@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export function StaffHub({ user, onNavigate, onLogout }) {
+export function StaffHub({ user, logo, onNavigate, onLogout }) {
   const [hovered, setHovered] = useState(null);
 
   const allowedViews = user?.role === "admin" ? [] : (user?.permissions?.views || []);
@@ -16,7 +16,12 @@ export function StaffHub({ user, onNavigate, onLogout }) {
   return (
     <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, background: "var(--bg)" }}>
       <div style={{ textAlign: "center", marginBottom: 40 }}>
-        <div style={{ fontSize: 42, marginBottom: 8 }}>🏠</div>
+        <div style={{ marginBottom: 12 }}>
+          {logo
+            ? <img src={logo} alt="לוגו" style={{ height: 80, maxWidth: 200, objectFit: "contain" }} />
+            : <span style={{ fontSize: 42 }}>🏠</span>
+          }
+        </div>
         <h1 style={{ fontSize: 28, fontWeight: 900, color: "var(--text)", margin: 0 }}>Staff Hub</h1>
         <div style={{ fontSize: 15, color: "var(--text2)", marginTop: 8 }}>
           שלום, <strong>{user?.full_name || "צוות"}</strong>
