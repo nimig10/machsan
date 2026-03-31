@@ -51,12 +51,13 @@ function toggleArr(arr, val) {
 }
 
 // ─── Tab: אנשי צוות (staff_members in Supabase) ─────────────────────────────
-function StaffTab({ showToast }) {
+function StaffTab({ showToast, teamMembers, setTeamMembers }) {
   const [staff, setStaff]       = useState([]);
   const [loading, setLoading]   = useState(true);
   const [editUser, setEditUser] = useState(null);
   const [saving, setSaving]     = useState(false);
   const [deleting, setDeleting] = useState(null);
+  const [showPw, setShowPw]     = useState(false);
 
   const fetchStaff = async () => {
     try {
@@ -72,8 +73,8 @@ function StaffTab({ showToast }) {
 
   useEffect(() => { fetchStaff(); }, []);
 
-  const openNew = () => setEditUser({ full_name: "", email: "", role: "staff", password: "", permissions: { ...DEFAULT_PERMISSIONS } });
-  const openEdit = (s) => setEditUser({ ...s, password: "", permissions: mergePerms(s.permissions) });
+  const openNew = () => { setShowPw(false); setEditUser({ full_name: "", email: "", role: "staff", password: "", permissions: { ...DEFAULT_PERMISSIONS } }); };
+  const openEdit = (s) => { setShowPw(false); setEditUser({ ...s, password: "", permissions: mergePerms(s.permissions) }); };
   const setPerms = (patch) => setEditUser(p => ({ ...p, permissions: { ...p.permissions, ...patch } }));
 
   const handleSave = async () => {
@@ -91,6 +92,27 @@ function StaffTab({ showToast }) {
       if (res.ok) {
         const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
         logActivity({ user_id: caller.id, user_name: caller.full_name, action: id ? "staff_update" : "staff_create", entity: "staff_member", entity_id: id || data.user?.id, details: { full_name, email, role } });
+        // Sync to teamMembers (store table)
+        const emailLower = email.trim().toLowerCase();
+        const notifyTypes = permissions?.notifyLoanTypes || [];
+        const current = Array.isArray(teamMembers) ? teamMembers : [];
+        if (!id) {
+          // CREATE — add to teamMembers if not already there
+          if (!current.some(m => m.email?.toLowerCase() === emailLower)) {
+            const updated = [...current, { id: data.user?.id || Date.now(), name: full_name.trim(), email: emailLower, phone: "", loanTypes: notifyTypes }];
+            setTeamMembers(updated);
+            storageSet("teamMembers", updated);
+          }
+        } else {
+          // UPDATE — update matching entry in teamMembers
+          const idx = current.findIndex(m => m.id === id || m.email?.toLowerCase() === emailLower);
+          if (idx >= 0) {
+            const updated = [...current];
+            updated[idx] = { ...updated[idx], name: full_name.trim(), email: emailLower, loanTypes: notifyTypes };
+            setTeamMembers(updated);
+            storageSet("teamMembers", updated);
+          }
+        }
         showToast?.("success", id ? "המשתמש עודכן" : "המשתמש נוצר"); setEditUser(null); fetchStaff();
       }
       else showToast?.("error", data.error || "שגיאה בשמירה");
@@ -102,7 +124,16 @@ function StaffTab({ showToast }) {
     setDeleting(id);
     try {
       const res = await fetch("/api/staff", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete", callerRole: "admin", id }) });
-      if (res.ok) { showToast?.("success", "המשתמש נמחק"); fetchStaff(); }
+      if (res.ok) {
+          // Remove from teamMembers too
+          const current = Array.isArray(teamMembers) ? teamMembers : [];
+          const deleted = staff.find(s => s.id === id);
+          if (deleted) {
+            const updated = current.filter(m => m.id !== id && m.email?.toLowerCase() !== deleted.email?.toLowerCase());
+            if (updated.length !== current.length) { setTeamMembers(updated); storageSet("teamMembers", updated); }
+          }
+          showToast?.("success", "המשתמש נמחק"); fetchStaff();
+        }
       else showToast?.("error", "שגיאה במחיקה");
     } catch { showToast?.("error", "שגיאת רשת"); }
     finally { setDeleting(null); }
@@ -192,7 +223,13 @@ function StaffTab({ showToast }) {
               </div>
               <div className="form-group">
                 <label className="form-label">{editUser.id ? "סיסמה חדשה (השאר ריק)" : "סיסמה *"}</label>
-                <input className="form-input" type="password" dir="ltr" value={editUser.password || ""} onChange={e => setEditUser(p => ({ ...p, password: e.target.value }))} placeholder={editUser.id ? "••••••" : ""} />
+                <div style={{ position: "relative" }}>
+                  <input className="form-input" type={showPw ? "text" : "password"} dir="ltr" value={editUser.password || ""} onChange={e => setEditUser(p => ({ ...p, password: e.target.value }))} placeholder={editUser.id ? "••••••" : ""} style={{ paddingLeft: 36 }} />
+                  <button type="button" onClick={() => setShowPw(p => !p)}
+                    style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "var(--text3)", padding: 0 }}>
+                    {showPw ? "🙈" : "👁️"}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -607,7 +644,7 @@ export function StaffManagementPage({ showToast, teamMembers, setTeamMembers, de
         ))}
       </div>
 
-      {tab === "staff"  && <StaffTab showToast={showToast} />}
+      {tab === "staff"  && <StaffTab showToast={showToast} teamMembers={teamMembers} setTeamMembers={setTeamMembers} />}
       {tab === "legacy" && <LegacyTeamTab teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} managerToken={managerToken} showToast={showToast}/>}
     </div>
   );

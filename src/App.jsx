@@ -7457,7 +7457,7 @@ export default function App() {
         <StaffHub
           user={staffUser}
           onNavigate={(view) => setStaffView(view)}
-          onLogout={() => setStaffUser(null)}
+          onLogout={() => { sessionStorage.removeItem("staff_user"); sessionStorage.removeItem("staff_view"); window.location.replace("/"); }}
         />
       )}
 
