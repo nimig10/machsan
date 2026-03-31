@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['LOGO APP1.png'],
+      includeAssets: ['NEWLOGO1.png'],
       manifest: {
         name: 'המחסן',
         short_name: 'המחסן',
@@ -18,7 +18,7 @@ export default defineConfig({
         display: 'standalone',
         icons: [
           {
-            src: 'LOGO APP1.png',
+            src: 'NEWLOGO1.png',
             sizes: '192x192 512x512',
             type: 'image/png',
             purpose: 'any maskable'
