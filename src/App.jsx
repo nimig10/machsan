@@ -18,6 +18,7 @@ import { StaffHub } from "./components/StaffHub.jsx";
 import { StaffManagementPage } from "./components/StaffManagementPage.jsx";
 import { SystemSettingsPage } from "./components/SystemSettingsPage.jsx";
 import { ActivityLogsPage } from "./components/ActivityLogsPage.jsx";
+import { InstallPrompt } from "./components/InstallPrompt.jsx";
 
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
 const SB_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -7660,6 +7661,7 @@ export default function App() {
 
       {/* old warehouse standalone section removed — now accessed via staffView === "warehouse" above */}
 
+      <InstallPrompt />
       <Toast toasts={toasts}/>
     </>
   );
