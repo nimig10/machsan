@@ -59,7 +59,7 @@ export function InstallPrompt() {
         <div style={styles.content}>
           <span style={styles.icon}>📲</span>
           <div style={styles.textContainer}>
-            <strong style={styles.title}>התקן את 'המחסן'</strong>
+            <strong style={styles.title}>התקן את 'קמרה סאונד APP'</strong>
             <p style={styles.subtitle}>גישה מהירה מהמסך הראשי</p>
           </div>
         </div>

@@ -8,17 +8,17 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['NEWLOGO1.png'],
+      includeAssets: ['SOUND CAMLOGO1.png'],
       manifest: {
-        name: 'המחסן',
-        short_name: 'המחסן',
+        name: 'קמרה סאונד APP',
+        short_name: 'קמרה סאונד APP',
         description: 'מערכת המחסן הדיגיטלי',
         theme_color: '#f5a623',
         background_color: '#0a0c10',
         display: 'standalone',
         icons: [
           {
-            src: 'NEWLOGO1.png',
+            src: 'SOUND CAMLOGO1.png',
             sizes: '192x192 512x512',
             type: 'image/png',
             purpose: 'any maskable'
