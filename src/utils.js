@@ -126,10 +126,10 @@ export async function storageSet(key, value) {
     try {
       const existing = lsGet(key);
       if (existing && Array.isArray(existing) && existing.length > 0) {
-        await fetch(`${SB_URL}/rest/v1/store`, {
+        await fetch("/api/store", {
           method: "POST",
-          headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates" },
-          body: JSON.stringify({ key: `backup_${key}`, data: existing, updated_at: new Date().toISOString() }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key: `backup_${key}`, data: existing }),
         });
       }
     } catch(e) { /* backup failure should not block the write */ }
@@ -145,10 +145,10 @@ export async function storageSet(key, value) {
   const previousCachedValue = lsGet(key);
   lsSet(key, value); // cache immediately
   try {
-    const res = await fetch(`${SB_URL}/rest/v1/store`, {
+    const res = await fetch("/api/store", {
       method:  "POST",
-      headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates" },
-      body:    JSON.stringify({ key, data: value, updated_at: new Date().toISOString() }),
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ key, data: value }),
     });
     if (!res.ok) {
       const err = await res.text();

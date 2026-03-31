@@ -99,10 +99,10 @@ async function autoBackup(key) {
     if (Array.isArray(json) && json.length > 0 && json[0].data) {
       const old = json[0].data;
       if (Array.isArray(old) && old.length > 0) {
-        await fetch(`${SB_URL}/rest/v1/store`, {
+        await fetch("/api/store", {
           method: "POST",
-          headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates" },
-          body: JSON.stringify({ key: `backup_${key}`, data: old, updated_at: new Date().toISOString() }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key: `backup_${key}`, data: old }),
         });
         localStorage.setItem(lastKey, String(Date.now()));
         console.log(`🔒 Backup saved: backup_${key} (${old.length} items)`);
@@ -116,10 +116,10 @@ async function storageSet(key, value) {
   lsSet(key, value); // cache immediately
   try {
     await autoBackup(key);
-    const res = await fetch(`${SB_URL}/rest/v1/store`, {
+    const res = await fetch("/api/store", {
       method:  "POST",
-      headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates" },
-      body:    JSON.stringify({ key, data: value, updated_at: new Date().toISOString() }),
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ key, data: value }),
     });
     if (!res.ok) {
       const err = await res.text();
