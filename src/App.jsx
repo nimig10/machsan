@@ -7438,10 +7438,11 @@ export default function App() {
       {/* ── דף כניסת צוות דדיקאטי /admin/login ── */}
       {isAdminLogin && (
         <StaffLogin onSuccess={(user) => {
-          setStaffUser(user);
+          // Save to sessionStorage BEFORE the redirect — setStaffUser/setStaffView
+          // are async (React state) and their useEffect won't run before location.replace.
+          sessionStorage.setItem("staff_user", JSON.stringify(user));
           const v = user?.role !== "admin" && user?.permissions?.views;
-          setStaffView(v?.length === 1 ? v[0] : "hub");
-          // Navigate to /admin and reload so isAdmin becomes true
+          sessionStorage.setItem("staff_view", v?.length === 1 ? v[0] : "hub");
           window.location.replace("/admin");
         }}/>
       )}
