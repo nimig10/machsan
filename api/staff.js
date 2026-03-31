@@ -66,10 +66,26 @@ export default async function handler(req, res) {
     return res.status(201).json({ success: true, user: { id: user.id, full_name: user.full_name, email: user.email, role: user.role, permissions: user.permissions } });
   }
 
+  // ── Helper: count how many admins exist ──
+  async function adminCount() {
+    const r = await sbFetch("staff_members?role=eq.admin&select=id");
+    return Array.isArray(r.data) ? r.data.length : 0;
+  }
+
   // UPDATE
   if (action === "update") {
     const { id, full_name, email, role, password, permissions } = req.body;
     if (!id) return res.status(400).json({ error: "Missing id" });
+
+    // Guard: prevent demoting the last admin
+    if (role === "staff") {
+      const current = await sbFetch(`staff_members?id=eq.${id}&select=role`);
+      const wasAdmin = Array.isArray(current.data) && current.data[0]?.role === "admin";
+      if (wasAdmin && (await adminCount()) <= 1) {
+        return res.status(400).json({ error: "last_admin" });
+      }
+    }
+
     const updates = { updated_at: new Date().toISOString() };
     if (full_name) updates.full_name = full_name.trim();
     if (email) updates.email = email.trim().toLowerCase();
@@ -88,6 +104,14 @@ export default async function handler(req, res) {
   if (action === "delete") {
     const { id } = req.body;
     if (!id) return res.status(400).json({ error: "Missing id" });
+
+    // Guard: prevent deleting the last admin
+    const target = await sbFetch(`staff_members?id=eq.${id}&select=role`);
+    const isAdmin = Array.isArray(target.data) && target.data[0]?.role === "admin";
+    if (isAdmin && (await adminCount()) <= 1) {
+      return res.status(400).json({ error: "last_admin" });
+    }
+
     const result = await sbFetch(`staff_members?id=eq.${id}`, { method: "DELETE" });
     if (!result.ok) return res.status(result.status).json({ error: "Failed to delete" });
     return res.status(200).json({ success: true });

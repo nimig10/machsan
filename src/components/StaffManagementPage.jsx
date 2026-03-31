@@ -115,7 +115,10 @@ function StaffTab({ showToast, teamMembers, setTeamMembers }) {
         }
         showToast?.("success", id ? "המשתמש עודכן" : "המשתמש נוצר"); setEditUser(null); fetchStaff();
       }
-      else showToast?.("error", data.error || "שגיאה בשמירה");
+      else {
+          const msg = data.error === "last_admin" ? "לא ניתן להוריד את המנהל האחרון — חייב להישאר לפחות מנהל אחד במערכת" : (data.error || "שגיאה בשמירה");
+          showToast?.("error", msg);
+        }
     } catch { showToast?.("error", "שגיאת רשת"); }
     finally { setSaving(false); }
   };
@@ -134,7 +137,11 @@ function StaffTab({ showToast, teamMembers, setTeamMembers }) {
           }
           showToast?.("success", "המשתמש נמחק"); fetchStaff();
         }
-      else showToast?.("error", "שגיאה במחיקה");
+      else {
+          const data = await res.json().catch(() => ({}));
+          const msg = data.error === "last_admin" ? "לא ניתן למחוק את המנהל האחרון — חייב להישאר לפחות מנהל אחד במערכת" : "שגיאה במחיקה";
+          showToast?.("error", msg);
+        }
     } catch { showToast?.("error", "שגיאת רשת"); }
     finally { setDeleting(null); }
   };
@@ -149,6 +156,9 @@ function StaffTab({ showToast, teamMembers, setTeamMembers }) {
   };
 
   if (loading) return <div style={{ textAlign: "center", padding: 40, color: "var(--text3)" }}>טוען...</div>;
+
+  const adminCountLocal = staff.filter(s => s.role === "admin").length;
+  const isLastAdmin = (s) => s.role === "admin" && adminCountLocal <= 1;
 
   const perms = editUser?.permissions || DEFAULT_PERMISSIONS;
   const allWarehouseAllowed = !perms.views.length || perms.views.includes("warehouse");
@@ -179,8 +189,9 @@ function StaffTab({ showToast, teamMembers, setTeamMembers }) {
               </div>
               <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                 <button className="btn btn-secondary btn-sm" onClick={() => openEdit(s)}>✏️ ערוך</button>
-                <button className="btn btn-secondary btn-sm" style={{ color: "#ef4444" }}
-                  disabled={deleting === s.id}
+                <button className="btn btn-secondary btn-sm" style={{ color: isLastAdmin(s) ? "var(--text3)" : "#ef4444" }}
+                  disabled={deleting === s.id || isLastAdmin(s)}
+                  title={isLastAdmin(s) ? "לא ניתן למחוק את המנהל האחרון" : ""}
                   onClick={() => { if (confirm(`למחוק את ${s.full_name}?`)) handleDelete(s.id); }}>
                   {deleting === s.id ? "..." : "🗑️"}
                 </button>
@@ -216,10 +227,16 @@ function StaffTab({ showToast, teamMembers, setTeamMembers }) {
               </div>
               <div className="form-group">
                 <label className="form-label">תפקיד</label>
-                <select className="form-select" value={editUser.role || "staff"} onChange={e => setEditUser(p => ({ ...p, role: e.target.value }))}>
-                  <option value="staff">צוות</option>
-                  <option value="admin">מנהל (Admin)</option>
-                </select>
+                {editUser.id && editUser.role === "admin" && adminCountLocal <= 1 ? (
+                  <div className="form-input" style={{ background: "var(--surface2)", color: "var(--text3)", cursor: "not-allowed" }}>
+                    מנהל (Admin) — מנהל אחרון, לא ניתן לשנות
+                  </div>
+                ) : (
+                  <select className="form-select" value={editUser.role || "staff"} onChange={e => setEditUser(p => ({ ...p, role: e.target.value }))}>
+                    <option value="staff">צוות</option>
+                    <option value="admin">מנהל (Admin)</option>
+                  </select>
+                )}
               </div>
               <div className="form-group">
                 <label className="form-label">{editUser.id ? "סיסמה חדשה (השאר ריק)" : "סיסמה *"}</label>
