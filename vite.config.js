@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['SOUND CAMLOGO1.png'],
+      includeAssets: ['LOGON1.png'],
       manifest: {
         name: 'קמרה סאונד APP',
         short_name: 'קמרה סאונד APP',
@@ -18,7 +18,7 @@ export default defineConfig({
         display: 'standalone',
         icons: [
           {
-            src: 'SOUND CAMLOGO1.png',
+            src: 'LOGON1.png',
             sizes: '192x192 512x512',
             type: 'image/png',
             purpose: 'any maskable'
