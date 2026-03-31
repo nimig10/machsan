@@ -6752,12 +6752,11 @@ function StaffLogin({ onSuccess }) {
 
 
 // ─── PROTECTED ROUTE ──────────────────────────────────────────────────────────
-// Wraps any admin-only subtree. If a visitor lands on /admin/* without an
-// authenticated staffUser session they are silently redirected to the root (/).
-// Usage: <ProtectedRoute authed={authed}>{...children}</ProtectedRoute>
+// Wraps admin-only content. /admin/login is always accessible (it's the login page itself).
 function ProtectedRoute({ authed, children }) {
   const isAdminPath = window.location.pathname.startsWith("/admin");
-  if (isAdminPath && !authed) {
+  const isLoginPage = window.location.pathname === "/admin/login";
+  if (isAdminPath && !isLoginPage && !authed) {
     // Redirect to public form without adding a history entry
     window.history.replaceState(null, "", "/");
     return null;
@@ -6770,6 +6769,7 @@ function ProtectedRoute({ authed, children }) {
 export default function App() {
   const pathname = window.location.pathname;
   const isAdmin = pathname.startsWith("/admin");
+  const isAdminLogin = pathname === "/admin/login";
   const isCalendarView = pathname.startsWith("/calendar");
   const isManagerCalendarView = pathname.startsWith("/manager-calendar");
   const isPublicDisplayView = pathname === "/daily";
@@ -7433,6 +7433,17 @@ export default function App() {
         <div className="public-page-shell">
           {loading ? <Loading/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes} refreshInventory={refreshPublicInventory}/>}
         </div>
+      )}
+
+      {/* ── דף כניסת צוות דדיקאטי /admin/login ── */}
+      {isAdminLogin && (
+        <StaffLogin onSuccess={(user) => {
+          setStaffUser(user);
+          const v = user?.role !== "admin" && user?.permissions?.views;
+          setStaffView(v?.length === 1 ? v[0] : "hub");
+          // Navigate to /admin and reload so isAdmin becomes true
+          window.location.replace("/admin");
+        }}/>
       )}
 
       {/* ── אזור ניהול (מוגן מפני גישה ישירה) ── */}
