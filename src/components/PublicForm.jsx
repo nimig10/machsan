@@ -2310,7 +2310,6 @@ ${inventory}
             }).sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:(a.startTime||"")>(b.startTime||"")?1:-1);
             const isFuture=b=>{const e=b.isNight?(()=>{const d=new Date(b.date);d.setDate(d.getDate()+1);return d.toISOString().slice(0,10);})():b.date;return new Date(`${e}T${b.endTime||"23:59"}:00`).getTime()>Date.now();};
             const futureOnes=myBookings.filter(isFuture);
-            const pastOnes=myBookings.filter(b=>!isFuture(b));
             const handleCancel=async id=>{const updated=studioBookings.filter(b=>b.id!==id);setStudioBookings(updated);await storageSet("studio_bookings",updated);showToast("success","❌ ההזמנה בוטלה");};
             const renderRow=(b,canEdit)=>{
               const studioObj=studios.find(s=>String(s.id)===String(b.studioId));
@@ -2330,8 +2329,8 @@ ${inventory}
                 </div>
               </div>);
             };
-            if (myBookings.length===0) return <div style={{textAlign:"center",color:"var(--text3)",padding:"20px 0",fontSize:13}}>אין קביעות אולפן</div>;
-            return <>{futureOnes.length>0&&<><div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:6,letterSpacing:0.5}}>עתידיות</div>{futureOnes.map(b=>renderRow(b,true))}</>}{pastOnes.length>0&&<><div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginTop:futureOnes.length?16:0,marginBottom:6,letterSpacing:0.5}}>עברו</div>{pastOnes.map(b=>renderRow(b,false))}</>}</>;
+            if (futureOnes.length===0) return <div style={{textAlign:"center",color:"var(--text3)",padding:"20px 0",fontSize:13}}>אין קביעות אולפן עתידיות</div>;
+            return <>{futureOnes.map(b=>renderRow(b,true))}</>;
           })()}
 
           {/* ─── רשימת ציוד ─── */}
