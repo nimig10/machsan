@@ -889,6 +889,8 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [studios, setStudios] = useState([]);
   const [studioWeekOffset, setStudioWeekOffset] = useState(0);
   const [studioModal, setStudioModal] = useState(null);
+  const [expandedResId, setExpandedResId] = useState(null);
+  const fmtDate = (d) => { if (!d) return ""; const [y,m,dd] = d.split("-"); return `${dd}.${m}.${y}`; };
   const [showEquipmentAiModal, setShowEquipmentAiModal] = useState(false);
   const [equipmentAiPrompt, setEquipmentAiPrompt] = useState("");
   const [equipmentAiLoading, setEquipmentAiLoading] = useState(false);
@@ -1811,7 +1813,7 @@ ${inventory}
 
   const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""}); setItems([]); setAgreed(false); };
 
-  const VIEWS = ["equipment", "studios", "daily"];
+  const VIEWS = ["equipment", "studios", "daily", "my-bookings"];
   const handleFormSwipeStart = (e) => {
     const touch = e.touches[0];
     const blocked = !!e.target.closest('[data-no-swipe]');
@@ -1833,6 +1835,7 @@ ${inventory}
       sessionStorage.setItem("public_view", next);
       if (next === "studios") loadStudiosData();
       if (next === "daily") { setDailyDayOffset(0); loadDailySchedule(); }
+      if (next === "my-bookings") loadStudiosData();
     } else if (dx > 0 && idx > 0) {
       const prev = VIEWS[idx - 1];
       setPublicView(prev);
@@ -1943,6 +1946,10 @@ ${inventory}
             <button type="button" onClick={()=>{setPublicView("daily");setDailyDayOffset(0);loadDailySchedule();}}
               style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:publicView==="daily"?"var(--accent)":"transparent",color:publicView==="daily"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
               📅 לוז יומי
+            </button>
+            <button type="button" onClick={()=>{setPublicView("my-bookings");loadStudiosData();}}
+              style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:publicView==="my-bookings"?"var(--accent)":"transparent",color:publicView==="my-bookings"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              📋 ההזמנות
             </button>
           </div>
           {publicView==="equipment" && <>
@@ -2287,6 +2294,89 @@ ${inventory}
                   </div>
               }
             </>;
+          })()}
+        </div>}
+        {publicView==="my-bookings" && <div className="form-card-body" style={{direction:"rtl"}}>
+          {/* ─── קביעות אולפן ─── */}
+          <div style={{fontWeight:900,fontSize:15,marginBottom:12,paddingBottom:10,borderBottom:"1px solid var(--border)"}}>🎙️ קביעות אולפן</div>
+          {(()=>{
+            const myBookings = studioBookings.filter(b=>{
+              if (!b||!loggedInStudent) return false;
+              if (b.bookingKind&&b.bookingKind!=="student") return false;
+              const stEmail=String(loggedInStudent.email||"").toLowerCase().trim();
+              const bEmail=String(b.studentEmail||"").toLowerCase().trim();
+              if (stEmail&&bEmail) return stEmail===bEmail;
+              return normalizeName(b.studentName||"")===normalizeName(loggedInStudent.name||"");
+            }).sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:(a.startTime||"")>(b.startTime||"")?1:-1);
+            const isFuture=b=>{const e=b.isNight?(()=>{const d=new Date(b.date);d.setDate(d.getDate()+1);return d.toISOString().slice(0,10);})():b.date;return new Date(`${e}T${b.endTime||"23:59"}:00`).getTime()>Date.now();};
+            const futureOnes=myBookings.filter(isFuture);
+            const pastOnes=myBookings.filter(b=>!isFuture(b));
+            const handleCancel=async id=>{const updated=studioBookings.filter(b=>b.id!==id);setStudioBookings(updated);await storageSet("studio_bookings",updated);showToast("success","❌ ההזמנה בוטלה");};
+            const renderRow=(b,canEdit)=>{
+              const studioObj=studios.find(s=>String(s.id)===String(b.studioId));
+              const color=b.isNight?"#2196f3":"var(--green)";
+              const timeLabel=b.isNight?"מ-21:00 והלאה":`${b.startTime||""}–${b.endTime||""}`;
+              return (<div key={b.id} style={{background:"var(--surface2)",borderRadius:8,padding:"12px 14px",marginBottom:8,border:`1px solid ${color}33`,borderRight:`3px solid ${color}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,flexWrap:"wrap"}}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:13}}>{studioObj?.name||"אולפן"}{b.isNight&&<span style={{color:"#2196f3",marginRight:4}}> 🌙</span>}</div>
+                    <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>📅 {fmtDate(b.date)} · ⏰ {timeLabel}</div>
+                    {b.notes&&<div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>💬 {b.notes}</div>}
+                  </div>
+                  {canEdit&&<div style={{display:"flex",gap:6,flexShrink:0}}>
+                    <button onClick={()=>{loadStudiosData();setStudioModal({type:"editBooking",bookingId:b.id,studioId:b.studioId,date:b.date,dayName:"",isNight:b.isNight||false,defaultStart:b.startTime,defaultEnd:b.endTime,notes:b.notes});setPublicView("studios");}} style={{background:"var(--accent)",color:"#000",border:"none",borderRadius:4,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>✏️ ערוך</button>
+                    <button onClick={()=>handleCancel(b.id)} style={{background:"var(--red)",color:"#fff",border:"none",borderRadius:4,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>❌ בטל</button>
+                  </div>}
+                </div>
+              </div>);
+            };
+            if (myBookings.length===0) return <div style={{textAlign:"center",color:"var(--text3)",padding:"20px 0",fontSize:13}}>אין קביעות אולפן</div>;
+            return <>{futureOnes.length>0&&<><div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:6,letterSpacing:0.5}}>עתידיות</div>{futureOnes.map(b=>renderRow(b,true))}</>}{pastOnes.length>0&&<><div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginTop:futureOnes.length?16:0,marginBottom:6,letterSpacing:0.5}}>עברו</div>{pastOnes.map(b=>renderRow(b,false))}</>}</>;
+          })()}
+
+          {/* ─── רשימת ציוד ─── */}
+          <div style={{fontWeight:900,fontSize:15,marginTop:28,marginBottom:12,paddingBottom:10,borderBottom:"1px solid var(--border)"}}>📦 רשימת ציוד</div>
+          {(()=>{
+            const sColor=s=>s==="מאושר"||s==="פעילה"?"#1a7a4a":s==="ממתין"||s==="אישור ראש מחלקה"?"#b8860b":s==="נדחה"?"#c0392b":s==="באיחור"?"#e67e22":s==="הוחזר"?"#2471a3":"var(--text3)";
+            const sBg=s=>s==="מאושר"||s==="פעילה"?"rgba(46,204,113,0.15)":s==="ממתין"||s==="אישור ראש מחלקה"?"rgba(241,196,15,0.15)":s==="נדחה"?"rgba(231,76,60,0.15)":s==="באיחור"?"rgba(230,126,34,0.18)":s==="הוחזר"?"rgba(52,152,219,0.15)":"var(--surface2)";
+            const sBorder=s=>s==="מאושר"||s==="פעילה"?"rgba(46,204,113,0.25)":s==="ממתין"||s==="אישור ראש מחלקה"?"rgba(241,196,15,0.25)":s==="נדחה"?"rgba(231,76,60,0.3)":s==="באיחור"?"rgba(230,126,34,0.4)":s==="הוחזר"?"rgba(52,152,219,0.25)":"var(--border)";
+            const myRes=[...reservations].filter(r=>{
+              const stEmail=String(loggedInStudent?.email||"").toLowerCase().trim();
+              const rEmail=String(r.email||"").toLowerCase().trim();
+              if (stEmail&&rEmail) return stEmail===rEmail;
+              return normalizeName(r.student_name||"")===normalizeName(loggedInStudent?.name||"");
+            }).sort((a,b)=>(b.borrow_date||"")>(a.borrow_date||"")?1:-1);
+            if (myRes.length===0) return <div style={{textAlign:"center",color:"var(--text3)",padding:"20px 0",fontSize:13}}>אין בקשות השאלה</div>;
+            return myRes.map(r=>{
+              const isExp=expandedResId===r.id;
+              const st=r.status||"";
+              return (<div key={r.id} style={{borderRadius:10,border:`1px solid ${sBorder(st)}`,marginBottom:10,overflow:"hidden"}}>
+                <div style={{background:"var(--surface2)",padding:"12px 14px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}} onClick={()=>setExpandedResId(isExp?null:r.id)}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:13}}>
+                      📅 {fmtDate(r.borrow_date)}{r.borrow_time&&<span style={{color:"var(--accent)",marginRight:4}}> {r.borrow_time}</span>} ← {fmtDate(r.return_date)}{r.return_time&&<span style={{color:"var(--accent)",marginRight:4}}> {r.return_time}</span>}
+                    </div>
+                    <div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>{r.loan_type&&<span style={{marginLeft:8}}>{r.loan_type}</span>}{r.items?.length||0} פריטים</div>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                    <span style={{background:sBg(st),color:sColor(st),border:`1px solid ${sBorder(st)}`,borderRadius:100,padding:"2px 10px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{st}</span>
+                    <span style={{fontSize:13,color:"var(--text3)",display:"inline-block",transform:isExp?"rotate(180deg)":"rotate(0deg)",transition:"transform 0.2s"}}>▾</span>
+                  </div>
+                </div>
+                {isExp&&<div style={{padding:"12px 14px",borderTop:`1px solid ${sBorder(st)}`,display:"flex",flexDirection:"column",gap:10}}>
+                  {(r.items||[]).map((item,i)=>{
+                    const eq=equipment.find(e=>String(e.id)===String(item.equipment_id));
+                    const img=eq?.image;
+                    return (<div key={i} style={{display:"flex",alignItems:"center",gap:10}}>
+                      {img?.startsWith("data:")||img?.startsWith("http")
+                        ?<img src={img} alt="" style={{width:38,height:38,objectFit:"cover",borderRadius:6,flexShrink:0}}/>
+                        :<span style={{fontSize:30,flexShrink:0}}>{img||"📦"}</span>}
+                      <div><div style={{fontWeight:700,fontSize:13}}>{eq?.name||item.name||"פריט"}</div><div style={{fontSize:11,color:"var(--text3)"}}>כמות: {item.quantity}</div></div>
+                    </div>);
+                  })}
+                </div>}
+              </div>);
+            });
           })()}
         </div>}
         <div style={{padding:"16px 24px",borderTop:"1px solid var(--border)",textAlign:"center"}}>
@@ -3360,49 +3450,6 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
         </div>
       )}
       {renderAddBookingModal()}
-      {/* My bookings — hide past bookings */}
-      {bookings.filter((b)=>{
-        if (!isBookingOwnedByStudent(b)) return false;
-        const endDate = b.isNight ? (() => { const d = new Date(b.date); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); })() : b.date;
-        return new Date(`${endDate}T${b.endTime||"23:59"}:00`).getTime() > Date.now();
-      }).length > 0 && (
-        <div style={{marginTop:20}}>
-          <div style={{fontWeight:800,fontSize:14,marginBottom:8}}>📋 ההזמנות שלי</div>
-          {bookings.filter((b)=>{
-        if (!isBookingOwnedByStudent(b)) return false;
-        const endDate = b.isNight ? (() => { const d = new Date(b.date); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); })() : b.date;
-        return new Date(`${endDate}T${b.endTime||"23:59"}:00`).getTime() > Date.now();
-      }).sort((a,b)=>(a.date||"").localeCompare(b.date||"")||(a.startTime||"").localeCompare(b.startTime||"")).map(b=>{
-            const studio = studios.find(s=>sameStudioId(s.id, b.studioId));
-            const color = getBookingColor(b);
-            const canCancel = b.date >= todayStr;
-            return (
-              <div key={b.id} style={{background:"var(--surface2)",borderRadius:8,padding:"10px 14px",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center",border:`1px solid ${color}44`,borderRight:`3px solid ${color}`}}>
-                <div>
-                  <div style={{fontWeight:700,fontSize:13}}>
-                    {studio?.image?.startsWith("http") ? null : (studio?.image||"🎙️")} {studio?.name} · {b.date}
-                    {b.isNight && <span style={{color:NIGHT_COLOR,marginRight:4}}> 🌙</span>}
-                  </div>
-                  <div style={{fontSize:12,color:"var(--text3)"}}>{getStudioBookingTimeLabel(b)}</div>
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  {canCancel && (
-                    <>
-                      <button onClick={()=>setModal({type:"editBooking",bookingId:b.id,studioId:b.studioId,date:b.date,dayName:"",isNight:b.isNight||false,defaultStart:b.startTime,defaultEnd:b.endTime,notes:b.notes})} style={{background:"var(--accent)",color:"#000",border:"none",borderRadius:4,padding:"3px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                        ✏️ ערוך
-                      </button>
-                      <button onClick={()=>cancelBooking(b.id)} style={{background:"var(--red)",color:"#fff",border:"none",borderRadius:4,padding:"3px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                        ❌ בטל
-                      </button>
-                    </>
-                  )}
-                  <span style={{background:color+"22",color,borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>קביעה פעילה</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
       {/* Night policies modal — always shown for night bookings */}
       {nightPolicyPending && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
