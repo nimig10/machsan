@@ -1,6 +1,6 @@
 // ReservationsPage.jsx — admin reservations management page (includes rejected + archive tabs)
 import { useEffect, useState } from "react";
-import { storageSet, storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity } from "../utils.js";
+import { storageSet, storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
@@ -24,7 +24,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
   const archivedCount = reservations.filter(r=>r.status==="הוחזר").length;
   const effectiveStatusFilter = isRejectedPage
     ? (["הכל","נדחה","באיחור"].includes(statusF) ? statusF : "הכל")
-    : (["הכל","ממתין","אישור ראש מחלקה","מאושר"].includes(statusF) ? statusF : "הכל");
+    : (["הכל","ממתין","אישור ראש מחלקה","מאושר","פעילה"].includes(statusF) ? statusF : "הכל");
 
   const filtered = [...reservations]
     .filter(r => {
@@ -33,7 +33,10 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
         if (effectiveStatusFilter !== "הכל" && r.status !== effectiveStatusFilter) return false;
       } else {
         if (r.status === "הוחזר" || r.status === "נדחה" || r.status === "באיחור") return false;
-        if (effectiveStatusFilter !== "הכל" && r.status !== effectiveStatusFilter) return false;
+        if (effectiveStatusFilter !== "הכל") {
+          if (effectiveStatusFilter === "פעילה") { if (getEffectiveStatus(r) !== "פעילה") return false; }
+          else if (r.status !== effectiveStatusFilter) return false;
+        }
       }
       return (loanTypeF==="הכל" || r.loan_type===loanTypeF) &&
         (r.student_name?.includes(search) || r.email?.includes(search));
@@ -404,7 +407,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                   </div>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  {statusBadge(r.status)}
+                  {statusBadge(getEffectiveStatus(r))}
                   <span style={{fontSize:11,color:"var(--text3)"}}>{formatDate(r.created_at)}</span>
                 </div>
               </div>

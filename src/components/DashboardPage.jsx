@@ -1,6 +1,6 @@
 // DashboardPage.jsx — admin dashboard page
 import { useState } from "react";
-import { storageSet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive } from "../utils.js";
+import { storageSet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 
@@ -277,7 +277,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
           <div style={{padding:"8px 16px",display:"flex",flexDirection:"column",gap:8,borderBottom:"1px solid var(--border)"}}>
             <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
               <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סטטוס:</span>
-              {["ממתין","אישור ראש מחלקה","נדחה","מאושר","באיחור"].map(s=>{
+              {["ממתין","אישור ראש מחלקה","נדחה","מאושר","פעילה","באיחור"].map(s=>{
                 const active=dashStatusF.includes(s);
                 return <button key={s} type="button" onClick={()=>setDashStatusF(p=>active?p.filter(x=>x!==s):[...p,s])}
                   style={{padding:"3px 10px",borderRadius:20,border:`1.5px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>{s}</button>;
@@ -293,7 +293,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
           </div>
           {(()=>{
             const dashFiltered = [...reservations]
-              .filter(r=>r.status!=="הוחזר"&&r.loan_type!=="שיעור"&&(dashStatusF.length===0||dashStatusF.includes(r.status)))
+              .filter(r=>r.status!=="הוחזר"&&r.loan_type!=="שיעור"&&(dashStatusF.length===0||dashStatusF.includes(r.status)||(dashStatusF.includes("פעילה")&&getEffectiveStatus(r)==="פעילה")))
               .sort((a,b)=>dashSortBy==="urgency"?new Date(a.borrow_date)-new Date(b.borrow_date):Number(b.id)-Number(a.id))
               .slice(0,8);
             if(!dashFiltered.length) return <div className="empty-state" style={{padding:20}}><div className="emoji">📋</div><p>אין בקשות תואמות</p></div>;
@@ -311,7 +311,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                 </div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-                {statusBadge(r.status)}
+                {statusBadge(getEffectiveStatus(r))}
               </div>
             </div>
           ));})()}

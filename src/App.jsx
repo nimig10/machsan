@@ -760,6 +760,7 @@ const css = `
   .cert-mobile  { display:none; }
   .badge-purple { background:rgba(155,89,182,0.15); color:#9b59b6; border:1px solid rgba(155,89,182,0.3); }
   .badge-orange { background:rgba(230,126,34,0.18); color:#e67e22; border:1px solid rgba(230,126,34,0.4); }
+  .badge-teal { background:rgba(0,188,212,0.15); color:#00acc1; border:1px solid rgba(0,188,212,0.35); }
   .badge-gray { background:var(--surface2); color:var(--text2); border:1px solid var(--border); }
   .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; z-index:10000; padding:20px; backdrop-filter:blur(4px); animation:fadeIn 0.15s; }
   .modal { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); width:100%; max-width:580px; max-height:90vh; overflow-y:auto; animation:slideUp 0.2s; }
@@ -7579,11 +7580,11 @@ export default function App() {
                   <select
                     className="form-select"
                     style={{flex:"1 1 100px",minWidth:95,fontSize:12,padding:"6px 8px"}}
-                    value={["הכל","ממתין","אישור ראש מחלקה","מאושר"].includes(resStatusF) ? resStatusF : "הכל"}
+                    value={["הכל","ממתין","אישור ראש מחלקה","מאושר","פעילה"].includes(resStatusF) ? resStatusF : "הכל"}
                     onChange={e=>setResStatusF(e.target.value)}
                   >
                     <option value="הכל">כל הסטטוסים</option>
-                    {["ממתין","אישור ראש מחלקה","מאושר"].map(s=><option key={s} value={s}>{s}</option>)}
+                    {["ממתין","אישור ראש מחלקה","מאושר","פעילה"].map(s=><option key={s} value={s}>{s}</option>)}
                   </select>
                   <select className="form-select" style={{flex:"1 1 90px",minWidth:85,fontSize:12,padding:"6px 8px"}} value={resLoanTypeF} onChange={e=>setResLoanTypeF(e.target.value)}>
                     <option value="הכל">כל הסוגים</option>

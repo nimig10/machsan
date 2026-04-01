@@ -292,6 +292,14 @@ export function toDateTime(dateStr, timeStr) {
   return d.getTime();
 }
 
+// Returns "פעילה" for approved reservations whose borrow time has already started
+export function getEffectiveStatus(r) {
+  if (r?.status === "מאושר" && r.borrow_date) {
+    if (toDateTime(r.borrow_date, r.borrow_time || "00:00") <= Date.now()) return "פעילה";
+  }
+  return r?.status || "";
+}
+
 export function safeClone(value) {
   try {
     if (typeof structuredClone === "function") return structuredClone(value);
