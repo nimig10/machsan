@@ -1009,6 +1009,11 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     if (Array.isArray(b)) setStudioBookings(b);
   };
 
+  const loadReservationsData = async () => {
+    const res = await storageGet("reservations");
+    if (Array.isArray(res)) setReservations(res);
+  };
+
   const loadDailySchedule = async () => {
     const lessons = await storageGet("lessons");
     setDailyLessons(Array.isArray(lessons) ? lessons : []);
@@ -1835,7 +1840,7 @@ ${inventory}
       sessionStorage.setItem("public_view", next);
       if (next === "studios") loadStudiosData();
       if (next === "daily") { setDailyDayOffset(0); loadDailySchedule(); }
-      if (next === "my-bookings") loadStudiosData();
+      if (next === "my-bookings") { loadStudiosData(); loadReservationsData(); }
     } else if (dx > 0 && idx > 0) {
       const prev = VIEWS[idx - 1];
       setPublicView(prev);
@@ -1941,7 +1946,7 @@ ${inventory}
               style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:publicView==="daily"?"var(--accent)":"transparent",color:publicView==="daily"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
               📅 לוז יומי
             </button>
-            <button type="button" onClick={()=>{setPublicView("my-bookings");loadStudiosData();}}
+            <button type="button" onClick={()=>{setPublicView("my-bookings");loadStudiosData();loadReservationsData();}}
               style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:publicView==="my-bookings"?"var(--accent)":"transparent",color:publicView==="my-bookings"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
               📋 ההזמנות
             </button>
