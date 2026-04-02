@@ -1,7 +1,7 @@
 // ui.jsx — shared UI primitives: Toast, Modal, Loading, statusBadge
 import { useState, useRef, useEffect } from "react";
 import lottie from "lottie-web";
-import loadingData from "../assets/loading-logo.json";
+import loadingData from "../assets/loading-logo2.json";
 import { normalizeReservationStatus } from "../utils.js";
 export function statusBadge(s) {
   const normalizedStatus = normalizeReservationStatus(s);
