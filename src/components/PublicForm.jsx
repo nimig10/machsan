@@ -890,6 +890,8 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [studioWeekOffset, setStudioWeekOffset] = useState(0);
   const [studioModal, setStudioModal] = useState(null);
   const [expandedResId, setExpandedResId] = useState(null);
+  const [editingBooking, setEditingBooking] = useState(null); // {id, studioId, date, startTime, endTime, isNight}
+  const [editBookingSaving, setEditBookingSaving] = useState(false);
   const fmtDate = (d) => { if (!d) return ""; const [y,m,dd] = d.split("-"); return `${dd}.${m}.${y}`; };
   const [showEquipmentAiModal, setShowEquipmentAiModal] = useState(false);
   const [equipmentAiPrompt, setEquipmentAiPrompt] = useState("");
@@ -2307,29 +2309,74 @@ ${inventory}
               if (stEmail&&bEmail) return stEmail===bEmail;
               return normalizeName(b.studentName||"")===normalizeName(loggedInStudent.name||"");
             }).sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:(a.startTime||"")>(b.startTime||"")?1:-1);
+            const NBST="21:30",NBET="08:00";
             const isFuture=b=>{const e=b.isNight?(()=>{const d=new Date(b.date);d.setDate(d.getDate()+1);return d.toISOString().slice(0,10);})():b.date;return new Date(`${e}T${b.endTime||"23:59"}:00`).getTime()>Date.now();};
             const futureOnes=myBookings.filter(isFuture);
             const handleCancel=async id=>{const updated=studioBookings.filter(b=>b.id!==id);setStudioBookings(updated);await storageSet("studio_bookings",updated);showToast("success","❌ ההזמנה בוטלה");};
-            const renderRow=(b,canEdit)=>{
+            const handleSaveEdit=async()=>{
+              if(!editingBooking) return;
+              const{id,studioId,date,startTime,endTime}=editingBooking;
+              if(!startTime||!endTime||startTime>=endTime){showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה");return;}
+              const overlap=studioBookings.some(b=>String(b.studioId)===String(studioId)&&b.date===date&&b.id!==id&&b.status!=="נדחה"&&!(endTime<=b.startTime||startTime>=b.endTime));
+              if(overlap){showToast("error","⚠️ קיימת הזמנה חופפת לשעות אלו");return;}
+              const hoursLimit=getStudioFutureHoursLimit(siteSettings);
+              const now=new Date();
+              const otherFutureHours=studioBookings.reduce((sum,b)=>{
+                if(b.id===id||b.status==="נדחה") return sum;
+                const stEmail=String(loggedInStudent?.email||"").toLowerCase().trim();
+                const bEmail=String(b.studentEmail||"").toLowerCase().trim();
+                const isOwn=stEmail&&bEmail?stEmail===bEmail:normalizeName(b.studentName||"")===normalizeName(loggedInStudent?.name||"");
+                if(!isOwn) return sum;
+                return sum+getFutureStudioBookingHours(b,now,NBST,NBET);
+              },0);
+              const reqHours=getFutureStudioBookingHours({date,startTime,endTime,isNight:false},now,NBST,NBET);
+              if(otherFutureHours+reqHours>hoursLimit+0.0001){showToast("error",`חרגת ממכסת השעות (${formatStudioHoursValue(hoursLimit)} שעות)`);return;}
+              setEditBookingSaving(true);
+              const updated=studioBookings.map(b=>b.id===id?{...b,startTime,endTime}:b);
+              setStudioBookings(updated);
+              await storageSet("studio_bookings",updated);
+              setEditingBooking(null);
+              setEditBookingSaving(false);
+              showToast("success","✅ ההזמנה עודכנה");
+            };
+            const renderRow=(b)=>{
               const studioObj=studios.find(s=>String(s.id)===String(b.studioId));
               const color=b.isNight?"#2196f3":"var(--green)";
-              const timeLabel=b.isNight?"מ-21:00 והלאה":`${b.startTime||""}–${b.endTime||""}`;
-              return (<div key={b.id} style={{background:"var(--surface2)",borderRadius:8,padding:"12px 14px",marginBottom:8,border:`1px solid ${color}33`,borderRight:`3px solid ${color}`}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,flexWrap:"wrap"}}>
+              const timeLabel=b.isNight?`מ-21:30 והלאה`:`${b.startTime||""}–${b.endTime||""}`;
+              const isEditing=editingBooking?.id===b.id;
+              return (<div key={b.id} style={{background:"var(--surface2)",borderRadius:8,marginBottom:8,border:`1px solid ${color}33`,borderRight:`3px solid ${color}`,overflow:"hidden"}}>
+                <div style={{padding:"12px 14px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,flexWrap:"wrap"}}>
                   <div>
                     <div style={{fontWeight:700,fontSize:13}}>{studioObj?.name||"אולפן"}{b.isNight&&<span style={{color:"#2196f3",marginRight:4}}> 🌙</span>}</div>
                     <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>📅 {fmtDate(b.date)} · ⏰ {timeLabel}</div>
                     {b.notes&&<div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>💬 {b.notes}</div>}
                   </div>
-                  {canEdit&&<div style={{display:"flex",gap:6,flexShrink:0}}>
-                    <button onClick={()=>{loadStudiosData();setStudioModal({type:"editBooking",bookingId:b.id,studioId:b.studioId,date:b.date,dayName:"",isNight:b.isNight||false,defaultStart:b.startTime,defaultEnd:b.endTime,notes:b.notes});setPublicView("studios");}} style={{background:"var(--accent)",color:"#000",border:"none",borderRadius:4,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>✏️ ערוך</button>
+                  <div style={{display:"flex",gap:6,flexShrink:0}}>
+                    {!b.isNight&&<button onClick={()=>setEditingBooking(isEditing?null:{id:b.id,studioId:b.studioId,date:b.date,startTime:b.startTime||"",endTime:b.endTime||""})} style={{background:isEditing?"var(--surface3)":"var(--accent)",color:isEditing?"var(--text)":"#000",border:"none",borderRadius:4,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{isEditing?"✕ סגור":"✏️ ערוך"}</button>}
                     <button onClick={()=>handleCancel(b.id)} style={{background:"var(--red)",color:"#fff",border:"none",borderRadius:4,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>❌ בטל</button>
-                  </div>}
+                  </div>
                 </div>
+                {isEditing&&<div style={{padding:"12px 14px",borderTop:`1px solid ${color}33`,background:"var(--surface3)"}}>
+                  <div style={{fontSize:12,fontWeight:700,marginBottom:10,color:"var(--text2)"}}>✏️ עריכת שעות — {fmtDate(b.date)}</div>
+                  <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap",marginBottom:12}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <label style={{fontSize:11,color:"var(--text3)",fontWeight:700}}>שעת התחלה</label>
+                      <input type="time" value={editingBooking.startTime} onChange={e=>setEditingBooking(p=>({...p,startTime:e.target.value}))} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:6,padding:"6px 8px",color:"var(--text)",fontSize:13,fontWeight:700}}/>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <label style={{fontSize:11,color:"var(--text3)",fontWeight:700}}>שעת סיום</label>
+                      <input type="time" value={editingBooking.endTime} onChange={e=>setEditingBooking(p=>({...p,endTime:e.target.value}))} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:6,padding:"6px 8px",color:"var(--text)",fontSize:13,fontWeight:700}}/>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={handleSaveEdit} disabled={editBookingSaving} style={{background:"var(--green)",color:"#fff",border:"none",borderRadius:6,padding:"7px 18px",fontSize:12,fontWeight:700,cursor:"pointer"}}>{editBookingSaving?"שומר...":"💾 שמור שינויים"}</button>
+                    <button onClick={()=>setEditingBooking(null)} style={{background:"var(--surface)",color:"var(--text2)",border:"1px solid var(--border)",borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>ביטול</button>
+                  </div>
+                </div>}
               </div>);
             };
             if (futureOnes.length===0) return <div style={{textAlign:"center",color:"var(--text3)",padding:"20px 0",fontSize:13}}>אין קביעות אולפן עתידיות</div>;
-            return <>{futureOnes.map(b=>renderRow(b,true))}</>;
+            return <>{futureOnes.map(b=>renderRow(b))}</>;
           })()}
 
           {/* ─── רשימת ציוד ─── */}
