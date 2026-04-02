@@ -1,4 +1,7 @@
 // ui.jsx — shared UI primitives: Toast, Modal, Loading, statusBadge
+import { useRef, useEffect } from "react";
+import lottie from "lottie-web";
+import loadingData from "../assets/loading-logo.json";
 import { normalizeReservationStatus } from "../utils.js";
 export function statusBadge(s) {
   const normalizedStatus = normalizeReservationStatus(s);
@@ -20,5 +23,15 @@ export function Modal({ title, onClose, children, footer, size="" }) {
   );
 }
 export function Loading() {
-  return <div className="loading-wrap"><div className="spinner"/><span>טוען נתונים...</span></div>;
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    const anim = lottie.loadAnimation({ container: ref.current, renderer: "svg", loop: true, autoplay: true, animationData: loadingData });
+    return () => anim.destroy();
+  }, []);
+  return (
+    <div style={{position:"fixed",inset:0,width:"100vw",height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"transparent",overflow:"hidden",zIndex:9999}}>
+      <div ref={ref} style={{width:300,maxWidth:"60vw"}} />
+    </div>
+  );
 }
