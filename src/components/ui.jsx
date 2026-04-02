@@ -1,6 +1,6 @@
 // ui.jsx — shared UI primitives: Toast, Modal, Loading, statusBadge
-import { useState, useEffect } from "react";
-import Lottie from "lottie-react";
+import { useState, useRef, useEffect } from "react";
+import lottie from "lottie-web";
 import loadingData from "../assets/loading-logo.json";
 import { normalizeReservationStatus } from "../utils.js";
 export function statusBadge(s) {
@@ -48,6 +48,7 @@ function tintLottieData(data, hex) {
 const MIN_DISPLAY_MS = 4000;
 
 export function Loading({ accentColor, ready = false, onDone }) {
+  const ref = useRef(null);
   const [minDone, setMinDone] = useState(false);
 
   // 4-second minimum display timer
@@ -65,19 +66,17 @@ export function Loading({ accentColor, ready = false, onDone }) {
     try { return JSON.parse(localStorage.getItem("cache_siteSettings"))?.accentColor; } catch { return null; }
   })() || "#f5a623";
 
-  const tinted = tintLottieData(loadingData, color);
+  useEffect(() => {
+    if (!ref.current) return;
+    const tinted = tintLottieData(loadingData, color);
+    const anim = lottie.loadAnimation({ container: ref.current, renderer: "svg", loop: true, autoplay: true, animationData: tinted, rendererSettings: { preserveAspectRatio: "xMidYMid meet" } });
+    return () => anim.destroy();
+  }, [color]);
 
   return (
     <div style={{position:"fixed",inset:0,width:"100vw",height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",zIndex:9999}}>
       <style>{`@media(max-width:600px){.lottie-load{width:250px!important;height:250px!important}}`}</style>
-      <Lottie
-        animationData={tinted}
-        loop={true}
-        autoplay={true}
-        className="lottie-load"
-        style={{width:350,height:350}}
-        rendererSettings={{preserveAspectRatio:"xMidYMid meet"}}
-      />
+      <div ref={ref} className="lottie-load" style={{width:350,height:350}} />
     </div>
   );
 }
