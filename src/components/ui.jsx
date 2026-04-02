@@ -22,16 +22,52 @@ export function Modal({ title, onClose, children, footer, size="" }) {
     </div>
   );
 }
-export function Loading() {
+// Replaces white [1,1,1,1] colors in Lottie JSON with the given hex accent color
+function tintLottieData(data, hex) {
+  if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return data;
+  const r = parseInt(hex.slice(1,3),16)/255;
+  const g = parseInt(hex.slice(3,5),16)/255;
+  const b = parseInt(hex.slice(5,7),16)/255;
+  function walk(obj) {
+    if (!obj || typeof obj !== "object") return obj;
+    if (Array.isArray(obj)) return obj.map(walk);
+    const out = {};
+    for (const k of Object.keys(obj)) {
+      // Static color value: {a:0, k:[r,g,b,a]} — replace if white/near-white
+      if (k === "k" && Array.isArray(obj[k]) && obj[k].length === 4 &&
+          typeof obj[k][0] === "number" && obj[k][0] > 0.8 && obj[k][1] > 0.8 && obj[k][2] > 0.8) {
+        out[k] = [r, g, b, obj[k][3]];
+      } else {
+        out[k] = walk(obj[k]);
+      }
+    }
+    return out;
+  }
+  return walk(JSON.parse(JSON.stringify(data)));
+}
+
+const LOTTIE_TOTAL_SECONDS = 422 / 60; // 7.033s — from the JSON (op=422, fr=60)
+const TARGET_SECONDS = 3.43;
+const LOTTIE_SPEED = LOTTIE_TOTAL_SECONDS / TARGET_SECONDS; // ≈2.05
+
+export function Loading({ accentColor }) {
   const ref = useRef(null);
+  // Read accent color from localStorage cache if not passed as prop
+  const color = accentColor || (() => {
+    try { const s = localStorage.getItem("cache_siteSettings"); return s ? JSON.parse(s)?.accentColor : null; } catch { return null; }
+  })() || "#f5a623";
+
   useEffect(() => {
     if (!ref.current) return;
-    const anim = lottie.loadAnimation({ container: ref.current, renderer: "svg", loop: true, autoplay: true, animationData: loadingData });
+    const tinted = tintLottieData(loadingData, color);
+    const anim = lottie.loadAnimation({ container: ref.current, renderer: "svg", loop: true, autoplay: true, animationData: tinted });
+    anim.setSpeed(LOTTIE_SPEED);
     return () => anim.destroy();
-  }, []);
+  }, [color]);
   return (
     <div style={{position:"fixed",inset:0,width:"100vw",height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"transparent",overflow:"hidden",zIndex:9999}}>
-      <div ref={ref} style={{width:300,maxWidth:"60vw"}} />
+      <style>{`@media(max-width:600px){.lottie-load{width:280px!important}}`}</style>
+      <div ref={ref} className="lottie-load" style={{width:460}} />
     </div>
   );
 }
