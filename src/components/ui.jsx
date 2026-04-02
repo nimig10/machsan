@@ -62,16 +62,19 @@ export function Loading({ accentColor, ready = false, onDone }) {
     if (minDone && ready) onDone?.();
   }, [minDone, ready]);
 
-  const color = accentColor || (() => {
-    try { return JSON.parse(localStorage.getItem("cache_siteSettings"))?.accentColor; } catch { return null; }
-  })() || "#f5a623";
+  const colorRef = useRef(null);
+  if (!colorRef.current) {
+    colorRef.current = accentColor || (() => {
+      try { return JSON.parse(localStorage.getItem("cache_siteSettings"))?.accentColor; } catch { return null; }
+    })() || "#f5a623";
+  }
 
   useEffect(() => {
     if (!ref.current) return;
-    const tinted = tintLottieData(loadingData, color);
+    const tinted = tintLottieData(loadingData, colorRef.current);
     const anim = lottie.loadAnimation({ container: ref.current, renderer: "svg", loop: true, autoplay: true, animationData: tinted, rendererSettings: { preserveAspectRatio: "xMidYMid meet" } });
     return () => anim.destroy();
-  }, [color]);
+  }, []);
 
   return (
     <div style={{position:"fixed",inset:0,width:"100vw",height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",zIndex:9999}}>
