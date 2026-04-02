@@ -6382,6 +6382,7 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, settingsRole =
     setSaving(true);
     setSiteSettings(draft);
     try { localStorage.setItem("cache_siteSettings", JSON.stringify(draft)); } catch {}
+    try { const tc=document.getElementById("theme-color-meta"); if(tc&&draft.accentColor) tc.setAttribute("content",draft.accentColor); } catch {}
     await storageSet("siteSettings", draft);
     setSaving(false);
     showToast("success", "ההגדרות נשמרו ✅");
@@ -7175,6 +7176,7 @@ export default function App() {
         _setSiteSettings(loadedSettings);
         try { localStorage.setItem("cache_siteSettings", JSON.stringify(loadedSettings)); } catch {}
         if(loadedSettings.theme==="light") document.documentElement.setAttribute("data-theme","light");
+        try { const tc=document.getElementById("theme-color-meta"); if(tc&&loadedSettings.accentColor) tc.setAttribute("content",loadedSettings.accentColor); } catch {}
 
         // ─── SAFE INIT: only write defaults when DB confirmed the key doesn't exist ───
         // "supabase_empty" = DB responded OK but row missing → safe to initialize

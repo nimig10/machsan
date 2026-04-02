@@ -1872,7 +1872,7 @@ ${inventory}
         {siteSettings.logo
           ? <img src={siteSettings.logo} alt="לוגו" style={{width:82,height:82,objectFit:"contain",borderRadius:12,marginBottom:16,display:"block",marginInline:"auto"}}/>
           : <div style={{fontSize:48,marginBottom:16}}>🎬</div>}
-        <h2 style={{fontSize:20,fontWeight:900,color:"var(--accent)",marginBottom:4}}>מערכת פניות לסטודנט</h2>
+        <h2 style={{fontSize:"clamp(14px,4vw,20px)",fontWeight:900,color:"var(--accent)",marginBottom:4}}>מערכת פניות לסטודנט</h2>
         <div style={{fontSize:13,color:"var(--text3)",marginBottom:24}}>מכללת קמרה אובסקורה וסאונד</div>
         <div style={{textAlign:"right",marginBottom:12}}>
           <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>שם מלא</label>
@@ -1931,7 +1931,7 @@ ${inventory}
             </svg>
           </button>
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",paddingInline:"24px"}}>
-            <div style={{fontSize:22,fontWeight:900,color:"var(--accent)"}}>מערכת פניות לסטודנט</div>
+            <div style={{fontSize:"clamp(15px,4.5vw,22px)",fontWeight:900,color:"var(--accent)"}}>מערכת פניות לסטודנט</div>
             <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>שלום, {loggedInStudent.name}</div>
           </div>
           {/* ── View toggle: equipment vs studios ── */}
