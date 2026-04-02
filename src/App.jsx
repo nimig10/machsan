@@ -6795,6 +6795,8 @@ export default function App() {
   const [studioBookings, _setStudioBookings] = useState([]);
   const [lessons, _setLessons] = useState([]);
   const [loading, setLoading]         = useState(true);
+  const [loadingDone, setLoadingDone] = useState(false);
+  const handleLoadingDone = () => setLoadingDone(true);
   const [toasts, setToasts]           = useState([]);
   // Staff auth: unified login
   const [staffUser, setStaffUser] = useState(() => {
@@ -7408,7 +7410,7 @@ export default function App() {
       {/* ── טופס ציבורי ── */}
       {isManagerCalendarView ? (
         <div style={{minHeight:"100vh",background:"var(--bg)",direction:"rtl"}}>
-          {loading ? <Loading accentColor={siteSettings.accentColor}/> : (
+          {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : (
             managerToken && urlToken === managerToken
               ? <ManagerCalendarPage reservations={reservations} setReservations={setReservations} collegeManager={collegeManager} equipment={equipment} kits={kits} siteSettings={siteSettings}/>
               : <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",flexDirection:"column",gap:16,color:"var(--text2)"}}>
@@ -7420,7 +7422,7 @@ export default function App() {
         </div>
       ) : isCalendarView ? (
         <div style={{minHeight:"100vh",background:"var(--bg)",direction:"rtl"}}>
-          {loading ? <Loading accentColor={siteSettings.accentColor}/> : (
+          {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : (
             calendarToken && urlToken === calendarToken
               ? <DeptHeadCalendarPage reservations={reservations} calendarToken={calendarToken} kits={kits} equipment={equipment} siteSettings={siteSettings}/>
               : <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",flexDirection:"column",gap:16,color:"var(--text2)"}}>
@@ -7432,7 +7434,7 @@ export default function App() {
         </div>
       ) : isPublicFormView && (
         <div className="public-page-shell">
-          {loading ? <Loading accentColor={siteSettings.accentColor}/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes} refreshInventory={refreshPublicInventory}/>}
+          {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes} refreshInventory={refreshPublicInventory}/>}
         </div>
       )}
 
@@ -7473,7 +7475,7 @@ export default function App() {
                 <span className="topbar-title" style={{flex:1}}>ניהול צוות</span>
               </div>
             </div>
-            {loading ? <Loading accentColor={siteSettings.accentColor}/> : <StaffManagementPage showToast={showToast} teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} managerToken={managerToken}/>}
+            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <StaffManagementPage showToast={showToast} teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} managerToken={managerToken}/>}
           </div>
         </div>
       )}
@@ -7597,7 +7599,7 @@ export default function App() {
                 </div>
               )}
             </div>
-            {loading ? <Loading accentColor={siteSettings.accentColor}/> : <>
+            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <>
               <div style={{display:page==="dashboard"?"block":"none"}}><DashboardPage equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} siteSettings={siteSettings}/></div>
               <div style={{display:page==="equipment"?"block":"none"}}><EquipmentPage equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} categoryLoanTypes={categoryLoanTypes} setCategoryLoanTypes={setCategoryLoanTypes} certifications={certifications} studios={studios} collegeManager={collegeManager} managerToken={managerToken} onLogCreated={attachLogIdToUndo}/></div>
               <div style={{display:page==="reservations"?"block":"none"}}><ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
@@ -7678,7 +7680,7 @@ export default function App() {
                 </button>
               </div>
             </div>
-            {loading ? <Loading accentColor={siteSettings.accentColor}/> : <>
+            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <>
               <div style={{display:secretaryPage==="dashboard"?"block":"none"}}><SecretaryDashboardPage certifications={certifications} studios={studios} studioBookings={studioBookings} lessons={lessons}/></div>
               <div style={{display:secretaryPage==="studios"?"block":"none"}}><StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin" studios={studios} setStudios={setStudios} bookings={studioBookings} setBookings={setStudioBookings} siteSettings={siteSettings} setSiteSettings={setSiteSettings} isActive={secretaryPage==="studios"}/></div>
               <div style={{display:secretaryPage==="studio-certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment} onlyMode="studio"/></div>
