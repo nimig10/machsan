@@ -480,7 +480,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                 </div>
               </div>
               {/* Return button for approved/overdue requests */}
-              {(dashViewRes.status==="מאושר"||dashViewRes.status==="באיחור") && setReservations && (
+              {(getEffectiveStatus(dashViewRes)==="פעילה"||getEffectiveStatus(dashViewRes)==="באיחור") && setReservations && (
                 <div style={{borderTop:"1px solid var(--border)",paddingTop:14,display:"flex",justifyContent:"center"}}>
                   <button className="btn btn-secondary" style={{fontSize:14,padding:"10px 32px",background:"var(--blue)",borderColor:"var(--blue)",color:"#fff"}}
                     onClick={async()=>{
