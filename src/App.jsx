@@ -6381,6 +6381,7 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, settingsRole =
   const save = async () => {
     setSaving(true);
     setSiteSettings(draft);
+    try { localStorage.setItem("cache_siteSettings", JSON.stringify(draft)); } catch {}
     await storageSet("siteSettings", draft);
     setSaving(false);
     showToast("success", "ההגדרות נשמרו ✅");
@@ -7172,6 +7173,7 @@ export default function App() {
         _setLessons(Array.isArray(lsns) ? lsns : []);
           const loadedSettings = siteSet || { logo:"", theme:"dark" };
         _setSiteSettings(loadedSettings);
+        try { localStorage.setItem("cache_siteSettings", JSON.stringify(loadedSettings)); } catch {}
         if(loadedSettings.theme==="light") document.documentElement.setAttribute("data-theme","light");
 
         // ─── SAFE INIT: only write defaults when DB confirmed the key doesn't exist ───
