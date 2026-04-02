@@ -1,6 +1,6 @@
 // PublicForm.jsx — public loan request form
 import { useEffect, useState, useRef, useMemo } from "react";
-import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE } from "../utils.js";
+import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus } from "../utils.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import AIChatBot from "./AIChatBot.jsx";
 
@@ -2338,11 +2338,11 @@ ${inventory}
               const rEmail=String(r.email||"").toLowerCase().trim();
               if (stEmail&&rEmail) return stEmail===rEmail;
               return normalizeName(r.student_name||"")===normalizeName(loggedInStudent?.name||"");
-            }).filter(r=>r.status!=="הוחזר").sort((a,b)=>(b.borrow_date||"")>(a.borrow_date||"")?1:-1);
+            }).filter(r=>getEffectiveStatus(r)!=="הוחזר").sort((a,b)=>(b.borrow_date||"")>(a.borrow_date||"")?1:-1);
             if (myRes.length===0) return <div style={{textAlign:"center",color:"var(--text3)",padding:"20px 0",fontSize:13}}>אין בקשות השאלה</div>;
             return myRes.map(r=>{
               const isExp=expandedResId===r.id;
-              const st=r.status||"";
+              const st=getEffectiveStatus(r);
               return (<div key={r.id} style={{borderRadius:10,border:`1px solid ${sBorder(st)}`,marginBottom:10,overflow:"hidden"}}>
                 <div style={{background:"var(--surface2)",padding:"12px 14px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}} onClick={()=>setExpandedResId(isExp?null:r.id)}>
                   <div>
