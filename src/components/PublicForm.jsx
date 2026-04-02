@@ -1924,12 +1924,6 @@ ${inventory}
             </svg>
           </button>
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",paddingInline:"24px"}}>
-            {siteSettings.logo
-              ? <img src={siteSettings.logo} alt="לוגו" style={{width:82,height:82,objectFit:"contain",borderRadius:12,marginBottom:siteSettings.soundLogo?6:12}}/>
-              : <div style={{fontSize:48,marginBottom:siteSettings.soundLogo?6:12}}>🎬</div>}
-            {siteSettings.soundLogo && (
-              <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:82,height:82,objectFit:"contain",borderRadius:12,marginBottom:12}}/>
-            )}
             <div style={{fontSize:22,fontWeight:900,color:"var(--accent)"}}>מערכת פניות לסטודנט</div>
             <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>שלום, {loggedInStudent.name}</div>
           </div>
