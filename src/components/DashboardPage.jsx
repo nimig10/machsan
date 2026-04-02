@@ -391,11 +391,11 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
               {DASHBOARD_CAL_STATUSES.map(s=>{
                 const active = calStatusF.includes(s);
-                const clr = s==="מאושר" ? "var(--green)" : s==="ממתין" ? "var(--yellow)" : s==="באיחור" ? "#e67e22" : s==="אישור ראש מחלקה" ? "var(--purple)" : "var(--red)";
+                const clr = s==="מאושר" ? "var(--green)" : s==="ממתין" ? "var(--yellow)" : s==="פעילה" ? "#64b5f6" : s==="באיחור" ? "#e67e22" : s==="אישור ראש מחלקה" ? "var(--purple)" : "var(--red)";
                 return (
                   <button key={s} type="button" onClick={()=>setCalStatusF(p=>active?p.filter(x=>x!==s):[...p,s])}
                     style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${active?clr:"var(--border)"}`,background:active?`color-mix(in srgb,${clr} 15%,transparent)`:"transparent",color:active?clr:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>
-                    {s==="מאושר" ? "✅" : s==="ממתין" ? "⏳" : s==="באיחור" ? "⚠️" : s==="אישור ראש מחלקה" ? "🟣" : "❌"} {s}
+                    {s==="מאושר" ? "✅" : s==="ממתין" ? "⏳" : s==="פעילה" ? "👍" : s==="באיחור" ? "⚠️" : s==="אישור ראש מחלקה" ? "🟣" : "❌"} {s}
                   </button>
                 );
               })}

@@ -2382,9 +2382,9 @@ ${inventory}
           {/* ─── רשימת ציוד ─── */}
           <div style={{fontWeight:900,fontSize:15,marginTop:28,marginBottom:12,paddingBottom:10,borderBottom:"1px solid var(--border)"}}>📦 רשימת ציוד</div>
           {(()=>{
-            const sColor=s=>s==="מאושר"||s==="פעילה"?"#1a7a4a":s==="ממתין"||s==="אישור ראש מחלקה"?"#b8860b":s==="נדחה"?"#c0392b":s==="באיחור"?"#e67e22":s==="הוחזר"?"#2471a3":"var(--text3)";
-            const sBg=s=>s==="מאושר"||s==="פעילה"?"rgba(46,204,113,0.15)":s==="ממתין"||s==="אישור ראש מחלקה"?"rgba(241,196,15,0.15)":s==="נדחה"?"rgba(231,76,60,0.15)":s==="באיחור"?"rgba(230,126,34,0.18)":s==="הוחזר"?"rgba(52,152,219,0.15)":"var(--surface2)";
-            const sBorder=s=>s==="מאושר"||s==="פעילה"?"rgba(46,204,113,0.25)":s==="ממתין"||s==="אישור ראש מחלקה"?"rgba(241,196,15,0.25)":s==="נדחה"?"rgba(231,76,60,0.3)":s==="באיחור"?"rgba(230,126,34,0.4)":s==="הוחזר"?"rgba(52,152,219,0.25)":"var(--border)";
+            const sColor=s=>s==="מאושר"?"#1a7a4a":s==="פעילה"?"#64b5f6":s==="ממתין"||s==="אישור ראש מחלקה"?"#b8860b":s==="נדחה"?"#c0392b":s==="באיחור"?"#e67e22":s==="הוחזר"?"#2471a3":"var(--text3)";
+            const sBg=s=>s==="מאושר"?"rgba(46,204,113,0.15)":s==="פעילה"?"rgba(100,181,246,0.15)":s==="ממתין"||s==="אישור ראש מחלקה"?"rgba(241,196,15,0.15)":s==="נדחה"?"rgba(231,76,60,0.15)":s==="באיחור"?"rgba(230,126,34,0.18)":s==="הוחזר"?"rgba(52,152,219,0.15)":"var(--surface2)";
+            const sBorder=s=>s==="מאושר"?"rgba(46,204,113,0.25)":s==="פעילה"?"rgba(100,181,246,0.3)":s==="ממתין"||s==="אישור ראש מחלקה"?"rgba(241,196,15,0.25)":s==="נדחה"?"rgba(231,76,60,0.3)":s==="באיחור"?"rgba(230,126,34,0.4)":s==="הוחזר"?"rgba(52,152,219,0.25)":"var(--border)";
             const myRes=[...reservations].filter(r=>{
               const stEmail=String(loggedInStudent?.email||"").toLowerCase().trim();
               const rEmail=String(r.email||"").toLowerCase().trim();
@@ -2395,8 +2395,8 @@ ${inventory}
             return myRes.map(r=>{
               const isExp=expandedResId===r.id;
               const st=getEffectiveStatus(r);
-              const cardBg=st==="פעילה"?"rgba(46,204,113,0.08)":st==="באיחור"?"rgba(230,126,34,0.08)":r.loan_type==="סאונד"?"rgba(245,166,35,0.06)":r.loan_type==="הפקה"?"rgba(52,152,219,0.06)":r.loan_type==="קולנוע יומית"?"rgba(52,152,219,0.08)":r.loan_type==="שיעור"?"rgba(155,89,182,0.1)":"var(--surface2)";
-              const cardBorder=st==="פעילה"?"rgba(46,204,113,0.35)":st==="באיחור"?"rgba(230,126,34,0.45)":r.loan_type==="סאונד"?"rgba(245,166,35,0.25)":r.loan_type==="הפקה"?"rgba(52,152,219,0.25)":r.loan_type==="קולנוע יומית"?"rgba(52,152,219,0.3)":r.loan_type==="שיעור"?"rgba(155,89,182,0.3)":"var(--border)";
+              const cardBg=st==="פעילה"?"rgba(100,181,246,0.08)":st==="באיחור"?"rgba(230,126,34,0.08)":r.loan_type==="סאונד"?"rgba(245,166,35,0.06)":r.loan_type==="הפקה"?"rgba(52,152,219,0.06)":r.loan_type==="קולנוע יומית"?"rgba(52,152,219,0.08)":r.loan_type==="שיעור"?"rgba(155,89,182,0.1)":"var(--surface2)";
+              const cardBorder=st==="פעילה"?"rgba(100,181,246,0.35)":st==="באיחור"?"rgba(230,126,34,0.45)":r.loan_type==="סאונד"?"rgba(245,166,35,0.25)":r.loan_type==="הפקה"?"rgba(52,152,219,0.25)":r.loan_type==="קולנוע יומית"?"rgba(52,152,219,0.3)":r.loan_type==="שיעור"?"rgba(155,89,182,0.3)":"var(--border)";
               return (<div key={r.id} style={{borderRadius:10,border:`1px solid ${cardBorder}`,marginBottom:10,overflow:"hidden"}}>
                 <div style={{background:cardBg,padding:"12px 14px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}} onClick={()=>setExpandedResId(isExp?null:r.id)}>
                   <div>
