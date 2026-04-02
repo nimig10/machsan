@@ -64,9 +64,9 @@ export function Loading({ accentColor, ready = false, onDone }) {
 
   const colorRef = useRef(null);
   if (!colorRef.current) {
-    colorRef.current = accentColor || (() => {
+    colorRef.current = (() => {
       try { return JSON.parse(localStorage.getItem("cache_siteSettings"))?.accentColor; } catch { return null; }
-    })() || "#f5a623";
+    })() || accentColor || "#f5a623";
   }
 
   useEffect(() => {
