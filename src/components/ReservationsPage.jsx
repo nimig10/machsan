@@ -34,8 +34,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       } else {
         if (r.status === "הוחזר" || r.status === "נדחה" || r.status === "באיחור") return false;
         if (effectiveStatusFilter !== "הכל") {
-          if (effectiveStatusFilter === "פעילה") { if (getEffectiveStatus(r) !== "פעילה") return false; }
-          else if (r.status !== effectiveStatusFilter) return false;
+          if (getEffectiveStatus(r) !== effectiveStatusFilter) return false;
         }
       }
       return (loanTypeF==="הכל" || r.loan_type===loanTypeF) &&
