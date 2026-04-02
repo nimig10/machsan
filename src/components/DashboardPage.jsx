@@ -76,7 +76,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
     ["rgba(200,160,0,0.75)","#fff"],   ["rgba(230,126,34,0.75)","#fff"],
     ["rgba(26,188,156,0.75)","#fff"],  ["rgba(236,72,153,0.75)","#fff"],
   ];
-  const DASHBOARD_CAL_STATUSES = ["ממתין","מאושר","נדחה","באיחור","אישור ראש מחלקה"];
+  const DASHBOARD_CAL_STATUSES = ["ממתין","מאושר","פעילה","נדחה","באיחור","אישור ראש מחלקה"];
   const CAL_LOAN_TYPES = [
     { key:"הכל", label:"הכל", icon:"📦" },
     { key:"פרטית", label:"פרטית", icon:"👤" },
@@ -89,7 +89,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
 
   const activeRes = reservations.filter(r =>
     r.status !== "הוחזר" && r.borrow_date && r.return_date &&
-    (calStatusF.length===0 || calStatusF.includes(r.status)) &&
+    (calStatusF.length===0 || calStatusF.includes(r.status) || (calStatusF.includes("פעילה") && getEffectiveStatus(r)==="פעילה")) &&
     (calLoanTypeF==="הכל" || r.loan_type===calLoanTypeF)
   );
   const colorMap = {};
@@ -379,7 +379,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
 
         <div className="card calendar-card">
           <div className="card-header">
-            <span className="card-title">📅 השאלות ציוד פעילות</span>
+            <span className="card-title">📅 לוח השאלות ציוד</span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <button className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo-1,1))}>‹</button>
               <span style={{fontWeight:800,minWidth:110,textAlign:"center"}}>{HE_M[mo]} {yr}</span>
@@ -451,7 +451,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                 <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{dashViewRes.email}</div>
               </div>
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                {statusBadge(dashViewRes.status)}
+                {statusBadge(getEffectiveStatus(dashViewRes))}
                 <button className="btn btn-secondary btn-sm" onClick={()=>setDashViewRes(null)}>✕</button>
               </div>
             </div>
