@@ -250,7 +250,35 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     return found;
   };
 
+  const findLessonConflict = (lesson) => {
+    for (const session of (lesson.schedule || [])) {
+      const stId = String(session.studioId || lesson.studioId || "");
+      if (!stId) continue;
+      const sS = session.startTime || "00:00", sE = session.endTime || "23:59";
+      for (const other of lessons) {
+        if (other.id === lesson.id) continue; // skip self when editing
+        const otherStId = String(other.studioId || "");
+        for (const os of (other.schedule || [])) {
+          const osStId = String(os.studioId || otherStId || "");
+          if (osStId !== stId) continue;
+          if (os.date !== session.date) continue;
+          const oS = os.startTime || "00:00", oE = os.endTime || "23:59";
+          if (oS < sE && oE > sS) {
+            const studio = studios.find(s => String(s.id) === stId);
+            return { lessonName: other.name, studioName: studio?.name || "החדר", startTime: oS, endTime: oE, date: os.date };
+          }
+        }
+      }
+    }
+    return null;
+  };
+
   const save = async (lesson) => {
+    const lessonConflict = findLessonConflict(lesson);
+    if (lessonConflict) {
+      showToast("error", `פעולה נחסמה: החדר "${lessonConflict.studioName}" כבר תפוס בשעות אלו. הקביעה הקיימת שמפריעה: "${lessonConflict.lessonName}" בין השעות ${lessonConflict.startTime} ל-${lessonConflict.endTime}`);
+      return;
+    }
     const found = findBookingConflicts(lesson);
     if (found.length > 0) {
       setPendingLesson(lesson);

@@ -2787,6 +2787,19 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     if (!isNight && overlap) return "⚠️ קיימת הזמנה חופפת";
     return "";
   };
+  const checkStudentParallelBooking = (date, startTime, endTime, excludeBookingId = null) => {
+    const stuId = student?.id ?? null;
+    const stuName = student?.name || "";
+    return bookings.find(b => {
+      if (!isActiveStudioBooking(b)) return false;
+      if (b.date !== date) return false;
+      if (excludeBookingId !== null && String(b.id) === String(excludeBookingId)) return false;
+      const isMine = (stuId !== null && String(b.studentId) === String(stuId)) || b.studentName === stuName;
+      if (!isMine) return false;
+      return !(endTime <= b.startTime || startTime >= b.endTime);
+    }) || null;
+  };
+
   const persistStudentBooking = async ({ studioId, date, startTime, endTime, notes="", isNight=false, blockedMessage="", successMessage="✅ החדר הוזמן בהצלחה!" }) => {
     // Night booking always requires consent — close booking modal + day view, then show policy modal
     if (isNight) {
@@ -2802,6 +2815,12 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       const normalizedEndTime = endTime;
       const validationError = getStudioBookingValidationError({ studioId, date, startTime: normalizedStartTime, endTime: normalizedEndTime, isNight, blockedMessage });
       if (validationError) { showToast("error", validationError); return false; }
+      const parallelConflict = checkStudentParallelBooking(date, normalizedStartTime, normalizedEndTime);
+      if (parallelConflict) {
+        const studioLabel = parallelConflict.studioId || "חדר";
+        showToast("error", `פעולה נחסמה: אינך יכול להזמין שני חדרים במקביל באותן השעות (${parallelConflict.startTime}–${parallelConflict.endTime})`);
+        return false;
+      }
       const newBooking = {
         id: Date.now(),
         bookingKind: "student",
@@ -3576,6 +3595,8 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                       const normalizedEndTime = args.isNight ? NIGHT_END_TIME : args.endTime;
                       const validationError = getStudioBookingValidationError({ studioId:args.studioId, date:args.date, startTime:normalizedStartTime, endTime:normalizedEndTime, isNight:args.isNight, blockedMessage:args.blockedMessage });
                       if (validationError) { showToast("error",validationError); return; }
+                      const parallelConflict = checkStudentParallelBooking(args.date, normalizedStartTime, normalizedEndTime);
+                      if (parallelConflict) { showToast("error", `פעולה נחסמה: אינך יכול להזמין שני חדרים במקביל באותן השעות (${parallelConflict.startTime}–${parallelConflict.endTime})`); setNightPolicyPending(null); return; }
                       const newBooking = { id:Date.now(), bookingKind:"student", studioId:args.studioId, date:args.date, startTime:normalizedStartTime, endTime:normalizedEndTime, studentName:student.name, studentEmail:student.email||"", studentPhone:student.phone||"", studentId:student?.id??null, notes:args.notes, isNight:args.isNight, createdAt:new Date().toISOString() };
                       const next = [...bookings, newBooking];
                       setBookings(next);
