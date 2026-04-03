@@ -7284,6 +7284,40 @@ export default function App() {
 
   useEffect(() => { if (!loading && !isPublicFormView) fetchEquipmentReports(); },[loading]);
 
+  const refreshAdminData = async () => {
+    if (historySuspendedRef.current) return;
+    try {
+      const [resR, bookingsR] = await Promise.all([
+        storageGet("reservations"),
+        storageGet("studio_bookings"),
+      ]);
+      if (Array.isArray(resR)) {
+        const normalized = normalizeReservationsForArchive(resR);
+        if (!dataEquals(reservationsRef.current, normalized)) _setReservations(normalized);
+      }
+      if (Array.isArray(bookingsR) && !dataEquals(studioBookingsRef.current, bookingsR)) {
+        _setStudioBookings(bookingsR);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (loading || isPublicFormView) return;
+    const handleFocus = () => void refreshAdminData();
+    const handleVisibility = () => { if (document.visibilityState === "visible") void refreshAdminData(); };
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      void refreshAdminData();
+    }, 30000);
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [loading, isPublicFormView]);
+
   useEffect(() => {
     if (loading || !isPublicFormView) return undefined;
 
