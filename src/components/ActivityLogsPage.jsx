@@ -27,7 +27,7 @@ function formatDate(iso) {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function ActivityLogsPage({ showToast }) {
+export function ActivityLogsPage({ showToast, teamMembers = [] }) {
   const [logs, setLogs]             = useState([]);
   const [loading, setLoading]       = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -92,7 +92,7 @@ export function ActivityLogsPage({ showToast }) {
           <select className="form-select" value={filterUser} onChange={e => setFilterUser(e.target.value)}
             style={{ minWidth: 180, padding: "6px 10px", fontSize: 13 }}>
             <option value="">כל העובדים</option>
-            {users.map(u => (
+            {users.filter(u => teamMembers.length === 0 || teamMembers.some(m => String(m.id) === String(u.id))).map(u => (
               <option key={u.id} value={u.id}>{u.name}</option>
             ))}
           </select>

@@ -7612,7 +7612,7 @@ export default function App() {
                 <span className="topbar-title" style={{flex:1}}>יומן פעילות</span>
               </div>
             </div>
-            <ActivityLogsPage showToast={showToast}/>
+            <ActivityLogsPage showToast={showToast} teamMembers={teamMembers}/>
           </div>
         </div>
       )}
