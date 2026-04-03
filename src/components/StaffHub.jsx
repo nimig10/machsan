@@ -8,6 +8,7 @@ export function StaffHub({ user, logo, onNavigate, onLogout }) {
   const allOptions = [
     { key: "warehouse",       icon: "📦", title: "תפעול מחסן",     desc: "ניהול ציוד, הזמנות, קיטים והסמכות",              color: "#3b82f6" },
     { key: "administration",  icon: "📋", title: "אדמיניסטרציה",   desc: "ניהול סטודנטים, אולפנים, שיעורים ודוחות",        color: "#8b5cf6" },
+    { key: "staff-schedule",  icon: "📅", title: "לוז עובדים",     desc: "הגשת העדפות, צפייה בשיבוצים ומשמרות",            color: "#0ea5e9" },
   ];
 
   // Filter views based on permissions (empty = all allowed)

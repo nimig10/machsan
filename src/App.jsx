@@ -18,6 +18,7 @@ import { StaffHub } from "./components/StaffHub.jsx";
 import { StaffManagementPage } from "./components/StaffManagementPage.jsx";
 import { SystemSettingsPage } from "./components/SystemSettingsPage.jsx";
 import { ActivityLogsPage } from "./components/ActivityLogsPage.jsx";
+import { StaffSchedulePage } from "./components/StaffSchedulePage.jsx";
 import { InstallPrompt } from "./components/InstallPrompt.jsx";
 
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
@@ -7613,6 +7614,21 @@ export default function App() {
               </div>
             </div>
             <ActivityLogsPage showToast={showToast} teamMembers={teamMembers}/>
+          </div>
+        </div>
+      )}
+
+      {/* ── לוז עובדים (all staff) ── */}
+      {isAdmin && authed && staffView === "staff-schedule" && (
+        <div className="app" style={{"--accent":siteSettings.adminAccentColor||"#f5a623","--accent-glow":`${siteSettings.adminAccentColor||"#f5a623"}2e`,"--admin-fs":`${siteSettings.adminFontSize||14}px`}}>
+          <div className="main" style={{marginRight:0,width:"100%"}}>
+            <div className="topbar">
+              <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setStaffView("hub")}>← חזרה</button>
+                <span className="topbar-title" style={{flex:1}}>לוז עובדים</span>
+              </div>
+            </div>
+            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <StaffSchedulePage staffUser={staffUser} showToast={showToast} teamMembers={teamMembers}/>}
           </div>
         </div>
       )}

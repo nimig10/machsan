@@ -256,7 +256,7 @@ function StaffTab({ showToast, teamMembers, setTeamMembers }) {
                 <div style={{ marginBottom: 12 }}>
                   <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 6 }}>גישה לאזורים (ריק = גישה לכל)</div>
                   <div style={{ display: "flex", gap: 8 }}>
-                    {[{ id: "warehouse", label: "📦 תפעול מחסן" }, { id: "administration", label: "📋 אדמיניסטרציה" }].map(v => (
+                    {[{ id: "warehouse", label: "📦 תפעול מחסן" }, { id: "administration", label: "📋 אדמיניסטרציה" }, { id: "staff-schedule", label: "📅 לוז עובדים" }].map(v => (
                       <label key={v.id} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", padding: "7px 14px", borderRadius: 8, border: `1px solid ${perms.views.includes(v.id) ? "var(--accent)" : "var(--border)"}`, background: perms.views.includes(v.id) ? "rgba(245,166,35,0.1)" : "transparent", fontSize: 13, fontWeight: 600 }}>
                         <input type="checkbox" style={{ accentColor: "var(--accent)" }} checked={perms.views.includes(v.id)} onChange={() => setPerms({ views: toggleArr(perms.views, v.id) })} />
                         {v.label}
