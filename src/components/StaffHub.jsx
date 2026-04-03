@@ -11,8 +11,8 @@ export function StaffHub({ user, logo, onNavigate, onLogout }) {
     { key: "staff-schedule",  icon: "📅", title: "לוז עובדים",     desc: "הגשת העדפות, צפייה בשיבוצים ומשמרות",            color: "#0ea5e9" },
   ];
 
-  // Filter views based on permissions (empty = all allowed)
-  const options = allOptions.filter(o => !allowedViews.length || allowedViews.includes(o.key));
+  // Filter views based on permissions (empty = all allowed); staff-schedule always visible
+  const options = allOptions.filter(o => o.key === "staff-schedule" || !allowedViews.length || allowedViews.includes(o.key));
 
   return (
     <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, background: "var(--bg)" }}>
