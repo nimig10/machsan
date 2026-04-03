@@ -1955,7 +1955,7 @@ ${inventory}
             </button>
             <button type="button" onClick={()=>{setPublicView("my-bookings");loadStudiosData();loadReservationsData();}}
               style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:publicView==="my-bookings"?"var(--accent)":"transparent",color:publicView==="my-bookings"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-              📋 ההזמנות
+              📋 ההזמנות שלי
             </button>
           </div>
           {publicView==="equipment" && <>
