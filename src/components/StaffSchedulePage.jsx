@@ -104,6 +104,13 @@ export function StaffSchedulePage({ staffUser, showToast, teamMembers = [] }) {
   const isAdmin = staffUser?.role === "admin";
   const currentStaffId = staffUser?.id;
 
+  // Ensure current user always appears even if teamMembers is empty
+  const displayMembers = useMemo(() => {
+    if (teamMembers.length > 0) return teamMembers;
+    if (staffUser) return [{ id: staffUser.id, name: staffUser.full_name || "אני" }];
+    return [];
+  }, [teamMembers, staffUser]);
+
   const [weekOffset, setWeekOffset] = useState(0);
   const [preferences, setPreferences] = useState([]);
   const [assignments, setAssignments] = useState([]);
@@ -265,86 +272,114 @@ export function StaffSchedulePage({ staffUser, showToast, teamMembers = [] }) {
       {loading ? (
         <div style={{ textAlign: "center", padding: 60, color: "var(--text3)" }}>טוען...</div>
       ) : (
-        /* ── Calendar Grid ── */
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 800, tableLayout: "fixed" }}>
-            <thead>
-              <tr>
-                <th style={{ ...thStyle, width: 120, textAlign: "right" }}>עובד</th>
-                {weekDates.map((date, i) => {
-                  const holiday = holidays.find(h => h.date === date);
-                  const isToday = date === today;
-                  return (
-                    <th key={date} style={{ ...thStyle, background: isToday ? "rgba(59,130,246,0.08)" : holiday ? "rgba(245,158,11,0.06)" : undefined }}>
-                      <div style={{ fontWeight: 800, fontSize: 13 }}>{HE_DAYS[i]}</div>
-                      <div style={{ fontSize: 11, color: "var(--text3)" }}>{formatDateHe(date)}</div>
-                      {holiday && <div style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700, marginTop: 2 }}>{holiday.isErev ? `ערב ${holiday.name}` : holiday.name}</div>}
-                    </th>
-                  );
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              {teamMembers.map(member => (
-                <tr key={member.id || member.name}>
-                  <td style={{ ...tdStyle, fontWeight: 700, fontSize: 13, position: "sticky", right: 0, background: "var(--surface)", zIndex: 1 }}>
-                    {member.name}
-                  </td>
-                  {weekDates.map(date => {
-                    const pref = getPref(String(member.id), date);
-                    const assignment = getAssignment(String(member.id), date);
-                    const isPast = date < today;
-                    const isMe = String(member.id) === String(currentStaffId);
+        /* ── Day Cards (mobile-friendly) ── */
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {weekDates.map((date, i) => {
+            const holiday = holidays.find(h => h.date === date);
+            const isToday = date === today;
+            const dateEditable = canStaffEditDate(date);
+
+            return (
+              <div key={date} style={{
+                border: `1.5px solid ${isToday ? "rgba(59,130,246,0.5)" : "var(--border)"}`,
+                borderRadius: 12,
+                background: isToday ? "rgba(59,130,246,0.04)" : "var(--surface)",
+                overflow: "hidden",
+              }}>
+                {/* Day header */}
+                <div style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "10px 14px",
+                  background: isToday ? "rgba(59,130,246,0.08)" : holiday ? "rgba(245,158,11,0.06)" : "var(--surface2)",
+                  borderBottom: "1px solid var(--border)",
+                }}>
+                  <div>
+                    <span style={{ fontWeight: 800, fontSize: 15 }}>{HE_DAYS[i]}</span>
+                    <span style={{ fontSize: 13, color: "var(--text3)", marginRight: 8 }}>{formatDateHe(date)}</span>
+                    {isToday && <span style={{ fontSize: 11, color: "#3b82f6", fontWeight: 700, marginRight: 6 }}>· היום</span>}
+                  </div>
+                  {holiday && <span style={{ fontSize: 11, color: "#f59e0b", fontWeight: 700 }}>{holiday.isErev ? `ערב ${holiday.name}` : holiday.name}</span>}
+                </div>
+
+                {/* Members for this day */}
+                <div style={{ padding: "8px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
+                  {displayMembers.map(member => {
+                    const memberId = String(member.id);
+                    const pref = getPref(memberId, date);
+                    const assignment = getAssignment(memberId, date);
+                    const isMe = memberId === String(currentStaffId);
                     const isLocked = assignment?.locked;
-                    const canEdit = isAdmin || (isMe && !isLocked && canStaffEditDate(date));
+                    const canEdit = isAdmin || (isMe && !isLocked && dateEditable);
+                    const hasContent = pref || assignment;
+
+                    // Non-admin: show only own row or rows with content
+                    if (!isAdmin && !isMe && !hasContent) return null;
 
                     return (
-                      <td key={date} style={{ ...tdStyle, background: date === today ? "rgba(59,130,246,0.04)" : undefined, verticalAlign: "top", padding: "6px 4px" }}>
-                        {/* Assignment */}
-                        {assignment && (
-                          <CellBadge
-                            entry={assignment}
-                            type="assignment"
-                            isAdmin={isAdmin}
-                            onClick={() => isAdmin && openEditor(String(member.id), date, "assignment")}
-                            onLock={isAdmin ? () => toggleLock(assignment.id, assignment.locked) : null}
-                            onDelete={isAdmin ? () => deleteAssignment(assignment.id) : null}
-                            showPrivateNote={isAdmin}
-                          />
-                        )}
-                        {/* Preference */}
-                        {pref && (
-                          <CellBadge
-                            entry={pref}
-                            type="preference"
-                            isAdmin={isAdmin}
-                            onClick={() => canEdit && openEditor(String(member.id), date, "preference")}
-                            onDelete={canEdit ? () => deletePref(pref.id) : null}
-                            showPrivateNote={isAdmin}
-                          />
-                        )}
-                        {/* Add button */}
-                        {!assignment && !pref && canEdit && (
-                          <button
-                            onClick={() => openEditor(String(member.id), date, isAdmin ? "assignment" : "preference")}
-                            style={{ width: "100%", padding: "8px 4px", border: "1px dashed var(--border)", borderRadius: 8, background: "transparent", color: "var(--text3)", fontSize: 18, cursor: "pointer", transition: "all 0.15s" }}
-                            title={isAdmin ? "שבץ עובד" : "הוסף העדפה"}
-                          >+</button>
-                        )}
-                        {/* Staff can add preference even if assignment exists (but not locked) */}
-                        {assignment && !pref && canEdit && !isAdmin && !isLocked && (
-                          <button
-                            onClick={() => openEditor(String(member.id), date, "preference")}
-                            style={{ width: "100%", marginTop: 4, padding: "4px", border: "1px dashed var(--border)", borderRadius: 6, background: "transparent", color: "var(--text3)", fontSize: 10, cursor: "pointer" }}
-                          >+ העדפה</button>
-                        )}
-                      </td>
+                      <div key={memberId} style={{
+                        display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 10px",
+                        borderRadius: 8,
+                        background: isMe ? "rgba(59,130,246,0.06)" : "transparent",
+                        border: isMe ? "1px solid rgba(59,130,246,0.15)" : "1px solid transparent",
+                      }}>
+                        {/* Name */}
+                        <div style={{ minWidth: 70, fontWeight: isMe ? 800 : 600, fontSize: 13, color: isMe ? "var(--text)" : "var(--text2)", paddingTop: 4 }}>
+                          {member.name}
+                          {isMe && <span style={{ fontSize: 10, color: "#3b82f6", display: "block" }}>את/ה</span>}
+                        </div>
+
+                        {/* Content */}
+                        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+                          {assignment && (
+                            <CellBadge entry={assignment} type="assignment" isAdmin={isAdmin}
+                              onClick={() => isAdmin && openEditor(memberId, date, "assignment")}
+                              onLock={isAdmin ? () => toggleLock(assignment.id, assignment.locked) : null}
+                              onDelete={isAdmin ? () => deleteAssignment(assignment.id) : null}
+                              showPrivateNote={isAdmin}
+                            />
+                          )}
+                          {pref && (
+                            <CellBadge entry={pref} type="preference" isAdmin={isAdmin}
+                              onClick={() => canEdit && openEditor(memberId, date, "preference")}
+                              onDelete={canEdit ? () => deletePref(pref.id) : null}
+                              showPrivateNote={isAdmin}
+                            />
+                          )}
+                          {!hasContent && canEdit && (
+                            <button
+                              onClick={() => openEditor(memberId, date, isAdmin ? "assignment" : "preference")}
+                              style={{
+                                padding: "10px 16px", border: "1.5px dashed var(--border)", borderRadius: 8,
+                                background: "transparent", color: "var(--text3)", fontSize: 13,
+                                cursor: "pointer", transition: "all 0.15s", textAlign: "center",
+                              }}
+                            >
+                              {isAdmin ? "➕ שבץ" : "➕ הוסף העדפה"}
+                            </button>
+                          )}
+                          {assignment && !pref && canEdit && !isAdmin && !isLocked && (
+                            <button onClick={() => openEditor(memberId, date, "preference")}
+                              style={{ padding: "6px 12px", border: "1px dashed var(--border)", borderRadius: 6, background: "transparent", color: "var(--text3)", fontSize: 11, cursor: "pointer" }}>
+                              ➕ הוסף העדפה
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     );
                   })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  {/* Admin: add assignment for any member */}
+                  {isAdmin && displayMembers.length > 0 && (
+                    <div style={{ textAlign: "center", padding: 4 }}>
+                      <button onClick={() => openEditor(String(displayMembers[0].id), date, "assignment")}
+                        style={{ fontSize: 11, color: "var(--text3)", background: "transparent", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+                        ➕ שבץ עובד נוסף
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -559,25 +594,6 @@ function ScheduleEditorModal({ modal, isAdmin, teamMembers, onSave, onClose }) {
 }
 
 // ── Styles ──
-const thStyle = {
-  padding: "10px 6px",
-  textAlign: "center",
-  borderBottom: "2px solid var(--border)",
-  fontSize: 13,
-  color: "var(--text)",
-  position: "sticky",
-  top: 0,
-  background: "var(--surface)",
-  zIndex: 2,
-};
-
-const tdStyle = {
-  padding: "8px 4px",
-  borderBottom: "1px solid var(--border)",
-  borderLeft: "1px solid var(--border)",
-  minWidth: 95,
-};
-
 const miniBtn = {
   padding: "2px 4px",
   border: "none",
