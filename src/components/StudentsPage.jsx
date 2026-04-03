@@ -27,7 +27,7 @@ const buildTrackSettings = (students = [], existingTrackSettings = [], explicitT
   });
 };
 
-export function StudentsPage({ certifications, setCertifications, showToast, onLogCreated = () => {} }) {
+export function StudentsPage({ certifications, setCertifications, showToast, onLogCreated = () => {}, studioBookings = [], setStudioBookings, reservations = [], setReservations }) {
   const { types = [], students = [], tracks: explicitTracks = [] } = certifications;
   const trackSettings = buildTrackSettings(students, certifications?.trackSettings, explicitTracks);
   const [addingStudent, setAddingStudent] = useState(false);
@@ -164,8 +164,32 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
   // ── Delete student ──
   const deleteStudent = async (stuId) => {
     const stu = students.find(s => s.id === stuId);
+    if (!stu) return;
+    const stuName = stu.name;
+    const stuEmail = (stu.email || "").toLowerCase().trim();
     const updated = { types, students: students.filter(s=>s.id!==stuId) };
     if(await save(updated)) {
+      // Cascade: delete studio bookings for this student
+      if (setStudioBookings) {
+        const filteredBookings = studioBookings.filter(b => b.studentName !== stuName);
+        if (filteredBookings.length !== studioBookings.length) {
+          setStudioBookings(filteredBookings);
+          await storageSet("studio_bookings", filteredBookings);
+        }
+      }
+      // Cascade: delete non-returned reservations for this student
+      if (setReservations) {
+        const filteredRes = reservations.filter(r => {
+          if (r.status === "הוחזר") return true;
+          const matchName = r.student_name === stuName;
+          const matchEmail = stuEmail && (r.email || "").toLowerCase().trim() === stuEmail;
+          return !(matchName || matchEmail);
+        });
+        if (filteredRes.length !== reservations.length) {
+          setReservations(filteredRes);
+          await storageSet("reservations", filteredRes);
+        }
+      }
       showToast("success","הסטודנט הוסר");
       const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
       const logId = await logActivity({ user_id: caller.id, user_name: caller.full_name, action: "student_delete", entity: "student", entity_id: String(stuId), details: { name: stu?.name || stuId } });

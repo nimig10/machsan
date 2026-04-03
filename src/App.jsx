@@ -5381,8 +5381,31 @@ function CertificationsPage_REMOVED({ certifications, setCertifications, showToa
   };
 
   const deleteStudent = async (stuId) => {
+    const stu = students.find(s => s.id === stuId);
+    if (!stu) return;
+    const stuName = stu.name;
+    const stuEmail = (stu.email || "").toLowerCase().trim();
     const updated = { types, students: students.filter(s=>s.id!==stuId) };
-    if(await save(updated)) showToast("success","הסטודנט הוסר");
+    if(await save(updated)) {
+      // Cascade: delete studio bookings for this student
+      const filteredBookings = studioBookings.filter(b => b.studentName !== stuName);
+      if (filteredBookings.length !== studioBookings.length) {
+        setStudioBookings(filteredBookings);
+        await storageSet("studio_bookings", filteredBookings);
+      }
+      // Cascade: delete non-returned reservations for this student
+      const filteredRes = reservations.filter(r => {
+        if (r.status === "הוחזר") return true;
+        const matchName = r.student_name === stuName;
+        const matchEmail = stuEmail && (r.email || "").toLowerCase().trim() === stuEmail;
+        return !(matchName || matchEmail);
+      });
+      if (filteredRes.length !== reservations.length) {
+        setReservations(filteredRes);
+        await storageSet("reservations", filteredRes);
+      }
+      showToast("success","הסטודנט הוסר");
+    }
   };
 
   const saveEdit = async () => {
@@ -7735,7 +7758,7 @@ export default function App() {
               <div style={{display:secretaryPage==="studios"?"block":"none"}}><StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin" studios={studios} setStudios={setStudios} bookings={studioBookings} setBookings={setStudioBookings} siteSettings={siteSettings} setSiteSettings={setSiteSettings} isActive={secretaryPage==="studios"}/></div>
               <div style={{display:secretaryPage==="studio-certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment} onlyMode="studio"/></div>
               <div style={{display:secretaryPage==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean) : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
-              <div style={{display:secretaryPage==="students"?"block":"none"}}><StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} onLogCreated={attachLogIdToUndo}/></div>
+              <div style={{display:secretaryPage==="students"?"block":"none"}}><StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} onLogCreated={attachLogIdToUndo} studioBookings={studioBookings} setStudioBookings={setStudioBookings} reservations={reservations} setReservations={setReservations}/></div>
               <div style={{display:secretaryPage==="policies"?"block":"none"}}><PoliciesPage policies={policies} setPolicies={setPolicies} showToast={showToast}/></div>
               <div style={{display:secretaryPage==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} settingsRole="administration"/></div>
             </>}
