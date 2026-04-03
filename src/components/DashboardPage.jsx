@@ -11,7 +11,7 @@ function getDayName(dateStr) {
   return HE_DAYS[d.getDay()] || "";
 }
 
-export function DashboardPage({ equipment, reservations, setReservations, showToast, siteSettings = {} }) {
+export function DashboardPage({ equipment, reservations, setReservations, showToast, siteSettings = {}, equipmentReports = [] }) {
   const todayStr = today();
   const nowMs = Date.now();
 
@@ -243,7 +243,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                     <div key={r.id} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"12px 16px"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,flexWrap:"wrap",marginBottom:8}}>
                         <div>
-                          <div style={{fontWeight:800,fontSize:14}}>{r.student_name}</div>
+                          <div style={{fontWeight:800,fontSize:14}}>{r.student_name}{equipmentReports.some(rp=>rp.reservation_id===String(r.id)&&rp.status==="open")&&<span title="דיווח תקלה פתוח" style={{color:"#e74c3c",fontSize:14,marginRight:4}}>⚠️</span>}</div>
                           <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>
                             <span style={{background:"var(--surface3)",borderRadius:6,padding:"1px 8px",fontWeight:700,color:"var(--text2)",marginLeft:6}}>{LOAN_TYPE_ICON[r.loan_type]||"📦"} {r.loan_type}</span>
                             📅 {formatDate(r.borrow_date)}{r.borrow_time&&` ${r.borrow_time}`} → {formatDate(r.return_date)}{r.return_time&&` ${r.return_time}`}
@@ -311,6 +311,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                 </div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                {equipmentReports.some(rp=>rp.reservation_id===String(r.id)&&rp.status==="open")&&<span title="דיווח תקלה פתוח" style={{color:"#e74c3c",fontSize:14}}>⚠️</span>}
                 {statusBadge(getEffectiveStatus(r))}
               </div>
             </div>
@@ -471,12 +472,13 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
               <div>
                 <div style={{fontWeight:700,fontSize:13,marginBottom:8}}>ציוד ({dashViewRes.items?.length||0} פריטים)</div>
                 <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  {dashViewRes.items?.map((i,j)=>(
-                    <div key={j} style={{display:"flex",justifyContent:"space-between",padding:"6px 12px",background:"var(--surface2)",borderRadius:"var(--r-sm)",fontSize:13}}>
-                      <span>{equipment.find(e=>e.id==i.equipment_id)?.name||"?"}</span>
+                  {dashViewRes.items?.map((i,j)=>{
+                    const hasReport=equipmentReports.some(rp=>rp.equipment_id===String(i.equipment_id)&&rp.reservation_id===String(dashViewRes.id)&&rp.status==="open");
+                    return <div key={j} style={{display:"flex",justifyContent:"space-between",padding:"6px 12px",background:hasReport?"rgba(231,76,60,0.1)":"var(--surface2)",borderRadius:"var(--r-sm)",fontSize:13,border:hasReport?"1px solid rgba(231,76,60,0.3)":"none"}}>
+                      <span>{hasReport&&<span style={{color:"#e74c3c",marginLeft:4}}>⚠️</span>}{equipment.find(e=>e.id==i.equipment_id)?.name||"?"}</span>
                       <strong style={{color:"var(--accent)"}}>×{i.quantity}</strong>
-                    </div>
-                  ))}
+                    </div>;
+                  })}
                 </div>
               </div>
               {/* Return button for approved/overdue requests */}

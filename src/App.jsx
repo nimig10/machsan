@@ -1023,8 +1023,9 @@ function CategoryLoanTypesModal({ categoryLoanTypes = {}, onSave, onClose }) {
   );
 }
 
-function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories, categoryTypes={}, setCategoryTypes, categoryLoanTypes={}, setCategoryLoanTypes=()=>{}, certifications={types:[],students:[]}, studios=[], collegeManager={}, managerToken="", onLogCreated=()=>{} }) {
-  const [eqSubView, setEqSubView] = useState("active"); // "active" | "damaged"
+function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories, categoryTypes={}, setCategoryTypes, categoryLoanTypes={}, setCategoryLoanTypes=()=>{}, certifications={types:[],students:[]}, studios=[], collegeManager={}, managerToken="", onLogCreated=()=>{}, equipmentReports:eqReports=[], fetchEquipmentReports:fetchEqReports=()=>{} }) {
+  const [eqSubView, setEqSubView] = useState("active"); // "active" | "damaged" | "reports"
+  const [eqReportsLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState("הכל");
   const [selectedCats, setSelectedCats] = useState([]);
@@ -1545,6 +1546,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
         {[
           {id:"active",label:"📦 ציוד פעיל",badge:null},
           {id:"damaged",label:"🔧 ציוד בדיקה",badge:damagedCount||null},
+          {id:"reports",label:"📋 דיווחי סטודנטים",badge:eqReports.filter(r=>r.status==="open").length||null},
         ].map(t=>(
           <button key={t.id} onClick={()=>setEqSubView(t.id)}
             style={{padding:"8px 18px",borderRadius:8,border:`2px solid ${eqSubView===t.id?"var(--accent)":"var(--border)"}`,
@@ -1558,6 +1560,43 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
 
       {/* Damaged sub-view */}
       {eqSubView==="damaged" && <DamagedEquipmentPage equipment={equipment} setEquipment={setEquipment} showToast={showToast} categories={categories} collegeManager={collegeManager} managerToken={managerToken}/>}
+
+      {/* Reports sub-view */}
+      {eqSubView==="reports" && <div>
+        <div className="flex-between mb-4">
+          <div style={{fontWeight:900,fontSize:16}}>📋 דיווחי סטודנטים על ציוד</div>
+          <button className="btn btn-secondary btn-sm" onClick={fetchEqReports} disabled={eqReportsLoading}>{eqReportsLoading?"טוען...":"🔄 רענן"}</button>
+        </div>
+        {eqReports.filter(r=>r.status==="open").length===0
+          ?<div className="empty-state" style={{padding:40}}><div className="emoji">✅</div><p>אין דיווחים פתוחים</p></div>
+          :eqReports.filter(r=>r.status==="open").map(rp=>{
+            const eq=equipment.find(e=>String(e.id)===String(rp.equipment_id));
+            return <div key={rp.id} className="card" style={{padding:16,marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:800,fontSize:14}}>{eq?.name||rp.equipment_id}</div>
+                  <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>👤 {rp.student_name} · 📅 {new Date(rp.created_at).toLocaleDateString("he-IL")}</div>
+                  <div style={{marginTop:8,fontSize:13,color:"var(--text)",background:"var(--surface2)",borderRadius:8,padding:"10px 12px",border:"1px solid var(--border)"}}>{rp.content}</div>
+                </div>
+                <button className="btn btn-secondary btn-sm" style={{flexShrink:0}} onClick={async()=>{
+                  try{await fetch("/api/equipment-report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"mark-handled",id:rp.id})});
+                  fetchEqReports();showToast("success","סומן כטופל ✅");}catch{showToast("error","שגיאה");}
+                }}>✅ טופל</button>
+              </div>
+            </div>;
+          })
+        }
+        {eqReports.filter(r=>r.status==="handled").length>0&&<>
+          <div style={{fontWeight:800,fontSize:14,color:"var(--text3)",marginTop:24,marginBottom:8}}>היסטוריה ({eqReports.filter(r=>r.status==="handled").length})</div>
+          {eqReports.filter(r=>r.status==="handled").slice(0,20).map(rp=>{
+            const eq=equipment.find(e=>String(e.id)===String(rp.equipment_id));
+            return <div key={rp.id} className="card" style={{padding:12,marginBottom:6,opacity:0.6}}>
+              <div style={{fontWeight:700,fontSize:13}}>{eq?.name||rp.equipment_id} — {rp.student_name}</div>
+              <div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>{new Date(rp.created_at).toLocaleDateString("he-IL")} · {rp.content.slice(0,80)}{rp.content.length>80?"...":""}</div>
+            </div>;
+          })}
+        </>}
+      </div>}
 
       {/* Active equipment sub-view */}
       {eqSubView==="active" && <>
@@ -6796,6 +6835,7 @@ export default function App() {
   const [studios, _setStudios] = useState([]);
   const [studioBookings, _setStudioBookings] = useState([]);
   const [lessons, _setLessons] = useState([]);
+  const [equipmentReports, setEquipmentReports] = useState([]);
   const [loading, setLoading]         = useState(true);
   const [loadingDone, setLoadingDone] = useState(false);
   const handleLoadingDone = () => setLoadingDone(true);
@@ -6975,6 +7015,10 @@ export default function App() {
   const setStudios = createTrackedSetter(_setStudios);
   const setStudioBookings = createTrackedSetter(_setStudioBookings);
   const setLessons = createTrackedSetter(_setLessons);
+
+  const fetchEquipmentReports = async () => {
+    try { const r = await fetch("/api/equipment-report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"list"})}); const d = await r.json(); if(Array.isArray(d)) setEquipmentReports(d); } catch {}
+  };
 
   const showToast = (type, msg) => {
     const id = Date.now();
@@ -7214,6 +7258,8 @@ export default function App() {
       setLoading(false);
     })();
   },[]);
+
+  useEffect(() => { if (!loading && !isPublicFormView) fetchEquipmentReports(); },[loading]);
 
   useEffect(() => {
     if (loading || !isPublicFormView) return undefined;
@@ -7604,12 +7650,12 @@ export default function App() {
               )}
             </div>
             {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <>
-              <div style={{display:page==="dashboard"?"block":"none"}}><DashboardPage equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} siteSettings={siteSettings}/></div>
-              <div style={{display:page==="equipment"?"block":"none"}}><EquipmentPage equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} categoryLoanTypes={categoryLoanTypes} setCategoryLoanTypes={setCategoryLoanTypes} certifications={certifications} studios={studios} collegeManager={collegeManager} managerToken={managerToken} onLogCreated={attachLogIdToUndo}/></div>
+              <div style={{display:page==="dashboard"?"block":"none"}}><DashboardPage equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} siteSettings={siteSettings} equipmentReports={equipmentReports}/></div>
+              <div style={{display:page==="equipment"?"block":"none"}}><EquipmentPage equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} categoryLoanTypes={categoryLoanTypes} setCategoryLoanTypes={setCategoryLoanTypes} certifications={certifications} studios={studios} collegeManager={collegeManager} managerToken={managerToken} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports} fetchEquipmentReports={fetchEquipmentReports}/></div>
               <div style={{display:page==="reservations"?"block":"none"}}><ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}
-                initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings} onLogCreated={attachLogIdToUndo}/></div>
+                initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports}/></div>
               <div style={{display:page==="team"?"block":"none"}}><TeamPage teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/></div>
               <div style={{display:page==="kits"?"block":"none"}}><KitsPage kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons}/></div>
               <div style={{display:page==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length

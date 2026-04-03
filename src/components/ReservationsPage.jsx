@@ -7,7 +7,7 @@ import { ArchivePage } from "./ArchivePage.jsx";
 
 export function ReservationsPage({ reservations, setReservations, equipment, showToast,
     search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy, mode="active", initialSubView="active", collegeManager={}, managerToken="",
-    categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], calendarToken="", siteSettings={}, onLogCreated = () => {} }) {
+    categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], calendarToken="", siteSettings={}, onLogCreated = () => {}, equipmentReports=[] }) {
   const [subView, setSubView] = useState("active"); // "active" | "rejected" | "archive"
   const [selected, setSelected] = useState(null);
   const [editing, setEditing]   = useState(null);
@@ -406,6 +406,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                   </div>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  {equipmentReports.some(rp=>rp.reservation_id===String(r.id)&&rp.status==="open")&&<span title="דיווח תקלה פתוח" style={{color:"#e74c3c",fontSize:14}}>⚠️</span>}
                   {statusBadge(getEffectiveStatus(r))}
                   <span style={{fontSize:11,color:"var(--text3)"}}>{formatDate(r.created_at)}</span>
                 </div>
@@ -662,15 +663,16 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
             <div>
               <div className="form-section-title">ציוד מבוקש ({selected.items?.length||0} פריטים)</div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {selected.items?.map((item,i)=>(
-                  <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"var(--surface2)",borderRadius:"var(--r-sm)",border:"1px solid var(--border)"}}>
+                {selected.items?.map((item,i)=>{
+                  const hasReport=equipmentReports.some(rp=>rp.equipment_id===String(item.equipment_id)&&rp.reservation_id===String(selected.id)&&rp.status==="open");
+                  return (<div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:hasReport?"rgba(231,76,60,0.06)":"var(--surface2)",borderRadius:"var(--r-sm)",border:hasReport?"1px solid rgba(231,76,60,0.3)":"1px solid var(--border)"}}>
                     <EqImg id={item.equipment_id} size={32}/>
                     <div style={{flex:1}}>
-                      <div style={{fontWeight:700,fontSize:14}}>{eqName(item.equipment_id)}</div>
+                      <div style={{fontWeight:700,fontSize:14}}>{eqName(item.equipment_id)}{hasReport&&<span style={{color:"#e74c3c",fontSize:12,marginRight:6}}>⚠️ דיווח תקלה</span>}</div>
                       <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>כמות: <strong style={{color:"var(--accent)"}}>{item.quantity}</strong></div>
                     </div>
-                  </div>
-                ))}
+                  </div>);
+                })}
               </div>
             </div>
           </div>

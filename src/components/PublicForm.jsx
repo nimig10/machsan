@@ -892,6 +892,11 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [expandedResId, setExpandedResId] = useState(null);
   const [editingBooking, setEditingBooking] = useState(null); // {id, studioId, date, startTime, endTime, isNight}
   const [editBookingSaving, setEditBookingSaving] = useState(false);
+  // Equipment reports state
+  const [reportModal, setReportModal] = useState(null); // {equipmentId, equipmentName, reservationId}
+  const [reportContent, setReportContent] = useState("");
+  const [reportSending, setReportSending] = useState(false);
+  const [reportedItems, setReportedItems] = useState(new Set()); // "eqId:resId" keys
   const fmtDate = (d) => { if (!d) return ""; const [y,m,dd] = d.split("-"); return `${dd}.${m}.${y}`; };
   const [showEquipmentAiModal, setShowEquipmentAiModal] = useState(false);
   const [equipmentAiPrompt, setEquipmentAiPrompt] = useState("");
@@ -2414,11 +2419,20 @@ ${inventory}
                   {(r.items||[]).map((item,i)=>{
                     const eq=equipment.find(e=>String(e.id)===String(item.equipment_id));
                     const img=eq?.image;
-                    return (<div key={i} style={{display:"flex",alignItems:"center",gap:10}}>
-                      {img?.startsWith("data:")||img?.startsWith("http")
-                        ?<img src={img} alt="" style={{width:38,height:38,objectFit:"cover",borderRadius:6,flexShrink:0}}/>
-                        :<span style={{fontSize:30,flexShrink:0}}>{img||"📦"}</span>}
-                      <div><div style={{fontWeight:700,fontSize:13}}>{eq?.name||item.name||"פריט"}</div><div style={{fontSize:11,color:"var(--text3)"}}>כמות: {item.quantity}</div></div>
+                    const rKey=`${item.equipment_id}:${r.id}`;
+                    const alreadyReported=reportedItems.has(rKey);
+                    return (<div key={i}>
+                      <div style={{display:"flex",alignItems:"center",gap:10}}>
+                        {img?.startsWith("data:")||img?.startsWith("http")
+                          ?<img src={img} alt="" style={{width:38,height:38,objectFit:"cover",borderRadius:6,flexShrink:0}}/>
+                          :<span style={{fontSize:30,flexShrink:0}}>{img||"📦"}</span>}
+                        <div style={{flex:1}}><div style={{fontWeight:700,fontSize:13}}>{eq?.name||item.name||"פריט"}</div><div style={{fontSize:11,color:"var(--text3)"}}>כמות: {item.quantity}</div></div>
+                        {st==="פעילה"&&<div style={{flexShrink:0}}>
+                          {alreadyReported
+                            ?<span style={{fontSize:10,color:"var(--text3)",fontWeight:700}}>✅ דווח</span>
+                            :<button onClick={async(e)=>{e.stopPropagation();try{const res=await fetch("/api/equipment-report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"check-duplicate",equipment_id:String(item.equipment_id),reservation_id:String(r.id)})});const d=await res.json();if(d.exists){setReportedItems(p=>new Set([...p,rKey]));showToast("info","כבר נשלח דיווח על פריט זה");return;}}catch{}setReportModal({equipmentId:String(item.equipment_id),equipmentName:eq?.name||item.name||"פריט",reservationId:String(r.id)});setReportContent("");}} style={{background:"rgba(231,76,60,0.12)",color:"#e74c3c",border:"1px solid rgba(231,76,60,0.3)",borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>⚠️ דווח תקלה</button>}
+                        </div>}
+                      </div>
                     </div>);
                   })}
                 </div>}
@@ -2439,6 +2453,31 @@ ${inventory}
         </div>
       </div>
     </div>
+    {reportModal&&<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setReportModal(null)}>
+      <div className="modal" style={{maxWidth:420}}>
+        <div className="modal-header"><span className="modal-title">⚠️ דיווח על תקלה</span><button className="btn btn-secondary btn-sm btn-icon" onClick={()=>setReportModal(null)}>✕</button></div>
+        <div className="modal-body" style={{direction:"rtl"}}>
+          <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>פריט: {reportModal.equipmentName}</div>
+          <div style={{marginBottom:6,fontWeight:700,fontSize:12,color:"var(--text2)"}}>תאר את התקלה:</div>
+          <textarea value={reportContent} onChange={e=>{if(e.target.value.length<=400)setReportContent(e.target.value);}} placeholder="תאר את מצב הפריט..." rows={4} style={{width:"100%",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,padding:10,color:"var(--text)",fontSize:13,resize:"vertical",fontFamily:"inherit"}}/>
+          <div style={{textAlign:"left",fontSize:11,color:reportContent.length>380?"var(--red)":"var(--text3)",marginTop:4}}>{reportContent.length}/400</div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={()=>setReportModal(null)}>ביטול</button>
+          <button className="btn btn-primary" disabled={reportSending||!reportContent.trim()} style={{background:"#e74c3c",borderColor:"#e74c3c"}} onClick={async()=>{
+            setReportSending(true);
+            try{
+              const res=await fetch("/api/equipment-report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"create",equipment_id:reportModal.equipmentId,student_name:loggedInStudent?.name||"",reservation_id:reportModal.reservationId,content:reportContent.trim()})});
+              const d=await res.json();
+              if(d.error==="duplicate"){showToast("info","כבר נשלח דיווח על פריט זה");setReportedItems(p=>new Set([...p,`${reportModal.equipmentId}:${reportModal.reservationId}`]));}
+              else if(d.ok){showToast("success","הדיווח נשלח בהצלחה ✅");setReportedItems(p=>new Set([...p,`${reportModal.equipmentId}:${reportModal.reservationId}`]));}
+              else{showToast("error","שגיאה בשליחת הדיווח");}
+            }catch{showToast("error","שגיאה בשליחת הדיווח");}
+            setReportSending(false);setReportModal(null);
+          }}>{reportSending?"שולח...":"📨 שלח דיווח"}</button>
+        </div>
+      </div>
+    </div>}
     {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor}/>}
     {showEquipmentAiModal && (
       <div
