@@ -39,24 +39,54 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
-// Preference window: Sun–Wed of current week, for the FOLLOWING week
-function isPreferenceWindowOpen() {
+// Can a regular staff member edit preferences for a given date?
+function canStaffEditDate(dateStr) {
   const now = new Date();
-  const day = now.getDay(); // 0=Sun … 6=Sat
-  return day >= 0 && day <= 3; // Sun–Wed
+  now.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr + "T00:00:00");
+  const today = now.getDay(); // 0=Sun
+
+  // Past or today — no
+  if (target <= now) return false;
+
+  // Find current week's Sunday and next week's Sunday
+  const currentSun = new Date(now);
+  currentSun.setDate(now.getDate() - today);
+  const nextSun = new Date(currentSun);
+  nextSun.setDate(currentSun.getDate() + 7);
+  const weekAfterSun = new Date(currentSun);
+  weekAfterSun.setDate(currentSun.getDate() + 14);
+
+  // Current week — no (already in progress)
+  if (target < nextSun) return false;
+
+  // Next week — only if preference window is open (Sun–Wed)
+  if (target < weekAfterSun) return today >= 0 && today <= 3;
+
+  // 2+ weeks ahead — always open
+  return true;
 }
 
-function getPreferenceTargetWeekStart() {
+// Get preference window status text for display
+function getPreferenceWindowStatus(weekDates) {
   const now = new Date();
-  const day = now.getDay();
-  const nextSun = new Date(now);
-  nextSun.setDate(now.getDate() + (7 - day));
-  nextSun.setHours(0, 0, 0, 0);
-  return nextSun.toISOString().slice(0, 10);
-}
+  now.setHours(0, 0, 0, 0);
+  const today = now.getDay();
+  const currentSun = new Date(now);
+  currentSun.setDate(now.getDate() - today);
+  const nextSun = new Date(currentSun);
+  nextSun.setDate(currentSun.getDate() + 7);
+  const weekAfterSun = new Date(currentSun);
+  weekAfterSun.setDate(currentSun.getDate() + 14);
 
-function isDateInWeek(dateStr, weekDates) {
-  return weekDates.includes(dateStr);
+  const weekStart = new Date(weekDates[0] + "T00:00:00");
+
+  if (weekStart < nextSun) return { open: false, text: "שבוע נוכחי" };
+  if (weekStart < weekAfterSun) {
+    const windowOpen = today >= 0 && today <= 3;
+    return { open: windowOpen, text: windowOpen ? "חלון ההעדפות פתוח (עד יום רביעי)" : "חלון ההעדפות נסגר לשבוע זה" };
+  }
+  return { open: true, text: "ניתן להגיש העדפות" };
 }
 
 // ── API helper ──
@@ -107,10 +137,7 @@ export function StaffSchedulePage({ staffUser, showToast, teamMembers = [] }) {
   useEffect(() => { fetchWeekData(); }, [fetchWeekData]);
 
   // Check if preference window applies to displayed week
-  const prefWindowOpen = isPreferenceWindowOpen();
-  const prefTargetWeekStart = getPreferenceTargetWeekStart();
-  const isTargetWeek = startDate === prefTargetWeekStart;
-  const canStaffSubmitPrefs = prefWindowOpen && isTargetWeek;
+  const prefWindowStatus = getPreferenceWindowStatus(weekDates);
 
   // Get pref/assignment for a specific staff+date
   const getPref = (staffId, date) => preferences.find(p => p.staff_id === staffId && p.date === date);
@@ -206,11 +233,11 @@ export function StaffSchedulePage({ staffUser, showToast, teamMembers = [] }) {
         {/* Preference window indicator */}
         {!isAdmin && (
           <div style={{ fontSize: 12, padding: "4px 12px", borderRadius: 20, fontWeight: 700,
-            background: canStaffSubmitPrefs ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
-            color: canStaffSubmitPrefs ? "#22c55e" : "#ef4444",
-            border: `1px solid ${canStaffSubmitPrefs ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
+            background: prefWindowStatus.open ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
+            color: prefWindowStatus.open ? "#22c55e" : "#ef4444",
+            border: `1px solid ${prefWindowStatus.open ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
           }}>
-            {canStaffSubmitPrefs ? "חלון ההעדפות פתוח" : "חלון ההעדפות סגור"}
+            {prefWindowStatus.text}
           </div>
         )}
       </div>
@@ -269,7 +296,7 @@ export function StaffSchedulePage({ staffUser, showToast, teamMembers = [] }) {
                     const isPast = date < today;
                     const isMe = String(member.id) === String(currentStaffId);
                     const isLocked = assignment?.locked;
-                    const canEdit = isAdmin || (isMe && !isLocked && !isPast);
+                    const canEdit = isAdmin || (isMe && !isLocked && canStaffEditDate(date));
 
                     return (
                       <td key={date} style={{ ...tdStyle, background: date === today ? "rgba(59,130,246,0.04)" : undefined, verticalAlign: "top", padding: "6px 4px" }}>
