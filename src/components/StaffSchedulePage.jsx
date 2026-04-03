@@ -20,6 +20,13 @@ function formatDateHe(dateStr) {
   return `${dd}/${mm}`;
 }
 
+function localDateStr(d) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 function getWeekDates(offset = 0) {
   const now = new Date();
   const day = now.getDay(); // 0=Sun
@@ -30,13 +37,13 @@ function getWeekDates(offset = 0) {
   for (let i = 0; i < 7; i++) {
     const d = new Date(sun);
     d.setDate(sun.getDate() + i);
-    dates.push(d.toISOString().slice(0, 10));
+    dates.push(localDateStr(d));
   }
   return dates;
 }
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateStr(new Date());
 }
 
 // Can a regular staff member edit preferences for a given date?

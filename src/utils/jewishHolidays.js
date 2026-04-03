@@ -397,12 +397,9 @@ const ALL_HOLIDAYS = [
  * @returns {Array<{date: string, name: string, isErev: boolean}>}
  */
 export function getHolidaysForDateRange(startDate, endDate) {
-  const start =
-    typeof startDate === "string"
-      ? startDate
-      : startDate.toISOString().slice(0, 10);
-  const end =
-    typeof endDate === "string" ? endDate : endDate.toISOString().slice(0, 10);
+  const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  const start = typeof startDate === "string" ? startDate : fmt(startDate);
+  const end = typeof endDate === "string" ? endDate : fmt(endDate);
 
   return ALL_HOLIDAYS.filter((h) => h.date >= start && h.date <= end);
 }

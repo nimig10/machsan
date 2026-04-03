@@ -71,7 +71,7 @@ export default async function handler(req, res) {
     }
     // Date-in-past check (admins exempt)
     if (callerRole !== "admin") {
-      const today = new Date().toISOString().slice(0, 10);
+      const now = new Date(); const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
       if (date < today) {
         return res.status(400).json({ error: "Cannot set preference for a past date" });
       }
