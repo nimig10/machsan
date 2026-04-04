@@ -6821,8 +6821,7 @@ function StaffLogin({ onSuccess }) {
 // Wraps admin-only content. /admin/login is always accessible (it's the login page itself).
 function ProtectedRoute({ authed, children }) {
   const isAdminPath = window.location.pathname.startsWith("/admin");
-  const isLoginPage = window.location.pathname === "/admin/login";
-  if (isAdminPath && !isLoginPage && !authed) {
+  if (isAdminPath && !authed) {
     // Redirect to public form without adding a history entry
     window.history.replaceState(null, "", "/");
     return null;
@@ -6835,7 +6834,6 @@ function ProtectedRoute({ authed, children }) {
 export default function App() {
   const pathname = window.location.pathname;
   const isAdmin = pathname.startsWith("/admin");
-  const isAdminLogin = pathname === "/admin/login";
   const isCalendarView = pathname.startsWith("/calendar");
   const isManagerCalendarView = pathname.startsWith("/manager-calendar");
   const isPublicDisplayView = pathname === "/daily";
@@ -7551,16 +7549,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ── דף כניסת צוות דדיקאטי /admin/login ── */}
-      {isAdminLogin && (
-        <StaffLogin onSuccess={(user) => {
-          // Save to sessionStorage BEFORE the redirect — setStaffUser/setStaffView
-          // are async (React state) and their useEffect won't run before location.replace.
-          sessionStorage.setItem("staff_user", JSON.stringify(user));
-          sessionStorage.setItem("staff_view", "hub");
-          window.location.replace("/admin");
-        }}/>
-      )}
+
 
       {/* ── אזור ניהול (מוגן מפני גישה ישירה) ── */}
       <ProtectedRoute authed={authed}>
