@@ -87,29 +87,23 @@ function timeToY(timeStr) {
 }
 
 /* ── Layout overlapping blocks into columns ── */
-function layoutBlocks(blocks) {
-  if (!blocks.length) return blocks;
-  blocks.sort((a, b) => a.startTime.localeCompare(b.startTime));
-  const cols = [];
-  for (const block of blocks) {
-    let placed = false;
-    for (let c = 0; c < cols.length; c++) {
-      const last = cols[c][cols[c].length - 1];
-      if (block.startTime >= last.endTime) {
-        cols[c].push(block);
-        block._col = c;
-        placed = true;
-        break;
-      }
-    }
-    if (!placed) {
-      block._col = cols.length;
-      cols.push([block]);
+function groupBlocks(blocks) {
+  if (!blocks.length) return [];
+  const sorted = [...blocks].sort((a, b) => a.startTime.localeCompare(b.startTime));
+  const groups = [];
+  let cur = { startTime: sorted[0].startTime, endTime: sorted[0].endTime, members: [sorted[0]] };
+  for (let i = 1; i < sorted.length; i++) {
+    const b = sorted[i];
+    if (b.startTime < cur.endTime) {
+      if (b.endTime > cur.endTime) cur.endTime = b.endTime;
+      cur.members.push(b);
+    } else {
+      groups.push(cur);
+      cur = { startTime: b.startTime, endTime: b.endTime, members: [b] };
     }
   }
-  const total = Math.max(1, cols.length);
-  blocks.forEach(b => b._totalCols = total);
-  return blocks;
+  groups.push(cur);
+  return groups;
 }
 
 /* ── API helper ── */
@@ -250,7 +244,7 @@ export function StaffSchedulePage({ staffUser, showToast }) {
       if (entry.shift_type === "absent" || !block.startTime || !block.endTime) absent.push(block);
       else timed.push(block);
     });
-    return { timed: layoutBlocks(timed), absent };
+    return { groups: groupBlocks(timed), absent };
   };
 
   const today = todayStr();
@@ -350,7 +344,7 @@ export function StaffSchedulePage({ staffUser, showToast }) {
 
             {/* Day columns */}
             {workDays.map((date, i) => {
-              const { timed, absent } = getDayBlocks(date);
+              const { groups, absent } = getDayBlocks(date);
               const isToday = date === today;
               const dateEditable = isAdmin || canStaffEditDate(date);
 
@@ -400,57 +394,49 @@ export function StaffSchedulePage({ staffUser, showToast }) {
                     </div>
                   )}
 
-                  {/* Shift blocks */}
-                  {timed.map(block => {
-                    const top = timeToY(block.startTime);
-                    const bottom = timeToY(block.endTime);
-                    const height = Math.max(bottom - top, 24);
-                    const colW = 100 / block._totalCols;
-                    const isMe = block.memberId === String(currentStaffId);
-                    const canEdit = isAdmin || (isMe && block.type === "preference" && canStaffEditDate(date));
-                    const accent = block.locked ? "#f59e0b" : block.type === "assignment" ? "#3b82f6" : "#22c55e";
-                    const bg = block.locked ? "rgba(245,158,11,0.2)" : block.type === "assignment" ? "rgba(59,130,246,0.2)" : "rgba(34,197,94,0.15)";
-
+                  {/* Shift groups — overlapping blocks stacked vertically */}
+                  {groups.map((group, gi) => {
+                    const top = timeToY(group.startTime);
+                    const bottom = timeToY(group.endTime);
+                    const groupH = Math.max(bottom - top, 22 * group.members.length);
                     return (
-                      <div key={`${block.type}-${block.id}`}
-                        onClick={e => { e.stopPropagation(); canEdit && openBlockEditor(block, date); }}
-                        title={`${block.memberName} · ${SHIFT_TYPES[block.shiftType]?.label || ""} · ${block.startTime}–${block.endTime}`}
-                        style={{
-                          position: "absolute",
-                          top: top + 1, height: height - 2,
-                          right: `${block._col * colW}%`,
-                          width: `${colW}%`,
-                          padding: "0 1px",
-                          boxSizing: "border-box",
-                          zIndex: 2,
-                          cursor: canEdit ? "pointer" : "default",
-                        }}
-                      >
-                        <div style={{
-                          height: "100%", borderRadius: 5,
-                          borderRight: `3px solid ${accent}`,
-                          background: bg, padding: "3px 6px",
-                          overflow: "hidden", fontSize: 10,
-                          transition: "opacity 0.15s",
-                          opacity: canEdit ? 1 : 0.85,
-                        }}>
-                          <div style={{ fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 11 }}>
-                            {block.locked && "🔒 "}{block.memberName}
-                          </div>
-                          {height > 40 && (
-                            <div style={{ fontSize: 9, color: "var(--text3)", marginTop: 1 }}>
-                              {SHIFT_TYPES[block.shiftType]?.icon} {block.startTime}–{block.endTime}
+                      <div key={gi} style={{
+                        position: "absolute",
+                        top: top + 1, left: 2, right: 2,
+                        height: groupH - 2,
+                        zIndex: 2,
+                        display: "flex", flexDirection: "column", gap: 1,
+                      }}>
+                        {group.members.map(block => {
+                          const isMe = block.memberId === String(currentStaffId);
+                          const canEdit = isAdmin || (isMe && block.type === "preference" && canStaffEditDate(date));
+                          const accent = block.locked ? "#f59e0b" : block.type === "assignment" ? "#3b82f6" : "#22c55e";
+                          const bg = block.locked ? "rgba(245,158,11,0.2)" : block.type === "assignment" ? "rgba(59,130,246,0.2)" : "rgba(34,197,94,0.15)";
+                          return (
+                            <div key={`${block.type}-${block.id}`}
+                              onClick={e => { e.stopPropagation(); canEdit && openBlockEditor(block, date); }}
+                              title={`${block.memberName} · ${SHIFT_TYPES[block.shiftType]?.label || ""} · ${block.startTime}–${block.endTime}`}
+                              style={{
+                                flex: 1, minHeight: 20,
+                                borderRadius: 5,
+                                borderRight: `3px solid ${accent}`,
+                                background: bg,
+                                padding: "2px 6px",
+                                overflow: "hidden",
+                                cursor: canEdit ? "pointer" : "default",
+                                opacity: canEdit ? 1 : 0.85,
+                                display: "flex", alignItems: "center", gap: 4,
+                              }}
+                            >
+                              <span style={{ fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 11, flex: 1 }}>
+                                {block.locked && "🔒 "}{block.memberName}
+                              </span>
+                              <span style={{ fontSize: 9, color: "var(--text3)", whiteSpace: "nowrap", flexShrink: 0 }}>
+                                {SHIFT_TYPES[block.shiftType]?.icon}
+                              </span>
                             </div>
-                          )}
-                          {height > 70 && block.type === "assignment" && (
-                            <div style={{ fontSize: 8, color: block.locked ? "#f59e0b" : "#3b82f6", marginTop: 2, fontWeight: 600 }}>
-                              {block.locked ? "נעול" : "שיבוץ"}
-                            </div>
-                          )}
-                          {height > 70 && block.hasPref && (
-                            <div style={{ fontSize: 8, color: "#22c55e", marginTop: 1 }}>● העדפה</div>
-                          )}
-                        </div>
+                          );
+                        })}
                       </div>
                     );
                   })}
