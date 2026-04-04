@@ -84,7 +84,7 @@ export default async function handler(req, res) {
       return res.status(409).json({ error: "Assignment is locked for this date" });
     }
     const times = normalizeShiftTimes(shiftType, startTime, endTime);
-    const result = await sbFetch("staff_schedule_preferences", {
+    const result = await sbFetch("staff_schedule_preferences?on_conflict=staff_id,date", {
       method: "POST",
       headers: {
         ...headers,
@@ -137,7 +137,7 @@ export default async function handler(req, res) {
     const shiftErr = validateShiftType(shiftType, startTime, endTime);
     if (shiftErr) return res.status(400).json({ error: shiftErr });
     const times = normalizeShiftTimes(shiftType, startTime, endTime);
-    const result = await sbFetch("staff_schedule_assignments", {
+    const result = await sbFetch("staff_schedule_assignments?on_conflict=staff_id,date", {
       method: "POST",
       headers: {
         ...headers,
