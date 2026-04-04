@@ -27,14 +27,18 @@ export default async function handler(req, res) {
   const { method } = req;
   const { action, callerRole } = req.body || {};
 
-  if (callerRole !== "admin") {
-    return res.status(403).json({ error: "Forbidden — admin only" });
-  }
-
-  // LIST
+  // LIST — allow all staff (return limited fields for non-admin)
   if (method === "GET" || action === "list") {
+    if (callerRole !== "admin") {
+      const result = await sbFetch("staff_members?select=id,full_name&order=created_at.asc");
+      return res.status(result.ok ? 200 : 500).json(result.data || []);
+    }
     const result = await sbFetch("staff_members?select=id,full_name,email,role,permissions,created_at&order=created_at.asc");
     return res.status(result.ok ? 200 : 500).json(result.data || []);
+  }
+
+  if (callerRole !== "admin") {
+    return res.status(403).json({ error: "Forbidden — admin only" });
   }
 
   if (method !== "POST") {

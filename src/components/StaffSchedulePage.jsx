@@ -107,23 +107,41 @@ async function scheduleApi(action, body = {}) {
 }
 
 // ── Main component ──
-export function StaffSchedulePage({ staffUser, showToast, teamMembers = [] }) {
+export function StaffSchedulePage({ staffUser, showToast }) {
   const isAdmin = staffUser?.role === "admin";
   const currentStaffId = staffUser?.id;
 
-  // Ensure current user always appears even if teamMembers is empty
-  const displayMembers = useMemo(() => {
-    if (teamMembers.length > 0) return teamMembers;
-    if (staffUser) return [{ id: staffUser.id, name: staffUser.full_name || "אני" }];
-    return [];
-  }, [teamMembers, staffUser]);
-
+  const [staffList, setStaffList] = useState([]);
   const [weekOffset, setWeekOffset] = useState(0);
   const [preferences, setPreferences] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [holidays, setHolidays] = useState([]);
   const [editModal, setEditModal] = useState(null); // { staffId, date, mode: "preference"|"assignment", existing? }
+
+  // Load staff_members from Supabase (the login system users)
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/staff", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "list", callerRole: isAdmin ? "admin" : "staff" }),
+        });
+        if (res.ok) {
+          const list = await res.json();
+          setStaffList(list.map(s => ({ id: s.id, name: s.full_name || s.email })));
+        }
+      } catch {}
+    })();
+  }, []);
+
+  // displayMembers: all staff for admin, or at least current user for regular staff
+  const displayMembers = useMemo(() => {
+    if (staffList.length > 0) return staffList;
+    if (staffUser) return [{ id: staffUser.id, name: staffUser.full_name || "אני" }];
+    return [];
+  }, [staffList, staffUser]);
 
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
   const startDate = weekDates[0];
@@ -395,7 +413,7 @@ export function StaffSchedulePage({ staffUser, showToast, teamMembers = [] }) {
         <ScheduleEditorModal
           modal={editModal}
           isAdmin={isAdmin}
-          teamMembers={teamMembers}
+          teamMembers={displayMembers}
           onSave={editModal.mode === "preference" ? savePref : saveAssignment}
           onClose={() => setEditModal(null)}
         />

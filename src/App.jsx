@@ -7628,7 +7628,7 @@ export default function App() {
                 <span className="topbar-title" style={{flex:1}}>לוז עובדים</span>
               </div>
             </div>
-            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <StaffSchedulePage staffUser={staffUser} showToast={showToast} teamMembers={teamMembers}/>}
+            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <StaffSchedulePage staffUser={staffUser} showToast={showToast}/>}
           </div>
         </div>
       )}
