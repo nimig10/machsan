@@ -98,6 +98,8 @@ export function StaffSchedulePage({ staffUser, showToast }) {
   const [loading, setLoading] = useState(true);
   const [fetching, setFetching] = useState(false);
   const hasLoadedOnce = useRef(false);
+  const weekCache = useRef({});       // { startDate: { preferences, assignments } }
+  const activeStartRef = useRef(null);
   const [holidays, setHolidays] = useState([]);
   const [editModal, setEditModal] = useState(null);
   const [notePopup, setNotePopup] = useState(null); // { memberName, note }
@@ -153,19 +155,61 @@ export function StaffSchedulePage({ staffUser, showToast }) {
     })();
   }, []);
 
-  const fetchWeekData = useCallback(async () => {
-    if (!hasLoadedOnce.current) { setLoading(true); } else { setFetching(true); }
-    try {
-      const data = await scheduleApi("list-week", { startDate, endDate });
-      setPreferences(data.preferences || []);
-      setAssignments(data.assignments || []);
-    } catch { showToast("error", "שגיאה בטעינת לוז"); }
-    setLoading(false);
-    setFetching(false);
-    hasLoadedOnce.current = true;
-  }, [startDate, endDate]);
+  // Apply cached data to state (only if still the active week)
+  const applyWeek = useCallback((start, data) => {
+    if (start !== activeStartRef.current) return;
+    setPreferences(data.preferences);
+    setAssignments(data.assignments);
+  }, []);
 
-  useEffect(() => { fetchWeekData(); }, [fetchWeekData]);
+  // Core loader: fetches one week (with caching). background=true skips loading UI.
+  const loadWeek = useCallback(async (start, end, { background = false, bust = false } = {}) => {
+    if (!bust && weekCache.current[start]) {
+      applyWeek(start, weekCache.current[start]);
+      return;
+    }
+    if (!background) {
+      if (!hasLoadedOnce.current) setLoading(true); else setFetching(true);
+    }
+    try {
+      const data = await scheduleApi("list-week", { startDate: start, endDate: end });
+      const result = { preferences: data.preferences || [], assignments: data.assignments || [] };
+      weekCache.current[start] = result;
+      applyWeek(start, result);
+    } catch { if (!background) showToast("error", "שגיאה בטעינת לוז"); }
+    finally {
+      if (!background) { setLoading(false); setFetching(false); hasLoadedOnce.current = true; }
+    }
+  }, [applyWeek]);
+
+  // Switch active week (instant if cached, fetch otherwise)
+  useEffect(() => {
+    activeStartRef.current = startDate;
+    loadWeek(startDate, endDate);
+  }, [startDate]);
+
+  // Prefetch ±1 and ±2 adjacent weeks in background after navigation
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      for (const delta of [-1, 1, -2, 2]) {
+        if (cancelled) break;
+        const dates = getWeekDates(weekOffset + delta);
+        const s = dates[0], e = dates[6];
+        if (!weekCache.current[s]) {
+          await new Promise(r => setTimeout(r, 250));
+          if (!cancelled) loadWeek(s, e, { background: true });
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [weekOffset]);
+
+  // Called after save/delete — bust cache for current week and reload
+  const fetchWeekData = useCallback(async () => {
+    delete weekCache.current[startDate];
+    await loadWeek(startDate, endDate, { bust: true });
+  }, [startDate, endDate, loadWeek]);
 
   const prefWindowStatus = getPreferenceWindowStatus(weekDates);
   const getPref = (sid, date) => preferences.find(p => p.staff_id === sid && p.date === date);
