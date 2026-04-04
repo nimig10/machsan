@@ -259,9 +259,17 @@ export function StaffSchedulePage({ staffUser, showToast }) {
   const openBlockEditor = (block, date) => {
     setEditModal({ staffId: block.memberId, date, mode: block.type, existing: block.entry });
   };
-  const openNewEditor = (date) => {
+  const openNewEditor = (date, defaultShift = "morning") => {
     if (!isAdmin && !canStaffEditDate(date)) return;
-    setEditModal({ staffId: String(currentStaffId), date, mode: isAdmin ? "assignment" : "preference", existing: null });
+    setEditModal({ staffId: String(currentStaffId), date, mode: isAdmin ? "assignment" : "preference", existing: null, defaultShift });
+  };
+  // Click on empty area of day column → smart shift pre-selection by hour
+  const handleDayClick = (e, date) => {
+    if (!isAdmin && !canStaffEditDate(date)) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const hour = START_H + y / HOUR_H;
+    openNewEditor(date, hour >= 14 ? "evening" : "morning");
   };
 
   /* ══════════ Render ══════════ */
@@ -347,11 +355,14 @@ export function StaffSchedulePage({ staffUser, showToast }) {
               const dateEditable = isAdmin || canStaffEditDate(date);
 
               return (
-                <div key={date} style={{
-                  position: "relative", height: GRID_H,
-                  background: isToday ? "rgba(59,130,246,0.03)" : "var(--surface)",
-                  borderLeft: i < 5 ? "1px solid var(--border)" : "none",
-                }}>
+                <div key={date}
+                  onClick={e => handleDayClick(e, date)}
+                  style={{
+                    position: "relative", height: GRID_H,
+                    background: isToday ? "rgba(59,130,246,0.03)" : "var(--surface)",
+                    borderLeft: i < 5 ? "1px solid var(--border)" : "none",
+                    cursor: (isAdmin || canStaffEditDate(date)) ? "pointer" : "default",
+                  }}>
                   {/* Hour grid lines */}
                   {HOURS.map(h => (
                     <div key={h} style={{
@@ -380,7 +391,7 @@ export function StaffSchedulePage({ staffUser, showToast }) {
                         const isMe = b.memberId === String(currentStaffId);
                         const canEdit = isAdmin || (isMe && b.type === "preference" && canStaffEditDate(date));
                         return (
-                          <div key={b.id} onClick={() => canEdit && openBlockEditor(b, date)}
+                          <div key={b.id} onClick={e => { e.stopPropagation(); canEdit && openBlockEditor(b, date); }}
                             style={{ fontSize: 9, background: "rgba(239,68,68,0.12)", color: "#ef4444", borderRadius: 4, padding: "1px 5px", cursor: canEdit ? "pointer" : "default", whiteSpace: "nowrap" }}>
                             🚫 {b.memberName}
                           </div>
@@ -402,7 +413,7 @@ export function StaffSchedulePage({ staffUser, showToast }) {
 
                     return (
                       <div key={`${block.type}-${block.id}`}
-                        onClick={() => canEdit && openBlockEditor(block, date)}
+                        onClick={e => { e.stopPropagation(); canEdit && openBlockEditor(block, date); }}
                         title={`${block.memberName} · ${SHIFT_TYPES[block.shiftType]?.label || ""} · ${block.startTime}–${block.endTime}`}
                         style={{
                           position: "absolute",
@@ -446,7 +457,7 @@ export function StaffSchedulePage({ staffUser, showToast }) {
 
                   {/* Add button */}
                   {dateEditable && (
-                    <button onClick={() => openNewEditor(date)}
+                    <button onClick={e => { e.stopPropagation(); openNewEditor(date); }}
                       style={{
                         position: "absolute", bottom: 6, left: "50%", transform: "translateX(-50%)",
                         width: 24, height: 24, borderRadius: "50%",
@@ -486,12 +497,12 @@ export function StaffSchedulePage({ staffUser, showToast }) {
 
 /* ══════════ Editor Modal ══════════ */
 function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSave, onDelete, onLock, onClose }) {
-  const { staffId: initStaffId, date, mode, existing } = modal;
+  const { staffId: initStaffId, date, mode, existing, defaultShift } = modal;
   const [staffId, setStaffId] = useState(String(initStaffId));
   const memberName = teamMembers.find(m => String(m.id) === staffId)?.name || "";
   const isEditingSelf = staffId === String(currentStaffId);
 
-  const [shiftType, setShiftType] = useState(existing?.shift_type || "morning");
+  const [shiftType, setShiftType] = useState(existing?.shift_type || defaultShift || "morning");
   const [startTime, setStartTime] = useState(existing?.start_time || "09:00");
   const [endTime, setEndTime] = useState(existing?.end_time || "17:00");
   const [note, setNote] = useState(existing?.note || "");

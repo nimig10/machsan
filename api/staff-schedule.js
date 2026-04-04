@@ -97,12 +97,12 @@ export default async function handler(req, res) {
         start_time: times.start_time,
         end_time: times.end_time,
         note: note || null,
-        note_public: notePublic || null,
+        note_public: notePublic ?? true,
         updated_at: new Date().toISOString(),
       }),
     });
     if (!result.ok) {
-      return res.status(500).json({ error: "Failed to upsert preference" });
+      return res.status(500).json({ error: "Failed to upsert preference", detail: result.data });
     }
     return res.status(200).json({ ok: true, data: result.data?.[0] || null });
   }
