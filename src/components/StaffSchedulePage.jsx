@@ -1,23 +1,18 @@
-// StaffSchedulePage.jsx — Staff weekly schedule: Google Calendar-style view
-import { useState, useEffect, useMemo, useCallback } from "react";
+// StaffSchedulePage.jsx — Staff weekly schedule: slot-based view
+import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
 import { Modal } from "./ui.jsx";
 
 /* ── Shift types ── */
 const SHIFT_TYPES = {
-  morning: { label: "בוקר", icon: "☀️", start: "09:00", end: "17:00", color: "#f59e0b", bg: "rgba(245,158,11,0.12)" },
-  evening: { label: "ערב", icon: "🌙", start: "14:00", end: "22:00", color: "#8b5cf6", bg: "rgba(139,92,246,0.12)" },
-  custom:  { label: "חופשי", icon: "🕐", color: "#3b82f6", bg: "rgba(59,130,246,0.12)" },
-  absent:  { label: "לא נוכח", icon: "🚫", color: "#ef4444", bg: "rgba(239,68,68,0.12)" },
+  morning: { label: "בוקר",    icon: "☀️",  color: "#f59e0b", bg: "rgba(245,158,11,0.13)", start: "09:00", end: "17:00" },
+  custom:  { label: "חופשי",   icon: "🕐",  color: "#22c55e", bg: "rgba(34,197,94,0.13)"  },
+  evening: { label: "ערב",     icon: "🌙",  color: "#3b82f6", bg: "rgba(59,130,246,0.13)", start: "14:00", end: "22:00" },
+  absent:  { label: "לא נוכח", icon: "🚫",  color: "#ef4444", bg: "rgba(239,68,68,0.13)"  },
 };
 
-const HE_DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
+const SLOT_ORDER = ["morning", "custom", "evening"];
 
-/* ── Calendar grid constants ── */
-const HOUR_H = 50;
-const START_H = 8;
-const END_H = 22;
-const GRID_H = (END_H - START_H) * HOUR_H; // 700px
-const HOURS = Array.from({ length: END_H - START_H }, (_, i) => START_H + i);
+const HE_DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 
 /* ── Helpers ── */
 function formatDateHe(dateStr) {
@@ -81,31 +76,6 @@ function getPreferenceWindowStatus(weekDates) {
   return { open: true, text: "ניתן להגיש העדפות" };
 }
 
-function timeToY(timeStr) {
-  const [h, m] = timeStr.split(":").map(Number);
-  return Math.max(0, Math.min(((h + m / 60) - START_H) * HOUR_H, GRID_H));
-}
-
-/* ── Layout overlapping blocks into columns ── */
-function groupBlocks(blocks) {
-  if (!blocks.length) return [];
-  const sorted = [...blocks].sort((a, b) => a.startTime.localeCompare(b.startTime));
-  const groups = [];
-  let cur = { startTime: sorted[0].startTime, endTime: sorted[0].endTime, members: [sorted[0]] };
-  for (let i = 1; i < sorted.length; i++) {
-    const b = sorted[i];
-    if (b.startTime < cur.endTime) {
-      if (b.endTime > cur.endTime) cur.endTime = b.endTime;
-      cur.members.push(b);
-    } else {
-      groups.push(cur);
-      cur = { startTime: b.startTime, endTime: b.endTime, members: [b] };
-    }
-  }
-  groups.push(cur);
-  return groups;
-}
-
 /* ── API helper ── */
 async function scheduleApi(action, body = {}) {
   const res = await fetch("/api/staff-schedule", {
@@ -128,6 +98,7 @@ export function StaffSchedulePage({ staffUser, showToast }) {
   const [loading, setLoading] = useState(true);
   const [holidays, setHolidays] = useState([]);
   const [editModal, setEditModal] = useState(null);
+  const [notePopup, setNotePopup] = useState(null); // { memberName, note }
 
   /* Load staff members from Supabase */
   useEffect(() => {
@@ -157,7 +128,7 @@ export function StaffSchedulePage({ staffUser, showToast }) {
   const startDate = weekDates[0];
   const endDate = weekDates[6];
 
-  /* Load holidays from Hebcal API (accurate Israeli dates, with static fallback) */
+  /* Load holidays from Hebcal API */
   useEffect(() => {
     const year = new Date().getFullYear();
     (async () => {
@@ -223,32 +194,40 @@ export function StaffSchedulePage({ staffUser, showToast }) {
     await fetchWeekData();
   };
 
-  /* ── Day blocks builder ── */
-  const getDayBlocks = (date) => {
-    const timed = [], absent = [];
+  /* ── Day slots builder ── */
+  const getDaySlots = useCallback((date) => {
+    const slots = { morning: [], custom: [], evening: [], absent: [] };
     displayMembers.forEach(member => {
       const mid = String(member.id);
       const asgn = getAssign(mid, date);
       const pref = getPref(mid, date);
       const entry = asgn || pref;
       if (!entry) return;
-      const st = SHIFT_TYPES[entry.shift_type];
       const block = {
         id: entry.id, memberId: mid, memberName: member.name,
         type: asgn ? "assignment" : "preference",
         shiftType: entry.shift_type,
-        startTime: entry.shift_type === "custom" ? entry.start_time : st?.start,
-        endTime: entry.shift_type === "custom" ? entry.end_time : st?.end,
-        locked: asgn?.locked || false, entry, hasPref: !!asgn && !!pref,
+        startTime: entry.start_time,
+        endTime: entry.end_time,
+        locked: asgn?.locked || false, entry,
+        hasPref: !!asgn && !!pref,
+        note: entry.note,
+        notePublic: entry.note_public ?? true,
       };
-      if (entry.shift_type === "absent" || !block.startTime || !block.endTime) absent.push(block);
-      else timed.push(block);
+      if (slots[entry.shift_type]) slots[entry.shift_type].push(block);
+      else slots.absent.push(block);
     });
-    return { groups: groupBlocks(timed), absent };
-  };
+    return slots;
+  }, [displayMembers, preferences, assignments]);
+
+  const allDaySlots = useMemo(
+    () => Object.fromEntries(workDays.map(d => [d, getDaySlots(d)])),
+    [workDays, getDaySlots]
+  );
 
   const today = todayStr();
   const maxWeekOffset = 4;
+  const hasAbsent = workDays.some(d => allDaySlots[d]?.absent?.length > 0);
 
   const openBlockEditor = (block, date) => {
     setEditModal({ staffId: block.memberId, date, mode: block.type, existing: block.entry });
@@ -257,18 +236,19 @@ export function StaffSchedulePage({ staffUser, showToast }) {
     if (!isAdmin && !canStaffEditDate(date)) return;
     setEditModal({ staffId: String(currentStaffId), date, mode: isAdmin ? "assignment" : "preference", existing: null, defaultShift });
   };
-  // Click on empty area of day column → smart shift pre-selection by hour
-  const handleDayClick = (e, date) => {
-    if (!isAdmin && !canStaffEditDate(date)) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const y = e.clientY - rect.top;
-    const hour = START_H + y / HOUR_H;
-    openNewEditor(date, hour >= 14 ? "evening" : "morning");
-  };
 
   /* ══════════ Render ══════════ */
   return (
     <div className="page" style={{ padding: "16px 12px" }}>
+
+      {/* ── Title + User ── */}
+      <div style={{ marginBottom: 14, direction: "rtl" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+          <span style={{ fontWeight: 900, fontSize: 20, color: "var(--text)" }}>לו&quot;ז עובדים</span>
+          <span style={{ fontSize: 13, color: "var(--text3)" }}>שלום, {staffUser?.full_name || ""}</span>
+        </div>
+      </div>
+
       {/* ── Week Navigation ── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -287,14 +267,6 @@ export function StaffSchedulePage({ staffUser, showToast }) {
         )}
       </div>
 
-      {/* ── Legend ── */}
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 12, fontSize: 11, color: "var(--text3)" }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 3 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "rgba(34,197,94,0.2)", border: "2px solid #22c55e", display: "inline-block" }} /> העדפה</span>
-        <span style={{ display: "flex", alignItems: "center", gap: 3 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "rgba(59,130,246,0.2)", border: "2px solid #3b82f6", display: "inline-block" }} /> שיבוץ</span>
-        <span style={{ display: "flex", alignItems: "center", gap: 3 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "rgba(245,158,11,0.2)", border: "2px solid #f59e0b", display: "inline-block" }} /> 🔒 נעול</span>
-        {Object.entries(SHIFT_TYPES).map(([k, s]) => <span key={k}>{s.icon} {s.label}</span>)}
-      </div>
-
       {loading ? (
         <div style={{ textAlign: "center", padding: 60, color: "var(--text3)" }}>טוען...</div>
       ) : (
@@ -302,10 +274,11 @@ export function StaffSchedulePage({ staffUser, showToast }) {
         <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", borderRadius: 10, border: "1px solid var(--border)" }}>
           <div style={{
             display: "grid",
-            gridTemplateColumns: "50px repeat(6, 1fr)",
+            gridTemplateColumns: "44px repeat(6, 1fr)",
             direction: "rtl",
-            minWidth: 780,
+            minWidth: 680,
           }}>
+
             {/* ═══ Header Row ═══ */}
             <div style={{ background: "var(--surface2)", borderBottom: "1px solid var(--border)", borderLeft: "1px solid var(--border)" }} />
             {workDays.map((date, i) => {
@@ -330,138 +303,178 @@ export function StaffSchedulePage({ staffUser, showToast }) {
               );
             })}
 
-            {/* ═══ Body Row ═══ */}
-            {/* Time axis */}
-            <div style={{ position: "relative", height: GRID_H, background: "var(--surface2)", borderLeft: "1px solid var(--border)" }}>
-              {HOURS.map(h => (
-                <div key={h} style={{
-                  position: "absolute", top: (h - START_H) * HOUR_H - 7,
-                  width: "100%", fontSize: 10, color: "var(--text3)", textAlign: "center",
-                  direction: "ltr",
-                }}>{String(h).padStart(2, "0")}:00</div>
-              ))}
-            </div>
-
-            {/* Day columns */}
-            {workDays.map((date, i) => {
-              const { groups, absent } = getDayBlocks(date);
-              const isToday = date === today;
-              const dateEditable = isAdmin || canStaffEditDate(date);
-
+            {/* ═══ Shift Rows (morning / custom / evening) ═══ */}
+            {SLOT_ORDER.map((slotKey, rowIdx) => {
+              const st = SHIFT_TYPES[slotKey];
+              const isLastSlot = rowIdx === SLOT_ORDER.length - 1;
               return (
-                <div key={date}
-                  onClick={e => handleDayClick(e, date)}
-                  style={{
-                    position: "relative", height: GRID_H,
-                    background: isToday ? "rgba(59,130,246,0.03)" : "var(--surface)",
-                    borderLeft: i < 5 ? "1px solid var(--border)" : "none",
-                    cursor: (isAdmin || canStaffEditDate(date)) ? "pointer" : "default",
+                <Fragment key={slotKey}>
+                  {/* Row label */}
+                  <div style={{
+                    background: st.bg,
+                    borderTop: "1px solid var(--border)",
+                    borderLeft: "1px solid var(--border)",
+                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                    padding: "6px 2px", gap: 2,
                   }}>
-                  {/* Hour grid lines */}
-                  {HOURS.map(h => (
-                    <div key={h} style={{
-                      position: "absolute", top: (h - START_H) * HOUR_H, width: "100%",
-                      borderTop: "1px solid var(--border)", opacity: 0.3, pointerEvents: "none",
-                    }} />
-                  ))}
+                    <span style={{ fontSize: 16 }}>{st.icon}</span>
+                    <span style={{ fontSize: 8, color: st.color, fontWeight: 700, textAlign: "center" }}>{st.label}</span>
+                  </div>
 
-                  {/* Current time red line */}
-                  {isToday && (() => {
-                    const now = new Date();
-                    const y = ((now.getHours() + now.getMinutes() / 60) - START_H) * HOUR_H;
-                    if (y < 0 || y > GRID_H) return null;
+                  {/* Day cells */}
+                  {workDays.map((date, i) => {
+                    const members = allDaySlots[date]?.[slotKey] || [];
+                    const isToday = date === today;
+                    const dateEditable = isAdmin || canStaffEditDate(date);
+                    const cellBg = isToday ? `${st.bg.replace("0.13", "0.22")}` : st.bg;
+
                     return (
-                      <div style={{ position: "absolute", top: y, width: "100%", zIndex: 5, pointerEvents: "none" }}>
-                        <div style={{ height: 2, background: "#ef4444", width: "100%" }} />
-                        <div style={{ position: "absolute", top: -4, right: -5, width: 10, height: 10, borderRadius: "50%", background: "#ef4444" }} />
+                      <div key={date} style={{
+                        background: cellBg,
+                        borderTop: "1px solid var(--border)",
+                        borderLeft: i < 5 ? "1px solid var(--border)" : "none",
+                        padding: "5px 4px 28px",
+                        minHeight: 72,
+                        position: "relative",
+                      }}>
+                        {/* Member list */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                          {members.map(block => {
+                            const isMe = block.memberId === String(currentStaffId);
+                            const canEdit = isAdmin || (isMe && block.type === "preference" && canStaffEditDate(date));
+                            const hasNote = !!block.note;
+                            const canSeeNote = hasNote && (block.notePublic || isAdmin);
+
+                            return (
+                              <div key={block.id}
+                                onClick={() => canEdit && openBlockEditor(block, date)}
+                                style={{
+                                  display: "flex", alignItems: "center", gap: 3,
+                                  background: "rgba(255,255,255,0.07)",
+                                  borderRadius: 5, padding: "3px 6px",
+                                  borderRight: `2.5px solid ${block.locked ? "#f59e0b" : st.color}`,
+                                  cursor: canEdit ? "pointer" : "default",
+                                  transition: "background 0.12s",
+                                }}
+                                onMouseEnter={e => { if (canEdit) e.currentTarget.style.background = "rgba(255,255,255,0.14)"; }}
+                                onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
+                              >
+                                {block.locked && <span style={{ fontSize: 9 }}>🔒</span>}
+                                <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                  {block.memberName}
+                                </span>
+                                {slotKey === "custom" && block.startTime && block.endTime && (
+                                  <span style={{ fontSize: 9, color: "rgba(255,255,255,0.6)", whiteSpace: "nowrap", flexShrink: 0 }}>
+                                    {block.startTime}–{block.endTime}
+                                  </span>
+                                )}
+                                {hasNote && (
+                                  <span
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      if (canSeeNote) setNotePopup({ memberName: block.memberName, note: block.note });
+                                    }}
+                                    title={canSeeNote ? "לחץ לצפייה בהערה" : "הערה פרטית (מנהל בלבד)"}
+                                    style={{ fontSize: 11, flexShrink: 0, cursor: canSeeNote ? "pointer" : "default", opacity: canSeeNote ? 1 : 0.4 }}
+                                  >⭐</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Plus button — shown in last slot row only */}
+                        {isLastSlot && dateEditable && (
+                          <button
+                            onClick={() => openNewEditor(date)}
+                            title={isAdmin ? "שבץ עובד" : "הוסף העדפה"}
+                            style={{
+                              position: "absolute", bottom: 5, left: "50%", transform: "translateX(-50%)",
+                              width: 26, height: 26, borderRadius: "50%",
+                              border: "1.5px solid rgba(255,255,255,0.55)",
+                              background: "rgba(255,255,255,0.18)",
+                              color: "#fff", fontSize: 16, fontWeight: 700,
+                              cursor: "pointer",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              transition: "background 0.15s, border-color 0.15s",
+                              zIndex: 2,
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.35)"; e.currentTarget.style.borderColor = "#fff"; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.18)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.55)"; }}
+                          >+</button>
+                        )}
                       </div>
                     );
-                  })()}
+                  })}
+                </Fragment>
+              );
+            })}
 
-                  {/* Absent chips at top */}
-                  {absent.length > 0 && (
-                    <div style={{ position: "absolute", top: 2, left: 2, right: 2, zIndex: 3, display: "flex", flexWrap: "wrap", gap: 2 }}>
-                      {absent.map(b => {
-                        const isMe = b.memberId === String(currentStaffId);
-                        const canEdit = isAdmin || (isMe && b.type === "preference" && canStaffEditDate(date));
-                        return (
-                          <div key={b.id} onClick={e => { e.stopPropagation(); canEdit && openBlockEditor(b, date); }}
-                            style={{ fontSize: 9, background: "rgba(239,68,68,0.12)", color: "#ef4444", borderRadius: 4, padding: "1px 5px", cursor: canEdit ? "pointer" : "default", whiteSpace: "nowrap" }}>
-                            🚫 {b.memberName}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Shift groups — overlapping blocks stacked vertically */}
-                  {groups.map((group, gi) => {
-                    const top = timeToY(group.startTime);
-                    const bottom = timeToY(group.endTime);
-                    const groupH = Math.max(bottom - top, 22 * group.members.length);
-                    return (
-                      <div key={gi} style={{
-                        position: "absolute",
-                        top: top + 1, left: 2, right: 2,
-                        height: groupH - 2,
-                        zIndex: 2,
-                        display: "flex", flexDirection: "column", gap: 1,
-                      }}>
-                        {group.members.map(block => {
+            {/* ═══ Absent Row (only if any absent entries exist) ═══ */}
+            {hasAbsent && (
+              <Fragment key="absent">
+                <div style={{
+                  background: SHIFT_TYPES.absent.bg,
+                  borderTop: "1px solid var(--border)",
+                  borderLeft: "1px solid var(--border)",
+                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                  padding: "6px 2px", gap: 2,
+                }}>
+                  <span style={{ fontSize: 16 }}>{SHIFT_TYPES.absent.icon}</span>
+                  <span style={{ fontSize: 8, color: SHIFT_TYPES.absent.color, fontWeight: 700, textAlign: "center" }}>{SHIFT_TYPES.absent.label}</span>
+                </div>
+                {workDays.map((date, i) => {
+                  const absent = allDaySlots[date]?.absent || [];
+                  return (
+                    <div key={date} style={{
+                      background: SHIFT_TYPES.absent.bg,
+                      borderTop: "1px solid var(--border)",
+                      borderLeft: i < 5 ? "1px solid var(--border)" : "none",
+                      padding: "5px 4px",
+                      minHeight: 36,
+                    }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                        {absent.map(block => {
                           const isMe = block.memberId === String(currentStaffId);
                           const canEdit = isAdmin || (isMe && block.type === "preference" && canStaffEditDate(date));
-                          const accent = block.locked ? "#f59e0b" : block.type === "assignment" ? "#3b82f6" : "#22c55e";
-                          const bg = block.locked ? "rgba(245,158,11,0.2)" : block.type === "assignment" ? "rgba(59,130,246,0.2)" : "rgba(34,197,94,0.15)";
                           return (
-                            <div key={`${block.type}-${block.id}`}
-                              onClick={e => { e.stopPropagation(); canEdit && openBlockEditor(block, date); }}
-                              title={`${block.memberName} · ${SHIFT_TYPES[block.shiftType]?.label || ""} · ${block.startTime}–${block.endTime}`}
+                            <div key={block.id}
+                              onClick={() => canEdit && openBlockEditor(block, date)}
                               style={{
-                                flex: 1, minHeight: 20,
-                                borderRadius: 5,
-                                borderRight: `3px solid ${accent}`,
-                                background: bg,
-                                padding: "2px 6px",
-                                overflow: "hidden",
+                                display: "flex", alignItems: "center", gap: 3,
+                                background: "rgba(239,68,68,0.12)",
+                                borderRadius: 5, padding: "2px 5px",
+                                borderRight: `2px solid ${SHIFT_TYPES.absent.color}`,
                                 cursor: canEdit ? "pointer" : "default",
-                                opacity: canEdit ? 1 : 0.85,
-                                display: "flex", alignItems: "center", gap: 4,
+                                fontSize: 10, color: "#fca5a5",
                               }}
                             >
-                              <span style={{ fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 11, flex: 1 }}>
-                                {block.locked && "🔒 "}{block.memberName}
-                              </span>
-                              <span style={{ fontSize: 9, color: "var(--text3)", whiteSpace: "nowrap", flexShrink: 0 }}>
-                                {SHIFT_TYPES[block.shiftType]?.icon}
+                              <span style={{ fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {block.memberName}
                               </span>
                             </div>
                           );
                         })}
                       </div>
-                    );
-                  })}
+                    </div>
+                  );
+                })}
+              </Fragment>
+            )}
 
-                  {/* Add button */}
-                  {dateEditable && (
-                    <button onClick={e => { e.stopPropagation(); openNewEditor(date); }}
-                      style={{
-                        position: "absolute", bottom: 6, left: "50%", transform: "translateX(-50%)",
-                        width: 24, height: 24, borderRadius: "50%",
-                        border: "1.5px dashed var(--text3)", background: "transparent",
-                        color: "var(--text3)", fontSize: 14, cursor: "pointer",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        zIndex: 3, opacity: 0.4, transition: "opacity 0.15s",
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.opacity = 1}
-                      onMouseLeave={e => e.currentTarget.style.opacity = 0.4}
-                      title={isAdmin ? "שבץ" : "הוסף העדפה"}
-                    >+</button>
-                  )}
-                </div>
-              );
-            })}
           </div>
         </div>
+      )}
+
+      {/* ── Note Popup ── */}
+      {notePopup && (
+        <Modal onClose={() => setNotePopup(null)}>
+          <div style={{ padding: 24, maxWidth: 340, direction: "rtl" }}>
+            <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 12 }}>⭐ הערה של {notePopup.memberName}</div>
+            <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{notePopup.note}</div>
+            <button className="btn btn-secondary" style={{ marginTop: 18 }} onClick={() => setNotePopup(null)}>סגור</button>
+          </div>
+        </Modal>
       )}
 
       {/* ── Edit Modal ── */}
@@ -568,7 +581,7 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
         {/* Fixed time display */}
         {(shiftType === "morning" || shiftType === "evening") && (
           <div style={{ fontSize: 13, color: "var(--text3)", marginBottom: 14, padding: "8px 12px", background: "var(--surface2)", borderRadius: 8 }}>
-            🕐 {SHIFT_TYPES[shiftType].start} – {SHIFT_TYPES[shiftType].end}
+            🕐 {SHIFT_TYPES[shiftType].start || ""} – {SHIFT_TYPES[shiftType].end || ""}
           </div>
         )}
 

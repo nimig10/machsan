@@ -7630,7 +7630,7 @@ export default function App() {
             <div className="topbar">
               <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
                 <button className="btn btn-secondary btn-sm" onClick={()=>setStaffView("hub")}>← חזרה</button>
-                <span className="topbar-title" style={{flex:1}}>לוז עובדים</span>
+                <span className="topbar-title" style={{flex:1}}>לו&quot;ז עובדים</span>
               </div>
             </div>
             {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <StaffSchedulePage staffUser={staffUser} showToast={showToast}/>}
