@@ -413,6 +413,7 @@ export function StaffSchedulePage({ staffUser, showToast }) {
         <ScheduleEditorModal
           modal={editModal}
           isAdmin={isAdmin}
+          currentStaffId={currentStaffId}
           teamMembers={displayMembers}
           onSave={editModal.mode === "preference" ? savePref : saveAssignment}
           onClose={() => setEditModal(null)}
@@ -426,8 +427,9 @@ export function StaffSchedulePage({ staffUser, showToast }) {
 function CellBadge({ entry, type, isAdmin, onClick, onLock, onDelete, showPrivateNote }) {
   const shift = SHIFT_TYPES[entry.shift_type] || SHIFT_TYPES.custom;
   const isAssignment = type === "assignment";
-  const borderColor = isAssignment ? "#3b82f6" : "#22c55e";
-  const bgColor = isAssignment ? "rgba(59,130,246,0.1)" : "rgba(34,197,94,0.08)";
+  const isLocked = isAssignment && entry.locked;
+  const borderColor = isLocked ? "#f59e0b" : isAssignment ? "#3b82f6" : "#22c55e";
+  const bgColor = isLocked ? "rgba(245,158,11,0.1)" : isAssignment ? "rgba(59,130,246,0.1)" : "rgba(34,197,94,0.08)";
   const hasNote = entry.note && entry.note.trim().length > 0;
   const noteVisible = hasNote && (entry.note_public || showPrivateNote);
 
@@ -455,8 +457,8 @@ function CellBadge({ entry, type, isAdmin, onClick, onLock, onDelete, showPrivat
         </span>
         <span style={{ display: "flex", gap: 2, alignItems: "center" }}>
           {hasNote && <span title={noteVisible ? entry.note : "הערה פרטית"} style={{ cursor: "help" }}>⭐</span>}
-          {entry.locked && <span title="נעול">🔒</span>}
-          {isAssignment && <span style={{ fontSize: 9, color: "#3b82f6", fontWeight: 700 }}>שיבוץ</span>}
+          {isLocked && <span title="נעול על ידי מנהל" style={{ fontSize: 12 }}>🔒</span>}
+          {isAssignment && <span style={{ fontSize: 9, color: isLocked ? "#f59e0b" : "#3b82f6", fontWeight: 700 }}>{isLocked ? "נעול" : "שיבוץ"}</span>}
         </span>
       </div>
       {entry.shift_type !== "absent" && startTime && endTime && (
@@ -479,9 +481,10 @@ function CellBadge({ entry, type, isAdmin, onClick, onLock, onDelete, showPrivat
 }
 
 // ── Editor Modal ──
-function ScheduleEditorModal({ modal, isAdmin, teamMembers, onSave, onClose }) {
+function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSave, onClose }) {
   const { staffId, date, mode, existing } = modal;
   const memberName = teamMembers.find(m => String(m.id) === String(staffId))?.name || "";
+  const isEditingSelf = String(staffId) === String(currentStaffId);
 
   const [shiftType, setShiftType] = useState(existing?.shift_type || "morning");
   const [startTime, setStartTime] = useState(existing?.start_time || "09:00");
@@ -596,8 +599,8 @@ function ScheduleEditorModal({ modal, isAdmin, teamMembers, onSave, onClose }) {
           </div>
         </div>
 
-        {/* Lock toggle (admin + assignment only) */}
-        {isAdmin && mode === "assignment" && (
+        {/* Lock toggle (admin + assignment + editing another member, not self) */}
+        {isAdmin && mode === "assignment" && !isEditingSelf && (
           <div style={{ marginBottom: 14 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
               <input type="checkbox" checked={locked} onChange={e => setLocked(e.target.checked)} />
