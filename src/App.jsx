@@ -6819,13 +6819,7 @@ function StaffLogin({ onSuccess }) {
 
 // ─── PROTECTED ROUTE ──────────────────────────────────────────────────────────
 // Wraps admin-only content. /admin/login is always accessible (it's the login page itself).
-function ProtectedRoute({ authed, children }) {
-  const isAdminPath = window.location.pathname.startsWith("/admin");
-  if (isAdminPath && !authed) {
-    // Redirect to public form without adding a history entry
-    window.history.replaceState(null, "", "/");
-    return null;
-  }
+function ProtectedRoute({ children }) {
   return children;
 }
 
