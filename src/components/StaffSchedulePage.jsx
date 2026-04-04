@@ -211,8 +211,11 @@ export function StaffSchedulePage({ staffUser, showToast }) {
         endTime: entry.end_time,
         locked: asgn?.locked || false, entry,
         hasPref: !!asgn && !!pref,
-        note: entry.note,
-        notePublic: entry.note_public ?? true,
+        staffNote: pref?.note || null,
+        staffNotePublic: pref?.note_public ?? true,
+        managerNote: asgn?.note || null,
+        prefEntry: pref || null,
+        asgnEntry: asgn || null,
       };
       if (slots[entry.shift_type]) slots[entry.shift_type].push(block);
       else slots.absent.push(block);
@@ -230,11 +233,19 @@ export function StaffSchedulePage({ staffUser, showToast }) {
   const hasAbsent = workDays.some(d => allDaySlots[d]?.absent?.length > 0);
 
   const openBlockEditor = (block, date) => {
-    setEditModal({ staffId: block.memberId, date, mode: block.type, existing: block.entry });
+    if (!isAdmin && block.type === "assignment") {
+      // Staff editing unlocked assignment → open as preference editor
+      setEditModal({ staffId: block.memberId, date, mode: "preference", existing: block.prefEntry, prefEntry: block.prefEntry, asgnEntry: block.asgnEntry });
+    } else {
+      setEditModal({ staffId: block.memberId, date, mode: block.type, existing: block.entry, prefEntry: block.prefEntry, asgnEntry: block.asgnEntry });
+    }
   };
   const openNewEditor = (date, defaultShift = "morning") => {
     if (!isAdmin && !canStaffEditDate(date)) return;
-    setEditModal({ staffId: String(currentStaffId), date, mode: isAdmin ? "assignment" : "preference", existing: null, defaultShift });
+    const sid = String(currentStaffId);
+    const pref = getPref(sid, date);
+    const asgn = getAssign(sid, date);
+    setEditModal({ staffId: sid, date, mode: isAdmin ? "assignment" : "preference", existing: null, defaultShift, prefEntry: pref, asgnEntry: asgn });
   };
 
   /* ══════════ Render ══════════ */
@@ -341,9 +352,16 @@ export function StaffSchedulePage({ staffUser, showToast }) {
                         <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                           {members.map(block => {
                             const isMe = block.memberId === String(currentStaffId);
-                            const canEdit = isAdmin || (isMe && block.type === "preference" && canStaffEditDate(date));
-                            const hasNote = !!block.note;
-                            const canSeeNote = hasNote && (block.notePublic || isAdmin);
+                            // Staff can edit own preferences OR own unlocked assignments
+                            const canEdit = isAdmin || (isMe && canStaffEditDate(date) && (block.type === "preference" || !block.locked));
+                            // Lock icon: only visible to admin or to the locked staff member
+                            const showLock = block.locked && (isAdmin || isMe);
+                            // Notes: staff note (from preference) + manager note (from assignment)
+                            const canSeeStaffNote = !!block.staffNote && (block.staffNotePublic || isAdmin);
+                            const canSeeManagerNote = !!block.managerNote && (isAdmin || isMe);
+                            const hasVisibleNote = canSeeStaffNote || canSeeManagerNote;
+                            // Star shows to everyone if there's a staff note (even if private), but only clickable if can see
+                            const showStar = !!block.staffNote || (!!block.managerNote && (isAdmin || isMe));
 
                             return (
                               <div key={block.id}
@@ -352,14 +370,14 @@ export function StaffSchedulePage({ staffUser, showToast }) {
                                   display: "flex", alignItems: "center", gap: 3,
                                   background: "rgba(255,255,255,0.07)",
                                   borderRadius: 5, padding: "3px 6px",
-                                  borderRight: `2.5px solid ${block.locked ? "#f59e0b" : st.color}`,
+                                  borderRight: `2.5px solid ${showLock ? "#f59e0b" : st.color}`,
                                   cursor: canEdit ? "pointer" : "default",
                                   transition: "background 0.12s",
                                 }}
                                 onMouseEnter={e => { if (canEdit) e.currentTarget.style.background = "rgba(255,255,255,0.14)"; }}
                                 onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
                               >
-                                {block.locked && <span style={{ fontSize: 9 }}>🔒</span>}
+                                {showLock && <span style={{ fontSize: 9 }}>🔒</span>}
                                 <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                   {block.memberName}
                                 </span>
@@ -368,14 +386,18 @@ export function StaffSchedulePage({ staffUser, showToast }) {
                                     {block.startTime}–{block.endTime}
                                   </span>
                                 )}
-                                {hasNote && (
+                                {showStar && (
                                   <span
                                     onClick={e => {
                                       e.stopPropagation();
-                                      if (canSeeNote) setNotePopup({ memberName: block.memberName, note: block.note });
+                                      if (hasVisibleNote) setNotePopup({
+                                        memberName: block.memberName,
+                                        staffNote: canSeeStaffNote ? block.staffNote : null,
+                                        managerNote: canSeeManagerNote ? block.managerNote : null,
+                                      });
                                     }}
-                                    title={canSeeNote ? "לחץ לצפייה בהערה" : "הערה פרטית (מנהל בלבד)"}
-                                    style={{ fontSize: 11, flexShrink: 0, cursor: canSeeNote ? "pointer" : "default", opacity: canSeeNote ? 1 : 0.4 }}
+                                    title={hasVisibleNote ? "לחץ לצפייה בהערה" : "הערה פרטית"}
+                                    style={{ fontSize: 11, flexShrink: 0, cursor: hasVisibleNote ? "pointer" : "default", opacity: hasVisibleNote ? 1 : 0.4 }}
                                   >⭐</span>
                                 )}
                               </div>
@@ -436,7 +458,7 @@ export function StaffSchedulePage({ staffUser, showToast }) {
                       <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                         {absent.map(block => {
                           const isMe = block.memberId === String(currentStaffId);
-                          const canEdit = isAdmin || (isMe && block.type === "preference" && canStaffEditDate(date));
+                          const canEdit = isAdmin || (isMe && canStaffEditDate(date) && (block.type === "preference" || !block.locked));
                           return (
                             <div key={block.id}
                               onClick={() => canEdit && openBlockEditor(block, date)}
@@ -469,10 +491,21 @@ export function StaffSchedulePage({ staffUser, showToast }) {
       {/* ── Note Popup ── */}
       {notePopup && (
         <Modal onClose={() => setNotePopup(null)}>
-          <div style={{ padding: 24, maxWidth: 340, direction: "rtl" }}>
-            <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 12 }}>⭐ הערה של {notePopup.memberName}</div>
-            <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{notePopup.note}</div>
-            <button className="btn btn-secondary" style={{ marginTop: 18 }} onClick={() => setNotePopup(null)}>סגור</button>
+          <div style={{ padding: 24, maxWidth: 360, direction: "rtl" }}>
+            <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 14 }}>⭐ הערות — {notePopup.memberName}</div>
+            {notePopup.staffNote && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontWeight: 700, fontSize: 12, color: "#22c55e", marginBottom: 4 }}>📝 הערת איש צוות</div>
+                <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7, whiteSpace: "pre-wrap", padding: "8px 10px", background: "var(--surface2)", borderRadius: 8 }}>{notePopup.staffNote}</div>
+              </div>
+            )}
+            {notePopup.managerNote && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontWeight: 700, fontSize: 12, color: "#3b82f6", marginBottom: 4 }}>👤 הערת מנהל</div>
+                <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7, whiteSpace: "pre-wrap", padding: "8px 10px", background: "var(--surface2)", borderRadius: 8 }}>{notePopup.managerNote}</div>
+              </div>
+            )}
+            <button className="btn btn-secondary" style={{ marginTop: 4 }} onClick={() => setNotePopup(null)}>סגור</button>
           </div>
         </Modal>
       )}
@@ -496,7 +529,7 @@ export function StaffSchedulePage({ staffUser, showToast }) {
 
 /* ══════════ Editor Modal ══════════ */
 function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSave, onDelete, onLock, onClose }) {
-  const { staffId: initStaffId, date, mode, existing, defaultShift } = modal;
+  const { staffId: initStaffId, date, mode, existing, defaultShift, prefEntry, asgnEntry } = modal;
   const [staffId, setStaffId] = useState(String(initStaffId));
   const memberName = teamMembers.find(m => String(m.id) === staffId)?.name || "";
   const isEditingSelf = staffId === String(currentStaffId);
@@ -504,10 +537,15 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
   const [shiftType, setShiftType] = useState(existing?.shift_type || defaultShift || "morning");
   const [startTime, setStartTime] = useState(existing?.start_time || "09:00");
   const [endTime, setEndTime] = useState(existing?.end_time || "17:00");
+  // In preference mode → note = staff note (editable); in assignment mode → note = manager note (editable)
   const [note, setNote] = useState(existing?.note || "");
   const [notePublic, setNotePublic] = useState(existing?.note_public ?? true);
   const [locked, setLocked] = useState(existing?.locked ?? false);
   const [saving, setSaving] = useState(false);
+
+  // Read-only note from the other side
+  const readOnlyStaffNote = mode === "assignment" ? (prefEntry?.note || null) : null;
+  const readOnlyManagerNote = mode === "preference" ? (asgnEntry?.note || null) : null;
 
   const handleSave = async () => {
     if (shiftType === "custom" && (!startTime || !endTime || startTime >= endTime)) return;
@@ -585,21 +623,45 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
           </div>
         )}
 
-        {/* Note */}
+        {/* ── Read-only staff note (shown when admin edits assignment) ── */}
+        {readOnlyStaffNote && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ ...labelStyle, color: "#22c55e" }}>📝 הערת איש צוות</label>
+            <div style={{ fontSize: 13, color: "var(--text)", padding: "8px 12px", background: "var(--surface2)", borderRadius: 8, borderRight: "3px solid #22c55e", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+              {readOnlyStaffNote}
+            </div>
+          </div>
+        )}
+
+        {/* ── Read-only manager note (shown when staff edits preference) ── */}
+        {readOnlyManagerNote && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ ...labelStyle, color: "#3b82f6" }}>👤 הערת מנהל</label>
+            <div style={{ fontSize: 13, color: "var(--text)", padding: "8px 12px", background: "var(--surface2)", borderRadius: 8, borderRight: "3px solid #3b82f6", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+              {readOnlyManagerNote}
+            </div>
+          </div>
+        )}
+
+        {/* ── Editable note ── */}
         <div style={{ marginBottom: 14 }}>
-          <label style={labelStyle}>הערה (אופציונלי)</label>
+          <label style={labelStyle}>{mode === "assignment" ? "👤 הערת מנהל (אופציונלי)" : "📝 הערת איש צוות (אופציונלי)"}</label>
           <textarea value={note} onChange={e => { if (e.target.value.length <= 250) setNote(e.target.value); }}
-            placeholder="הערה, אילוץ, סיבה..." rows={2}
+            placeholder={mode === "assignment" ? "סיבת השיבוץ, הוראות..." : "הערה, אילוץ, סיבה..."}
+            rows={2}
             style={{ width: "100%", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: 10, color: "var(--text)", fontSize: 13, resize: "vertical", fontFamily: "inherit" }} />
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
-            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, cursor: "pointer" }}>
-                <input type="radio" name="noteVis" checked={notePublic} onChange={() => setNotePublic(true)} /> ציבורית
-              </label>
-              <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, cursor: "pointer" }}>
-                <input type="radio" name="noteVis" checked={!notePublic} onChange={() => setNotePublic(false)} /> פרטית למנהל 🔒
-              </label>
-            </div>
+            {/* Public/private toggle — only for staff notes (preference mode) */}
+            {mode === "preference" ? (
+              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, cursor: "pointer" }}>
+                  <input type="radio" name="noteVis" checked={notePublic} onChange={() => setNotePublic(true)} /> ציבורית
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, cursor: "pointer" }}>
+                  <input type="radio" name="noteVis" checked={!notePublic} onChange={() => setNotePublic(false)} /> פרטית למנהל 🔒
+                </label>
+              </div>
+            ) : <div />}
             <span style={{ fontSize: 11, color: note.length > 230 ? "var(--red)" : "var(--text3)" }}>{note.length}/250</span>
           </div>
         </div>
