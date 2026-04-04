@@ -7557,8 +7557,7 @@ export default function App() {
           // Save to sessionStorage BEFORE the redirect — setStaffUser/setStaffView
           // are async (React state) and their useEffect won't run before location.replace.
           sessionStorage.setItem("staff_user", JSON.stringify(user));
-          const v = user?.role !== "admin" && user?.permissions?.views;
-          sessionStorage.setItem("staff_view", v?.length === 1 ? v[0] : "hub");
+          sessionStorage.setItem("staff_view", "hub");
           window.location.replace("/admin");
         }}/>
       )}
