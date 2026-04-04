@@ -1,5 +1,5 @@
 // StaffSchedulePage.jsx — Staff weekly schedule: slot-based view
-import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
 import { Modal } from "./ui.jsx";
 
 /* ── Shift types ── */
@@ -96,6 +96,8 @@ export function StaffSchedulePage({ staffUser, showToast }) {
   const [preferences, setPreferences] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [fetching, setFetching] = useState(false);
+  const hasLoadedOnce = useRef(false);
   const [holidays, setHolidays] = useState([]);
   const [editModal, setEditModal] = useState(null);
   const [notePopup, setNotePopup] = useState(null); // { memberName, note }
@@ -152,13 +154,15 @@ export function StaffSchedulePage({ staffUser, showToast }) {
   }, []);
 
   const fetchWeekData = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedOnce.current) { setLoading(true); } else { setFetching(true); }
     try {
       const data = await scheduleApi("list-week", { startDate, endDate });
       setPreferences(data.preferences || []);
       setAssignments(data.assignments || []);
     } catch { showToast("error", "שגיאה בטעינת לוז"); }
     setLoading(false);
+    setFetching(false);
+    hasLoadedOnce.current = true;
   }, [startDate, endDate]);
 
   useEffect(() => { fetchWeekData(); }, [fetchWeekData]);
@@ -282,7 +286,8 @@ export function StaffSchedulePage({ staffUser, showToast }) {
         <div style={{ textAlign: "center", padding: 60, color: "var(--text3)" }}>טוען...</div>
       ) : (
         /* ── Calendar Grid ── */
-        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", borderRadius: 10, border: "1px solid var(--border)" }}>
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", borderRadius: 10, border: "1px solid var(--border)", position: "relative", opacity: fetching ? 0.55 : 1, transition: "opacity 0.18s" }}>
+          {fetching && <div style={{ position: "absolute", inset: 0, zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}><div style={{ background: "var(--surface2)", padding: "6px 16px", borderRadius: 20, fontSize: 12, color: "var(--text3)", border: "1px solid var(--border)" }}>טוען...</div></div>}
           <div style={{
             display: "grid",
             gridTemplateColumns: "44px repeat(6, 1fr)",
@@ -340,14 +345,17 @@ export function StaffSchedulePage({ staffUser, showToast }) {
                     const cellBg = isToday ? `${st.bg.replace("0.13", "0.22")}` : st.bg;
 
                     return (
-                      <div key={date} style={{
-                        background: cellBg,
-                        borderTop: "1px solid var(--border)",
-                        borderLeft: i < 5 ? "1px solid var(--border)" : "none",
-                        padding: "5px 4px 28px",
-                        minHeight: 72,
-                        position: "relative",
-                      }}>
+                      <div key={date}
+                        onClick={() => dateEditable && openNewEditor(date, slotKey)}
+                        style={{
+                          background: cellBg,
+                          borderTop: "1px solid var(--border)",
+                          borderLeft: i < 5 ? "1px solid var(--border)" : "none",
+                          padding: "5px 4px",
+                          minHeight: 72,
+                          position: "relative",
+                          cursor: dateEditable ? "pointer" : "default",
+                        }}>
                         {/* Member list */}
                         <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                           {members.map(block => {
@@ -373,7 +381,8 @@ export function StaffSchedulePage({ staffUser, showToast }) {
 
                             return (
                               <div key={block.id}
-                                onClick={() => {
+                                onClick={e => {
+                                  e.stopPropagation();
                                   if (canEdit) openBlockEditor(block, date);
                                   else if (hasVisibleNote) openNotePopup();
                                 }}
@@ -409,26 +418,6 @@ export function StaffSchedulePage({ staffUser, showToast }) {
                           })}
                         </div>
 
-                        {/* Plus button — shown in last slot row only */}
-                        {isLastSlot && dateEditable && (
-                          <button
-                            onClick={() => openNewEditor(date)}
-                            title={isAdmin ? "שבץ עובד" : "הוסף העדפה"}
-                            style={{
-                              position: "absolute", bottom: 5, left: "50%", transform: "translateX(-50%)",
-                              width: 26, height: 26, borderRadius: "50%",
-                              border: "1.5px solid rgba(255,255,255,0.55)",
-                              background: "rgba(255,255,255,0.18)",
-                              color: "#fff", fontSize: 16, fontWeight: 700,
-                              cursor: "pointer",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              transition: "background 0.15s, border-color 0.15s",
-                              zIndex: 2,
-                            }}
-                            onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.35)"; e.currentTarget.style.borderColor = "#fff"; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.18)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.55)"; }}
-                          >+</button>
-                        )}
                       </div>
                     );
                   })}
