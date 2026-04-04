@@ -363,18 +363,29 @@ export function StaffSchedulePage({ staffUser, showToast }) {
                             // Star shows to everyone if there's a staff note (even if private), but only clickable if can see
                             const showStar = !!block.staffNote || (!!block.managerNote && (isAdmin || isMe));
 
+                            const openNotePopup = () => setNotePopup({
+                              memberName: block.memberName,
+                              staffNote: canSeeStaffNote ? block.staffNote : null,
+                              managerNote: canSeeManagerNote ? block.managerNote : null,
+                            });
+                            // Chip is clickable for editing (own/admin) OR for viewing note (anyone with visible note)
+                            const chipClickable = canEdit || hasVisibleNote;
+
                             return (
                               <div key={block.id}
-                                onClick={() => canEdit && openBlockEditor(block, date)}
+                                onClick={() => {
+                                  if (canEdit) openBlockEditor(block, date);
+                                  else if (hasVisibleNote) openNotePopup();
+                                }}
                                 style={{
                                   display: "flex", alignItems: "center", gap: 3,
                                   background: "rgba(255,255,255,0.07)",
                                   borderRadius: 5, padding: "3px 6px",
                                   borderRight: `2.5px solid ${showLock ? "#f59e0b" : st.color}`,
-                                  cursor: canEdit ? "pointer" : "default",
+                                  cursor: chipClickable ? "pointer" : "default",
                                   transition: "background 0.12s",
                                 }}
-                                onMouseEnter={e => { if (canEdit) e.currentTarget.style.background = "rgba(255,255,255,0.14)"; }}
+                                onMouseEnter={e => { if (chipClickable) e.currentTarget.style.background = "rgba(255,255,255,0.14)"; }}
                                 onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
                               >
                                 {showLock && <span style={{ fontSize: 9 }}>🔒</span>}
@@ -388,14 +399,7 @@ export function StaffSchedulePage({ staffUser, showToast }) {
                                 )}
                                 {showStar && (
                                   <span
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      if (hasVisibleNote) setNotePopup({
-                                        memberName: block.memberName,
-                                        staffNote: canSeeStaffNote ? block.staffNote : null,
-                                        managerNote: canSeeManagerNote ? block.managerNote : null,
-                                      });
-                                    }}
+                                    onClick={e => { e.stopPropagation(); if (hasVisibleNote) openNotePopup(); }}
                                     title={hasVisibleNote ? "לחץ לצפייה בהערה" : "הערה פרטית"}
                                     style={{ fontSize: 11, flexShrink: 0, cursor: hasVisibleNote ? "pointer" : "default", opacity: hasVisibleNote ? 1 : 0.4 }}
                                   >⭐</span>
