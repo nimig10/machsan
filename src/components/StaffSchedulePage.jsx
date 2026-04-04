@@ -1,80 +1,67 @@
-// StaffSchedulePage.jsx — Staff weekly schedule: preferences & assignments
+// StaffSchedulePage.jsx — Staff weekly schedule: Google Calendar-style view
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Modal } from "./ui.jsx";
 
-// ── Shift constants ──
+/* ── Shift types ── */
 const SHIFT_TYPES = {
   morning: { label: "בוקר", icon: "☀️", start: "09:00", end: "17:00", color: "#f59e0b", bg: "rgba(245,158,11,0.12)" },
   evening: { label: "ערב", icon: "🌙", start: "14:00", end: "22:00", color: "#8b5cf6", bg: "rgba(139,92,246,0.12)" },
-  custom:  { label: "חופשי", icon: "🕐", start: null, end: null, color: "#3b82f6", bg: "rgba(59,130,246,0.12)" },
-  absent:  { label: "לא נוכח", icon: "🚫", start: null, end: null, color: "#ef4444", bg: "rgba(239,68,68,0.12)" },
+  custom:  { label: "חופשי", icon: "🕐", color: "#3b82f6", bg: "rgba(59,130,246,0.12)" },
+  absent:  { label: "לא נוכח", icon: "🚫", color: "#ef4444", bg: "rgba(239,68,68,0.12)" },
 };
 
 const HE_DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 
+/* ── Calendar grid constants ── */
+const HOUR_H = 50;
+const START_H = 8;
+const END_H = 22;
+const GRID_H = (END_H - START_H) * HOUR_H; // 700px
+const HOURS = Array.from({ length: END_H - START_H }, (_, i) => START_H + i);
+
+/* ── Helpers ── */
 function formatDateHe(dateStr) {
   if (!dateStr) return "";
   const d = new Date(dateStr + "T00:00:00");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  return `${dd}/${mm}`;
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function localDateStr(d) {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function getWeekDates(offset = 0) {
   const now = new Date();
-  const day = now.getDay(); // 0=Sun
+  const day = now.getDay();
   const sun = new Date(now);
   sun.setDate(now.getDate() - day + offset * 7);
   sun.setHours(0, 0, 0, 0);
-  const dates = [];
-  for (let i = 0; i < 7; i++) {
+  return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(sun);
     d.setDate(sun.getDate() + i);
-    dates.push(localDateStr(d));
-  }
-  return dates;
+    return localDateStr(d);
+  });
 }
 
-function todayStr() {
-  return localDateStr(new Date());
-}
+function todayStr() { return localDateStr(new Date()); }
 
-// Can a regular staff member edit preferences for a given date?
 function canStaffEditDate(dateStr) {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   const target = new Date(dateStr + "T00:00:00");
-  const today = now.getDay(); // 0=Sun
-
-  // Past or today — no
+  const today = now.getDay();
   if (target <= now) return false;
-
-  // Find current week's Sunday and next week's Sunday
   const currentSun = new Date(now);
   currentSun.setDate(now.getDate() - today);
   const nextSun = new Date(currentSun);
   nextSun.setDate(currentSun.getDate() + 7);
   const weekAfterSun = new Date(currentSun);
   weekAfterSun.setDate(currentSun.getDate() + 14);
-
-  // Current week — no (already in progress)
   if (target < nextSun) return false;
-
-  // Next week — only if preference window is open (Sun–Wed)
   if (target < weekAfterSun) return today >= 0 && today <= 3;
-
-  // 2+ weeks ahead — always open
   return true;
 }
 
-// Get preference window status text for display
 function getPreferenceWindowStatus(weekDates) {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -85,18 +72,47 @@ function getPreferenceWindowStatus(weekDates) {
   nextSun.setDate(currentSun.getDate() + 7);
   const weekAfterSun = new Date(currentSun);
   weekAfterSun.setDate(currentSun.getDate() + 14);
-
   const weekStart = new Date(weekDates[0] + "T00:00:00");
-
   if (weekStart < nextSun) return { open: false, text: "שבוע נוכחי" };
   if (weekStart < weekAfterSun) {
-    const windowOpen = today >= 0 && today <= 3;
-    return { open: windowOpen, text: windowOpen ? "חלון ההעדפות פתוח (עד יום רביעי)" : "חלון ההעדפות נסגר לשבוע זה" };
+    const wo = today >= 0 && today <= 3;
+    return { open: wo, text: wo ? "חלון ההעדפות פתוח (עד יום רביעי)" : "חלון ההעדפות נסגר לשבוע זה" };
   }
   return { open: true, text: "ניתן להגיש העדפות" };
 }
 
-// ── API helper ──
+function timeToY(timeStr) {
+  const [h, m] = timeStr.split(":").map(Number);
+  return Math.max(0, Math.min(((h + m / 60) - START_H) * HOUR_H, GRID_H));
+}
+
+/* ── Layout overlapping blocks into columns ── */
+function layoutBlocks(blocks) {
+  if (!blocks.length) return blocks;
+  blocks.sort((a, b) => a.startTime.localeCompare(b.startTime));
+  const cols = [];
+  for (const block of blocks) {
+    let placed = false;
+    for (let c = 0; c < cols.length; c++) {
+      const last = cols[c][cols[c].length - 1];
+      if (block.startTime >= last.endTime) {
+        cols[c].push(block);
+        block._col = c;
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      block._col = cols.length;
+      cols.push([block]);
+    }
+  }
+  const total = Math.max(1, cols.length);
+  blocks.forEach(b => b._totalCols = total);
+  return blocks;
+}
+
+/* ── API helper ── */
 async function scheduleApi(action, body = {}) {
   const res = await fetch("/api/staff-schedule", {
     method: "POST",
@@ -106,7 +122,7 @@ async function scheduleApi(action, body = {}) {
   return res.json();
 }
 
-// ── Main component ──
+/* ══════════════════════ Main Component ══════════════════════ */
 export function StaffSchedulePage({ staffUser, showToast }) {
   const isAdmin = staffUser?.role === "admin";
   const currentStaffId = staffUser?.id;
@@ -117,9 +133,9 @@ export function StaffSchedulePage({ staffUser, showToast }) {
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [holidays, setHolidays] = useState([]);
-  const [editModal, setEditModal] = useState(null); // { staffId, date, mode: "preference"|"assignment", existing? }
+  const [editModal, setEditModal] = useState(null);
 
-  // Load staff_members from Supabase (the login system users)
+  /* Load staff members from Supabase */
   useEffect(() => {
     (async () => {
       try {
@@ -136,7 +152,6 @@ export function StaffSchedulePage({ staffUser, showToast }) {
     })();
   }, []);
 
-  // displayMembers: all staff for admin, or at least current user for regular staff
   const displayMembers = useMemo(() => {
     if (staffList.length > 0) return staffList;
     if (staffUser) return [{ id: staffUser.id, name: staffUser.full_name || "אני" }];
@@ -144,17 +159,32 @@ export function StaffSchedulePage({ staffUser, showToast }) {
   }, [staffList, staffUser]);
 
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
+  const workDays = useMemo(() => weekDates.slice(0, 6), [weekDates]); // Sun–Fri, no Saturday
   const startDate = weekDates[0];
   const endDate = weekDates[6];
 
-  // Load holidays dynamically
+  /* Load holidays from Hebcal API (accurate Israeli dates, with static fallback) */
   useEffect(() => {
-    import("../utils/jewishHolidays.js").then(mod => {
-      if (mod.getHolidaysForDateRange) {
-        setHolidays(mod.getHolidaysForDateRange(startDate, endDate));
+    const year = new Date().getFullYear();
+    (async () => {
+      const all = [];
+      for (const y of [year, year + 1]) {
+        try {
+          const r = await fetch(`https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=on&mod=on&year=${y}&month=x&geo=il&i=on`);
+          const d = await r.json();
+          for (const item of d.items || []) {
+            all.push({ date: item.date, name: item.hebrew || item.title, isErev: /^Erev /.test(item.title || "") });
+          }
+        } catch {
+          try {
+            const mod = await import("../utils/jewishHolidays.js");
+            if (mod.getHolidaysForDateRange) all.push(...mod.getHolidaysForDateRange(`${y}-01-01`, `${y}-12-31`));
+          } catch {}
+        }
       }
-    }).catch(() => {});
-  }, [startDate, endDate]);
+      setHolidays(all);
+    })();
+  }, []);
 
   const fetchWeekData = useCallback(async () => {
     setLoading(true);
@@ -168,243 +198,272 @@ export function StaffSchedulePage({ staffUser, showToast }) {
 
   useEffect(() => { fetchWeekData(); }, [fetchWeekData]);
 
-  // Check if preference window applies to displayed week
   const prefWindowStatus = getPreferenceWindowStatus(weekDates);
+  const getPref = (sid, date) => preferences.find(p => p.staff_id === sid && p.date === date);
+  const getAssign = (sid, date) => assignments.find(a => a.staff_id === sid && a.date === date);
 
-  // Get pref/assignment for a specific staff+date
-  const getPref = (staffId, date) => preferences.find(p => p.staff_id === staffId && p.date === date);
-  const getAssignment = (staffId, date) => assignments.find(a => a.staff_id === staffId && a.date === date);
-
-  // Open edit modal
-  const openEditor = (staffId, date, mode) => {
-    const existing = mode === "preference" ? getPref(staffId, date) : getAssignment(staffId, date);
-    setEditModal({ staffId, date, mode, existing: existing || null });
-  };
-
-  // Save preference
+  /* ── Handlers ── */
   const savePref = async (data) => {
-    const result = await scheduleApi("upsert-preference", {
-      staffId: data.staffId,
-      date: data.date,
-      shiftType: data.shiftType,
-      startTime: data.startTime || null,
-      endTime: data.endTime || null,
-      note: data.note || "",
-      notePublic: data.notePublic ?? true,
-      callerRole: isAdmin ? "admin" : "staff",
-      callerId: currentStaffId,
-    });
-    if (result.error) { showToast("error", result.error); return false; }
-    showToast("success", "ההעדפה נשמרה");
-    await fetchWeekData();
-    return true;
+    const r = await scheduleApi("upsert-preference", { ...data, callerRole: isAdmin ? "admin" : "staff", callerId: currentStaffId });
+    if (r.error) { showToast("error", r.error); return false; }
+    showToast("success", "ההעדפה נשמרה"); await fetchWeekData(); return true;
   };
-
-  // Save assignment
   const saveAssignment = async (data) => {
-    const result = await scheduleApi("upsert-assignment", {
-      staffId: data.staffId,
-      date: data.date,
-      shiftType: data.shiftType,
-      startTime: data.startTime || null,
-      endTime: data.endTime || null,
-      note: data.note || "",
-      notePublic: data.notePublic ?? true,
-      locked: data.locked ?? false,
-      assignedBy: currentStaffId,
-      source: data.source || "manager",
-      callerRole: "admin",
-      callerId: currentStaffId,
-    });
-    if (result.error) { showToast("error", result.error); return false; }
-    showToast("success", "השיבוץ נשמר");
-    await fetchWeekData();
-    return true;
+    const r = await scheduleApi("upsert-assignment", { ...data, assignedBy: currentStaffId, source: data.source || "manager", callerRole: "admin", callerId: currentStaffId });
+    if (r.error) { showToast("error", r.error); return false; }
+    showToast("success", "השיבוץ נשמר"); await fetchWeekData(); return true;
   };
-
-  // Delete preference
   const deletePref = async (id) => {
-    const result = await scheduleApi("delete-preference", { id, callerRole: isAdmin ? "admin" : "staff", callerId: currentStaffId });
-    if (result.error) { showToast("error", result.error); return; }
-    showToast("success", "ההעדפה נמחקה");
-    await fetchWeekData();
+    const r = await scheduleApi("delete-preference", { id, callerRole: isAdmin ? "admin" : "staff", callerId: currentStaffId });
+    if (r.error) { showToast("error", r.error); return; }
+    showToast("success", "ההעדפה נמחקה"); await fetchWeekData();
   };
-
-  // Delete assignment
   const deleteAssignment = async (id) => {
-    const result = await scheduleApi("delete-assignment", { id, callerRole: "admin" });
-    if (result.error) { showToast("error", result.error); return; }
-    showToast("success", "השיבוץ נמחק");
+    const r = await scheduleApi("delete-assignment", { id, callerRole: "admin" });
+    if (r.error) { showToast("error", r.error); return; }
+    showToast("success", "השיבוץ נמחק"); await fetchWeekData();
+  };
+  const toggleLock = async (aId, locked) => {
+    const r = await scheduleApi(locked ? "unlock" : "lock", { id: aId, callerRole: "admin" });
+    if (r.error) { showToast("error", r.error); return; }
     await fetchWeekData();
   };
 
-  // Toggle lock
-  const toggleLock = async (assignmentId, currentLocked) => {
-    const action = currentLocked ? "unlock" : "lock";
-    const result = await scheduleApi(action, { id: assignmentId, callerRole: "admin" });
-    if (result.error) { showToast("error", result.error); return; }
-    await fetchWeekData();
+  /* ── Day blocks builder ── */
+  const getDayBlocks = (date) => {
+    const timed = [], absent = [];
+    displayMembers.forEach(member => {
+      const mid = String(member.id);
+      const asgn = getAssign(mid, date);
+      const pref = getPref(mid, date);
+      const entry = asgn || pref;
+      if (!entry) return;
+      const st = SHIFT_TYPES[entry.shift_type];
+      const block = {
+        id: entry.id, memberId: mid, memberName: member.name,
+        type: asgn ? "assignment" : "preference",
+        shiftType: entry.shift_type,
+        startTime: entry.shift_type === "custom" ? entry.start_time : st?.start,
+        endTime: entry.shift_type === "custom" ? entry.end_time : st?.end,
+        locked: asgn?.locked || false, entry, hasPref: !!asgn && !!pref,
+      };
+      if (entry.shift_type === "absent" || !block.startTime || !block.endTime) absent.push(block);
+      else timed.push(block);
+    });
+    return { timed: layoutBlocks(timed), absent };
   };
 
-  // Determine max offset (1 month ahead)
-  const maxWeekOffset = 4;
   const today = todayStr();
+  const maxWeekOffset = 4;
 
+  const openBlockEditor = (block, date) => {
+    setEditModal({ staffId: block.memberId, date, mode: block.type, existing: block.entry });
+  };
+  const openNewEditor = (date) => {
+    if (!isAdmin && !canStaffEditDate(date)) return;
+    setEditModal({ staffId: String(currentStaffId), date, mode: isAdmin ? "assignment" : "preference", existing: null });
+  };
+
+  /* ══════════ Render ══════════ */
   return (
-    <div className="page" style={{ padding: "20px 16px" }}>
+    <div className="page" style={{ padding: "16px 12px" }}>
       {/* ── Week Navigation ── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button className="btn btn-secondary btn-sm" disabled={weekOffset <= -4} onClick={() => setWeekOffset(w => w - 1)}>→ שבוע קודם</button>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <button className="btn btn-secondary btn-sm" disabled={weekOffset <= -4} onClick={() => setWeekOffset(w => w - 1)}>→</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(0)}>השבוע</button>
-          <button className="btn btn-secondary btn-sm" disabled={weekOffset >= maxWeekOffset} onClick={() => setWeekOffset(w => w + 1)}>שבוע הבא ←</button>
+          <button className="btn btn-secondary btn-sm" disabled={weekOffset >= maxWeekOffset} onClick={() => setWeekOffset(w => w + 1)}>←</button>
         </div>
-        <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>
-          📅 {formatDateHe(startDate)} – {formatDateHe(endDate)}
-        </div>
-        {/* Preference window indicator */}
+        <span style={{ fontSize: 15, fontWeight: 800, color: "var(--text)" }}>
+          {formatDateHe(startDate)} – {formatDateHe(workDays[5])}
+        </span>
         {!isAdmin && (
-          <div style={{ fontSize: 12, padding: "4px 12px", borderRadius: 20, fontWeight: 700,
+          <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 16, fontWeight: 700,
             background: prefWindowStatus.open ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
             color: prefWindowStatus.open ? "#22c55e" : "#ef4444",
-            border: `1px solid ${prefWindowStatus.open ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
-          }}>
-            {prefWindowStatus.text}
-          </div>
+          }}>{prefWindowStatus.text}</span>
         )}
       </div>
 
       {/* ── Legend ── */}
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 16, fontSize: 12, color: "var(--text3)" }}>
-        {Object.entries(SHIFT_TYPES).map(([key, s]) => (
-          <span key={key} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <span style={{ width: 12, height: 12, borderRadius: 4, background: s.bg, border: `1px solid ${s.color}`, display: "inline-block" }} />
-            {s.icon} {s.label}
-          </span>
-        ))}
-        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <span style={{ width: 12, height: 12, borderRadius: 4, background: "rgba(34,197,94,0.12)", border: "1px solid #22c55e", display: "inline-block" }} />
-          העדפה
-        </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <span style={{ width: 12, height: 12, borderRadius: 4, background: "rgba(59,130,246,0.15)", border: "1px solid #3b82f6", display: "inline-block" }} />
-          שיבוץ
-        </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>🔒 נעול</span>
-        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>⭐ הערה</span>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 12, fontSize: 11, color: "var(--text3)" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 3 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "rgba(34,197,94,0.2)", border: "2px solid #22c55e", display: "inline-block" }} /> העדפה</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 3 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "rgba(59,130,246,0.2)", border: "2px solid #3b82f6", display: "inline-block" }} /> שיבוץ</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 3 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "rgba(245,158,11,0.2)", border: "2px solid #f59e0b", display: "inline-block" }} /> 🔒 נעול</span>
+        {Object.entries(SHIFT_TYPES).map(([k, s]) => <span key={k}>{s.icon} {s.label}</span>)}
       </div>
 
       {loading ? (
         <div style={{ textAlign: "center", padding: 60, color: "var(--text3)" }}>טוען...</div>
       ) : (
-        /* ── Day Cards (mobile-friendly) ── */
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {weekDates.map((date, i) => {
-            const holiday = holidays.find(h => h.date === date);
-            const isToday = date === today;
-            const dateEditable = canStaffEditDate(date);
-
-            return (
-              <div key={date} style={{
-                border: `1.5px solid ${isToday ? "rgba(59,130,246,0.5)" : "var(--border)"}`,
-                borderRadius: 12,
-                background: isToday ? "rgba(59,130,246,0.04)" : "var(--surface)",
-                overflow: "hidden",
-              }}>
-                {/* Day header */}
-                <div style={{
-                  display: "flex", justifyContent: "space-between", alignItems: "center",
-                  padding: "10px 14px",
-                  background: isToday ? "rgba(59,130,246,0.08)" : holiday ? "rgba(245,158,11,0.06)" : "var(--surface2)",
+        /* ── Calendar Grid ── */
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", borderRadius: 10, border: "1px solid var(--border)" }}>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "50px repeat(6, 1fr)",
+            direction: "rtl",
+            minWidth: 780,
+          }}>
+            {/* ═══ Header Row ═══ */}
+            <div style={{ background: "var(--surface2)", borderBottom: "1px solid var(--border)", borderLeft: "1px solid var(--border)" }} />
+            {workDays.map((date, i) => {
+              const dayIdx = new Date(date + "T00:00:00").getDay();
+              const hol = holidays.find(h => h.date === date);
+              const isToday = date === today;
+              return (
+                <div key={date} style={{
+                  padding: "8px 4px", textAlign: "center",
+                  background: isToday ? "rgba(59,130,246,0.08)" : hol ? "rgba(245,158,11,0.06)" : "var(--surface2)",
                   borderBottom: "1px solid var(--border)",
+                  borderLeft: i < 5 ? "1px solid var(--border)" : "none",
                 }}>
-                  <div>
-                    <span style={{ fontWeight: 800, fontSize: 15 }}>{HE_DAYS[i]}</span>
-                    <span style={{ fontSize: 13, color: "var(--text3)", marginRight: 8 }}>{formatDateHe(date)}</span>
-                    {isToday && <span style={{ fontSize: 11, color: "#3b82f6", fontWeight: 700, marginRight: 6 }}>· היום</span>}
-                  </div>
-                  {holiday && <span style={{ fontSize: 11, color: "#f59e0b", fontWeight: 700 }}>{holiday.isErev ? `ערב ${holiday.name}` : holiday.name}</span>}
+                  <div style={{ fontWeight: 700, fontSize: 12, color: isToday ? "#3b82f6" : "var(--text3)" }}>{HE_DAYS[dayIdx]}</div>
+                  <div style={{
+                    fontSize: 22, fontWeight: 800, lineHeight: 1.2,
+                    color: isToday ? "#fff" : "var(--text)",
+                    ...(isToday ? { background: "#3b82f6", borderRadius: "50%", width: 34, height: 34, display: "inline-flex", alignItems: "center", justifyContent: "center" } : {}),
+                  }}>{new Date(date + "T00:00:00").getDate()}</div>
+                  {hol && <div style={{ fontSize: 9, color: "#f59e0b", fontWeight: 600, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{hol.isErev ? `ערב ${hol.name}` : hol.name}</div>}
                 </div>
+              );
+            })}
 
-                {/* Members for this day */}
-                <div style={{ padding: "8px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
-                  {displayMembers.map(member => {
-                    const memberId = String(member.id);
-                    const pref = getPref(memberId, date);
-                    const assignment = getAssignment(memberId, date);
-                    const isMe = memberId === String(currentStaffId);
-                    const isLocked = assignment?.locked;
-                    const canEdit = isAdmin || (isMe && !isLocked && dateEditable);
-                    const hasContent = pref || assignment;
+            {/* ═══ Body Row ═══ */}
+            {/* Time axis */}
+            <div style={{ position: "relative", height: GRID_H, background: "var(--surface2)", borderLeft: "1px solid var(--border)" }}>
+              {HOURS.map(h => (
+                <div key={h} style={{
+                  position: "absolute", top: (h - START_H) * HOUR_H - 7,
+                  width: "100%", fontSize: 10, color: "var(--text3)", textAlign: "center",
+                  direction: "ltr",
+                }}>{String(h).padStart(2, "0")}:00</div>
+              ))}
+            </div>
 
-                    // Non-admin: show only own row or rows with content
-                    if (!isAdmin && !isMe && !hasContent) return null;
+            {/* Day columns */}
+            {workDays.map((date, i) => {
+              const { timed, absent } = getDayBlocks(date);
+              const isToday = date === today;
+              const dateEditable = isAdmin || canStaffEditDate(date);
+
+              return (
+                <div key={date} style={{
+                  position: "relative", height: GRID_H,
+                  background: isToday ? "rgba(59,130,246,0.03)" : "var(--surface)",
+                  borderLeft: i < 5 ? "1px solid var(--border)" : "none",
+                }}>
+                  {/* Hour grid lines */}
+                  {HOURS.map(h => (
+                    <div key={h} style={{
+                      position: "absolute", top: (h - START_H) * HOUR_H, width: "100%",
+                      borderTop: "1px solid var(--border)", opacity: 0.3, pointerEvents: "none",
+                    }} />
+                  ))}
+
+                  {/* Current time red line */}
+                  {isToday && (() => {
+                    const now = new Date();
+                    const y = ((now.getHours() + now.getMinutes() / 60) - START_H) * HOUR_H;
+                    if (y < 0 || y > GRID_H) return null;
+                    return (
+                      <div style={{ position: "absolute", top: y, width: "100%", zIndex: 5, pointerEvents: "none" }}>
+                        <div style={{ height: 2, background: "#ef4444", width: "100%" }} />
+                        <div style={{ position: "absolute", top: -4, right: -5, width: 10, height: 10, borderRadius: "50%", background: "#ef4444" }} />
+                      </div>
+                    );
+                  })()}
+
+                  {/* Absent chips at top */}
+                  {absent.length > 0 && (
+                    <div style={{ position: "absolute", top: 2, left: 2, right: 2, zIndex: 3, display: "flex", flexWrap: "wrap", gap: 2 }}>
+                      {absent.map(b => {
+                        const isMe = b.memberId === String(currentStaffId);
+                        const canEdit = isAdmin || (isMe && b.type === "preference" && canStaffEditDate(date));
+                        return (
+                          <div key={b.id} onClick={() => canEdit && openBlockEditor(b, date)}
+                            style={{ fontSize: 9, background: "rgba(239,68,68,0.12)", color: "#ef4444", borderRadius: 4, padding: "1px 5px", cursor: canEdit ? "pointer" : "default", whiteSpace: "nowrap" }}>
+                            🚫 {b.memberName}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Shift blocks */}
+                  {timed.map(block => {
+                    const top = timeToY(block.startTime);
+                    const bottom = timeToY(block.endTime);
+                    const height = Math.max(bottom - top, 24);
+                    const colW = 100 / block._totalCols;
+                    const isMe = block.memberId === String(currentStaffId);
+                    const canEdit = isAdmin || (isMe && block.type === "preference" && canStaffEditDate(date));
+                    const accent = block.locked ? "#f59e0b" : block.type === "assignment" ? "#3b82f6" : "#22c55e";
+                    const bg = block.locked ? "rgba(245,158,11,0.2)" : block.type === "assignment" ? "rgba(59,130,246,0.2)" : "rgba(34,197,94,0.15)";
 
                     return (
-                      <div key={memberId} style={{
-                        display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 10px",
-                        borderRadius: 8,
-                        background: isMe ? "rgba(59,130,246,0.06)" : "transparent",
-                        border: isMe ? "1px solid rgba(59,130,246,0.15)" : "1px solid transparent",
-                      }}>
-                        {/* Name */}
-                        <div style={{ minWidth: 70, fontWeight: isMe ? 800 : 600, fontSize: 13, color: isMe ? "var(--text)" : "var(--text2)", paddingTop: 4 }}>
-                          {member.name}
-                          {isMe && <span style={{ fontSize: 10, color: "#3b82f6", display: "block" }}>את/ה</span>}
-                        </div>
-
-                        {/* Content */}
-                        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-                          {assignment && (
-                            <CellBadge entry={assignment} type="assignment" isAdmin={isAdmin}
-                              onClick={() => isAdmin && openEditor(memberId, date, "assignment")}
-                              onLock={isAdmin ? () => toggleLock(assignment.id, assignment.locked) : null}
-                              onDelete={isAdmin ? () => deleteAssignment(assignment.id) : null}
-                              showPrivateNote={isAdmin}
-                            />
+                      <div key={`${block.type}-${block.id}`}
+                        onClick={() => canEdit && openBlockEditor(block, date)}
+                        title={`${block.memberName} · ${SHIFT_TYPES[block.shiftType]?.label || ""} · ${block.startTime}–${block.endTime}`}
+                        style={{
+                          position: "absolute",
+                          top: top + 1, height: height - 2,
+                          right: `${block._col * colW}%`,
+                          width: `${colW}%`,
+                          padding: "0 1px",
+                          boxSizing: "border-box",
+                          zIndex: 2,
+                          cursor: canEdit ? "pointer" : "default",
+                        }}
+                      >
+                        <div style={{
+                          height: "100%", borderRadius: 5,
+                          borderRight: `3px solid ${accent}`,
+                          background: bg, padding: "3px 6px",
+                          overflow: "hidden", fontSize: 10,
+                          transition: "opacity 0.15s",
+                          opacity: canEdit ? 1 : 0.85,
+                        }}>
+                          <div style={{ fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 11 }}>
+                            {block.locked && "🔒 "}{block.memberName}
+                          </div>
+                          {height > 40 && (
+                            <div style={{ fontSize: 9, color: "var(--text3)", marginTop: 1 }}>
+                              {SHIFT_TYPES[block.shiftType]?.icon} {block.startTime}–{block.endTime}
+                            </div>
                           )}
-                          {pref && (
-                            <CellBadge entry={pref} type="preference" isAdmin={isAdmin}
-                              onClick={() => canEdit && openEditor(memberId, date, "preference")}
-                              onDelete={canEdit ? () => deletePref(pref.id) : null}
-                              showPrivateNote={isAdmin}
-                            />
+                          {height > 70 && block.type === "assignment" && (
+                            <div style={{ fontSize: 8, color: block.locked ? "#f59e0b" : "#3b82f6", marginTop: 2, fontWeight: 600 }}>
+                              {block.locked ? "נעול" : "שיבוץ"}
+                            </div>
                           )}
-                          {!hasContent && canEdit && (
-                            <button
-                              onClick={() => openEditor(memberId, date, isAdmin ? "assignment" : "preference")}
-                              style={{
-                                padding: "10px 16px", border: "1.5px dashed var(--border)", borderRadius: 8,
-                                background: "transparent", color: "var(--text3)", fontSize: 13,
-                                cursor: "pointer", transition: "all 0.15s", textAlign: "center",
-                              }}
-                            >
-                              {isAdmin ? "➕ שבץ" : "➕ הוסף העדפה"}
-                            </button>
-                          )}
-                          {assignment && !pref && canEdit && !isAdmin && !isLocked && (
-                            <button onClick={() => openEditor(memberId, date, "preference")}
-                              style={{ padding: "6px 12px", border: "1px dashed var(--border)", borderRadius: 6, background: "transparent", color: "var(--text3)", fontSize: 11, cursor: "pointer" }}>
-                              ➕ הוסף העדפה
-                            </button>
+                          {height > 70 && block.hasPref && (
+                            <div style={{ fontSize: 8, color: "#22c55e", marginTop: 1 }}>● העדפה</div>
                           )}
                         </div>
                       </div>
                     );
                   })}
-                  {/* Admin: add assignment for any member */}
-                  {isAdmin && displayMembers.length > 0 && (
-                    <div style={{ textAlign: "center", padding: 4 }}>
-                      <button onClick={() => openEditor(String(displayMembers[0].id), date, "assignment")}
-                        style={{ fontSize: 11, color: "var(--text3)", background: "transparent", border: "none", cursor: "pointer", textDecoration: "underline" }}>
-                        ➕ שבץ עובד נוסף
-                      </button>
-                    </div>
+
+                  {/* Add button */}
+                  {dateEditable && (
+                    <button onClick={() => openNewEditor(date)}
+                      style={{
+                        position: "absolute", bottom: 6, left: "50%", transform: "translateX(-50%)",
+                        width: 24, height: 24, borderRadius: "50%",
+                        border: "1.5px dashed var(--text3)", background: "transparent",
+                        color: "var(--text3)", fontSize: 14, cursor: "pointer",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        zIndex: 3, opacity: 0.4, transition: "opacity 0.15s",
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                      onMouseLeave={e => e.currentTarget.style.opacity = 0.4}
+                      title={isAdmin ? "שבץ" : "הוסף העדפה"}
+                    >+</button>
                   )}
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -416,6 +475,8 @@ export function StaffSchedulePage({ staffUser, showToast }) {
           currentStaffId={currentStaffId}
           teamMembers={displayMembers}
           onSave={editModal.mode === "preference" ? savePref : saveAssignment}
+          onDelete={editModal.mode === "preference" ? deletePref : deleteAssignment}
+          onLock={editModal.mode === "assignment" ? toggleLock : null}
           onClose={() => setEditModal(null)}
         />
       )}
@@ -423,68 +484,12 @@ export function StaffSchedulePage({ staffUser, showToast }) {
   );
 }
 
-// ── Cell Badge Component ──
-function CellBadge({ entry, type, isAdmin, onClick, onLock, onDelete, showPrivateNote }) {
-  const shift = SHIFT_TYPES[entry.shift_type] || SHIFT_TYPES.custom;
-  const isAssignment = type === "assignment";
-  const isLocked = isAssignment && entry.locked;
-  const borderColor = isLocked ? "#f59e0b" : isAssignment ? "#3b82f6" : "#22c55e";
-  const bgColor = isLocked ? "rgba(245,158,11,0.1)" : isAssignment ? "rgba(59,130,246,0.1)" : "rgba(34,197,94,0.08)";
-  const hasNote = entry.note && entry.note.trim().length > 0;
-  const noteVisible = hasNote && (entry.note_public || showPrivateNote);
-
-  const startTime = entry.shift_type === "morning" ? "09:00" : entry.shift_type === "evening" ? "14:00" : entry.start_time;
-  const endTime = entry.shift_type === "morning" ? "17:00" : entry.shift_type === "evening" ? "22:00" : entry.end_time;
-
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        padding: "5px 7px",
-        borderRadius: 8,
-        border: `1px solid ${borderColor}40`,
-        background: bgColor,
-        marginBottom: 3,
-        cursor: onClick ? "pointer" : "default",
-        fontSize: 11,
-        position: "relative",
-        transition: "all 0.15s",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 3, justifyContent: "space-between" }}>
-        <span style={{ fontWeight: 700 }}>
-          {shift.icon} {shift.label}
-        </span>
-        <span style={{ display: "flex", gap: 2, alignItems: "center" }}>
-          {hasNote && <span title={noteVisible ? entry.note : "הערה פרטית"} style={{ cursor: "help" }}>⭐</span>}
-          {isLocked && <span title="נעול על ידי מנהל" style={{ fontSize: 12 }}>🔒</span>}
-          {isAssignment && <span style={{ fontSize: 9, color: isLocked ? "#f59e0b" : "#3b82f6", fontWeight: 700 }}>{isLocked ? "נעול" : "שיבוץ"}</span>}
-        </span>
-      </div>
-      {entry.shift_type !== "absent" && startTime && endTime && (
-        <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 2 }}>{startTime} – {endTime}</div>
-      )}
-      {noteVisible && (
-        <div style={{ fontSize: 10, color: entry.note_public ? "var(--text3)" : "#ef4444", marginTop: 3, fontStyle: entry.note_public ? "normal" : "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 100 }}>
-          {!entry.note_public && "🔒 "}{entry.note}
-        </div>
-      )}
-      {/* Inline action buttons */}
-      {(onLock || onDelete) && (
-        <div style={{ display: "flex", gap: 4, marginTop: 4, justifyContent: "flex-end" }}>
-          {onLock && <button onClick={e => { e.stopPropagation(); onLock(); }} style={miniBtn} title={entry.locked ? "פתח נעילה" : "נעל"}>{entry.locked ? "🔓" : "🔒"}</button>}
-          {onDelete && <button onClick={e => { e.stopPropagation(); onDelete(); }} style={{ ...miniBtn, color: "#ef4444" }} title="מחק">🗑️</button>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Editor Modal ──
-function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSave, onClose }) {
-  const { staffId, date, mode, existing } = modal;
-  const memberName = teamMembers.find(m => String(m.id) === String(staffId))?.name || "";
-  const isEditingSelf = String(staffId) === String(currentStaffId);
+/* ══════════ Editor Modal ══════════ */
+function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSave, onDelete, onLock, onClose }) {
+  const { staffId: initStaffId, date, mode, existing } = modal;
+  const [staffId, setStaffId] = useState(String(initStaffId));
+  const memberName = teamMembers.find(m => String(m.id) === staffId)?.name || "";
+  const isEditingSelf = staffId === String(currentStaffId);
 
   const [shiftType, setShiftType] = useState(existing?.shift_type || "morning");
   const [startTime, setStartTime] = useState(existing?.start_time || "09:00");
@@ -495,33 +500,23 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
-    if (shiftType === "custom" && (!startTime || !endTime)) {
-      return;
-    }
-    if (shiftType === "custom" && startTime >= endTime) {
-      return;
-    }
+    if (shiftType === "custom" && (!startTime || !endTime || startTime >= endTime)) return;
     if (note.length > 250) return;
     setSaving(true);
-    const data = {
-      staffId,
-      date,
-      shiftType,
+    const ok = await onSave({
+      staffId, date, shiftType,
       startTime: shiftType === "custom" ? startTime : null,
       endTime: shiftType === "custom" ? endTime : null,
-      note: note.trim(),
-      notePublic,
-      locked,
+      note: note.trim(), notePublic, locked,
       source: mode === "assignment" ? "manager" : undefined,
-    };
-    const ok = await onSave(data);
+    });
     setSaving(false);
     if (ok) onClose();
   };
 
   return (
     <Modal onClose={onClose}>
-      <div style={{ padding: 24, minWidth: 320, maxWidth: 420, direction: "rtl" }}>
+      <div style={{ padding: 24, minWidth: 300, maxWidth: 420, direction: "rtl" }}>
         <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 4 }}>
           {mode === "preference" ? "✏️ העדפה" : "📋 שיבוץ"}
         </div>
@@ -529,26 +524,30 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
           {memberName} · {HE_DAYS[new Date(date + "T00:00:00").getDay()]} {formatDateHe(date)}
         </div>
 
+        {/* Member selector (admin creating new assignment) */}
+        {isAdmin && mode === "assignment" && !existing && teamMembers.length > 1 && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={labelStyle}>עובד</label>
+            <select value={staffId} onChange={e => setStaffId(e.target.value)}
+              style={{ width: "100%", padding: 8, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: 13 }}>
+              {teamMembers.map(m => <option key={m.id} value={String(m.id)}>{m.name}</option>)}
+            </select>
+          </div>
+        )}
+
         {/* Shift Type */}
         <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text3)", marginBottom: 6, display: "block" }}>סוג משמרת</label>
+          <label style={{ ...labelStyle, marginBottom: 6 }}>סוג משמרת</label>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {Object.entries(SHIFT_TYPES).map(([key, s]) => (
-              <button
-                key={key}
-                onClick={() => setShiftType(key)}
+              <button key={key} onClick={() => setShiftType(key)}
                 style={{
-                  padding: "8px 14px",
-                  borderRadius: 8,
+                  padding: "8px 14px", borderRadius: 8,
                   border: `1.5px solid ${shiftType === key ? s.color : "var(--border)"}`,
                   background: shiftType === key ? s.bg : "var(--surface2)",
                   color: shiftType === key ? s.color : "var(--text2)",
-                  fontWeight: shiftType === key ? 700 : 400,
-                  fontSize: 13,
-                  cursor: "pointer",
-                  transition: "all 0.15s",
-                }}
-              >
+                  fontWeight: shiftType === key ? 700 : 400, fontSize: 13, cursor: "pointer",
+                }}>
                 {s.icon} {s.label}
               </button>
             ))}
@@ -579,13 +578,9 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
         {/* Note */}
         <div style={{ marginBottom: 14 }}>
           <label style={labelStyle}>הערה (אופציונלי)</label>
-          <textarea
-            value={note}
-            onChange={e => { if (e.target.value.length <= 250) setNote(e.target.value); }}
-            placeholder="הערה, אילוץ, סיבה..."
-            rows={3}
-            style={{ width: "100%", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: 10, color: "var(--text)", fontSize: 13, resize: "vertical", fontFamily: "inherit" }}
-          />
+          <textarea value={note} onChange={e => { if (e.target.value.length <= 250) setNote(e.target.value); }}
+            placeholder="הערה, אילוץ, סיבה..." rows={2}
+            style={{ width: "100%", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: 10, color: "var(--text)", fontSize: 13, resize: "vertical", fontFamily: "inherit" }} />
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
             <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
               <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, cursor: "pointer" }}>
@@ -599,7 +594,7 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
           </div>
         </div>
 
-        {/* Lock toggle (admin + assignment + editing another member, not self) */}
+        {/* Lock toggle — only for admin assigning ANOTHER member */}
         {isAdmin && mode === "assignment" && !isEditingSelf && (
           <div style={{ marginBottom: 14 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
@@ -610,31 +605,32 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
         )}
 
         {/* Actions */}
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>
-          <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
-          <button className="btn btn-primary" disabled={saving || (shiftType === "custom" && (!startTime || !endTime || startTime >= endTime))} onClick={handleSave}>
-            {saving ? "שומר..." : "💾 שמור"}
-          </button>
+        <div style={{ display: "flex", gap: 8, justifyContent: "space-between", marginTop: 20, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            {existing && onDelete && (
+              <button className="btn btn-secondary" style={{ color: "#ef4444", fontSize: 12 }}
+                onClick={async () => { await onDelete(existing.id); onClose(); }}>🗑️ מחק</button>
+            )}
+            {existing && onLock && isAdmin && mode === "assignment" && !isEditingSelf && (
+              <button className="btn btn-secondary" style={{ fontSize: 12 }}
+                onClick={async () => { await onLock(existing.id, existing.locked); onClose(); }}>
+                {existing.locked ? "🔓 פתח נעילה" : "🔒 נעל"}
+              </button>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+            <button className="btn btn-primary" disabled={saving || (shiftType === "custom" && (!startTime || !endTime || startTime >= endTime))} onClick={handleSave}>
+              {saving ? "שומר..." : "💾 שמור"}
+            </button>
+          </div>
         </div>
       </div>
     </Modal>
   );
 }
 
-// ── Styles ──
-const miniBtn = {
-  padding: "2px 4px",
-  border: "none",
-  background: "transparent",
-  cursor: "pointer",
-  fontSize: 11,
-  borderRadius: 4,
-};
-
+/* ── Styles ── */
 const labelStyle = {
-  fontSize: 12,
-  fontWeight: 700,
-  color: "var(--text3)",
-  marginBottom: 4,
-  display: "block",
+  fontSize: 12, fontWeight: 700, color: "var(--text3)", marginBottom: 4, display: "block",
 };
