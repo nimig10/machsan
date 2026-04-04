@@ -7561,7 +7561,7 @@ export default function App() {
       {/* ── אזור ניהול (מוגן מפני גישה ישירה) ── */}
       <ProtectedRoute authed={authed}>
       {/* ── כניסת צוות ── */}
-      {isAdmin && !authed && <StaffLogin onSuccess={(user)=>{ setStaffUser(user); const v = user?.role!=="admin" && user?.permissions?.views; setStaffView(v?.length===1 ? v[0] : "hub"); }}/>}
+      {isAdmin && !authed && <StaffLogin onSuccess={(user)=>{ setStaffUser(user); setStaffView("hub"); }}/>}
 
       {/* ── Staff Hub ── */}
       {isAdmin && authed && staffView === "hub" && (
