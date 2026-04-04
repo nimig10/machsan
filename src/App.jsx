@@ -7170,8 +7170,13 @@ export default function App() {
   useEffect(() => {
     if (!isAdmin || !authed) return;
     const TIMEOUT_MS = 20 * 60 * 1000;
-    let timer = setTimeout(() => { setStaffUser(null); }, TIMEOUT_MS);
-    const reset = () => { clearTimeout(timer); timer = setTimeout(() => { setStaffUser(null); }, TIMEOUT_MS); };
+    const doLogout = () => {
+      sessionStorage.removeItem("staff_user");
+      sessionStorage.removeItem("staff_view");
+      window.location.replace("/admin/login");
+    };
+    let timer = setTimeout(doLogout, TIMEOUT_MS);
+    const reset = () => { clearTimeout(timer); timer = setTimeout(doLogout, TIMEOUT_MS); };
     const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"];
     events.forEach(e => window.addEventListener(e, reset, { passive: true }));
     return () => { clearTimeout(timer); events.forEach(e => window.removeEventListener(e, reset)); };
