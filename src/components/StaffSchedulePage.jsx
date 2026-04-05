@@ -328,11 +328,16 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
   const currentMonthKey = `${currentWeekMid.getFullYear()}-${currentWeekMid.getMonth()}`;
   const selectedMonthIdx = monthOptions.findIndex(o => `${o.year}-${o.month}` === currentMonthKey);
   const [monthMenuOpen, setMonthMenuOpen] = useState(false);
+  const monthMenuRef = useRef(null);
   useEffect(() => {
     if (!monthMenuOpen) return;
-    const close = () => setMonthMenuOpen(false);
-    window.addEventListener("click", close, true);
-    return () => window.removeEventListener("click", close, true);
+    const close = (e) => {
+      if (monthMenuRef.current && !monthMenuRef.current.contains(e.target)) {
+        setMonthMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
   }, [monthMenuOpen]);
 
   const openBlockEditor = (block, date) => {
@@ -371,10 +376,10 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
           <button className="btn btn-secondary btn-sm" disabled={weekOffset >= MAX_WEEK_OFFSET} onClick={() => setWeekOffset(w => w + 1)}>←</button>
 
           {/* Month picker dropdown */}
-          <div style={{ position: "relative" }}>
+          <div style={{ position: "relative" }} ref={monthMenuRef}>
             <button
               className="btn btn-secondary btn-sm"
-              onClick={e => { e.stopPropagation(); setMonthMenuOpen(v => !v); }}
+              onClick={() => setMonthMenuOpen(v => !v)}
               style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}
             >
               {selectedMonthIdx >= 0 ? monthOptions[selectedMonthIdx].label : "בחר חודש"}
@@ -386,9 +391,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                 background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10,
                 boxShadow: "0 8px 24px rgba(0,0,0,0.35)", minWidth: 160, direction: "rtl",
                 maxHeight: 300, overflowY: "auto",
-              }}
-                onClick={e => e.stopPropagation()}
-              >
+              }}>
                 {monthOptions.map((opt, idx) => {
                   const wo = monthToWeekOffset(opt.year, opt.month);
                   const clamped = Math.max(MIN_WEEK_OFFSET, Math.min(MAX_WEEK_OFFSET, wo));
