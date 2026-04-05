@@ -1,7 +1,13 @@
-// StaffSchedulePage.jsx — Staff weekly schedule: slot-based view
+// StaffSchedulePage.jsx — Staff weekly schedule + daily activity summary
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
 import { Modal } from "./ui.jsx";
-import StudioBookingPage from "./StudioBookingPage.jsx";
+
+/* ── Half-hour time slots 09:00–22:00 ── */
+const TIME_SLOTS = (() => {
+  const s = [];
+  for (let h = 9; h <= 22; h++) for (const m of ["00", "30"]) { if (h === 22 && m === "30") break; s.push(`${String(h).padStart(2, "0")}:${m}`); }
+  return s;
+})();
 
 /* ── Shift types ── */
 const SHIFT_TYPES = {
@@ -111,7 +117,7 @@ async function scheduleApi(action, body = {}) {
 }
 
 /* ══════════════════════ Main Component ══════════════════════ */
-export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBookings = [] }) {
+export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBookings = [], reservations = [] }) {
   const isAdmin = staffUser?.role === "admin";
   const currentStaffId = staffUser?.id;
 
@@ -128,7 +134,8 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
   const [editModal, setEditModal] = useState(null);
   const [notePopup, setNotePopup] = useState(null); // { memberName, note }
   const [myShiftsOnly, setMyShiftsOnly] = useState(false);
-  const [lessonsOnly, setLessonsOnly] = useState(false);
+  const [showLessons, setShowLessons] = useState(false);
+  const [showLoans, setShowLoans] = useState(false);
 
   /* Load staff members from Supabase */
   useEffect(() => {
@@ -363,7 +370,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
       {/* ── Title + User ── */}
       <div style={{ marginBottom: 14, direction: "rtl" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-          <span style={{ fontWeight: 900, fontSize: 20, color: "var(--text)" }}>לו&quot;ז עובדים</span>
+          <span style={{ fontWeight: 900, fontSize: 20, color: "var(--text)" }}>חלוקת משמרות</span>
           <span style={{ fontSize: 13, color: "var(--text3)" }}>שלום, {staffUser?.full_name || ""}</span>
         </div>
       </div>
@@ -633,28 +640,15 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
           </div>
         </div>
 
-        {/* ── Room Booking Calendar (synced, same scroll container, aligned columns) ── */}
-        {studios.length > 0 && (
-          <div style={{ marginTop: 20, direction: "rtl" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-              <span style={{ fontWeight: 800, fontSize: 15, color: "var(--text)" }}>🏛️ לוח קביעות חדרים</span>
-              <button
-                className={`btn btn-sm ${lessonsOnly ? "btn-primary" : "btn-secondary"}`}
-                onClick={() => setLessonsOnly(v => !v)}
-                style={{ fontSize: 12 }}
-              >📚 שיעורים</button>
-            </div>
-            <StudioBookingPage
-              showToast={showToast}
-              studios={studios}
-              bookings={studioBookings}
-              role={isAdmin ? "admin" : "staff"}
-              embeddedWeekOffset={weekOffset}
-              lessonsOnly={lessonsOnly}
-              isActive={true}
-            />
-          </div>
-        )}
+        {/* ══════ Collapsible: Daily Lessons & Bookings ══════ */}
+        <CollapsibleSection title="📚 לו&quot;ז יומי — שיעורים / קביעות" open={showLessons} onToggle={() => setShowLessons(v => !v)}>
+          <DailyBookingsGrid workDays={workDays} studioBookings={studioBookings} studios={studios} today={today} holidays={holidays} />
+        </CollapsibleSection>
+
+        {/* ══════ Collapsible: Loan Requests ══════ */}
+        <CollapsibleSection title="📦 בקשות השאלה — סטודנטים / שיעורים" open={showLoans} onToggle={() => setShowLoans(v => !v)}>
+          <DailyLoansGrid workDays={workDays} reservations={reservations} today={today} holidays={holidays} />
+        </CollapsibleSection>
 
         </div>
       )}
@@ -698,12 +692,171 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
   );
 }
 
+/* ══════════ Collapsible Section ══════════ */
+function CollapsibleSection({ title, open, onToggle, children }) {
+  return (
+    <div style={{ marginTop: 16, direction: "rtl" }}>
+      <button onClick={onToggle} style={{
+        width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "10px 14px", background: "var(--surface2)", border: "1px solid var(--border)",
+        borderRadius: open ? "10px 10px 0 0" : 10, cursor: "pointer", color: "var(--text)", fontWeight: 800, fontSize: 14,
+      }}>
+        <span>{title}</span>
+        <span style={{ fontSize: 11, color: "var(--text3)", transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "none" }}>▼</span>
+      </button>
+      {open && (
+        <div style={{ border: "1px solid var(--border)", borderTop: "none", borderRadius: "0 0 10px 10px", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════ Daily Bookings Grid (lessons + student bookings) ══════════ */
+function DailyBookingsGrid({ workDays, studioBookings, studios, today, holidays }) {
+  const bookings = Array.isArray(studioBookings) ? studioBookings : [];
+  const studioMap = Object.fromEntries((studios || []).map(s => [String(s.id), s]));
+
+  const getBookingKind = (b) => {
+    if (b.bookingKind === "lesson" || b.lesson_auto || b.lesson_id) return "lesson";
+    if (b.bookingKind === "team" || b.teamMemberId || b.teamMemberName || b.ownerType === "team") return "team";
+    return "student";
+  };
+
+  // Per-day: lessons first (sorted by time), then student bookings
+  const dayData = workDays.map(date => {
+    const dayBookings = bookings.filter(b => b.date === date && b.status !== "נדחה");
+    const lessons = dayBookings.filter(b => getBookingKind(b) === "lesson").sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
+    const students = dayBookings.filter(b => getBookingKind(b) === "student").sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
+    return { date, lessons, students };
+  });
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", direction: "rtl", minWidth: 716 }}>
+      {/* Header */}
+      {workDays.map((date, i) => {
+        const dayIdx = new Date(date + "T00:00:00").getDay();
+        const hol = holidays.find(h => h.date === date);
+        const isToday = date === today;
+        return (
+          <div key={date} style={{ padding: "6px 4px", textAlign: "center", borderBottom: "1px solid var(--border)", borderLeft: i < 5 ? "1px solid var(--border)" : "none", background: isToday ? "rgba(59,130,246,0.08)" : hol ? "#2d2400" : "var(--surface2)" }}>
+            <div style={{ fontWeight: 700, fontSize: 11, color: isToday ? "#3b82f6" : hol ? "#f59e0b" : "var(--text3)" }}>{HE_DAYS[dayIdx]} {new Date(date + "T00:00:00").getDate()}</div>
+            {hol && <div style={{ fontSize: 8, color: "#f59e0b", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hol.name}</div>}
+          </div>
+        );
+      })}
+      {/* Body cells */}
+      {workDays.map((date, i) => {
+        const d = dayData[i];
+        return (
+          <div key={date} style={{ padding: "4px 3px", borderLeft: i < 5 ? "1px solid var(--border)" : "none", minHeight: 60, fontSize: 10 }}>
+            {/* Lessons */}
+            {d.lessons.map((b, j) => {
+              const studio = studioMap[String(b.studioId)];
+              return (
+                <div key={b.id || j} style={{ background: "rgba(245,166,35,0.12)", border: "1px solid rgba(245,166,35,0.3)", borderRadius: 5, padding: "3px 4px", marginBottom: 3 }}>
+                  <div style={{ fontWeight: 800, color: "#f5a623", fontSize: 10 }}>{b.startTime || ""}–{b.endTime || ""}</div>
+                  <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 10, lineHeight: 1.3 }}>{b.courseName || b.studentName || "שיעור"}</div>
+                  {b.instructorName && <div style={{ color: "var(--text3)", fontSize: 9 }}>👨‍🏫 {b.instructorName}</div>}
+                  {studio && <div style={{ color: "var(--text3)", fontSize: 9 }}>🏛️ {studio.name}</div>}
+                </div>
+              );
+            })}
+            {/* Student bookings */}
+            {d.students.map((b, j) => {
+              const studio = studioMap[String(b.studioId)];
+              return (
+                <div key={b.id || j} style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 5, padding: "3px 4px", marginBottom: 3 }}>
+                  <div style={{ fontWeight: 800, color: "var(--green, #22c55e)", fontSize: 10 }}>{b.startTime || ""}–{b.endTime || ""}</div>
+                  <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 10 }}>{b.studentName || "סטודנט"}</div>
+                  {studio && <div style={{ color: "var(--text3)", fontSize: 9 }}>🏛️ {studio.name}</div>}
+                </div>
+              );
+            })}
+            {d.lessons.length === 0 && d.students.length === 0 && <div style={{ color: "var(--text3)", textAlign: "center", paddingTop: 16, fontSize: 10 }}>—</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ══════════ Daily Loans Grid (borrow/return only, no in-between) ══════════ */
+function DailyLoansGrid({ workDays, reservations, today, holidays }) {
+  const activeRes = (reservations || []).filter(r => r.status !== "נדחה" && r.status !== "הוחזר");
+
+  // For each workDay, show loans that START or END on that day
+  // Student loans first, then lesson loans
+  const dayData = workDays.map(date => {
+    const borrows = activeRes.filter(r => r.borrow_date === date);
+    const returns = activeRes.filter(r => r.return_date === date && r.borrow_date !== date);
+    const studentBorrows = borrows.filter(r => r.loan_type !== "שיעור");
+    const lessonBorrows = borrows.filter(r => r.loan_type === "שיעור");
+    const studentReturns = returns.filter(r => r.loan_type !== "שיעור");
+    const lessonReturns = returns.filter(r => r.loan_type === "שיעור");
+    return { date, studentBorrows, lessonBorrows, studentReturns, lessonReturns };
+  });
+
+  const LoanChip = ({ r, isReturn }) => (
+    <div style={{
+      background: isReturn ? "rgba(59,130,246,0.1)" : "rgba(245,158,11,0.1)",
+      border: `1px solid ${isReturn ? "rgba(59,130,246,0.25)" : "rgba(245,158,11,0.25)"}`,
+      borderRadius: 5, padding: "2px 4px", marginBottom: 2,
+    }}>
+      <div style={{ fontWeight: 700, color: isReturn ? "#3b82f6" : "#f59e0b", fontSize: 9 }}>
+        {isReturn ? "↩ החזרה" : "↗ יציאה"} {r.borrow_time && !isReturn ? r.borrow_time : ""}
+      </div>
+      <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 10, lineHeight: 1.3 }}>
+        {r.student_name || "—"}
+      </div>
+      <div style={{ color: "var(--text3)", fontSize: 9 }}>
+        {(r.items || []).length} פריטים · {r.loan_type || ""}
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", direction: "rtl", minWidth: 716 }}>
+      {/* Header */}
+      {workDays.map((date, i) => {
+        const dayIdx = new Date(date + "T00:00:00").getDay();
+        const hol = holidays.find(h => h.date === date);
+        const isToday = date === today;
+        return (
+          <div key={date} style={{ padding: "6px 4px", textAlign: "center", borderBottom: "1px solid var(--border)", borderLeft: i < 5 ? "1px solid var(--border)" : "none", background: isToday ? "rgba(59,130,246,0.08)" : hol ? "#2d2400" : "var(--surface2)" }}>
+            <div style={{ fontWeight: 700, fontSize: 11, color: isToday ? "#3b82f6" : hol ? "#f59e0b" : "var(--text3)" }}>{HE_DAYS[dayIdx]} {new Date(date + "T00:00:00").getDate()}</div>
+          </div>
+        );
+      })}
+      {/* Body cells */}
+      {workDays.map((date, i) => {
+        const d = dayData[i];
+        const hasData = d.studentBorrows.length + d.lessonBorrows.length + d.studentReturns.length + d.lessonReturns.length > 0;
+        return (
+          <div key={date} style={{ padding: "4px 3px", borderLeft: i < 5 ? "1px solid var(--border)" : "none", minHeight: 50, fontSize: 10 }}>
+            {/* Student borrows/returns first */}
+            {d.studentBorrows.map(r => <LoanChip key={`b-${r.id}`} r={r} isReturn={false} />)}
+            {d.studentReturns.map(r => <LoanChip key={`r-${r.id}`} r={r} isReturn={true} />)}
+            {/* Then lesson borrows/returns */}
+            {d.lessonBorrows.map(r => <LoanChip key={`b-${r.id}`} r={r} isReturn={false} />)}
+            {d.lessonReturns.map(r => <LoanChip key={`r-${r.id}`} r={r} isReturn={true} />)}
+            {!hasData && <div style={{ color: "var(--text3)", textAlign: "center", paddingTop: 14, fontSize: 10 }}>—</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ══════════ Editor Modal ══════════ */
 function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSave, onDelete, onLock, onClose }) {
   const { staffId: initStaffId, date, mode, existing, defaultShift, prefEntry, asgnEntry } = modal;
   const [staffId, setStaffId] = useState(String(initStaffId));
+  const [selectedStaffIds, setSelectedStaffIds] = useState([String(initStaffId)]);
   const memberName = teamMembers.find(m => String(m.id) === staffId)?.name || "";
   const isEditingSelf = staffId === String(currentStaffId);
+  const isMultiSelect = isAdmin && mode === "assignment" && !existing && selectedStaffIds.length > 0;
 
   const [shiftType, setShiftType] = useState(existing?.shift_type || defaultShift || "morning");
   const [startTime, setStartTime] = useState(existing?.start_time || "09:00");
@@ -712,7 +865,6 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
   const [note, setNote] = useState(existing?.note || "");
   const [notePublic, setNotePublic] = useState(existing?.note_public ?? true);
   const [locked, setLocked] = useState(existing?.locked ?? false);
-  const [saving, setSaving] = useState(false);
 
   // Read-only note from the other side
   const readOnlyStaffNote = mode === "assignment" ? (prefEntry?.note || null) : null;
@@ -721,16 +873,18 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
   const handleSave = async () => {
     if (shiftType === "custom" && (!startTime || !endTime || startTime >= endTime)) return;
     if (note.length > 250) return;
-    setSaving(true);
-    const ok = await onSave({
-      staffId, date, shiftType,
+    // Close modal immediately (optimistic) for faster UX
+    onClose();
+    const ids = isMultiSelect ? selectedStaffIds : [staffId];
+    const payload = {
+      date, shiftType,
       startTime: shiftType === "custom" ? startTime : null,
       endTime: shiftType === "custom" ? endTime : null,
       note: note.trim(), notePublic, locked,
       source: mode === "assignment" ? "manager" : undefined,
-    });
-    setSaving(false);
-    if (ok) onClose();
+    };
+    // Save all selected staff members (parallel for multi-select)
+    await Promise.all(ids.map(sid => onSave({ ...payload, staffId: sid })));
   };
 
   return (
@@ -743,14 +897,26 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
           {memberName} · {HE_DAYS[new Date(date + "T00:00:00").getDay()]} {formatDateHe(date)}
         </div>
 
-        {/* Member selector (admin creating new assignment) */}
+        {/* Member selector (admin creating new assignment — button chips, multi-select) */}
         {isAdmin && mode === "assignment" && !existing && teamMembers.length > 1 && (
           <div style={{ marginBottom: 14 }}>
-            <label style={labelStyle}>עובד</label>
-            <select value={staffId} onChange={e => setStaffId(e.target.value)}
-              style={{ width: "100%", padding: 8, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: 13 }}>
-              {teamMembers.map(m => <option key={m.id} value={String(m.id)}>{m.name}</option>)}
-            </select>
+            <label style={labelStyle}>עובדים לשיבוץ (ניתן לבחור מספר)</label>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {teamMembers.map(m => {
+                const sel = selectedStaffIds.includes(String(m.id));
+                return (
+                  <button key={m.id} type="button"
+                    onClick={() => setSelectedStaffIds(prev => sel ? prev.filter(id => id !== String(m.id)) : [...prev, String(m.id)])}
+                    style={{
+                      padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: sel ? 700 : 500, cursor: "pointer",
+                      border: `1.5px solid ${sel ? "var(--accent, #f5a623)" : "var(--border)"}`,
+                      background: sel ? "rgba(245,166,35,0.15)" : "var(--surface2)",
+                      color: sel ? "var(--accent, #f5a623)" : "var(--text2)",
+                    }}
+                  >{m.name}</button>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -773,16 +939,22 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
           </div>
         </div>
 
-        {/* Custom time pickers */}
+        {/* Custom time pickers (30-min slots 09:00–22:00) */}
         {shiftType === "custom" && (
           <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
             <div style={{ flex: 1 }}>
               <label style={labelStyle}>שעת התחלה</label>
-              <input type="time" className="form-input" value={startTime} onChange={e => setStartTime(e.target.value)} />
+              <select value={startTime} onChange={e => setStartTime(e.target.value)}
+                style={{ width: "100%", padding: 8, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: 13 }}>
+                {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
             </div>
             <div style={{ flex: 1 }}>
               <label style={labelStyle}>שעת סיום</label>
-              <input type="time" className="form-input" value={endTime} onChange={e => setEndTime(e.target.value)} />
+              <select value={endTime} onChange={e => setEndTime(e.target.value)}
+                style={{ width: "100%", padding: 8, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: 13 }}>
+                {TIME_SLOTS.filter(t => t > startTime).map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
             </div>
           </div>
         )}
@@ -863,8 +1035,8 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
-            <button className="btn btn-primary" disabled={saving || (shiftType === "custom" && (!startTime || !endTime || startTime >= endTime))} onClick={handleSave}>
-              {saving ? "שומר..." : "💾 שמור"}
+            <button className="btn btn-primary" disabled={(shiftType === "custom" && (!startTime || !endTime || startTime >= endTime)) || (isMultiSelect && selectedStaffIds.length === 0)} onClick={handleSave}>
+              💾 {isMultiSelect && selectedStaffIds.length > 1 ? `שמור (${selectedStaffIds.length} עובדים)` : "שמור"}
             </button>
           </div>
         </div>
