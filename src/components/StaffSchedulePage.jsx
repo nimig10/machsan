@@ -15,23 +15,24 @@ const SLOT_ORDER = ["morning", "custom", "evening"];
 
 const HE_DAYS   = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
-const MAX_WEEK_OFFSET = 26; // ±6 months
+const MIN_WEEK_OFFSET = -26; // 6 months back
+const MAX_WEEK_OFFSET = 54;  // 12 months forward
 
 // Return weekOffset needed to land on the week that contains the 1st of the given month
 function monthToWeekOffset(year, month) {
   const firstOfMonth = new Date(year, month, 1);
   const firstDay = firstOfMonth.getDay();
-  const weekSun = new Date(firstOfMonth); weekSun.setDate(1 - firstDay);
+  const weekSun = new Date(year, month, 1 - firstDay); // Sunday of the week containing the 1st
   const now = new Date(); now.setHours(0, 0, 0, 0);
   const thisSun = new Date(now); thisSun.setDate(now.getDate() - now.getDay());
   return Math.round((weekSun.getTime() - thisSun.getTime()) / (7 * 86400000));
 }
 
-// Build list of months: 6 back + current + 6 forward
+// Build list of months: 6 back + current + 12 forward
 function getMonthOptions() {
   const now = new Date();
   const options = [];
-  for (let delta = -6; delta <= 6; delta++) {
+  for (let delta = -6; delta <= 12; delta++) {
     const d = new Date(now.getFullYear(), now.getMonth() + delta, 1);
     options.push({ year: d.getFullYear(), month: d.getMonth(), label: `${HE_MONTHS[d.getMonth()]} ${d.getFullYear()}` });
   }
@@ -126,6 +127,8 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
   const [holidays, setHolidays] = useState([]);
   const [editModal, setEditModal] = useState(null);
   const [notePopup, setNotePopup] = useState(null); // { memberName, note }
+  const [myShiftsOnly, setMyShiftsOnly] = useState(false);
+  const [lessonsOnly, setLessonsOnly] = useState(false);
 
   /* Load staff members from Supabase */
   useEffect(() => {
@@ -144,11 +147,19 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
     })();
   }, []);
 
-  const displayMembers = useMemo(() => {
+  const allMembers = useMemo(() => {
     if (staffList.length > 0) return staffList;
     if (staffUser) return [{ id: staffUser.id, name: staffUser.full_name || "אני" }];
     return [];
   }, [staffList, staffUser]);
+
+  const displayMembers = useMemo(() => {
+    if (myShiftsOnly && currentStaffId) {
+      const me = allMembers.find(m => String(m.id) === String(currentStaffId));
+      return me ? [me] : [];
+    }
+    return allMembers;
+  }, [allMembers, myShiftsOnly, currentStaffId]);
 
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
   const workDays = useMemo(() => weekDates.slice(0, 6), [weekDates]); // Sun–Fri, no Saturday
@@ -176,6 +187,14 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
       }
       setHolidays(all);
     })();
+  }, []);
+
+  // Purge data older than 6 months from DB (run once on mount, admin only)
+  useEffect(() => {
+    if (!isAdmin) return;
+    const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 6);
+    const cutoffStr = localDateStr(cutoff);
+    scheduleApi("purge-old", { beforeDate: cutoffStr }).catch(() => {});
   }, []);
 
   // Apply cached data to state (only if still the active week)
@@ -344,10 +363,10 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
         </div>
       </div>
 
-      {/* ── Week Navigation ── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 8, direction: "rtl" }}>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <button className="btn btn-secondary btn-sm" disabled={weekOffset <= -MAX_WEEK_OFFSET} onClick={() => setWeekOffset(w => w - 1)}>→</button>
+      {/* ── Week Navigation + Filters ── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, flexWrap: "wrap", gap: 8, direction: "rtl" }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <button className="btn btn-secondary btn-sm" disabled={weekOffset <= MIN_WEEK_OFFSET} onClick={() => setWeekOffset(w => w - 1)}>→</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(0)}>השבוע</button>
           <button className="btn btn-secondary btn-sm" disabled={weekOffset >= MAX_WEEK_OFFSET} onClick={() => setWeekOffset(w => w + 1)}>←</button>
 
@@ -355,7 +374,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
           <div style={{ position: "relative" }}>
             <button
               className="btn btn-secondary btn-sm"
-              onClick={() => setMonthMenuOpen(v => !v)}
+              onClick={e => { e.stopPropagation(); setMonthMenuOpen(v => !v); }}
               style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}
             >
               {selectedMonthIdx >= 0 ? monthOptions[selectedMonthIdx].label : "בחר חודש"}
@@ -367,20 +386,21 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                 background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10,
                 boxShadow: "0 8px 24px rgba(0,0,0,0.35)", minWidth: 160, direction: "rtl",
                 maxHeight: 300, overflowY: "auto",
-              }}>
+              }}
+                onClick={e => e.stopPropagation()}
+              >
                 {monthOptions.map((opt, idx) => {
-                  const offset = monthToWeekOffset(opt.year, opt.month);
-                  const inRange = Math.abs(offset) <= MAX_WEEK_OFFSET;
+                  const wo = monthToWeekOffset(opt.year, opt.month);
+                  const clamped = Math.max(MIN_WEEK_OFFSET, Math.min(MAX_WEEK_OFFSET, wo));
                   const isSelected = idx === selectedMonthIdx;
                   return (
                     <button key={`${opt.year}-${opt.month}`}
-                      disabled={!inRange}
-                      onClick={() => { setWeekOffset(Math.max(-MAX_WEEK_OFFSET, Math.min(MAX_WEEK_OFFSET, offset))); setMonthMenuOpen(false); }}
+                      onClick={() => { setWeekOffset(clamped); setMonthMenuOpen(false); }}
                       style={{
                         display: "block", width: "100%", textAlign: "right",
                         padding: "8px 14px", background: isSelected ? "rgba(59,130,246,0.18)" : "transparent",
-                        border: "none", color: isSelected ? "#3b82f6" : inRange ? "var(--text)" : "var(--text3)",
-                        fontWeight: isSelected ? 800 : 600, fontSize: 13, cursor: inRange ? "pointer" : "default",
+                        border: "none", color: isSelected ? "#3b82f6" : "var(--text)",
+                        fontWeight: isSelected ? 800 : 600, fontSize: 13, cursor: "pointer",
                         borderBottom: "1px solid var(--border)",
                       }}
                     >{opt.label}</button>
@@ -389,6 +409,13 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
               </div>
             )}
           </div>
+
+          {/* "My shifts" filter */}
+          <button
+            className={`btn btn-sm ${myShiftsOnly ? "btn-primary" : "btn-secondary"}`}
+            onClick={() => setMyShiftsOnly(v => !v)}
+            style={{ fontSize: 12 }}
+          >👤 משמרות שלי</button>
         </div>
 
         <span style={{ fontSize: 15, fontWeight: 800, color: "var(--text)" }}>
@@ -413,9 +440,9 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
           {fetching && <div style={{ position: "absolute", inset: 0, zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}><div style={{ background: "var(--surface2)", padding: "6px 16px", borderRadius: 20, fontSize: 12, color: "var(--text3)", border: "1px solid var(--border)" }}>טוען...</div></div>}
           <div style={{
             display: "grid",
-            gridTemplateColumns: "44px repeat(6, 1fr)",
+            gridTemplateColumns: "80px repeat(6, 1fr)",
             direction: "rtl",
-            minWidth: 680,
+            minWidth: 716,
           }}>
 
             {/* ═══ Header Row ═══ */}
@@ -606,8 +633,13 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
         {/* ── Room Booking Calendar (synced, same scroll container, aligned columns) ── */}
         {studios.length > 0 && (
           <div style={{ marginTop: 20, direction: "rtl" }}>
-            <div style={{ fontWeight: 800, fontSize: 15, color: "var(--text)", marginBottom: 8, paddingRight: 2 }}>
-              🏛️ לוח קביעות חדרים
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              <span style={{ fontWeight: 800, fontSize: 15, color: "var(--text)" }}>🏛️ לוח קביעות חדרים</span>
+              <button
+                className={`btn btn-sm ${lessonsOnly ? "btn-primary" : "btn-secondary"}`}
+                onClick={() => setLessonsOnly(v => !v)}
+                style={{ fontSize: 12 }}
+              >📚 שיעורים</button>
             </div>
             <StudioBookingPage
               showToast={showToast}
@@ -615,6 +647,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
               bookings={studioBookings}
               role={isAdmin ? "admin" : "staff"}
               embeddedWeekOffset={weekOffset}
+              lessonsOnly={lessonsOnly}
               isActive={true}
             />
           </div>

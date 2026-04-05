@@ -218,5 +218,18 @@ export default async function handler(req, res) {
     return res.status(result.ok ? 200 : 500).json({ ok: result.ok });
   }
 
+  // PURGE-OLD — delete preferences & assignments older than a given date (admin only)
+  if (action === "purge-old") {
+    if (callerRole !== "admin") return res.status(403).json({ error: "Admin only" });
+    const { beforeDate } = req.body;
+    if (!beforeDate) return res.status(400).json({ error: "Missing beforeDate" });
+    const filter = `date=lt.${encodeURIComponent(beforeDate)}`;
+    const [pr, ar] = await Promise.all([
+      sbFetch(`staff_schedule_preferences?${filter}`, { method: "DELETE" }),
+      sbFetch(`staff_schedule_assignments?${filter}`, { method: "DELETE" }),
+    ]);
+    return res.status(pr.ok && ar.ok ? 200 : 500).json({ ok: pr.ok && ar.ok });
+  }
+
   return res.status(400).json({ error: "Unknown action" });
 }
