@@ -371,7 +371,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
       {/* ── Title + User ── */}
       <div style={{ marginBottom: 14, direction: "rtl" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-          <span style={{ fontWeight: 900, fontSize: 20, color: "var(--text)" }}>חלוקת משמרות</span>
+          <span style={{ fontWeight: 900, fontSize: 20, color: "var(--text)" }}>לו&quot;ז עובדים</span>
           <span style={{ fontSize: 13, color: "var(--text3)" }}>שלום, {staffUser?.full_name || ""}</span>
         </div>
       </div>
@@ -443,10 +443,11 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
       {loading ? (
         <div style={{ textAlign: "center", padding: 60, color: "var(--text3)" }}>טוען...</div>
       ) : (
-        /* ── Shared scroll container for both grids ── */
         <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-
-        {/* ── Staff Schedule Grid ── */}
+        {/* ══════════════════════════════════════════════════
+            ONE unified grid: shifts + lessons + bookings + loans
+            all share the same 80px + 6-col layout
+        ══════════════════════════════════════════════════ */}
         <div style={{ borderRadius: 10, border: "1px solid var(--border)", position: "relative", opacity: fetching ? 0.55 : 1, transition: "opacity 0.18s" }}>
           {fetching && <div style={{ position: "absolute", inset: 0, zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}><div style={{ background: "var(--surface2)", padding: "6px 16px", borderRadius: 20, fontSize: 12, color: "var(--text3)", border: "1px solid var(--border)" }}>טוען...</div></div>}
           <div style={{
@@ -638,24 +639,26 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
               </Fragment>
             )}
 
+            {/* ══ Section divider: Lessons ══ */}
+            <SectionDivider title="📚 לו&quot;ז יומי — שיעורים" open={showLessons} onToggle={() => setShowLessons(v => !v)} />
+
+            {/* ══ Lessons body row ══ */}
+            {showLessons && <LessonsRow workDays={workDays} studioBookings={studioBookings} studios={studios} today={today} holidays={holidays} />}
+
+            {/* ══ Section divider: Student Bookings ══ */}
+            <SectionDivider title="🎵 לו&quot;ז יומי — קביעות" open={showStudentBookings} onToggle={() => setShowStudentBookings(v => !v)} />
+
+            {/* ══ Student Bookings body row ══ */}
+            {showStudentBookings && <StudentBookingsRow workDays={workDays} studioBookings={studioBookings} studios={studios} today={today} holidays={holidays} />}
+
+            {/* ══ Section divider: Loans ══ */}
+            <SectionDivider title="📦 בקשות השאלה" open={showLoans} onToggle={() => setShowLoans(v => !v)} />
+
+            {/* ══ Loans body row ══ */}
+            {showLoans && <LoansRow workDays={workDays} reservations={reservations} today={today} />}
+
           </div>
         </div>
-
-        {/* ══════ Collapsible: Daily Lessons ══════ */}
-        <CollapsibleSection title="📚 לו&quot;ז יומי — שיעורים" open={showLessons} onToggle={() => setShowLessons(v => !v)}>
-          <DailyBookingsGrid workDays={workDays} studioBookings={studioBookings} studios={studios} today={today} holidays={holidays} kind="lessons" />
-        </CollapsibleSection>
-
-        {/* ══════ Collapsible: Daily Student Bookings ══════ */}
-        <CollapsibleSection title="🎵 לו&quot;ז יומי — קביעות סטודנטים" open={showStudentBookings} onToggle={() => setShowStudentBookings(v => !v)}>
-          <DailyBookingsGrid workDays={workDays} studioBookings={studioBookings} studios={studios} today={today} holidays={holidays} kind="students" />
-        </CollapsibleSection>
-
-        {/* ══════ Collapsible: Loan Requests ══════ */}
-        <CollapsibleSection title="📦 בקשות השאלה — סטודנטים / שיעורים" open={showLoans} onToggle={() => setShowLoans(v => !v)}>
-          <DailyLoansGrid workDays={workDays} reservations={reservations} today={today} holidays={holidays} />
-        </CollapsibleSection>
-
         </div>
       )}
 
@@ -698,82 +701,53 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
   );
 }
 
-/* ══════════ Collapsible Section ══════════ */
-function CollapsibleSection({ title, open, onToggle, children }) {
+/* ══════════ Section Divider — spans all 7 grid columns ══════════ */
+function SectionDivider({ title, open, onToggle }) {
   return (
-    <div style={{ marginTop: 16, direction: "rtl" }}>
+    <div style={{ gridColumn: "1 / -1", borderTop: "2px solid var(--border)" }}>
       <button onClick={onToggle} style={{
         width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "10px 14px", background: "var(--surface2)", border: "1px solid var(--border)",
-        borderRadius: open ? "10px 10px 0 0" : 10, cursor: "pointer", color: "var(--text)", fontWeight: 800, fontSize: 14,
+        padding: "8px 14px", background: open ? "rgba(255,255,255,0.04)" : "var(--surface2)",
+        border: "none", cursor: "pointer", color: "var(--text)", fontWeight: 800, fontSize: 13,
       }}>
         <span>{title}</span>
-        <span style={{ fontSize: 11, color: "var(--text3)", transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "none" }}>▼</span>
+        <span style={{ fontSize: 10, color: "var(--text3)", transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "none" }}>▼</span>
       </button>
-      {open && (
-        <div style={{ border: "1px solid var(--border)", borderTop: "none", borderRadius: "0 0 10px 10px", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-          {children}
-        </div>
-      )}
     </div>
   );
 }
 
-/* ══════════ Daily Bookings Grid (lessons OR student bookings) ══════════ */
-function DailyBookingsGrid({ workDays, studioBookings, studios, today, holidays, kind = "lessons" }) {
+/* helpers shared by row components */
+function getBookingKind(b) {
+  if (b.bookingKind === "lesson" || b.lesson_auto || b.lesson_id) return "lesson";
+  if (b.bookingKind === "team" || b.teamMemberId || b.teamMemberName || b.ownerType === "team") return "team";
+  return "student";
+}
+
+/* ══════════ Lessons row — direct grid children (Fragment) ══════════ */
+function LessonsRow({ workDays, studioBookings, studios, today, holidays }) {
   const bookings = Array.isArray(studioBookings) ? studioBookings : [];
   const studioMap = Object.fromEntries((studios || []).map(s => [String(s.id), s]));
 
-  const getBookingKind = (b) => {
-    if (b.bookingKind === "lesson" || b.lesson_auto || b.lesson_id) return "lesson";
-    if (b.bookingKind === "team" || b.teamMemberId || b.teamMemberName || b.ownerType === "team") return "team";
-    return "student";
-  };
-
-  const dayData = workDays.map(date => {
-    const dayBookings = bookings.filter(b => b.date === date && b.status !== "נדחה");
-    const lessons = dayBookings.filter(b => getBookingKind(b) === "lesson").sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
-    const students = dayBookings.filter(b => getBookingKind(b) === "student").sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
-    return { date, lessons, students };
-  });
-
-  const isLessons = kind === "lessons";
-
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "80px repeat(6, 1fr)", direction: "rtl", minWidth: 716 }}>
-      {/* Label column header */}
-      <div style={{ background: "var(--surface2)", borderBottom: "1px solid var(--border)", borderLeft: "1px solid var(--border)" }} />
-      {/* Day headers */}
-      {workDays.map((date, i) => {
-        const dayIdx = new Date(date + "T00:00:00").getDay();
-        const hol = holidays.find(h => h.date === date);
-        const isToday = date === today;
-        return (
-          <div key={date} style={{ padding: "6px 4px", textAlign: "center", borderBottom: "1px solid var(--border)", borderLeft: i < 5 ? "1px solid var(--border)" : "none", background: isToday ? "rgba(59,130,246,0.08)" : hol ? "#2d2400" : "var(--surface2)" }}>
-            <div style={{ fontWeight: 700, fontSize: 11, color: isToday ? "#3b82f6" : hol ? "#f59e0b" : "var(--text3)" }}>{HE_DAYS[dayIdx]} {new Date(date + "T00:00:00").getDate()}</div>
-            {hol && <div style={{ fontSize: 8, color: "#f59e0b", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hol.name}</div>}
-          </div>
-        );
-      })}
-      {/* Label column body */}
+    <Fragment>
+      {/* Label cell */}
       <div style={{
-        borderLeft: "1px solid var(--border)",
+        borderLeft: "1px solid var(--border)", borderTop: "1px solid var(--border)",
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        padding: "6px 2px", gap: 2,
-        background: isLessons ? "rgba(245,166,35,0.08)" : "rgba(34,197,94,0.08)",
+        padding: "6px 2px", gap: 2, background: "rgba(245,166,35,0.08)",
       }}>
-        <span style={{ fontSize: 14 }}>{isLessons ? "📚" : "🎵"}</span>
-        <span style={{ fontSize: 8, color: isLessons ? "#f5a623" : "#22c55e", fontWeight: 700, textAlign: "center" }}>
-          {isLessons ? "שיעורים" : "קביעות"}
-        </span>
+        <span style={{ fontSize: 14 }}>📚</span>
+        <span style={{ fontSize: 8, color: "#f5a623", fontWeight: 700, textAlign: "center" }}>שיעורים</span>
       </div>
-      {/* Body cells */}
+      {/* Day cells */}
       {workDays.map((date, i) => {
-        const d = dayData[i];
-        const items = isLessons ? d.lessons : d.students;
+        const lessons = bookings
+          .filter(b => b.date === date && b.status !== "נדחה" && getBookingKind(b) === "lesson")
+          .sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
         return (
-          <div key={date} style={{ padding: "4px 3px", borderLeft: i < 5 ? "1px solid var(--border)" : "none", minHeight: 60, fontSize: 10 }}>
-            {isLessons ? items.map((b, j) => {
+          <div key={date} style={{ padding: "4px 3px", borderLeft: i < 5 ? "1px solid var(--border)" : "none", borderTop: "1px solid var(--border)", minHeight: 54 }}>
+            {lessons.map((b, j) => {
               const studio = studioMap[String(b.studioId)];
               return (
                 <div key={b.id || j} style={{ background: "rgba(245,166,35,0.12)", border: "1px solid rgba(245,166,35,0.3)", borderRadius: 5, padding: "3px 5px", marginBottom: 3 }}>
@@ -783,7 +757,39 @@ function DailyBookingsGrid({ workDays, studioBookings, studios, today, holidays,
                   {studio && <div style={{ color: "var(--text2)", fontSize: 11, fontWeight: 600 }}>🏛️ {studio.name}</div>}
                 </div>
               );
-            }) : items.map((b, j) => {
+            })}
+            {lessons.length === 0 && <div style={{ color: "var(--text3)", textAlign: "center", paddingTop: 14, fontSize: 10 }}>—</div>}
+          </div>
+        );
+      })}
+    </Fragment>
+  );
+}
+
+/* ══════════ Student Bookings row ══════════ */
+function StudentBookingsRow({ workDays, studioBookings, studios, today, holidays }) {
+  const bookings = Array.isArray(studioBookings) ? studioBookings : [];
+  const studioMap = Object.fromEntries((studios || []).map(s => [String(s.id), s]));
+
+  return (
+    <Fragment>
+      {/* Label cell */}
+      <div style={{
+        borderLeft: "1px solid var(--border)", borderTop: "1px solid var(--border)",
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        padding: "6px 2px", gap: 2, background: "rgba(34,197,94,0.08)",
+      }}>
+        <span style={{ fontSize: 14 }}>🎵</span>
+        <span style={{ fontSize: 8, color: "#22c55e", fontWeight: 700, textAlign: "center" }}>קביעות</span>
+      </div>
+      {/* Day cells */}
+      {workDays.map((date, i) => {
+        const students = bookings
+          .filter(b => b.date === date && b.status !== "נדחה" && getBookingKind(b) === "student")
+          .sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
+        return (
+          <div key={date} style={{ padding: "4px 3px", borderLeft: i < 5 ? "1px solid var(--border)" : "none", borderTop: "1px solid var(--border)", minHeight: 54 }}>
+            {students.map((b, j) => {
               const studio = studioMap[String(b.studioId)];
               return (
                 <div key={b.id || j} style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 5, padding: "3px 5px", marginBottom: 3 }}>
@@ -793,31 +799,17 @@ function DailyBookingsGrid({ workDays, studioBookings, studios, today, holidays,
                 </div>
               );
             })}
-            {items.length === 0 && <div style={{ color: "var(--text3)", textAlign: "center", paddingTop: 16, fontSize: 10 }}>—</div>}
+            {students.length === 0 && <div style={{ color: "var(--text3)", textAlign: "center", paddingTop: 14, fontSize: 10 }}>—</div>}
           </div>
         );
       })}
-    </div>
+    </Fragment>
   );
 }
 
-/* ══════════ Daily Loans Grid (borrow/return only, no in-between) ══════════ */
-function DailyLoansGrid({ workDays, reservations, today, holidays }) {
-  const activeRes = (reservations || []).filter(r => r.status !== "נדחה" && r.status !== "הוחזר");
-
-  // For each workDay, show loans that START or END on that day
-  // Student loans first, then lesson loans
-  const dayData = workDays.map(date => {
-    const borrows = activeRes.filter(r => r.borrow_date === date);
-    const returns = activeRes.filter(r => r.return_date === date && r.borrow_date !== date);
-    const studentBorrows = borrows.filter(r => r.loan_type !== "שיעור");
-    const lessonBorrows = borrows.filter(r => r.loan_type === "שיעור");
-    const studentReturns = returns.filter(r => r.loan_type !== "שיעור");
-    const lessonReturns = returns.filter(r => r.loan_type === "שיעור");
-    return { date, studentBorrows, lessonBorrows, studentReturns, lessonReturns };
-  });
-
-  const LoanChip = ({ r, isReturn }) => (
+/* ══════════ Loans row ══════════ */
+function LoanChip({ r, isReturn }) {
+  return (
     <div style={{
       background: isReturn ? "rgba(59,130,246,0.1)" : "rgba(245,158,11,0.1)",
       border: `1px solid ${isReturn ? "rgba(59,130,246,0.25)" : "rgba(245,158,11,0.25)"}`,
@@ -826,57 +818,46 @@ function DailyLoansGrid({ workDays, reservations, today, holidays }) {
       <div style={{ fontWeight: 700, color: isReturn ? "#3b82f6" : "#f59e0b", fontSize: 9 }}>
         {isReturn ? "↩ החזרה" : "↗ יציאה"} {r.borrow_time && !isReturn ? r.borrow_time : ""}
       </div>
-      <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 10, lineHeight: 1.3 }}>
-        {r.student_name || "—"}
-      </div>
-      <div style={{ color: "var(--text3)", fontSize: 9 }}>
-        {(r.items || []).length} פריטים · {r.loan_type || ""}
-      </div>
+      <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 10, lineHeight: 1.3 }}>{r.student_name || "—"}</div>
+      <div style={{ color: "var(--text3)", fontSize: 9 }}>{(r.items || []).length} פריטים · {r.loan_type || ""}</div>
     </div>
   );
+}
+
+function LoansRow({ workDays, reservations, today }) {
+  const activeRes = (reservations || []).filter(r => r.status !== "נדחה" && r.status !== "הוחזר");
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "80px repeat(6, 1fr)", direction: "rtl", minWidth: 716 }}>
-      {/* Label column header */}
-      <div style={{ background: "var(--surface2)", borderBottom: "1px solid var(--border)", borderLeft: "1px solid var(--border)" }} />
-      {/* Day headers */}
-      {workDays.map((date, i) => {
-        const dayIdx = new Date(date + "T00:00:00").getDay();
-        const hol = holidays.find(h => h.date === date);
-        const isToday = date === today;
-        return (
-          <div key={date} style={{ padding: "6px 4px", textAlign: "center", borderBottom: "1px solid var(--border)", borderLeft: i < 5 ? "1px solid var(--border)" : "none", background: isToday ? "rgba(59,130,246,0.08)" : hol ? "#2d2400" : "var(--surface2)" }}>
-            <div style={{ fontWeight: 700, fontSize: 11, color: isToday ? "#3b82f6" : hol ? "#f59e0b" : "var(--text3)" }}>{HE_DAYS[dayIdx]} {new Date(date + "T00:00:00").getDate()}</div>
-          </div>
-        );
-      })}
-      {/* Label column body */}
+    <Fragment>
+      {/* Label cell */}
       <div style={{
-        borderLeft: "1px solid var(--border)",
+        borderLeft: "1px solid var(--border)", borderTop: "1px solid var(--border)",
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        padding: "6px 2px", gap: 2,
-        background: "rgba(245,158,11,0.08)",
+        padding: "6px 2px", gap: 2, background: "rgba(245,158,11,0.08)",
       }}>
         <span style={{ fontSize: 14 }}>📦</span>
         <span style={{ fontSize: 8, color: "#f59e0b", fontWeight: 700, textAlign: "center" }}>השאלות</span>
       </div>
-      {/* Body cells */}
+      {/* Day cells */}
       {workDays.map((date, i) => {
-        const d = dayData[i];
-        const hasData = d.studentBorrows.length + d.lessonBorrows.length + d.studentReturns.length + d.lessonReturns.length > 0;
+        const borrows = activeRes.filter(r => r.borrow_date === date);
+        const returns = activeRes.filter(r => r.return_date === date && r.borrow_date !== date);
+        const studentBorrows = borrows.filter(r => r.loan_type !== "שיעור");
+        const lessonBorrows = borrows.filter(r => r.loan_type === "שיעור");
+        const studentReturns = returns.filter(r => r.loan_type !== "שיעור");
+        const lessonReturns = returns.filter(r => r.loan_type === "שיעור");
+        const hasData = studentBorrows.length + lessonBorrows.length + studentReturns.length + lessonReturns.length > 0;
         return (
-          <div key={date} style={{ padding: "4px 3px", borderLeft: i < 5 ? "1px solid var(--border)" : "none", minHeight: 50, fontSize: 10 }}>
-            {/* Student borrows/returns first */}
-            {d.studentBorrows.map(r => <LoanChip key={`b-${r.id}`} r={r} isReturn={false} />)}
-            {d.studentReturns.map(r => <LoanChip key={`r-${r.id}`} r={r} isReturn={true} />)}
-            {/* Then lesson borrows/returns */}
-            {d.lessonBorrows.map(r => <LoanChip key={`b-${r.id}`} r={r} isReturn={false} />)}
-            {d.lessonReturns.map(r => <LoanChip key={`r-${r.id}`} r={r} isReturn={true} />)}
+          <div key={date} style={{ padding: "4px 3px", borderLeft: i < 5 ? "1px solid var(--border)" : "none", borderTop: "1px solid var(--border)", minHeight: 50, fontSize: 10 }}>
+            {studentBorrows.map(r => <LoanChip key={`sb-${r.id}`} r={r} isReturn={false} />)}
+            {studentReturns.map(r => <LoanChip key={`sr-${r.id}`} r={r} isReturn={true} />)}
+            {lessonBorrows.map(r => <LoanChip key={`lb-${r.id}`} r={r} isReturn={false} />)}
+            {lessonReturns.map(r => <LoanChip key={`lr-${r.id}`} r={r} isReturn={true} />)}
             {!hasData && <div style={{ color: "var(--text3)", textAlign: "center", paddingTop: 14, fontSize: 10 }}>—</div>}
           </div>
         );
       })}
-    </div>
+    </Fragment>
   );
 }
 
