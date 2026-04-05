@@ -906,7 +906,16 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
                 const sel = selectedStaffIds.includes(String(m.id));
                 return (
                   <button key={m.id} type="button"
-                    onClick={() => setSelectedStaffIds(prev => sel ? prev.filter(id => id !== String(m.id)) : [...prev, String(m.id)])}
+                    onClick={e => {
+                      const id = String(m.id);
+                      if (e.ctrlKey || e.metaKey) {
+                        // Ctrl/Cmd: toggle in multi-select
+                        setSelectedStaffIds(prev => sel ? prev.filter(x => x !== id) : [...prev, id]);
+                      } else {
+                        // Regular click: replace selection with this one
+                        setSelectedStaffIds([id]);
+                      }
+                    }}
                     style={{
                       padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: sel ? 700 : 500, cursor: "pointer",
                       border: `1.5px solid ${sel ? "var(--accent, #f5a623)" : "var(--border)"}`,
