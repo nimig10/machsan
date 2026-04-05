@@ -1,6 +1,7 @@
 // StaffSchedulePage.jsx — Staff weekly schedule: slot-based view
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
 import { Modal } from "./ui.jsx";
+import StudioBookingPage from "./StudioBookingPage.jsx";
 
 /* ── Shift types ── */
 const SHIFT_TYPES = {
@@ -12,7 +13,30 @@ const SHIFT_TYPES = {
 
 const SLOT_ORDER = ["morning", "custom", "evening"];
 
-const HE_DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
+const HE_DAYS   = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
+const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+const MAX_WEEK_OFFSET = 26; // ±6 months
+
+// Return weekOffset needed to land on the week that contains the 1st of the given month
+function monthToWeekOffset(year, month) {
+  const firstOfMonth = new Date(year, month, 1);
+  const firstDay = firstOfMonth.getDay();
+  const weekSun = new Date(firstOfMonth); weekSun.setDate(1 - firstDay);
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const thisSun = new Date(now); thisSun.setDate(now.getDate() - now.getDay());
+  return Math.round((weekSun.getTime() - thisSun.getTime()) / (7 * 86400000));
+}
+
+// Build list of months: 6 back + current + 6 forward
+function getMonthOptions() {
+  const now = new Date();
+  const options = [];
+  for (let delta = -6; delta <= 6; delta++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + delta, 1);
+    options.push({ year: d.getFullYear(), month: d.getMonth(), label: `${HE_MONTHS[d.getMonth()]} ${d.getFullYear()}` });
+  }
+  return options;
+}
 
 /* ── Helpers ── */
 function formatDateHe(dateStr) {
@@ -42,36 +66,35 @@ function todayStr() { return localDateStr(new Date()); }
 
 function canStaffEditDate(dateStr) {
   const now = new Date();
-  now.setHours(0, 0, 0, 0);
+  const today = now.getDay(); // 0=Sun … 6=Sat
+  const midnight = new Date(now); midnight.setHours(0, 0, 0, 0);
   const target = new Date(dateStr + "T00:00:00");
-  const today = now.getDay();
-  if (target <= now) return false;
-  const currentSun = new Date(now);
-  currentSun.setDate(now.getDate() - today);
-  const nextSun = new Date(currentSun);
-  nextSun.setDate(currentSun.getDate() + 7);
-  const weekAfterSun = new Date(currentSun);
-  weekAfterSun.setDate(currentSun.getDate() + 14);
+  if (target <= midnight) return false;
+  const currentSun = new Date(midnight);
+  currentSun.setDate(midnight.getDate() - today);
+  const nextSun = new Date(currentSun); nextSun.setDate(currentSun.getDate() + 7);
+  const weekAfterSun = new Date(currentSun); weekAfterSun.setDate(currentSun.getDate() + 14);
   if (target < nextSun) return false;
-  if (target < weekAfterSun) return today >= 0 && today <= 3;
+  // For next week: window open until Saturday 20:00
+  if (target < weekAfterSun) {
+    if (today < 6) return true;          // Sun–Fri: always open
+    return now.getHours() < 20;          // Sat: open until 20:00
+  }
   return true;
 }
 
 function getPreferenceWindowStatus(weekDates) {
   const now = new Date();
-  now.setHours(0, 0, 0, 0);
   const today = now.getDay();
-  const currentSun = new Date(now);
-  currentSun.setDate(now.getDate() - today);
-  const nextSun = new Date(currentSun);
-  nextSun.setDate(currentSun.getDate() + 7);
-  const weekAfterSun = new Date(currentSun);
-  weekAfterSun.setDate(currentSun.getDate() + 14);
+  const midnight = new Date(now); midnight.setHours(0, 0, 0, 0);
+  const currentSun = new Date(midnight); currentSun.setDate(midnight.getDate() - today);
+  const nextSun = new Date(currentSun); nextSun.setDate(currentSun.getDate() + 7);
+  const weekAfterSun = new Date(currentSun); weekAfterSun.setDate(currentSun.getDate() + 14);
   const weekStart = new Date(weekDates[0] + "T00:00:00");
   if (weekStart < nextSun) return { open: false, text: "שבוע נוכחי" };
   if (weekStart < weekAfterSun) {
-    const wo = today >= 0 && today <= 3;
-    return { open: wo, text: wo ? "חלון ההעדפות פתוח (עד יום רביעי)" : "חלון ההעדפות נסגר לשבוע זה" };
+    const wo = today < 6 || now.getHours() < 20;
+    return { open: wo, text: wo ? "חלון ההעדפות פתוח (עד שבת 20:00)" : "חלון ההעדפות נסגר לשבוע זה" };
   }
   return { open: true, text: "ניתן להגיש העדפות" };
 }
@@ -87,7 +110,7 @@ async function scheduleApi(action, body = {}) {
 }
 
 /* ══════════════════════ Main Component ══════════════════════ */
-export function StaffSchedulePage({ staffUser, showToast }) {
+export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBookings = [] }) {
   const isAdmin = staffUser?.role === "admin";
   const currentStaffId = staffUser?.id;
 
@@ -277,8 +300,21 @@ export function StaffSchedulePage({ staffUser, showToast }) {
   );
 
   const today = todayStr();
-  const maxWeekOffset = 4;
   const hasAbsent = workDays.some(d => allDaySlots[d]?.absent?.length > 0);
+
+  // Month picker: figure out which month option is currently "selected"
+  const monthOptions = getMonthOptions();
+  const currentWeekMid = new Date(startDate + "T00:00:00");
+  currentWeekMid.setDate(currentWeekMid.getDate() + 3);
+  const currentMonthKey = `${currentWeekMid.getFullYear()}-${currentWeekMid.getMonth()}`;
+  const selectedMonthIdx = monthOptions.findIndex(o => `${o.year}-${o.month}` === currentMonthKey);
+  const [monthMenuOpen, setMonthMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!monthMenuOpen) return;
+    const close = () => setMonthMenuOpen(false);
+    window.addEventListener("click", close, true);
+    return () => window.removeEventListener("click", close, true);
+  }, [monthMenuOpen]);
 
   const openBlockEditor = (block, date) => {
     if (!isAdmin && block.type === "assignment") {
@@ -309,12 +345,52 @@ export function StaffSchedulePage({ staffUser, showToast }) {
       </div>
 
       {/* ── Week Navigation ── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 8, direction: "rtl" }}>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <button className="btn btn-secondary btn-sm" disabled={weekOffset <= -4} onClick={() => setWeekOffset(w => w - 1)}>→</button>
+          <button className="btn btn-secondary btn-sm" disabled={weekOffset <= -MAX_WEEK_OFFSET} onClick={() => setWeekOffset(w => w - 1)}>→</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(0)}>השבוע</button>
-          <button className="btn btn-secondary btn-sm" disabled={weekOffset >= maxWeekOffset} onClick={() => setWeekOffset(w => w + 1)}>←</button>
+          <button className="btn btn-secondary btn-sm" disabled={weekOffset >= MAX_WEEK_OFFSET} onClick={() => setWeekOffset(w => w + 1)}>←</button>
+
+          {/* Month picker dropdown */}
+          <div style={{ position: "relative" }}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => setMonthMenuOpen(v => !v)}
+              style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}
+            >
+              {selectedMonthIdx >= 0 ? monthOptions[selectedMonthIdx].label : "בחר חודש"}
+              <span style={{ fontSize: 9, opacity: 0.6 }}>▼</span>
+            </button>
+            {monthMenuOpen && (
+              <div style={{
+                position: "absolute", top: "100%", right: 0, zIndex: 200, marginTop: 4,
+                background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.35)", minWidth: 160, direction: "rtl",
+                maxHeight: 300, overflowY: "auto",
+              }}>
+                {monthOptions.map((opt, idx) => {
+                  const offset = monthToWeekOffset(opt.year, opt.month);
+                  const inRange = Math.abs(offset) <= MAX_WEEK_OFFSET;
+                  const isSelected = idx === selectedMonthIdx;
+                  return (
+                    <button key={`${opt.year}-${opt.month}`}
+                      disabled={!inRange}
+                      onClick={() => { setWeekOffset(Math.max(-MAX_WEEK_OFFSET, Math.min(MAX_WEEK_OFFSET, offset))); setMonthMenuOpen(false); }}
+                      style={{
+                        display: "block", width: "100%", textAlign: "right",
+                        padding: "8px 14px", background: isSelected ? "rgba(59,130,246,0.18)" : "transparent",
+                        border: "none", color: isSelected ? "#3b82f6" : inRange ? "var(--text)" : "var(--text3)",
+                        fontWeight: isSelected ? 800 : 600, fontSize: 13, cursor: inRange ? "pointer" : "default",
+                        borderBottom: "1px solid var(--border)",
+                      }}
+                    >{opt.label}</button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
+
         <span style={{ fontSize: 15, fontWeight: 800, color: "var(--text)" }}>
           {formatDateHe(startDate)} – {formatDateHe(workDays[5])}
         </span>
@@ -329,8 +405,11 @@ export function StaffSchedulePage({ staffUser, showToast }) {
       {loading ? (
         <div style={{ textAlign: "center", padding: 60, color: "var(--text3)" }}>טוען...</div>
       ) : (
-        /* ── Calendar Grid ── */
-        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", borderRadius: 10, border: "1px solid var(--border)", position: "relative", opacity: fetching ? 0.55 : 1, transition: "opacity 0.18s" }}>
+        /* ── Shared scroll container for both grids ── */
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+
+        {/* ── Staff Schedule Grid ── */}
+        <div style={{ borderRadius: 10, border: "1px solid var(--border)", position: "relative", opacity: fetching ? 0.55 : 1, transition: "opacity 0.18s" }}>
           {fetching && <div style={{ position: "absolute", inset: 0, zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}><div style={{ background: "var(--surface2)", padding: "6px 16px", borderRadius: 20, fontSize: 12, color: "var(--text3)", border: "1px solid var(--border)" }}>טוען...</div></div>}
           <div style={{
             display: "grid",
@@ -522,6 +601,25 @@ export function StaffSchedulePage({ staffUser, showToast }) {
             )}
 
           </div>
+        </div>
+
+        {/* ── Room Booking Calendar (synced, same scroll container, aligned columns) ── */}
+        {studios.length > 0 && (
+          <div style={{ marginTop: 20, direction: "rtl" }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: "var(--text)", marginBottom: 8, paddingRight: 2 }}>
+              🏛️ לוח קביעות חדרים
+            </div>
+            <StudioBookingPage
+              showToast={showToast}
+              studios={studios}
+              bookings={studioBookings}
+              role={isAdmin ? "admin" : "staff"}
+              embeddedWeekOffset={weekOffset}
+              isActive={true}
+            />
+          </div>
+        )}
+
         </div>
       )}
 

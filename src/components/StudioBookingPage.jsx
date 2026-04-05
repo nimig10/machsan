@@ -118,7 +118,8 @@ const tdStyle = { padding:"6px 8px", border:"1px solid var(--border)", textAlign
 const labelStyle = { display:"flex", flexDirection:"column", gap:4, fontSize:13, fontWeight:600, color:"var(--text2)" };
 
 export default function StudioBookingPage(props) {
-  const { showToast, teamMembers = [], certifications = { types: [], students: [] }, role = "admin", studios: studiosProp, setStudios: setStudiosProp, bookings: bookingsProp, setBookings: setBookingsProp, siteSettings: siteSettingsProp = {}, setSiteSettings: setSiteSettingsProp, isActive = true } = props;
+  const { showToast, teamMembers = [], certifications = { types: [], students: [] }, role = "admin", studios: studiosProp, setStudios: setStudiosProp, bookings: bookingsProp, setBookings: setBookingsProp, siteSettings: siteSettingsProp = {}, setSiteSettings: setSiteSettingsProp, isActive = true, embeddedWeekOffset } = props;
+  const isEmbedded = embeddedWeekOffset !== undefined;
   const [localStudios, setLocalStudios] = useState(() => lsGet("studios") || []);
   const [localBookings, setLocalBookings] = useState(() => lsGet("studio_bookings") || []);
   const [localSiteSettings, setLocalSiteSettings] = useState(() => lsGet("siteSettings") || {});
@@ -131,7 +132,10 @@ export default function StudioBookingPage(props) {
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth < 769);
   const [mobileDayStart, setMobileDayStart] = useState(0);
-  const [weekOffset, setWeekOffset] = useState(0);
+  const [internalWeekOffset, setInternalWeekOffset] = useState(0);
+  const [holidays, setHolidays] = useState([]);
+  const weekOffset = isEmbedded ? embeddedWeekOffset : internalWeekOffset;
+  const setWeekOffset = isEmbedded ? () => {} : setInternalWeekOffset;
   const [calendarFullscreen, setCalendarFullscreen] = useState(false);
   const [todayOnly, setTodayOnly] = useState(false);
   const [sortMode, setSortMode] = useState("urgency");
@@ -155,6 +159,24 @@ export default function StudioBookingPage(props) {
     return () => window.removeEventListener("resize", handler);
   }, []);
 
+  // Load Israeli holidays from Hebcal (same source as StaffSchedulePage)
+  useEffect(() => {
+    const year = new Date().getFullYear();
+    (async () => {
+      const all = [];
+      for (const y of [year, year + 1]) {
+        try {
+          const r = await fetch(`https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=on&mod=on&year=${y}&month=x&geo=il&i=on`);
+          const d = await r.json();
+          for (const item of d.items || []) {
+            all.push({ date: item.date, name: item.hebrew || item.title, isErev: /^Erev /.test(item.title || "") });
+          }
+        } catch { /* silent fallback */ }
+      }
+      setHolidays(all);
+    })();
+  }, []);
+
   // When week changes, reset mobile day window to start on today (or Sunday)
   useEffect(() => {
     const days = getWeekDays(weekOffset);
@@ -164,7 +186,9 @@ export default function StudioBookingPage(props) {
 
 
   const todayStr = getTodayStr();
-  const weekDays = getWeekDays(weekOffset);
+  const allWeekDays = getWeekDays(weekOffset);
+  // In embedded mode show Sun–Fri only (same 6 columns as StaffSchedulePage)
+  const weekDays = isEmbedded ? allWeekDays.slice(0, 6) : allWeekDays;
   const MOBILE_DAYS = 3;
   const visibleDays = isMobile && !calendarFullscreen
     ? weekDays.slice(mobileDayStart, mobileDayStart + MOBILE_DAYS)
@@ -706,22 +730,25 @@ export default function StudioBookingPage(props) {
   };
 
   return (
-    <div className="page" style={{ direction:"rtl" }}>
-      <div className="flex-between mb-4" style={{ flexWrap:"wrap", gap:8 }}>
-        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-          <button className={`btn ${activeView==="calendar" ? "btn-primary" : "btn-secondary"}`} onClick={() => setActiveView("calendar")}>📅 לוח שנה</button>
-          <button className={`btn ${activeView==="list" ? "btn-primary" : "btn-secondary"}`} onClick={() => setActiveView("list")}>
-            📋 כל ההזמנות {activeBookings.length > 0 && <span style={{ background:"var(--accent)", color:"#000", borderRadius:"50%", padding:"1px 6px", fontSize:11, marginRight:4 }}>{activeBookings.length}</span>}
-          </button>
-          {role === "admin" && <button className={`btn ${activeView==="manage" ? "btn-primary" : "btn-secondary"}`} onClick={() => setActiveView("manage")}>🏛️ ניהול חדרים</button>}
+    <div className={isEmbedded ? undefined : "page"} style={{ direction:"rtl" }}>
+      {/* Tabs — hidden in embedded mode */}
+      {!isEmbedded && (
+        <div className="flex-between mb-4" style={{ flexWrap:"wrap", gap:8 }}>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button className={`btn ${activeView==="calendar" ? "btn-primary" : "btn-secondary"}`} onClick={() => setActiveView("calendar")}>📅 לוח שנה</button>
+            <button className={`btn ${activeView==="list" ? "btn-primary" : "btn-secondary"}`} onClick={() => setActiveView("list")}>
+              📋 כל ההזמנות {activeBookings.length > 0 && <span style={{ background:"var(--accent)", color:"#000", borderRadius:"50%", padding:"1px 6px", fontSize:11, marginRight:4 }}>{activeBookings.length}</span>}
+            </button>
+            {role === "admin" && <button className={`btn ${activeView==="manage" ? "btn-primary" : "btn-secondary"}`} onClick={() => setActiveView("manage")}>🏛️ ניהול חדרים</button>}
+          </div>
+          {role === "admin" && activeView === "manage" && <button className="btn btn-primary" onClick={() => setModal({ type:"addStudio" })}>➕ חדר חדש</button>}
         </div>
-        {role === "admin" && activeView === "manage" && <button className="btn btn-primary" onClick={() => setModal({ type:"addStudio" })}>➕ חדר חדש</button>}
-      </div>
+      )}
 
-      {activeView === "calendar" && (
+      {(isEmbedded || activeView === "calendar") && (
         <div>
-          {/* Mobile only: mini calendar above the grid */}
-          {isMobile && (
+          {/* Mobile only: mini calendar above the grid — hidden in embedded mode */}
+          {isMobile && !isEmbedded && (
             <div style={{ marginBottom:16, background:"var(--surface2)", borderRadius:"var(--r)", border:"1px solid var(--border)", padding:12 }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
                 <button onClick={() => setMiniMonth((current) => current.month === 0 ? { year:current.year - 1, month:11 } : { year:current.year, month:current.month - 1 })} style={{ background:"none", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:16, padding:"2px 6px" }}>→</button>
@@ -747,6 +774,8 @@ export default function StudioBookingPage(props) {
             <>
             {calendarFullscreen && <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:8999 }} onClick={() => setCalendarFullscreen(false)} />}
             <div style={calendarFullscreen ? { position:"fixed", inset:8, zIndex:9000, background:"var(--bg)", borderRadius:16, border:"1px solid var(--border)", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 20px 60px rgba(0,0,0,0.6)" } : {}}>
+            {/* Navigation bar — hidden when synced externally */}
+            {!isEmbedded && (
             <div style={{ padding:"6px 12px", background:"var(--surface)", border:"1px solid var(--border)", borderRadius: calendarFullscreen ? "16px 16px 0 0" : "8px 8px 0 0", display:"flex", alignItems:"center", gap:6, flexWrap:"nowrap" }}>
               {isMobile && !calendarFullscreen ? (
                 <>
@@ -772,34 +801,47 @@ export default function StudioBookingPage(props) {
                 </>
               )}
             </div>
-            <div className="no-swipe-nav" style={{ flex: calendarFullscreen ? 1 : undefined, overflowX:"auto", overflowY: (calendarFullscreen || !isMobile) ? "auto" : undefined, maxHeight: (!isMobile && !calendarFullscreen) ? "calc(100vh - 260px)" : undefined, minHeight:0 }}>
-              <table style={{ width:"100%", borderCollapse:"separate", borderSpacing:0, tableLayout:"fixed", minWidth: isMobile && !calendarFullscreen ? undefined : `${Math.max(570, visibleDays.length * 90 + 130)}px` }}>
+            )}
+            <div className="no-swipe-nav" style={{ flex: calendarFullscreen ? 1 : undefined, overflowX: isEmbedded ? "visible" : "auto", overflowY: (calendarFullscreen || !isMobile) ? "auto" : undefined, maxHeight: (!isMobile && !calendarFullscreen) ? "calc(100vh - 260px)" : undefined, minHeight:0 }}>
+              <table style={{ width:"100%", borderCollapse:"separate", borderSpacing:0, tableLayout:"fixed", minWidth: isEmbedded ? 680 : (isMobile && !calendarFullscreen ? undefined : `${Math.max(570, visibleDays.length * 90 + 130)}px`) }}>
                 <thead>
                   <tr>
-                    <th style={{ ...thStyle, position:"sticky", top: (calendarFullscreen || !isMobile) ? 0 : undefined, right:0, zIndex: (calendarFullscreen || !isMobile) ? 5 : 3, width: isMobile ? 70 : 130, boxShadow:"-2px 0 6px rgba(0,0,0,0.18)" }}>חדר</th>
-                    {visibleDays.map((day) => (
-                      <th key={day.fullDate} style={{ ...thStyle, position: (calendarFullscreen || !isMobile) ? "sticky" : undefined, top:0, zIndex:3, background:day.isToday ? "var(--accent)" : "var(--surface2)" }}>
-                        <div style={{ fontWeight:700, color:day.isToday ? "#000" : undefined }}>{day.name}</div>
-                        <div style={{ fontSize:11, color:day.isToday ? "#000" : "var(--text3)" }}>{day.date}/{String(new Date(day.fullDate).getMonth() + 1).padStart(2, "0")}</div>
-                      </th>
-                    ))}
+                    <th style={{ ...thStyle, position: isEmbedded ? undefined : "sticky", top: (calendarFullscreen || !isMobile) ? 0 : undefined, right:0, zIndex: (calendarFullscreen || !isMobile) ? 5 : 3, width: isEmbedded ? 44 : (isMobile ? 70 : 130), boxShadow: isEmbedded ? undefined : "-2px 0 6px rgba(0,0,0,0.18)" }}>חדר</th>
+                    {visibleDays.map((day) => {
+                      const hol = holidays.find(h => h.date === day.fullDate);
+                      return (
+                        <th key={day.fullDate} style={{ ...thStyle, position: (calendarFullscreen || !isMobile) ? "sticky" : undefined, top:0, zIndex:3, background:day.isToday ? "var(--accent)" : hol ? "rgba(245,158,11,0.06)" : "var(--surface2)" }}>
+                          <div style={{ fontWeight:700, color:day.isToday ? "#000" : undefined }}>{day.name}</div>
+                          <div style={{ fontSize:11, color:day.isToday ? "#000" : "var(--text3)" }}>{day.date}/{String(new Date(day.fullDate).getMonth() + 1).padStart(2, "0")}</div>
+                          {hol && <div style={{ fontSize:9, color:day.isToday ? "#000" : "#f59e0b", fontWeight:600, marginTop:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{hol.isErev ? `ערב ${hol.name}` : hol.name}</div>}
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody>
                   {studios.map((studio) => (
                     <tr key={studio.id}>
-                      <td style={{ ...tdStyle, position:"sticky", right:0, zIndex:2, background:"var(--surface2)", verticalAlign:"middle", padding:"6px 4px", boxShadow:"-2px 0 6px rgba(0,0,0,0.18)", width: isMobile ? 70 : 130 }}>
-                        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
-                          <StudioImg studio={studio} size={isMobile ? 22 : 28} />
-                          <span style={{ fontSize: isMobile ? 9 : 11, fontWeight:800, lineHeight:1.2, wordBreak:"break-word", textAlign:"center" }}>{studio.name}</span>
-                          {!isMobile && (() => {
-                            const certNames = getStudioCertNames(studio);
-                            return certNames.length ? <span style={{ fontSize:9, color:"var(--accent)", lineHeight:1.2, wordBreak:"break-word", textAlign:"center" }}>🎓 {certNames.join(", ")}</span> : null;
-                          })()}
-                          {studio.isClassroom && <div style={{ fontSize:9, color:"#3498db", fontWeight:800 }}>🏫 כיתה</div>}
-                          {studio.classroomOnly && <div style={{ fontSize:9, color:"#fff", fontWeight:800, background:"#3498db", borderRadius:4, padding:"1px 5px" }}>🔒</div>}
-                          {isStudioDisabled(studio) && <div style={{ fontSize:9, color:"var(--red)", fontWeight:800 }}>🔧</div>}
-                        </div>
+                      <td style={{ ...tdStyle, position: isEmbedded ? undefined : "sticky", right:0, zIndex:2, background:"var(--surface2)", verticalAlign:"middle", padding: isEmbedded ? "4px 2px" : "6px 4px", boxShadow: isEmbedded ? undefined : "-2px 0 6px rgba(0,0,0,0.18)", width: isEmbedded ? 44 : (isMobile ? 70 : 130) }}>
+                        {isEmbedded ? (
+                          /* Compact display in embedded mode (44px column) */
+                          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:1 }} title={studio.name}>
+                            <StudioImg studio={studio} size={20} />
+                            <span style={{ fontSize:8, fontWeight:800, lineHeight:1.1, textAlign:"center", overflow:"hidden", width:"100%", whiteSpace:"nowrap", textOverflow:"ellipsis" }}>{studio.name}</span>
+                          </div>
+                        ) : (
+                          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
+                            <StudioImg studio={studio} size={isMobile ? 22 : 28} />
+                            <span style={{ fontSize: isMobile ? 9 : 11, fontWeight:800, lineHeight:1.2, wordBreak:"break-word", textAlign:"center" }}>{studio.name}</span>
+                            {!isMobile && (() => {
+                              const certNames = getStudioCertNames(studio);
+                              return certNames.length ? <span style={{ fontSize:9, color:"var(--accent)", lineHeight:1.2, wordBreak:"break-word", textAlign:"center" }}>🎓 {certNames.join(", ")}</span> : null;
+                            })()}
+                            {studio.isClassroom && <div style={{ fontSize:9, color:"#3498db", fontWeight:800 }}>🏫 כיתה</div>}
+                            {studio.classroomOnly && <div style={{ fontSize:9, color:"#fff", fontWeight:800, background:"#3498db", borderRadius:4, padding:"1px 5px" }}>🔒</div>}
+                            {isStudioDisabled(studio) && <div style={{ fontSize:9, color:"var(--red)", fontWeight:800 }}>🔧</div>}
+                          </div>
+                        )}
                       </td>
                       {isStudioDisabled(studio) ? (
                         <td colSpan={visibleDays.length} style={{ ...tdStyle, background:"rgba(231,76,60,0.08)", color:"var(--red)", fontWeight:800, textAlign:"center", padding:"14px 18px" }}>
@@ -1073,7 +1115,7 @@ export default function StudioBookingPage(props) {
       )}
 
       {/* Desktop sidebar mini-calendar via portal */}
-      {!isMobile && isActive && activeView === "calendar" && (() => {
+      {!isEmbedded && !isMobile && isActive && activeView === "calendar" && (() => {
         const target = document.getElementById("sidebar-mini-cal");
         if (!target) return null;
         return createPortal(
