@@ -1,5 +1,5 @@
 // LessonsPage.jsx — course & lesson schedule management
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today } from "../utils.js";
 
@@ -188,7 +188,7 @@ const fetchWithRetry = async (url, options, maxRetries = 5) => {
   return fetch(url, options);
 };
 
-export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[], trackOptions=[], studioBookings=[], setStudioBookings, certifications={} }) {
+export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[], trackOptions=[], studioBookings=[], setStudioBookings, certifications={}, openLessonId=null, onOpenLessonConsumed=null }) {
   const [mode, setMode] = useState(null); // null | "add" | "edit"
   const [editTarget, setEditTarget] = useState(null);
   const [pendingLesson, setPendingLesson] = useState(null);
@@ -203,6 +203,18 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const [aiImporting, setAiImporting] = useState(false);
   const importInputRef = useRef(null);
   const aiImportInputRef = useRef(null);
+
+  // Navigate directly to lesson edit form when openLessonId is set (e.g. from room booking)
+  useEffect(() => {
+    if (!openLessonId) return;
+    const lesson = lessons.find(l => String(l.id) === String(openLessonId));
+    if (lesson) {
+      setEditTarget(lesson);
+      setMode("edit");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    if (onOpenLessonConsumed) onOpenLessonConsumed();
+  }, [openLessonId]);
   const normalizedTrackOptions = [...new Set((trackOptions || []).map((option) => String(option || "").trim()).filter(Boolean))];
   const isKnownTrack = (value = "") => normalizedTrackOptions.includes(String(value || "").trim());
 
@@ -1123,10 +1135,12 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
     resizingRef.current = { colIdx, startX: e.clientX, startWidth: colWidths[colIdx] };
     const onMove = (ev) => {
       if (!resizingRef.current) return;
-      // RTL: גרירה שמאלה = הרחבה, גרירה ימינה = צמצום
-      const delta = resizingRef.current.startX - ev.clientX;
-      const newW = Math.max(40, resizingRef.current.startWidth + delta);
-      setColWidths(prev => prev.map((w,i) => i === resizingRef.current.colIdx ? newW : w));
+      // Destructure BEFORE setColWidths — the ref may be nulled by onUp
+      // before React processes the queued state-update callback
+      const { colIdx: ci, startX, startWidth } = resizingRef.current;
+      const delta = startX - ev.clientX; // RTL: left = widen
+      const newW = Math.max(40, startWidth + delta);
+      setColWidths(prev => prev.map((w,i) => i === ci ? newW : w));
     };
     const onUp = () => {
       resizingRef.current = null;

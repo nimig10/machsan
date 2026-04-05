@@ -118,7 +118,7 @@ const tdStyle = { padding:"6px 8px", border:"1px solid var(--border)", textAlign
 const labelStyle = { display:"flex", flexDirection:"column", gap:4, fontSize:13, fontWeight:600, color:"var(--text2)" };
 
 export default function StudioBookingPage(props) {
-  const { showToast, teamMembers = [], certifications = { types: [], students: [] }, role = "admin", studios: studiosProp, setStudios: setStudiosProp, bookings: bookingsProp, setBookings: setBookingsProp, siteSettings: siteSettingsProp = {}, setSiteSettings: setSiteSettingsProp, isActive = true, embeddedWeekOffset, lessonsOnly = false } = props;
+  const { showToast, teamMembers = [], certifications = { types: [], students: [] }, role = "admin", studios: studiosProp, setStudios: setStudiosProp, bookings: bookingsProp, setBookings: setBookingsProp, siteSettings: siteSettingsProp = {}, setSiteSettings: setSiteSettingsProp, isActive = true, embeddedWeekOffset, lessonsOnly = false, currentUser = null, lessons = [], setLessons = null, onNavigateToLesson = null } = props;
   const isEmbedded = embeddedWeekOffset !== undefined;
   const [localStudios, setLocalStudios] = useState(() => lsGet("studios") || []);
   const [localBookings, setLocalBookings] = useState(() => lsGet("studio_bookings") || []);
@@ -405,7 +405,6 @@ export default function StudioBookingPage(props) {
       showToast("error", STUDIO_MAINTENANCE_MESSAGE);
       return;
     }
-    setFormTeamMember("");
     setModal({ type:"addBooking", studioId, studioName, date, dayName, isNightTeam:false });
   };
 
@@ -419,6 +418,55 @@ export default function StudioBookingPage(props) {
     setFormTeamMember("");
     setEditImage("");
     setModal(null);
+  };
+
+  const saveLessonBookingEdit = async () => {
+    if (!modal?.booking || !setLessons) return;
+    const booking = modal.booking;
+    const newStart = modal.lessonStartTime;
+    const newEnd = modal.lessonEndTime;
+    const newStudioId = modal.lessonStudioId || null;
+
+    if (!newStart || !newEnd || newStart >= newEnd) {
+      showToast("error", "שעת סיום חייבת להיות אחרי שעת התחלה");
+      return;
+    }
+
+    // Conflict check — exclude bookings from the same lesson on the same date
+    const conflict = activeBookings.find(b => {
+      if (String(b.lesson_id) === String(booking.lesson_id) && b.date === booking.date) return false;
+      if (!sameStudioId(b.studioId, newStudioId || booking.studioId)) return false;
+      if (b.date !== booking.date) return false;
+      if (b.isNight) return false;
+      return !(newEnd <= (b.startTime || "00:00") || newStart >= (b.endTime || "23:59"));
+    });
+    if (conflict) {
+      showToast("error", getConflictMessage(conflict, booking.date));
+      return;
+    }
+
+    const lesson = lessons.find(l => String(l.id) === String(booking.lesson_id));
+    if (!lesson) { showToast("error", "הקורס לא נמצא"); return; }
+
+    const updatedSchedule = (lesson.schedule || []).map(s =>
+      s.date === booking.date
+        ? { ...s, startTime: newStart, endTime: newEnd, ...(newStudioId ? { studioId: newStudioId } : {}) }
+        : s
+    );
+    const updatedLessons = lessons.map(l =>
+      String(l.id) === String(lesson.id) ? { ...l, schedule: updatedSchedule } : l
+    );
+    setSaving(true);
+    try {
+      setLessons(updatedLessons);
+      await storageSet("lessons", updatedLessons);
+      showToast("success", "השיעור עודכן");
+      closeModal();
+    } catch {
+      showToast("error", "שגיאה בשמירת השיעור");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const cellBookings = useCallback((studioId, fullDate) => (
@@ -557,8 +605,9 @@ export default function StudioBookingPage(props) {
     if (!modal?.studioId || !modal?.date) return;
     setSaving(true);
 
-    const selectedMember = teamMemberOptions.find((member) => String(member.id) === String(formTeamMember));
-    const memberName = selectedMember?.name || "";
+    // Always book under the currently logged-in user
+    const memberName = currentUser?.full_name || currentUser?.name || "";
+    const memberId = currentUser?.id ?? null;
     const formData = new FormData(event.target);
     const studio = studios.find((item) => sameStudioId(item.id, modal.studioId));
     const notes = String(formData.get("notes") || "").trim();
@@ -569,7 +618,7 @@ export default function StudioBookingPage(props) {
     const recurringGroupId = repeatCount > 0 ? `team_repeat_${Date.now()}` : null;
 
     if (!memberName || !startTime || !endTime) {
-      showToast("error", "נא לבחור איש צוות ולהשלים את פרטי הקביעה");
+      showToast("error", "נא להשלים את פרטי הקביעה");
       setSaving(false);
       return;
     }
@@ -599,7 +648,7 @@ export default function StudioBookingPage(props) {
           id: Date.now() + occurrence,
           bookingKind: "team",
           ownerType: "team",
-          teamMemberId: selectedMember?.id ?? null,
+          teamMemberId: memberId,
           teamMemberName: memberName,
           studentName: memberName,
           studioId: modal.studioId,
@@ -1037,15 +1086,18 @@ export default function StudioBookingPage(props) {
       )}
 
       {modal?.type === "addBooking" && (
-        <Modal title={`📅 קביעת חדר לצוות — ${modal.studioName} · ${modal.dayName} ${modal.date}`} onClose={closeModal} footer={<><button className="btn btn-secondary" onClick={closeModal}>ביטול</button><button form="addBookingForm" type="submit" className="btn btn-primary" disabled={saving || !teamMemberOptions.length}>{saving ? "שומר..." : "שמור קביעה"}</button></>}>
+        <Modal title={`📅 קביעת חדר לצוות — ${modal.studioName} · ${modal.dayName} ${modal.date}`} onClose={closeModal} footer={<><button className="btn btn-secondary" onClick={closeModal}>ביטול</button><button form="addBookingForm" type="submit" className="btn btn-primary" disabled={saving}>{saving ? "שומר..." : "שמור קביעה"}</button></>}>
           <form id="addBookingForm" onSubmit={submitBooking} style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            {/* Current user auto-assigned */}
+            <div style={{ background:"rgba(155,89,182,0.08)", border:"1px solid rgba(155,89,182,0.2)", borderRadius:8, padding:"10px 12px", fontSize:13, fontWeight:600, color:"var(--text)" }}>
+              👤 קביעה על שם: <strong>{currentUser?.full_name || currentUser?.name || "—"}</strong>
+            </div>
             <label style={labelStyle}>
               מופעים חוזרים שבועיים
               <input name="repeatCount" type="number" min="0" max="24" defaultValue="0" className="form-input" />
               <span style={{ fontSize:11, color:"var(--text3)", fontWeight:500 }}>0 = בלי שכפול. כל ערך אחר ייצור מופעים נוספים שבוע אחרי שבוע באותו יום ובאותן שעות.</span>
             </label>
             {bookingRequiredCert.length > 0 && <div style={{ background:"rgba(52,152,219,0.08)", border:"1px solid rgba(52,152,219,0.2)", borderRadius:8, padding:"8px 12px", fontSize:12, color:"var(--blue)", fontWeight:600 }}>🎓 החדר הזה דורש לסטודנטים הסמכה: {bookingRequiredCert.map((type) => type.name).join(" / ")}. קביעת צוות ממשיכה לעבוד גם בלי הסמכה.</div>}
-            <label style={labelStyle}>איש צוות *{teamMemberOptions.length > 0 ? <select className="form-input" value={formTeamMember} onChange={(event) => setFormTeamMember(event.target.value)} required><option value="" disabled>בחר איש צוות...</option>{teamMemberOptions.map((member) => <option key={String(member.id)} value={String(member.id)}>{member.name}</option>)}</select> : <div style={{ background:"rgba(231,76,60,0.08)", border:"1px solid rgba(231,76,60,0.2)", borderRadius:8, padding:"10px 12px", color:"var(--red)", fontWeight:700 }}>אין כרגע אנשי צוות ברובריקת "צוות"</div>}</label>
             <div style={{ display:"flex", gap:8 }}>
               <label style={{ ...labelStyle, flex:1 }}>
                 שעת התחלה *
@@ -1101,16 +1153,39 @@ export default function StudioBookingPage(props) {
       )}
 
       {modal?.type === "viewBooking" && (
-        <Modal title={`📋 הזמנה — ${modal.studioName}`} onClose={closeModal} footer={<div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"space-between", width:"100%" }}><div>{canDeleteBooking(modal.booking) && <button className="btn btn-secondary btn-sm" style={{ color:"var(--red)", borderColor:"var(--red)" }} onClick={() => void deleteBooking(modal.booking.id)}>{getBookingKind(modal.booking) === "student" ? "מחק ושלח" : "מחק"}</button>}</div><button className="btn btn-secondary btn-sm" onClick={closeModal}>סגור</button></div>}>
+        <Modal title={`📋 הזמנה — ${modal.studioName}`} onClose={closeModal} footer={(() => {
+          const booking = modal.booking;
+          const kind = getBookingKind(booking);
+          const isEditingLesson = modal.lessonEditing;
+          return (
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"space-between", width:"100%" }}>
+              <div style={{ display:"flex", gap:8 }}>
+                {canDeleteBooking(booking) && <button className="btn btn-secondary btn-sm" style={{ color:"var(--red)", borderColor:"var(--red)" }} onClick={() => void deleteBooking(booking.id)}>{kind === "student" ? "מחק ושלח" : "מחק"}</button>}
+                {kind === "lesson" && !isEditingLesson && role === "admin" && setLessons && (
+                  <button className="btn btn-secondary btn-sm" onClick={() => setModal(prev => ({ ...prev, lessonEditing: true, lessonStartTime: booking.startTime, lessonEndTime: booking.endTime, lessonStudioId: String(booking.studioId || "") }))}>✏️ ערוך שעות / חדר</button>
+                )}
+                {kind === "lesson" && isEditingLesson && (
+                  <button className="btn btn-primary btn-sm" disabled={saving} onClick={() => saveLessonBookingEdit()}>{saving ? "שומר..." : "💾 שמור שינויים"}</button>
+                )}
+                {kind === "lesson" && onNavigateToLesson && booking.lesson_id && (
+                  <button className="btn btn-secondary btn-sm" style={{ color:LESSON_COLOR, borderColor:LESSON_COLOR }} onClick={() => { closeModal(); onNavigateToLesson(booking.lesson_id); }}>📽️ עריכת קורס</button>
+                )}
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={closeModal}>{isEditingLesson ? "בטל" : "סגור"}</button>
+            </div>
+          );
+        })()}>
           {(() => {
             const booking = modal.booking;
             const kind = getBookingKind(booking);
             const color = getBookingColor(booking);
+            const isEditingLesson = modal.lessonEditing;
+            const classroomStudios = studios.filter(s => s.isClassroom || s.classroomOnly);
             return (
               <div style={{ display:"flex", flexDirection:"column", gap:10, direction:"rtl" }}>
                 <Row label="סוג" value={<span style={{ color, fontWeight:700 }}>{getBookingTypeLabel(booking)}</span>} />
                 <Row label="תאריך" value={booking.date} />
-                <Row label="חלון שעות" value={getBookingTimeLabel(booking)} />
+                {!isEditingLesson && <Row label="חלון שעות" value={getBookingTimeLabel(booking)} />}
                 {kind === "lesson" && <><Row label="קורס" value={booking.courseName || "—"} /><Row label="מרצה" value={booking.instructorName || "—"} /><Row label="מסלול" value={booking.track || "—"} /><Row label="נושא השיעור" value={booking.subject || "—"} /></>}
                 {kind === "student" && <>
                   <Row label="סטודנט" value={booking.studentName} />
@@ -1120,7 +1195,41 @@ export default function StudioBookingPage(props) {
                 {kind === "team" && <Row label="איש צוות" value={booking.teamMemberName || booking.studentName} />}
                 {booking.isNight && kind !== "lesson" && <Row label="זמן" value={<span style={{ color:NIGHT_COLOR, fontWeight:700 }}>קביעת לילה</span>} />}
                 {booking.notes && <Row label="הערות" value={booking.notes} />}
-                {kind === "lesson" && <div style={{ background:"rgba(245,166,35,0.10)", border:"1px solid rgba(245,166,35,0.25)", borderRadius:8, padding:"12px 14px", fontSize:13, color:"var(--text2)", lineHeight:1.7 }}>קביעת שיעור מנוהלת מתוך רובריקת "שיעורים". כדי לשנות או לבטל אותה צריך לערוך את הקורס עצמו.</div>}
+
+                {/* ── Lesson booking editor ── */}
+                {kind === "lesson" && isEditingLesson && (
+                  <div style={{ background:"rgba(245,166,35,0.08)", border:"1px solid rgba(245,166,35,0.25)", borderRadius:8, padding:"12px 14px", display:"flex", flexDirection:"column", gap:10 }}>
+                    <div style={{ fontWeight:700, fontSize:13, color:LESSON_COLOR }}>✏️ עריכת שעות וחדר לשיעור זה</div>
+                    <div style={{ display:"flex", gap:8 }}>
+                      <label style={{ ...labelStyle, flex:1 }}>
+                        שעת התחלה
+                        <select className="form-input" value={modal.lessonStartTime || ""} onChange={e => setModal(prev => ({ ...prev, lessonStartTime: e.target.value }))}>
+                          {DAY_HOURS.map(t => <option key={t}>{t}</option>)}
+                        </select>
+                      </label>
+                      <label style={{ ...labelStyle, flex:1 }}>
+                        שעת סיום
+                        <select className="form-input" value={modal.lessonEndTime || ""} onChange={e => setModal(prev => ({ ...prev, lessonEndTime: e.target.value }))}>
+                          {DAY_HOURS.map(t => <option key={t}>{t}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                    {classroomStudios.length > 0 && (
+                      <label style={labelStyle}>
+                        כיתה
+                        <select className="form-input" value={modal.lessonStudioId || ""} onChange={e => setModal(prev => ({ ...prev, lessonStudioId: e.target.value }))}>
+                          <option value="">— ללא שיוך —</option>
+                          {classroomStudios.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
+                        </select>
+                      </label>
+                    )}
+                    <div style={{ fontSize:11, color:"var(--text3)" }}>השינויים יתעדכנו גם ברובריקת "שיעורים"</div>
+                  </div>
+                )}
+
+                {kind === "lesson" && !isEditingLesson && !setLessons && (
+                  <div style={{ background:"rgba(245,166,35,0.10)", border:"1px solid rgba(245,166,35,0.25)", borderRadius:8, padding:"12px 14px", fontSize:13, color:"var(--text2)", lineHeight:1.7 }}>קביעת שיעור מנוהלת מתוך רובריקת "שיעורים".</div>
+                )}
                 {kind === "student" && role === "admin" && <div style={{ display:"flex", flexDirection:"column", gap:6 }}><label style={{ fontSize:13, fontWeight:700, color:"var(--text2)" }}>הודעה לסטודנט במקרה ביטול</label><textarea className="form-input" rows={3} value={cancelMessage} onChange={(event) => setCancelMessage(event.target.value)} placeholder="למשל: נאלצנו לבטל את הקביעה בגלל חסימת חדר / תחזוקה / שיעור" /><div style={{ fontSize:11, color:"var(--text3)" }}>ההודעה תצורף למייל הביטול שנשלח אוטומטית לסטודנט.</div></div>}
               </div>
             );
