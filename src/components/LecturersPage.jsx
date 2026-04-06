@@ -351,7 +351,8 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
 
                 if (isEditing) {
                   return (
-                    <tr key={lec.id} style={{ background: "rgba(245,166,35,0.06)" }}>
+                    <tr key={lec.id} style={{ background: "rgba(245,166,35,0.06)", cursor: "pointer" }}
+                      onClick={e => { if (e.target.tagName !== "INPUT" && e.target.tagName !== "BUTTON") setEditingId(null); }}>
                       <td style={td}>
                         <input className="form-input" value={editName} onChange={e => setEditName(e.target.value)}
                           style={{ ...inpStyle, fontWeight: 700 }} autoFocus />
