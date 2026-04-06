@@ -1153,6 +1153,8 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
   const [track, setTrack]                     = useState(initial?.track||"");
   const initLecturerId = initial?.lecturerId || (initial?.instructorName ? (lecturers.find(l => l.fullName.trim().toLowerCase() === String(initial.instructorName||"").trim().toLowerCase())?.id || "") : "");
   const [lecturerId, setLecturerId]           = useState(initLecturerId);
+  const initLecturerName = initLecturerId ? (lecturers.find(l => l.id === initLecturerId)?.fullName || initial?.instructorName || "") : (initial?.instructorName || "");
+  const [lecturerInput, setLecturerInput]     = useState(initLecturerName);
   const [description, setDescription]         = useState(initial?.description||"");
   const [studioId, setStudioId]               = useState(initial?.studioId||"");
   const [kitId, setKitId]                     = useState(initialLinkedKitId);
@@ -1297,7 +1299,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
       name: name.trim(),
       track: track.trim(),
       lecturerId: lecturerId || null,
-      instructorName: selectedLecturer?.fullName || "",
+      instructorName: selectedLecturer?.fullName || lecturerInput.trim(),
       instructorPhone: selectedLecturer?.phone || "",
       instructorEmail: selectedLecturer?.email || "",
       description: description.trim(),
@@ -1474,12 +1476,28 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
         </div>
         <div className="form-group" style={{marginBottom:10}}>
           <label className="form-label">מרצה</label>
-          <select className="form-select" value={lecturerId} onChange={e=>setLecturerId(e.target.value)}>
-            <option value="">— ללא מרצה —</option>
+          <datalist id="lf-lecturers-list">
             {lecturers.filter(l=>l.isActive!==false).sort((a,b)=>a.fullName.localeCompare(b.fullName,"he")).map(l=>(
-              <option key={l.id} value={l.id}>{l.fullName}{l.phone ? ` · ${l.phone}` : ""}</option>
+              <option key={l.id} value={l.fullName}/>
             ))}
-          </select>
+          </datalist>
+          <div style={{position:"relative"}}>
+            <input className="form-input" list="lf-lecturers-list"
+              placeholder="הקלד שם מרצה..."
+              value={lecturerInput}
+              onChange={e=>{
+                const val = e.target.value;
+                setLecturerInput(val);
+                const matched = lecturers.find(l=>l.fullName.trim().toLowerCase()===val.trim().toLowerCase());
+                setLecturerId(matched ? matched.id : "");
+              }}
+            />
+            {lecturerInput && (
+              <button type="button" onClick={()=>{setLecturerInput("");setLecturerId("");}}
+                style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"var(--text3)",cursor:"pointer",fontSize:16,lineHeight:1,padding:0}}>✕</button>
+            )}
+          </div>
+          {lecturerId && <div style={{fontSize:11,color:"#22c55e",marginTop:3}}>✓ מקושר למרצה קיים</div>}
           {!lecturers.length && <div style={{fontSize:11,color:"var(--text3)",marginTop:3}}>ניתן להוסיף מרצים דרך רובריקת "מרצים"</div>}
         </div>
         <div className="form-group" style={{marginBottom:10}}>
