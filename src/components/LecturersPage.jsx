@@ -205,7 +205,7 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
   }, [lecturers, search, trackFilter, lecturerTracks]);
 
   const th = { padding: "8px 12px", textAlign: "right", fontWeight: 800, fontSize: 12, color: "var(--text3)", borderBottom: "2px solid var(--border)", whiteSpace: "nowrap" };
-  const td = { padding: "8px 12px", borderBottom: "1px solid var(--border)", fontSize: 13, verticalAlign: "middle" };
+  const td = { padding: "6px 12px", borderBottom: "1px solid var(--border)", fontSize: 13, verticalAlign: "middle" };
 
   if (addMode) {
     return (
@@ -274,14 +274,21 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
         </div>
       ) : (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", background: "var(--surface2)", borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", background: "var(--surface2)", borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", tableLayout: "fixed" }}>
+            <colgroup>
+              <col style={{ width: "22%" }} />
+              <col style={{ width: "16%" }} />
+              <col style={{ width: "22%" }} />
+              <col style={{ width: "28%" }} />
+              <col style={{ width: "12%" }} />
+            </colgroup>
             <thead>
               <tr style={{ background: "rgba(245,166,35,0.08)" }}>
                 <th style={th}>שם מלא</th>
                 <th style={th}>טלפון</th>
                 <th style={th}>מייל</th>
                 <th style={th}>מסלולי לימוד</th>
-                <th style={{ ...th, textAlign: "center", width: 60 }}>מחיקה</th>
+                <th style={{ ...th, textAlign: "center" }}>פעולות</th>
               </tr>
             </thead>
             <tbody>
@@ -290,20 +297,21 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                 const tracks = lecturerTracks[lec.id] ? [...lecturerTracks[lec.id]] : [];
                 const isEditing = editingId === lec.id;
 
+                const inpStyle = { width: "100%", boxSizing: "border-box", fontSize: 13, padding: "3px 6px", margin: 0, height: 28, border: "1px solid var(--border)", borderRadius: 6, background: "var(--surface)", color: "var(--text)" };
                 if (isEditing) {
                   return (
                     <tr key={lec.id} style={{ background: "rgba(245,166,35,0.06)" }}>
                       <td style={td}>
                         <input className="form-input" value={editName} onChange={e => setEditName(e.target.value)}
-                          style={{ width: "100%", boxSizing: "border-box", fontSize: 13, fontWeight: 700, padding: "4px 8px" }} />
+                          style={{ ...inpStyle, fontWeight: 700 }} autoFocus />
                       </td>
                       <td style={td}>
                         <input className="form-input" value={editPhone} onChange={e => setEditPhone(e.target.value)}
-                          style={{ width: "100%", boxSizing: "border-box", fontSize: 13, padding: "4px 8px" }} />
+                          style={inpStyle} />
                       </td>
                       <td style={td}>
                         <input className="form-input" type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)}
-                          style={{ width: "100%", boxSizing: "border-box", fontSize: 12, padding: "4px 8px" }} />
+                          style={{ ...inpStyle, fontSize: 12 }} />
                       </td>
                       <td style={td}>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
@@ -311,12 +319,11 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                             ? tracks.map(t => <span key={t} style={{ background: "rgba(245,166,35,0.15)", color: "#f5a623", borderRadius: 12, padding: "2px 8px", fontSize: 11, fontWeight: 600 }}>{t}</span>)
                             : <span style={{ color: "var(--text3)", fontSize: 12 }}>—</span>}
                         </div>
-                        <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 4 }}>שיוך מסלולים מתבצע דרך רובריקת השיעורים</div>
                       </td>
                       <td style={{ ...td, textAlign: "center" }}>
-                        <div style={{ display: "flex", gap: 4, justifyContent: "center", flexDirection: "column", alignItems: "center" }}>
-                          <button className="btn btn-primary btn-sm" style={{ fontSize: 11 }} onClick={() => saveInlineEdit(lec)}>✓ שמור</button>
-                          <button className="btn btn-secondary btn-sm" style={{ fontSize: 11 }} onClick={() => setEditingId(null)}>✕ בטל</button>
+                        <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
+                          <button className="btn btn-primary btn-sm" style={{ fontSize: 11, padding: "2px 8px" }} onClick={() => saveInlineEdit(lec)}>✓</button>
+                          <button className="btn btn-secondary btn-sm" style={{ fontSize: 11, padding: "2px 8px" }} onClick={() => setEditingId(null)}>✕</button>
                         </div>
                       </td>
                     </tr>
