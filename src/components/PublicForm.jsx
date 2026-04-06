@@ -2516,7 +2516,7 @@ ${inventory}
         </div>
       </div>
     </div>}
-    {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor} commitmentPdf={siteSettings.commitmentPdf} commitmentPdfCompressed={siteSettings.commitmentPdfCompressed} commitmentPdfName={siteSettings.commitmentPdfName}/>}
+    {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor} commitmentPdf={policies.commitmentPdf} commitmentPdfCompressed={policies.commitmentPdfCompressed} commitmentPdfName={policies.commitmentPdfName}/>}
     {showEquipmentAiModal && (
       <div
         style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:2600,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
