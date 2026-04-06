@@ -1184,11 +1184,14 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
   };
 
   const updateSessionField = (index, field, value) => {
-    setSchedule(prev => prev.map((session, sessionIndex) => (
-      sessionIndex === index
-        ? { ...session, [field]: (field === "topic" || field === "kitId" || field === "studioId") ? value : value || (field === "date" ? "" : session[field]) }
-        : session
-    )));
+    setSchedule(prev => {
+      const updated = prev.map((session, sessionIndex) => (
+        sessionIndex === index
+          ? { ...session, [field]: (field === "topic" || field === "kitId" || field === "studioId") ? value : value || (field === "date" ? "" : session[field]) }
+          : session
+      ));
+      return field === "date" ? sortScheduleEntries(updated) : updated;
+    });
   };
 
   const sendTeacherEmail = async () => {
