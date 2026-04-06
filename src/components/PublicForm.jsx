@@ -646,7 +646,32 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
 }
 
 // ─── INFO PANEL ───────────────────────────────────────────────────────────────
-function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColor }) {
+async function downloadCommitmentPdf(base64, compressed, name) {
+  const binary = atob(base64);
+  const raw = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) raw[i] = binary.charCodeAt(i);
+  let bytes = raw;
+  if (compressed) {
+    try {
+      const ds = new DecompressionStream("gzip");
+      const w = ds.writable.getWriter();
+      w.write(raw); w.close();
+      const chunks = [];
+      const reader = ds.readable.getReader();
+      for (;;) { const { value, done } = await reader.read(); if (done) break; chunks.push(value); }
+      const total = chunks.reduce((a, c) => a + c.length, 0);
+      bytes = new Uint8Array(total);
+      let off = 0;
+      for (const c of chunks) { bytes.set(c, off); off += c.length; }
+    } catch { bytes = raw; }
+  }
+  const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = name || "מסמך-התחייבות.pdf"; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColor, commitmentPdf, commitmentPdfCompressed, commitmentPdfName }) {
   const [tab, setTab] = useState("policies");
   const [selectedEq, setSelectedEq] = useState(null);  // equipment detail view
   const [infoCatFilter, setInfoCatFilter] = useState([]); // multi-select
@@ -778,6 +803,19 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
           {/* ── POLICIES TAB ── */}
           {tab==="policies" && (
             <div style={{maxWidth:720,margin:"0 auto"}}>
+              {commitmentPdf && (
+                <div style={{marginBottom:24,padding:"16px 20px",background:"rgba(245,166,35,0.07)",border:"2px solid var(--accent)",borderRadius:"var(--r)",display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+                  <div style={{flex:1,minWidth:180}}>
+                    <div style={{fontWeight:800,fontSize:14,color:"var(--accent)",marginBottom:4}}>📄 מסמך התחייבות — נהלי השאלת ציוד</div>
+                    <div style={{fontSize:12,color:"var(--text3)",lineHeight:1.6}}>הורד, הדפס וחתום על המסמך לפני השאלה ראשונה. ניתן לחתום גם דיגיטלית.</div>
+                  </div>
+                  <button type="button"
+                    onClick={()=>downloadCommitmentPdf(commitmentPdf, commitmentPdfCompressed, commitmentPdfName)}
+                    style={{background:"var(--accent)",color:"#0a0c10",border:"none",borderRadius:8,padding:"10px 20px",fontWeight:900,fontSize:13,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>
+                    ⬇️ הורד מסמך
+                  </button>
+                </div>
+              )}
               {["פרטית","הפקה","סאונד","קולנוע יומית","לילה"].map(lt=>{
                 const text = policies[lt];
                 if(!text) return null;
@@ -2478,7 +2516,7 @@ ${inventory}
         </div>
       </div>
     </div>}
-    {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor}/>}
+    {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor} commitmentPdf={siteSettings.commitmentPdf} commitmentPdfCompressed={siteSettings.commitmentPdfCompressed} commitmentPdfName={siteSettings.commitmentPdfName}/>}
     {showEquipmentAiModal && (
       <div
         style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:2600,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
