@@ -349,13 +349,16 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     showToast("success", "הקורס נמחק. ניתן לשחזר עם לחצן ↩ בטל פעולה למעלה.");
   };
 
-  const getLessonTrackLabel = (lesson) => String(lesson?.track || "").trim() || "ללא מסלול";
+  const UNASSIGNED_TRACK = "לא משויך";
+  const getLessonTrackLabel = (lesson) => {
+    const raw = String(lesson?.track || "").trim();
+    return (raw && raw !== "כללי" && isKnownTrack(raw)) ? raw : UNASSIGNED_TRACK;
+  };
   const allTrackFilters = [
     "הכל",
     ...new Set([
       ...normalizedTrackOptions,
-      ...lessons.map((lesson) => String(lesson?.track || "").trim()).filter(Boolean),
-      ...(lessons.some((lesson) => !String(lesson?.track || "").trim()) ? ["ללא מסלול"] : []),
+      ...(lessons.some((lesson) => getLessonTrackLabel(lesson) === UNASSIGNED_TRACK) ? [UNASSIGNED_TRACK] : []),
     ]),
   ];
   const allTracksSelected = !trackFilter.length;
@@ -629,7 +632,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 3. חלץ instructorEmail ו-instructorPhone מסקשן "פרטי מרצה" — שייך אותם לאותו קורס
 4. חלץ שעות לפורמט HH:MM. אם חסרה שעה — כתוב '00:00'
 5. תאריך בפורמט YYYY-MM-DD. אם הוא מספר אקסל (כגון 46120) — המר ל-YYYY-MM-DD (בסיס: 1900-01-01)
-6. זהה מסלול לימודים מהכותרות. אם לא ברור — כתוב 'כללי'
+6. זהה מסלול לימודים מהכותרות. אם לא ברור — השאר ריק
 7. התעלם לחלוטין משורות של: חגים, שבתות, פגרות, הודעות מנהלה ("פורים", "שבת", "פגרה", "סגור" וכו')
         `;
 
@@ -754,7 +757,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           cleanedLessons.forEach((item, index) => {
             const courseName = String(item?.title || item?.courseName || "").trim();
             const teacher = String(item?.instructor || item?.teacher || "").trim() || "לא צוין";
-            const track = String(item?.track || "").trim() || "כללי";
+            const track = String(item?.track || "").trim();
             const dayOfWeek = String(item?.dayOfWeek || "").trim();
             const lessonDate = normalizeImportedLessonDate(item?.date, dayOfWeek);
             const { startTime, endTime } = resolveImportedLessonTimes(item);
@@ -968,6 +971,8 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
               {allTrackFilters.map((trackName) => {
                 const active = isTrackSelected(trackName);
+                const isUnassigned = trackName === UNASSIGNED_TRACK;
+                const activeColor = isUnassigned ? "#ef4444" : "#f5a623";
                 return (
                   <button
                     key={trackName}
@@ -976,9 +981,9 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                     style={{
                       padding:"5px 12px",
                       borderRadius:20,
-                      border:`2px solid ${active ? "#f5a623" : "var(--border)"}`,
-                      background:active ? "rgba(245,166,35,0.14)" : "transparent",
-                      color:active ? "#f5a623" : "var(--text3)",
+                      border:`2px solid ${active ? activeColor : isUnassigned ? "rgba(239,68,68,0.4)" : "var(--border)"}`,
+                      background:active ? (isUnassigned ? "rgba(239,68,68,0.14)" : "rgba(245,166,35,0.14)") : "transparent",
+                      color:active ? activeColor : isUnassigned ? "rgba(239,68,68,0.6)" : "var(--text3)",
                       fontWeight:700,
                       fontSize:12,
                       cursor:"pointer",
@@ -1066,10 +1071,10 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                 {Object.entries(groupedLessons)
                   .sort(([left], [right]) => left.localeCompare(right, "he"))
                   .map(([trackName, trackLessons]) => (
-                    <div key={trackName} style={{display:"flex",flexDirection:"column",gap:10,background:"rgba(245,166,35,0.04)",border:"1px solid rgba(245,166,35,0.18)",borderRadius:14,padding:"14px 16px"}}>
+                    <div key={trackName} style={{display:"flex",flexDirection:"column",gap:10,background:trackName===UNASSIGNED_TRACK?"rgba(239,68,68,0.04)":"rgba(245,166,35,0.04)",border:`1px solid ${trackName===UNASSIGNED_TRACK?"rgba(239,68,68,0.18)":"rgba(245,166,35,0.18)"}`,borderRadius:14,padding:"14px 16px"}}>
                       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                        <span style={{fontWeight:900,fontSize:15,color:"#f5a623"}}>🎓 {trackName}</span>
-                        <span style={{background:"rgba(245,166,35,0.16)",color:"#f5a623",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:800}}>{trackLessons.length} קורסים</span>
+                        <span style={{fontWeight:900,fontSize:15,color:trackName===UNASSIGNED_TRACK?"#ef4444":"#f5a623"}}>{trackName===UNASSIGNED_TRACK?"⚠️":"🎓"} {trackName}</span>
+                        <span style={{background:trackName===UNASSIGNED_TRACK?"rgba(239,68,68,0.16)":"rgba(245,166,35,0.16)",color:trackName===UNASSIGNED_TRACK?"#ef4444":"#f5a623",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:800}}>{trackLessons.length} קורסים</span>
                       </div>
                       {trackLessons.map(l=>{
                         const studio = studios.find(s=>String(s.id)===String(l.studioId));
