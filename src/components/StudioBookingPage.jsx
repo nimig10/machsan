@@ -137,6 +137,7 @@ export default function StudioBookingPage(props) {
   const weekOffset = isEmbedded ? embeddedWeekOffset : internalWeekOffset;
   const setWeekOffset = isEmbedded ? () => {} : setInternalWeekOffset;
   const [calendarFullscreen, setCalendarFullscreen] = useState(false);
+  const [lessonsFilter, setLessonsFilter] = useState(false);
   const [todayOnly, setTodayOnly] = useState(false);
   const [sortMode, setSortMode] = useState("urgency");
   const [futureRangeDays, setFutureRangeDays] = useState(7);
@@ -197,9 +198,9 @@ export default function StudioBookingPage(props) {
 
   // "Lessons only" filter: show only classroom studios + lesson-type bookings
   const visibleStudios = useMemo(() => {
-    if (!lessonsOnly) return studios;
+    if (!lessonsOnly && !lessonsFilter) return studios;
     return studios.filter(s => s.isClassroom || s.classroomOnly);
-  }, [studios, lessonsOnly]);
+  }, [studios, lessonsOnly, lessonsFilter]);
 
   const saveStudios = useCallback(async (nextStudios) => {
     setStudios(nextStudios);
@@ -473,11 +474,11 @@ export default function StudioBookingPage(props) {
     activeBookings
       .filter((booking) => {
         if (!sameStudioId(booking.studioId, studioId) || booking.date !== fullDate) return false;
-        if (lessonsOnly && getBookingKind(booking) !== "lesson") return false;
+        if ((lessonsOnly || lessonsFilter) && getBookingKind(booking) !== "lesson") return false;
         return true;
       })
       .sort((left, right) => (left.startTime || "").localeCompare(right.startTime || ""))
-  ), [activeBookings, lessonsOnly, getBookingKind]);
+  ), [activeBookings, lessonsOnly, lessonsFilter, getBookingKind]);
 
   const uploadToCloudinary = async (file) => {
     const dataUrl = await new Promise((resolve, reject) => {
@@ -846,6 +847,7 @@ export default function StudioBookingPage(props) {
                   </span>
                   <button className="btn btn-secondary btn-sm" onClick={() => { if (mobileDayStart + MOBILE_DAYS < 7) setMobileDayStart(s => s + MOBILE_DAYS); else setWeekOffset(w => w + 1); }}>←</button>
                   <button className="btn btn-secondary btn-sm" onClick={() => { setWeekOffset(0); }} style={{ fontSize:11 }}>היום</button>
+                  <button className={`btn btn-sm ${lessonsFilter ? "btn-primary" : "btn-secondary"}`} onClick={() => setLessonsFilter(f => !f)} style={{ fontSize:11, background: lessonsFilter ? "rgba(245,166,35,0.25)" : undefined, borderColor: lessonsFilter ? "#f5a623" : undefined, color: lessonsFilter ? "#f5a623" : undefined }}>📚 שיעורים</button>
                   <button className="btn btn-secondary btn-sm" onClick={() => setCalendarFullscreen(true)} style={{ fontSize:11 }}>⛶</button>
                 </>
               ) : (
@@ -853,6 +855,7 @@ export default function StudioBookingPage(props) {
                   <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current - 1)}>→</button>
                   <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(0)}>היום</button>
                   <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current + 1)}>←</button>
+                  <button className={`btn btn-sm ${lessonsFilter ? "btn-primary" : "btn-secondary"}`} onClick={() => setLessonsFilter(f => !f)} style={{ fontSize:12, background: lessonsFilter ? "rgba(245,166,35,0.25)" : undefined, borderColor: lessonsFilter ? "#f5a623" : undefined, color: lessonsFilter ? "#f5a623" : undefined }}>📚 שיעורים</button>
                   {!calendarFullscreen && <span style={{ fontSize:12, color:"var(--text3)", whiteSpace:"nowrap" }}>
                     {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth() + 1).padStart(2, "0")} – {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth() + 1).padStart(2, "0")}
                   </span>}
