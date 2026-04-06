@@ -137,6 +137,10 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
   const [showLessons, setShowLessons] = useState(false);
   const [showStudentBookings, setShowStudentBookings] = useState(false);
   const [showLoans, setShowLoans] = useState(false);
+  const [viewMode, setViewMode] = useState("week"); // "week" | "day"
+  const [dayViewIdx, setDayViewIdx] = useState(0);  // 0=Sun … 5=Fri
+  const [dayMenuOpen, setDayMenuOpen] = useState(false);
+  const dayMenuRef = useRef(null);
 
   /* Load staff members from Supabase */
   useEffect(() => {
@@ -173,6 +177,8 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
   const workDays = useMemo(() => weekDates.slice(0, 6), [weekDates]); // Sun–Fri, no Saturday
   const startDate = weekDates[0];
   const endDate = weekDates[6];
+  // In day-view mode show only the selected day column
+  const displayDays = viewMode === "day" ? [workDays[dayViewIdx]] : workDays;
 
   /* Load holidays from Hebcal API */
   useEffect(() => {
@@ -327,7 +333,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
   );
 
   const today = todayStr();
-  const hasAbsent = workDays.some(d => allDaySlots[d]?.absent?.length > 0);
+  const hasAbsent = displayDays.some(d => allDaySlots[d]?.absent?.length > 0);
 
   // Month picker: figure out which month option is currently "selected"
   const monthOptions = getMonthOptions();
@@ -347,6 +353,15 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [monthMenuOpen]);
+
+  useEffect(() => {
+    if (!dayMenuOpen) return;
+    const close = (e) => {
+      if (dayMenuRef.current && !dayMenuRef.current.contains(e.target)) setDayMenuOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [dayMenuOpen]);
 
   const openBlockEditor = (block, date) => {
     if (!isAdmin && block.type === "assignment") {
@@ -376,12 +391,76 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
         </div>
       </div>
 
-      {/* ── Week Navigation + Filters ── */}
+      {/* ── Week/Day Navigation + Filters ── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, flexWrap: "wrap", gap: 8, direction: "rtl" }}>
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-          <button className="btn btn-secondary btn-sm" disabled={weekOffset <= MIN_WEEK_OFFSET} onClick={() => setWeekOffset(w => w - 1)}>→</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(0)}>השבוע</button>
-          <button className="btn btn-secondary btn-sm" disabled={weekOffset >= MAX_WEEK_OFFSET} onClick={() => setWeekOffset(w => w + 1)}>←</button>
+          {/* ← → navigate weeks (week mode) or days (day mode) */}
+          <button className="btn btn-secondary btn-sm"
+            disabled={viewMode === "week" ? weekOffset <= MIN_WEEK_OFFSET : false}
+            onClick={() => {
+              if (viewMode === "day") {
+                if (dayViewIdx > 0) { setDayViewIdx(i => i - 1); }
+                else { setWeekOffset(w => w - 1); setDayViewIdx(5); }
+              } else { setWeekOffset(w => w - 1); }
+            }}>→</button>
+
+          {/* "השבוע" / day picker dropdown */}
+          <div style={{ position: "relative" }} ref={dayMenuRef}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => setDayMenuOpen(v => !v)}
+              style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4, minWidth: 72 }}
+            >
+              {viewMode === "day"
+                ? `${HE_DAYS[new Date(displayDays[0] + "T00:00:00").getDay()]} ${new Date(displayDays[0] + "T00:00:00").getDate()}`
+                : "השבוע"}
+              <span style={{ fontSize: 9, opacity: 0.6 }}>▼</span>
+            </button>
+            {dayMenuOpen && (
+              <div style={{
+                position: "absolute", top: "100%", right: 0, zIndex: 210, marginTop: 4,
+                background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.35)", minWidth: 150, direction: "rtl",
+              }}>
+                {/* Week view option */}
+                <button
+                  onClick={() => { setViewMode("week"); setWeekOffset(0); setDayMenuOpen(false); }}
+                  style={{ display: "block", width: "100%", textAlign: "right", padding: "8px 14px",
+                    background: viewMode === "week" ? "rgba(59,130,246,0.18)" : "transparent",
+                    border: "none", borderBottom: "1px solid var(--border)",
+                    color: viewMode === "week" ? "#3b82f6" : "var(--text)",
+                    fontWeight: viewMode === "week" ? 800 : 600, fontSize: 13, cursor: "pointer" }}>
+                  📅 שבוע מלא
+                </button>
+                {/* Individual days */}
+                {workDays.map((date, i) => {
+                  const d = new Date(date + "T00:00:00");
+                  const isSel = viewMode === "day" && dayViewIdx === i;
+                  const isToday = date === today;
+                  return (
+                    <button key={date}
+                      onClick={() => { setViewMode("day"); setDayViewIdx(i); setDayMenuOpen(false); }}
+                      style={{ display: "block", width: "100%", textAlign: "right", padding: "7px 14px",
+                        background: isSel ? "rgba(59,130,246,0.18)" : "transparent",
+                        border: "none", borderBottom: i < 5 ? "1px solid var(--border)" : "none",
+                        color: isSel ? "#3b82f6" : isToday ? "var(--accent)" : "var(--text)",
+                        fontWeight: isSel || isToday ? 800 : 500, fontSize: 13, cursor: "pointer" }}>
+                      {HE_DAYS[d.getDay()]} {d.getDate()}/{d.getMonth() + 1}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <button className="btn btn-secondary btn-sm"
+            disabled={viewMode === "week" ? weekOffset >= MAX_WEEK_OFFSET : false}
+            onClick={() => {
+              if (viewMode === "day") {
+                if (dayViewIdx < 5) { setDayViewIdx(i => i + 1); }
+                else { setWeekOffset(w => w + 1); setDayViewIdx(0); }
+              } else { setWeekOffset(w => w + 1); }
+            }}>←</button>
 
           {/* Month picker dropdown */}
           <div style={{ position: "relative" }} ref={monthMenuRef}>
@@ -430,7 +509,9 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
         </div>
 
         <span style={{ fontSize: 15, fontWeight: 800, color: "var(--text)" }}>
-          {formatDateHe(startDate)} – {formatDateHe(workDays[5])}
+          {viewMode === "day"
+            ? `${HE_DAYS[new Date(displayDays[0] + "T00:00:00").getDay()]} ${formatDateHe(displayDays[0])}`
+            : `${formatDateHe(startDate)} – ${formatDateHe(workDays[5])}`}
         </span>
         {!isAdmin && (
           <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 16, fontWeight: 700,
@@ -452,14 +533,14 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
           {fetching && <div style={{ position: "absolute", inset: 0, zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}><div style={{ background: "var(--surface2)", padding: "6px 16px", borderRadius: 20, fontSize: 12, color: "var(--text3)", border: "1px solid var(--border)" }}>טוען...</div></div>}
           <div style={{
             display: "grid",
-            gridTemplateColumns: "80px repeat(6, 1fr)",
+            gridTemplateColumns: `80px repeat(${displayDays.length}, 1fr)`,
             direction: "rtl",
-            minWidth: 716,
+            minWidth: viewMode === "day" ? 280 : 716,
           }}>
 
             {/* ═══ Header Row ═══ */}
             <div style={{ background: "var(--surface2)", borderBottom: "1px solid var(--border)", borderLeft: "1px solid var(--border)" }} />
-            {workDays.map((date, i) => {
+            {displayDays.map((date, i) => {
               const dayIdx = new Date(date + "T00:00:00").getDay();
               const hol = holidays.find(h => h.date === date);
               const isToday = date === today;
@@ -500,7 +581,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                   </div>
 
                   {/* Day cells */}
-                  {workDays.map((date, i) => {
+                  {displayDays.map((date, i) => {
                     const members = allDaySlots[date]?.[slotKey] || [];
                     const isToday = date === today;
                     const dateEditable = isAdmin || canStaffEditDate(date);
@@ -512,7 +593,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                         style={{
                           background: cellBg,
                           borderTop: "1px solid var(--border)",
-                          borderLeft: i < 5 ? "1px solid var(--border)" : "none",
+                          borderLeft: i < displayDays.length - 1 ? "1px solid var(--border)" : "none",
                           padding: "5px 4px",
                           minHeight: 72,
                           position: "relative",
@@ -600,13 +681,13 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                   <span style={{ fontSize: 16 }}>{SHIFT_TYPES.absent.icon}</span>
                   <span style={{ fontSize: 8, color: SHIFT_TYPES.absent.color, fontWeight: 700, textAlign: "center" }}>{SHIFT_TYPES.absent.label}</span>
                 </div>
-                {workDays.map((date, i) => {
+                {displayDays.map((date, i) => {
                   const absent = allDaySlots[date]?.absent || [];
                   return (
                     <div key={date} style={{
                       background: SHIFT_TYPES.absent.bg,
                       borderTop: "1px solid var(--border)",
-                      borderLeft: i < 5 ? "1px solid var(--border)" : "none",
+                      borderLeft: i < displayDays.length - 1 ? "1px solid var(--border)" : "none",
                       padding: "5px 4px",
                       minHeight: 36,
                     }}>
@@ -643,19 +724,19 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
             <SectionDivider title="📚 לו&quot;ז יומי — שיעורים" open={showLessons} onToggle={() => setShowLessons(v => !v)} />
 
             {/* ══ Lessons body row ══ */}
-            {showLessons && <LessonsRow workDays={workDays} studioBookings={studioBookings} studios={studios} today={today} holidays={holidays} />}
+            {showLessons && <LessonsRow workDays={displayDays} studioBookings={studioBookings} studios={studios} today={today} holidays={holidays} />}
 
             {/* ══ Section divider: Student Bookings ══ */}
             <SectionDivider title="🎵 לו&quot;ז יומי — קביעות" open={showStudentBookings} onToggle={() => setShowStudentBookings(v => !v)} />
 
             {/* ══ Student Bookings body row ══ */}
-            {showStudentBookings && <StudentBookingsRow workDays={workDays} studioBookings={studioBookings} studios={studios} today={today} holidays={holidays} />}
+            {showStudentBookings && <StudentBookingsRow workDays={displayDays} studioBookings={studioBookings} studios={studios} today={today} holidays={holidays} />}
 
             {/* ══ Section divider: Loans ══ */}
             <SectionDivider title="📦 בקשות השאלה" open={showLoans} onToggle={() => setShowLoans(v => !v)} />
 
             {/* ══ Loans body row ══ */}
-            {showLoans && <LoansRow workDays={workDays} reservations={reservations} today={today} />}
+            {showLoans && <LoansRow workDays={displayDays} reservations={reservations} today={today} />}
 
           </div>
         </div>
@@ -724,6 +805,19 @@ function getBookingKind(b) {
   return "student";
 }
 
+/* ── Time-of-day grouping for lessons ── */
+const LESSON_PERIODS = [
+  { key: "morning",  label: "🌅 בוקר",   from: "09:00", to: "13:00", color: "#f59e0b" },
+  { key: "noon",     label: "☀️ צהריים", from: "13:00", to: "17:00", color: "#22c55e" },
+  { key: "evening",  label: "🌙 ערב",    from: "17:00", to: "22:00", color: "#3b82f6" },
+];
+function lessonPeriod(startTime) {
+  if (!startTime) return "evening";
+  if (startTime < "13:00") return "morning";
+  if (startTime < "17:00") return "noon";
+  return "evening";
+}
+
 /* ══════════ Lessons row — direct grid children (Fragment) ══════════ */
 function LessonsRow({ workDays, studioBookings, studios, today, holidays }) {
   const bookings = Array.isArray(studioBookings) ? studioBookings : [];
@@ -742,23 +836,39 @@ function LessonsRow({ workDays, studioBookings, studios, today, holidays }) {
       </div>
       {/* Day cells */}
       {workDays.map((date, i) => {
-        const lessons = bookings
+        const allLessons = bookings
           .filter(b => b.date === date && b.status !== "נדחה" && getBookingKind(b) === "lesson")
           .sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
+
+        // Group by time period
+        const groups = LESSON_PERIODS.map(p => ({
+          ...p,
+          items: allLessons.filter(b => lessonPeriod(b.startTime) === p.key),
+        })).filter(g => g.items.length > 0);
+
         return (
-          <div key={date} style={{ padding: "4px 3px", borderLeft: i < 5 ? "1px solid var(--border)" : "none", borderTop: "1px solid var(--border)", minHeight: 54 }}>
-            {lessons.map((b, j) => {
-              const studio = studioMap[String(b.studioId)];
-              return (
-                <div key={b.id || j} style={{ background: "rgba(245,166,35,0.12)", border: "1px solid rgba(245,166,35,0.3)", borderRadius: 5, padding: "3px 5px", marginBottom: 3 }}>
-                  <div style={{ fontWeight: 800, color: "#f5a623", fontSize: 10 }}>{b.startTime || ""}–{b.endTime || ""}</div>
-                  <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 11, lineHeight: 1.3 }}>{b.courseName || b.studentName || "שיעור"}</div>
-                  {b.instructorName && <div style={{ color: "#f5a623", fontSize: 11, fontWeight: 700 }}>👨‍🏫 {b.instructorName}</div>}
-                  {studio && <div style={{ color: "var(--text2)", fontSize: 11, fontWeight: 600 }}>🏛️ {studio.name}</div>}
+          <div key={date} style={{ padding: "4px 3px", borderLeft: i < workDays.length - 1 ? "1px solid var(--border)" : "none", borderTop: "1px solid var(--border)", minHeight: 54 }}>
+            {groups.map(group => (
+              <div key={group.key}>
+                {/* Period header */}
+                <div style={{ fontSize: 8, fontWeight: 800, color: group.color, marginBottom: 2, marginTop: 2, paddingRight: 2 }}>
+                  {group.label}
                 </div>
-              );
-            })}
-            {lessons.length === 0 && <div style={{ color: "var(--text3)", textAlign: "center", paddingTop: 14, fontSize: 10 }}>—</div>}
+                {group.items.map((b, j) => {
+                  const studio = studioMap[String(b.studioId)];
+                  return (
+                    <div key={b.id || j} style={{ background: "rgba(245,166,35,0.12)", border: "1px solid rgba(245,166,35,0.3)", borderRadius: 5, padding: "3px 5px", marginBottom: 3 }}>
+                      <div style={{ fontWeight: 800, color: "#f5a623", fontSize: 10 }}>{b.startTime || ""}–{b.endTime || ""}</div>
+                      <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 11, lineHeight: 1.3 }}>{b.courseName || b.studentName || "שיעור"}</div>
+                      {b.instructorName && <div style={{ color: "#f5a623", fontSize: 11, fontWeight: 700 }}>👨‍🏫 {b.instructorName}</div>}
+                      {b.track && <div style={{ color: "var(--text3)", fontSize: 9, fontWeight: 600 }}>📍 {b.track}</div>}
+                      {studio && <div style={{ color: "var(--text2)", fontSize: 11, fontWeight: 600 }}>🏛️ {studio.name}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+            {allLessons.length === 0 && <div style={{ color: "var(--text3)", textAlign: "center", paddingTop: 14, fontSize: 10 }}>—</div>}
           </div>
         );
       })}
@@ -788,7 +898,7 @@ function StudentBookingsRow({ workDays, studioBookings, studios, today, holidays
           .filter(b => b.date === date && b.status !== "נדחה" && getBookingKind(b) === "student")
           .sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
         return (
-          <div key={date} style={{ padding: "4px 3px", borderLeft: i < 5 ? "1px solid var(--border)" : "none", borderTop: "1px solid var(--border)", minHeight: 54 }}>
+          <div key={date} style={{ padding: "4px 3px", borderLeft: i < workDays.length - 1 ? "1px solid var(--border)" : "none", borderTop: "1px solid var(--border)", minHeight: 54 }}>
             {students.map((b, j) => {
               const studio = studioMap[String(b.studioId)];
               return (
@@ -820,6 +930,7 @@ function LoanChip({ r, isReturn }) {
       </div>
       <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 10, lineHeight: 1.3 }}>{r.student_name || "—"}</div>
       <div style={{ color: "var(--text3)", fontSize: 9 }}>{(r.items || []).length} פריטים · {r.loan_type || ""}</div>
+      {r.status && <div style={{ fontSize: 8, fontWeight: 700, color: r.status === "מאושר" ? "#22c55e" : r.status === "ממתין" ? "#f59e0b" : "var(--text3)", marginTop: 1 }}>● {r.status}</div>}
     </div>
   );
 }
@@ -848,7 +959,7 @@ function LoansRow({ workDays, reservations, today }) {
         const lessonReturns = returns.filter(r => r.loan_type === "שיעור");
         const hasData = studentBorrows.length + lessonBorrows.length + studentReturns.length + lessonReturns.length > 0;
         return (
-          <div key={date} style={{ padding: "4px 3px", borderLeft: i < 5 ? "1px solid var(--border)" : "none", borderTop: "1px solid var(--border)", minHeight: 50, fontSize: 10 }}>
+          <div key={date} style={{ padding: "4px 3px", borderLeft: i < workDays.length - 1 ? "1px solid var(--border)" : "none", borderTop: "1px solid var(--border)", minHeight: 50, fontSize: 10 }}>
             {studentBorrows.map(r => <LoanChip key={`sb-${r.id}`} r={r} isReturn={false} />)}
             {studentReturns.map(r => <LoanChip key={`sr-${r.id}`} r={r} isReturn={true} />)}
             {lessonBorrows.map(r => <LoanChip key={`lb-${r.id}`} r={r} isReturn={false} />)}
@@ -1030,8 +1141,8 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
           </div>
         </div>
 
-        {/* Lock toggle — only for admin assigning ANOTHER member */}
-        {isAdmin && mode === "assignment" && !isEditingSelf && (
+        {/* Lock toggle — admin assignment (always shown so new assignments can be locked immediately) */}
+        {isAdmin && mode === "assignment" && (
           <div style={{ marginBottom: 14 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
               <input type="checkbox" checked={locked} onChange={e => setLocked(e.target.checked)} />
