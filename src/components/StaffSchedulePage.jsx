@@ -963,12 +963,14 @@ function LessonsRow({ workDays, studioBookings, studios, today, holidays }) {
 
 /* ══════════ Day Lessons Table (daily view) ══════════ */
 const DAY_LESSON_COLS = [
-  { key: "track",      label: "מסלול",       initW: 130 },
+  { key: "sessionNum", label: "#",            initW: 40 },
+  { key: "track",      label: "מסלול",       initW: 120 },
   { key: "startTime",  label: "משעה",        initW: 70 },
   { key: "endTime",    label: "עד שעה",      initW: 70 },
-  { key: "course",     label: "קורס",        initW: 170 },
-  { key: "instructor", label: "מרצה",        initW: 130 },
-  { key: "studio",     label: "כיתת לימוד",  initW: 140 },
+  { key: "course",     label: "קורס",        initW: 160 },
+  { key: "topic",      label: "שם השיעור",   initW: 130 },
+  { key: "instructor", label: "מרצה",        initW: 120 },
+  { key: "studio",     label: "כיתת לימוד",  initW: 130 },
   { key: "endDate",    label: "תאריך סיום",  initW: 100 },
 ];
 
@@ -1026,6 +1028,19 @@ function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEd
     const dates = lesson.schedule.map(s => s.date).filter(Boolean).sort();
     return dates[dates.length - 1] || "";
   };
+  const getSessionNum = (lessonId, sessionDate) => {
+    const lesson = (lessons || []).find(l => String(l.id) === String(lessonId));
+    if (!lesson?.schedule?.length) return null;
+    const sorted = [...lesson.schedule].filter(s => s.date).sort((a, b) => a.date.localeCompare(b.date));
+    const idx = sorted.findIndex(s => s.date === sessionDate);
+    return idx >= 0 ? idx + 1 : null;
+  };
+  const getSessionTopic = (lessonId, sessionDate) => {
+    const lesson = (lessons || []).find(l => String(l.id) === String(lessonId));
+    if (!lesson?.schedule?.length) return "";
+    const session = lesson.schedule.find(s => s.date === sessionDate);
+    return session?.topic || "";
+  };
   const fmtDate = (d) => { if (!d) return "—"; const [y, m, day] = d.split("-"); return `${day}/${m}/${y}`; };
 
   // Group bookings by time period
@@ -1076,6 +1091,8 @@ function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEd
                 const isEditing = editingId === b.id;
                 const studio = studioMap[String(b.studioId)];
                 const endDate = getLessonEndDate(b.lesson_id);
+                const sessionNum = getSessionNum(b.lesson_id, b.date);
+                const sessionTopic = getSessionTopic(b.lesson_id, b.date);
                 return (
                   <div key={b.id}
                     onClick={() => { if (!isEditing && canEdit) startEdit(b); }}
@@ -1085,6 +1102,7 @@ function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEd
                       cursor: canEdit && !isEditing ? "pointer" : "default",
                     }}
                   >
+                    <div style={{ ...tdBase, textAlign: "center" }}><span style={{ fontWeight: 800, color: "var(--text3)", fontSize: 11 }}>{sessionNum != null ? `#${sessionNum}` : "—"}</span></div>
                     <div style={{ ...tdBase }}><span style={{ color: "var(--text)", fontWeight: 600 }}>{b.track || "—"}</span></div>
                     <div style={{ ...tdBase }}>
                       {isEditing ? (
@@ -1101,6 +1119,7 @@ function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEd
                       ) : <span style={{ fontWeight: 700 }}>{b.endTime || "—"}</span>}
                     </div>
                     <div style={{ ...tdBase }}><span style={{ fontWeight: 700, color: "var(--text)" }}>{b.courseName || "—"}</span></div>
+                    <div style={{ ...tdBase }}><span style={{ color: "var(--text2)", fontStyle: sessionTopic ? "normal" : "italic" }}>{sessionTopic || "—"}</span></div>
                     <div style={{ ...tdBase }}><span style={{ color: "var(--text2)" }}>{b.instructorName || "—"}</span></div>
                     <div style={{ ...tdBase }}>
                       {isEditing ? (
