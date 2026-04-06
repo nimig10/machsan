@@ -7244,9 +7244,46 @@ export default function App() {
           setManagerToken(mgrTok || "");
         _setStudios(Array.isArray(stds) ? stds : []);
         _setStudioBookings(Array.isArray(stdBk) ? stdBk : []);
-        const lsns = lessonsR.value;
-        _setLessons(Array.isArray(lsns) ? lsns : []);
-        _setLecturers(Array.isArray(lecturersR.value) ? lecturersR.value : []);
+        const lsns = Array.isArray(lessonsR.value) ? lessonsR.value : [];
+        _setLessons(lsns);
+        let loadedLecturers = Array.isArray(lecturersR.value) ? lecturersR.value : [];
+
+        // ── Sync: extract lecturers from existing lessons that aren't in the lecturers list yet ──
+        const existingNames = new Set(loadedLecturers.map(l => String(l.fullName || "").trim().toLowerCase()));
+        const newLecturers = [];
+        const updatedLessons = [];
+        let lessonsChanged = false;
+        for (const lesson of lsns) {
+          const name = String(lesson.instructorName || "").trim();
+          if (!name) { updatedLessons.push(lesson); continue; }
+          const nameLower = name.toLowerCase();
+          if (!existingNames.has(nameLower)) {
+            const lec = makeLecturer({
+              fullName: name,
+              phone: String(lesson.instructorPhone || "").trim(),
+              email: String(lesson.instructorEmail || "").trim(),
+            });
+            newLecturers.push(lec);
+            existingNames.add(nameLower);
+            updatedLessons.push({ ...lesson, lecturerId: lec.id });
+            lessonsChanged = true;
+          } else if (!lesson.lecturerId) {
+            const matched = [...loadedLecturers, ...newLecturers].find(l => String(l.fullName || "").trim().toLowerCase() === nameLower);
+            if (matched) { updatedLessons.push({ ...lesson, lecturerId: matched.id }); lessonsChanged = true; }
+            else updatedLessons.push(lesson);
+          } else {
+            updatedLessons.push(lesson);
+          }
+        }
+        if (newLecturers.length > 0) {
+          loadedLecturers = [...loadedLecturers, ...newLecturers];
+          await storageSet("lecturers", loadedLecturers);
+        }
+        if (lessonsChanged) {
+          _setLessons(updatedLessons);
+          await storageSet("lessons", updatedLessons);
+        }
+        _setLecturers(loadedLecturers);
           const loadedSettings = siteSet || { logo:"", theme:"dark" };
         _setSiteSettings(loadedSettings);
         try { localStorage.setItem("cache_siteSettings", JSON.stringify(loadedSettings)); } catch {}
