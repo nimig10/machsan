@@ -15,6 +15,7 @@ const DEFAULT_PERMISSIONS = {
   warehouseSections: [],   // [] = all; or specific section ids
   administrationSections: [],
   notifyLoanTypes: [],     // [] = none; or ["פרטית","הפקה","סאונד","קולנוע יומית","שיעור"]
+  canEditDailyLessons: false,
 };
 
 async function sbFetch(path, options = {}) {

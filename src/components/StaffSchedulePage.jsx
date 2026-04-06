@@ -1,6 +1,7 @@
 // StaffSchedulePage.jsx — Staff weekly schedule + daily activity summary
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
 import { Modal } from "./ui.jsx";
+import { storageSet } from "../utils.js";
 
 /* ── Half-hour time slots 09:00–22:00 ── */
 const TIME_SLOTS = (() => {
@@ -117,8 +118,9 @@ async function scheduleApi(action, body = {}) {
 }
 
 /* ══════════════════════ Main Component ══════════════════════ */
-export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBookings = [], reservations = [] }) {
+export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBookings = [], reservations = [], lessons = [], setLessons }) {
   const isAdmin = staffUser?.role === "admin";
+  const canEditLessons = isAdmin || !!staffUser?.permissions?.canEditDailyLessons;
   const currentStaffId = staffUser?.id;
 
   const [staffList, setStaffList] = useState([]);
@@ -387,6 +389,44 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
     setEditModal({ staffId: sid, date, mode: isAdmin ? "assignment" : "preference", existing: null, defaultShift, prefEntry: pref, asgnEntry: asgn });
   };
 
+  /* ── Edit/delete daily lesson schedule entries ── */
+  const handleEditLessonSession = async (lessonId, sessionDate, updates) => {
+    // Check for studio conflicts before saving
+    if (updates.studioId) {
+      const allBookings = Array.isArray(studioBookings) ? studioBookings : [];
+      const conflict = allBookings.find(b =>
+        b.date === sessionDate &&
+        String(b.studioId) === String(updates.studioId) &&
+        !(b.lesson_id && String(b.lesson_id) === String(lessonId) && b.date === sessionDate) &&
+        b.status !== "נדחה" &&
+        (updates.startTime || "00:00") < (b.endTime || "23:59") &&
+        (updates.endTime || "23:59") > (b.startTime || "00:00")
+      );
+      if (conflict) {
+        showToast("error", "לא ניתן להשלים את העריכה — חפיפה עם קביעה קיימת בכיתה זו");
+        return false;
+      }
+    }
+    const updated = lessons.map(l => {
+      if (String(l.id) !== String(lessonId)) return l;
+      return { ...l, schedule: (l.schedule || []).map(s => s.date === sessionDate ? { ...s, ...updates } : s) };
+    });
+    setLessons(updated);
+    await storageSet("lessons", updated);
+    showToast("success", "השיעור עודכן");
+    return true;
+  };
+
+  const handleDeleteLessonSession = async (lessonId, sessionDate) => {
+    const updated = lessons.map(l => {
+      if (String(l.id) !== String(lessonId)) return l;
+      return { ...l, schedule: (l.schedule || []).filter(s => s.date !== sessionDate) };
+    });
+    setLessons(updated);
+    await storageSet("lessons", updated);
+    showToast("success", "השיעור נמחק מיום זה");
+  };
+
   /* ══════════ Render ══════════ */
   return (
     <div className="page" style={{ padding: "16px 12px" }}>
@@ -412,7 +452,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
               } else { setWeekOffset(w => w - 1); }
             }}>→</button>
 
-          {/* "השבוע" / day picker dropdown */}
+          {/* View mode dropdown (שבוע / day picker) */}
           <div style={{ position: "relative" }} ref={dayMenuRef}>
             <button
               className="btn btn-secondary btn-sm"
@@ -421,7 +461,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
             >
               {viewMode === "day"
                 ? `${HE_DAYS[new Date(displayDays[0] + "T00:00:00").getDay()]} ${new Date(displayDays[0] + "T00:00:00").getDate()}`
-                : "השבוע"}
+                : "שבוע"}
               <span style={{ fontSize: 9, opacity: 0.6 }}>▼</span>
             </button>
             {dayMenuOpen && (
@@ -432,7 +472,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
               }}>
                 {/* Week view option */}
                 <button
-                  onClick={() => { setViewMode("week"); setWeekOffset(0); setDayMenuOpen(false); }}
+                  onClick={() => { setViewMode("week"); setDayMenuOpen(false); }}
                   style={{ display: "block", width: "100%", textAlign: "right", padding: "8px 14px",
                     background: viewMode === "week" ? "rgba(59,130,246,0.18)" : "transparent",
                     border: "none", borderBottom: "1px solid var(--border)",
@@ -469,6 +509,20 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                 else { setWeekOffset(w => w + 1); setDayViewIdx(0); }
               } else { setWeekOffset(w => w + 1); }
             }}>←</button>
+
+          {/* Return to current week */}
+          {weekOffset !== 0 && (
+            <button className="btn btn-secondary btn-sm"
+              onClick={() => {
+                setWeekOffset(0);
+                if (viewMode === "day") {
+                  const todayIdx = workDays.findIndex(d => d === today);
+                  setDayViewIdx(todayIdx >= 0 ? todayIdx : 0);
+                }
+              }}
+              style={{ fontSize: 11, opacity: 0.85 }}
+            >השבוע הנוכחי</button>
+          )}
 
           {/* Month picker dropdown */}
           <div style={{ position: "relative" }} ref={monthMenuRef}>
@@ -732,7 +786,20 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
             <SectionDivider title="📚 לו&quot;ז יומי — שיעורים" open={showLessons} onToggle={() => setShowLessons(v => !v)} />
 
             {/* ══ Lessons body row ══ */}
-            {showLessons && <LessonsRow workDays={displayDays} studioBookings={studioBookings} studios={studios} today={today} holidays={holidays} />}
+            {showLessons && viewMode === "day" ? (
+              <DayLessonsTable
+                date={displayDays[0]}
+                studioBookings={studioBookings}
+                studios={studios}
+                lessons={lessons}
+                canEdit={canEditLessons}
+                onEditSession={handleEditLessonSession}
+                onDeleteSession={handleDeleteLessonSession}
+                showToast={showToast}
+              />
+            ) : showLessons && (
+              <LessonsRow workDays={displayDays} studioBookings={studioBookings} studios={studios} today={today} holidays={holidays} />
+            )}
 
             {/* ══ Section divider: Student Bookings ══ */}
             <SectionDivider title="🎵 לו&quot;ז יומי — קביעות" open={showStudentBookings} onToggle={() => setShowStudentBookings(v => !v)} />
@@ -881,6 +948,122 @@ function LessonsRow({ workDays, studioBookings, studios, today, holidays }) {
         );
       })}
     </Fragment>
+  );
+}
+
+/* ══════════ Day Lessons Table (daily view) ══════════ */
+function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEditSession, onDeleteSession, showToast }) {
+  const bookings = (Array.isArray(studioBookings) ? studioBookings : [])
+    .filter(b => b.date === date && b.status !== "נדחה" && getBookingKind(b) === "lesson")
+    .sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
+  const studioMap = Object.fromEntries((studios || []).map(s => [String(s.id), s]));
+  const classroomStudios = (studios || []).filter(s => s.isClassroom || s.classroomOnly);
+
+  const [editingId, setEditingId] = useState(null);
+  const [editVals, setEditVals] = useState({});
+  const [confirmDelete, setConfirmDelete] = useState(null);
+
+  const startEdit = (b) => {
+    setEditingId(b.id);
+    setEditVals({ startTime: b.startTime, endTime: b.endTime, studioId: b.studioId || "" });
+  };
+  const cancelEdit = () => { setEditingId(null); setEditVals({}); };
+  const saveEdit = async (b) => {
+    const ok = await onEditSession(b.lesson_id, b.date, editVals);
+    if (ok !== false) { setEditingId(null); setEditVals({}); }
+  };
+
+  const getLessonEndDate = (lessonId) => {
+    const lesson = (lessons || []).find(l => String(l.id) === String(lessonId));
+    if (!lesson?.schedule?.length) return "";
+    const dates = lesson.schedule.map(s => s.date).filter(Boolean).sort();
+    return dates[dates.length - 1] || "";
+  };
+
+  const formatHe = (d) => { if (!d) return "—"; const [y, m, day] = d.split("-"); return `${day}/${m}/${y}`; };
+
+  const thStyle = { padding: "8px 10px", textAlign: "right", fontWeight: 800, fontSize: 12, color: "#f5a623", borderBottom: "2px solid rgba(245,166,35,0.4)", whiteSpace: "nowrap" };
+  const tdStyle = { padding: "6px 10px", borderBottom: "1px solid var(--border)", fontSize: 12, verticalAlign: "middle" };
+
+  return (
+    <div style={{ gridColumn: "1 / -1", padding: "8px 6px", overflowX: "auto" }}>
+      {bookings.length === 0 ? (
+        <div style={{ textAlign: "center", color: "var(--text3)", padding: 20, fontSize: 13 }}>אין שיעורים ביום זה</div>
+      ) : (
+        <table style={{ width: "100%", borderCollapse: "collapse", direction: "rtl", background: "var(--surface2)", borderRadius: 8, overflow: "hidden" }}>
+          <thead>
+            <tr style={{ background: "rgba(245,166,35,0.10)" }}>
+              <th style={thStyle}>מסלול</th>
+              <th style={thStyle}>משעה</th>
+              <th style={thStyle}>עד שעה</th>
+              <th style={thStyle}>קורס</th>
+              <th style={thStyle}>מרצה</th>
+              <th style={thStyle}>כיתת לימוד</th>
+              <th style={thStyle}>תאריך סיום</th>
+              {canEdit && <th style={{ ...thStyle, textAlign: "center", width: 70 }}>עריכה</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {bookings.map(b => {
+              const isEditing = editingId === b.id;
+              const studio = studioMap[String(b.studioId)];
+              const endDate = getLessonEndDate(b.lesson_id);
+              return (
+                <tr key={b.id} style={{ background: isEditing ? "rgba(245,166,35,0.06)" : "transparent" }}>
+                  <td style={tdStyle}><span style={{ color: "var(--text)", fontWeight: 600 }}>{b.track || "—"}</span></td>
+                  <td style={tdStyle}>
+                    {isEditing ? (
+                      <select className="form-select" value={editVals.startTime} onChange={e => setEditVals(v => ({ ...v, startTime: e.target.value }))} style={{ fontSize: 12, padding: "3px 4px", height: 28 }}>
+                        {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    ) : <span style={{ fontWeight: 700 }}>{b.startTime || "—"}</span>}
+                  </td>
+                  <td style={tdStyle}>
+                    {isEditing ? (
+                      <select className="form-select" value={editVals.endTime} onChange={e => setEditVals(v => ({ ...v, endTime: e.target.value }))} style={{ fontSize: 12, padding: "3px 4px", height: 28 }}>
+                        {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    ) : <span style={{ fontWeight: 700 }}>{b.endTime || "—"}</span>}
+                  </td>
+                  <td style={tdStyle}><span style={{ fontWeight: 700, color: "var(--text)" }}>{b.courseName || "—"}</span></td>
+                  <td style={tdStyle}><span style={{ color: "var(--text2)" }}>{b.instructorName || "—"}</span></td>
+                  <td style={tdStyle}>
+                    {isEditing ? (
+                      <select className="form-select" value={editVals.studioId || ""} onChange={e => setEditVals(v => ({ ...v, studioId: e.target.value || null }))} style={{ fontSize: 12, padding: "3px 4px", height: 28 }}>
+                        <option value="">ללא שיוך</option>
+                        {classroomStudios.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    ) : <span style={{ fontWeight: 600 }}>{studio?.name || "—"}</span>}
+                  </td>
+                  <td style={tdStyle}><span style={{ color: "var(--text3)", fontSize: 11 }}>{formatHe(endDate)}</span></td>
+                  {canEdit && (
+                    <td style={{ ...tdStyle, textAlign: "center" }}>
+                      {isEditing ? (
+                        <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
+                          <button onClick={() => saveEdit(b)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15, color: "#22c55e", padding: 2 }} title="שמור">✓</button>
+                          <button onClick={cancelEdit} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15, color: "#ef4444", padding: 2 }} title="בטל">✕</button>
+                        </div>
+                      ) : confirmDelete === b.id ? (
+                        <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
+                          <span style={{ fontSize: 10, color: "var(--text3)" }}>למחוק?</span>
+                          <button onClick={async () => { await onDeleteSession(b.lesson_id, b.date); setConfirmDelete(null); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#ef4444", padding: 2 }} title="אישור">✓</button>
+                          <button onClick={() => setConfirmDelete(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--text3)", padding: 2 }} title="בטל">✕</button>
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
+                          <button onClick={() => startEdit(b)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: 2 }} title="ערוך">✏️</button>
+                          <button onClick={() => setConfirmDelete(b.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: 2 }} title="מחק">🗑️</button>
+                        </div>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }
 

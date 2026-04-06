@@ -7616,7 +7616,7 @@ export default function App() {
                 <span className="topbar-title" style={{flex:1}}>חלוקת משמרות</span>
               </div>
             </div>
-            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <StaffSchedulePage staffUser={staffUser} showToast={showToast} studios={studios} studioBookings={studioBookings} reservations={reservations}/>}
+            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <StaffSchedulePage staffUser={staffUser} showToast={showToast} studios={studios} studioBookings={studioBookings} reservations={reservations} lessons={lessons} setLessons={setLessons}/>}
           </div>
         </div>
       )}

@@ -30,6 +30,7 @@ const DEFAULT_PERMISSIONS = {
   warehouseSections: [],
   administrationSections: [],
   notifyLoanTypes: [],
+  canEditDailyLessons: false,
 };
 
 function mergePerms(p) {
@@ -302,6 +303,17 @@ function StaffTab({ showToast, teamMembers, setTeamMembers }) {
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {editUser?.role !== "admin" && (
+              <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 12, padding: 16 }}>
+                <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 10 }}>📋 הרשאות נוספות</div>
+                <CheckRow
+                  label='📚 עריכת לו"ז יומי — שיעורים בלו"ז עובדים'
+                  checked={!!perms.canEditDailyLessons}
+                  onChange={checked => setPerms({ canEditDailyLessons: checked })}
+                />
               </div>
             )}
 
