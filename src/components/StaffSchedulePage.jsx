@@ -597,7 +597,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
             display: "grid",
             gridTemplateColumns: `80px repeat(${displayDays.length}, 1fr)`,
             direction: "rtl",
-            minWidth: viewMode === "day" ? 280 : 716,
+            minWidth: viewMode === "day" ? (showLessons ? 980 : 280) : 716,
           }}>
 
             {/* ═══ Header Row ═══ */}
@@ -925,34 +925,21 @@ function LessonsRow({ workDays, studioBookings, studios, today, holidays }) {
           .filter(b => b.date === date && b.status !== "נדחה" && getBookingKind(b) === "lesson")
           .sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
 
-        // Group by time period
-        const groups = LESSON_PERIODS.map(p => ({
-          ...p,
-          items: allLessons.filter(b => lessonPeriod(b.startTime) === p.key),
-        })).filter(g => g.items.length > 0);
-
         return (
           <div key={date} style={{ padding: "4px 3px", borderLeft: i < workDays.length - 1 ? "1px solid var(--border)" : "none", borderTop: "1px solid var(--border)", minHeight: 54 }}>
-            {groups.map(group => (
-              <div key={group.key}>
-                {/* Period header */}
-                <div style={{ fontSize: 8, fontWeight: 800, color: group.color, marginBottom: 2, marginTop: 2, paddingRight: 2 }}>
-                  {group.label}
+            {allLessons.map((b, j) => {
+              const studio = studioMap[String(b.studioId)];
+              const period = LESSON_PERIODS.find(p => p.key === lessonPeriod(b.startTime));
+              return (
+                <div key={b.id || j} style={{ background: "rgba(245,166,35,0.12)", border: "1px solid rgba(245,166,35,0.3)", borderRadius: 5, padding: "3px 5px", marginBottom: 3, borderRight: `2px solid ${period?.color || "#f5a623"}` }}>
+                  <div style={{ fontWeight: 800, color: "#f5a623", fontSize: 10 }}>{b.startTime || ""}–{b.endTime || ""}</div>
+                  <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 11, lineHeight: 1.3 }}>{b.courseName || b.studentName || "שיעור"}</div>
+                  {b.instructorName && <div style={{ color: "#f5a623", fontSize: 11, fontWeight: 700 }}>👨‍🏫 {b.instructorName}</div>}
+                  {b.track && <div style={{ color: "var(--text3)", fontSize: 9, fontWeight: 600 }}>📍 {b.track}</div>}
+                  {studio && <div style={{ color: "var(--text2)", fontSize: 11, fontWeight: 600 }}>🏛️ {studio.name}</div>}
                 </div>
-                {group.items.map((b, j) => {
-                  const studio = studioMap[String(b.studioId)];
-                  return (
-                    <div key={b.id || j} style={{ background: "rgba(245,166,35,0.12)", border: "1px solid rgba(245,166,35,0.3)", borderRadius: 5, padding: "3px 5px", marginBottom: 3 }}>
-                      <div style={{ fontWeight: 800, color: "#f5a623", fontSize: 10 }}>{b.startTime || ""}–{b.endTime || ""}</div>
-                      <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 11, lineHeight: 1.3 }}>{b.courseName || b.studentName || "שיעור"}</div>
-                      {b.instructorName && <div style={{ color: "#f5a623", fontSize: 11, fontWeight: 700 }}>👨‍🏫 {b.instructorName}</div>}
-                      {b.track && <div style={{ color: "var(--text3)", fontSize: 9, fontWeight: 600 }}>📍 {b.track}</div>}
-                      {studio && <div style={{ color: "var(--text2)", fontSize: 11, fontWeight: 600 }}>🏛️ {studio.name}</div>}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+              );
+            })}
             {allLessons.length === 0 && <div style={{ color: "var(--text3)", textAlign: "center", paddingTop: 14, fontSize: 10 }}>—</div>}
           </div>
         );
@@ -1056,7 +1043,7 @@ function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEd
   const gridTemplate = colWidths.map(w => `${w}px`).join(" ");
 
   return (
-    <div style={{ gridColumn: "1 / -1", padding: "8px 6px", overflowX: "auto" }}>
+    <div style={{ gridColumn: "1 / -1", padding: "8px 6px" }}>
       {bookings.length === 0 ? (
         <div style={{ textAlign: "center", color: "var(--text3)", padding: 20, fontSize: 13 }}>אין שיעורים ביום זה</div>
       ) : (
