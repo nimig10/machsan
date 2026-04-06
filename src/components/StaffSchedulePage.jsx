@@ -122,7 +122,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
   const currentStaffId = staffUser?.id;
 
   const [staffList, setStaffList] = useState([]);
-  const [weekOffset, setWeekOffset] = useState(0);
+  const [weekOffset, setWeekOffset] = useState(() => { try { return Number(sessionStorage.getItem("sch_weekOffset") || 0); } catch { return 0; } });
   const [preferences, setPreferences] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -134,13 +134,21 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
   const [editModal, setEditModal] = useState(null);
   const [notePopup, setNotePopup] = useState(null); // { memberName, note }
   const [myShiftsOnly, setMyShiftsOnly] = useState(false);
-  const [showLessons, setShowLessons] = useState(false);
-  const [showStudentBookings, setShowStudentBookings] = useState(false);
-  const [showLoans, setShowLoans] = useState(false);
-  const [viewMode, setViewMode] = useState("week"); // "week" | "day"
-  const [dayViewIdx, setDayViewIdx] = useState(0);  // 0=Sun … 5=Fri
+  const [showLessons, setShowLessons] = useState(() => { try { return localStorage.getItem("sch_showLessons") === "1"; } catch { return false; } });
+  const [showStudentBookings, setShowStudentBookings] = useState(() => { try { return localStorage.getItem("sch_showBookings") === "1"; } catch { return false; } });
+  const [showLoans, setShowLoans] = useState(() => { try { return localStorage.getItem("sch_showLoans") === "1"; } catch { return false; } });
+  const [viewMode, setViewMode] = useState(() => { try { return sessionStorage.getItem("sch_viewMode") || "week"; } catch { return "week"; } });
+  const [dayViewIdx, setDayViewIdx] = useState(() => { try { return Number(sessionStorage.getItem("sch_dayViewIdx") || 0); } catch { return 0; } });
   const [dayMenuOpen, setDayMenuOpen] = useState(false);
   const dayMenuRef = useRef(null);
+
+  /* Persist navigation state across page refreshes */
+  useEffect(() => { try { sessionStorage.setItem("sch_weekOffset", weekOffset); } catch {} }, [weekOffset]);
+  useEffect(() => { try { sessionStorage.setItem("sch_viewMode", viewMode); } catch {} }, [viewMode]);
+  useEffect(() => { try { sessionStorage.setItem("sch_dayViewIdx", dayViewIdx); } catch {} }, [dayViewIdx]);
+  useEffect(() => { try { localStorage.setItem("sch_showLessons", showLessons ? "1" : "0"); } catch {} }, [showLessons]);
+  useEffect(() => { try { localStorage.setItem("sch_showBookings", showStudentBookings ? "1" : "0"); } catch {} }, [showStudentBookings]);
+  useEffect(() => { try { localStorage.setItem("sch_showLoans", showLoans ? "1" : "0"); } catch {} }, [showLoans]);
 
   /* Load staff members from Supabase */
   useEffect(() => {
