@@ -64,6 +64,13 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
   const [editNotes, setEditNotes] = useState("");
 
   // Derive tracks from lessons for each lecturer
+  const UNASSIGNED = "לא משויך";
+  const knownTracks = useMemo(() => new Set((trackOptions || []).map(t => String(t || "").trim()).filter(Boolean)), [trackOptions]);
+  const normalizeTrack = (raw) => {
+    const t = String(raw || "").trim();
+    return (t && t !== "כללי" && knownTracks.has(t)) ? t : UNASSIGNED;
+  };
+
   const lecturerTracks = useMemo(() => {
     const map = {};
     const nameToId = {};
@@ -72,16 +79,13 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
       map[lec.id] = new Set();
     }
     for (const l of lessons) {
-      const track = String(l.track || "").trim();
-      if (!track) continue;
       let lecId = l.lecturerId;
-      if (!lecId && l.instructorName) {
-        lecId = nameToId[String(l.instructorName || "").trim().toLowerCase()];
-      }
-      if (lecId && map[lecId]) map[lecId].add(track);
+      if (!lecId && l.instructorName) lecId = nameToId[String(l.instructorName || "").trim().toLowerCase()];
+      if (!lecId || !map[lecId]) continue;
+      map[lecId].add(normalizeTrack(l.track));
     }
     return map;
-  }, [lessons, lecturers]);
+  }, [lessons, lecturers, knownTracks]);
 
   const linkedLecturerIds = useMemo(() => {
     const ids = new Set();
@@ -100,7 +104,10 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
   const allDerivedTracks = useMemo(() => {
     const set = new Set();
     for (const id in lecturerTracks) for (const t of lecturerTracks[id]) set.add(t);
-    return [...set].sort((a, b) => a.localeCompare(b, "he"));
+    // Known tracks first (sorted), then "לא משויך" last
+    const known = [...set].filter(t => t !== UNASSIGNED).sort((a, b) => a.localeCompare(b, "he"));
+    if (set.has(UNASSIGNED)) known.push(UNASSIGNED);
+    return known;
   }, [lecturerTracks]);
 
   /* ── Actions ── */
@@ -298,12 +305,14 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
           <span style={{ fontSize: 12, color: "var(--text3)", fontWeight: 600 }}>מסלולים:</span>
           {allDerivedTracks.map(t => {
             const active = trackFilter.includes(t);
+            const isUnassigned = t === UNASSIGNED;
             return (
               <button key={t} type="button"
                 onClick={() => setTrackFilter(prev => active ? prev.filter(x => x !== t) : [...prev, t])}
-                style={{ fontSize: 11, padding: "3px 10px", borderRadius: 12, border: "1px solid var(--border)",
-                  background: active ? "var(--accent)" : "var(--surface2)",
-                  color: active ? "#000" : "var(--text)",
+                style={{ fontSize: 11, padding: "3px 10px", borderRadius: 12,
+                  border: `1px solid ${isUnassigned ? (active ? "#ef4444" : "rgba(239,68,68,0.5)") : "var(--border)"}`,
+                  background: active ? (isUnassigned ? "rgba(239,68,68,0.18)" : "var(--accent)") : "var(--surface2)",
+                  color: active ? (isUnassigned ? "#ef4444" : "#000") : (isUnassigned ? "rgba(239,68,68,0.8)" : "var(--text)"),
                   cursor: "pointer", fontWeight: active ? 700 : 400, transition: "all 0.15s" }}
               >{t}</button>
             );
@@ -368,7 +377,7 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                       <td style={td}>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                           {tracks.length > 0
-                            ? tracks.map(t => <span key={t} style={{ background: "rgba(245,166,35,0.15)", color: "#f5a623", borderRadius: 12, padding: "2px 8px", fontSize: 11, fontWeight: 600 }}>{t}</span>)
+                            ? tracks.map(t => <span key={t} style={{ background: t===UNASSIGNED?"rgba(239,68,68,0.15)":"rgba(245,166,35,0.15)", color: t===UNASSIGNED?"#ef4444":"#f5a623", borderRadius: 12, padding: "2px 8px", fontSize: 11, fontWeight: 600 }}>{t}</span>)
                             : <span style={{ color: "var(--text3)", fontSize: 12 }}>—</span>}
                         </div>
                       </td>
