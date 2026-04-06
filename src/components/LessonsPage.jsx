@@ -224,6 +224,35 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const normalizedTrackOptions = [...new Set((trackOptions || []).map((option) => String(option || "").trim()).filter(Boolean))];
   const isKnownTrack = (value = "") => normalizedTrackOptions.includes(String(value || "").trim());
 
+  // Auto-create lecturers from imported lessons and link them
+  const syncImportedLecturers = async (importedLessons) => {
+    if (!setLecturers) return importedLessons;
+    const existingNames = new Set(lecturers.map(l => String(l.fullName || "").trim().toLowerCase()));
+    const newLecs = [];
+    const nameToId = {};
+    for (const lec of lecturers) nameToId[String(lec.fullName || "").trim().toLowerCase()] = lec.id;
+
+    const updated = importedLessons.map(lesson => {
+      const instrName = String(lesson.instructorName || "").trim();
+      if (!instrName) return lesson;
+      const key = instrName.toLowerCase();
+      if (!existingNames.has(key) && !nameToId[key]) {
+        const newLec = makeLecturer({ fullName: instrName, phone: lesson.instructorPhone || "", email: lesson.instructorEmail || "" });
+        newLecs.push(newLec);
+        existingNames.add(key);
+        nameToId[key] = newLec.id;
+      }
+      return { ...lesson, lecturerId: nameToId[key] || lesson.lecturerId || null };
+    });
+
+    if (newLecs.length > 0) {
+      const allLecs = [...lecturers, ...newLecs];
+      setLecturers(allLecs);
+      await storageSet("lecturers", allLecs);
+    }
+    return updated;
+  };
+
   const lessonKits = kits.filter(k=>k.kitType==="lesson");
   const getLinkedKit = (lesson) => {
     if(!lesson) return null;
@@ -570,8 +599,9 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
         addedCount += 1;
       });
 
-      setLessons(updatedLessons);
-      await storageSet("lessons", updatedLessons);
+      const synced = await syncImportedLecturers(updatedLessons);
+      setLessons(synced);
+      await storageSet("lessons", synced);
       showToast("success", `יובאו ${addedCount} קורסים ועודכנו ${updatedCount} קורסים`);
     } catch (error) {
       console.error("Lessons XL import failed", error);
@@ -849,8 +879,9 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             addedCount += 1;
           });
 
-          setLessons(updatedLessons);
-          await storageSet("lessons", updatedLessons);
+          const synced = await syncImportedLecturers(updatedLessons);
+          setLessons(synced);
+          await storageSet("lessons", synced);
           showToast("success", `פוענחו ${cleanedLessons.length} שיעורים. נוספו ${addedCount} קורסים ועודכנו ${updatedCount} קורסים.`);
         } catch (err) {
           console.error("Error processing Excel:", err);
@@ -1120,10 +1151,8 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
   const initialLinkedKitId = initial?.kitId || lessonKits.find(k=>k.lessonId !== null && k.lessonId !== undefined && String(k.lessonId).trim() !== "" && String(k.lessonId)===String(initial?.id||""))?.id || "";
   const [name, setName]                       = useState(initial?.name||"");
   const [track, setTrack]                     = useState(initial?.track||"");
-  const [lecturerId, setLecturerId]           = useState(initial?.lecturerId||"");
-  const [instructorName, setInstructorName]   = useState(initial?.instructorName||"");
-  const [instructorPhone, setInstructorPhone] = useState(initial?.instructorPhone||"");
-  const [instructorEmail, setInstructorEmail] = useState(initial?.instructorEmail||"");
+  const initLecturerId = initial?.lecturerId || (initial?.instructorName ? (lecturers.find(l => l.fullName.trim().toLowerCase() === String(initial.instructorName||"").trim().toLowerCase())?.id || "") : "");
+  const [lecturerId, setLecturerId]           = useState(initLecturerId);
   const [description, setDescription]         = useState(initial?.description||"");
   const [studioId, setStudioId]               = useState(initial?.studioId||"");
   const [kitId, setKitId]                     = useState(initialLinkedKitId);
@@ -1208,13 +1237,15 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
     });
   };
 
+  const selectedLecturerObj = lecturerId ? lecturers.find(l => l.id === lecturerId) : null;
   const sendTeacherEmail = async () => {
-    const recipient = String(instructorEmail||"").trim();
-    if(!recipient) { setLocalMsg({type:"error",text:"יש להזין מייל למרצה"}); return; }
+    const recipient = String(selectedLecturerObj?.email||"").trim();
+    if(!recipient) { setLocalMsg({type:"error",text:"למרצה שנבחר אין כתובת מייל"}); return; }
     const message = String(teacherMessage||"").trim();
     if(!message) { setLocalMsg({type:"error",text:"יש למלא נוסח הודעה"}); return; }
     setTeacherEmailSending(true);
     try {
+      const lecName = selectedLecturerObj?.fullName || name.trim() || "מורה";
       const scheduleList = (schedule||[]).map((s,i)=>
         `<div style="margin-bottom:6px;color:#c7cedf">שיעור ${i+1}: ${formatDate(s.date)} ${s.startTime||""}${s.endTime?`–${s.endTime}`:""}${s.topic?` · ${s.topic}`:""}</div>`
       ).join("");
@@ -1224,8 +1255,8 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
         body:JSON.stringify({
           to: recipient,
           type: "lesson_kit_ready",
-          student_name: instructorName.trim()||name.trim()||"מורה",
-          recipient_name: instructorName.trim()||name.trim()||"",
+          student_name: lecName,
+          recipient_name: lecName,
           lesson_kit_name: name.trim(),
           custom_message: message,
           items_list: "",
@@ -1260,28 +1291,15 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
     const invalidSession = finalSchedule.find(session => !session.date || session.startTime >= session.endTime);
     if(invalidSession) { setLocalMsg({type:"error",text:"יש לתקן תאריך או שעות לא תקינים בלוח השיעורים"}); return; }
     setSaving(true);
-    // Auto-create lecturer if name typed but no lecturerId linked
-    let resolvedLecturerId = lecturerId;
-    if (!resolvedLecturerId && instructorName.trim() && setLecturers) {
-      const existing = lecturers.find(l => l.fullName.trim().toLowerCase() === instructorName.trim().toLowerCase());
-      if (existing) {
-        resolvedLecturerId = existing.id;
-      } else {
-        const newLec = makeLecturer({ fullName: instructorName.trim(), phone: instructorPhone.trim(), email: instructorEmail.trim() });
-        const updatedLecs = [...lecturers, newLec];
-        setLecturers(updatedLecs);
-        await storageSet("lecturers", updatedLecs);
-        resolvedLecturerId = newLec.id;
-      }
-    }
+    const selectedLecturer = lecturerId ? lecturers.find(l => l.id === lecturerId) : null;
     const lesson = {
       id: initial?.id||`lesson_${Date.now()}`,
       name: name.trim(),
       track: track.trim(),
-      lecturerId: resolvedLecturerId || null,
-      instructorName: instructorName.trim(),
-      instructorPhone: instructorPhone.trim(),
-      instructorEmail: instructorEmail.trim(),
+      lecturerId: lecturerId || null,
+      instructorName: selectedLecturer?.fullName || "",
+      instructorPhone: selectedLecturer?.phone || "",
+      instructorEmail: selectedLecturer?.email || "",
       description: description.trim(),
       studioId: studioId||null,
       kitId: kitId||null,
@@ -1454,44 +1472,15 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
           <label className="form-label">שם הקורס *</label>
           <input className="form-input" placeholder='לדוגמה: "חדר טלוויזיה א"' value={name} onChange={e=>setName(e.target.value)}/>
         </div>
-        <div style={{marginBottom:10}}>
-          <div className="form-group" style={{marginBottom:6}}>
-            <label className="form-label" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span>שם המרצה</span>
-              {lecturers.length > 0 && <span style={{fontSize:11,color:"var(--text3)"}}>בחר מהרשימה או הקלד שם חדש</span>}
-            </label>
-            <datalist id="lecturers-list">
-              {lecturers.filter(l=>l.isActive!==false).map(l=>(
-                <option key={l.id} value={l.fullName}/>
-              ))}
-            </datalist>
-            <input className="form-input" list="lecturers-list" placeholder='ד"ר ישראל ישראלי' value={instructorName}
-              onChange={e=>{
-                setInstructorName(e.target.value);
-                const matched = lecturers.find(l=>l.fullName.trim().toLowerCase()===e.target.value.trim().toLowerCase());
-                if (matched) {
-                  setLecturerId(matched.id);
-                  if (matched.phone && !instructorPhone) setInstructorPhone(matched.phone);
-                  if (matched.email && !instructorEmail) setInstructorEmail(matched.email);
-                } else {
-                  setLecturerId("");
-                }
-              }}/>
-            {lecturerId && (
-              <div style={{fontSize:11,color:"#22c55e",marginTop:3}}>✓ מקושר למרצה קיים</div>
-            )}
-            {!lecturerId && instructorName.trim() && setLecturers && (
-              <div style={{fontSize:11,color:"var(--text3)",marginTop:3}}>מרצה חדש יווצר אוטומטית בשמירה</div>
-            )}
-          </div>
-        </div>
-        <div className="grid-2" style={{marginBottom:10}}>
-          <div className="form-group"><label className="form-label">טלפון מרצה</label>
-            <input className="form-input" placeholder="05x-xxxxxxx" value={instructorPhone} onChange={e=>setInstructorPhone(e.target.value)}/></div>
-          <div className="form-group">
-            <label className="form-label">מייל מרצה</label>
-            <input className="form-input" type="email" placeholder="lecturer@college.ac.il" value={instructorEmail} onChange={e=>setInstructorEmail(e.target.value)}/>
-          </div>
+        <div className="form-group" style={{marginBottom:10}}>
+          <label className="form-label">מרצה</label>
+          <select className="form-select" value={lecturerId} onChange={e=>setLecturerId(e.target.value)}>
+            <option value="">— ללא מרצה —</option>
+            {lecturers.filter(l=>l.isActive!==false).sort((a,b)=>a.fullName.localeCompare(b.fullName,"he")).map(l=>(
+              <option key={l.id} value={l.id}>{l.fullName}{l.phone ? ` · ${l.phone}` : ""}</option>
+            ))}
+          </select>
+          {!lecturers.length && <div style={{fontSize:11,color:"var(--text3)",marginTop:3}}>ניתן להוסיף מרצים דרך רובריקת "מרצים"</div>}
         </div>
         <div className="form-group" style={{marginBottom:10}}>
           <label className="form-label">מסלול לימודים</label>
@@ -1539,7 +1528,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
       </div>
 
       {/* Email to teacher */}
-      {instructorEmail && (
+      {selectedLecturerObj?.email && (
         <div style={{background:"rgba(52,152,219,0.06)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
           <div style={{fontWeight:800,fontSize:13,color:"#3498db",marginBottom:10}}>✉️ שליחת מייל למרצה</div>
           <textarea className="form-textarea" rows={3} placeholder="נוסח ההודעה למרצה..." value={teacherMessage} onChange={e=>setTeacherMessage(e.target.value)}/>
