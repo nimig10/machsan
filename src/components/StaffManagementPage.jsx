@@ -15,6 +15,7 @@ const ADMINISTRATION_SECTIONS = [
   { id: "studios",                label: "🎙️ ניהול חדרים" },
   { id: "studio-certifications",  label: "🎓 הסמכת אולפן" },
   { id: "lessons",                label: "📽️ שיעורים" },
+  { id: "lecturers",              label: "👩‍🏫 מרצים" },
   { id: "students",               label: "👨‍🎓 סטודנטים" },
   { id: "policies",               label: "📋 נהלים" },
   { id: "settings",               label: "⚙️ הגדרות" },

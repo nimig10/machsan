@@ -11,6 +11,7 @@ import { StudentsPage } from "./components/StudentsPage.jsx";
 import { CertificationsPage } from "./components/CertificationsPage.jsx";
 import { PublicForm } from "./components/PublicForm.jsx";
 import { LessonsPage } from "./components/LessonsPage.jsx";
+import { LecturersPage, makeLecturer } from "./components/LecturersPage.jsx";
 import SmartEquipmentImportButton from "./components/SmartEquipmentImportButton.jsx";
 import { SecretaryDashboardPage } from "./components/SecretaryDashboardPage.jsx";
 import { PublicDisplayPage } from "./components/PublicDisplayPage.jsx";
@@ -6851,6 +6852,7 @@ export default function App() {
   const [studios, _setStudios] = useState([]);
   const [studioBookings, _setStudioBookings] = useState([]);
   const [lessons, _setLessons] = useState([]);
+  const [lecturers, _setLecturers] = useState([]);
   const [equipmentReports, setEquipmentReports] = useState([]);
   const [loading, setLoading]         = useState(true);
   const [loadingDone, setLoadingDone] = useState(false);
@@ -6890,6 +6892,7 @@ export default function App() {
   const studiosRef = useRef(studios);
   const studioBookingsRef = useRef(studioBookings);
   const lessonsRef = useRef(lessons);
+  const lecturersRef = useRef(lecturers);
   const historySuspendedRef = useRef(true);
   const historyQueuedRef = useRef(false);
   const undoInFlightRef = useRef(false);
@@ -6910,6 +6913,7 @@ export default function App() {
   studiosRef.current = studios;
   studioBookingsRef.current = studioBookings;
   lessonsRef.current = lessons;
+  lecturersRef.current = lecturers;
 
   const applyPublicLiveSync = (key, value) => {
     if (key === "equipment" && Array.isArray(value)) {
@@ -6991,6 +6995,7 @@ export default function App() {
     studios: safeClone(studiosRef.current),
     studioBookings: safeClone(studioBookingsRef.current),
     lessons: safeClone(lessonsRef.current),
+    lecturers: safeClone(lecturersRef.current),
   });
 
 
@@ -7032,6 +7037,7 @@ export default function App() {
   const setStudios = createTrackedSetter(_setStudios);
   const setStudioBookings = createTrackedSetter(_setStudioBookings);
   const setLessons = createTrackedSetter(_setLessons);
+  const setLecturers = createTrackedSetter(_setLecturers);
 
   const fetchEquipmentReports = async () => {
     try { const r = await fetch("/api/equipment-report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"list"})}); const d = await r.json(); if(Array.isArray(d)) setEquipmentReports(d); } catch {}
@@ -7075,7 +7081,7 @@ export default function App() {
       const keysToUpdate = [
         "equipment", "reservations", "categories", "categoryTypes", "categoryLoanTypes",
         "teamMembers", "deptHeads", "collegeManager", "kits", "policies",
-        "certifications", "siteSettings", "studios", "studioBookings", "lessons"
+        "certifications", "siteSettings", "studios", "studioBookings", "lessons", "lecturers"
       ];
       
       const promises = [];
@@ -7100,6 +7106,7 @@ export default function App() {
       if (snapshot.studios) _setStudios(snapshot.studios);
       if (snapshot.studioBookings) _setStudioBookings(snapshot.studioBookings);
       if (snapshot.lessons) _setLessons(snapshot.lessons);
+      if (snapshot.lecturers) _setLecturers(snapshot.lecturers);
 
       let ok = true;
       if (promises.length > 0) {
@@ -7179,7 +7186,7 @@ export default function App() {
     (async()=>{
         try {
           historySuspendedRef.current = true;
-          const [eqR, resR, catsR, catTypesR, catLoanTypesR, tmR, ktsR, polR, certsR, dhsR, calTokR, mgrR, mgrTokR, siteSetR, studiosR, studioBkR, lessonsR] = await Promise.all([
+          const [eqR, resR, catsR, catTypesR, catLoanTypesR, tmR, ktsR, polR, certsR, dhsR, calTokR, mgrR, mgrTokR, siteSetR, studiosR, studioBkR, lessonsR, lecturersR] = await Promise.all([
             storageGet("equipment"),
           storageGet("reservations"),
           storageGet("categories"),
@@ -7197,6 +7204,7 @@ export default function App() {
           storageGet("studios"),
           storageGet("studio_bookings"),
           storageGet("lessons"),
+          storageGet("lecturers"),
           ]);
           // Extract values and sources
           const eq = eqR.value, eqSrc = eqR.source;
@@ -7238,6 +7246,7 @@ export default function App() {
         _setStudioBookings(Array.isArray(stdBk) ? stdBk : []);
         const lsns = lessonsR.value;
         _setLessons(Array.isArray(lsns) ? lsns : []);
+        _setLecturers(Array.isArray(lecturersR.value) ? lecturersR.value : []);
           const loadedSettings = siteSet || { logo:"", theme:"dark" };
         _setSiteSettings(loadedSettings);
         try { localStorage.setItem("cache_siteSettings", JSON.stringify(loadedSettings)); } catch {}
@@ -7719,7 +7728,7 @@ export default function App() {
                 initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports}/></div>
               <div style={{display:page==="team"?"block":"none"}}><TeamPage teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/></div>
               <div style={{display:page==="kits"?"block":"none"}}><KitsPage kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons}/></div>
-              <div style={{display:page==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length
+              <div style={{display:page==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} lecturers={lecturers} setLecturers={setLecturers} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length
                 ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean)
                 : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
               <div style={{display:page==="policies"?"block":"none"}}><PoliciesPage policies={policies} setPolicies={setPolicies} showToast={showToast}/></div>
@@ -7750,6 +7759,7 @@ export default function App() {
                 {id:"studios",icon:"🎙️",label:"ניהול חדרים"},
                 {id:"studio-certifications",icon:"🎓",label:"הסמכת אולפן"},
                 {id:"lessons",icon:"📽️",label:"שיעורים",badge:lessons.length||null},
+                {id:"lecturers",icon:"👩‍🏫",label:"מרצים",badge:lecturers.filter(l=>l.isActive!==false).length||null},
                 {id:"students",icon:"👨‍🎓",label:"סטודנטים"},
                 {id:"policies",icon:"📋",label:"נהלים"},
                 {id:"settings",icon:"⚙️",label:"הגדרות"},
@@ -7773,7 +7783,7 @@ export default function App() {
           <div className="main" onTouchStart={handleSwipeTouchStart} onTouchEnd={handleSecretarySwipeTouchEnd}>
             <div className="topbar" style={{flexWrap:"wrap",gap:8}}>
               <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
-                <span className="topbar-title" style={{flex:1}}>{{dashboard:"סטטוס אדמיניסטרציה",studios:"ניהול חדרים","studio-certifications":"הסמכת אולפן",lessons:"שיעורים",students:"סטודנטים",policies:"נהלים",settings:"הגדרות",team:"ניהול צוות"}[secretaryPage]||"סטטוס אדמיניסטרציה"}</span>
+                <span className="topbar-title" style={{flex:1}}>{{dashboard:"סטטוס אדמיניסטרציה",studios:"ניהול חדרים","studio-certifications":"הסמכת אולפן",lessons:"שיעורים",lecturers:"מרצים",students:"סטודנטים",policies:"נהלים",settings:"הגדרות",team:"ניהול צוות"}[secretaryPage]||"סטטוס אדמיניסטרציה"}</span>
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={handleUndo}
@@ -7795,7 +7805,8 @@ export default function App() {
               <div style={{display:secretaryPage==="dashboard"?"block":"none"}}><SecretaryDashboardPage certifications={certifications} studios={studios} studioBookings={studioBookings} lessons={lessons}/></div>
               <div style={{display:secretaryPage==="studios"?"block":"none"}}><StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin" studios={studios} setStudios={setStudios} bookings={studioBookings} setBookings={setStudioBookings} siteSettings={siteSettings} setSiteSettings={setSiteSettings} isActive={secretaryPage==="studios"} currentUser={staffUser} lessons={lessons} setLessons={setLessons} onNavigateToLesson={(lessonId) => { setEditLessonId(lessonId); setSecretaryPage("lessons"); }}/></div>
               <div style={{display:secretaryPage==="studio-certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment} onlyMode="studio"/></div>
-              <div style={{display:secretaryPage==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} openLessonId={editLessonId} onOpenLessonConsumed={() => setEditLessonId(null)} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean) : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
+              <div style={{display:secretaryPage==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} openLessonId={editLessonId} onOpenLessonConsumed={() => setEditLessonId(null)} lecturers={lecturers} setLecturers={setLecturers} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean) : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
+              <div style={{display:secretaryPage==="lecturers"?"block":"none"}}><LecturersPage lecturers={lecturers} setLecturers={setLecturers} showToast={showToast} trackOptions={Array.isArray(certifications?.trackSettings)&&certifications.trackSettings.length?certifications.trackSettings.map(s=>String(s?.name||"").trim()).filter(Boolean):[...new Set((certifications?.students||[]).map(s=>String(s?.track||"").trim()).filter(Boolean))]}/></div>
               <div style={{display:secretaryPage==="students"?"block":"none"}}><StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} onLogCreated={attachLogIdToUndo} studioBookings={studioBookings} setStudioBookings={setStudioBookings} reservations={reservations} setReservations={setReservations}/></div>
               <div style={{display:secretaryPage==="policies"?"block":"none"}}><PoliciesPage policies={policies} setPolicies={setPolicies} showToast={showToast}/></div>
               <div style={{display:secretaryPage==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} settingsRole="administration"/></div>

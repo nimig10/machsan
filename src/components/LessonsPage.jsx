@@ -2,6 +2,7 @@
 import { useRef, useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today } from "../utils.js";
+import { makeLecturer } from "./LecturersPage.jsx";
 
 let _skeyCounter = 0;
 
@@ -193,7 +194,7 @@ const fetchWithRetry = async (url, options, maxRetries = 5) => {
   return fetch(url, options);
 };
 
-export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[], trackOptions=[], studioBookings=[], setStudioBookings, certifications={}, openLessonId=null, onOpenLessonConsumed=null }) {
+export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[], trackOptions=[], studioBookings=[], setStudioBookings, certifications={}, openLessonId=null, onOpenLessonConsumed=null, lecturers=[], setLecturers }) {
   const [mode, setMode] = useState(null); // null | "add" | "edit"
   const [editTarget, setEditTarget] = useState(null);
   const [pendingLesson, setPendingLesson] = useState(null);
@@ -917,6 +918,8 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           kits={kits}
           showToast={showToast}
           trackOptions={trackOptions}
+          lecturers={lecturers}
+          setLecturers={setLecturers}
         />
       ) : (
         <>
@@ -1108,10 +1111,11 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 }
 
 // ── Lesson/Course Form ────────────────────────────────────────────────────────
-function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment, reservations, setReservations, kits, showToast, trackOptions=[] }) {
+function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment, reservations, setReservations, kits, showToast, trackOptions=[], lecturers=[], setLecturers }) {
   const initialLinkedKitId = initial?.kitId || lessonKits.find(k=>k.lessonId !== null && k.lessonId !== undefined && String(k.lessonId).trim() !== "" && String(k.lessonId)===String(initial?.id||""))?.id || "";
   const [name, setName]                       = useState(initial?.name||"");
   const [track, setTrack]                     = useState(initial?.track||"");
+  const [lecturerId, setLecturerId]           = useState(initial?.lecturerId||"");
   const [instructorName, setInstructorName]   = useState(initial?.instructorName||"");
   const [instructorPhone, setInstructorPhone] = useState(initial?.instructorPhone||"");
   const [instructorEmail, setInstructorEmail] = useState(initial?.instructorEmail||"");
@@ -1251,10 +1255,25 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
     const invalidSession = finalSchedule.find(session => !session.date || session.startTime >= session.endTime);
     if(invalidSession) { setLocalMsg({type:"error",text:"יש לתקן תאריך או שעות לא תקינים בלוח השיעורים"}); return; }
     setSaving(true);
+    // Auto-create lecturer if name typed but no lecturerId linked
+    let resolvedLecturerId = lecturerId;
+    if (!resolvedLecturerId && instructorName.trim() && setLecturers) {
+      const existing = lecturers.find(l => l.fullName.trim().toLowerCase() === instructorName.trim().toLowerCase());
+      if (existing) {
+        resolvedLecturerId = existing.id;
+      } else {
+        const newLec = makeLecturer({ fullName: instructorName.trim(), phone: instructorPhone.trim(), email: instructorEmail.trim() });
+        const updatedLecs = [...lecturers, newLec];
+        setLecturers(updatedLecs);
+        await storageSet("lecturers", updatedLecs);
+        resolvedLecturerId = newLec.id;
+      }
+    }
     const lesson = {
       id: initial?.id||`lesson_${Date.now()}`,
       name: name.trim(),
       track: track.trim(),
+      lecturerId: resolvedLecturerId || null,
       instructorName: instructorName.trim(),
       instructorPhone: instructorPhone.trim(),
       instructorEmail: instructorEmail.trim(),
@@ -1430,24 +1449,51 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
           <label className="form-label">שם הקורס *</label>
           <input className="form-input" placeholder='לדוגמה: "חדר טלוויזיה א"' value={name} onChange={e=>setName(e.target.value)}/>
         </div>
-        <div className="grid-2" style={{marginBottom:10}}>
-          <div className="form-group"><label className="form-label">שם המרצה</label>
-            <input className="form-input" placeholder='ד"ר ישראל ישראלי' value={instructorName} onChange={e=>setInstructorName(e.target.value)}/></div>
-          <div className="form-group"><label className="form-label">טלפון מרצה</label>
-            <input className="form-input" placeholder="05x-xxxxxxx" value={instructorPhone} onChange={e=>setInstructorPhone(e.target.value)}/></div>
+        <div style={{marginBottom:10}}>
+          <div className="form-group" style={{marginBottom:6}}>
+            <label className="form-label" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span>שם המרצה</span>
+              {lecturers.length > 0 && <span style={{fontSize:11,color:"var(--text3)"}}>בחר מהרשימה או הקלד שם חדש</span>}
+            </label>
+            <datalist id="lecturers-list">
+              {lecturers.filter(l=>l.isActive!==false).map(l=>(
+                <option key={l.id} value={l.fullName}/>
+              ))}
+            </datalist>
+            <input className="form-input" list="lecturers-list" placeholder='ד"ר ישראל ישראלי' value={instructorName}
+              onChange={e=>{
+                setInstructorName(e.target.value);
+                const matched = lecturers.find(l=>l.fullName.trim().toLowerCase()===e.target.value.trim().toLowerCase());
+                if (matched) {
+                  setLecturerId(matched.id);
+                  if (matched.phone && !instructorPhone) setInstructorPhone(matched.phone);
+                  if (matched.email && !instructorEmail) setInstructorEmail(matched.email);
+                } else {
+                  setLecturerId("");
+                }
+              }}/>
+            {lecturerId && (
+              <div style={{fontSize:11,color:"#22c55e",marginTop:3}}>✓ מקושר למרצה קיים</div>
+            )}
+            {!lecturerId && instructorName.trim() && setLecturers && (
+              <div style={{fontSize:11,color:"var(--text3)",marginTop:3}}>מרצה חדש יווצר אוטומטית בשמירה</div>
+            )}
+          </div>
         </div>
         <div className="grid-2" style={{marginBottom:10}}>
+          <div className="form-group"><label className="form-label">טלפון מרצה</label>
+            <input className="form-input" placeholder="05x-xxxxxxx" value={instructorPhone} onChange={e=>setInstructorPhone(e.target.value)}/></div>
           <div className="form-group">
             <label className="form-label">מייל מרצה</label>
             <input className="form-input" type="email" placeholder="lecturer@college.ac.il" value={instructorEmail} onChange={e=>setInstructorEmail(e.target.value)}/>
           </div>
-          <div className="form-group">
-            <label className="form-label">מסלול לימודים</label>
-            <select className="form-select" value={normalizedTrackOptions.includes(track) ? track : ""} onChange={e=>setTrack(e.target.value)}>
-              <option value="">בחר מסלול לימודים קיים</option>
-              {normalizedTrackOptions.map(option => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </div>
+        </div>
+        <div className="form-group" style={{marginBottom:10}}>
+          <label className="form-label">מסלול לימודים</label>
+          <select className="form-select" value={normalizedTrackOptions.includes(track) ? track : ""} onChange={e=>setTrack(e.target.value)}>
+            <option value="">בחר מסלול לימודים קיים</option>
+            {normalizedTrackOptions.map(option => <option key={option} value={option}>{option}</option>)}
+          </select>
         </div>
         <div className="form-group">
           <label className="form-label">הערות</label>
