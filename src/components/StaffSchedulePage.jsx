@@ -963,7 +963,7 @@ function LessonsRow({ workDays, studioBookings, studios, today, holidays }) {
 
 /* ══════════ Day Lessons Table (daily view) ══════════ */
 const DAY_LESSON_COLS = [
-  { key: "sessionNum", label: "#",            initW: 40 },
+  { key: "sessionNum", label: "מספר מפגש",   initW: 80 },
   { key: "track",      label: "מסלול",       initW: 120 },
   { key: "startTime",  label: "משעה",        initW: 70 },
   { key: "endTime",    label: "עד שעה",      initW: 70 },
@@ -1095,7 +1095,7 @@ function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEd
                 const sessionTopic = getSessionTopic(b.lesson_id, b.date);
                 return (
                   <div key={b.id}
-                    onClick={() => { if (!isEditing && canEdit) startEdit(b); }}
+                    onClick={() => { if (!canEdit) return; if (isEditing) cancelEdit(); else startEdit(b); }}
                     style={{
                       display: "grid", gridTemplateColumns: gridTemplate,
                       background: isEditing ? "rgba(245,166,35,0.06)" : "transparent",
