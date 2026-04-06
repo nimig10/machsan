@@ -44,20 +44,21 @@ function LecturerForm({ initial, onSave, onCancel, lecturers, trackOptions = [],
   const [fullName,    setFullName]    = useState(initial?.fullName    || "");
   const [phone,       setPhone]       = useState(initial?.phone       || "");
   const [email,       setEmail]       = useState(initial?.email       || "");
-  const [tracksRaw,   setTracksRaw]   = useState((initial?.studyTracks || []).join(", "));
+  const [selectedTracks, setSelectedTracks] = useState(initial?.studyTracks || []);
   const [notes,       setNotes]       = useState(initial?.notes       || "");
-  const [isActive,    setIsActive]    = useState(initial?.isActive !== false);
   const [saving,      setSaving]      = useState(false);
   const [dupWarning,  setDupWarning]  = useState(null);
 
   const isEdit = !!initial?.id;
 
-  const parseTracks = (raw) =>
-    raw.split(",").map(s => s.trim()).filter(Boolean);
+  const toggleTrack = (track) => {
+    setSelectedTracks(prev =>
+      prev.includes(track) ? prev.filter(t => t !== track) : [...prev, track]
+    );
+  };
 
   const handleSave = async (force = false) => {
     if (!fullName.trim()) { showToast("error", "שם מלא הוא שדה חובה"); return; }
-    const studyTracks = parseTracks(tracksRaw);
 
     if (!force) {
       const dup = findDuplicate(lecturers, { fullName, email, phone }, initial?.id);
@@ -67,7 +68,7 @@ function LecturerForm({ initial, onSave, onCancel, lecturers, trackOptions = [],
       }
     }
     setSaving(true);
-    onSave({ fullName: fullName.trim(), phone: phone.trim(), email: email.trim(), studyTracks, notes: notes.trim(), isActive });
+    onSave({ fullName: fullName.trim(), phone: phone.trim(), email: email.trim(), studyTracks: selectedTracks, notes: notes.trim() });
   };
 
   const inp = { className: "form-input", style: { width: "100%", boxSizing: "border-box" } };
@@ -101,32 +102,30 @@ function LecturerForm({ initial, onSave, onCancel, lecturers, trackOptions = [],
         </div>
       </div>
       <div style={row}>
-        <span style={lbl}>מסלולי לימוד (מופרדים בפסיק)</span>
-        <input {...inp} placeholder="הנדסאי קולנוע שנה א, הנדסת קול" value={tracksRaw} onChange={e => setTracksRaw(e.target.value)} />
-        {trackOptions.length > 0 && (
-          <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
-            {trackOptions.map(t => (
-              <button key={t} type="button"
-                onClick={() => {
-                  const cur = parseTracks(tracksRaw);
-                  if (!cur.includes(t)) setTracksRaw([...cur, t].join(", "));
-                }}
-                style={{ fontSize: 11, padding: "2px 8px", borderRadius: 12, border: "1px solid var(--border)", background: parseTracks(tracksRaw).includes(t) ? "var(--accent)" : "var(--surface2)", color: parseTracks(tracksRaw).includes(t) ? "#000" : "var(--text)", cursor: "pointer" }}
-              >{t}</button>
-            ))}
+        <span style={lbl}>מסלולי לימוד</span>
+        {trackOptions.length > 0 ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+            {trackOptions.map(t => {
+              const active = selectedTracks.includes(t);
+              return (
+                <button key={t} type="button"
+                  onClick={() => toggleTrack(t)}
+                  style={{ fontSize: 12, padding: "4px 12px", borderRadius: 12, border: "1px solid var(--border)",
+                    background: active ? "var(--accent)" : "var(--surface2)",
+                    color: active ? "#000" : "var(--text)",
+                    cursor: "pointer", fontWeight: active ? 700 : 400, transition: "all 0.15s" }}
+                >{t}</button>
+              );
+            })}
           </div>
+        ) : (
+          <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>לא הוגדרו מסלולי לימוד ברובריקת הסטודנטים</div>
         )}
       </div>
       <div style={row}>
         <span style={lbl}>הערות פנימיות</span>
         <textarea {...inp} rows={2} placeholder="הערות..." value={notes} onChange={e => setNotes(e.target.value)} style={{ ...inp.style, resize: "vertical" }} />
       </div>
-      {isEdit && (
-        <div style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
-          <input type="checkbox" id="lec-active" checked={isActive} onChange={e => setIsActive(e.target.checked)} />
-          <label htmlFor="lec-active" style={{ fontSize: 13, cursor: "pointer" }}>פעיל</label>
-        </div>
-      )}
 
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-start" }}>
         <button className="btn btn-primary" onClick={() => handleSave()} disabled={saving}>{saving ? "שומר..." : isEdit ? "עדכן" : "הוסף מרצה"}</button>
@@ -137,11 +136,30 @@ function LecturerForm({ initial, onSave, onCancel, lecturers, trackOptions = [],
 }
 
 /* ── Main exported component ── */
-export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOptions = [] }) {
+export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOptions = [], lessons = [] }) {
   const [search,      setSearch]      = useState("");
-  const [showInactive, setShowInactive] = useState(false);
   const [mode,        setMode]        = useState(null); // "add" | "edit"
   const [editTarget,  setEditTarget]  = useState(null);
+
+  // Build set of lecturerIds that are linked to at least one lesson
+  const linkedLecturerIds = useMemo(() => {
+    const ids = new Set();
+    for (const l of lessons) {
+      if (l.lecturerId) ids.add(l.lecturerId);
+    }
+    // Also match by instructorName for lessons without lecturerId
+    const nameToId = {};
+    for (const lec of lecturers) {
+      nameToId[String(lec.fullName || "").trim().toLowerCase()] = lec.id;
+    }
+    for (const l of lessons) {
+      if (!l.lecturerId && l.instructorName) {
+        const id = nameToId[String(l.instructorName || "").trim().toLowerCase()];
+        if (id) ids.add(id);
+      }
+    }
+    return ids;
+  }, [lessons, lecturers]);
 
   const save = async (fields) => {
     let updated;
@@ -159,22 +177,20 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
     setEditTarget(null);
   };
 
-  const archive = async (lec) => {
-    const updated = lecturers.map(l => l.id === lec.id ? makeLecturer({ ...l, isActive: !l.isActive }) : l);
+  const deleteLecturer = async (lec) => {
+    const updated = lecturers.filter(l => l.id !== lec.id);
     setLecturers(updated);
     await storageSet("lecturers", updated);
-    showToast("success", lec.isActive ? "המרצה הועבר לארכיון" : "המרצה שוחזר");
+    showToast("success", "המרצה נמחק");
   };
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return lecturers
-      .filter(l => showInactive ? true : l.isActive !== false)
+      .filter(l => l.isActive !== false)
       .filter(l => !q || l.fullName.toLowerCase().includes(q) || (l.email||"").toLowerCase().includes(q) || (l.phone||"").includes(q))
       .sort((a, b) => a.fullName.localeCompare(b.fullName, "he"));
-  }, [lecturers, search, showInactive]);
-
-  const inactiveCount = lecturers.filter(l => l.isActive === false).length;
+  }, [lecturers, search]);
 
   const th = { padding: "8px 12px", textAlign: "right", fontWeight: 800, fontSize: 12, color: "var(--text3)", borderBottom: "2px solid var(--border)", whiteSpace: "nowrap" };
   const td = { padding: "8px 12px", borderBottom: "1px solid var(--border)", fontSize: 13, verticalAlign: "middle" };
@@ -212,11 +228,6 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
       <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
         <input className="form-input" placeholder="🔍 חיפוש לפי שם / מייל / טלפון" value={search} onChange={e => setSearch(e.target.value)}
           style={{ flex: "1 1 220px", maxWidth: 320 }} />
-        {inactiveCount > 0 && (
-          <button className={`btn btn-sm ${showInactive ? "btn-primary" : "btn-secondary"}`} onClick={() => setShowInactive(v => !v)} style={{ fontSize: 12 }}>
-            {showInactive ? "הסתר" : `הצג לא פעילים (${inactiveCount})`}
-          </button>
-        )}
       </div>
 
       {/* Table */}
@@ -235,43 +246,43 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                 <th style={th}>טלפון</th>
                 <th style={th}>מייל</th>
                 <th style={th}>מסלולי לימוד</th>
-                <th style={th}>סטטוס</th>
                 <th style={{ ...th, textAlign: "center" }}>פעולות</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map(lec => (
-                <tr key={lec.id} style={{ opacity: lec.isActive === false ? 0.55 : 1 }}>
-                  <td style={{ ...td, fontWeight: 700 }}>{lec.fullName}</td>
-                  <td style={td}>{lec.phone || <span style={{ color: "var(--text3)" }}>—</span>}</td>
-                  <td style={td}><span style={{ fontSize: 12 }}>{lec.email || <span style={{ color: "var(--text3)" }}>—</span>}</span></td>
-                  <td style={td}>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                      {(lec.studyTracks || []).length > 0
-                        ? lec.studyTracks.map(t => (
-                            <span key={t} style={{ background: "rgba(245,166,35,0.15)", color: "#f5a623", borderRadius: 12, padding: "2px 8px", fontSize: 11, fontWeight: 600 }}>{t}</span>
-                          ))
-                        : <span style={{ color: "var(--text3)", fontSize: 12 }}>—</span>}
-                    </div>
-                  </td>
-                  <td style={td}>
-                    <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 12,
-                      background: lec.isActive !== false ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.1)",
-                      color: lec.isActive !== false ? "#22c55e" : "#ef4444" }}>
-                      {lec.isActive !== false ? "פעיל" : "ארכיון"}
-                    </span>
-                  </td>
-                  <td style={{ ...td, textAlign: "center" }}>
-                    <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => { setEditTarget(lec); setMode("edit"); }}>✏️ ערוך</button>
-                      <button className="btn btn-secondary btn-sm" style={{ color: lec.isActive !== false ? "var(--red)" : "#22c55e", borderColor: lec.isActive !== false ? "var(--red)" : "#22c55e", fontSize: 11 }}
-                        onClick={() => archive(lec)}>
-                        {lec.isActive !== false ? "העבר לארכיון" : "שחזר"}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {filtered.map(lec => {
+                const isLinked = linkedLecturerIds.has(lec.id);
+                return (
+                  <tr key={lec.id}>
+                    <td style={{ ...td, fontWeight: 700 }}>
+                      {lec.fullName}
+                      {!isLinked && (
+                        <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 400, marginTop: 2 }}>לא משויך לקורס</div>
+                      )}
+                    </td>
+                    <td style={td}>{lec.phone || <span style={{ color: "var(--text3)" }}>—</span>}</td>
+                    <td style={td}><span style={{ fontSize: 12 }}>{lec.email || <span style={{ color: "var(--text3)" }}>—</span>}</span></td>
+                    <td style={td}>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        {(lec.studyTracks || []).length > 0
+                          ? lec.studyTracks.map(t => (
+                              <span key={t} style={{ background: "rgba(245,166,35,0.15)", color: "#f5a623", borderRadius: 12, padding: "2px 8px", fontSize: 11, fontWeight: 600 }}>{t}</span>
+                            ))
+                          : <span style={{ color: "var(--text3)", fontSize: 12 }}>—</span>}
+                      </div>
+                    </td>
+                    <td style={{ ...td, textAlign: "center" }}>
+                      <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => { setEditTarget(lec); setMode("edit"); }}>✏️ ערוך</button>
+                        <button className="btn btn-secondary btn-sm" style={{ color: "var(--red)", borderColor: "var(--red)", fontSize: 11 }}
+                          onClick={() => { if (window.confirm(`למחוק את המרצה "${lec.fullName}"?`)) deleteLecturer(lec); }}>
+                          🗑️ מחק
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
