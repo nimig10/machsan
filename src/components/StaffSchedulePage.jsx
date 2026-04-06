@@ -783,7 +783,14 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
             )}
 
             {/* ══ Section divider: Lessons ══ */}
-            <SectionDivider title="📚 לו&quot;ז יומי — שיעורים" open={showLessons} onToggle={() => setShowLessons(v => !v)} />
+            <SectionDivider
+              title={viewMode === "day"
+                ? `📚 לו"ז יומי — שיעורים`
+                : `📚 לו"ז יומי — שיעורים`}
+              subtitle={viewMode === "day" ? `${HE_DAYS[new Date(displayDays[0] + "T00:00:00").getDay()]} ${formatDateHe(displayDays[0])}` : null}
+              open={showLessons}
+              onToggle={() => setShowLessons(v => !v)}
+            />
 
             {/* ══ Lessons body row ══ */}
             {showLessons && viewMode === "day" ? (
@@ -858,7 +865,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
 }
 
 /* ══════════ Section Divider — spans all 7 grid columns ══════════ */
-function SectionDivider({ title, open, onToggle }) {
+function SectionDivider({ title, subtitle, open, onToggle }) {
   return (
     <div style={{ gridColumn: "1 / -1", borderTop: "2px solid var(--border)" }}>
       <button onClick={onToggle} style={{
@@ -866,7 +873,10 @@ function SectionDivider({ title, open, onToggle }) {
         padding: "8px 14px", background: open ? "rgba(255,255,255,0.04)" : "var(--surface2)",
         border: "none", cursor: "pointer", color: "var(--text)", fontWeight: 800, fontSize: 13,
       }}>
-        <span>{title}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {title}
+          {subtitle && <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text3)" }}>{subtitle}</span>}
+        </span>
         <span style={{ fontSize: 10, color: "var(--text3)", transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "none" }}>▼</span>
       </button>
     </div>
@@ -952,18 +962,55 @@ function LessonsRow({ workDays, studioBookings, studios, today, holidays }) {
 }
 
 /* ══════════ Day Lessons Table (daily view) ══════════ */
-function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEditSession, onDeleteSession, showToast }) {
+const DAY_LESSON_COLS = [
+  { key: "track",      label: "מסלול",       initW: 130 },
+  { key: "startTime",  label: "משעה",        initW: 70 },
+  { key: "endTime",    label: "עד שעה",      initW: 70 },
+  { key: "course",     label: "קורס",        initW: 170 },
+  { key: "instructor", label: "מרצה",        initW: 130 },
+  { key: "studio",     label: "כיתת לימוד",  initW: 140 },
+  { key: "endDate",    label: "תאריך סיום",  initW: 100 },
+];
+
+function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEditSession, onDeleteSession }) {
   const bookings = (Array.isArray(studioBookings) ? studioBookings : [])
     .filter(b => b.date === date && b.status !== "נדחה" && getBookingKind(b) === "lesson")
     .sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
   const studioMap = Object.fromEntries((studios || []).map(s => [String(s.id), s]));
   const classroomStudios = (studios || []).filter(s => s.isClassroom || s.classroomOnly);
 
+  const baseCols = canEdit ? [...DAY_LESSON_COLS, { key: "actions", label: "", initW: 50 }] : DAY_LESSON_COLS;
+  const [colWidths, setColWidths] = useState(baseCols.map(c => c.initW));
+  const resizingRef = useRef(null);
+
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!resizingRef.current) return;
+      const { colIdx, startX, startWidth } = resizingRef.current;
+      const delta = startX - (e.touches ? e.touches[0].clientX : e.clientX); // RTL: drag left = wider
+      setColWidths(prev => prev.map((w, i) => i === colIdx ? Math.max(40, startWidth + delta) : w));
+    };
+    const onUp = () => { resizingRef.current = null; };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchmove", onMove);
+    window.addEventListener("touchend", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); window.removeEventListener("touchmove", onMove); window.removeEventListener("touchend", onUp); };
+  }, []);
+
+  const startResize = (colIdx, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    resizingRef.current = { colIdx, startX: clientX, startWidth: colWidths[colIdx] };
+  };
+
   const [editingId, setEditingId] = useState(null);
   const [editVals, setEditVals] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   const startEdit = (b) => {
+    if (!canEdit) return;
     setEditingId(b.id);
     setEditVals({ startTime: b.startTime, endTime: b.endTime, studioId: b.studioId || "" });
   };
@@ -979,89 +1026,114 @@ function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEd
     const dates = lesson.schedule.map(s => s.date).filter(Boolean).sort();
     return dates[dates.length - 1] || "";
   };
+  const fmtDate = (d) => { if (!d) return "—"; const [y, m, day] = d.split("-"); return `${day}/${m}/${y}`; };
 
-  const formatHe = (d) => { if (!d) return "—"; const [y, m, day] = d.split("-"); return `${day}/${m}/${y}`; };
+  // Group bookings by time period
+  const groups = LESSON_PERIODS.map(p => ({
+    ...p,
+    items: bookings.filter(b => lessonPeriod(b.startTime) === p.key),
+  })).filter(g => g.items.length > 0);
 
-  const thStyle = { padding: "8px 10px", textAlign: "right", fontWeight: 800, fontSize: 12, color: "#f5a623", borderBottom: "2px solid rgba(245,166,35,0.4)", whiteSpace: "nowrap" };
-  const tdStyle = { padding: "6px 10px", borderBottom: "1px solid var(--border)", fontSize: 12, verticalAlign: "middle" };
+  const borderCol = "1px solid var(--border)";
+  const thBase = { padding: "8px 10px", textAlign: "right", fontWeight: 800, fontSize: 12, color: "#f5a623", borderBottom: "2px solid rgba(245,166,35,0.4)", borderLeft: borderCol, whiteSpace: "nowrap", position: "relative", overflow: "hidden" };
+  const tdBase = { padding: "6px 10px", borderBottom: "1px solid var(--border)", borderLeft: borderCol, fontSize: 12, verticalAlign: "middle", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+
+  const gridTemplate = colWidths.map(w => `${w}px`).join(" ");
 
   return (
     <div style={{ gridColumn: "1 / -1", padding: "8px 6px", overflowX: "auto" }}>
       {bookings.length === 0 ? (
         <div style={{ textAlign: "center", color: "var(--text3)", padding: 20, fontSize: 13 }}>אין שיעורים ביום זה</div>
       ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse", direction: "rtl", background: "var(--surface2)", borderRadius: 8, overflow: "hidden" }}>
-          <thead>
-            <tr style={{ background: "rgba(245,166,35,0.10)" }}>
-              <th style={thStyle}>מסלול</th>
-              <th style={thStyle}>משעה</th>
-              <th style={thStyle}>עד שעה</th>
-              <th style={thStyle}>קורס</th>
-              <th style={thStyle}>מרצה</th>
-              <th style={thStyle}>כיתת לימוד</th>
-              <th style={thStyle}>תאריך סיום</th>
-              {canEdit && <th style={{ ...thStyle, textAlign: "center", width: 70 }}>עריכה</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {bookings.map(b => {
-              const isEditing = editingId === b.id;
-              const studio = studioMap[String(b.studioId)];
-              const endDate = getLessonEndDate(b.lesson_id);
-              return (
-                <tr key={b.id} style={{ background: isEditing ? "rgba(245,166,35,0.06)" : "transparent" }}>
-                  <td style={tdStyle}><span style={{ color: "var(--text)", fontWeight: 600 }}>{b.track || "—"}</span></td>
-                  <td style={tdStyle}>
-                    {isEditing ? (
-                      <select className="form-select" value={editVals.startTime} onChange={e => setEditVals(v => ({ ...v, startTime: e.target.value }))} style={{ fontSize: 12, padding: "3px 4px", height: 28 }}>
-                        {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                    ) : <span style={{ fontWeight: 700 }}>{b.startTime || "—"}</span>}
-                  </td>
-                  <td style={tdStyle}>
-                    {isEditing ? (
-                      <select className="form-select" value={editVals.endTime} onChange={e => setEditVals(v => ({ ...v, endTime: e.target.value }))} style={{ fontSize: 12, padding: "3px 4px", height: 28 }}>
-                        {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                    ) : <span style={{ fontWeight: 700 }}>{b.endTime || "—"}</span>}
-                  </td>
-                  <td style={tdStyle}><span style={{ fontWeight: 700, color: "var(--text)" }}>{b.courseName || "—"}</span></td>
-                  <td style={tdStyle}><span style={{ color: "var(--text2)" }}>{b.instructorName || "—"}</span></td>
-                  <td style={tdStyle}>
-                    {isEditing ? (
-                      <select className="form-select" value={editVals.studioId || ""} onChange={e => setEditVals(v => ({ ...v, studioId: e.target.value || null }))} style={{ fontSize: 12, padding: "3px 4px", height: 28 }}>
-                        <option value="">ללא שיוך</option>
-                        {classroomStudios.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                      </select>
-                    ) : <span style={{ fontWeight: 600 }}>{studio?.name || "—"}</span>}
-                  </td>
-                  <td style={tdStyle}><span style={{ color: "var(--text3)", fontSize: 11 }}>{formatHe(endDate)}</span></td>
-                  {canEdit && (
-                    <td style={{ ...tdStyle, textAlign: "center" }}>
+        <div style={{ direction: "rtl", background: "var(--surface2)", borderRadius: 8, overflow: "hidden", border: borderCol }}>
+          {/* Header */}
+          <div style={{ display: "grid", gridTemplateColumns: gridTemplate, background: "rgba(245,166,35,0.10)" }}>
+            {baseCols.map((col, ci) => (
+              <div key={col.key} style={{ ...thBase, borderLeft: ci === baseCols.length - 1 ? "none" : borderCol }}>
+                {col.label}
+                {ci < baseCols.length - (canEdit ? 1 : 0) && (
+                  <div
+                    onMouseDown={e => startResize(ci, e)}
+                    onTouchStart={e => startResize(ci, e)}
+                    style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 5, cursor: "col-resize", background: "transparent" }}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Body — grouped by time period */}
+          {groups.map(group => (
+            <Fragment key={group.key}>
+              {/* Period header row */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", background: `${group.color}18`, borderBottom: borderCol }}>
+                <div style={{ padding: "5px 14px", fontWeight: 800, fontSize: 11, color: group.color }}>
+                  {group.label} ({group.items.length})
+                </div>
+              </div>
+              {/* Lesson rows */}
+              {group.items.map(b => {
+                const isEditing = editingId === b.id;
+                const studio = studioMap[String(b.studioId)];
+                const endDate = getLessonEndDate(b.lesson_id);
+                return (
+                  <div key={b.id}
+                    onClick={() => { if (!isEditing && canEdit) startEdit(b); }}
+                    style={{
+                      display: "grid", gridTemplateColumns: gridTemplate,
+                      background: isEditing ? "rgba(245,166,35,0.06)" : "transparent",
+                      cursor: canEdit && !isEditing ? "pointer" : "default",
+                    }}
+                  >
+                    <div style={{ ...tdBase }}><span style={{ color: "var(--text)", fontWeight: 600 }}>{b.track || "—"}</span></div>
+                    <div style={{ ...tdBase }}>
                       {isEditing ? (
-                        <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
-                          <button onClick={() => saveEdit(b)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15, color: "#22c55e", padding: 2 }} title="שמור">✓</button>
-                          <button onClick={cancelEdit} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15, color: "#ef4444", padding: 2 }} title="בטל">✕</button>
-                        </div>
-                      ) : confirmDelete === b.id ? (
-                        <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
-                          <span style={{ fontSize: 10, color: "var(--text3)" }}>למחוק?</span>
-                          <button onClick={async () => { await onDeleteSession(b.lesson_id, b.date); setConfirmDelete(null); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#ef4444", padding: 2 }} title="אישור">✓</button>
-                          <button onClick={() => setConfirmDelete(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--text3)", padding: 2 }} title="בטל">✕</button>
-                        </div>
-                      ) : (
-                        <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
-                          <button onClick={() => startEdit(b)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: 2 }} title="ערוך">✏️</button>
-                          <button onClick={() => setConfirmDelete(b.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: 2 }} title="מחק">🗑️</button>
-                        </div>
-                      )}
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                        <select className="form-select" value={editVals.startTime} onClick={e => e.stopPropagation()} onChange={e => setEditVals(v => ({ ...v, startTime: e.target.value }))} style={{ fontSize: 12, padding: "2px 4px", height: 26, width: "100%" }}>
+                          {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      ) : <span style={{ fontWeight: 700 }}>{b.startTime || "—"}</span>}
+                    </div>
+                    <div style={{ ...tdBase }}>
+                      {isEditing ? (
+                        <select className="form-select" value={editVals.endTime} onClick={e => e.stopPropagation()} onChange={e => setEditVals(v => ({ ...v, endTime: e.target.value }))} style={{ fontSize: 12, padding: "2px 4px", height: 26, width: "100%" }}>
+                          {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      ) : <span style={{ fontWeight: 700 }}>{b.endTime || "—"}</span>}
+                    </div>
+                    <div style={{ ...tdBase }}><span style={{ fontWeight: 700, color: "var(--text)" }}>{b.courseName || "—"}</span></div>
+                    <div style={{ ...tdBase }}><span style={{ color: "var(--text2)" }}>{b.instructorName || "—"}</span></div>
+                    <div style={{ ...tdBase }}>
+                      {isEditing ? (
+                        <select className="form-select" value={editVals.studioId || ""} onClick={e => e.stopPropagation()} onChange={e => setEditVals(v => ({ ...v, studioId: e.target.value || null }))} style={{ fontSize: 12, padding: "2px 4px", height: 26, width: "100%" }}>
+                          <option value="">ללא שיוך</option>
+                          {classroomStudios.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      ) : <span style={{ fontWeight: 600 }}>{studio?.name || "—"}</span>}
+                    </div>
+                    <div style={{ ...tdBase }}><span style={{ color: "var(--text3)", fontSize: 11 }}>{fmtDate(endDate)}</span></div>
+                    {canEdit && (
+                      <div style={{ ...tdBase, borderLeft: "none", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {isEditing ? (
+                          <div style={{ display: "flex", gap: 4 }} onClick={e => e.stopPropagation()}>
+                            <button onClick={() => saveEdit(b)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15, color: "#22c55e", padding: 2 }} title="שמור">✓</button>
+                            <button onClick={cancelEdit} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15, color: "#ef4444", padding: 2 }} title="בטל">✕</button>
+                          </div>
+                        ) : confirmDelete === b.id ? (
+                          <div style={{ display: "flex", gap: 3, alignItems: "center" }} onClick={e => e.stopPropagation()}>
+                            <button onClick={async () => { await onDeleteSession(b.lesson_id, b.date); setConfirmDelete(null); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#ef4444", padding: 2 }}>✓</button>
+                            <button onClick={() => setConfirmDelete(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--text3)", padding: 2 }}>✕</button>
+                          </div>
+                        ) : (
+                          <button onClick={e => { e.stopPropagation(); setConfirmDelete(b.id); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: 2 }} title="מחק">🗑️</button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </Fragment>
+          ))}
+        </div>
       )}
     </div>
   );
