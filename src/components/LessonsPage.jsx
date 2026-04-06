@@ -3,6 +3,8 @@ import { useRef, useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today } from "../utils.js";
 
+let _skeyCounter = 0;
+
 function sortScheduleEntries(entries = []) {
   return [...entries].sort((a, b) => {
     const aDateTime = `${a?.date || ""} ${a?.startTime || "00:00"}`;
@@ -13,6 +15,7 @@ function sortScheduleEntries(entries = []) {
 
 function normalizeScheduleEntry(entry = {}) {
   return {
+    _key: entry?._key || `sk-${++_skeyCounter}`,
     date: entry?.date || "",
     startTime: entry?.startTime || "09:00",
     endTime: entry?.endTime || "12:00",
@@ -24,13 +27,15 @@ function normalizeScheduleEntry(entry = {}) {
 
 function dedupeScheduleEntries(entries = []) {
   const seen = new Set();
-  return sortScheduleEntries(entries).filter((entry) => {
-    const normalized = normalizeScheduleEntry(entry);
-    const key = `${normalized.date}__${normalized.startTime}__${normalized.endTime}__${normalized.topic}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return sortScheduleEntries(entries)
+    .filter((entry) => {
+      const normalized = normalizeScheduleEntry(entry);
+      const key = `${normalized.date}__${normalized.startTime}__${normalized.endTime}__${normalized.topic}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map(e => e._key ? e : normalizeScheduleEntry(e));
 }
 
 function normalizeHebrewDay(dayOfWeek = "") {
@@ -1317,7 +1322,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
               /* ── מובייל: כרטיס לכל מפגש ── */
               <div style={{display:"flex",flexDirection:"column",gap:8,maxHeight:420,overflowY:"auto"}}>
                 {schedule.map((s,i)=>(
-                  <div key={`${s.date}-${s.startTime}-${i}`} style={{background:"var(--surface2)",border:"1px solid rgba(155,89,182,0.2)",borderRadius:10,padding:"10px 12px"}}>
+                  <div key={s._key || `${s.date}-${s.startTime}-${i}`} style={{background:"var(--surface2)",border:"1px solid rgba(155,89,182,0.2)",borderRadius:10,padding:"10px 12px"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                       <span style={{fontWeight:800,color:"#9b59b6",fontSize:12}}>#{i+1}</span>
                       <button onClick={()=>setSchedule(prev=>prev.filter((_,j)=>j!==i))}
@@ -1382,7 +1387,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
                 </div>
                 <div style={{maxHeight:300,overflow:"auto",display:"flex",flexDirection:"column",gap:2}}>
                   {schedule.map((s,i)=>(
-                    <div key={`${s.date}-${s.startTime}-${i}`} style={{display:"grid",gridTemplateColumns:gridTemplate,alignItems:"center",gap:0,fontSize:12,background:"var(--surface2)",border:"1px solid rgba(155,89,182,0.12)",borderTop:"none"}}>
+                    <div key={s._key || `${s.date}-${s.startTime}-${i}`} style={{display:"grid",gridTemplateColumns:gridTemplate,alignItems:"center",gap:0,fontSize:12,background:"var(--surface2)",border:"1px solid rgba(155,89,182,0.12)",borderTop:"none"}}>
                       <div style={{fontWeight:800,color:"#9b59b6",fontSize:11,textAlign:"center",padding:"4px 2px",borderRight:"1px solid rgba(155,89,182,0.15)"}}>#{i+1}</div>
                       <input className="form-input" type="date" value={s.date} style={{padding:"3px 6px",fontSize:12,height:28,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"date",e.target.value)}/>
                       <select className="form-select" value={s.startTime} style={{padding:"3px 4px",fontSize:12,height:28,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"startTime",e.target.value)}>
