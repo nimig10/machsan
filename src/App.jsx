@@ -20,6 +20,7 @@ import { StaffManagementPage } from "./components/StaffManagementPage.jsx";
 import { SystemSettingsPage } from "./components/SystemSettingsPage.jsx";
 import { ActivityLogsPage } from "./components/ActivityLogsPage.jsx";
 import { StaffSchedulePage } from "./components/StaffSchedulePage.jsx";
+import { LecturerPortal } from "./components/LecturerPortal.jsx";
 import { useInstallPrompt } from "./components/InstallPrompt.jsx";
 
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
@@ -6907,7 +6908,8 @@ export default function App() {
   const isCalendarView = pathname.startsWith("/calendar");
   const isManagerCalendarView = pathname.startsWith("/manager-calendar");
   const isPublicDisplayView = pathname === "/daily";
-  const isPublicFormView = !isAdmin && !isCalendarView && !isManagerCalendarView && !isPublicDisplayView;
+  const isLecturerPortalView = pathname.startsWith("/lecturer");
+  const isPublicFormView = !isAdmin && !isCalendarView && !isManagerCalendarView && !isPublicDisplayView && !isLecturerPortalView;
   const urlToken = new URLSearchParams(window.location.search).get("token")||"";
   const { canInstall: canInstallPwa, install: installPwa } = useInstallPrompt();
   const [page, setPage]               = useState(() => sessionStorage.getItem("admin_page") || "dashboard");
@@ -7052,6 +7054,61 @@ export default function App() {
         categories: categoriesRef.current,
         categoryLoanTypes: categoryLoanTypesRef.current,
       };
+    }
+  };
+
+  const applyLecturerLiveSync = (key, value) => {
+    if (key === "equipment" && Array.isArray(value)) {
+      const normalizedEquipment = normalizeEquipmentTagFlags(value).map(ensureUnits);
+      if (!dataEquals(equipmentRef.current, normalizedEquipment)) _setEquipment(normalizedEquipment);
+      return;
+    }
+
+    if (key === "reservations" && Array.isArray(value)) {
+      const normalizedReservations = normalizeReservationsForArchive(value);
+      if (!dataEquals(reservationsRef.current, normalizedReservations)) _setReservations(normalizedReservations);
+      return;
+    }
+
+    if (key === "lessons" && Array.isArray(value) && !dataEquals(lessonsRef.current, value)) {
+      _setLessons(value);
+      return;
+    }
+
+    if (key === "lecturers" && Array.isArray(value) && !dataEquals(lecturersRef.current, value)) {
+      _setLecturers(value);
+      return;
+    }
+
+    if (key === "kits" && Array.isArray(value) && !dataEquals(kitsRef.current, value)) {
+      _setKits(value);
+      return;
+    }
+
+    if (key === "studios" && Array.isArray(value) && !dataEquals(studiosRef.current, value)) {
+      _setStudios(value);
+    }
+  };
+
+  const refreshLecturerData = async () => {
+    try {
+      const [eqR, resR, lessonsR, lecturersR, kitsR, studiosR] = await Promise.all([
+        storageGet("equipment"),
+        storageGet("reservations"),
+        storageGet("lessons"),
+        storageGet("lecturers"),
+        storageGet("kits"),
+        storageGet("studios"),
+      ]);
+
+      applyLecturerLiveSync("equipment", eqR?.value);
+      applyLecturerLiveSync("reservations", resR?.value);
+      applyLecturerLiveSync("lessons", lessonsR?.value);
+      applyLecturerLiveSync("lecturers", lecturersR?.value);
+      applyLecturerLiveSync("kits", kitsR?.value);
+      applyLecturerLiveSync("studios", studiosR?.value);
+    } catch (error) {
+      console.warn("lecturer portal sync failed", error);
     }
   };
 
@@ -7427,7 +7484,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (loading || isPublicFormView) return;
+    if (loading || isPublicFormView || isLecturerPortalView) return;
     const handleFocus = () => void refreshAdminData();
     const handleVisibility = () => { if (document.visibilityState === "visible") void refreshAdminData(); };
     const intervalId = window.setInterval(() => {
@@ -7441,7 +7498,7 @@ export default function App() {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [loading, isPublicFormView]);
+  }, [loading, isPublicFormView, isLecturerPortalView]);
 
   useEffect(() => {
     if (loading || !isPublicFormView) return undefined;
@@ -7486,6 +7543,50 @@ export default function App() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [loading, isPublicFormView]);
+
+  useEffect(() => {
+    if (loading || !isLecturerPortalView) return undefined;
+
+    const handleFocus = () => {
+      void refreshLecturerData();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshLecturerData();
+      }
+    };
+
+    const handleStorage = (event) => {
+      if (event.storageArea !== window.localStorage || !event.key?.startsWith("cache_")) return;
+      const key = event.key.replace(/^cache_/, "");
+      if (!["equipment", "reservations", "lessons", "lecturers", "kits", "studios"].includes(key)) return;
+      try {
+        const parsedValue = event.newValue ? JSON.parse(event.newValue) : null;
+        applyLecturerLiveSync(key, parsedValue);
+      } catch (error) {
+        console.warn("lecturer cache sync failed", error);
+        void refreshLecturerData();
+      }
+    };
+
+    void refreshLecturerData();
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      void refreshLecturerData();
+    }, 10000);
+
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("storage", handleStorage);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("storage", handleStorage);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loading, isLecturerPortalView]);
 
   useEffect(() => {
     if (loading) return;
@@ -7662,6 +7763,23 @@ export default function App() {
                   <div style={{fontSize:18,fontWeight:700}}>קישור לא תקין</div>
                   <div style={{fontSize:13}}>הקישור שבידך אינו תקין או פג תוקפו</div>
                 </div>
+          )}
+        </div>
+      ) : isLecturerPortalView ? (
+        <div className="public-page-shell">
+          {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : (
+            <LecturerPortal
+              lecturers={lecturers}
+              lessons={lessons}
+              kits={kits}
+              equipment={equipment}
+              reservations={reservations}
+              studios={studios}
+              setLessons={setLessons}
+              setKits={setKits}
+              showToast={showToast}
+              siteSettings={siteSettings}
+            />
           )}
         </div>
       ) : isPublicFormView && (
