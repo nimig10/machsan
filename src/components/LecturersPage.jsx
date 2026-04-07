@@ -1,5 +1,5 @@
 // LecturersPage.jsx — central lecturers management
-import { useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import { storageSet } from "../utils.js";
 
@@ -62,6 +62,10 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
   const [editPhone, setEditPhone] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [inlineSaving, setInlineSaving] = useState(false);
+  const inlineSaveTimeoutRef = useRef(null);
+  const lastSavedInlineDraftRef = useRef("");
+  const lastFailedInlineDraftRef = useRef("");
 
   // Derive tracks from lessons for each lecturer
   const UNASSIGNED = "לא משויך";
@@ -136,8 +140,22 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
     setShowAddModal(false);
   };
 
-  const startEdit = (lec) => {
-    if (editingId === lec.id) { setEditingId(null); return; }
+  const clearInlineSaveTimeout = () => {
+    if (inlineSaveTimeoutRef.current) {
+      clearTimeout(inlineSaveTimeoutRef.current);
+      inlineSaveTimeoutRef.current = null;
+    }
+  };
+
+  const resetInlineSaveState = () => {
+    clearInlineSaveTimeout();
+    lastSavedInlineDraftRef.current = "";
+    lastFailedInlineDraftRef.current = "";
+  };
+
+  const openInlineEdit = (lec) => {
+    resetInlineSaveState();
+    setInlineSaving(false);
     setEditingId(lec.id);
     setEditName(lec.fullName || "");
     setEditPhone(lec.phone || "");
@@ -145,18 +163,103 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
     setEditNotes(lec.notes || "");
   };
 
-  const saveInlineEdit = async (lec) => {
-    if (!editName.trim()) { showToast("error", "שם מלא הוא שדה חובה"); return; }
-    const updated = lecturers.map(l => l.id === lec.id ? makeLecturer({ ...l, fullName: editName.trim(), phone: editPhone.trim(), email: editEmail.trim(), notes: editNotes.trim() }) : l);
+  const buildInlineDraft = () => ({
+    fullName: String(editName || "").trim(),
+    phone: String(editPhone || "").trim(),
+    email: String(editEmail || "").trim(),
+    notes: String(editNotes || "").trim(),
+  });
+
+  const getInlineDraftKey = (draft) => [draft.fullName, draft.phone, draft.email, draft.notes].join("\u0001");
+
+  const isInlineDraftDirty = (lec, draft) => (
+    String(lec?.fullName || "").trim() !== draft.fullName
+    || String(lec?.phone || "").trim() !== draft.phone
+    || String(lec?.email || "").trim() !== draft.email
+    || String(lec?.notes || "").trim() !== draft.notes
+  );
+
+  const saveInlineEdit = async (lec, { closeOnSuccess = false, silent = false } = {}) => {
+    clearInlineSaveTimeout();
+    if (!lec) {
+      if (closeOnSuccess) setEditingId(null);
+      return true;
+    }
+
+    const draft = buildInlineDraft();
+    const draftKey = getInlineDraftKey(draft);
+
+    if (!draft.fullName) {
+      showToast("error", "שם מלא הוא שדה חובה");
+      return false;
+    }
+
+    if (!isInlineDraftDirty(lec, draft)) {
+      lastSavedInlineDraftRef.current = draftKey;
+      lastFailedInlineDraftRef.current = "";
+      if (closeOnSuccess) setEditingId(null);
+      return true;
+    }
+
+    setInlineSaving(true);
+    const updated = lecturers.map((item) => (
+      item.id === lec.id ? makeLecturer({ ...item, ...draft }) : item
+    ));
     const result = await storageSet("lecturers", updated);
+    setInlineSaving(false);
+
     if (!result?.ok) {
+      lastFailedInlineDraftRef.current = draftKey;
       showToast("error", "שגיאה בעדכון המרצה. הנתונים לא נשמרו.");
+      return false;
+    }
+
+    lastSavedInlineDraftRef.current = draftKey;
+    lastFailedInlineDraftRef.current = "";
+    setLecturers(updated);
+    if (!silent) showToast("success", "המרצה עודכן");
+    if (closeOnSuccess) setEditingId(null);
+    return true;
+  };
+
+  const closeInlineEdit = async (lec) => {
+    const didSave = await saveInlineEdit(lec, { closeOnSuccess: false, silent: true });
+    if (didSave) setEditingId(null);
+  };
+
+  const startEdit = async (lec) => {
+    if (editingId === lec.id) {
+      await closeInlineEdit(lec);
       return;
     }
-    setLecturers(updated);
-    showToast("success", "המרצה עודכן");
-    setEditingId(null);
+
+    if (editingId) {
+      const current = lecturers.find((item) => item.id === editingId);
+      const didSave = await saveInlineEdit(current, { closeOnSuccess: false, silent: true });
+      if (!didSave) return;
+    }
+
+    openInlineEdit(lec);
   };
+
+  const editingLecturer = editingId ? lecturers.find((item) => item.id === editingId) : null;
+
+  useEffect(() => {
+    clearInlineSaveTimeout();
+
+    if (!editingLecturer || inlineSaving) return undefined;
+
+    const draft = buildInlineDraft();
+    const draftKey = getInlineDraftKey(draft);
+    if (!draft.fullName || !isInlineDraftDirty(editingLecturer, draft)) return undefined;
+    if (lastSavedInlineDraftRef.current === draftKey || lastFailedInlineDraftRef.current === draftKey) return undefined;
+
+    inlineSaveTimeoutRef.current = setTimeout(() => {
+      void saveInlineEdit(editingLecturer, { closeOnSuccess: false, silent: true });
+    }, 700);
+
+    return () => clearInlineSaveTimeout();
+  }, [editingLecturer, editName, editPhone, editEmail, editNotes, inlineSaving]);
 
   const deleteLecturer = async (lec) => {
     const updated = lecturers.filter(l => l.id !== lec.id);
@@ -167,7 +270,11 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
     }
     setLecturers(updated);
     showToast("success", "המרצה נמחק");
-    if (editingId === lec.id) setEditingId(null);
+    if (editingId === lec.id) {
+      resetInlineSaveState();
+      setInlineSaving(false);
+      setEditingId(null);
+    }
   };
 
   /* ── XL Import ── */
@@ -262,6 +369,10 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
 
         .lecturers-table .lecturers-row:hover td:first-child {
           box-shadow: inset -4px 0 0 var(--accent);
+        }
+
+        .lecturers-table .lecturers-inline-actions > button:first-child {
+          display: none;
         }
       `}</style>
       {/* ── Add Modal ── */}
@@ -395,7 +506,7 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                 if (isEditing) {
                   return (
                     <tr key={lec.id} style={{ background: "rgba(245,166,35,0.06)", cursor: "pointer" }}
-                      onClick={e => { if (e.target.tagName !== "INPUT" && e.target.tagName !== "BUTTON") setEditingId(null); }}>
+                      onClick={e => { if (e.target.tagName !== "INPUT" && e.target.tagName !== "BUTTON") void closeInlineEdit(lec); }}>
                       <td style={td}>
                         <input className="form-input" value={editName} onChange={e => setEditName(e.target.value)}
                           style={{ ...inpStyle, fontWeight: 700 }} autoFocus />
@@ -416,7 +527,14 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                         </div>
                       </td>
                       <td style={{ ...td, textAlign: "center" }}>
-                        <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
+                        <div className="lecturers-inline-actions" style={{ display: "flex", gap: 8, justifyContent: "center", alignItems: "center" }}
+                          onClickCapture={(e) => {
+                            if (e.target.tagName === "BUTTON") {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              void closeInlineEdit(lec);
+                            }
+                          }}>
                           <button className="btn btn-primary btn-sm" style={{ fontSize: 11, padding: "2px 8px" }} onClick={() => saveInlineEdit(lec)}>✓</button>
                           <button className="btn btn-secondary btn-sm" style={{ fontSize: 11, padding: "2px 8px" }} onClick={() => setEditingId(null)}>✕</button>
                         </div>
@@ -429,7 +547,7 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                   <tr
                     key={lec.id}
                     className="lecturers-row"
-                    onClick={() => startEdit(lec)}
+                    onClick={() => void startEdit(lec)}
                     style={{ cursor: "pointer" }}
                   >
                     <td style={{ ...td, fontWeight: 700 }}>
