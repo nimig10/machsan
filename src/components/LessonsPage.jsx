@@ -247,8 +247,11 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
     if (newLecs.length > 0) {
       const allLecs = [...lecturers, ...newLecs];
+      const result = await storageSet("lecturers", allLecs);
+      if (!result?.ok) {
+        throw new Error("שגיאה בשמירת המרצים החדשים שנוצרו מהייבוא");
+      }
       setLecturers(allLecs);
-      await storageSet("lecturers", allLecs);
     }
     return updated;
   };
@@ -1148,6 +1151,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
 // ── Lesson/Course Form ────────────────────────────────────────────────────────
 function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment, reservations, setReservations, kits, showToast, trackOptions=[], lecturers=[], setLecturers }) {
+  const lecturerOptions = lecturers.filter((lecturer) => lecturer?.isActive !== false);
   const initialLinkedKitId = initial?.kitId || lessonKits.find(k=>k.lessonId !== null && k.lessonId !== undefined && String(k.lessonId).trim() !== "" && String(k.lessonId)===String(initial?.id||""))?.id || "";
   const [name, setName]                       = useState(initial?.name||"");
   const [track, setTrack]                     = useState(initial?.track||"");
@@ -1165,6 +1169,8 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
   const [teacherEmailSending, setTeacherEmailSending] = useState(false);
   const normalizedTrackOptions = [...new Set((trackOptions || []).map(option => String(option || "").trim()).filter(Boolean))];
   const isMobile = typeof window !== "undefined" && window.innerWidth < 769;
+  const selectedLecturerObj = lecturerId ? lecturers.find(l => l.id === lecturerId) : null;
+  const lecturerSelectionInvalid = Boolean(String(lecturerInput || "").trim()) && !selectedLecturerObj;
 
   // Manual schedule builder
   const [manStartDate, setManStartDate] = useState("");
@@ -1239,7 +1245,6 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
     });
   };
 
-  const selectedLecturerObj = lecturerId ? lecturers.find(l => l.id === lecturerId) : null;
   const sendTeacherEmail = async () => {
     const recipient = String(selectedLecturerObj?.email||"").trim();
     if(!recipient) { setLocalMsg({type:"error",text:"למרצה שנבחר אין כתובת מייל"}); return; }
@@ -1280,6 +1285,10 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
       setLocalMsg({type:"error",text:"מסלול לימודים לא קיים"});
       return;
     }
+    if (lecturerSelectionInvalid) {
+      setLocalMsg({type:"error",text:'לא ניתן לשמור שם מרצה שאינו קיים. בחרו מרצה קיים מרובריקת "מרצים", או הוסיפו אותו קודם שם. בייבוא XL מרצים חדשים נוצרים אוטומטית.'});
+      return;
+    }
     let finalSchedule = [...schedule];
     if(manStartDate && finalSchedule.length===0) {
       const count = Math.max(1,Math.min(52,Number(manCount)||1));
@@ -1299,7 +1308,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
       name: name.trim(),
       track: track.trim(),
       lecturerId: lecturerId || null,
-      instructorName: selectedLecturer?.fullName || lecturerInput.trim(),
+      instructorName: selectedLecturer?.fullName || "",
       instructorPhone: selectedLecturer?.phone || "",
       instructorEmail: selectedLecturer?.email || "",
       description: description.trim(),
@@ -1477,18 +1486,19 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
         <div className="form-group" style={{marginBottom:10}}>
           <label className="form-label">מרצה</label>
           <datalist id="lf-lecturers-list">
-            {lecturers.filter(l=>l.isActive!==false).sort((a,b)=>a.fullName.localeCompare(b.fullName,"he")).map(l=>(
+            {lecturerOptions.sort((a,b)=>a.fullName.localeCompare(b.fullName,"he")).map(l=>(
               <option key={l.id} value={l.fullName}/>
             ))}
           </datalist>
           <div style={{position:"relative"}}>
             <input className="form-input" list="lf-lecturers-list"
+              style={lecturerSelectionInvalid ? { borderColor:"#ef4444", boxShadow:"0 0 0 1px rgba(239,68,68,0.18)" } : undefined}
               placeholder="הקלד שם מרצה..."
               value={lecturerInput}
               onChange={e=>{
                 const val = e.target.value;
                 setLecturerInput(val);
-                const matched = lecturers.find(l=>l.fullName.trim().toLowerCase()===val.trim().toLowerCase());
+                const matched = lecturerOptions.find(l=>l.fullName.trim().toLowerCase()===val.trim().toLowerCase());
                 setLecturerId(matched ? matched.id : "");
               }}
             />
@@ -1497,6 +1507,14 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
                 style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"var(--text3)",cursor:"pointer",fontSize:16,lineHeight:1,padding:0}}>✕</button>
             )}
           </div>
+          <div style={{fontSize:11,color:"var(--text3)",marginTop:3}}>
+            ניתן לבחור כאן רק מרצה שכבר קיים ברובריקת "מרצים". אם זה מרצה חדש, צריך להוסיף אותו קודם שם. בייבוא XL מרצים חדשים נוצרים אוטומטית.
+          </div>
+          {lecturerSelectionInvalid && (
+            <div style={{fontSize:11,color:"#ef4444",marginTop:3}}>
+              השם שהוקלד לא קיים ברובריקת "מרצים", ולכן אי אפשר לשמור כך את הקורס.
+            </div>
+          )}
           {lecturerId && <div style={{fontSize:11,color:"#22c55e",marginTop:3}}>✓ מקושר למרצה קיים</div>}
           {!lecturers.length && <div style={{fontSize:11,color:"var(--text3)",marginTop:3}}>ניתן להוסיף מרצים דרך רובריקת "מרצים"</div>}
         </div>
