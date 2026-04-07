@@ -19,7 +19,14 @@
       "mcp__claude_ai_Supabase__get_project_url",
       "mcp__claude_ai_Supabase__get_publishable_keys",
       "Bash(printf \"https://wxkyqgwwraojnbmyyfco.supabase.co\\\\n\\\\n\")",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(ls C:machsan/.env*)",
+      "Bash(ls C:machsan/src/components/StaffLogin*)",
+      "mcp__claude_ai_Supabase__list_tables",
+      "Bash(node -e \":*)",
+      "Bash(git rm:*)",
+      "Bash(git revert:*)",
+      "Bash(grep -v \"^.*//.*reserv\\\\|_set\\\\|archiv\\\\|Ref\\\\|resR\\\\.\\\\|resSrc\\\\|resSearch\\\\|resStatus\\\\|resSortBy\\\\|resLoanType\\\\|overdue\\\\|submitted\\\\|returned\")"
     ]
   }
 }
