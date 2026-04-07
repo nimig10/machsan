@@ -20,7 +20,7 @@ import { StaffManagementPage } from "./components/StaffManagementPage.jsx";
 import { SystemSettingsPage } from "./components/SystemSettingsPage.jsx";
 import { ActivityLogsPage } from "./components/ActivityLogsPage.jsx";
 import { StaffSchedulePage } from "./components/StaffSchedulePage.jsx";
-import { InstallPrompt } from "./components/InstallPrompt.jsx";
+import { useInstallPrompt } from "./components/InstallPrompt.jsx";
 
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
 const SB_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -6909,6 +6909,7 @@ export default function App() {
   const isPublicDisplayView = pathname === "/daily";
   const isPublicFormView = !isAdmin && !isCalendarView && !isManagerCalendarView && !isPublicDisplayView;
   const urlToken = new URLSearchParams(window.location.search).get("token")||"";
+  const { canInstall: canInstallPwa, install: installPwa } = useInstallPrompt();
   const [page, setPage]               = useState(() => sessionStorage.getItem("admin_page") || "dashboard");
   const [equipment, _setEquipment]     = useState([]);
   const [reservations, _setReservations] = useState([]);
@@ -7677,6 +7678,8 @@ export default function App() {
         <StaffHub
           user={staffUser}
           logo={siteSettings.logo}
+          canInstall={canInstallPwa}
+          onInstall={() => { void installPwa(); }}
           onNavigate={(view) => setStaffView(view)}
           onLogout={() => { sessionStorage.removeItem("staff_user"); sessionStorage.removeItem("staff_view"); window.location.replace("/"); }}
         />
@@ -7931,7 +7934,6 @@ export default function App() {
 
       </ProtectedRoute>
 
-      <InstallPrompt />
       <Toast toasts={toasts}/>
     </>
   );
