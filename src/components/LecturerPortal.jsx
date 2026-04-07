@@ -47,21 +47,6 @@ function digitsOnly(value = "") {
   return String(value || "").replace(/\D/g, "");
 }
 
-function normalizeLecturerIdentifier(value = "") {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  return raw.includes("@") ? raw.toLowerCase() : digitsOnly(raw);
-}
-
-function lecturerMatchesLogin(lecturer, name, identifier) {
-  if (normalizeName(lecturer?.fullName) !== normalizeName(name)) return false;
-  const lecturerEmail = String(lecturer?.email || "").trim().toLowerCase();
-  const lecturerPhone = digitsOnly(lecturer?.phone || "");
-  if (!lecturerEmail && !lecturerPhone) return true;
-  if (!identifier) return false;
-  return identifier === lecturerEmail || identifier === lecturerPhone;
-}
-
 function buildDefaultKitName(lesson, scope, session) {
   const courseName = String(lesson?.name || "").trim() || "קורס";
   if (scope === "session" && session?.date) {
@@ -86,8 +71,6 @@ export function LecturerPortal({
   showToast,
   siteSettings = {},
 }) {
-  const [loginForm, setLoginForm] = useState({ name: "", identifier: "" });
-  const [loginError, setLoginError] = useState("");
   const [loggedInLecturer, setLoggedInLecturer] = useState(() => {
     try {
       const stored = sessionStorage.getItem("lecturer_portal_user");
@@ -135,10 +118,21 @@ export function LecturerPortal({
 
   useEffect(() => {
     if (!loggedInLecturer || currentLecturer) return;
+    try {
+      sessionStorage.setItem("public_login_role", "lecturer");
+      sessionStorage.setItem("public_login_notice", "צריך להתחבר כמרצה ממסך הכניסה הראשי.");
+    } catch {}
     setLoggedInLecturer(null);
     setEditorState(null);
-    setLoginError("רשומת המרצה כבר לא זמינה. צריך להתחבר מחדש.");
   }, [currentLecturer, loggedInLecturer]);
+
+  useEffect(() => {
+    if (loggedInLecturer) return undefined;
+    const timeoutId = window.setTimeout(() => {
+      window.location.replace("/");
+    }, 120);
+    return () => window.clearTimeout(timeoutId);
+  }, [loggedInLecturer]);
 
   const lecturerLessons = useMemo(() => {
     if (!currentLecturer) return [];
@@ -311,20 +305,6 @@ export function LecturerPortal({
     });
   }, [draftSearch, equipment]);
 
-  const handleLogin = () => {
-    const normalizedIdentifier = normalizeLecturerIdentifier(loginForm.identifier);
-    const matchedLecturer = activeLecturers.find((lecturer) => lecturerMatchesLogin(lecturer, loginForm.name, normalizedIdentifier));
-    if (!matchedLecturer) {
-      setLoginError("לא נמצאה התאמה למרצה פעיל במערכת. אפשר להתחבר רק עם מרצה שקיים ברובריקת המרצים.");
-      return;
-    }
-    setLoginError("");
-    setLoggedInLecturer({
-      id: matchedLecturer.id,
-      fullName: matchedLecturer.fullName,
-    });
-  };
-
   const closeEditor = () => {
     if (saving) return;
     setEditorState(null);
@@ -489,6 +469,27 @@ export function LecturerPortal({
         : "השאלת המפגש נשמרה ותתעדכן דרך מסלול השיעור הקיים.",
     );
   };
+
+  if (!loggedInLecturer || !currentLecturer) {
+    return (
+      <div className="form-page" style={{ "--accent": siteSettings.accentColor || "#f5a623" }}>
+        <div style={{ width: "100%", maxWidth: 430, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 16, padding: "40px 32px", textAlign: "center", direction: "rtl" }}>
+          {siteSettings.logo
+            ? <img src={siteSettings.logo} alt="לוגו" style={{ width: 82, height: 82, objectFit: "contain", borderRadius: 12, marginBottom: 16, display: "block", marginInline: "auto" }} />
+            : <div style={{ fontSize: 48, marginBottom: 16 }}>🎓</div>}
+          <h2 style={{ fontSize: "clamp(15px,4vw,20px)", fontWeight: 900, color: "var(--accent)", marginBottom: 6 }}>מעביר למסך הכניסה</h2>
+          <div style={{ fontSize: 13, color: "var(--text3)", marginBottom: 24 }}>
+            כניסת מרצים מתבצעת עכשיו ממסך הכניסה הראשי של מערכת הפניות.
+          </div>
+          <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+            <a href="/" style={{ fontSize: 12, color: "var(--text3)", textDecoration: "none" }}>
+              חזרה למסך הכניסה
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!loggedInLecturer) {
     return (

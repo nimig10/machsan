@@ -897,7 +897,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
 }
 
 // ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
-export function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], calendarToken="", siteSettings={}, categoryLoanTypes={}, refreshInventory=async()=>({}) }) {
+export function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], calendarToken="", siteSettings={}, categoryLoanTypes={}, refreshInventory=async()=>({}), lecturers=[] }) {
   const initialParams = new URLSearchParams(window.location.search);
   const initialLoanTypeParam = initialParams.get("loan_type");
   const initialStepParam = Number(initialParams.get("step"));
@@ -917,8 +917,24 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [loggedInStudent, setLoggedInStudent] = useState(() => {
     try { const s = sessionStorage.getItem("public_student"); return s ? JSON.parse(s) : null; } catch { return null; }
   });
+  const [loginRole, setLoginRole] = useState(() => {
+    try {
+      const hasRedirectNotice = Boolean(sessionStorage.getItem("public_login_notice"));
+      return hasRedirectNotice && sessionStorage.getItem("public_login_role") === "lecturer" ? "lecturer" : "student";
+    } catch {
+      return "student";
+    }
+  });
   const [loginForm, setLoginForm] = useState({ name:"", email:"" });
-  const [loginError, setLoginError] = useState("");
+  const [loginError, setLoginError] = useState(() => {
+    try {
+      const msg = sessionStorage.getItem("public_login_notice") || "";
+      if (msg) sessionStorage.removeItem("public_login_notice");
+      return msg;
+    } catch {
+      return "";
+    }
+  });
   const [publicView, setPublicView] = useState(() => sessionStorage.getItem("public_view") || "equipment"); // "equipment" | "studios" | "daily"
   const [dailyLessons, setDailyLessons] = useState([]);
   const [dailyDayOffset, setDailyDayOffset] = useState(0);
@@ -1064,13 +1080,33 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     setDailyLessons(Array.isArray(lessons) ? lessons : []);
   };
 
-  const handleStudentLogin = () => {
+  const handleLogin = () => {
     const name = loginForm.name.trim();
     const email = loginForm.email.toLowerCase().trim();
     if (!name || !email) return;
+    if (loginRole === "lecturer") {
+      const matchedLecturer = (lecturers || []).find((lecturer) => (
+        lecturer?.isActive !== false
+        && lecturer.email?.toLowerCase().trim() === email
+        && normalizeName(lecturer.fullName) === normalizeName(name)
+      ));
+      if (!matchedLecturer) {
+        setLoginError("הפרטים לא תואמים למרצה רשום במערכת");
+        return;
+      }
+      try {
+        sessionStorage.removeItem("public_student");
+        sessionStorage.removeItem("public_view");
+        sessionStorage.setItem("lecturer_portal_user", JSON.stringify({ id: matchedLecturer.id, fullName: matchedLecturer.fullName }));
+      } catch {}
+      setLoginError("");
+      window.location.assign("/lecturer");
+      return;
+    }
     const stuList = certifications.students || [];
     const found = stuList.find(s => s.email?.toLowerCase() === email && s.name?.trim().toLowerCase() === name.toLowerCase());
     if (!found) { setLoginError("הפרטים לא תואמים למשתמש רשום במערכת"); return; }
+    try { sessionStorage.removeItem("lecturer_portal_user"); } catch {}
     setLoggedInStudent(found);
     setLoginError("");
     set("student_name", found.name);
@@ -1915,24 +1951,44 @@ ${inventory}
         {siteSettings.logo
           ? <img src={siteSettings.logo} alt="לוגו" style={{width:82,height:82,objectFit:"contain",borderRadius:12,marginBottom:16,display:"block",marginInline:"auto"}}/>
           : <div style={{fontSize:48,marginBottom:16}}>🎬</div>}
-        <h2 style={{fontSize:"clamp(14px,4vw,20px)",fontWeight:900,color:"var(--accent)",marginBottom:4}}>מערכת פניות לסטודנט</h2>
-        <div style={{fontSize:13,color:"var(--text3)",marginBottom:24}}>מכללת קמרה אובסקורה וסאונד</div>
+        <h2 style={{fontSize:"clamp(14px,4vw,20px)",fontWeight:900,color:"var(--accent)",marginBottom:4}}>מערכת הפניות</h2>
+        <div style={{fontSize:13,color:"var(--text3)",marginBottom:24}}>כניסת סטודנטים ומרצים · מכללת קמרה אובסקורה וסאונד</div>
+        <div style={{display:"flex",gap:4,marginBottom:18,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4}}>
+          <button
+            type="button"
+            onClick={()=>{setLoginRole("student");setLoginError("");}}
+            style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:loginRole==="student"?"var(--accent)":"transparent",color:loginRole==="student"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer"}}
+          >
+            סטודנט
+          </button>
+          <button
+            type="button"
+            onClick={()=>{setLoginRole("lecturer");setLoginError("");}}
+            style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:loginRole==="lecturer"?"var(--accent)":"transparent",color:loginRole==="lecturer"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer"}}
+          >
+            מרצה
+          </button>
+        </div>
         <div style={{textAlign:"right",marginBottom:12}}>
           <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>שם מלא</label>
           <input className="form-input" placeholder="הקלד/י שם מלא" value={loginForm.name}
             onChange={e=>{setLoginForm(p=>({...p,name:e.target.value}));setLoginError("");}}
-            onKeyDown={e=>e.key==="Enter"&&handleStudentLogin()}/>
+            onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
         </div>
         <div style={{textAlign:"right",marginBottom:16}}>
           <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>אימייל</label>
           <input className="form-input" type="email" placeholder="email@example.com" value={loginForm.email}
             onChange={e=>{setLoginForm(p=>({...p,email:e.target.value}));setLoginError("");}}
-            onKeyDown={e=>e.key==="Enter"&&handleStudentLogin()}/>
+            onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
         </div>
         {loginError && <div style={{color:"var(--red)",fontSize:13,fontWeight:700,marginBottom:12}}>❌ {loginError}</div>}
-        <button className="btn btn-primary" style={{width:"100%",padding:"12px",fontSize:15}} onClick={handleStudentLogin}
-          disabled={!loginForm.name.trim()||!loginForm.email.trim()}>🔑 כניסה למערכת</button>
-        <div style={{fontSize:11,color:"var(--text3)",marginTop:16}}>רק סטודנטים רשומים יכולים להיכנס למערכת</div>
+        <button className="btn btn-primary" style={{width:"100%",padding:"12px",fontSize:15}} onClick={handleLogin}
+          disabled={!loginForm.name.trim()||!loginForm.email.trim()}>🔑 {loginRole === "student" ? "כניסת סטודנט" : "כניסת מרצה"}</button>
+        <div style={{fontSize:11,color:"var(--text3)",marginTop:16}}>
+          {loginRole === "student"
+            ? "רק סטודנטים רשומים יכולים להיכנס למערכת"
+            : "רק מרצים שרשומים ברובריקת המרצים יכולים להיכנס למצב מרצה"}
+        </div>
         <div style={{marginTop:20,paddingTop:16,borderTop:"1px solid var(--border)",textAlign:"center"}}>
           <a
             href="/admin/login"
@@ -1974,7 +2030,7 @@ ${inventory}
             </svg>
           </button>
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",paddingInline:"24px"}}>
-            <div style={{fontSize:"clamp(15px,4.5vw,22px)",fontWeight:900,color:"var(--accent)"}}>מערכת פניות לסטודנט</div>
+            <div style={{fontSize:"clamp(15px,4.5vw,22px)",fontWeight:900,color:"var(--accent)"}}>מערכת הפניות</div>
             <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>שלום, {loggedInStudent.name}</div>
           </div>
           {/* ── View toggle: equipment vs studios ── */}

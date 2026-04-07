@@ -3092,7 +3092,7 @@ function PublicForm_REMOVED({ equipment, reservations, setReservations, showToas
             {siteSettings.soundLogo && (
               <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:82,height:82,objectFit:"contain",borderRadius:12,marginBottom:12}}/>
             )}
-            <div style={{fontSize:22,fontWeight:900,color:"var(--accent)"}}>מערכת פניות לסטודנט</div>
+            <div style={{fontSize:22,fontWeight:900,color:"var(--accent)"}}>מערכת הפניות</div>
             <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>טופס השאלת ציוד</div>
           </div>
           {/* Clickable tab navigation — always free to navigate, validation only on submit */}
@@ -7784,7 +7784,7 @@ export default function App() {
         </div>
       ) : isPublicFormView && (
         <div className="public-page-shell">
-          {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes} refreshInventory={refreshPublicInventory}/>}
+          {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes} refreshInventory={refreshPublicInventory} lecturers={lecturers}/>}
         </div>
       )}
 
