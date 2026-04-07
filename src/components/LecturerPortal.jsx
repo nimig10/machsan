@@ -85,6 +85,8 @@ export function LecturerPortal({
   const [draftDescription, setDraftDescription] = useState("");
   const [draftItems, setDraftItems] = useState([]);
   const [draftSearch, setDraftSearch] = useState("");
+  const [selectedCats, setSelectedCats] = useState([]);
+  const [showSelectedOnly, setShowSelectedOnly] = useState(false);
   const [editorError, setEditorError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -249,6 +251,8 @@ export function LecturerPortal({
         })),
     );
     setDraftSearch("");
+    setSelectedCats([]);
+    setShowSelectedOnly(false);
     setEditorError("");
   }, [editorContext]);
 
@@ -304,6 +308,33 @@ export function LecturerPortal({
       return haystack.includes(term);
     });
   }, [draftSearch, equipment]);
+
+  const filteredEquipmentGroups = useMemo(() => {
+    const groups = new Map();
+    filteredEquipment.forEach((item) => {
+      const category = String(item?.category || "").trim() || "ללא קטגוריה";
+      if (!groups.has(category)) groups.set(category, []);
+      groups.get(category).push(item);
+    });
+    return Array.from(groups.entries());
+  }, [filteredEquipment]);
+
+  const baseCategories = useMemo(
+    () => filteredEquipmentGroups.map(([category]) => category),
+    [filteredEquipmentGroups],
+  );
+
+  const visibleEquipmentGroups = useMemo(() => (
+    filteredEquipmentGroups
+      .filter(([category]) => selectedCats.length === 0 || selectedCats.includes(category))
+      .map(([category, items]) => [
+        category,
+        showSelectedOnly
+          ? items.filter((item) => draftItems.some((draftItem) => String(draftItem.equipment_id) === String(item.id) && Number(draftItem.quantity) > 0))
+          : items,
+      ])
+      .filter(([, items]) => items.length > 0)
+  ), [filteredEquipmentGroups, selectedCats, showSelectedOnly, draftItems]);
 
   const closeEditor = () => {
     if (saving) return;
@@ -714,7 +745,115 @@ export function LecturerPortal({
               />
             </div>
 
-            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))" }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12, alignItems: "center" }}>
+              <button
+                type="button"
+                onClick={() => setShowSelectedOnly((current) => !current)}
+                style={{ padding: "5px 12px", borderRadius: 20, border: `2px solid ${showSelectedOnly ? "var(--green)" : "var(--border)"}`, background: showSelectedOnly ? "rgba(46,204,113,0.12)" : "transparent", color: showSelectedOnly ? "var(--green)" : "var(--text3)", fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}
+              >
+                {showSelectedOnly ? "✅ נבחרו" : "⬜"} {showSelectedOnly ? "הצג הכל" : "הצג נבחרים בלבד"}
+              </button>
+              <div style={{ width: 1, height: 20, background: "var(--border)", flexShrink: 0 }} />
+              {baseCategories.map((category) => {
+                const active = selectedCats.includes(category);
+                return (
+                  <button
+                    key={category}
+                    type="button"
+                    onClick={() => setSelectedCats((current) => current.includes(category) ? current.filter((value) => value !== category) : [...current, category])}
+                    style={{ padding: "4px 10px", borderRadius: 20, border: `2px solid ${active ? "var(--accent)" : "var(--border)"}`, background: active ? "var(--accent-glow)" : "transparent", color: active ? "var(--accent)" : "var(--text3)", fontWeight: 700, fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}
+                  >
+                    {category}
+                  </button>
+                );
+              })}
+              {selectedCats.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedCats([])}
+                  style={{ padding: "4px 8px", borderRadius: 20, border: "1px solid var(--border)", background: "transparent", color: "var(--text3)", fontSize: 11, cursor: "pointer" }}
+                >
+                  ✕ נקה
+                </button>
+              )}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              {visibleEquipmentGroups.map(([category, categoryItems]) => (
+                <div key={category}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: "var(--text3)", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
+                    {category}
+                  </div>
+                  {categoryItems.map((item) => {
+                    const selectedQuantity = getSelectedQuantity(item.id);
+                    const availableQuantity = Number(availabilityByEquipmentId[item.id] ?? item.total_quantity ?? 0);
+                    const overLimit = selectedQuantity > availableQuantity;
+                    const atMax = selectedQuantity >= availableQuantity;
+                    const isImage = item.image?.startsWith("data:") || item.image?.startsWith("http");
+                    return (
+                      <div
+                        key={item.id}
+                        className="item-row"
+                        style={{
+                          opacity: availableQuantity === 0 && selectedQuantity === 0 ? 0.45 : 1,
+                          borderColor: overLimit ? "rgba(239,68,68,0.45)" : selectedQuantity > 0 ? "rgba(245,166,35,0.32)" : "var(--border)",
+                          background: selectedQuantity > 0 ? "rgba(245,166,35,0.06)" : "var(--surface2)",
+                        }}
+                      >
+                        {isImage
+                          ? <img src={item.image} alt={item.name} style={{ width: 42, height: 42, objectFit: "cover", borderRadius: 8, flexShrink: 0 }} />
+                          : <span style={{ fontSize: 28, lineHeight: 1, flexShrink: 0 }}>{item.image || "📦"}</span>}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text)" }}>{item.name}</div>
+                          <div style={{ fontSize: 12, color: overLimit ? "#ef4444" : "var(--text3)", marginTop: 4 }}>
+                            זמין: <span style={{ color: availableQuantity === 0 ? "var(--red)" : availableQuantity <= 2 ? "var(--yellow)" : "var(--green)", fontWeight: 700 }}>{availableQuantity}</span>
+                          </div>
+                          {overLimit && (
+                            <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 700, marginTop: 4 }}>
+                              הכמות שנבחרה גבוהה מהמלאי הזמין למפגש הזה.
+                            </div>
+                          )}
+                        </div>
+                        {availableQuantity > 0 || selectedQuantity > 0 ? (
+                          <div className="qty-ctrl">
+                            <button
+                              type="button"
+                              className="qty-btn"
+                              disabled={selectedQuantity <= 0}
+                              style={{ opacity: selectedQuantity <= 0 ? 0.35 : 1 }}
+                              onClick={() => setItemQuantity(item.id, selectedQuantity - 1)}
+                            >
+                              −
+                            </button>
+                            <span className="qty-num">{selectedQuantity}</span>
+                            <button
+                              type="button"
+                              className="qty-btn"
+                              disabled={atMax}
+                              style={{ opacity: atMax ? 0.3 : 1 }}
+                              onClick={() => {
+                                if (!atMax) setItemQuantity(item.id, Math.min(selectedQuantity + 1, availableQuantity));
+                              }}
+                            >
+                              +
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="badge badge-red">לא זמין</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+              {!visibleEquipmentGroups.length && (
+                <div style={{ textAlign: "center", color: "var(--text3)", padding: "22px 0", fontSize: 13 }}>
+                  {showSelectedOnly ? "לא נבחר ציוד עדיין." : "לא נמצא ציוד שתואם לחיפוש."}
+                </div>
+              )}
+            </div>
+
+            {false && <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))" }}>
               {filteredEquipment.map((item) => {
                 const selectedQuantity = getSelectedQuantity(item.id);
                 const availableQuantity = Number(availabilityByEquipmentId[item.id] ?? item.total_quantity ?? 0);
@@ -740,7 +879,7 @@ export function LecturerPortal({
                   </div>
                 );
               })}
-            </div>
+            </div>}
 
             {!!selectedItems.length && (
               <div style={{ marginTop: 18, padding: "12px 14px", borderRadius: 14, background: "var(--surface2)", border: "1px solid var(--border)" }}>
@@ -749,7 +888,7 @@ export function LecturerPortal({
                   {selectedItems.map((item) => {
                     const eq = equipment.find((candidate) => String(candidate.id) === String(item.equipment_id));
                     return (
-                      <div key={item.equipment_id} style={{ background: "rgba(245,166,35,0.12)", border: "1px solid rgba(245,166,35,0.26)", borderRadius: 999, padding: "6px 10px", fontSize: 12, fontWeight: 700 }}>
+                      <div key={item.equipment_id} style={{ background: "rgba(245,166,35,0.12)", border: "1px solid rgba(245,166,35,0.26)", borderRadius: 999, padding: "6px 10px", fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 8 }}>
                         {eq?.name || item.name || "פריט"} · {item.quantity}
                       </div>
                     );
