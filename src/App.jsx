@@ -7408,16 +7408,20 @@ export default function App() {
   const refreshAdminData = async () => {
     if (historySuspendedRef.current) return;
     try {
-      const [resR, bookingsR] = await Promise.all([
+      const [resR, bookingsR, lecturersR] = await Promise.all([
         storageGet("reservations"),
         storageGet("studio_bookings"),
+        storageGet("lecturers"),
       ]);
-      if (Array.isArray(resR)) {
-        const normalized = normalizeReservationsForArchive(resR);
+      if (Array.isArray(resR?.value)) {
+        const normalized = normalizeReservationsForArchive(resR.value);
         if (!dataEquals(reservationsRef.current, normalized)) _setReservations(normalized);
       }
-      if (Array.isArray(bookingsR) && !dataEquals(studioBookingsRef.current, bookingsR)) {
-        _setStudioBookings(bookingsR);
+      if (Array.isArray(bookingsR?.value) && !dataEquals(studioBookingsRef.current, bookingsR.value)) {
+        _setStudioBookings(bookingsR.value);
+      }
+      if (Array.isArray(lecturersR?.value) && !dataEquals(lecturersRef.current, lecturersR.value)) {
+        _setLecturers(lecturersR.value);
       }
     } catch {}
   };

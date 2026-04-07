@@ -125,8 +125,13 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
     setAddSaving(true);
     const newLec = makeLecturer({ fullName: addName.trim(), phone: addPhone.trim(), email: addEmail.trim(), notes: addNotes.trim() });
     const updated = [...lecturers, newLec];
+    const result = await storageSet("lecturers", updated);
+    if (!result?.ok) {
+      setAddSaving(false);
+      showToast("error", "שגיאה בשמירת המרצה. הנתונים לא נשמרו.");
+      return;
+    }
     setLecturers(updated);
-    await storageSet("lecturers", updated);
     showToast("success", "המרצה נוסף");
     setShowAddModal(false);
   };
@@ -143,16 +148,24 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
   const saveInlineEdit = async (lec) => {
     if (!editName.trim()) { showToast("error", "שם מלא הוא שדה חובה"); return; }
     const updated = lecturers.map(l => l.id === lec.id ? makeLecturer({ ...l, fullName: editName.trim(), phone: editPhone.trim(), email: editEmail.trim(), notes: editNotes.trim() }) : l);
+    const result = await storageSet("lecturers", updated);
+    if (!result?.ok) {
+      showToast("error", "שגיאה בעדכון המרצה. הנתונים לא נשמרו.");
+      return;
+    }
     setLecturers(updated);
-    await storageSet("lecturers", updated);
     showToast("success", "המרצה עודכן");
     setEditingId(null);
   };
 
   const deleteLecturer = async (lec) => {
     const updated = lecturers.filter(l => l.id !== lec.id);
+    const result = await storageSet("lecturers", updated);
+    if (!result?.ok) {
+      showToast("error", "שגיאה במחיקת המרצה. המחיקה לא נשמרה.");
+      return;
+    }
     setLecturers(updated);
-    await storageSet("lecturers", updated);
     showToast("success", "המרצה נמחק");
     if (editingId === lec.id) setEditingId(null);
   };
@@ -197,8 +210,12 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
 
       if (newLecs.length > 0) {
         const updated = [...lecturers, ...newLecs];
+        const result = await storageSet("lecturers", updated);
+        if (!result?.ok) {
+          showToast("error", "שגיאה בשמירת ייבוא המרצים. הנתונים לא נשמרו.");
+          return;
+        }
         setLecturers(updated);
-        await storageSet("lecturers", updated);
       }
       showToast("success", `יובאו ${addedCount} מרצים${skippedCount ? ` (${skippedCount} דולגו — כבר קיימים)` : ""}`);
     } catch (err) {
