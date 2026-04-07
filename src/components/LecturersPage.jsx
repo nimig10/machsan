@@ -46,6 +46,7 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
   const [trackFilter,  setTrackFilter]  = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingId,    setEditingId]    = useState(null);
+  const [hoveredId,    setHoveredId]    = useState(null);
   const [xlImporting,  setXlImporting]  = useState(false);
   const importRef = useRef(null);
 
@@ -244,6 +245,19 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
   const td = { padding: "6px 12px", borderBottom: "1px solid var(--border)", fontSize: 13, verticalAlign: "middle" };
   const inpStyle = { width: "100%", boxSizing: "border-box", fontSize: 13, padding: "3px 6px", margin: 0, height: 28, border: "1px solid var(--border)", borderRadius: 6, background: "var(--surface)", color: "var(--text)" };
   const lbl = { fontSize: 12, color: "var(--text3)", marginBottom: 4, display: "block" };
+  const hoveredCellStyle = {
+    background: "rgba(245,166,35,0.12)",
+    boxShadow: "inset 0 1px 0 rgba(245,166,35,0.38), inset 0 -1px 0 rgba(245,166,35,0.38)",
+  };
+  const hoveredLeadCellStyle = {
+    ...hoveredCellStyle,
+    boxShadow: "inset -4px 0 0 var(--accent), inset 0 1px 0 rgba(245,166,35,0.38), inset 0 -1px 0 rgba(245,166,35,0.38)",
+  };
+  const getRowCellStyle = (baseStyle, isHovered, { lead = false } = {}) => ({
+    ...baseStyle,
+    transition: "background 0.15s ease, box-shadow 0.15s ease, color 0.15s ease",
+    ...(isHovered ? (lead ? hoveredLeadCellStyle : hoveredCellStyle) : {}),
+  });
 
   return (
     <div className="page" style={{ direction: "rtl" }}>
@@ -408,11 +422,21 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                   );
                 }
 
+                const isHovered = hoveredId === lec.id;
+
                 return (
-                  <tr key={lec.id} onClick={() => startEdit(lec)} style={{ cursor: "pointer", transition: "background 0.1s" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "rgba(245,166,35,0.04)"}
-                    onMouseLeave={e => e.currentTarget.style.background = ""}>
-                    <td style={{ ...td, fontWeight: 700 }}>
+                  <tr
+                    key={lec.id}
+                    onClick={() => startEdit(lec)}
+                    style={{
+                      cursor: "pointer",
+                      background: isHovered ? "rgba(245,166,35,0.14)" : "transparent",
+                      boxShadow: isHovered ? "inset -4px 0 0 var(--accent), inset 0 1px 0 rgba(245,166,35,0.38), inset 0 -1px 0 rgba(245,166,35,0.38)" : "none",
+                    }}
+                    onMouseEnter={() => setHoveredId(lec.id)}
+                    onMouseLeave={() => setHoveredId((current) => (current === lec.id ? null : current))}
+                  >
+                    <td style={getRowCellStyle({ ...td, fontWeight: 700 }, isHovered, { lead: true })}>
                       {lec.fullName}
                       {!isLinked && (
                         <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 400, marginTop: 2 }}>לא משויך לקורס</div>
