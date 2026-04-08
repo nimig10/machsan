@@ -569,7 +569,7 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                     </td>
                     <td style={{ ...td, textAlign: "center" }} onClick={e => e.stopPropagation()}>
                       <button className="btn btn-secondary btn-sm" style={{ color: "var(--red)", borderColor: "var(--red)", fontSize: 11 }}
-                        onClick={() => { if (window.confirm(`למחוק את המרצה "${lec.fullName}"?`)) deleteLecturer(lec); }}>
+                        onClick={() => deleteLecturer(lec)}>
                         🗑️
                       </button>
                     </td>
