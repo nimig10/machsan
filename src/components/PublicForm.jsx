@@ -2110,8 +2110,8 @@ ${inventory}
               <div style={{fontSize:15,fontWeight:700,color:"var(--text)",direction:"ltr",textAlign:"right"}}>{otpEmail}</div>
             </div>
             <div style={{textAlign:"right",marginBottom:16}}>
-              <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>קוד אימות (6 ספרות)</label>
-              <input className="form-input" type="text" inputMode="numeric" maxLength={6} placeholder="000000" value={otpToken}
+              <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>קוד אימות</label>
+              <input className="form-input" type="text" inputMode="numeric" maxLength={8} placeholder="00000000" value={otpToken}
                 style={{letterSpacing:"0.3em",textAlign:"center",fontSize:22,fontWeight:700}}
                 onChange={e=>{setOtpToken(e.target.value.replace(/\D/g,""));setLoginError("");}}
                 onKeyDown={e=>e.key==="Enter"&&handleVerifyOtp()}
