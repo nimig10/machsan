@@ -1,6 +1,6 @@
 // PublicForm.jsx — public loan request form
 import { useEffect, useState, useRef, useMemo } from "react";
-import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus, SB_URL, SB_HEADERS } from "../utils.js";
+import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus } from "../utils.js";
 import { supabase } from "../supabaseClient.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import AIChatBot from "./AIChatBot.jsx";
@@ -1129,19 +1129,15 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     }
   };
 
-  // Helper: upsert auth_entity_map row via Supabase REST
+  // Helper: upsert auth_entity_map row via authenticated Supabase client
   const upsertAuthEntityMap = async (authUserId, entityType, entityId, email) => {
     try {
-      await fetch(`${SB_URL}/rest/v1/auth_entity_map`, {
-        method: "POST",
-        headers: { ...SB_HEADERS, Prefer: "resolution=merge-duplicates,return=minimal" },
-        body: JSON.stringify({
-          auth_user_id: authUserId,
-          entity_type: entityType,
-          entity_id: entityId,
-          email: email.toLowerCase().trim(),
-        }),
-      });
+      await supabase.from("auth_entity_map").upsert({
+        auth_user_id: authUserId,
+        entity_type: entityType,
+        entity_id: entityId,
+        email: email.toLowerCase().trim(),
+      }, { onConflict: "auth_user_id" });
     } catch (err) {
       console.warn("upsertAuthEntityMap failed:", err);
     }
