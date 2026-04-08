@@ -1222,9 +1222,29 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
         set("email", matchedStudent.email);
         if (matchedStudent.phone) set("phone", matchedStudent.phone);
         if (matchedStudent.track) set("course", matchedStudent.track);
+        return;
       }
+
+      // Session exists but email matches neither official dataset — sign out and deny
+      setLoginError("כתובת האימייל לא משויכת לחשבון רשום. הגישה נדחתה.");
+      supabase.auth.signOut().catch(() => {});
     });
   }, [lecturers, certifications]);
+
+  // Validate any student state restored from sessionStorage against the active
+  // Supabase session. A manually injected sessionStorage value alone must not
+  // grant access — it must be backed by a real session with a matching email.
+  useEffect(() => {
+    if (!loggedInStudent) return;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const authEmail = session?.user?.email?.toLowerCase().trim();
+      const storedEmail = String(loggedInStudent.email || "").toLowerCase().trim();
+      if (!authEmail || authEmail !== storedEmail) {
+        if (authEmail) supabase.auth.signOut().catch(() => {});
+        setLoggedInStudent(null);
+      }
+    });
+  }, []); // mount-only — runs once to validate the sessionStorage-restored value
 
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const setSoundDayLoan = (enabled) => {
