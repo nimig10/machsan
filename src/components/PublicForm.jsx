@@ -1,6 +1,7 @@
 // PublicForm.jsx — public loan request form
 import { useEffect, useState, useRef, useMemo } from "react";
-import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus } from "../utils.js";
+import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus, SB_URL, SB_HEADERS } from "../utils.js";
+import { supabase } from "../supabaseClient.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import AIChatBot from "./AIChatBot.jsx";
 
@@ -917,15 +918,11 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [loggedInStudent, setLoggedInStudent] = useState(() => {
     try { const s = sessionStorage.getItem("public_student"); return s ? JSON.parse(s) : null; } catch { return null; }
   });
-  const [loginRole, setLoginRole] = useState(() => {
-    try {
-      const hasRedirectNotice = Boolean(sessionStorage.getItem("public_login_notice"));
-      return hasRedirectNotice && sessionStorage.getItem("public_login_role") === "lecturer" ? "lecturer" : "student";
-    } catch {
-      return "student";
-    }
-  });
-  const [loginForm, setLoginForm] = useState({ name:"", email:"" });
+  const [otpEmail, setOtpEmail] = useState("");
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpToken, setOtpToken] = useState("");
+  const [otpVerifying, setOtpVerifying] = useState(false);
   const [loginError, setLoginError] = useState(() => {
     try {
       const msg = sessionStorage.getItem("public_login_notice") || "";
@@ -1021,8 +1018,9 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   useEffect(() => {
     if (!loggedInStudent) return;
     const TIMEOUT_MS = 7 * 60 * 1000;
-    let timer = setTimeout(() => setLoggedInStudent(null), TIMEOUT_MS);
-    const reset = () => { clearTimeout(timer); timer = setTimeout(() => setLoggedInStudent(null), TIMEOUT_MS); };
+    const handleTimeout = () => { supabase.auth.signOut().catch(()=>{}); setLoggedInStudent(null); };
+    let timer = setTimeout(handleTimeout, TIMEOUT_MS);
+    const reset = () => { clearTimeout(timer); timer = setTimeout(handleTimeout, TIMEOUT_MS); };
     const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"];
     events.forEach(e => window.addEventListener(e, reset, { passive: true }));
     return () => { clearTimeout(timer); events.forEach(e => window.removeEventListener(e, reset)); };
@@ -1080,40 +1078,157 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     setDailyLessons(Array.isArray(lessons) ? lessons : []);
   };
 
-  const handleLogin = () => {
-    const name = loginForm.name.trim();
-    const email = loginForm.email.toLowerCase().trim();
-    if (!name || !email) return;
-    if (loginRole === "lecturer") {
-      const matchedLecturer = (lecturers || []).find((lecturer) => (
-        lecturer?.isActive !== false
-        && lecturer.email?.toLowerCase().trim() === email
-        && normalizeName(lecturer.fullName) === normalizeName(name)
-      ));
-      if (!matchedLecturer) {
-        setLoginError("הפרטים לא תואמים למרצה רשום במערכת");
+  // ── OTP / Magic Link login ──────────────────────────────────────────────────
+  const handleSendOtp = async () => {
+    const email = otpEmail.toLowerCase().trim();
+    if (!email) return;
+    setOtpSending(true);
+    setLoginError("");
+    try {
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "otp", email }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.error === "not_registered") {
+          setLoginError("כתובת האימייל לא רשומה במערכת");
+        } else {
+          setLoginError("שגיאה בשליחת קוד הכניסה. נסו שוב.");
+        }
+        setOtpSending(false);
         return;
       }
-      try {
-        sessionStorage.removeItem("public_student");
-        sessionStorage.removeItem("public_view");
-        sessionStorage.setItem("lecturer_portal_user", JSON.stringify({ id: matchedLecturer.id, fullName: matchedLecturer.fullName }));
-      } catch {}
-      setLoginError("");
-      window.location.assign("/lecturer");
-      return;
+      setOtpSent(true);
+      setOtpSending(false);
+    } catch {
+      setLoginError("שגיאה בתקשורת. נסו שוב.");
+      setOtpSending(false);
     }
-    const stuList = certifications.students || [];
-    const found = stuList.find(s => s.email?.toLowerCase() === email && s.name?.trim().toLowerCase() === name.toLowerCase());
-    if (!found) { setLoginError("הפרטים לא תואמים למשתמש רשום במערכת"); return; }
-    try { sessionStorage.removeItem("lecturer_portal_user"); } catch {}
-    setLoggedInStudent(found);
-    setLoginError("");
-    set("student_name", found.name);
-    set("email", found.email);
-    if (found.phone) set("phone", found.phone);
-    if (found.track) set("course", found.track);
   };
+
+  const handleVerifyOtp = async () => {
+    const email = otpEmail.toLowerCase().trim();
+    const token = otpToken.trim();
+    if (!email || !token) return;
+    setOtpVerifying(true);
+    setLoginError("");
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
+      if (error || !data?.user) {
+        setLoginError("קוד שגוי או שפג תוקפו. נסו שוב.");
+        setOtpVerifying(false);
+        return;
+      }
+      // Auth session established — onAuthStateChange will handle the rest
+      setOtpVerifying(false);
+    } catch {
+      setLoginError("שגיאה באימות. נסו שוב.");
+      setOtpVerifying(false);
+    }
+  };
+
+  // Helper: upsert auth_entity_map row via Supabase REST
+  const upsertAuthEntityMap = async (authUserId, entityType, entityId, email) => {
+    try {
+      await fetch(`${SB_URL}/rest/v1/auth_entity_map`, {
+        method: "POST",
+        headers: { ...SB_HEADERS, Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({
+          auth_user_id: authUserId,
+          entity_type: entityType,
+          entity_id: entityId,
+          email: email.toLowerCase().trim(),
+        }),
+      });
+    } catch (err) {
+      console.warn("upsertAuthEntityMap failed:", err);
+    }
+  };
+
+  // Listen for Supabase auth state changes
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event !== "SIGNED_IN" || !session?.user?.email) return;
+      const authEmail = session.user.email.toLowerCase().trim();
+      const authUserId = session.user.id;
+
+      // 1. Try lecturers first
+      const matchedLecturer = (lecturers || []).find(
+        (l) => l.isActive !== false && l.email?.toLowerCase().trim() === authEmail,
+      );
+      if (matchedLecturer) {
+        await upsertAuthEntityMap(authUserId, "lecturer", String(matchedLecturer.id), authEmail);
+        try {
+          sessionStorage.removeItem("public_student");
+          sessionStorage.removeItem("public_view");
+          sessionStorage.setItem("lecturer_portal_user", JSON.stringify({ id: matchedLecturer.id, fullName: matchedLecturer.fullName }));
+        } catch {}
+        window.location.assign("/lecturer");
+        return;
+      }
+
+      // 2. Try certifications.students
+      const stuList = certifications?.students || [];
+      const matchedStudent = stuList.find(
+        (s) => s.email?.toLowerCase().trim() === authEmail,
+      );
+      if (matchedStudent) {
+        await upsertAuthEntityMap(authUserId, "student", String(matchedStudent.id), authEmail);
+        try { sessionStorage.removeItem("lecturer_portal_user"); } catch {}
+        setLoggedInStudent(matchedStudent);
+        setLoginError("");
+        set("student_name", matchedStudent.name);
+        set("email", matchedStudent.email);
+        if (matchedStudent.phone) set("phone", matchedStudent.phone);
+        if (matchedStudent.track) set("course", matchedStudent.track);
+        return;
+      }
+
+      // 3. No match — deny access
+      setLoginError("כתובת האימייל לא משויכת לחשבון רשום. הגישה נדחתה.");
+      await supabase.auth.signOut();
+    });
+
+    return () => subscription.unsubscribe();
+  }, [lecturers, certifications]);
+
+  // Check for existing session on mount (e.g. after magic link redirect)
+  useEffect(() => {
+    if (loggedInStudent) return;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.user?.email) return;
+      const authEmail = session.user.email.toLowerCase().trim();
+
+      // Try matching — if found, set state (same logic as onAuthStateChange)
+      const matchedLecturer = (lecturers || []).find(
+        (l) => l.isActive !== false && l.email?.toLowerCase().trim() === authEmail,
+      );
+      if (matchedLecturer) {
+        try {
+          sessionStorage.removeItem("public_student");
+          sessionStorage.removeItem("public_view");
+          sessionStorage.setItem("lecturer_portal_user", JSON.stringify({ id: matchedLecturer.id, fullName: matchedLecturer.fullName }));
+        } catch {}
+        window.location.assign("/lecturer");
+        return;
+      }
+
+      const stuList = certifications?.students || [];
+      const matchedStudent = stuList.find(
+        (s) => s.email?.toLowerCase().trim() === authEmail,
+      );
+      if (matchedStudent) {
+        try { sessionStorage.removeItem("lecturer_portal_user"); } catch {}
+        setLoggedInStudent(matchedStudent);
+        set("student_name", matchedStudent.name);
+        set("email", matchedStudent.email);
+        if (matchedStudent.phone) set("phone", matchedStudent.phone);
+        if (matchedStudent.track) set("course", matchedStudent.track);
+      }
+    });
+  }, [lecturers, certifications]);
 
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const setSoundDayLoan = (enabled) => {
@@ -1944,7 +2059,7 @@ ${inventory}
     </div>
   );
 
-  // ── Student login gate ──
+  // ── OTP login gate ──
   if (!loggedInStudent) return (
     <div className="form-page" style={{"--accent": siteSettings.accentColor||"#f5a623"}}>
       <div style={{width:"100%",maxWidth:420,background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:"40px 32px",textAlign:"center",direction:"rtl"}}>
@@ -1953,42 +2068,51 @@ ${inventory}
           : <div style={{fontSize:48,marginBottom:16}}>🎬</div>}
         <h2 style={{fontSize:"clamp(14px,4vw,20px)",fontWeight:900,color:"var(--accent)",marginBottom:4}}>מערכת הפניות</h2>
         <div style={{fontSize:13,color:"var(--text3)",marginBottom:24}}>כניסת סטודנטים ומרצים · מכללת קמרה אובסקורה וסאונד</div>
-        <div style={{display:"flex",gap:4,marginBottom:18,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4}}>
-          <button
-            type="button"
-            onClick={()=>{setLoginRole("student");setLoginError("");}}
-            style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:loginRole==="student"?"var(--accent)":"transparent",color:loginRole==="student"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer"}}
-          >
-            סטודנט
-          </button>
-          <button
-            type="button"
-            onClick={()=>{setLoginRole("lecturer");setLoginError("");}}
-            style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:loginRole==="lecturer"?"var(--accent)":"transparent",color:loginRole==="lecturer"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer"}}
-          >
-            מרצה
-          </button>
-        </div>
-        <div style={{textAlign:"right",marginBottom:12}}>
-          <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>שם מלא</label>
-          <input className="form-input" placeholder="הקלד/י שם מלא" value={loginForm.name}
-            onChange={e=>{setLoginForm(p=>({...p,name:e.target.value}));setLoginError("");}}
-            onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
-        </div>
-        <div style={{textAlign:"right",marginBottom:16}}>
-          <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>אימייל</label>
-          <input className="form-input" type="email" placeholder="email@example.com" value={loginForm.email}
-            onChange={e=>{setLoginForm(p=>({...p,email:e.target.value}));setLoginError("");}}
-            onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
-        </div>
-        {loginError && <div style={{color:"var(--red)",fontSize:13,fontWeight:700,marginBottom:12}}>❌ {loginError}</div>}
-        <button className="btn btn-primary" style={{width:"100%",padding:"12px",fontSize:15}} onClick={handleLogin}
-          disabled={!loginForm.name.trim()||!loginForm.email.trim()}>🔑 {loginRole === "student" ? "כניסת סטודנט" : "כניסת מרצה"}</button>
-        <div style={{fontSize:11,color:"var(--text3)",marginTop:16}}>
-          {loginRole === "student"
-            ? "רק סטודנטים רשומים יכולים להיכנס למערכת"
-            : "רק מרצים שרשומים ברובריקת המרצים יכולים להיכנס למצב מרצה"}
-        </div>
+
+        {!otpSent ? (
+          <>
+            <div style={{textAlign:"right",marginBottom:16}}>
+              <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>אימייל</label>
+              <input className="form-input" type="email" placeholder="email@example.com" value={otpEmail}
+                onChange={e=>{setOtpEmail(e.target.value);setLoginError("");}}
+                onKeyDown={e=>e.key==="Enter"&&handleSendOtp()}
+                disabled={otpSending}/>
+            </div>
+            {loginError && <div style={{color:"var(--red)",fontSize:13,fontWeight:700,marginBottom:12}}>{loginError}</div>}
+            <button className="btn btn-primary" style={{width:"100%",padding:"12px",fontSize:15}} onClick={handleSendOtp}
+              disabled={!otpEmail.trim()||otpSending}>
+              {otpSending ? "שולח..." : "שלח קוד כניסה"}
+            </button>
+            <div style={{fontSize:11,color:"var(--text3)",marginTop:16}}>
+              קוד חד-פעמי יישלח לאימייל שלך. רק משתמשים רשומים יכולים להיכנס.
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{background:"var(--surface2)",borderRadius:12,padding:16,marginBottom:16,textAlign:"right"}}>
+              <div style={{fontSize:13,color:"var(--text2)",marginBottom:4}}>קוד נשלח ל:</div>
+              <div style={{fontSize:15,fontWeight:700,color:"var(--text)",direction:"ltr",textAlign:"right"}}>{otpEmail}</div>
+            </div>
+            <div style={{textAlign:"right",marginBottom:16}}>
+              <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>קוד אימות (6 ספרות)</label>
+              <input className="form-input" type="text" inputMode="numeric" maxLength={6} placeholder="000000" value={otpToken}
+                style={{letterSpacing:"0.3em",textAlign:"center",fontSize:22,fontWeight:700}}
+                onChange={e=>{setOtpToken(e.target.value.replace(/\D/g,""));setLoginError("");}}
+                onKeyDown={e=>e.key==="Enter"&&handleVerifyOtp()}
+                disabled={otpVerifying}/>
+            </div>
+            {loginError && <div style={{color:"var(--red)",fontSize:13,fontWeight:700,marginBottom:12}}>{loginError}</div>}
+            <button className="btn btn-primary" style={{width:"100%",padding:"12px",fontSize:15}} onClick={handleVerifyOtp}
+              disabled={otpToken.length<6||otpVerifying}>
+              {otpVerifying ? "מאמת..." : "כניסה"}
+            </button>
+            <button type="button" style={{marginTop:12,background:"none",border:"none",color:"var(--text3)",fontSize:12,cursor:"pointer",textDecoration:"underline"}}
+              onClick={()=>{setOtpSent(false);setOtpToken("");setLoginError("");}}>
+              שלח קוד חדש / שנה אימייל
+            </button>
+          </>
+        )}
+
         <div style={{marginTop:20,paddingTop:16,borderTop:"1px solid var(--border)",textAlign:"center"}}>
           <a
             href="/admin/login"
@@ -2537,7 +2661,7 @@ ${inventory}
         <div style={{padding:"16px 24px",borderTop:"1px solid var(--border)",textAlign:"center"}}>
           <button
             type="button"
-            onClick={() => { setLoggedInStudent(null); sessionStorage.removeItem("public_view"); }}
+            onClick={() => { supabase.auth.signOut().catch(()=>{}); setLoggedInStudent(null); setOtpSent(false); setOtpToken(""); setOtpEmail(""); sessionStorage.removeItem("public_view"); }}
             style={{background:"var(--surface2)",border:"1px solid var(--border)",color:"var(--text2)",fontSize:13,cursor:"pointer",padding:"8px 20px",borderRadius:8,transition:"all 0.15s",fontWeight:600}}
             onMouseEnter={e=>{e.currentTarget.style.borderColor="var(--accent)";e.currentTarget.style.color="var(--accent)";}}
             onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--border)";e.currentTarget.style.color="var(--text2)";}}
