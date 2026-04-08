@@ -1017,7 +1017,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   // ─── טיימר חוסר פעילות — 60 שניות ─────────────────────────────────────────
   useEffect(() => {
     if (!loggedInStudent) return;
-    const TIMEOUT_MS = 7 * 60 * 1000;
+    const TIMEOUT_MS = 30 * 60 * 1000;
     const handleTimeout = () => { supabase.auth.signOut().catch(()=>{}); setLoggedInStudent(null); };
     let timer = setTimeout(handleTimeout, TIMEOUT_MS);
     const reset = () => { clearTimeout(timer); timer = setTimeout(handleTimeout, TIMEOUT_MS); };
