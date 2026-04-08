@@ -22,6 +22,25 @@ import { ActivityLogsPage } from "./components/ActivityLogsPage.jsx";
 import { StaffSchedulePage } from "./components/StaffSchedulePage.jsx";
 import { LecturerPortal } from "./components/LecturerPortal.jsx";
 import { useInstallPrompt } from "./components/InstallPrompt.jsx";
+import { supabase } from "./supabaseClient.js";
+
+// ─── SUPABASE AUTH: strip PKCE / magic-link params early ─────────────────────
+// supabase-js auto-detects ?code= (PKCE) and #access_token= (implicit) on
+// createClient, but the URL params can linger on slow loads. We call getSession
+// at module level to guarantee the exchange runs before React renders, then
+// clean the URL so a browser refresh doesn't replay a spent code.
+supabase.auth.getSession().then(() => {
+  const url = new URL(window.location.href);
+  let dirty = false;
+  for (const p of ["code", "error", "error_code", "error_description"]) {
+    if (url.searchParams.has(p)) { url.searchParams.delete(p); dirty = true; }
+  }
+  if (window.location.hash.includes("access_token")) {
+    url.hash = "";
+    dirty = true;
+  }
+  if (dirty) window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+});
 
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
 const SB_URL = import.meta.env.VITE_SUPABASE_URL;
