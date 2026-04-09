@@ -586,39 +586,50 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
       return ta.localeCompare(tb, "he");
     });
 
+  const closeAddModal = () => { setAddingStudent(false); setStudentForm({name:"",email:"",phone:"",track:""}); };
+
   return (
     <div className="page" style={{direction:"rtl"}}>
-      {/* ── Add student form ── */}
-      {addingStudent ? (
-        <div className="card" style={{marginBottom:20}}>
-          <div className="card-header">
-            <div className="card-title">➕ הוספת סטודנט</div>
-            <button className="btn btn-secondary btn-sm" onClick={()=>setAddingStudent(false)}>✕ ביטול</button>
-          </div>
-          <div className="grid-2" style={{marginBottom:12}}>
-            <div className="form-group"><label className="form-label">שם מלא *</label>
-              <input className="form-input" value={studentForm.name} onChange={e=>setStudentForm(p=>({...p,name:e.target.value}))} placeholder="שם מלא"/></div>
-            <div className="form-group"><label className="form-label">אימייל *</label>
-              <input className="form-input" type="email" value={studentForm.email} onChange={e=>setStudentForm(p=>({...p,email:e.target.value}))} placeholder="email@example.com"/></div>
-          </div>
-          <div className="form-group"><label className="form-label">טלפון</label>
-            <input className="form-input" value={studentForm.phone} onChange={e=>setStudentForm(p=>({...p,phone:e.target.value}))} placeholder="05x-xxxxxxx"/></div>
-          <div className="form-group"><label className="form-label">מסלול לימודים</label>
-            <select className="form-input" value={studentForm.track||""} onChange={e=>setStudentForm(p=>({...p,track:e.target.value}))}>
-              <option value="">-- בחר מסלול --</option>
-              {trackSettings.map(s=><option key={s.name} value={s.name}>{s.name}</option>)}
-            </select>
-          </div>
-          <div style={{marginTop:12,display:"flex",gap:8}}>
-            <button className="btn btn-primary" disabled={!studentForm.name.trim()||!studentForm.email.trim()||saving} onClick={addStudent}>
-              {saving?"⏳ שומר...":"✅ הוסף סטודנט"}
-            </button>
+
+      {/* ── Add student modal ── */}
+      {addingStudent && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}
+          onClick={e=>e.target===e.currentTarget&&closeAddModal()}>
+          <div style={{width:"100%",maxWidth:480,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl",boxShadow:"0 8px 32px rgba(0,0,0,0.5)"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0"}}>
+              <div style={{fontWeight:900,fontSize:16}}>➕ הוספת סטודנט</div>
+              <button className="btn btn-secondary btn-sm" onClick={closeAddModal}>✕</button>
+            </div>
+            <div style={{padding:"20px"}}>
+              <div className="grid-2" style={{marginBottom:12}}>
+                <div className="form-group"><label className="form-label">שם מלא *</label>
+                  <input className="form-input" autoFocus value={studentForm.name} onChange={e=>setStudentForm(p=>({...p,name:e.target.value}))}
+                    onKeyDown={e=>e.key==="Enter"&&addStudent()} placeholder="שם מלא"/></div>
+                <div className="form-group"><label className="form-label">אימייל *</label>
+                  <input className="form-input" type="email" value={studentForm.email} onChange={e=>setStudentForm(p=>({...p,email:e.target.value}))}
+                    onKeyDown={e=>e.key==="Enter"&&addStudent()} placeholder="email@example.com"/></div>
+              </div>
+              <div className="form-group"><label className="form-label">טלפון</label>
+                <input className="form-input" value={studentForm.phone} onChange={e=>setStudentForm(p=>({...p,phone:e.target.value}))} placeholder="05x-xxxxxxx"/></div>
+              <div className="form-group"><label className="form-label">מסלול לימודים</label>
+                <select className="form-input" value={studentForm.track||""} onChange={e=>setStudentForm(p=>({...p,track:e.target.value}))}>
+                  <option value="">-- בחר מסלול --</option>
+                  {trackSettings.map(s=><option key={s.name} value={s.name}>{s.name}</option>)}
+                </select>
+              </div>
+              <div style={{display:"flex",gap:8,marginTop:16,justifyContent:"flex-end"}}>
+                <button className="btn btn-secondary" onClick={closeAddModal}>ביטול</button>
+                <button className="btn btn-primary" disabled={!studentForm.name.trim()||!studentForm.email.trim()||saving} onClick={addStudent}>
+                  {saving?"⏳ שומר...":"✅ הוסף סטודנט"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      ) : (
-        <>
-        <div style={{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap",alignItems:"center"}}>
-          <button className="btn btn-primary" onClick={()=>setAddingStudent(true)}>➕ הוספת סטודנט</button>
+      )}
+
+      <div style={{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap",alignItems:"center"}}>
+        <button className="btn btn-primary" onClick={()=>setAddingStudent(true)}>➕ הוספת סטודנט</button>
           <button className="btn btn-secondary" onClick={()=>setAddingTrack(true)}>🎓 הוסף מסלול</button>
           <label className="btn btn-secondary" style={{cursor:xlBasicImporting?"not-allowed":"pointer",opacity:xlBasicImporting?0.6:1,marginBottom:0}}>
             {xlBasicImporting ? "⏳ מייבא..." : "📊 ייבוא XL"}
