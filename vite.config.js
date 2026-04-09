@@ -13,6 +13,10 @@ export default defineConfig({
       workbox: {
         skipWaiting: true,
         clientsClaim: true,
+        // Main bundle is ~2.1 MB; default precache limit is 2 MiB, which
+        // breaks the Vercel build. Raise to 5 MiB so the SW precaches the
+        // full app shell.
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
       },
       manifest: {
         name: 'קמרה סאונד APP',
