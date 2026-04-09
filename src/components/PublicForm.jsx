@@ -934,6 +934,10 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
     }
 
     setBusy(true);
+    // 25s client-side timeout so the UI can NEVER hang forever even if the
+    // serverless function stalls or the network drops silently.
+    const abort = new AbortController();
+    const abortTimer = setTimeout(() => abort.abort(), 25000);
     try {
       // Grab the current access token so the backend can verify the caller.
       const { data: { session } } = await supabase.auth.getSession();
@@ -941,6 +945,7 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
       if (!accessToken) {
         setError("אין חיבור פעיל. התחבר/י מחדש ונסה/י שוב.");
         setBusy(false);
+        clearTimeout(abortTimer);
         return;
       }
 
@@ -954,45 +959,62 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
           email: nEmail,
           password: password || undefined,
         }),
+        signal: abort.signal,
       });
 
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        if (data.error === "email_taken") {
+        const code = data && (data.error || data.code);
+        if (code === "email_taken") {
           setError("כתובת האימייל כבר משויכת לסטודנט אחר.");
-        } else if (data.error === "invalid_name") {
+        } else if (code === "invalid_name") {
           setError("שם מלא חסר או קצר מדי.");
-        } else if (data.error === "invalid_email") {
+        } else if (code === "invalid_email") {
           setError("כתובת אימייל לא תקינה.");
-        } else if (data.error === "password_too_short") {
+        } else if (code === "password_too_short") {
           setError("הסיסמה קצרה מדי (לפחות 6 תווים).");
-        } else if (data.error === "student_not_found") {
+        } else if (code === "student_not_found") {
           setError("לא נמצא סטודנט פעיל תחת המייל המחובר.");
-        } else if (data.error === "invalid_session" || data.error === "missing_access_token") {
+        } else if (code === "invalid_session" || code === "missing_access_token") {
           setError("פקע החיבור. התחבר/י מחדש ונסה/י שוב.");
-        } else if (data.error === "store_update_failed") {
+        } else if (code === "store_update_failed") {
           setError("שמירה במסד הנתונים נכשלה. נסו שוב.");
-        } else if (data.error === "auth_update_failed" && data.profileSaved) {
+        } else if (code === "auth_update_failed" && data.profileSaved) {
           setError("הפרטים נשמרו אך עדכון ההתחברות נכשל. נסו לרענן ולהתחבר שוב.");
+        } else if (res.status === 400 && (!code || code === "Missing or unknown action")) {
+          // Old backend still deployed — user is on a stale PWA bundle.
+          setError("הגרסה שבדפדפן ישנה. רענן/י את הדף (Ctrl+Shift+R) ונסה/י שוב.");
         } else {
-          setError("שגיאה בשמירה. נסו שוב.");
+          setError(`שגיאה בשמירה (${res.status}${code ? " · " + code : ""}). נסו שוב.`);
         }
         setBusy(false);
+        clearTimeout(abortTimer);
         return;
       }
 
-      // Success
-      if (showToast) showToast("success", "הפרטים עודכנו בהצלחה");
-      if (onSaved) onSaved(data.student || { ...student, name: nName, email: nEmail }, {
-        emailChanged:    !!data.emailChanged,
-        passwordChanged: !!data.passwordChanged,
-      });
+      // Success — close modal BEFORE running parent callbacks so the UI
+      // unfreezes even if a downstream callback throws.
+      clearTimeout(abortTimer);
       setBusy(false);
       onClose?.();
+      if (showToast) showToast("success", "הפרטים עודכנו בהצלחה");
+      try {
+        if (onSaved) onSaved(data.student || { ...student, name: nName, email: nEmail }, {
+          emailChanged:    !!data.emailChanged,
+          passwordChanged: !!data.passwordChanged,
+        });
+      } catch (cbErr) {
+        console.warn("AccountSettingsModal onSaved callback error:", cbErr);
+      }
     } catch (err) {
-      console.warn("update-student-profile error:", err);
-      setError("שגיאת תקשורת. נסו שוב.");
+      clearTimeout(abortTimer);
+      console.warn("update-student-credentials error:", err);
+      if (err && err.name === "AbortError") {
+        setError("פג זמן הבקשה. בדוק/י חיבור לאינטרנט ונסה/י שוב.");
+      } else {
+        setError("שגיאת תקשורת. נסו שוב.");
+      }
       setBusy(false);
     }
   };
