@@ -2200,7 +2200,7 @@ ${inventory}
           ? <img src={siteSettings.logo} alt="לוגו" style={{width:82,height:82,objectFit:"contain",borderRadius:12,marginBottom:16,display:"block",marginInline:"auto"}}/>
           : <div style={{fontSize:48,marginBottom:16}}>🎬</div>}
         <h2 style={{fontSize:"clamp(14px,4vw,20px)",fontWeight:900,color:"var(--accent)",marginBottom:4}}>מערכת הפניות</h2>
-        <div style={{fontSize:13,color:"var(--text3)",marginBottom:24}}>כניסת סטודנטים ומרצים · מכללת קמרה אובסקורה וסאונד</div>
+        <div style={{fontSize:14,color:"var(--text2)",marginBottom:24,fontWeight:500}}>כניסת סטודנטים ומרצים · מכללת קמרה אובסקורה וסאונד</div>
 
         {authView === "login" && (
           <>
@@ -2227,8 +2227,9 @@ ${inventory}
               onClick={()=>{setAuthView("forgot");setLoginError("");setLoginPassword("");}}>
               שכחת סיסמה?
             </button>
-            <div style={{fontSize:11,color:"var(--text3)",marginTop:14}}>
-              רק משתמשים רשומים יכולים להיכנס. כניסה ראשונה? לחץ/י על "שכחת סיסמה?" ליצירת סיסמה.
+            <div style={{fontSize:13,color:"var(--text2)",marginTop:14,lineHeight:1.6}}>
+              רק משתמשים רשומים יכולים להיכנס.<br/>
+              כניסה ראשונה? לחץ/י על <strong>"שכחת סיסמה?"</strong> ליצירת סיסמה.
             </div>
           </>
         )}
