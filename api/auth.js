@@ -298,7 +298,7 @@ async function handleEnsureUser(req, res) {
 // "current email" — ignoring whatever the client sends — so a hostile
 // client cannot target another student's record.
 async function handleUpdateStudentCredentials(req, res) {
-  const { accessToken, name, email, password } = req.body || {};
+  const { accessToken, name, email, phone, password } = req.body || {};
   if (!accessToken) {
     return res.status(401).json({ error: "missing_access_token" });
   }
@@ -311,12 +311,21 @@ async function handleUpdateStudentCredentials(req, res) {
   const currentEmail = normalizeEmail(authUser.email);
   const nextName     = String(name || "").trim();
   const nextEmail    = normalizeEmail(email);
+  // Phone is optional. Strip anything that isn't a digit or leading '+' so
+  // spaces / dashes / parentheses don't trip validation, then enforce a
+  // 7–15 digit range (covers Israeli locals, US, and international formats).
+  const phoneProvided = phone != null;
+  const nextPhoneRaw  = phoneProvided ? String(phone || "").trim() : "";
+  const nextPhone     = nextPhoneRaw.replace(/[^\d+]/g, "");
 
   if (!nextName || nextName.length < 2) {
     return res.status(400).json({ error: "invalid_name" });
   }
   if (!isValidEmail(nextEmail)) {
     return res.status(400).json({ error: "invalid_email" });
+  }
+  if (nextPhone && !/^\+?\d{7,15}$/.test(nextPhone)) {
+    return res.status(400).json({ error: "invalid_phone" });
   }
   if (password != null && password !== "" && String(password).length < 6) {
     return res.status(400).json({ error: "password_too_short" });
@@ -342,8 +351,15 @@ async function handleUpdateStudentCredentials(req, res) {
     }
   }
 
-  // Update the store (certifications.students[meIdx]).
-  const updatedStudent = { ...students[meIdx], name: nextName, email: nextEmail };
+  // Update the store (certifications.students[meIdx]). Only overwrite `phone`
+  // when the client actually sent the field — this keeps legacy clients that
+  // don't know about phone from wiping existing values.
+  const updatedStudent = {
+    ...students[meIdx],
+    name:  nextName,
+    email: nextEmail,
+    ...(phoneProvided ? { phone: nextPhone } : {}),
+  };
   const updatedStudents = students.map((s, i) => (i === meIdx ? updatedStudent : s));
   const updatedCertifications = { ...certifications, students: updatedStudents };
 
@@ -357,8 +373,10 @@ async function handleUpdateStudentCredentials(req, res) {
     authUser.user_metadata && typeof authUser.user_metadata === "object"
       ? authUser.user_metadata
       : {};
+  const nextMeta = { ...currentMeta, full_name: nextName };
+  if (phoneProvided) nextMeta.phone = nextPhone;
   const authUpdate = {
-    user_metadata: { ...currentMeta, full_name: nextName },
+    user_metadata: nextMeta,
   };
   if (nextEmail !== currentEmail) {
     authUpdate.email = nextEmail;
@@ -392,8 +410,9 @@ async function handleUpdateStudentCredentials(req, res) {
   return res.status(200).json({
     ok: true,
     student: updatedStudent,
-    emailChanged: nextEmail !== currentEmail,
+    emailChanged:    nextEmail !== currentEmail,
     passwordChanged: !!(password && String(password).length >= 6),
+    phoneChanged:    phoneProvided && (students[meIdx]?.phone || "") !== nextPhone,
   });
 }
 

@@ -905,6 +905,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
 function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColor }) {
   const [name,     setName]     = useState(String(student?.name  || ""));
   const [email,    setEmail]    = useState(String(student?.email || ""));
+  const [phone,    setPhone]    = useState(String(student?.phone || ""));
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [busy,     setBusy]     = useState(false);
@@ -914,12 +915,20 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
     setError("");
     const nName  = String(name  || "").trim();
     const nEmail = String(email || "").trim().toLowerCase();
+    // Strip everything that isn't a digit/plus so whitespace / dashes / ()'s
+    // don't break the validation. Empty phone is allowed (optional field).
+    const nPhoneRaw = String(phone || "").trim();
+    const nPhone    = nPhoneRaw.replace(/[^\d+]/g, "");
     if (!nName || nName.length < 2) {
       setError("יש להזין שם מלא (לפחות 2 תווים).");
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nEmail)) {
       setError("כתובת אימייל לא תקינה.");
+      return;
+    }
+    if (nPhone && !/^\+?\d{7,15}$/.test(nPhone)) {
+      setError("מספר טלפון לא תקין (7 עד 15 ספרות).");
       return;
     }
     if (password || confirmPassword) {
@@ -938,14 +947,22 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
     // serverless function stalls or the network drops silently.
     const abort = new AbortController();
     const abortTimer = setTimeout(() => abort.abort(), 25000);
+    // Bulletproof cleanup: the try/finally guarantees the busy flag flips off
+    // and the abort timer is cleared even if any downstream callback throws.
+    let unfroze = false;
+    const unfreeze = () => {
+      if (unfroze) return;
+      unfroze = true;
+      clearTimeout(abortTimer);
+      setBusy(false);
+    };
     try {
       // Grab the current access token so the backend can verify the caller.
       const { data: { session } } = await supabase.auth.getSession();
       const accessToken = session?.access_token;
       if (!accessToken) {
         setError("אין חיבור פעיל. התחבר/י מחדש ונסה/י שוב.");
-        setBusy(false);
-        clearTimeout(abortTimer);
+        unfreeze();
         return;
       }
 
@@ -957,6 +974,7 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
           accessToken,
           name:  nName,
           email: nEmail,
+          phone: nPhone,
           password: password || undefined,
         }),
         signal: abort.signal,
@@ -972,6 +990,8 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
           setError("שם מלא חסר או קצר מדי.");
         } else if (code === "invalid_email") {
           setError("כתובת אימייל לא תקינה.");
+        } else if (code === "invalid_phone") {
+          setError("מספר טלפון לא תקין.");
         } else if (code === "password_too_short") {
           setError("הסיסמה קצרה מדי (לפחות 6 תווים).");
         } else if (code === "student_not_found") {
@@ -988,34 +1008,46 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
         } else {
           setError(`שגיאה בשמירה (${res.status}${code ? " · " + code : ""}). נסו שוב.`);
         }
-        setBusy(false);
-        clearTimeout(abortTimer);
+        unfreeze();
         return;
       }
 
-      // Success — close modal BEFORE running parent callbacks so the UI
-      // unfreezes even if a downstream callback throws.
-      clearTimeout(abortTimer);
-      setBusy(false);
+      // SUCCESS path — we must unfreeze the UI and close the modal BEFORE
+      // running any parent callback, so a thrown callback can never keep the
+      // modal frozen.
+      const nextStudent =
+        data.student ||
+        { ...student, name: nName, email: nEmail, phone: nPhone };
+      const flags = {
+        emailChanged:    !!data.emailChanged,
+        passwordChanged: !!data.passwordChanged,
+        phoneChanged:    (student?.phone || "") !== nPhone,
+      };
+      unfreeze();
       onClose?.();
       if (showToast) showToast("success", "הפרטים עודכנו בהצלחה");
-      try {
-        if (onSaved) onSaved(data.student || { ...student, name: nName, email: nEmail }, {
-          emailChanged:    !!data.emailChanged,
-          passwordChanged: !!data.passwordChanged,
-        });
-      } catch (cbErr) {
-        console.warn("AccountSettingsModal onSaved callback error:", cbErr);
-      }
+      // Defer the parent callback one tick so it runs AFTER our modal has
+      // fully unmounted. This way any state-cascade the parent triggers
+      // (e.g. the real-time gatekeeper) can't race the modal cleanup.
+      setTimeout(() => {
+        try {
+          if (onSaved) onSaved(nextStudent, flags);
+        } catch (cbErr) {
+          console.warn("AccountSettingsModal onSaved callback error:", cbErr);
+        }
+      }, 0);
     } catch (err) {
-      clearTimeout(abortTimer);
       console.warn("update-student-credentials error:", err);
       if (err && err.name === "AbortError") {
         setError("פג זמן הבקשה. בדוק/י חיבור לאינטרנט ונסה/י שוב.");
       } else {
         setError("שגיאת תקשורת. נסו שוב.");
       }
-      setBusy(false);
+      unfreeze();
+    } finally {
+      // Absolute safety net: no matter what, make sure the UI is never left
+      // frozen. This is belt-and-braces on top of the unfreeze() calls above.
+      unfreeze();
     }
   };
 
@@ -1060,6 +1092,25 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
             />
             <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>
               שינוי האימייל ישמש כמזהה ההתחברות הבא שלך.
+            </div>
+          </div>
+
+          <div>
+            <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>מספר טלפון</label>
+            <input
+              className="form-input"
+              type="tel"
+              value={phone}
+              onChange={(e)=>setPhone(e.target.value)}
+              disabled={busy}
+              placeholder="050-1234567"
+              autoComplete="tel"
+              inputMode="tel"
+              dir="ltr"
+              style={{textAlign:"right"}}
+            />
+            <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>
+              ישמש אותנו ליצירת קשר בנוגע להשאלות שלך.
             </div>
           </div>
 
@@ -1553,6 +1604,19 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     });
   }, []); // mount-only — runs once to validate the sessionStorage-restored value
 
+  // Self-update grace window. When a student saves their own profile via the
+  // Account Settings modal, we optimistically set loggedInStudent to the new
+  // values BEFORE the admin `certifications` state has round-tripped through
+  // the /api/store → Supabase → polling/realtime pipeline. Without this guard,
+  // the gatekeeper useEffect below would see the NEW email in loggedInStudent,
+  // not find it in the STALE certifications.students[], and forcibly sign the
+  // user out — which is exactly the "screen freeze" bug users were hitting.
+  //
+  // `selfUpdateSnapshotRef.current` holds {oldEmail, newEmail, until}. While
+  // the current time is < until, the gatekeeper trusts the user even if the
+  // new email isn't in the store yet.
+  const selfUpdateSnapshotRef = useRef(null);
+
   // Real-time Gatekeeper: whenever certifications (the admin source of truth)
   // updates, re-validate that the currently logged-in student still exists in
   // certifications.students. If the admin just removed them, sign out and
@@ -1563,6 +1627,25 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     if (!Array.isArray(stuList) || stuList.length === 0) return;
     const storedEmail = String(loggedInStudent.email || "").toLowerCase().trim();
     if (!storedEmail) return;
+
+    // Grace window: the user just updated their own profile and the store
+    // hasn't finished propagating yet — trust loggedInStudent for now.
+    const snap = selfUpdateSnapshotRef.current;
+    if (snap && Date.now() < snap.until) {
+      const snapNew = String(snap.newEmail || "").toLowerCase().trim();
+      const snapOld = String(snap.oldEmail || "").toLowerCase().trim();
+      if (storedEmail === snapNew || storedEmail === snapOld) {
+        // Also treat as present if EITHER the new or old email is in the list
+        // (covers the window where the store still has the old value as well
+        // as the window right after it flips to the new one).
+        const presentEither = stuList.some((s) => {
+          const e = String(s.email || "").toLowerCase().trim();
+          return e === snapNew || e === snapOld;
+        });
+        if (presentEither) return;
+      }
+    }
+
     const stillExists = stuList.some(
       (s) => String(s.email || "").toLowerCase().trim() === storedEmail,
     );
@@ -3124,13 +3207,25 @@ ${inventory}
         showToast={showToast}
         onClose={()=>setShowAccountSettings(false)}
         onSaved={(updatedStudent, flags)=>{
+          // Arm the 15s self-update grace window BEFORE we touch loggedInStudent.
+          // Otherwise the gatekeeper useEffect would see the new email, check
+          // the stale certifications.students[] list (which still has the old
+          // email), find no match, and sign the user out — causing the "screen
+          // freezes on save" bug.
+          selfUpdateSnapshotRef.current = {
+            oldEmail: loggedInStudent?.email || "",
+            newEmail: updatedStudent?.email || "",
+            until: Date.now() + 15000,
+          };
           // Update local state so the UI reflects the change immediately.
           setLoggedInStudent(updatedStudent);
           set("student_name", updatedStudent.name || "");
-          set("email", updatedStudent.email || "");
+          set("email",        updatedStudent.email || "");
+          if (updatedStudent.phone != null) set("phone", updatedStudent.phone || "");
           // The backend already wrote the updated certifications.students[]
           // row via the Service Role key, so App-level admin polling
-          // (refreshAdminData → certifications) will pick it up within 30s.
+          // (refreshAdminData → certifications) AND the Supabase realtime
+          // listener on the `store` table will pick it up within a second.
           if (flags?.passwordChanged) {
             showToast?.("success", "הסיסמה עודכנה. השתמש/י בה בכניסה הבאה.");
           }

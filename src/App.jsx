@@ -7536,6 +7536,66 @@ export default function App() {
     };
   }, [loading, isPublicFormView, isLecturerPortalView]);
 
+  // ── Supabase realtime listener on the `store` table ────────────────────────
+  // Live-sync certifications (and the rest of the store keys we care about)
+  // into local state the instant anyone — the admin in another tab, another
+  // admin on another machine, or a student self-updating their own profile
+  // via PublicForm's Account Settings modal — writes to the store. This is
+  // what drives the Students page in the secretary panel updating in real
+  // time when a logged-in student changes their name / email / phone.
+  //
+  // The publication `supabase_realtime` was granted SELECT on public.store
+  // via a server-side migration; without that the subscribe() below returns
+  // CLOSED / TIMED_OUT and no events fire.
+  useEffect(() => {
+    if (loading || isPublicFormView || isLecturerPortalView) return undefined;
+    const channel = supabase
+      .channel("store-live-sync")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "store" },
+        (payload) => {
+          try {
+            const row = payload.new || payload.old;
+            const key = row?.key;
+            const data = payload.new?.data;
+            if (!key || data === undefined) return;
+            if (key === "certifications") {
+              if (typeof data === "object" && data !== null &&
+                  !dataEquals(certificationsRef.current, data)) {
+                _setCertifications(data);
+              }
+            } else if (key === "reservations") {
+              if (Array.isArray(data)) {
+                const normalized = normalizeReservationsForArchive(data);
+                if (!dataEquals(reservationsRef.current, normalized)) {
+                  _setReservations(normalized);
+                }
+              }
+            } else if (key === "studio_bookings") {
+              if (Array.isArray(data) && !dataEquals(studioBookingsRef.current, data)) {
+                _setStudioBookings(data);
+              }
+            } else if (key === "lecturers") {
+              if (Array.isArray(data) && !dataEquals(lecturersRef.current, data)) {
+                _setLecturers(data);
+              }
+            }
+          } catch (err) {
+            console.warn("store realtime payload handler failed", err);
+          }
+        },
+      )
+      .subscribe((status) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.warn("store realtime channel:", status);
+        }
+      });
+    return () => {
+      try { supabase.removeChannel(channel); } catch {}
+    };
+  }, [loading, isPublicFormView, isLecturerPortalView]);
+
   useEffect(() => {
     if (loading || !isPublicFormView) return undefined;
 
