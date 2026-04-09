@@ -6893,6 +6893,16 @@ function StaffLogin({ onSuccess }) {
         <button className="btn btn-primary" style={{width:"100%"}} onClick={attempt} disabled={loading}>
           {loading ? "מאמת..." : "כניסה"}
         </button>
+
+        <div style={{marginTop:20,paddingTop:16,borderTop:"1px solid var(--border)",textAlign:"center"}}>
+          <a
+            href="/"
+            style={{fontSize:12,color:"var(--text3)",textDecoration:"none",display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:"var(--r-sm)",border:"1px solid var(--border)",background:"transparent",cursor:"pointer",transition:"color 0.15s"}}
+            onMouseEnter={e=>{e.currentTarget.style.color="var(--text)";e.currentTarget.style.borderColor="var(--text2)";}}
+            onMouseLeave={e=>{e.currentTarget.style.color="var(--text3)";e.currentTarget.style.borderColor="var(--border)";}}>
+            ← חזרה למערכת הפניות לסטודנטים ומרצים
+          </a>
+        </div>
       </div>
     </div>
   );
