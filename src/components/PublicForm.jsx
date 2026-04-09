@@ -924,8 +924,15 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [loginPassword, setLoginPassword] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
   // PASSWORD_RECOVERY modal (user clicked reset link from email)
-  const [recoveryMode, setRecoveryMode] = useState(false);
-  const recoveryModeRef = useRef(false);
+  // The inline <script> in index.html sets window.__isPasswordRecovery = true
+  // synchronously before any module loads, so we can pre-arm the ref here and
+  // suppress any SIGNED_IN events that may fire before PASSWORD_RECOVERY.
+  // This is critical in PWA mode where a stale stored session would otherwise
+  // route the user into the portal before the recovery event arrives.
+  const isRecoveryInitial =
+    typeof window !== "undefined" && window.__isPasswordRecovery === true;
+  const [recoveryMode, setRecoveryMode] = useState(isRecoveryInitial);
+  const recoveryModeRef = useRef(isRecoveryInitial);
   useEffect(() => { recoveryModeRef.current = recoveryMode; }, [recoveryMode]);
   const [recoveryPassword, setRecoveryPassword] = useState("");
   const [recoveryConfirm, setRecoveryConfirm] = useState("");
@@ -1225,6 +1232,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       // PASSWORD_RECOVERY is fired after the user clicks the reset link.
       // Open the "new password" modal instead of routing into the portal.
       if (event === "PASSWORD_RECOVERY") {
+        recoveryModeRef.current = true; // sync update (useEffect runs next tick)
         setRecoveryMode(true);
         return;
       }

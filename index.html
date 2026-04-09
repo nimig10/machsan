@@ -12,6 +12,37 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Detect Supabase password-recovery URL BEFORE any module (including
+      // the Supabase client) loads. In PWA mode the app is launched with a
+      // pre-existing session in localStorage, which otherwise fires SIGNED_IN
+      // first and routes the user into the portal — clobbering the #recovery
+      // fragment before PASSWORD_RECOVERY can fire. We wipe any stored
+      // Supabase auth token so the recovery token in the URL becomes the
+      // only active session when createClient() runs.
+      (function () {
+        try {
+          var hash = window.location.hash || "";
+          var search = window.location.search || "";
+          var isRecovery =
+            hash.indexOf("type=recovery") !== -1 ||
+            search.indexOf("type=recovery") !== -1;
+          if (isRecovery) {
+            window.__isPasswordRecovery = true;
+            for (var i = localStorage.length - 1; i >= 0; i--) {
+              var key = localStorage.key(i);
+              if (
+                key &&
+                key.indexOf("sb-") === 0 &&
+                key.indexOf("-auth-token") !== -1
+              ) {
+                localStorage.removeItem(key);
+              }
+            }
+          }
+        } catch (e) {}
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
