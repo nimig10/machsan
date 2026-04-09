@@ -121,8 +121,9 @@ async function findEligibleRecord(normalizedEmail) {
 }
 
 // Provisions an auth.users row (without password) via the Admin API if one
-// doesn't already exist. Used on first-login so resetPasswordForEmail works.
-async function ensureAuthUserExists(normalizedEmail) {
+// doesn't already exist, and always syncs user_metadata.full_name so email
+// templates can greet the user by name via {{ index .UserMetaData "full_name" }}.
+async function ensureAuthUserExists(normalizedEmail, fullName) {
   try {
     // Query existing auth user by email
     const lookupRes = await fetch(
@@ -132,7 +133,18 @@ async function ensureAuthUserExists(normalizedEmail) {
     if (lookupRes.ok) {
       const data = await lookupRes.json();
       const list = Array.isArray(data?.users) ? data.users : (Array.isArray(data) ? data : []);
-      if (list.length > 0) return { created: false };
+      if (list.length > 0) {
+        // User already exists — update metadata so name is always fresh
+        if (fullName) {
+          const userId = list[0].id;
+          await fetch(`${SB_URL}/auth/v1/admin/users/${userId}`, {
+            method: "PUT",
+            headers: SERVICE_HEADERS,
+            body: JSON.stringify({ user_metadata: { full_name: fullName } }),
+          });
+        }
+        return { created: false };
+      }
     }
 
     // Not found — create via Admin API (no password, email confirmed)
@@ -142,6 +154,7 @@ async function ensureAuthUserExists(normalizedEmail) {
       body: JSON.stringify({
         email: normalizedEmail,
         email_confirm: true,
+        user_metadata: fullName ? { full_name: fullName } : {},
       }),
     });
     if (!createRes.ok) {
@@ -175,7 +188,7 @@ async function handleEnsureUser(req, res) {
   // When provision=true (called from forgot-password flow), make sure the
   // auth.users row exists so resetPasswordForEmail can deliver the link.
   if (provision) {
-    await ensureAuthUserExists(normalizedEmail);
+    await ensureAuthUserExists(normalizedEmail, record.name);
   }
 
   return res.status(200).json({ ok: true, role: record.role, name: record.name });
