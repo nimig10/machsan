@@ -738,15 +738,9 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                               {trackSettings.map(ts=><option key={ts.name} value={ts.name}>{ts.name}</option>)}
                             </select>
                           </td>
-                          <td style={{...tdS,width:80,textAlign:"center"}} onClick={e=>e.stopPropagation()}>
-                            <div style={{display:"flex",gap:4,justifyContent:"center"}}>
-                              <button className="btn btn-primary btn-sm" style={{fontSize:11,padding:"2px 8px"}}
-                                disabled={inlineSaving} onClick={()=>void saveInlineEdit(s,{closeOnSuccess:true})}>
-                                {inlineSaving?"⏳":"✓"}
-                              </button>
-                              <button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:"2px 8px"}}
-                                onClick={()=>setEditingId(null)}>✕</button>
-                            </div>
+                          <td style={{...tdS,width:48,textAlign:"center"}} onClick={e=>e.stopPropagation()}>
+                            <button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:"2px 8px"}}
+                              onClick={()=>void closeInlineEdit(s)}>✕</button>
                           </td>
                         </tr>
                       );
@@ -792,12 +786,9 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                       {trackSettings.map(ts=><option key={ts.name} value={ts.name}>{ts.name}</option>)}
                     </select>
                   </div>
-                  <div style={{display:"flex",gap:8,marginTop:10}}>
-                    <button className="btn btn-primary btn-sm" disabled={inlineSaving}
-                      onClick={()=>void saveInlineEdit(s,{closeOnSuccess:true})}>
-                      {inlineSaving?"⏳ שומר...":"✓ שמור"}
-                    </button>
-                    <button className="btn btn-secondary btn-sm" onClick={()=>setEditingId(null)}>✕ ביטול</button>
+                  <div style={{display:"flex",gap:8,marginTop:10,alignItems:"center"}}>
+                    {inlineSaving && <span style={{fontSize:12,color:"var(--text3)"}}>⏳ שומר...</span>}
+                    <button className="btn btn-secondary btn-sm" onClick={()=>void closeInlineEdit(s)}>✕ סגור</button>
                     <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)",marginRight:"auto"}}
                       onClick={()=>{deleteStudent(s.id);setEditingId(null);}}>🗑️</button>
                   </div>
