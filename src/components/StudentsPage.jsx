@@ -1,5 +1,5 @@
 // StudentsPage.jsx — student management page (CRUD + import)
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { storageSet, logActivity } from "../utils.js";
 import { Modal } from "./ui.jsx";
 import SmartExcelImportButton from "./SmartExcelImportButton.jsx";
@@ -32,8 +32,17 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
   const trackSettings = buildTrackSettings(students, certifications?.trackSettings, explicitTracks);
   const [addingStudent, setAddingStudent] = useState(false);
   const [studentForm, setStudentForm] = useState({ name:"", email:"", phone:"", track:"" });
-  const [editStudent, setEditStudent] = useState(null);
-  const [editForm, setEditForm] = useState({ name:"", email:"", phone:"", track:"" });
+
+  // ── Inline-edit state (replaces modal) ──
+  const [editingId,      setEditingId]      = useState(null);
+  const [editName,       setEditName]       = useState("");
+  const [editEmail,      setEditEmail]      = useState("");
+  const [editPhone,      setEditPhone]      = useState("");
+  const [editTrackInl,   setEditTrackInl]   = useState("");
+  const [inlineSaving,   setInlineSaving]   = useState(false);
+  const inlineSaveTimeout    = useRef(null);
+  const lastSavedDraftRef    = useRef("");
+  const lastFailedDraftRef   = useRef("");
   const [editTrack, setEditTrack] = useState(null);
   const [editTrackName, setEditTrackName] = useState("");
   const [editTrackType, setEditTrackType] = useState("");
@@ -197,21 +206,110 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
     }
   };
 
-  // ── Edit student ──
-  const saveEdit = async () => {
-    const name = editForm.name.trim();
-    const email = editForm.email.toLowerCase().trim();
-    if(!name||!email) return;
-    const dup = students.find(s=>s.email===email && s.id!==editStudent.id);
-    if(dup) { showToast("error","מייל זה כבר קיים לסטודנט אחר"); return; }
-    const updated = { types, students: students.map(s=>s.id===editStudent.id ? {...s,name,email,phone:editForm.phone.trim(),track:editForm.track?.trim()||""} : s) };
-    if(await save(updated)) {
-      showToast("success","פרטי הסטודנט עודכנו");
-      setEditStudent(null);
-      const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
-      logActivity({ user_id: caller.id, user_name: caller.full_name, action: "student_edit", entity: "student", entity_id: String(editStudent.id), details: { name } });
-    }
+  // ── Inline-edit helpers ──
+  const clearInlineSaveTimeout = () => { clearTimeout(inlineSaveTimeout.current); };
+
+  const buildDraft = () => ({
+    name:  String(editName  || "").trim(),
+    email: String(editEmail || "").trim().toLowerCase(),
+    phone: String(editPhone || "").trim(),
+    track: String(editTrackInl || "").trim(),
+  });
+
+  const getDraftKey = (d) => [d.name, d.email, d.phone, d.track].join("\u0001");
+
+  const isDirty = (stu, d) => (
+    String(stu?.name  || "").trim()                    !== d.name  ||
+    String(stu?.email || "").trim().toLowerCase()      !== d.email ||
+    String(stu?.phone || "").trim()                    !== d.phone ||
+    String(stu?.track || "").trim()                    !== d.track
+  );
+
+  const openInlineEdit = (stu) => {
+    clearInlineSaveTimeout();
+    lastSavedDraftRef.current  = "";
+    lastFailedDraftRef.current = "";
+    setInlineSaving(false);
+    setEditingId(stu.id);
+    setEditName(stu.name  || "");
+    setEditEmail(stu.email || "");
+    setEditPhone(stu.phone || "");
+    setEditTrackInl(stu.track || "");
   };
+
+  const saveInlineEdit = async (stu, { closeOnSuccess = false, silent = false } = {}) => {
+    clearInlineSaveTimeout();
+    if (!stu) { if (closeOnSuccess) setEditingId(null); return true; }
+
+    const draft = buildDraft();
+    const key   = getDraftKey(draft);
+
+    if (!draft.name) { showToast("error", "שם מלא הוא שדה חובה"); return false; }
+    if (!draft.email || !draft.email.includes("@")) { showToast("error", "נדרש אימייל תקין"); return false; }
+
+    const dup = students.find(s => s.email === draft.email && s.id !== stu.id);
+    if (dup) { showToast("error", "מייל זה כבר קיים לסטודנט אחר"); return false; }
+
+    if (!isDirty(stu, draft)) {
+      lastSavedDraftRef.current = key;
+      lastFailedDraftRef.current = "";
+      if (closeOnSuccess) setEditingId(null);
+      return true;
+    }
+
+    setInlineSaving(true);
+    const updatedStudents = students.map(s => s.id === stu.id ? { ...s, ...draft } : s);
+    const ok = await save({ types, students: updatedStudents });
+    setInlineSaving(false);
+
+    if (!ok) {
+      lastFailedDraftRef.current = key;
+      showToast("error", "שגיאה בעדכון. הנתונים לא נשמרו.");
+      return false;
+    }
+
+    lastSavedDraftRef.current = key;
+    lastFailedDraftRef.current = "";
+    if (!silent) showToast("success", "פרטי הסטודנט עודכנו");
+    if (closeOnSuccess) setEditingId(null);
+    const caller = JSON.parse(sessionStorage.getItem("staff_user") || "{}");
+    logActivity({ user_id: caller.id, user_name: caller.full_name, action: "student_edit", entity: "student", entity_id: String(stu.id), details: { name: draft.name } });
+    return true;
+  };
+
+  const closeInlineEdit = async (stu) => {
+    const ok = await saveInlineEdit(stu, { closeOnSuccess: false, silent: true });
+    if (ok) setEditingId(null);
+  };
+
+  const startEdit = async (stu) => {
+    if (editingId === stu.id) { await closeInlineEdit(stu); return; }
+    if (editingId) {
+      const cur = students.find(s => s.id === editingId);
+      const ok  = await saveInlineEdit(cur, { closeOnSuccess: false, silent: true });
+      if (!ok) return;
+      setEditingId(null);
+    }
+    openInlineEdit(stu);
+  };
+
+  const editingStudent = editingId ? students.find(s => s.id === editingId) : null;
+
+  // Auto-save debounce — 700ms after last keystroke (mirrors LecturersPage)
+  useEffect(() => {
+    clearInlineSaveTimeout();
+    if (!editingStudent || inlineSaving) return;
+    const draft = buildDraft();
+    const key   = getDraftKey(draft);
+    if (!draft.name || !isDirty(editingStudent, draft)) return;
+    if (lastSavedDraftRef.current === key || lastFailedDraftRef.current === key) return;
+    inlineSaveTimeout.current = setTimeout(() => {
+      void saveInlineEdit(editingStudent, { closeOnSuccess: false, silent: true });
+    }, 700);
+    return () => clearInlineSaveTimeout();
+  }, [editingStudent, editName, editEmail, editPhone, editTrackInl, inlineSaving]);
+
+
 
   const openTrackEditor = (trackName) => {
     const trackObj = (certifications?.tracks || []).find(t => normalizeTrackName(t.name) === trackName);
@@ -572,47 +670,106 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
       )}
 
       {/* ── Students list ── */}
+      <style>{`
+        .students-table .students-row td {
+          transition: background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+        }
+        .students-table .students-row:hover td {
+          background: rgba(245, 166, 35, 0.14);
+          border-bottom-color: rgba(245, 166, 35, 0.28);
+        }
+        .students-table .students-row:hover td:last-child {
+          box-shadow: inset 4px 0 0 var(--accent);
+        }
+      `}</style>
+
       {filteredStudents.length===0 && !addingStudent ? (
         <div className="empty-state"><div className="emoji">👨‍🎓</div><p>{search?"לא נמצאו סטודנטים":"לא נוספו סטודנטים עדיין"}</p></div>
       ) : (
         <>
           {/* Desktop — table */}
           <div className="cert-desktop" style={{overflowX:"auto",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",minWidth:480,direction:"rtl"}}>
+            <table className="students-table" style={{width:"100%",borderCollapse:"collapse",minWidth:540,direction:"rtl"}}>
               <thead>
                 <tr style={{background:"var(--surface2)",borderBottom:"2px solid var(--border)"}}>
                   <th style={thS}>שם סטודנט</th>
                   <th style={thS}>אימייל</th>
                   <th style={thS}>טלפון</th>
                   <th style={thS}>מסלול לימודים</th>
-                  <th style={{...thS,width:48}}></th>
+                  <th style={{...thS,width:80,textAlign:"center"}}></th>
                 </tr>
               </thead>
               <tbody>
                 {(()=>{
                   const rows=[]; let lastTrack=undefined;
+                  const inpS = { padding:"4px 8px", fontSize:13, height:32, borderRadius:6, border:"1px solid var(--border)", background:"var(--surface)", color:"var(--text)", width:"100%", minWidth:0 };
                   filteredStudents.forEach((s,i)=>{
                     const t=s.track||"";
                     if(t!==lastTrack){
-                      rows.push(<tr key={`grp_${i}`}><td colSpan={4} style={{background:"rgba(245,166,35,0.06)",padding:"5px 14px",fontWeight:800,fontSize:11,color:"var(--accent)",borderBottom:"1px solid var(--border)",letterSpacing:0.5}}>{t?"🎓 "+t:"📋 ללא מסלול"}</td></tr>);
+                      rows.push(
+                        <tr key={`grp_${t}_${i}`}>
+                          <td colSpan={5} style={{background:"rgba(245,166,35,0.06)",padding:"5px 14px",fontWeight:800,fontSize:11,color:"var(--accent)",borderBottom:"1px solid var(--border)",letterSpacing:0.5}}>
+                            {t?"🎓 "+t:"📋 ללא מסלול"}
+                          </td>
+                        </tr>
+                      );
                       lastTrack=t;
                     }
-                    rows.push(<tr key={s.id} onClick={()=>{setEditStudent(s);setEditForm({name:s.name,email:s.email,phone:s.phone||"",track:s.track||""}); }} style={{borderBottom:"1px solid var(--border)",background:i%2===0?"var(--surface)":"var(--surface2)",cursor:"pointer"}}
-                      onMouseEnter={e=>e.currentTarget.style.background="rgba(245,166,35,0.05)"}
-                      onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"var(--surface)":"var(--surface2)"}>
-                      <td style={tdS}><div style={{fontWeight:700,fontSize:14}}>{s.name}</div></td>
-                      <td style={{...tdS,fontSize:12,color:"var(--text3)"}}>{s.email}</td>
-                      <td style={{...tdS,fontSize:12,color:"var(--text3)"}}>{s.phone||"—"}</td>
-                      <td style={tdS}>
-                        {s.track
-                          ? <span style={{background:"rgba(245,166,35,0.1)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:20,padding:"3px 10px",fontSize:11,color:"var(--accent)",fontWeight:700}}>🎓 {s.track}</span>
-                          : <span style={{fontSize:11,color:"var(--text3)"}}>—</span>}
-                      </td>
-                      <td style={{...tdS,width:48,textAlign:"center"}} onClick={e=>e.stopPropagation()}>
-                        <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)",padding:"3px 8px"}}
-                          onClick={()=>deleteStudent(s.id)}>🗑️</button>
-                      </td>
-                    </tr>);
+                    const isEditing = editingId === s.id;
+                    if (isEditing) {
+                      rows.push(
+                        <tr key={s.id} style={{background:"rgba(245,166,35,0.06)",borderBottom:"1px solid var(--border)"}}>
+                          <td style={{...tdS,padding:"6px 10px"}}>
+                            <input style={{...inpS,fontWeight:700}} value={editName} autoFocus
+                              onChange={e=>setEditName(e.target.value)}/>
+                          </td>
+                          <td style={{...tdS,padding:"6px 10px"}}>
+                            <input style={{...inpS,fontSize:12}} type="email" value={editEmail}
+                              onChange={e=>setEditEmail(e.target.value)}/>
+                          </td>
+                          <td style={{...tdS,padding:"6px 10px"}}>
+                            <input style={inpS} value={editPhone}
+                              onChange={e=>setEditPhone(e.target.value)}/>
+                          </td>
+                          <td style={{...tdS,padding:"6px 10px"}}>
+                            <select style={{...inpS}} value={editTrackInl}
+                              onChange={e=>setEditTrackInl(e.target.value)}>
+                              <option value="">-- ללא מסלול --</option>
+                              {trackSettings.map(ts=><option key={ts.name} value={ts.name}>{ts.name}</option>)}
+                            </select>
+                          </td>
+                          <td style={{...tdS,width:80,textAlign:"center"}} onClick={e=>e.stopPropagation()}>
+                            <div style={{display:"flex",gap:4,justifyContent:"center"}}>
+                              <button className="btn btn-primary btn-sm" style={{fontSize:11,padding:"2px 8px"}}
+                                disabled={inlineSaving} onClick={()=>void saveInlineEdit(s,{closeOnSuccess:true})}>
+                                {inlineSaving?"⏳":"✓"}
+                              </button>
+                              <button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:"2px 8px"}}
+                                onClick={()=>setEditingId(null)}>✕</button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    } else {
+                      rows.push(
+                        <tr key={s.id} className="students-row"
+                          onClick={()=>void startEdit(s)}
+                          style={{borderBottom:"1px solid var(--border)",cursor:"pointer"}}>
+                          <td style={{...tdS,fontWeight:700,fontSize:14}}>{s.name}</td>
+                          <td style={{...tdS,fontSize:12,color:"var(--text3)"}}>{s.email}</td>
+                          <td style={{...tdS,fontSize:12,color:"var(--text3)"}}>{s.phone||"—"}</td>
+                          <td style={tdS}>
+                            {s.track
+                              ? <span style={{background:"rgba(245,166,35,0.1)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:20,padding:"3px 10px",fontSize:11,color:"var(--accent)",fontWeight:700}}>🎓 {s.track}</span>
+                              : <span style={{fontSize:11,color:"var(--text3)"}}>—</span>}
+                          </td>
+                          <td style={{...tdS,width:80,textAlign:"center"}} onClick={e=>e.stopPropagation()}>
+                            <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)",padding:"3px 8px"}}
+                              onClick={()=>deleteStudent(s.id)}>🗑️</button>
+                          </td>
+                        </tr>
+                      );
+                    }
                   });
                   return rows;
                 })()}
@@ -620,68 +777,52 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
             </table>
           </div>
 
-          {/* Mobile — cards */}
+          {/* Mobile — cards (inline edit on tap) */}
           <div className="cert-mobile" style={{flexDirection:"column",gap:10}}>
-            {filteredStudents.map(s=>(
-              <div key={s.id} onClick={()=>{setEditStudent(s);setEditForm({name:s.name,email:s.email,phone:s.phone||"",track:s.track||""}); }}
-                style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 16px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontWeight:800,fontSize:15}}>{s.name}</div>
-                  {s.track&&<div style={{fontSize:11,color:"var(--accent)",fontWeight:700}}>🎓 {s.track}</div>}
-                  <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{s.email}</div>
-                  {s.phone&&<div style={{fontSize:11,color:"var(--text3)"}}>{s.phone}</div>}
+            {filteredStudents.map(s=>{
+              const isEditing = editingId === s.id;
+              return isEditing ? (
+                <div key={s.id} style={{background:"rgba(245,166,35,0.06)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:"var(--r)",padding:"14px 16px",direction:"rtl"}}>
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    <input className="form-input" placeholder="שם מלא" value={editName} autoFocus onChange={e=>setEditName(e.target.value)}/>
+                    <input className="form-input" placeholder="אימייל" type="email" value={editEmail} onChange={e=>setEditEmail(e.target.value)}/>
+                    <input className="form-input" placeholder="טלפון" value={editPhone} onChange={e=>setEditPhone(e.target.value)}/>
+                    <select className="form-input" value={editTrackInl} onChange={e=>setEditTrackInl(e.target.value)}>
+                      <option value="">-- ללא מסלול --</option>
+                      {trackSettings.map(ts=><option key={ts.name} value={ts.name}>{ts.name}</option>)}
+                    </select>
+                  </div>
+                  <div style={{display:"flex",gap:8,marginTop:10}}>
+                    <button className="btn btn-primary btn-sm" disabled={inlineSaving}
+                      onClick={()=>void saveInlineEdit(s,{closeOnSuccess:true})}>
+                      {inlineSaving?"⏳ שומר...":"✓ שמור"}
+                    </button>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>setEditingId(null)}>✕ ביטול</button>
+                    <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)",marginRight:"auto"}}
+                      onClick={()=>{deleteStudent(s.id);setEditingId(null);}}>🗑️</button>
+                  </div>
                 </div>
-                <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-                  <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)",padding:"4px 8px",fontSize:15}}
-                    onClick={e=>{e.stopPropagation();deleteStudent(s.id);}}>🗑️</button>
-                  <span style={{fontSize:18,color:"var(--text3)"}}>›</span>
+              ) : (
+                <div key={s.id} onClick={()=>void startEdit(s)}
+                  style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 16px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,transition:"background 0.16s"}}
+                  onMouseEnter={e=>e.currentTarget.style.background="rgba(245,166,35,0.08)"}
+                  onMouseLeave={e=>e.currentTarget.style.background="var(--surface)"}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:800,fontSize:15}}>{s.name}</div>
+                    {s.track&&<div style={{fontSize:11,color:"var(--accent)",fontWeight:700}}>🎓 {s.track}</div>}
+                    <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{s.email}</div>
+                    {s.phone&&<div style={{fontSize:11,color:"var(--text3)"}}>{s.phone}</div>}
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                    <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)",padding:"4px 8px",fontSize:15}}
+                      onClick={e=>{e.stopPropagation();deleteStudent(s.id);}}>🗑️</button>
+                    <span style={{fontSize:18,color:"var(--text3)"}}>✏️</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
-      )}
-
-      {/* ── Edit student modal ── */}
-      {editStudent&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}
-          onClick={e=>e.target===e.currentTarget&&setEditStudent(null)}>
-          <div style={{width:"100%",maxWidth:460,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0"}}>
-              <div style={{fontWeight:900,fontSize:16}}>✏️ עריכת סטודנט</div>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setEditStudent(null)}>✕</button>
-            </div>
-            <div style={{padding:"20px"}}>
-              <div className="grid-2" style={{marginBottom:12}}>
-                <div className="form-group"><label className="form-label">שם מלא *</label>
-                  <input className="form-input" value={editForm.name} onChange={e=>setEditForm(p=>({...p,name:e.target.value}))}/></div>
-                <div className="form-group"><label className="form-label">אימייל *</label>
-                  <input className="form-input" type="email" value={editForm.email} onChange={e=>setEditForm(p=>({...p,email:e.target.value}))}/></div>
-              </div>
-              <div className="form-group"><label className="form-label">טלפון</label>
-                <input className="form-input" value={editForm.phone} onChange={e=>setEditForm(p=>({...p,phone:e.target.value}))}/></div>
-              <div className="form-group"><label className="form-label">מסלול לימודים</label>
-                <select className="form-input" value={editForm.track||""} onChange={e=>setEditForm(p=>({...p,track:e.target.value}))}>
-                  <option value="">-- בחר מסלול --</option>
-                  {trackSettings.map(s=><option key={s.name} value={s.name}>{s.name}</option>)}
-                </select>
-              </div>
-              <div style={{display:"flex",gap:8,marginTop:16,justifyContent:"space-between",flexWrap:"wrap"}}>
-                <div style={{display:"flex",gap:8}}>
-                  <button className="btn btn-primary" disabled={!editForm.name.trim()||!editForm.email.trim()||saving} onClick={saveEdit}>
-                    {saving?"⏳ שומר...":"💾 שמור שינויים"}
-                  </button>
-                  <button className="btn btn-secondary" onClick={()=>setEditStudent(null)}>ביטול</button>
-                </div>
-                <button className="btn btn-secondary" style={{color:"var(--red)",borderColor:"var(--red)"}}
-                  disabled={saving}
-                  onClick={async()=>{ if(confirm(`למחוק את ${editStudent.name}?`)){await deleteStudent(editStudent.id);setEditStudent(null);} }}>
-                  🗑️ מחק סטודנט
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
       {editTrack && (
         <Modal
