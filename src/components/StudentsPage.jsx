@@ -677,9 +677,6 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
             </div>
           </div>
         )}
-      </>
-      )}
-
       {/* ── Students list ── */}
       <style>{`
         .students-table .students-row td {
