@@ -726,20 +726,22 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                     const isEditing = editingId === s.id;
                     if (isEditing) {
                       rows.push(
-                        <tr key={s.id} style={{background:"rgba(245,166,35,0.06)",borderBottom:"1px solid var(--border)"}}>
-                          <td style={{...tdS,padding:"6px 10px"}}>
+                        <tr key={s.id}
+                          style={{background:"rgba(245,166,35,0.06)",borderBottom:"1px solid var(--border)",cursor:"pointer"}}
+                          onClick={()=>void closeInlineEdit(s)}>
+                          <td style={{...tdS,padding:"6px 10px"}} onClick={e=>e.stopPropagation()}>
                             <input style={{...inpS,fontWeight:700}} value={editName} autoFocus
                               onChange={e=>setEditName(e.target.value)}/>
                           </td>
-                          <td style={{...tdS,padding:"6px 10px"}}>
+                          <td style={{...tdS,padding:"6px 10px"}} onClick={e=>e.stopPropagation()}>
                             <input style={{...inpS,fontSize:12}} type="email" value={editEmail}
                               onChange={e=>setEditEmail(e.target.value)}/>
                           </td>
-                          <td style={{...tdS,padding:"6px 10px"}}>
+                          <td style={{...tdS,padding:"6px 10px"}} onClick={e=>e.stopPropagation()}>
                             <input style={inpS} value={editPhone}
                               onChange={e=>setEditPhone(e.target.value)}/>
                           </td>
-                          <td style={{...tdS,padding:"6px 10px"}}>
+                          <td style={{...tdS,padding:"6px 10px"}} onClick={e=>e.stopPropagation()}>
                             <select style={{...inpS}} value={editTrackInl}
                               onChange={e=>setEditTrackInl(e.target.value)}>
                               <option value="">-- ללא מסלול --</option>
@@ -784,8 +786,10 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
             {filteredStudents.map(s=>{
               const isEditing = editingId === s.id;
               return isEditing ? (
-                <div key={s.id} style={{background:"rgba(245,166,35,0.06)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:"var(--r)",padding:"14px 16px",direction:"rtl"}}>
-                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                <div key={s.id}
+                  style={{background:"rgba(245,166,35,0.06)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:"var(--r)",padding:"14px 16px",direction:"rtl",cursor:"pointer"}}
+                  onClick={()=>void closeInlineEdit(s)}>
+                  <div style={{display:"flex",flexDirection:"column",gap:8}} onClick={e=>e.stopPropagation()}>
                     <input className="form-input" placeholder="שם מלא" value={editName} autoFocus onChange={e=>setEditName(e.target.value)}/>
                     <input className="form-input" placeholder="אימייל" type="email" value={editEmail} onChange={e=>setEditEmail(e.target.value)}/>
                     <input className="form-input" placeholder="טלפון" value={editPhone} onChange={e=>setEditPhone(e.target.value)}/>
@@ -794,7 +798,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                       {trackSettings.map(ts=><option key={ts.name} value={ts.name}>{ts.name}</option>)}
                     </select>
                   </div>
-                  <div style={{display:"flex",gap:8,marginTop:10,alignItems:"center"}}>
+                  <div style={{display:"flex",gap:8,marginTop:10,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
                     {inlineSaving && <span style={{fontSize:12,color:"var(--text3)"}}>⏳ שומר...</span>}
                     <button className="btn btn-secondary btn-sm" onClick={()=>void closeInlineEdit(s)}>✕ סגור</button>
                     <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)",marginRight:"auto"}}
