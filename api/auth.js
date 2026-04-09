@@ -120,31 +120,70 @@ async function findEligibleRecord(normalizedEmail) {
   return null;
 }
 
+// Looks up an existing auth user by email.
+// NOTE: Supabase GoTrue's Admin API does NOT support `?email=` as a real
+// filter — it silently ignores unknown query params and returns the full
+// (paginated) list. We therefore paginate and filter client-side.
+async function findAuthUserByEmail(normalizedEmail) {
+  const perPage = 1000;
+  // Safety cap — 50k users is plenty for this app.
+  for (let page = 1; page <= 50; page++) {
+    const res = await fetch(
+      `${SB_URL}/auth/v1/admin/users?page=${page}&per_page=${perPage}`,
+      { headers: SERVICE_HEADERS },
+    );
+    if (!res.ok) {
+      const txt = await res.text();
+      console.warn("findAuthUserByEmail list failed:", res.status, txt);
+      return null;
+    }
+    const data = await res.json();
+    const list = Array.isArray(data?.users)
+      ? data.users
+      : (Array.isArray(data) ? data : []);
+    if (list.length === 0) return null;
+
+    const found = list.find(
+      (u) => normalizeEmail(u.email) === normalizedEmail,
+    );
+    if (found) return found;
+
+    if (list.length < perPage) return null; // last page
+  }
+  return null;
+}
+
 // Provisions an auth.users row (without password) via the Admin API if one
 // doesn't already exist, and always syncs user_metadata.full_name so email
 // templates can greet the user by name via {{ index .UserMetaData "full_name" }}.
 async function ensureAuthUserExists(normalizedEmail, fullName) {
   try {
-    // Query existing auth user by email
-    const lookupRes = await fetch(
-      `${SB_URL}/auth/v1/admin/users?email=${encodeURIComponent(normalizedEmail)}`,
-      { headers: SERVICE_HEADERS },
-    );
-    if (lookupRes.ok) {
-      const data = await lookupRes.json();
-      const list = Array.isArray(data?.users) ? data.users : (Array.isArray(data) ? data : []);
-      if (list.length > 0) {
-        // User already exists — update metadata so name is always fresh
-        if (fullName) {
-          const userId = list[0].id;
-          await fetch(`${SB_URL}/auth/v1/admin/users/${userId}`, {
-            method: "PUT",
-            headers: SERVICE_HEADERS,
-            body: JSON.stringify({ user_metadata: { full_name: fullName } }),
-          });
-        }
-        return { created: false };
+    const existing = await findAuthUserByEmail(normalizedEmail);
+
+    if (existing) {
+      // Merge new full_name into existing metadata so we don't clobber
+      // anything else stored there.
+      const currentMeta =
+        (existing.user_metadata && typeof existing.user_metadata === "object")
+          ? existing.user_metadata
+          : {};
+      const nextMeta = { ...currentMeta };
+      if (fullName) nextMeta.full_name = fullName;
+
+      const updateRes = await fetch(
+        `${SB_URL}/auth/v1/admin/users/${existing.id}`,
+        {
+          method: "PUT",
+          headers: SERVICE_HEADERS,
+          body: JSON.stringify({ user_metadata: nextMeta }),
+        },
+      );
+      if (!updateRes.ok) {
+        const txt = await updateRes.text();
+        console.warn("ensureAuthUserExists update failed:", updateRes.status, txt);
+        return { created: false, updated: false, error: txt };
       }
+      return { created: false, updated: true };
     }
 
     // Not found — create via Admin API (no password, email confirmed)
@@ -159,7 +198,7 @@ async function ensureAuthUserExists(normalizedEmail, fullName) {
     });
     if (!createRes.ok) {
       const txt = await createRes.text();
-      console.warn("ensureAuthUserExists create failed:", txt);
+      console.warn("ensureAuthUserExists create failed:", createRes.status, txt);
       return { created: false, error: txt };
     }
     return { created: true };
