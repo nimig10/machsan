@@ -7494,10 +7494,11 @@ export default function App() {
   const refreshAdminData = async () => {
     if (historySuspendedRef.current) return;
     try {
-      const [resR, bookingsR, lecturersR] = await Promise.all([
+      const [resR, bookingsR, lecturersR, certsR] = await Promise.all([
         storageGet("reservations"),
         storageGet("studio_bookings"),
         storageGet("lecturers"),
+        storageGet("certifications"),
       ]);
       if (Array.isArray(resR?.value)) {
         const normalized = normalizeReservationsForArchive(resR.value);
@@ -7508,6 +7509,12 @@ export default function App() {
       }
       if (Array.isArray(lecturersR?.value) && !dataEquals(lecturersRef.current, lecturersR.value)) {
         _setLecturers(lecturersR.value);
+      }
+      // Pick up student-self-service updates made via PublicForm's Account Settings
+      // modal (which writes certifications.students[] via /api/auth action
+      // "update-student-credentials"). Also catches remote admin edits.
+      if (certsR?.value && typeof certsR.value === "object" && !dataEquals(certificationsRef.current, certsR.value)) {
+        _setCertifications(certsR.value);
       }
     } catch {}
   };

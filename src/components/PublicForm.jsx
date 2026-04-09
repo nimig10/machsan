@@ -897,6 +897,197 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
   );
 }
 
+// ─── ACCOUNT SETTINGS MODAL ──────────────────────────────────────────────────
+// Self-service modal for logged-in students to update their profile
+// (name, login email, password). On save it calls /api/auth action
+// "update-student-profile" which atomically updates both the auth.users
+// row and the certifications.students record.
+function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColor }) {
+  const [name,     setName]     = useState(String(student?.name  || ""));
+  const [email,    setEmail]    = useState(String(student?.email || ""));
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [busy,     setBusy]     = useState(false);
+  const [error,    setError]    = useState("");
+
+  const handleSave = async () => {
+    setError("");
+    const nName  = String(name  || "").trim();
+    const nEmail = String(email || "").trim().toLowerCase();
+    if (!nName || nName.length < 2) {
+      setError("יש להזין שם מלא (לפחות 2 תווים).");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nEmail)) {
+      setError("כתובת אימייל לא תקינה.");
+      return;
+    }
+    if (password || confirmPassword) {
+      if (password.length < 6) {
+        setError("הסיסמה חייבת להכיל לפחות 6 תווים.");
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError("הסיסמאות אינן תואמות.");
+        return;
+      }
+    }
+
+    setBusy(true);
+    try {
+      // Grab the current access token so the backend can verify the caller.
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+      if (!accessToken) {
+        setError("אין חיבור פעיל. התחבר/י מחדש ונסה/י שוב.");
+        setBusy(false);
+        return;
+      }
+
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update-student-credentials",
+          accessToken,
+          name:  nName,
+          email: nEmail,
+          password: password || undefined,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        if (data.error === "email_taken") {
+          setError("כתובת האימייל כבר משויכת לסטודנט אחר.");
+        } else if (data.error === "invalid_name") {
+          setError("שם מלא חסר או קצר מדי.");
+        } else if (data.error === "invalid_email") {
+          setError("כתובת אימייל לא תקינה.");
+        } else if (data.error === "password_too_short") {
+          setError("הסיסמה קצרה מדי (לפחות 6 תווים).");
+        } else if (data.error === "student_not_found") {
+          setError("לא נמצא סטודנט פעיל תחת המייל המחובר.");
+        } else if (data.error === "invalid_session" || data.error === "missing_access_token") {
+          setError("פקע החיבור. התחבר/י מחדש ונסה/י שוב.");
+        } else if (data.error === "store_update_failed") {
+          setError("שמירה במסד הנתונים נכשלה. נסו שוב.");
+        } else if (data.error === "auth_update_failed" && data.profileSaved) {
+          setError("הפרטים נשמרו אך עדכון ההתחברות נכשל. נסו לרענן ולהתחבר שוב.");
+        } else {
+          setError("שגיאה בשמירה. נסו שוב.");
+        }
+        setBusy(false);
+        return;
+      }
+
+      // Success
+      if (showToast) showToast("success", "הפרטים עודכנו בהצלחה");
+      if (onSaved) onSaved(data.student || { ...student, name: nName, email: nEmail }, {
+        emailChanged:    !!data.emailChanged,
+        passwordChanged: !!data.passwordChanged,
+      });
+      setBusy(false);
+      onClose?.();
+    } catch (err) {
+      console.warn("update-student-profile error:", err);
+      setError("שגיאת תקשורת. נסו שוב.");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:5200,display:"flex",alignItems:"center",justifyContent:"center",padding:16,direction:"rtl","--accent":accentColor||"#f5a623"}}
+      onClick={(e)=>{ if (e.target === e.currentTarget) onClose?.(); }}
+    >
+      <div style={{width:"100%",maxWidth:460,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",boxShadow:"0 30px 80px rgba(0,0,0,0.4)",overflow:"hidden"}}>
+        <div style={{padding:"18px 22px",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,background:"var(--surface2)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:22}}>⚙️</span>
+            <div style={{fontWeight:900,fontSize:17,color:"var(--accent)"}}>הגדרות חשבון</div>
+          </div>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={onClose} disabled={busy}>✕</button>
+        </div>
+
+        <div style={{padding:22,display:"flex",flexDirection:"column",gap:14}}>
+          <div>
+            <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>שם מלא</label>
+            <input
+              className="form-input"
+              type="text"
+              value={name}
+              onChange={(e)=>setName(e.target.value)}
+              disabled={busy}
+              placeholder="ישראל ישראלי"
+              autoComplete="name"
+            />
+          </div>
+
+          <div>
+            <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>אימייל התחברות</label>
+            <input
+              className="form-input"
+              type="email"
+              value={email}
+              onChange={(e)=>setEmail(e.target.value)}
+              disabled={busy}
+              placeholder="email@example.com"
+              autoComplete="email"
+            />
+            <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>
+              שינוי האימייל ישמש כמזהה ההתחברות הבא שלך.
+            </div>
+          </div>
+
+          <div style={{borderTop:"1px solid var(--border)",paddingTop:14,marginTop:4}}>
+            <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>
+              סיסמה חדשה <span style={{fontWeight:400,color:"var(--text3)"}}>(אופציונלי)</span>
+            </label>
+            <input
+              className="form-input"
+              type="password"
+              value={password}
+              onChange={(e)=>setPassword(e.target.value)}
+              disabled={busy}
+              placeholder="השאירו ריק כדי לא לשנות"
+              autoComplete="new-password"
+            />
+          </div>
+
+          {password && (
+            <div>
+              <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>אישור סיסמה חדשה</label>
+              <input
+                className="form-input"
+                type="password"
+                value={confirmPassword}
+                onChange={(e)=>setConfirmPassword(e.target.value)}
+                disabled={busy}
+                autoComplete="new-password"
+              />
+            </div>
+          )}
+
+          {error && (
+            <div style={{background:"rgba(239,68,68,0.12)",border:"1px solid rgba(239,68,68,0.4)",borderRadius:10,padding:"10px 12px",color:"#fca5a5",fontSize:13,fontWeight:600}}>
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div style={{padding:"14px 22px",borderTop:"1px solid var(--border)",display:"flex",gap:10,justifyContent:"flex-end",background:"var(--surface2)"}}>
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={busy}>ביטול</button>
+          <button type="button" className="btn btn-primary" onClick={handleSave} disabled={busy}>
+            {busy ? "שומר..." : "💾 שמירה"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
 export function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], calendarToken="", siteSettings={}, categoryLoanTypes={}, refreshInventory=async()=>({}), lecturers=[] }) {
   const initialParams = new URLSearchParams(window.location.search);
@@ -907,6 +1098,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     ? 2
     : (Number.isInteger(initialStepParam) && initialStepParam >= 1 && initialStepParam <= 4 ? initialStepParam : 1);
   const [step, setStep]       = useState(initialStep);
+  const [showAccountSettings, setShowAccountSettings] = useState(false);
   const swipeTouchRef = useRef(null);
   const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""});
   const [items, setItems]     = useState([]);
@@ -1112,7 +1304,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       if (!ensureRes.ok) {
         const data = await ensureRes.json().catch(() => ({}));
         if (data.error === "not_registered") {
-          setLoginError("כתובת האימייל לא רשומה במערכת");
+          setLoginError("לא סטודנט/מרצה פעיל במכללה לא ניתן להיכנס");
         } else {
           setLoginError("שגיאה בתקשורת. נסו שוב.");
         }
@@ -1156,7 +1348,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       if (!ensureRes.ok) {
         const data = await ensureRes.json().catch(() => ({}));
         if (data.error === "not_registered") {
-          setLoginError("כתובת האימייל לא רשומה במערכת");
+          setLoginError("לא סטודנט/מרצה פעיל במכללה לא ניתן להיכנס");
         } else {
           setLoginError("שגיאה בתקשורת. נסו שוב.");
         }
@@ -1276,7 +1468,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       }
 
       // 3. No match — deny access
-      setLoginError("כתובת האימייל לא משויכת לחשבון רשום. הגישה נדחתה.");
+      setLoginError("לא סטודנט/מרצה פעיל במכללה לא ניתן להיכנס");
       await supabase.auth.signOut();
     });
 
@@ -1319,7 +1511,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       }
 
       // Session exists but email matches neither official dataset — sign out and deny
-      setLoginError("כתובת האימייל לא משויכת לחשבון רשום. הגישה נדחתה.");
+      setLoginError("לא סטודנט/מרצה פעיל במכללה לא ניתן להיכנס");
       supabase.auth.signOut().catch(() => {});
     });
   }, [lecturers, certifications]);
@@ -1338,6 +1530,28 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       }
     });
   }, []); // mount-only — runs once to validate the sessionStorage-restored value
+
+  // Real-time Gatekeeper: whenever certifications (the admin source of truth)
+  // updates, re-validate that the currently logged-in student still exists in
+  // certifications.students. If the admin just removed them, sign out and
+  // bounce back to the login screen with the standard gatekeeper error.
+  useEffect(() => {
+    if (!loggedInStudent) return;
+    const stuList = certifications?.students || [];
+    if (!Array.isArray(stuList) || stuList.length === 0) return;
+    const storedEmail = String(loggedInStudent.email || "").toLowerCase().trim();
+    if (!storedEmail) return;
+    const stillExists = stuList.some(
+      (s) => String(s.email || "").toLowerCase().trim() === storedEmail,
+    );
+    if (!stillExists) {
+      supabase.auth.signOut().catch(() => {});
+      setLoggedInStudent(null);
+      try { sessionStorage.removeItem("public_student"); } catch {}
+      try { sessionStorage.setItem("public_login_notice", "לא סטודנט/מרצה פעיל במכללה לא ניתן להיכנס"); } catch {}
+      setLoginError("לא סטודנט/מרצה פעיל במכללה לא ניתן להיכנס");
+    }
+  }, [certifications, loggedInStudent]);
 
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
   const setSoundDayLoan = (enabled) => {
@@ -2324,6 +2538,19 @@ ${inventory}
               <rect x="19.4" y="19.5" width="3.2" height="10.5" rx="1.6" fill="currentColor"/>
             </svg>
           </button>
+          <button
+            type="button"
+            onClick={()=>setShowAccountSettings(true)}
+            title="הגדרות חשבון"
+            style={{position:"absolute",top:14,left:62,width:42,height:42,borderRadius:"50%",border:"none",background:"transparent",padding:0,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,color:"var(--accent)",opacity:0.9,transition:"opacity 0.15s"}}
+            onMouseEnter={e=>e.currentTarget.style.opacity=1}
+            onMouseLeave={e=>e.currentTarget.style.opacity=0.9}
+          >
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",paddingInline:"24px"}}>
             <div style={{fontSize:"clamp(15px,4.5vw,22px)",fontWeight:900,color:"var(--accent)"}}>מערכת הפניות</div>
             <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>שלום, {loggedInStudent.name}</div>
@@ -2868,6 +3095,26 @@ ${inventory}
       </div>
     </div>}
     {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor} commitmentPdf={policies.commitmentPdf} commitmentPdfCompressed={policies.commitmentPdfCompressed} commitmentPdfName={policies.commitmentPdfName}/>}
+    {showAccountSettings && loggedInStudent && (
+      <AccountSettingsModal
+        student={loggedInStudent}
+        accentColor={siteSettings.accentColor}
+        showToast={showToast}
+        onClose={()=>setShowAccountSettings(false)}
+        onSaved={(updatedStudent, flags)=>{
+          // Update local state so the UI reflects the change immediately.
+          setLoggedInStudent(updatedStudent);
+          set("student_name", updatedStudent.name || "");
+          set("email", updatedStudent.email || "");
+          // The backend already wrote the updated certifications.students[]
+          // row via the Service Role key, so App-level admin polling
+          // (refreshAdminData → certifications) will pick it up within 30s.
+          if (flags?.passwordChanged) {
+            showToast?.("success", "הסיסמה עודכנה. השתמש/י בה בכניסה הבאה.");
+          }
+        }}
+      />
+    )}
     {showEquipmentAiModal && (
       <div
         style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:2600,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}

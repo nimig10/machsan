@@ -43,6 +43,8 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
   const inlineSaveTimeout    = useRef(null);
   const lastSavedDraftRef    = useRef("");
   const lastFailedDraftRef   = useRef("");
+  const originalEmailRef     = useRef("");
+  const originalNameRef      = useRef("");
   const [editTrack, setEditTrack] = useState(null);
   const [editTrackName, setEditTrackName] = useState("");
   const [editTrackType, setEditTrackType] = useState("");
@@ -200,6 +202,25 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
         }
       }
       showToast("success","הסטודנט הוסר");
+      // Part A.3: remove the Supabase Auth user as well, so a deleted student
+      // cannot reuse their old credentials to re-enter the portal. This is
+      // fire-and-forget — the store deletion is already committed, and the
+      // server gatekeeper (`delete-student-auth`) re-verifies that the email
+      // is no longer present in certifications.students before removing it.
+      if (stuEmail) {
+        fetch("/api/auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "delete-student-auth", email: stuEmail }),
+        })
+          .then((r) => r.json().catch(() => ({})))
+          .then((j) => {
+            if (j && j.ok === false && j.code !== "no_auth_user") {
+              console.warn("delete-student-auth failed:", j);
+            }
+          })
+          .catch((err) => console.warn("delete-student-auth error:", err));
+      }
       const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
       const logId = await logActivity({ user_id: caller.id, user_name: caller.full_name, action: "student_delete", entity: "student", entity_id: String(stuId), details: { name: stu?.name || stuId } });
       onLogCreated(logId);
@@ -235,6 +256,33 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
     setEditEmail(stu.email || "");
     setEditPhone(stu.phone || "");
     setEditTrackInl(stu.track || "");
+    originalEmailRef.current = String(stu.email || "").trim().toLowerCase();
+    originalNameRef.current  = String(stu.name  || "").trim();
+  };
+
+  // Fire-and-forget: push admin edits (name / email) to the Supabase Auth user.
+  // This keeps the student's login credentials aligned with the admin table,
+  // which is the single source of truth. Failures are logged but never block
+  // the admin UI — the store update has already succeeded by this point.
+  const syncStudentAuthUser = async (oldEmail, newEmail, newName) => {
+    const o = String(oldEmail || "").trim().toLowerCase();
+    const n = String(newEmail || "").trim().toLowerCase();
+    const name = String(newName || "").trim();
+    if (!o || !n) return;
+    if (o === n && name === originalNameRef.current) return; // nothing changed
+    try {
+      const resp = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync-student-auth", oldEmail: o, newEmail: n, newName: name }),
+      });
+      const j = await resp.json().catch(() => ({}));
+      if (!resp.ok && j?.code !== "no_auth_user") {
+        console.warn("sync-student-auth failed:", j);
+      }
+    } catch (err) {
+      console.warn("sync-student-auth error:", err);
+    }
   };
 
   const saveInlineEdit = async (stu, { closeOnSuccess = false, silent = false } = {}) => {
@@ -270,6 +318,16 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
 
     lastSavedDraftRef.current = key;
     lastFailedDraftRef.current = "";
+    // Propagate name/email change to Supabase Auth user (fire-and-forget).
+    // Must happen after the store save succeeded, because sync-student-auth
+    // only accepts an email that's already present in certifications.students.
+    const prevEmail = originalEmailRef.current;
+    const prevName  = originalNameRef.current;
+    if (prevEmail && (prevEmail !== draft.email || prevName !== draft.name)) {
+      void syncStudentAuthUser(prevEmail, draft.email, draft.name);
+    }
+    originalEmailRef.current = draft.email;
+    originalNameRef.current  = draft.name;
     if (!silent) showToast("success", "פרטי הסטודנט עודכנו");
     if (closeOnSuccess) setEditingId(null);
     const caller = JSON.parse(sessionStorage.getItem("staff_user") || "{}");
