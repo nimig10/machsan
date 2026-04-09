@@ -918,11 +918,19 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [loggedInStudent, setLoggedInStudent] = useState(() => {
     try { const s = sessionStorage.getItem("public_student"); return s ? JSON.parse(s) : null; } catch { return null; }
   });
-  const [otpEmail, setOtpEmail] = useState("");
-  const [otpSending, setOtpSending] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpToken, setOtpToken] = useState("");
-  const [otpVerifying, setOtpVerifying] = useState(false);
+  // ── Password auth state ──────────────────────────────────────────────────
+  const [authView, setAuthView] = useState("login"); // "login" | "forgot" | "forgot-sent"
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginBusy, setLoginBusy] = useState(false);
+  // PASSWORD_RECOVERY modal (user clicked reset link from email)
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const recoveryModeRef = useRef(false);
+  useEffect(() => { recoveryModeRef.current = recoveryMode; }, [recoveryMode]);
+  const [recoveryPassword, setRecoveryPassword] = useState("");
+  const [recoveryConfirm, setRecoveryConfirm] = useState("");
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [recoveryError, setRecoveryError] = useState("");
   const [loginError, setLoginError] = useState(() => {
     try {
       const msg = sessionStorage.getItem("public_login_notice") || "";
@@ -1078,54 +1086,122 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     setDailyLessons(Array.isArray(lessons) ? lessons : []);
   };
 
-  // ── OTP / Magic Link login ──────────────────────────────────────────────────
-  const handleSendOtp = async () => {
-    const email = otpEmail.toLowerCase().trim();
-    if (!email) return;
-    setOtpSending(true);
+  // ── Password-based login ───────────────────────────────────────────────────
+  // Verifies the email is registered as a lecturer/student via /api/auth,
+  // then authenticates via supabase.auth.signInWithPassword().
+  const handleLogin = async () => {
+    const email = loginEmail.toLowerCase().trim();
+    const password = loginPassword;
+    if (!email || !password) return;
+    setLoginBusy(true);
     setLoginError("");
     try {
-      const res = await fetch("/api/auth", {
+      // 1. Eligibility check (is this email a registered student/lecturer?)
+      const ensureRes = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "otp", email }),
+        body: JSON.stringify({ action: "ensure-user", email }),
       });
-      const data = await res.json();
-      if (!res.ok) {
+      if (!ensureRes.ok) {
+        const data = await ensureRes.json().catch(() => ({}));
         if (data.error === "not_registered") {
           setLoginError("כתובת האימייל לא רשומה במערכת");
         } else {
-          setLoginError("שגיאה בשליחת קוד הכניסה. נסו שוב.");
+          setLoginError("שגיאה בתקשורת. נסו שוב.");
         }
-        setOtpSending(false);
+        setLoginBusy(false);
         return;
       }
-      setOtpSent(true);
-      setOtpSending(false);
+
+      // 2. Sign in via Supabase Auth
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error || !data?.user) {
+        // Invalid credentials — most likely a first-time user who never set
+        // a password, or a wrong password. Guide them to the reset flow.
+        setLoginError("אימייל או סיסמה שגויים. אם זו הכניסה הראשונה שלך, לחץ/י על \"שכחת סיסמה?\" ליצירת סיסמה.");
+        setLoginBusy(false);
+        return;
+      }
+      // Success — onAuthStateChange(SIGNED_IN) will handle routing
+      setLoginBusy(false);
     } catch {
       setLoginError("שגיאה בתקשורת. נסו שוב.");
-      setOtpSending(false);
+      setLoginBusy(false);
     }
   };
 
-  const handleVerifyOtp = async () => {
-    const email = otpEmail.toLowerCase().trim();
-    const token = otpToken.trim();
-    if (!email || !token) return;
-    setOtpVerifying(true);
+  // ── Forgot password ────────────────────────────────────────────────────────
+  // Verifies eligibility (and provisions auth.users row if missing) before
+  // triggering supabase.auth.resetPasswordForEmail(). The reset link lands
+  // on "/" where onAuthStateChange catches the PASSWORD_RECOVERY event and
+  // opens the new-password modal.
+  const handleForgotPassword = async () => {
+    const email = loginEmail.toLowerCase().trim();
+    if (!email) return;
+    setLoginBusy(true);
     setLoginError("");
     try {
-      const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
-      if (error || !data?.user) {
-        setLoginError("קוד שגוי או שפג תוקפו. נסו שוב.");
-        setOtpVerifying(false);
+      const ensureRes = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "ensure-user", email, provision: true }),
+      });
+      if (!ensureRes.ok) {
+        const data = await ensureRes.json().catch(() => ({}));
+        if (data.error === "not_registered") {
+          setLoginError("כתובת האימייל לא רשומה במערכת");
+        } else {
+          setLoginError("שגיאה בתקשורת. נסו שוב.");
+        }
+        setLoginBusy(false);
         return;
       }
-      // Auth session established — onAuthStateChange will handle the rest
-      setOtpVerifying(false);
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/`,
+      });
+      if (error) {
+        setLoginError("שליחת הקישור נכשלה. נסו שוב.");
+        setLoginBusy(false);
+        return;
+      }
+      setAuthView("forgot-sent");
+      setLoginBusy(false);
     } catch {
-      setLoginError("שגיאה באימות. נסו שוב.");
-      setOtpVerifying(false);
+      setLoginError("שגיאה בתקשורת. נסו שוב.");
+      setLoginBusy(false);
+    }
+  };
+
+  // ── Submit new password (after PASSWORD_RECOVERY) ──────────────────────────
+  const handleUpdatePassword = async () => {
+    setRecoveryError("");
+    if (!recoveryPassword || recoveryPassword.length < 6) {
+      setRecoveryError("הסיסמה חייבת להכיל לפחות 6 תווים");
+      return;
+    }
+    if (recoveryPassword !== recoveryConfirm) {
+      setRecoveryError("הסיסמאות אינן תואמות");
+      return;
+    }
+    setRecoveryBusy(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: recoveryPassword });
+      if (error) {
+        setRecoveryError("עדכון הסיסמה נכשל. נסו שוב.");
+        setRecoveryBusy(false);
+        return;
+      }
+      setRecoveryBusy(false);
+      setRecoveryMode(false);
+      setRecoveryPassword("");
+      setRecoveryConfirm("");
+      showToast("success", "הסיסמה עודכנה בהצלחה! ברוך/ה הבא/ה למערכת.");
+      // Session is already active — onAuthStateChange will route to the
+      // appropriate portal on the next SIGNED_IN tick (or stay logged in).
+    } catch {
+      setRecoveryError("שגיאה בתקשורת. נסו שוב.");
+      setRecoveryBusy(false);
     }
   };
 
@@ -1146,7 +1222,16 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   // Listen for Supabase auth state changes
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // PASSWORD_RECOVERY is fired after the user clicks the reset link.
+      // Open the "new password" modal instead of routing into the portal.
+      if (event === "PASSWORD_RECOVERY") {
+        setRecoveryMode(true);
+        return;
+      }
       if (event !== "SIGNED_IN" || !session?.user?.email) return;
+      // Suppress SIGNED_IN routing while the user is still in the
+      // PASSWORD_RECOVERY flow (Supabase fires SIGNED_IN alongside it).
+      if (recoveryModeRef.current) return;
       const authEmail = session.user.email.toLowerCase().trim();
       const authUserId = session.user.id;
 
@@ -2075,7 +2160,39 @@ ${inventory}
     </div>
   );
 
-  // ── OTP login gate ──
+  // ── PASSWORD_RECOVERY modal (priority — overrides login gate) ──
+  if (recoveryMode) return (
+    <div className="form-page" style={{"--accent": siteSettings.accentColor||"#f5a623"}}>
+      <div style={{width:"100%",maxWidth:420,background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:"40px 32px",textAlign:"center",direction:"rtl"}}>
+        {siteSettings.logo
+          ? <img src={siteSettings.logo} alt="לוגו" style={{width:82,height:82,objectFit:"contain",borderRadius:12,marginBottom:16,display:"block",marginInline:"auto"}}/>
+          : <div style={{fontSize:48,marginBottom:16}}>🔑</div>}
+        <h2 style={{fontSize:"clamp(14px,4vw,20px)",fontWeight:900,color:"var(--accent)",marginBottom:4}}>הגדרת סיסמה חדשה</h2>
+        <div style={{fontSize:13,color:"var(--text3)",marginBottom:24}}>בחר/י סיסמה חדשה לחשבון שלך</div>
+
+        <div style={{textAlign:"right",marginBottom:12}}>
+          <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>סיסמה חדשה</label>
+          <input className="form-input" type="password" placeholder="לפחות 6 תווים" value={recoveryPassword}
+            onChange={e=>{setRecoveryPassword(e.target.value);setRecoveryError("");}}
+            disabled={recoveryBusy} autoFocus/>
+        </div>
+        <div style={{textAlign:"right",marginBottom:16}}>
+          <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>אימות סיסמה</label>
+          <input className="form-input" type="password" placeholder="הזן/י את הסיסמה שוב" value={recoveryConfirm}
+            onChange={e=>{setRecoveryConfirm(e.target.value);setRecoveryError("");}}
+            onKeyDown={e=>e.key==="Enter"&&handleUpdatePassword()}
+            disabled={recoveryBusy}/>
+        </div>
+        {recoveryError && <div style={{color:"var(--red)",fontSize:13,fontWeight:700,marginBottom:12}}>{recoveryError}</div>}
+        <button className="btn btn-primary" style={{width:"100%",padding:"12px",fontSize:15}} onClick={handleUpdatePassword}
+          disabled={!recoveryPassword||!recoveryConfirm||recoveryBusy}>
+          {recoveryBusy ? "מעדכן..." : "עדכן סיסמה"}
+        </button>
+      </div>
+    </div>
+  );
+
+  // ── Password login gate ──
   if (!loggedInStudent) return (
     <div className="form-page" style={{"--accent": siteSettings.accentColor||"#f5a623"}}>
       <div style={{width:"100%",maxWidth:420,background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:"40px 32px",textAlign:"center",direction:"rtl"}}>
@@ -2085,46 +2202,75 @@ ${inventory}
         <h2 style={{fontSize:"clamp(14px,4vw,20px)",fontWeight:900,color:"var(--accent)",marginBottom:4}}>מערכת הפניות</h2>
         <div style={{fontSize:13,color:"var(--text3)",marginBottom:24}}>כניסת סטודנטים ומרצים · מכללת קמרה אובסקורה וסאונד</div>
 
-        {!otpSent ? (
+        {authView === "login" && (
+          <>
+            <div style={{textAlign:"right",marginBottom:12}}>
+              <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>אימייל</label>
+              <input className="form-input" type="email" placeholder="email@example.com" value={loginEmail}
+                onChange={e=>{setLoginEmail(e.target.value);setLoginError("");}}
+                onKeyDown={e=>e.key==="Enter"&&handleLogin()}
+                disabled={loginBusy} autoComplete="email"/>
+            </div>
+            <div style={{textAlign:"right",marginBottom:16}}>
+              <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>סיסמה</label>
+              <input className="form-input" type="password" placeholder="הקלד/י סיסמה" value={loginPassword}
+                onChange={e=>{setLoginPassword(e.target.value);setLoginError("");}}
+                onKeyDown={e=>e.key==="Enter"&&handleLogin()}
+                disabled={loginBusy} autoComplete="current-password"/>
+            </div>
+            {loginError && <div style={{color:"var(--red)",fontSize:13,fontWeight:700,marginBottom:12}}>{loginError}</div>}
+            <button className="btn btn-primary" style={{width:"100%",padding:"12px",fontSize:15}} onClick={handleLogin}
+              disabled={!loginEmail.trim()||!loginPassword||loginBusy}>
+              {loginBusy ? "מתחבר..." : "כניסה"}
+            </button>
+            <button type="button" style={{marginTop:14,background:"none",border:"none",color:"var(--accent)",fontSize:13,fontWeight:700,cursor:"pointer",textDecoration:"underline"}}
+              onClick={()=>{setAuthView("forgot");setLoginError("");setLoginPassword("");}}>
+              שכחת סיסמה?
+            </button>
+            <div style={{fontSize:11,color:"var(--text3)",marginTop:14}}>
+              רק משתמשים רשומים יכולים להיכנס. כניסה ראשונה? לחץ/י על "שכחת סיסמה?" ליצירת סיסמה.
+            </div>
+          </>
+        )}
+
+        {authView === "forgot" && (
           <>
             <div style={{textAlign:"right",marginBottom:16}}>
               <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>אימייל</label>
-              <input className="form-input" type="email" placeholder="email@example.com" value={otpEmail}
-                onChange={e=>{setOtpEmail(e.target.value);setLoginError("");}}
-                onKeyDown={e=>e.key==="Enter"&&handleSendOtp()}
-                disabled={otpSending}/>
+              <input className="form-input" type="email" placeholder="email@example.com" value={loginEmail}
+                onChange={e=>{setLoginEmail(e.target.value);setLoginError("");}}
+                onKeyDown={e=>e.key==="Enter"&&handleForgotPassword()}
+                disabled={loginBusy} autoComplete="email"/>
             </div>
             {loginError && <div style={{color:"var(--red)",fontSize:13,fontWeight:700,marginBottom:12}}>{loginError}</div>}
-            <button className="btn btn-primary" style={{width:"100%",padding:"12px",fontSize:15}} onClick={handleSendOtp}
-              disabled={!otpEmail.trim()||otpSending}>
-              {otpSending ? "שולח..." : "שלח קוד כניסה"}
-            </button>
-            <div style={{fontSize:11,color:"var(--text3)",marginTop:16}}>
-              קוד חד-פעמי יישלח לאימייל שלך. רק משתמשים רשומים יכולים להיכנס.
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={{background:"var(--surface2)",borderRadius:12,padding:16,marginBottom:16,textAlign:"right"}}>
-              <div style={{fontSize:13,color:"var(--text2)",marginBottom:4}}>קוד נשלח ל:</div>
-              <div style={{fontSize:15,fontWeight:700,color:"var(--text)",direction:"ltr",textAlign:"right"}}>{otpEmail}</div>
-            </div>
-            <div style={{textAlign:"right",marginBottom:16}}>
-              <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>קוד אימות</label>
-              <input className="form-input" type="text" inputMode="numeric" maxLength={8} placeholder="00000000" value={otpToken}
-                style={{letterSpacing:"0.3em",textAlign:"center",fontSize:22,fontWeight:700}}
-                onChange={e=>{setOtpToken(e.target.value.replace(/\D/g,""));setLoginError("");}}
-                onKeyDown={e=>e.key==="Enter"&&handleVerifyOtp()}
-                disabled={otpVerifying}/>
-            </div>
-            {loginError && <div style={{color:"var(--red)",fontSize:13,fontWeight:700,marginBottom:12}}>{loginError}</div>}
-            <button className="btn btn-primary" style={{width:"100%",padding:"12px",fontSize:15}} onClick={handleVerifyOtp}
-              disabled={otpToken.length<6||otpVerifying}>
-              {otpVerifying ? "מאמת..." : "כניסה"}
+            <button className="btn btn-primary" style={{width:"100%",padding:"12px",fontSize:15}} onClick={handleForgotPassword}
+              disabled={!loginEmail.trim()||loginBusy}>
+              {loginBusy ? "שולח..." : "שלח קישור לאיפוס"}
             </button>
             <button type="button" style={{marginTop:12,background:"none",border:"none",color:"var(--text3)",fontSize:12,cursor:"pointer",textDecoration:"underline"}}
-              onClick={()=>{setOtpSent(false);setOtpToken("");setLoginError("");}}>
-              שלח קוד חדש / שנה אימייל
+              onClick={()=>{setAuthView("login");setLoginError("");}}>
+              ← חזרה למסך הכניסה
+            </button>
+            <div style={{fontSize:11,color:"var(--text3)",marginTop:14}}>
+              נשלח אליך קישור במייל ליצירת/איפוס סיסמה. הקישור תקף לשעה.
+            </div>
+          </>
+        )}
+
+        {authView === "forgot-sent" && (
+          <>
+            <div style={{background:"rgba(74,222,128,0.1)",border:"1px solid rgba(74,222,128,0.3)",borderRadius:12,padding:16,marginBottom:16,textAlign:"right"}}>
+              <div style={{fontSize:32,marginBottom:8}}>📧</div>
+              <div style={{fontSize:14,fontWeight:700,color:"var(--text)",marginBottom:6}}>הקישור נשלח!</div>
+              <div style={{fontSize:12,color:"var(--text2)",lineHeight:1.5}}>
+                נשלח קישור לאיפוס סיסמה לכתובת:<br/>
+                <span style={{direction:"ltr",fontWeight:700,color:"var(--text)"}}>{loginEmail}</span><br/><br/>
+                פתח/י את המייל ולחץ/י על הקישור כדי להגדיר סיסמה חדשה.
+              </div>
+            </div>
+            <button type="button" className="btn btn-secondary" style={{width:"100%"}}
+              onClick={()=>{setAuthView("login");setLoginError("");}}>
+              ← חזרה למסך הכניסה
             </button>
           </>
         )}
@@ -2677,7 +2823,7 @@ ${inventory}
         <div style={{padding:"16px 24px",borderTop:"1px solid var(--border)",textAlign:"center"}}>
           <button
             type="button"
-            onClick={() => { supabase.auth.signOut().catch(()=>{}); setLoggedInStudent(null); setOtpSent(false); setOtpToken(""); setOtpEmail(""); sessionStorage.removeItem("public_view"); }}
+            onClick={() => { supabase.auth.signOut().catch(()=>{}); setLoggedInStudent(null); setAuthView("login"); setLoginEmail(""); setLoginPassword(""); sessionStorage.removeItem("public_view"); }}
             style={{background:"var(--surface2)",border:"1px solid var(--border)",color:"var(--text2)",fontSize:13,cursor:"pointer",padding:"8px 20px",borderRadius:8,transition:"all 0.15s",fontWeight:600}}
             onMouseEnter={e=>{e.currentTarget.style.borderColor="var(--accent)";e.currentTarget.style.color="var(--accent)";}}
             onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--border)";e.currentTarget.style.color="var(--text2)";}}

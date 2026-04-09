@@ -2,7 +2,8 @@
 //
 // Dispatches based on `action` in request body:
 //   action: "staff-login"  → password-based login for staff_members (existing flow)
-//   action: "otp"          → Magic Link / OTP gate for lecturers and students
+//   action: "ensure-user"  → eligibility check for lecturers/students before
+//                            signInWithPassword or resetPasswordForEmail
 //
 // Backwards-compatible: requests without an `action` field that include
 // `email` + `password` are treated as "staff-login".
@@ -82,10 +83,19 @@ async function handleStaffLogin(req, res) {
   });
 }
 
-// ── OTP / Magic Link ──────────────────────────────────────────────────────────
+// ── ensure-user ───────────────────────────────────────────────────────────────
 // Only lecturers (store key "lecturers") and certified students
 // (store key "certifications" → .students[]) are eligible.
 // teamMembers is intentionally excluded.
+//
+// This handler is called before client-side signInWithPassword() or
+// resetPasswordForEmail() to verify that the email is registered in the
+// official datasets (prevents strangers from enumerating / requesting
+// password resets for arbitrary addresses).
+//
+// On first login, it also provisions the auth.users row via the Admin API
+// so that resetPasswordForEmail can send a "set your password" link even if
+// the user has never logged in before.
 
 async function findEligibleRecord(normalizedEmail) {
   if (!normalizedEmail || !isValidEmail(normalizedEmail)) return null;
@@ -110,8 +120,44 @@ async function findEligibleRecord(normalizedEmail) {
   return null;
 }
 
-async function handleOtp(req, res) {
-  const { email } = req.body || {};
+// Provisions an auth.users row (without password) via the Admin API if one
+// doesn't already exist. Used on first-login so resetPasswordForEmail works.
+async function ensureAuthUserExists(normalizedEmail) {
+  try {
+    // Query existing auth user by email
+    const lookupRes = await fetch(
+      `${SB_URL}/auth/v1/admin/users?email=${encodeURIComponent(normalizedEmail)}`,
+      { headers: SERVICE_HEADERS },
+    );
+    if (lookupRes.ok) {
+      const data = await lookupRes.json();
+      const list = Array.isArray(data?.users) ? data.users : (Array.isArray(data) ? data : []);
+      if (list.length > 0) return { created: false };
+    }
+
+    // Not found — create via Admin API (no password, email confirmed)
+    const createRes = await fetch(`${SB_URL}/auth/v1/admin/users`, {
+      method: "POST",
+      headers: SERVICE_HEADERS,
+      body: JSON.stringify({
+        email: normalizedEmail,
+        email_confirm: true,
+      }),
+    });
+    if (!createRes.ok) {
+      const txt = await createRes.text();
+      console.warn("ensureAuthUserExists create failed:", txt);
+      return { created: false, error: txt };
+    }
+    return { created: true };
+  } catch (err) {
+    console.warn("ensureAuthUserExists exception:", err);
+    return { created: false };
+  }
+}
+
+async function handleEnsureUser(req, res) {
+  const { email, provision } = req.body || {};
   if (!email || typeof email !== "string") {
     return res.status(400).json({ error: "Missing email" });
   }
@@ -126,16 +172,10 @@ async function handleOtp(req, res) {
     return res.status(403).json({ error: "not_registered" });
   }
 
-  const otpRes = await fetch(`${SB_URL}/auth/v1/otp`, {
-    method:  "POST",
-    headers: SERVICE_HEADERS,
-    body:    JSON.stringify({ email: normalizedEmail, create_user: true }),
-  });
-
-  if (!otpRes.ok) {
-    const errText = await otpRes.text();
-    console.error("Supabase OTP error:", errText);
-    return res.status(500).json({ error: "otp_send_failed" });
+  // When provision=true (called from forgot-password flow), make sure the
+  // auth.users row exists so resetPasswordForEmail can deliver the link.
+  if (provision) {
+    await ensureAuthUserExists(normalizedEmail);
   }
 
   return res.status(200).json({ ok: true, role: record.role, name: record.name });
@@ -155,7 +195,7 @@ export default async function handler(req, res) {
 
   try {
     if (resolvedAction === "staff-login") return await handleStaffLogin(req, res);
-    if (resolvedAction === "otp")         return await handleOtp(req, res);
+    if (resolvedAction === "ensure-user") return await handleEnsureUser(req, res);
     return res.status(400).json({ error: "Missing or unknown action" });
   } catch (err) {
     console.error("Auth error:", err);
