@@ -205,6 +205,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const [trackFilter, setTrackFilter] = useState([]);
   const [sortMode, setSortMode] = useState("recent"); // "recent" | "urgency"
   const [archiveView, setArchiveView] = useState(false);
+  const [timeFilter, setTimeFilter] = useState("all"); // "all" | "week" | "month"
   const [xlImporting, setXlImporting] = useState(false);
   const [aiImporting, setAiImporting] = useState(false);
   const importInputRef = useRef(null);
@@ -413,12 +414,33 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     return lastDate < today();
   };
 
+  // חישוב טווח השבוע הנוכחי (ראשון–שבת) והחודש הנוכחי
+  const getWeekRange = () => {
+    const now = new Date();
+    const day = now.getDay(); // 0=ראשון
+    const sunday = new Date(now); sunday.setDate(now.getDate() - day);
+    const saturday = new Date(now); saturday.setDate(now.getDate() + (6 - day));
+    return { start: formatLocalDateInput(sunday), end: formatLocalDateInput(saturday) };
+  };
+  const getMonthRange = () => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return { start: formatLocalDateInput(start), end: formatLocalDateInput(end) };
+  };
+  const lessonHasSessionInRange = (lesson, range) => {
+    return (lesson.schedule || []).some(s => s.date >= range.start && s.date <= range.end);
+  };
+
   const filtered = lessons.filter((lesson) => {
     const matchesSearch = !search || lesson.name?.includes(search) || lesson.instructorName?.includes(search);
     const trackLabel = getLessonTrackLabel(lesson);
     const matchesTrack = allTracksSelected || trackFilter.includes(trackLabel);
     const matchesArchive = archiveView ? isArchived(lesson) : !isArchived(lesson);
-    return matchesSearch && matchesTrack && matchesArchive;
+    const matchesTime = timeFilter === "all" ||
+      (timeFilter === "week" && lessonHasSessionInRange(lesson, getWeekRange())) ||
+      (timeFilter === "month" && lessonHasSessionInRange(lesson, getMonthRange()));
+    return matchesSearch && matchesTrack && matchesArchive && matchesTime;
   });
 
   const archivedCount = lessons.filter(isArchived).length;
@@ -972,7 +994,27 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                 </button>
               ))}
             </div>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+              {/* פילטר זמן — השבוע / החודש */}
+              {[
+                { val: "all",   label: "הכל" },
+                { val: "week",  label: "📅 השבוע" },
+                { val: "month", label: "🗓️ החודש" },
+              ].map(opt => (
+                <button
+                  key={opt.val}
+                  type="button"
+                  onClick={() => setTimeFilter(opt.val)}
+                  style={{
+                    padding: "5px 13px", borderRadius: 20, fontWeight: 700, fontSize: 12, cursor: "pointer",
+                    border: `2px solid ${timeFilter === opt.val ? "#4ade80" : "var(--border)"}`,
+                    background: timeFilter === opt.val ? "rgba(74,222,128,0.14)" : "transparent",
+                    color: timeFilter === opt.val ? "#4ade80" : "var(--text3)",
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
               <button
                 type="button"
                 onClick={() => { setArchiveView(v => !v); setSearch(""); setTrackFilter([]); }}
