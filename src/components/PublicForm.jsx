@@ -1358,9 +1358,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     setDailyLessons(Array.isArray(lessons) ? lessons : []);
   };
 
-  // ── Password-based login ───────────────────────────────────────────────────
-  // Verifies the email is registered as a lecturer/student via /api/auth,
-  // then authenticates via supabase.auth.signInWithPassword().
+  // ── Password-based login (unified — all roles) ─────────────────────────────
   const handleLogin = async () => {
     const email = loginEmail.toLowerCase().trim();
     const password = loginPassword;
@@ -1368,33 +1366,13 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     setLoginBusy(true);
     setLoginError("");
     try {
-      // 1. Eligibility check (is this email a registered student/lecturer?)
-      const ensureRes = await fetch("/api/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "ensure-user", email }),
-      });
-      if (!ensureRes.ok) {
-        const data = await ensureRes.json().catch(() => ({}));
-        if (data.error === "not_registered") {
-          setLoginError("לא סטודנט/מרצה פעיל במכללה לא ניתן להיכנס");
-        } else {
-          setLoginError("שגיאה בתקשורת. נסו שוב.");
-        }
-        setLoginBusy(false);
-        return;
-      }
-
-      // 2. Sign in via Supabase Auth
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error || !data?.user) {
-        // Invalid credentials — most likely a first-time user who never set
-        // a password, or a wrong password. Guide them to the reset flow.
         setLoginError("אימייל או סיסמה שגויים. אם זו הכניסה הראשונה שלך, לחץ/י על \"שכחת סיסמה?\" ליצירת סיסמה.");
         setLoginBusy(false);
         return;
       }
-      // Success — onAuthStateChange(SIGNED_IN) will handle routing
+      // Success — onAuthStateChange(SIGNED_IN) will handle role-based routing
       setLoginBusy(false);
     } catch {
       setLoginError("שגיאה בתקשורת. נסו שוב.");
@@ -1402,33 +1380,13 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     }
   };
 
-  // ── Forgot password ────────────────────────────────────────────────────────
-  // Verifies eligibility (and provisions auth.users row if missing) before
-  // triggering supabase.auth.resetPasswordForEmail(). The reset link lands
-  // on "/" where onAuthStateChange catches the PASSWORD_RECOVERY event and
-  // opens the new-password modal.
+  // ── Forgot password (unified — all roles) ───────────────────────────────────
   const handleForgotPassword = async () => {
     const email = loginEmail.toLowerCase().trim();
     if (!email) return;
     setLoginBusy(true);
     setLoginError("");
     try {
-      const ensureRes = await fetch("/api/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "ensure-user", email, provision: true }),
-      });
-      if (!ensureRes.ok) {
-        const data = await ensureRes.json().catch(() => ({}));
-        if (data.error === "not_registered") {
-          setLoginError("לא סטודנט/מרצה פעיל במכללה לא ניתן להיכנס");
-        } else {
-          setLoginError("שגיאה בתקשורת. נסו שוב.");
-        }
-        setLoginBusy(false);
-        return;
-      }
-
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/`,
       });
@@ -1491,24 +1449,48 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     }
   };
 
-  // Listen for Supabase auth state changes
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // PASSWORD_RECOVERY is fired after the user clicks the reset link.
-      // Open the "new password" modal instead of routing into the portal.
-      if (event === "PASSWORD_RECOVERY") {
-        recoveryModeRef.current = true; // sync update (useEffect runs next tick)
-        setRecoveryMode(true);
-        return;
-      }
-      if (event !== "SIGNED_IN" || !session?.user?.email) return;
-      // Suppress SIGNED_IN routing while the user is still in the
-      // PASSWORD_RECOVERY flow (Supabase fires SIGNED_IN alongside it).
-      if (recoveryModeRef.current) return;
-      const authEmail = session.user.email.toLowerCase().trim();
-      const authUserId = session.user.id;
+  // ── Unified role-based routing helper ────────────────────────────────────────
+  const routeByRoles = async (session) => {
+    const authEmail = session.user.email.toLowerCase().trim();
+    const authUserId = session.user.id;
 
-      // 1. Try lecturers first
+    // Fetch user roles from public.users
+    const { data: userRow, error: userError } = await supabase
+      .from("users")
+      .select("id,full_name,email,phone,is_student,is_lecturer,is_warehouse,is_admin,permissions")
+      .eq("id", authUserId)
+      .single();
+
+    if (userError || !userRow) {
+      setLoginError("המשתמש לא נמצא במערכת. פנה/י למנהל.");
+      await supabase.auth.signOut();
+      return;
+    }
+
+    const isStaff = userRow.is_admin || userRow.is_warehouse;
+
+    // 1. Staff/Admin → store staffUser compatible object and redirect to /admin
+    if (isStaff) {
+      const staffUserObj = {
+        id: userRow.id,
+        full_name: userRow.full_name,
+        email: userRow.email,
+        role: userRow.is_admin ? "admin" : "staff",
+        permissions: userRow.permissions || {},
+        is_admin: userRow.is_admin,
+        is_warehouse: userRow.is_warehouse,
+        is_student: userRow.is_student,
+        is_lecturer: userRow.is_lecturer,
+      };
+      sessionStorage.setItem("staff_user", JSON.stringify(staffUserObj));
+      sessionStorage.removeItem("public_student");
+      sessionStorage.removeItem("public_view");
+      window.location.assign("/admin");
+      return;
+    }
+
+    // 2. Lecturer (non-staff) → lecturer portal
+    if (userRow.is_lecturer) {
       const matchedLecturer = (lecturers || []).find(
         (l) => l.isActive !== false && l.email?.toLowerCase().trim() === authEmail,
       );
@@ -1522,8 +1504,10 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
         window.location.assign("/lecturer");
         return;
       }
+    }
 
-      // 2. Try certifications.students
+    // 3. Student → public form
+    if (userRow.is_student) {
       const stuList = certifications?.students || [];
       const matchedStudent = stuList.find(
         (s) => s.email?.toLowerCase().trim() === authEmail,
@@ -1539,10 +1523,24 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
         if (matchedStudent.track) set("course", matchedStudent.track);
         return;
       }
+    }
 
-      // 3. No match — deny access
-      setLoginError("לא סטודנט/מרצה פעיל במכללה לא ניתן להיכנס");
-      await supabase.auth.signOut();
+    // 4. No matching role — deny access
+    setLoginError("המשתמש לא נמצא במערכת. פנה/י למנהל.");
+    await supabase.auth.signOut();
+  };
+
+  // Listen for Supabase auth state changes
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "PASSWORD_RECOVERY") {
+        recoveryModeRef.current = true;
+        setRecoveryMode(true);
+        return;
+      }
+      if (event !== "SIGNED_IN" || !session?.user?.email) return;
+      if (recoveryModeRef.current) return;
+      await routeByRoles(session);
     });
 
     return () => subscription.unsubscribe();
@@ -1553,39 +1551,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     if (loggedInStudent) return;
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session?.user?.email) return;
-      const authEmail = session.user.email.toLowerCase().trim();
-
-      // Try matching — if found, set state (same logic as onAuthStateChange)
-      const matchedLecturer = (lecturers || []).find(
-        (l) => l.isActive !== false && l.email?.toLowerCase().trim() === authEmail,
-      );
-      if (matchedLecturer) {
-        try {
-          sessionStorage.removeItem("public_student");
-          sessionStorage.removeItem("public_view");
-          sessionStorage.setItem("lecturer_portal_user", JSON.stringify({ id: matchedLecturer.id, fullName: matchedLecturer.fullName }));
-        } catch {}
-        window.location.assign("/lecturer");
-        return;
-      }
-
-      const stuList = certifications?.students || [];
-      const matchedStudent = stuList.find(
-        (s) => s.email?.toLowerCase().trim() === authEmail,
-      );
-      if (matchedStudent) {
-        try { sessionStorage.removeItem("lecturer_portal_user"); } catch {}
-        setLoggedInStudent(matchedStudent);
-        set("student_name", matchedStudent.name);
-        set("email", matchedStudent.email);
-        if (matchedStudent.phone) set("phone", matchedStudent.phone);
-        if (matchedStudent.track) set("course", matchedStudent.track);
-        return;
-      }
-
-      // Session exists but email matches neither official dataset — sign out and deny
-      setLoginError("לא סטודנט/מרצה פעיל במכללה לא ניתן להיכנס");
-      supabase.auth.signOut().catch(() => {});
+      routeByRoles(session);
     });
   }, [lecturers, certifications]);
 
@@ -2527,7 +2493,7 @@ ${inventory}
           ? <img src={siteSettings.logo} alt="לוגו" style={{width:82,height:82,objectFit:"contain",borderRadius:12,marginBottom:16,display:"block",marginInline:"auto"}}/>
           : <div style={{fontSize:48,marginBottom:16}}>🎬</div>}
         <h2 style={{fontSize:"clamp(14px,4vw,20px)",fontWeight:900,color:"var(--accent)",marginBottom:4}}>מערכת הפניות</h2>
-        <div style={{fontSize:14,color:"var(--text2)",marginBottom:24,fontWeight:500}}>כניסת סטודנטים ומרצים · מכללת קמרה אובסקורה וסאונד</div>
+        <div style={{fontSize:14,color:"var(--text2)",marginBottom:24,fontWeight:500}}>מכללת קמרה אובסקורה וסאונד</div>
 
         {authView === "login" && (
           <>
@@ -2603,15 +2569,7 @@ ${inventory}
           </>
         )}
 
-        <div style={{marginTop:20,paddingTop:16,borderTop:"1px solid var(--border)",textAlign:"center"}}>
-          <a
-            href="/admin/login"
-            style={{fontSize:12,color:"var(--text3)",textDecoration:"none",display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:"var(--r-sm)",border:"1px solid var(--border)",background:"transparent",cursor:"pointer",transition:"color 0.15s"}}
-            onMouseEnter={e=>{e.currentTarget.style.color="var(--text)";e.currentTarget.style.borderColor="var(--text2)";}}
-            onMouseLeave={e=>{e.currentTarget.style.color="var(--text3)";e.currentTarget.style.borderColor="var(--border)";}}>
-            🔐 כניסת סגל וצוות
-          </a>
-        </div>
+        {/* Staff login button removed — unified login for all roles */}
       </div>
     </div>
   );

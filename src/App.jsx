@@ -6831,82 +6831,7 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
   );
 }
 
-// ─── STAFF LOGIN ─────────────────────────────────────────────────────────────
-function StaffLogin({ onSuccess }) {
-  const [email, setEmail] = useState("");
-  const [pw, setPw] = useState("");
-  const [err, setErr] = useState("");
-  const [loading, setLoading] = useState(false);
-  const attempt = async () => {
-    if (!email.trim() || !pw.trim()) return;
-    setLoading(true);
-    setErr("");
-    try {
-      const res = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password: pw }),
-      });
-      const data = await res.json();
-      if (res.ok && data.user) {
-        logActivity({ user_id: data.user.id, user_name: data.user.full_name, action: "login", entity: "session", details: { email: data.user.email } });
-        onSuccess(data.user);
-      } else {
-        setErr("אימייל או סיסמה שגויים");
-        setTimeout(() => setErr(""), 3000);
-      }
-    } catch {
-      setErr("שגיאת רשת, נסה שוב");
-      setTimeout(() => setErr(""), 3000);
-    } finally {
-      setLoading(false);
-    }
-  };
-  return (
-    <div style={{minHeight:"100vh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"40px 48px",width:380,textAlign:"center"}}>
-        <div style={{fontSize:48,marginBottom:16}}>🏠</div>
-        <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>כניסת צוות</div>
-        <div style={{fontSize:13,color:"var(--text3)",marginBottom:28}}>מכללת קמרה אובסקורה וסאונד</div>
-        <input
-          className="form-input"
-          type="email"
-          placeholder="אימייל"
-          dir="ltr"
-          value={email}
-          onChange={e=>setEmail(e.target.value)}
-          onKeyDown={e=>e.key==="Enter"&&attempt()}
-          style={{marginBottom:10,textAlign:"center",fontSize:15}}
-          disabled={loading}
-        />
-        <input
-          className="form-input"
-          type="password"
-          placeholder="סיסמה"
-          value={pw}
-          onChange={e=>setPw(e.target.value)}
-          onKeyDown={e=>e.key==="Enter"&&attempt()}
-          style={{marginBottom:12,textAlign:"center",fontSize:18,letterSpacing:4}}
-          disabled={loading}
-        />
-        {err && <div style={{color:"var(--red)",fontSize:13,marginBottom:8}}>❌ {err}</div>}
-        <button className="btn btn-primary" style={{width:"100%"}} onClick={attempt} disabled={loading}>
-          {loading ? "מאמת..." : "כניסה"}
-        </button>
-
-        <div style={{marginTop:20,paddingTop:16,borderTop:"1px solid var(--border)",textAlign:"center"}}>
-          <a
-            href="/"
-            style={{fontSize:12,color:"var(--text3)",textDecoration:"none",display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:"var(--r-sm)",border:"1px solid var(--border)",background:"transparent",cursor:"pointer",transition:"color 0.15s"}}
-            onMouseEnter={e=>{e.currentTarget.style.color="var(--text)";e.currentTarget.style.borderColor="var(--text2)";}}
-            onMouseLeave={e=>{e.currentTarget.style.color="var(--text3)";e.currentTarget.style.borderColor="var(--border)";}}>
-            ← חזרה למערכת הפניות לסטודנטים ומרצים
-          </a>
-        </div>
-      </div>
-    </div>
-  );
-}
+// StaffLogin removed — unified login is handled by PublicForm on /
 
 // ─── הפניה חזרה לאדמין בלחיצה על כפתור "חזרה" בדפדפן ─────────────────────
 (function redirectAdminOnBack() {
@@ -6965,10 +6890,36 @@ export default function App() {
   const [loadingDone, setLoadingDone] = useState(false);
   const handleLoadingDone = () => setLoadingDone(true);
   const [toasts, setToasts]           = useState([]);
-  // Staff auth: unified login
+  // Staff auth: unified login (Supabase session + public.users)
   const [staffUser, setStaffUser] = useState(() => {
     try { const s = sessionStorage.getItem("staff_user"); return s ? JSON.parse(s) : null; } catch { return null; }
   });
+  // Recover staffUser from Supabase session if sessionStorage was cleared
+  useEffect(() => {
+    if (!isAdmin || staffUser) return;
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session?.user?.id) return;
+      const { data: userRow } = await supabase
+        .from("users")
+        .select("id,full_name,email,is_student,is_lecturer,is_warehouse,is_admin,permissions")
+        .eq("id", session.user.id)
+        .single();
+      if (!userRow || (!userRow.is_admin && !userRow.is_warehouse)) return;
+      const recovered = {
+        id: userRow.id,
+        full_name: userRow.full_name,
+        email: userRow.email,
+        role: userRow.is_admin ? "admin" : "staff",
+        permissions: userRow.permissions || {},
+        is_admin: userRow.is_admin,
+        is_warehouse: userRow.is_warehouse,
+        is_student: userRow.is_student,
+        is_lecturer: userRow.is_lecturer,
+      };
+      setStaffUser(recovered);
+      logActivity({ user_id: recovered.id, user_name: recovered.full_name, action: "login", entity: "session", details: { email: recovered.email, method: "session_recovery" } });
+    });
+  }, []);
   const [staffView, setStaffView] = useState(() => sessionStorage.getItem("staff_view") || "hub"); // hub | warehouse | administration | staff-management
   const authed = !!staffUser;
   const isMainAdmin = isAdmin && authed;
@@ -7333,9 +7284,10 @@ export default function App() {
     if (!isAdmin || !authed) return;
     const TIMEOUT_MS = 20 * 60 * 1000;
     const doLogout = () => {
+      supabase.auth.signOut().catch(()=>{});
       sessionStorage.removeItem("staff_user");
       sessionStorage.removeItem("staff_view");
-      window.location.replace("/admin/login");
+      window.location.replace("/");
     };
     let timer = setTimeout(doLogout, TIMEOUT_MS);
     const reset = () => { clearTimeout(timer); timer = setTimeout(doLogout, TIMEOUT_MS); };
@@ -7888,8 +7840,8 @@ export default function App() {
 
       {/* ── אזור ניהול (מוגן מפני גישה ישירה) ── */}
       <ProtectedRoute authed={authed}>
-      {/* ── כניסת צוות ── */}
-      {isAdmin && !authed && <StaffLogin onSuccess={(user)=>{ setStaffUser(user); setStaffView("hub"); }}/>}
+      {/* ── כניסת צוות — הפניה לדף כניסה אחיד ── */}
+      {isAdmin && !authed && (() => { window.location.replace("/"); return null; })()}
 
       {/* ── Staff Hub ── */}
       {isAdmin && authed && staffView === "hub" && (
@@ -7899,7 +7851,7 @@ export default function App() {
           canInstall={canInstallPwa}
           onInstall={() => { void installPwa(); }}
           onNavigate={(view) => setStaffView(view)}
-          onLogout={() => { sessionStorage.removeItem("staff_user"); sessionStorage.removeItem("staff_view"); window.location.replace("/"); }}
+          onLogout={() => { supabase.auth.signOut().catch(()=>{}); sessionStorage.removeItem("staff_user"); sessionStorage.removeItem("staff_view"); window.location.replace("/"); }}
         />
       )}
 
