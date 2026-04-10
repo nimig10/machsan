@@ -672,7 +672,7 @@ async function downloadCommitmentPdf(base64, compressed, name) {
   URL.revokeObjectURL(url);
 }
 
-function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColor, commitmentPdf, commitmentPdfCompressed, commitmentPdfName }) {
+function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColor, commitmentPdf, commitmentPdfCompressed, commitmentPdfName, certifications }) {
   const [tab, setTab] = useState("policies");
   const [selectedEq, setSelectedEq] = useState(null);  // equipment detail view
   const [infoCatFilter, setInfoCatFilter] = useState([]); // multi-select
@@ -747,6 +747,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                           <div style={{fontWeight:800,fontSize:14,textAlign:"center",marginBottom:4}}>{eq.name}</div>
                           <div style={{fontSize:11,color:"var(--accent)",fontWeight:700,textAlign:"center"}}>{eq.category}</div>
                           {eq.description&&<div style={{fontSize:12,color:"var(--text3)",marginTop:6,textAlign:"center",lineHeight:1.5,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{eq.description}</div>}
+                          {eq.certification_id&&(certifications?.types||[]).some(t=>t.id===eq.certification_id)&&<div style={{textAlign:"center",marginTop:6,fontSize:11,color:"#9b59b6",fontWeight:700}}>🏅 דרושה הסמכה</div>}
                           <div style={{textAlign:"center",marginTop:8,fontSize:11,color:"var(--text3)"}}>לחץ לפרטים נוספים ←</div>
                         </div>
                       );
@@ -794,6 +795,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                   <div style={{marginTop:16,display:"flex",gap:8,flexWrap:"wrap"}}>
                     {selectedEq.soundOnly&&<span style={{background:"rgba(245,166,35,0.12)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:20,padding:"4px 12px",fontSize:12,color:"var(--accent)",fontWeight:700}}>🎙️ ציוד סאונד</span>}
                     {selectedEq.photoOnly&&<span style={{background:"rgba(39,174,96,0.12)",border:"1px solid rgba(39,174,96,0.35)",borderRadius:20,padding:"4px 12px",fontSize:12,color:"var(--green)",fontWeight:700}}>🎥 ציוד צילום</span>}
+                    {(()=>{const ct=(certifications?.types||[]).find(t=>t.id===selectedEq.certification_id);return ct?<span style={{background:"rgba(155,89,182,0.12)",border:"1px solid rgba(155,89,182,0.4)",borderRadius:20,padding:"4px 12px",fontSize:12,color:"#9b59b6",fontWeight:700}}>🏅 הסמכה: {ct.name}</span>:null;})()}
                   </div>
                 </div>
               </div>
@@ -3115,7 +3117,7 @@ ${inventory}
         </div>
       </div>
     </div>}
-    {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor} commitmentPdf={policies.commitmentPdf} commitmentPdfCompressed={policies.commitmentPdfCompressed} commitmentPdfName={policies.commitmentPdfName}/>}
+    {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor} commitmentPdf={policies.commitmentPdf} commitmentPdfCompressed={policies.commitmentPdfCompressed} commitmentPdfName={policies.commitmentPdfName} certifications={certifications}/>}
     {showAccountSettings && loggedInStudent && (
       <AccountSettingsModal
         student={loggedInStudent}
