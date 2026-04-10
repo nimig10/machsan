@@ -1471,66 +1471,95 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     }
 
     const isStaff = userRow.is_admin || userRow.is_warehouse;
+    const roleFlags = { is_admin: userRow.is_admin, is_warehouse: userRow.is_warehouse, is_student: userRow.is_student, is_lecturer: userRow.is_lecturer };
 
-    // 1. Staff/Admin → store staffUser compatible object and redirect to /admin
-    if (isStaff) {
-      const staffUserObj = {
-        id: userRow.id,
-        full_name: userRow.full_name,
-        email: userRow.email,
-        role: userRow.is_admin ? "admin" : "staff",
-        permissions: userRow.permissions || {},
-        is_admin: userRow.is_admin,
-        is_warehouse: userRow.is_warehouse,
-        is_student: userRow.is_student,
-        is_lecturer: userRow.is_lecturer,
-      };
-      sessionStorage.setItem("staff_user", JSON.stringify(staffUserObj));
-      sessionStorage.removeItem("public_student");
-      sessionStorage.removeItem("public_view");
-      window.location.assign("/admin");
-      return;
+    // ── active_role hint: let multi-role users override default priority ──
+    const activeRole = sessionStorage.getItem("active_role");
+    if (activeRole === "student" && userRow.is_student) {
+      return await routeToStudent(authUserId, authEmail, userRow, roleFlags);
     }
+    if (activeRole === "lecturer" && userRow.is_lecturer) {
+      return await routeToLecturer(authUserId, authEmail, userRow, roleFlags);
+    }
+    if (activeRole === "staff" && isStaff) {
+      return routeToStaff(userRow, roleFlags);
+    }
+    // hint invalid or missing → fall through to default priority
 
-    // 2. Lecturer (non-staff) → lecturer portal
+    // 1. Staff/Admin (highest priority)
+    if (isStaff) return routeToStaff(userRow, roleFlags);
+
+    // 2. Lecturer
     if (userRow.is_lecturer) {
-      const matchedLecturer = (lecturers || []).find(
-        (l) => l.isActive !== false && l.email?.toLowerCase().trim() === authEmail,
-      );
-      if (matchedLecturer) {
-        await upsertAuthEntityMap(authUserId, "lecturer", String(matchedLecturer.id), authEmail);
-        try {
-          sessionStorage.removeItem("public_student");
-          sessionStorage.removeItem("public_view");
-          sessionStorage.setItem("lecturer_portal_user", JSON.stringify({ id: matchedLecturer.id, fullName: matchedLecturer.fullName }));
-        } catch {}
-        window.location.assign("/lecturer");
-        return;
-      }
+      const routed = await routeToLecturer(authUserId, authEmail, userRow, roleFlags);
+      if (routed) return;
     }
 
-    // 3. Student → public form
+    // 3. Student
     if (userRow.is_student) {
-      const stuList = certifications?.students || [];
-      const matchedStudent = stuList.find(
-        (s) => s.email?.toLowerCase().trim() === authEmail,
-      );
-      if (matchedStudent) {
-        await upsertAuthEntityMap(authUserId, "student", String(matchedStudent.id), authEmail);
-        try { sessionStorage.removeItem("lecturer_portal_user"); } catch {}
-        setLoggedInStudent(matchedStudent);
-        setLoginError("");
-        set("student_name", matchedStudent.name);
-        set("email", matchedStudent.email);
-        if (matchedStudent.phone) set("phone", matchedStudent.phone);
-        if (matchedStudent.track) set("course", matchedStudent.track);
-        return;
-      }
+      const routed = await routeToStudent(authUserId, authEmail, userRow, roleFlags);
+      if (routed) return;
     }
 
     // 4. No matching role — deny access
     setLoginError("המשתמש לא נמצא במערכת. פנה/י למנהל.");
     await supabase.auth.signOut();
+  };
+
+  // ── Role routing helpers ──────────────────────────────────────────────────
+  const routeToStaff = (userRow, roleFlags) => {
+    const staffUserObj = {
+      id: userRow.id,
+      full_name: userRow.full_name,
+      email: userRow.email,
+      role: userRow.is_admin ? "admin" : "staff",
+      permissions: userRow.permissions || {},
+      ...roleFlags,
+    };
+    sessionStorage.setItem("staff_user", JSON.stringify(staffUserObj));
+    sessionStorage.removeItem("public_student");
+    sessionStorage.removeItem("public_student_roles");
+    sessionStorage.removeItem("public_view");
+    window.location.assign("/admin");
+    return true;
+  };
+
+  const routeToLecturer = async (authUserId, authEmail, userRow, roleFlags) => {
+    const matchedLecturer = (lecturers || []).find(
+      (l) => l.isActive !== false && l.email?.toLowerCase().trim() === authEmail,
+    );
+    if (!matchedLecturer) return false;
+    await upsertAuthEntityMap(authUserId, "lecturer", String(matchedLecturer.id), authEmail);
+    try {
+      sessionStorage.removeItem("public_student");
+      sessionStorage.removeItem("public_student_roles");
+      sessionStorage.removeItem("public_view");
+      sessionStorage.setItem("lecturer_portal_user", JSON.stringify({ id: matchedLecturer.id, fullName: matchedLecturer.fullName, ...roleFlags }));
+    } catch {}
+    window.location.assign("/lecturer");
+    return true;
+  };
+
+  const routeToStudent = async (authUserId, authEmail, userRow, roleFlags) => {
+    const stuList = certifications?.students || [];
+    const matchedStudent = stuList.find(
+      (s) => s.email?.toLowerCase().trim() === authEmail,
+    );
+    if (!matchedStudent) return false;
+    await upsertAuthEntityMap(authUserId, "student", String(matchedStudent.id), authEmail);
+    try {
+      sessionStorage.removeItem("lecturer_portal_user");
+      sessionStorage.removeItem("staff_user");
+      sessionStorage.removeItem("staff_view");
+      sessionStorage.setItem("public_student_roles", JSON.stringify(roleFlags));
+    } catch {}
+    setLoggedInStudent(matchedStudent);
+    setLoginError("");
+    set("student_name", matchedStudent.name);
+    set("email", matchedStudent.email);
+    if (matchedStudent.phone) set("phone", matchedStudent.phone);
+    if (matchedStudent.track) set("course", matchedStudent.track);
+    return true;
   };
 
   // Listen for Supabase auth state changes
@@ -3127,13 +3156,24 @@ ${inventory}
         <div style={{padding:"16px 24px",borderTop:"1px solid var(--border)",textAlign:"center"}}>
           <button
             type="button"
-            onClick={() => { supabase.auth.signOut().catch(()=>{}); setLoggedInStudent(null); setAuthView("login"); setLoginEmail(""); setLoginPassword(""); sessionStorage.removeItem("public_view"); }}
+            onClick={() => { supabase.auth.signOut().catch(()=>{}); setLoggedInStudent(null); setAuthView("login"); setLoginEmail(""); setLoginPassword(""); sessionStorage.removeItem("public_view"); sessionStorage.removeItem("public_student_roles"); sessionStorage.removeItem("active_role"); }}
             style={{background:"var(--surface2)",border:"1px solid var(--border)",color:"var(--text2)",fontSize:13,cursor:"pointer",padding:"8px 20px",borderRadius:8,transition:"all 0.15s",fontWeight:600}}
             onMouseEnter={e=>{e.currentTarget.style.borderColor="var(--accent)";e.currentTarget.style.color="var(--accent)";}}
             onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--border)";e.currentTarget.style.color="var(--text2)";}}
           >
             ← חזרה לדף הכניסה
           </button>
+          {(() => { try { const r = JSON.parse(sessionStorage.getItem("public_student_roles")||"{}"); return r.is_admin || r.is_warehouse; } catch { return false; } })() && (
+            <button
+              type="button"
+              onClick={() => { sessionStorage.setItem("active_role", "staff"); sessionStorage.removeItem("public_student"); sessionStorage.removeItem("public_student_roles"); sessionStorage.removeItem("public_view"); window.location.assign("/"); }}
+              style={{background:"rgba(139,92,246,0.1)",border:"1px solid rgba(139,92,246,0.3)",color:"#8b5cf6",fontSize:13,cursor:"pointer",padding:"8px 20px",borderRadius:8,transition:"all 0.15s",fontWeight:600,marginTop:8}}
+              onMouseEnter={e=>{e.currentTarget.style.background="rgba(139,92,246,0.2)";}}
+              onMouseLeave={e=>{e.currentTarget.style.background="rgba(139,92,246,0.1)";}}
+            >
+              ניהול מערכת
+            </button>
+          )}
         </div>
       </div>
     </div>

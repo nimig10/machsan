@@ -7292,6 +7292,7 @@ export default function App() {
       await supabase.auth.signOut().catch(()=>{});
       sessionStorage.removeItem("staff_user");
       sessionStorage.removeItem("staff_view");
+      sessionStorage.removeItem("active_role");
       window.location.replace("/");
     };
     let timer = setTimeout(doLogout, TIMEOUT_MS);
@@ -7857,7 +7858,7 @@ export default function App() {
           canInstall={canInstallPwa}
           onInstall={() => { void installPwa(); }}
           onNavigate={(view) => setStaffView(view)}
-          onLogout={async () => { await supabase.auth.signOut().catch(()=>{}); sessionStorage.removeItem("staff_user"); sessionStorage.removeItem("staff_view"); window.location.replace("/"); }}
+          onLogout={async () => { await supabase.auth.signOut().catch(()=>{}); sessionStorage.removeItem("staff_user"); sessionStorage.removeItem("staff_view"); sessionStorage.removeItem("active_role"); window.location.replace("/"); }}
         />
       )}
 

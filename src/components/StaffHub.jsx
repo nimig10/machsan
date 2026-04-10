@@ -134,10 +134,55 @@ export function StaffHub({ user, logo, onNavigate, onLogout, canInstall = false,
             </div>
           )}
 
+          {(user?.is_student || user?.is_lecturer) && (
+            <div style={{ marginTop: 32, display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+              {user.is_student && (
+                <button
+                  onClick={() => { sessionStorage.setItem("active_role", "student"); sessionStorage.removeItem("staff_user"); sessionStorage.removeItem("staff_view"); window.location.assign("/"); }}
+                  onMouseEnter={() => setHovered("switch-student")}
+                  onMouseLeave={() => setHovered(null)}
+                  style={{
+                    padding: "8px 20px",
+                    border: `1.5px solid ${hovered === "switch-student" ? "#8b5cf6" : "var(--border)"}`,
+                    borderRadius: 8,
+                    background: hovered === "switch-student" ? "rgba(139,92,246,0.12)" : "var(--surface)",
+                    color: hovered === "switch-student" ? "#8b5cf6" : "var(--text2)",
+                    cursor: "pointer",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    transition: "all 0.2s",
+                  }}
+                >
+                  🎓 מעבר לתצוגת סטודנט
+                </button>
+              )}
+              {user.is_lecturer && (
+                <button
+                  onClick={() => { sessionStorage.setItem("active_role", "lecturer"); sessionStorage.removeItem("staff_user"); sessionStorage.removeItem("staff_view"); window.location.assign("/"); }}
+                  onMouseEnter={() => setHovered("switch-lecturer")}
+                  onMouseLeave={() => setHovered(null)}
+                  style={{
+                    padding: "8px 20px",
+                    border: `1.5px solid ${hovered === "switch-lecturer" ? "#0ea5e9" : "var(--border)"}`,
+                    borderRadius: 8,
+                    background: hovered === "switch-lecturer" ? "rgba(14,165,233,0.12)" : "var(--surface)",
+                    color: hovered === "switch-lecturer" ? "#0ea5e9" : "var(--text2)",
+                    cursor: "pointer",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    transition: "all 0.2s",
+                  }}
+                >
+                  📚 מעבר לתצוגת מרצה
+                </button>
+              )}
+            </div>
+          )}
+
           <button
             onClick={onLogout}
             style={{
-              marginTop: 32,
+              marginTop: 16,
               padding: "8px 20px",
               border: "none",
               borderRadius: 8,

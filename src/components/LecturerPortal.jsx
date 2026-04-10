@@ -602,9 +602,19 @@ export function LecturerPortal({
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
               />
+              {(() => { try { const r = loggedInLecturer || {}; return r.is_admin || r.is_warehouse; } catch { return false; } })() && (
+                <button
+                  className="btn"
+                  onClick={() => { sessionStorage.setItem("active_role", "staff"); sessionStorage.removeItem("lecturer_portal_user"); window.location.assign("/"); }}
+                  style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.3)", color: "#8b5cf6", fontWeight: 600 }}
+                >
+                  ניהול מערכת
+                </button>
+              )}
               <button
                 className="btn btn-secondary"
                 onClick={() => {
+                  sessionStorage.removeItem("active_role");
                   setLoggedInLecturer(null);
                   setEditorState(null);
                 }}
