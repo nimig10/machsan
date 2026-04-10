@@ -275,7 +275,42 @@ async function handleEnsureUser(req, res) {
   // When provision=true (called from forgot-password flow), make sure the
   // auth.users row exists so resetPasswordForEmail can deliver the link.
   if (provision) {
-    await ensureAuthUserExists(normalizedEmail, record.name);
+    const result = await ensureAuthUserExists(normalizedEmail, record.name);
+
+    // Also ensure public.users row exists with proper role flags
+    const authUser = await findAuthUserByEmail(normalizedEmail);
+    if (authUser) {
+      const roleFlags = {
+        is_student: record.role === "student",
+        is_lecturer: record.role === "lecturer",
+      };
+      // Upsert: create if missing, merge role flags if exists
+      const existing = await sbQuery(`users?id=eq.${authUser.id}&select=id,is_student,is_lecturer,is_admin,is_warehouse`);
+      if (!existing || existing.length === 0) {
+        await fetch(`${SB_URL}/rest/v1/users`, {
+          method: "POST",
+          headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
+          body: JSON.stringify({
+            id: authUser.id,
+            email: normalizedEmail,
+            full_name: record.name || "",
+            ...roleFlags,
+            is_admin: false,
+            is_warehouse: false,
+          }),
+        }).catch(() => {});
+      } else {
+        // Merge: set the role flag true without clearing other roles
+        const updates = { updated_at: new Date().toISOString() };
+        if (record.role === "student") updates.is_student = true;
+        if (record.role === "lecturer") updates.is_lecturer = true;
+        await fetch(`${SB_URL}/rest/v1/users?id=eq.${authUser.id}`, {
+          method: "PATCH",
+          headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
+          body: JSON.stringify(updates),
+        }).catch(() => {});
+      }
+    }
   }
 
   return res.status(200).json({ ok: true, role: record.role, name: record.name });
