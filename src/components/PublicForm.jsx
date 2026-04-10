@@ -1407,11 +1407,42 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       .single();
 
     if (userError || !userRow) {
-      setLoginError("המשתמש לא נמצא במערכת. פנה/י למנהל.");
-      await supabase.auth.signOut();
-      return;
+      // No public.users row — check if this email belongs to a student or lecturer
+      // and auto-create the row so they can proceed
+      const isStudent = (certifications?.students || []).some(s => s.email?.toLowerCase().trim() === authEmail);
+      const isLecturer = (lecturers || []).some(l => l.isActive !== false && l.email?.toLowerCase().trim() === authEmail);
+      if (!isStudent && !isLecturer) {
+        setLoginError("המשתמש לא נמצא במערכת. פנה/י למנהל.");
+        await supabase.auth.signOut();
+        return;
+      }
+      // Auto-provision public.users row via ensure-user API
+      try {
+        await fetch("/api/auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "ensure-user", email: authEmail, provision: true }),
+        });
+      } catch {}
+      // Re-fetch the newly created row
+      const { data: retryRow } = await supabase
+        .from("users")
+        .select("id,full_name,email,phone,is_student,is_lecturer,is_warehouse,is_admin,permissions")
+        .eq("id", authUserId)
+        .single();
+      if (!retryRow) {
+        setLoginError("המשתמש לא נמצא במערכת. פנה/י למנהל.");
+        await supabase.auth.signOut();
+        return;
+      }
+      // Continue with the newly created row
+      return await routeByRolesInner(retryRow, authUserId, authEmail);
     }
 
+    return await routeByRolesInner(userRow, authUserId, authEmail);
+  };
+
+  const routeByRolesInner = async (userRow, authUserId, authEmail) => {
     const isStaff = userRow.is_admin || userRow.is_warehouse;
     const roleFlags = { is_admin: userRow.is_admin, is_warehouse: userRow.is_warehouse, is_student: userRow.is_student, is_lecturer: userRow.is_lecturer };
 
