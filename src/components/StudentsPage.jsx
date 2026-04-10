@@ -785,8 +785,8 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                     if (isEditing) {
                       rows.push(
                         <tr key={s.id}
-                          style={{background:"rgba(245,166,35,0.06)",borderBottom:"1px solid var(--border)",cursor:"pointer"}}
-                          onClick={()=>void startEdit(s)}>
+                          style={{background:"rgba(245,166,35,0.06)",borderBottom:"1px solid var(--border)"}}
+                          >
                           <td style={{...tdS,padding:"6px 10px"}} onClick={e=>e.stopPropagation()}>
                             <input style={{...inpS,fontWeight:700}} value={editName} autoFocus
                               onChange={e=>setEditName(e.target.value)}/>
@@ -806,9 +806,9 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                               {trackSettings.map(ts=><option key={ts.name} value={ts.name}>{ts.name}</option>)}
                             </select>
                           </td>
-                          <td style={{...tdS,width:48,textAlign:"center"}} onClick={e=>e.stopPropagation()}>
+                          <td style={{...tdS,width:48,textAlign:"center"}}>
                             <button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:"2px 8px"}}
-                              onClick={()=>void closeInlineEdit(s)}>✕</button>
+                              onClick={()=>void startEdit(s)}>✕</button>
                           </td>
                         </tr>
                       );
