@@ -794,22 +794,22 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                         <tr key={s.id}
                           style={{background:"rgba(245,166,35,0.06)",borderBottom:"1px solid var(--border)",cursor:"pointer"}}
                           onClick={()=>void startEdit(s)}>
-                          <td style={{...tdS,padding:"6px 10px"}}>
+                          <td style={{...tdS,padding:"4px 8px"}}>
                             <input style={{...inpS,fontWeight:700}} value={editName} autoFocus
                               onClick={e=>e.stopPropagation()}
                               onChange={e=>setEditName(e.target.value)}/>
                           </td>
-                          <td style={{...tdS,padding:"6px 10px"}}>
+                          <td style={{...tdS,padding:"4px 8px"}}>
                             <input style={{...inpS,fontSize:12}} type="email" value={editEmail}
                               onClick={e=>e.stopPropagation()}
                               onChange={e=>setEditEmail(e.target.value)}/>
                           </td>
-                          <td style={{...tdS,padding:"6px 10px"}}>
+                          <td style={{...tdS,padding:"4px 8px"}}>
                             <input style={inpS} value={editPhone}
                               onClick={e=>e.stopPropagation()}
                               onChange={e=>setEditPhone(e.target.value)}/>
                           </td>
-                          <td style={{...tdS,padding:"6px 10px"}}>
+                          <td style={{...tdS,padding:"4px 8px"}}>
                             <select style={{...inpS}} value={editTrackInl}
                               onClick={e=>e.stopPropagation()}
                               onChange={e=>setEditTrackInl(e.target.value)}>
@@ -963,4 +963,4 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
 }
 
 const thS = { padding:"10px 14px", textAlign:"right", fontWeight:800, fontSize:13, color:"var(--text2)", whiteSpace:"nowrap" };
-const tdS = { padding:"10px 14px", whiteSpace:"nowrap" };
+const tdS = { padding:"0 14px", whiteSpace:"nowrap", overflow:"hidden", height:48, verticalAlign:"middle" };
