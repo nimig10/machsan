@@ -755,14 +755,21 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
         <>
           {/* Desktop — table */}
           <div className="cert-desktop" style={{overflowX:"auto",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
-            <table className="students-table" style={{width:"100%",borderCollapse:"collapse",minWidth:540,direction:"rtl"}}>
+            <table className="students-table" style={{width:"100%",borderCollapse:"collapse",minWidth:540,direction:"rtl",tableLayout:"fixed"}}>
+              <colgroup>
+                <col style={{width:"22%"}}/>
+                <col style={{width:"28%"}}/>
+                <col style={{width:"16%"}}/>
+                <col style={{width:"26%"}}/>
+                <col style={{width:"8%"}}/>
+              </colgroup>
               <thead>
                 <tr style={{background:"var(--surface2)",borderBottom:"2px solid var(--border)"}}>
                   <th style={thS}>שם סטודנט</th>
                   <th style={thS}>אימייל</th>
                   <th style={thS}>טלפון</th>
                   <th style={thS}>מסלול לימודים</th>
-                  <th style={{...thS,width:80,textAlign:"center"}}></th>
+                  <th style={{...thS,textAlign:"center"}}></th>
                 </tr>
               </thead>
               <tbody>
