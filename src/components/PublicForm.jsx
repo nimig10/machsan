@@ -904,7 +904,6 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
 // row and the certifications.students record.
 function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColor }) {
   const [name,     setName]     = useState(String(student?.name  || ""));
-  const [email,    setEmail]    = useState(String(student?.email || ""));
   const [phone,    setPhone]    = useState(String(student?.phone || ""));
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -914,17 +913,10 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
   const handleSave = async () => {
     setError("");
     const nName  = String(name  || "").trim();
-    const nEmail = String(email || "").trim().toLowerCase();
-    // Strip everything that isn't a digit/plus so whitespace / dashes / ()'s
-    // don't break the validation. Empty phone is allowed (optional field).
     const nPhoneRaw = String(phone || "").trim();
     const nPhone    = nPhoneRaw.replace(/[^\d+]/g, "");
     if (!nName || nName.length < 2) {
       setError("יש להזין שם מלא (לפחות 2 תווים).");
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nEmail)) {
-      setError("כתובת אימייל לא תקינה.");
       return;
     }
     if (nPhone && !/^\+?\d{7,15}$/.test(nPhone)) {
@@ -943,12 +935,8 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
     }
 
     setBusy(true);
-    // 25s client-side timeout so the UI can NEVER hang forever even if the
-    // serverless function stalls or the network drops silently.
     const abort = new AbortController();
     const abortTimer = setTimeout(() => abort.abort(), 25000);
-    // Bulletproof cleanup: the try/finally guarantees the busy flag flips off
-    // and the abort timer is cleared even if any downstream callback throws.
     let unfroze = false;
     const unfreeze = () => {
       if (unfroze) return;
@@ -957,7 +945,6 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
       setBusy(false);
     };
     try {
-      // Grab the current access token so the backend can verify the caller.
       const { data: { session } } = await supabase.auth.getSession();
       const accessToken = session?.access_token;
       if (!accessToken) {
@@ -966,6 +953,7 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
         return;
       }
 
+      const nEmail = String(student?.email || "").trim().toLowerCase();
       const res = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -984,15 +972,7 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
 
       if (!res.ok) {
         const code = data && (data.error || data.code);
-        if (code === "email_taken") {
-          setError("כתובת האימייל כבר משויכת לסטודנט אחר.");
-        } else if (code === "invalid_name") {
-          setError("שם מלא חסר או קצר מדי.");
-        } else if (code === "invalid_email") {
-          setError("כתובת אימייל לא תקינה.");
-        } else if (code === "invalid_phone") {
-          setError("מספר טלפון לא תקין.");
-        } else if (code === "password_too_short") {
+        if (code === "password_too_short") {
           setError("הסיסמה קצרה מדי (לפחות 6 תווים).");
         } else if (code === "student_not_found") {
           setError("לא נמצא סטודנט פעיל תחת המייל המחובר.");
@@ -1000,10 +980,7 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
           setError("פקע החיבור. התחבר/י מחדש ונסה/י שוב.");
         } else if (code === "store_update_failed") {
           setError("שמירה במסד הנתונים נכשלה. נסו שוב.");
-        } else if (code === "auth_update_failed" && data.profileSaved) {
-          setError("הפרטים נשמרו אך עדכון ההתחברות נכשל. נסו לרענן ולהתחבר שוב.");
         } else if (res.status === 400 && (!code || code === "Missing or unknown action")) {
-          // Old backend still deployed — user is on a stale PWA bundle.
           setError("הגרסה שבדפדפן ישנה. רענן/י את הדף (Ctrl+Shift+R) ונסה/י שוב.");
         } else {
           setError(`שגיאה בשמירה (${res.status}${code ? " · " + code : ""}). נסו שוב.`);
@@ -1012,23 +989,17 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
         return;
       }
 
-      // SUCCESS path — we must unfreeze the UI and close the modal BEFORE
-      // running any parent callback, so a thrown callback can never keep the
-      // modal frozen.
       const nextStudent =
         data.student ||
         { ...student, name: nName, email: nEmail, phone: nPhone };
       const flags = {
-        emailChanged:    !!data.emailChanged,
+        emailChanged:    false,
         passwordChanged: !!data.passwordChanged,
         phoneChanged:    (student?.phone || "") !== nPhone,
       };
       unfreeze();
       onClose?.();
       if (showToast) showToast("success", "הפרטים עודכנו בהצלחה");
-      // Defer the parent callback one tick so it runs AFTER our modal has
-      // fully unmounted. This way any state-cascade the parent triggers
-      // (e.g. the real-time gatekeeper) can't race the modal cleanup.
       setTimeout(() => {
         try {
           if (onSaved) onSaved(nextStudent, flags);
@@ -1045,8 +1016,6 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
       }
       unfreeze();
     } finally {
-      // Absolute safety net: no matter what, make sure the UI is never left
-      // frozen. This is belt-and-braces on top of the unfreeze() calls above.
       unfreeze();
     }
   };
@@ -1077,22 +1046,6 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
               placeholder="ישראל ישראלי"
               autoComplete="name"
             />
-          </div>
-
-          <div>
-            <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>אימייל התחברות</label>
-            <input
-              className="form-input"
-              type="email"
-              value={email}
-              onChange={(e)=>setEmail(e.target.value)}
-              disabled={busy}
-              placeholder="email@example.com"
-              autoComplete="email"
-            />
-            <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>
-              שינוי האימייל ישמש כמזהה ההתחברות הבא שלך.
-            </div>
           </div>
 
           <div>
