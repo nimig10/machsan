@@ -6894,17 +6894,21 @@ export default function App() {
   const [staffUser, setStaffUser] = useState(() => {
     try { const s = sessionStorage.getItem("staff_user"); return s ? JSON.parse(s) : null; } catch { return null; }
   });
+  const [staffAuthChecked, setStaffAuthChecked] = useState(() => {
+    // If we already have staffUser from sessionStorage, no need to wait
+    try { return !!sessionStorage.getItem("staff_user"); } catch { return false; }
+  });
   // Recover staffUser from Supabase session if sessionStorage was cleared
   useEffect(() => {
     if (!isAdmin || staffUser) return;
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session?.user?.id) return;
+      if (!session?.user?.id) { setStaffAuthChecked(true); return; }
       const { data: userRow } = await supabase
         .from("users")
         .select("id,full_name,email,is_student,is_lecturer,is_warehouse,is_admin,permissions")
         .eq("id", session.user.id)
         .single();
-      if (!userRow || (!userRow.is_admin && !userRow.is_warehouse)) return;
+      if (!userRow || (!userRow.is_admin && !userRow.is_warehouse)) { setStaffAuthChecked(true); return; }
       const recovered = {
         id: userRow.id,
         full_name: userRow.full_name,
@@ -6917,8 +6921,9 @@ export default function App() {
         is_lecturer: userRow.is_lecturer,
       };
       setStaffUser(recovered);
+      setStaffAuthChecked(true);
       logActivity({ user_id: recovered.id, user_name: recovered.full_name, action: "login", entity: "session", details: { email: recovered.email, method: "session_recovery" } });
-    });
+    }).catch(() => setStaffAuthChecked(true));
   }, []);
   const [staffView, setStaffView] = useState(() => sessionStorage.getItem("staff_view") || "hub"); // hub | warehouse | administration | staff-management
   const authed = !!staffUser;
@@ -7841,7 +7846,8 @@ export default function App() {
       {/* ── אזור ניהול (מוגן מפני גישה ישירה) ── */}
       <ProtectedRoute authed={authed}>
       {/* ── כניסת צוות — הפניה לדף כניסה אחיד ── */}
-      {isAdmin && !authed && (() => { window.location.replace("/"); return null; })()}
+      {isAdmin && !authed && staffAuthChecked && (() => { window.location.replace("/"); return null; })()}
+      {isAdmin && !authed && !staffAuthChecked && <Loading ready={false} accentColor={siteSettings.accentColor} onDone={() => {}} />}
 
       {/* ── Staff Hub ── */}
       {isAdmin && authed && staffView === "hub" && (
