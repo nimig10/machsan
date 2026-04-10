@@ -20,7 +20,7 @@ export function StaffHub({ user, logo, onNavigate, onLogout, canInstall = false,
 
   return (
     <div style={{ minHeight: "100dvh", padding: 24, background: "var(--bg)", position: "relative" }}>
-      {canInstall && (
+      {canInstall && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && (
         <button
           type="button"
           onClick={handleInstallClick}
