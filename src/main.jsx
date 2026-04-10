@@ -4,6 +4,13 @@ import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import App from './App.jsx'
 
+// ── PWA: mobile only ─────────────────────────────────────────────────────────
+// Register the service worker only on mobile/tablet devices.
+// Desktop users get a plain web app (no install prompt, no SW cache issues).
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+  navigator.userAgent
+);
+
 let hasReloadedForSwUpdate = false;
 
 const triggerReloadForSwUpdate = () => {
@@ -12,7 +19,7 @@ const triggerReloadForSwUpdate = () => {
   window.location.reload();
 };
 
-if ('serviceWorker' in navigator) {
+if (isMobile && 'serviceWorker' in navigator) {
   registerSW({
     immediate: true,
     onRegisteredSW(_swUrl, registration) {
@@ -32,6 +39,14 @@ if ('serviceWorker' in navigator) {
   });
 
   navigator.serviceWorker.addEventListener('controllerchange', triggerReloadForSwUpdate);
+} else if (!isMobile && 'serviceWorker' in navigator) {
+  // Desktop: unregister any existing SW so stale cache is cleared
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    regs.forEach(r => r.unregister());
+  });
+  caches.keys().then(keys => {
+    keys.forEach(k => caches.delete(k));
+  });
 }
 
 createRoot(document.getElementById('root')).render(
