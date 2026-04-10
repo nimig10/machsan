@@ -1418,17 +1418,20 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     try {
       const { error } = await supabase.auth.updateUser({ password: recoveryPassword });
       if (error) {
-        setRecoveryError("עדכון הסיסמה נכשל. נסו שוב.");
+        console.warn("updateUser failed:", error.message, error);
+        setRecoveryError(`עדכון הסיסמה נכשל: ${error.message || "נסו שוב."}`);
         setRecoveryBusy(false);
         return;
       }
       setRecoveryBusy(false);
+      recoveryModeRef.current = false;
       setRecoveryMode(false);
       setRecoveryPassword("");
       setRecoveryConfirm("");
       showToast("success", "הסיסמה עודכנה בהצלחה! ברוך/ה הבא/ה למערכת.");
-      // Session is already active — onAuthStateChange will route to the
-      // appropriate portal on the next SIGNED_IN tick (or stay logged in).
+      // Route by roles now that recovery is complete
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) await routeByRoles(session);
     } catch {
       setRecoveryError("שגיאה בתקשורת. נסו שוב.");
       setRecoveryBusy(false);
@@ -1549,8 +1552,10 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   // Check for existing session on mount (e.g. after magic link redirect)
   useEffect(() => {
     if (loggedInStudent) return;
+    if (recoveryModeRef.current || recoveryMode) return; // don't route during password recovery
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session?.user?.email) return;
+      if (recoveryModeRef.current) return; // re-check after async
       routeByRoles(session);
     });
   }, [lecturers, certifications]);
