@@ -2577,33 +2577,27 @@ ${inventory}
         )}
 
         {/* Staff login button removed — unified login for all roles */}
-      </div>
-      {/* ── Mobile PWA install banner ── */}
-      {(()=>{
-        if(typeof navigator==="undefined") return null;
-        const ua=navigator.userAgent;
-        const isMob=/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-        if(!isMob) return null;
-        const isStandalone=window.matchMedia?.("(display-mode: standalone)")?.matches||window.navigator.standalone;
-        if(isStandalone) return null;
-        const dismissed=sessionStorage.getItem("pwa_banner_dismissed");
-        if(dismissed) return null;
-        const isIOS=/iPhone|iPad|iPod/i.test(ua)&&!window.MSStream;
-        const show=isIOS||canInstall;
-        if(!show) return null;
-        return (
-          <div style={{marginTop:16,background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:12,padding:"10px 14px",direction:"rtl",display:"flex",alignItems:"center",gap:10}}>
-            <div style={{flex:1,minWidth:0,fontSize:12,color:"var(--text2)",lineHeight:1.5}}>
+
+        {/* ── Mobile PWA install hint ── */}
+        {(()=>{
+          if(typeof navigator==="undefined") return null;
+          const ua=navigator.userAgent;
+          const isMob=/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+          if(!isMob) return null;
+          const isStandalone=window.matchMedia?.("(display-mode: standalone)")?.matches||window.navigator.standalone;
+          if(isStandalone) return null;
+          const isIOS=/iPhone|iPad|iPod/i.test(ua)&&!window.MSStream;
+          if(!isIOS&&!canInstall) return null;
+          return (
+            <div style={{marginTop:20,textAlign:"center",fontSize:12,color:"var(--text3)",lineHeight:1.6}}>
               {isIOS
-                ? <>📲 להתקנה: לחץ/י <strong>שיתוף</strong> ← <strong>הוסף למסך הבית</strong></>
-                : <>📲 <strong style={{color:"var(--text)"}}>התקן את האפליקציה</strong> לגישה מהירה</>
+                ? <>📲 להתקנת האפליקציה: לחץ/י על כפתור <strong>השיתוף</strong> ובחר/י <strong>"הוסף למסך הבית"</strong></>
+                : <button type="button" onClick={()=>void onInstall()} style={{background:"none",border:"none",color:"var(--accent)",fontSize:12,fontWeight:700,cursor:"pointer",padding:0}}>📲 התקן את האפליקציה לגישה מהירה</button>
               }
             </div>
-            {!isIOS&&<button type="button" onClick={()=>void onInstall()} style={{background:"var(--accent)",color:"#0a0c10",border:"none",borderRadius:6,padding:"6px 12px",fontWeight:800,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>התקן</button>}
-            <button type="button" onClick={()=>{sessionStorage.setItem("pwa_banner_dismissed","1");setAuthView(v=>v);}} style={{background:"none",border:"none",color:"var(--text3)",fontSize:14,cursor:"pointer",padding:0,lineHeight:1}}>✕</button>
-          </div>
-        );
-      })()}
+          );
+        })()}
+      </div>
     </div>
   );
 
