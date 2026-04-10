@@ -522,6 +522,27 @@ async function handleDeleteStudentAuth(req, res) {
     }
   }
 
+  // Check public.users — never delete an auth user that also has staff/admin/lecturer roles
+  const usersRes = await fetch(
+    `${SB_URL}/rest/v1/users?email=eq.${encodeURIComponent(normEmail)}&select=id,is_admin,is_warehouse,is_lecturer`,
+    { headers: SERVICE_HEADERS },
+  );
+  if (usersRes.ok) {
+    const usersRows = await usersRes.json();
+    if (Array.isArray(usersRows) && usersRows.length > 0) {
+      const u = usersRows[0];
+      if (u.is_admin || u.is_warehouse || u.is_lecturer) {
+        // User has other roles — only clear is_student flag, don't delete auth user
+        await fetch(`${SB_URL}/rest/v1/users?id=eq.${u.id}`, {
+          method: "PATCH",
+          headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
+          body: JSON.stringify({ is_student: false, updated_at: new Date().toISOString() }),
+        }).catch(() => {});
+        return res.status(200).json({ ok: true, deleted: false, cleared_student_flag: true });
+      }
+    }
+  }
+
   // Find the auth user by email. If none exists, treat as success (idempotent).
   const authUser = await findAuthUserByEmail(normEmail);
   if (!authUser) {
