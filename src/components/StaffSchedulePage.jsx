@@ -591,13 +591,13 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
             ONE unified grid: shifts + lessons + bookings + loans
             all share the same 80px + 6-col layout
         ══════════════════════════════════════════════════ */}
-        <div style={{ borderRadius: 10, border: "1px solid var(--border)", position: "relative", opacity: fetching ? 0.55 : 1, transition: "opacity 0.18s" }}>
+        <div style={{ borderRadius: 10, border: "1px solid var(--border)", position: "relative", opacity: fetching ? 0.55 : 1, transition: "opacity 0.18s", overflow: "hidden" }}>
           {fetching && <div style={{ position: "absolute", inset: 0, zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}><div style={{ background: "var(--surface2)", padding: "6px 16px", borderRadius: 20, fontSize: 12, color: "var(--text3)", border: "1px solid var(--border)" }}>טוען...</div></div>}
           <div style={{
             display: "grid",
-            gridTemplateColumns: `80px repeat(${displayDays.length}, 1fr)`,
+            gridTemplateColumns: viewMode === "day" ? `80px repeat(${displayDays.length}, 1fr)` : `50px repeat(${displayDays.length}, 1fr)`,
             direction: "rtl",
-            minWidth: viewMode === "day" ? (showLessons ? 980 : 280) : 716,
+            minWidth: viewMode === "day" ? (showLessons ? 980 : 280) : 0,
           }}>
 
             {/* ═══ Header Row ═══ */}
@@ -608,10 +608,10 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
               const isToday = date === today;
               return (
                 <div key={date} style={{
-                  padding: "8px 4px", textAlign: "center",
+                  padding: "6px 2px", textAlign: "center",
                   background: isToday ? "rgba(59,130,246,0.08)" : hol ? "rgba(245,158,11,0.06)" : "var(--surface2)",
                   borderBottom: "1px solid var(--border)",
-                  borderLeft: i < 5 ? "1px solid var(--border)" : "none",
+                  borderLeft: i < displayDays.length - 1 ? "1px solid var(--border)" : "none",
                 }}>
                   <div style={{ fontWeight: 700, fontSize: 12, color: isToday ? "#3b82f6" : "var(--text3)" }}>{HE_DAYS[dayIdx]}</div>
                   <div style={{
@@ -636,10 +636,10 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                     borderTop: "1px solid var(--border)",
                     borderLeft: "1px solid var(--border)",
                     display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                    padding: "6px 2px", gap: 2,
+                    padding: "4px 2px", gap: 1,
                   }}>
-                    <span style={{ fontSize: 16 }}>{st.icon}</span>
-                    <span style={{ fontSize: 8, color: st.color, fontWeight: 700, textAlign: "center" }}>{st.label}</span>
+                    <span style={{ fontSize: 14 }}>{st.icon}</span>
+                    <span style={{ fontSize: 7, color: st.color, fontWeight: 700, textAlign: "center", lineHeight: 1.2 }}>{st.label}</span>
                   </div>
 
                   {/* Day cells */}
@@ -703,7 +703,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                                 onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
                               >
                                 {showLock && <span style={{ fontSize: 9 }}>🔒</span>}
-                                <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                <span style={{ fontSize: 10, fontWeight: 700, color: "#fff", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                   {block.memberName}
                                 </span>
                                 {slotKey === "custom" && block.startTime && block.endTime && (
