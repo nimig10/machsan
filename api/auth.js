@@ -481,6 +481,18 @@ async function handleSyncStudentAuth(req, res) {
     return res.status(500).json({ error: "auth_update_failed", details: txt });
   }
 
+  // Also sync public.users if a row exists for this auth user
+  const puUpdates = { updated_at: new Date().toISOString() };
+  if (normOld !== normNew) puUpdates.email = normNew;
+  if (nextName) puUpdates.full_name = nextName;
+  if (Object.keys(puUpdates).length > 1) {
+    await fetch(`${SB_URL}/rest/v1/users?id=eq.${authUser.id}`, {
+      method: "PATCH",
+      headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
+      body: JSON.stringify(puUpdates),
+    }).catch(() => {});
+  }
+
   return res.status(200).json({ ok: true, synced: true });
 }
 
