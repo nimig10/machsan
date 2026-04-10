@@ -1302,14 +1302,17 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     setLoginBusy(true);
     setLoginError("");
     try {
-      // Check if the email exists in public.users (linked to auth.users)
+      // Check ALL sources: public.users (staff), certifications.students, lecturers
+      const inStudents = (certifications?.students || []).some(s => String(s.email || "").toLowerCase().trim() === email);
+      const inLecturers = (lecturers || []).some(l => String(l.email || "").toLowerCase().trim() === email);
       const { data: userRows } = await supabase
         .from("users")
         .select("id")
         .eq("email", email)
         .limit(1);
-      if (!userRows || userRows.length === 0) {
-        setLoginError("כתובת המייל לא קיימת במערכת.");
+      const inStaff = userRows && userRows.length > 0;
+      if (!inStudents && !inLecturers && !inStaff) {
+        setLoginError("המייל לא קיים במערכת, אנא פנה/י למזכירות המכללה.");
         setLoginBusy(false);
         return;
       }
