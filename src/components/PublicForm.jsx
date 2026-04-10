@@ -2586,31 +2586,23 @@ ${inventory}
         if(!isMob) return null;
         const isStandalone=window.matchMedia?.("(display-mode: standalone)")?.matches||window.navigator.standalone;
         if(isStandalone) return null;
-        const isIOS=/iPhone|iPad|iPod/i.test(ua)&&!window.MSStream;
         const dismissed=sessionStorage.getItem("pwa_banner_dismissed");
         if(dismissed) return null;
-        const bannerStyle={position:"fixed",bottom:0,left:0,right:0,background:"var(--surface)",borderTop:"2px solid var(--accent)",padding:"14px 20px",zIndex:9999,direction:"rtl",boxShadow:"0 -4px 20px rgba(0,0,0,0.3)"};
-        const closeBtn=<button type="button" onClick={()=>{sessionStorage.setItem("pwa_banner_dismissed","1");setAuthView(v=>v);}} style={{position:"absolute",top:8,left:8,background:"none",border:"none",color:"var(--text3)",fontSize:18,cursor:"pointer",padding:4}}>✕</button>;
-        if(isIOS) return (
-          <div style={{...bannerStyle,textAlign:"center",position:"relative"}}>
-            {closeBtn}
-            <div style={{fontWeight:800,fontSize:14,color:"var(--text)",marginBottom:6}}>📲 התקן את האפליקציה</div>
-            <div style={{fontSize:12,color:"var(--text2)",lineHeight:1.6}}>
-              לחץ/י על <span style={{fontSize:16,verticalAlign:"middle"}}>⎋</span> (שיתוף) ואז על <strong>"הוסף למסך הבית"</strong>
+        const isIOS=/iPhone|iPad|iPod/i.test(ua)&&!window.MSStream;
+        const show=isIOS||canInstall;
+        if(!show) return null;
+        return (
+          <div style={{marginTop:16,background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:12,padding:"10px 14px",direction:"rtl",display:"flex",alignItems:"center",gap:10}}>
+            <div style={{flex:1,minWidth:0,fontSize:12,color:"var(--text2)",lineHeight:1.5}}>
+              {isIOS
+                ? <>📲 להתקנה: לחץ/י <strong>שיתוף</strong> ← <strong>הוסף למסך הבית</strong></>
+                : <>📲 <strong style={{color:"var(--text)"}}>התקן את האפליקציה</strong> לגישה מהירה</>
+              }
             </div>
+            {!isIOS&&<button type="button" onClick={()=>void onInstall()} style={{background:"var(--accent)",color:"#0a0c10",border:"none",borderRadius:6,padding:"6px 12px",fontWeight:800,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>התקן</button>}
+            <button type="button" onClick={()=>{sessionStorage.setItem("pwa_banner_dismissed","1");setAuthView(v=>v);}} style={{background:"none",border:"none",color:"var(--text3)",fontSize:14,cursor:"pointer",padding:0,lineHeight:1}}>✕</button>
           </div>
         );
-        if(canInstall) return (
-          <div style={{...bannerStyle,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,position:"relative"}}>
-            {closeBtn}
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontWeight:800,fontSize:14,color:"var(--text)"}}>📲 התקן את האפליקציה</div>
-              <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>גישה מהירה ישירות מהטלפון</div>
-            </div>
-            <button type="button" onClick={()=>void onInstall()} style={{background:"var(--accent)",color:"#0a0c10",border:"none",borderRadius:8,padding:"8px 18px",fontWeight:800,fontSize:13,cursor:"pointer",whiteSpace:"nowrap"}}>התקן</button>
-          </div>
-        );
-        return null;
       })()}
     </div>
   );
