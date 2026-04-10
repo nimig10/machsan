@@ -2592,7 +2592,7 @@ ${inventory}
             <div style={{marginTop:20,textAlign:"center",fontSize:12,color:"var(--text3)",lineHeight:1.6}}>
               {isIOS
                 ? <>📲 להתקנת האפליקציה: לחץ/י על כפתור <strong>השיתוף</strong> ובחר/י <strong>"הוסף למסך הבית"</strong></>
-                : <button type="button" onClick={()=>void onInstall()} style={{background:"none",border:"none",color:"var(--accent)",fontSize:12,fontWeight:700,cursor:"pointer",padding:0}}>📲 התקן את האפליקציה לגישה מהירה</button>
+                : <button type="button" onClick={()=>void onInstall()} style={{background:"transparent",border:"1.5px solid var(--accent)",color:"var(--accent)",fontSize:12,fontWeight:700,cursor:"pointer",padding:"8px 20px",borderRadius:8,width:"100%"}}>📲 התקן את האפליקציה</button>
               }
             </div>
           );
