@@ -591,7 +591,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
             ONE unified grid: shifts + lessons + bookings + loans
             all share the same 80px + 6-col layout
         ══════════════════════════════════════════════════ */}
-        <div style={{ borderRadius: 10, border: "1px solid var(--border)", position: "relative", opacity: fetching ? 0.55 : 1, transition: "opacity 0.18s", overflow: "hidden" }}>
+        <div style={{ borderRadius: 10, border: "1px solid var(--border)", position: "relative", opacity: fetching ? 0.55 : 1, transition: "opacity 0.18s" }}>
           {fetching && <div style={{ position: "absolute", inset: 0, zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}><div style={{ background: "var(--surface2)", padding: "6px 16px", borderRadius: 20, fontSize: 12, color: "var(--text3)", border: "1px solid var(--border)" }}>טוען...</div></div>}
           <div style={{
             display: "grid",
