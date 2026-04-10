@@ -1302,6 +1302,17 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     setLoginBusy(true);
     setLoginError("");
     try {
+      // Check if the email exists in public.users (linked to auth.users)
+      const { data: userRows } = await supabase
+        .from("users")
+        .select("id")
+        .eq("email", email)
+        .limit(1);
+      if (!userRows || userRows.length === 0) {
+        setLoginError("כתובת המייל לא קיימת במערכת.");
+        setLoginBusy(false);
+        return;
+      }
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/?reset=1`,
       });
