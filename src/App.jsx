@@ -7288,8 +7288,8 @@ export default function App() {
   useEffect(() => {
     if (!isAdmin || !authed) return;
     const TIMEOUT_MS = 20 * 60 * 1000;
-    const doLogout = () => {
-      supabase.auth.signOut().catch(()=>{});
+    const doLogout = async () => {
+      await supabase.auth.signOut().catch(()=>{});
       sessionStorage.removeItem("staff_user");
       sessionStorage.removeItem("staff_view");
       window.location.replace("/");
@@ -7857,7 +7857,7 @@ export default function App() {
           canInstall={canInstallPwa}
           onInstall={() => { void installPwa(); }}
           onNavigate={(view) => setStaffView(view)}
-          onLogout={() => { supabase.auth.signOut().catch(()=>{}); sessionStorage.removeItem("staff_user"); sessionStorage.removeItem("staff_view"); window.location.replace("/"); }}
+          onLogout={async () => { await supabase.auth.signOut().catch(()=>{}); sessionStorage.removeItem("staff_user"); sessionStorage.removeItem("staff_view"); window.location.replace("/"); }}
         />
       )}
 
