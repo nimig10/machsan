@@ -1077,7 +1077,7 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
 }
 
 // ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
-export function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], calendarToken="", siteSettings={}, categoryLoanTypes={}, refreshInventory=async()=>({}), lecturers=[] }) {
+export function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], calendarToken="", siteSettings={}, categoryLoanTypes={}, refreshInventory=async()=>({}), lecturers=[], canInstall=false, onInstall=()=>{} }) {
   const initialParams = new URLSearchParams(window.location.search);
   const initialLoanTypeParam = initialParams.get("loan_type");
   const initialStepParam = Number(initialParams.get("step"));
@@ -2547,6 +2547,16 @@ ${inventory}
 
         {/* Staff login button removed — unified login for all roles */}
       </div>
+      {/* ── Mobile PWA install banner ── */}
+      {canInstall && (
+        <div style={{position:"fixed",bottom:0,left:0,right:0,background:"var(--surface)",borderTop:"2px solid var(--accent)",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,zIndex:9999,direction:"rtl",boxShadow:"0 -4px 20px rgba(0,0,0,0.3)"}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:800,fontSize:14,color:"var(--text)"}}>📲 התקן את האפליקציה</div>
+            <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>גישה מהירה ישירות מהטלפון</div>
+          </div>
+          <button type="button" onClick={()=>void onInstall()} style={{background:"var(--accent)",color:"#0a0c10",border:"none",borderRadius:8,padding:"8px 18px",fontWeight:800,fontSize:13,cursor:"pointer",whiteSpace:"nowrap"}}>התקן</button>
+        </div>
+      )}
     </div>
   );
 
