@@ -945,6 +945,8 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
       setBusy(false);
     };
     try {
+      // Refresh session first — a prior password change may have invalidated the old token
+      await supabase.auth.refreshSession().catch(() => {});
       const { data: { session } } = await supabase.auth.getSession();
       const accessToken = session?.access_token;
       if (!accessToken) {
