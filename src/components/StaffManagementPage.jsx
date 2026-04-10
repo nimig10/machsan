@@ -88,7 +88,7 @@ function StaffTab({ showToast, teamMembers, setTeamMembers }) {
     try {
       const body = { action: id ? "update" : "create", callerRole: "admin", full_name: full_name.trim(), email: email.trim(), role: role || "staff", permissions };
       if (id) body.id = id;
-      if (password?.trim()) body.password = password.trim();
+      if (!id && password?.trim()) body.password = password.trim();
       const res = await fetch("/api/staff", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
       if (res.ok) {
@@ -240,16 +240,18 @@ function StaffTab({ showToast, teamMembers, setTeamMembers }) {
                   </select>
                 )}
               </div>
+              {!editUser.id && (
               <div className="form-group">
-                <label className="form-label">{editUser.id ? "סיסמה חדשה (השאר ריק)" : "סיסמה *"}</label>
+                <label className="form-label">סיסמה *</label>
                 <div style={{ position: "relative" }}>
-                  <input className="form-input" type={showPw ? "text" : "password"} dir="ltr" value={editUser.password || ""} onChange={e => setEditUser(p => ({ ...p, password: e.target.value }))} placeholder={editUser.id ? "••••••" : ""} style={{ paddingLeft: 36 }} />
+                  <input className="form-input" type={showPw ? "text" : "password"} dir="ltr" value={editUser.password || ""} onChange={e => setEditUser(p => ({ ...p, password: e.target.value }))} placeholder="" style={{ paddingLeft: 36 }} />
                   <button type="button" onClick={() => setShowPw(p => !p)}
-                    style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "var(--text3)", padding: 0 }}>
+                    style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%", background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "var(--text3)", padding: 0 }}>
                     {showPw ? "🙈" : "👁️"}
                   </button>
                 </div>
               </div>
+              )}
             </div>
 
             {editUser.role !== "admin" && (
