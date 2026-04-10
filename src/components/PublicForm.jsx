@@ -1365,15 +1365,15 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
         setRecoveryBusy(false);
         return;
       }
+      // Sign out so user must log in fresh with the new password
+      await supabase.auth.signOut();
       setRecoveryBusy(false);
       recoveryModeRef.current = false;
       setRecoveryMode(false);
       setRecoveryPassword("");
       setRecoveryConfirm("");
-      showToast("success", "הסיסמה עודכנה בהצלחה! ברוך/ה הבא/ה למערכת.");
-      // Route by roles now that recovery is complete
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) await routeByRoles(session);
+      setAuthView("login");
+      showToast("success", "הסיסמה עודכנה בהצלחה! התחבר/י עם הסיסמה החדשה.");
     } catch {
       setRecoveryError("שגיאה בתקשורת. נסו שוב.");
       setRecoveryBusy(false);
