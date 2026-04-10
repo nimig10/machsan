@@ -905,8 +905,6 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
 function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColor }) {
   const [name,     setName]     = useState(String(student?.name  || ""));
   const [phone,    setPhone]    = useState(String(student?.phone || ""));
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [busy,     setBusy]     = useState(false);
   const [error,    setError]    = useState("");
 
@@ -922,16 +920,6 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
     if (nPhone && !/^\+?\d{7,15}$/.test(nPhone)) {
       setError("מספר טלפון לא תקין (7 עד 15 ספרות).");
       return;
-    }
-    if (password || confirmPassword) {
-      if (password.length < 6) {
-        setError("הסיסמה חייבת להכיל לפחות 6 תווים.");
-        return;
-      }
-      if (password !== confirmPassword) {
-        setError("הסיסמאות אינן תואמות.");
-        return;
-      }
     }
 
     setBusy(true);
@@ -965,7 +953,6 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
           name:  nName,
           email: nEmail,
           phone: nPhone,
-          password: password || undefined,
         }),
         signal: abort.signal,
       });
@@ -996,7 +983,7 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
         { ...student, name: nName, email: nEmail, phone: nPhone };
       const flags = {
         emailChanged:    false,
-        passwordChanged: !!data.passwordChanged,
+        passwordChanged: false,
         phoneChanged:    (student?.phone || "") !== nPhone,
       };
       unfreeze();
@@ -1068,35 +1055,6 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
               ישמש אותנו ליצירת קשר בנוגע להשאלות שלך.
             </div>
           </div>
-
-          <div style={{borderTop:"1px solid var(--border)",paddingTop:14,marginTop:4}}>
-            <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>
-              סיסמה חדשה <span style={{fontWeight:400,color:"var(--text3)"}}>(אופציונלי)</span>
-            </label>
-            <input
-              className="form-input"
-              type="password"
-              value={password}
-              onChange={(e)=>setPassword(e.target.value)}
-              disabled={busy}
-              placeholder="השאירו ריק כדי לא לשנות"
-              autoComplete="new-password"
-            />
-          </div>
-
-          {password && (
-            <div>
-              <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>אישור סיסמה חדשה</label>
-              <input
-                className="form-input"
-                type="password"
-                value={confirmPassword}
-                onChange={(e)=>setConfirmPassword(e.target.value)}
-                disabled={busy}
-                autoComplete="new-password"
-              />
-            </div>
-          )}
 
           {error && (
             <div style={{background:"rgba(239,68,68,0.12)",border:"1px solid rgba(239,68,68,0.4)",borderRadius:10,padding:"10px 12px",color:"#fca5a5",fontSize:13,fontWeight:600}}>
