@@ -26,7 +26,8 @@
           var search = window.location.search || "";
           var isRecovery =
             hash.indexOf("type=recovery") !== -1 ||
-            search.indexOf("type=recovery") !== -1;
+            search.indexOf("type=recovery") !== -1 ||
+            search.indexOf("reset=1") !== -1;
           if (isRecovery) {
             window.__isPasswordRecovery = true;
             for (var i = localStorage.length - 1; i >= 0; i--) {

@@ -1388,7 +1388,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     setLoginError("");
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/`,
+        redirectTo: `${window.location.origin}/?reset=1`,
       });
       if (error) {
         setLoginError("שליחת הקישור נכשלה. נסו שוב.");

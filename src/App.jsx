@@ -32,7 +32,7 @@ import { supabase } from "./supabaseClient.js";
 supabase.auth.getSession().then(() => {
   const url = new URL(window.location.href);
   let dirty = false;
-  for (const p of ["code", "error", "error_code", "error_description"]) {
+  for (const p of ["code", "error", "error_code", "error_description", "reset"]) {
     if (url.searchParams.has(p)) { url.searchParams.delete(p); dirty = true; }
   }
   if (window.location.hash.includes("access_token")) {
