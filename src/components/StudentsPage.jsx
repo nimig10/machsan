@@ -785,31 +785,32 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                     if (isEditing) {
                       rows.push(
                         <tr key={s.id}
-                          style={{background:"rgba(245,166,35,0.06)",borderBottom:"1px solid var(--border)"}}
-                          >
-                          <td style={{...tdS,padding:"6px 10px"}} onClick={e=>e.stopPropagation()}>
+                          style={{background:"rgba(245,166,35,0.06)",borderBottom:"1px solid var(--border)",cursor:"pointer"}}
+                          onClick={()=>void startEdit(s)}>
+                          <td style={{...tdS,padding:"6px 10px"}}>
                             <input style={{...inpS,fontWeight:700}} value={editName} autoFocus
+                              onClick={e=>e.stopPropagation()}
                               onChange={e=>setEditName(e.target.value)}/>
                           </td>
-                          <td style={{...tdS,padding:"6px 10px"}} onClick={e=>e.stopPropagation()}>
+                          <td style={{...tdS,padding:"6px 10px"}}>
                             <input style={{...inpS,fontSize:12}} type="email" value={editEmail}
+                              onClick={e=>e.stopPropagation()}
                               onChange={e=>setEditEmail(e.target.value)}/>
                           </td>
-                          <td style={{...tdS,padding:"6px 10px"}} onClick={e=>e.stopPropagation()}>
+                          <td style={{...tdS,padding:"6px 10px"}}>
                             <input style={inpS} value={editPhone}
+                              onClick={e=>e.stopPropagation()}
                               onChange={e=>setEditPhone(e.target.value)}/>
                           </td>
-                          <td style={{...tdS,padding:"6px 10px"}} onClick={e=>e.stopPropagation()}>
+                          <td style={{...tdS,padding:"6px 10px"}}>
                             <select style={{...inpS}} value={editTrackInl}
+                              onClick={e=>e.stopPropagation()}
                               onChange={e=>setEditTrackInl(e.target.value)}>
                               <option value="">-- ללא מסלול --</option>
                               {trackSettings.map(ts=><option key={ts.name} value={ts.name}>{ts.name}</option>)}
                             </select>
                           </td>
-                          <td style={{...tdS,width:48,textAlign:"center"}}>
-                            <button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:"2px 8px"}}
-                              onClick={()=>void startEdit(s)}>✕</button>
-                          </td>
+                          <td style={{...tdS,width:48}}/>
                         </tr>
                       );
                     } else {
