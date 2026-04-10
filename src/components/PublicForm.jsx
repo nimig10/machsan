@@ -1302,19 +1302,32 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     setLoginBusy(true);
     setLoginError("");
     try {
-      // Check ALL sources: public.users (staff), certifications.students, lecturers
-      const inStudents = (certifications?.students || []).some(s => String(s.email || "").toLowerCase().trim() === email);
-      const inLecturers = (lecturers || []).some(l => String(l.email || "").toLowerCase().trim() === email);
-      const { data: userRows } = await supabase
-        .from("users")
-        .select("id")
-        .eq("email", email)
-        .limit(1);
-      const inStaff = userRows && userRows.length > 0;
-      if (!inStudents && !inLecturers && !inStaff) {
-        setLoginError("המייל לא קיים במערכת, אנא פנה/י למזכירות המכללה.");
-        setLoginBusy(false);
-        return;
+      // Use ensure-user API: validates email in students/lecturers AND
+      // provisions auth.users row if needed so resetPasswordForEmail works
+      const ensureRes = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "ensure-user", email, provision: true }),
+      });
+      if (!ensureRes.ok) {
+        const ej = await ensureRes.json().catch(() => ({}));
+        if (ej.error === "not_registered") {
+          // Also check public.users (staff) — ensure-user only checks students/lecturers
+          const { data: userRows } = await supabase
+            .from("users")
+            .select("id")
+            .eq("email", email)
+            .limit(1);
+          if (!userRows || userRows.length === 0) {
+            setLoginError("המייל לא קיים במערכת, אנא פנה/י למזכירות המכללה.");
+            setLoginBusy(false);
+            return;
+          }
+        } else {
+          setLoginError("שליחת הקישור נכשלה. נסו שוב.");
+          setLoginBusy(false);
+          return;
+        }
       }
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/?reset=1`,
