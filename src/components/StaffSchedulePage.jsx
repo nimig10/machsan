@@ -597,7 +597,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
             display: "grid",
             gridTemplateColumns: viewMode === "day" ? `80px repeat(${displayDays.length}, 1fr)` : `50px repeat(${displayDays.length}, 1fr)`,
             direction: "rtl",
-            minWidth: viewMode === "day" ? (showLessons ? 980 : 280) : 0,
+            minWidth: viewMode === "day" ? (showLessons ? 980 : 280) : 500,
           }}>
 
             {/* ═══ Header Row ═══ */}
