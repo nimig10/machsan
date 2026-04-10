@@ -9,12 +9,15 @@ function isStandaloneMode() {
   );
 }
 
+const isMobile = typeof navigator !== "undefined" &&
+  /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
 export function useInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(() => isStandaloneMode());
 
   useEffect(() => {
-    if (typeof window === "undefined") return undefined;
+    if (typeof window === "undefined" || !isMobile) return undefined;
 
     const mediaQuery = typeof window.matchMedia === "function"
       ? window.matchMedia("(display-mode: standalone)")

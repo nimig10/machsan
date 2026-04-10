@@ -39,14 +39,19 @@ if (isMobile && 'serviceWorker' in navigator) {
   });
 
   navigator.serviceWorker.addEventListener('controllerchange', triggerReloadForSwUpdate);
-} else if (!isMobile && 'serviceWorker' in navigator) {
-  // Desktop: unregister any existing SW so stale cache is cleared
-  navigator.serviceWorker.getRegistrations().then(regs => {
-    regs.forEach(r => r.unregister());
-  });
-  caches.keys().then(keys => {
-    keys.forEach(k => caches.delete(k));
-  });
+} else if (!isMobile) {
+  // Desktop: suppress browser install prompt entirely
+  window.addEventListener('beforeinstallprompt', e => e.preventDefault());
+
+  // Unregister any existing SW so stale cache is cleared
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(regs => {
+      regs.forEach(r => r.unregister());
+    });
+    caches.keys().then(keys => {
+      keys.forEach(k => caches.delete(k));
+    });
+  }
 }
 
 createRoot(document.getElementById('root')).render(
