@@ -52,7 +52,7 @@ function parseSmartBookingJson(text) {
 const LOAN_TYPE_EQUIPMENT_CLASSIFICATIONS = ["סאונד", "צילום", "כללי"];
 const DEFAULT_STUDIO_FUTURE_HOURS = 16;
 const DEFAULT_LOAN_TYPE_EQUIPMENT_CLASSIFICATION = {
-  פרטית: ["כללי"],
+  פרטית: ["כללי", "צילום", "סאונד"],
   הפקה: ["צילום"],
   סאונד: ["סאונד"],
   "קולנוע יומית": ["צילום"],

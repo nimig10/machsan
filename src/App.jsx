@@ -962,7 +962,7 @@ function workingUnits(eq) {
 const CATEGORY_LOAN_TYPE_OPTIONS = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
 const EQUIPMENT_CLASSIFICATION_OPTIONS = ["סאונד", "צילום", "כללי"];
 const DEFAULT_LOAN_TYPE_CLASSIFICATIONS = {
-  פרטית: ["כללי"],
+  פרטית: ["כללי", "צילום", "סאונד"],
   הפקה: ["צילום"],
   סאונד: ["סאונד"],
   "קולנוע יומית": ["צילום"],
