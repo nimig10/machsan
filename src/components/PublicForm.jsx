@@ -2607,7 +2607,7 @@ ${inventory}
               disabled={!loginEmail.trim()||loginBusy}>
               {loginBusy ? "שולח..." : "שלח קישור לאיפוס"}
             </button>
-            <button type="button" style={{marginTop:12,background:"none",border:"none",color:"var(--text3)",fontSize:12,cursor:"pointer",textDecoration:"underline"}}
+            <button type="button" className="btn btn-primary" style={{width:"100%",marginTop:12}}
               onClick={()=>{setAuthView("login");setLoginError("");}}>
               ← חזרה למסך הכניסה
             </button>
