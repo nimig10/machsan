@@ -1284,6 +1284,23 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error || !data?.user) {
+        // Fallback: staff member with valid bcrypt password but no Supabase auth yet
+        // provision=true creates the auth.users + public.users row automatically
+        try {
+          const staffRes = await fetch("/api/auth", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "staff-login", email, password, provision: true }),
+          });
+          if (staffRes.ok) {
+            // Auth account was provisioned — retry Supabase sign-in
+            const { data: data2, error: error2 } = await supabase.auth.signInWithPassword({ email, password });
+            if (!error2 && data2?.user) {
+              setLoginBusy(false);
+              return; // success — onAuthStateChange handles routing
+            }
+          }
+        } catch {}
         setLoginError("אימייל או סיסמה שגויים. אם זו הכניסה הראשונה שלך, לחץ/י על \"שכחת סיסמה?\" ליצירת סיסמה.");
         setLoginBusy(false);
         return;

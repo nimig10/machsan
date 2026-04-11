@@ -54,13 +54,14 @@ function isValidEmail(email) {
 // ── staff-login ───────────────────────────────────────────────────────────────
 
 async function handleStaffLogin(req, res) {
-  const { email, password } = req.body || {};
+  const { email, password, provision } = req.body || {};
   if (!email || !password) {
     return res.status(400).json({ error: "Missing email or password" });
   }
 
+  const normEmail = normalizeEmail(email);
   const rows = await sbQuery(
-    `staff_members?email=eq.${encodeURIComponent(email.trim().toLowerCase())}&select=id,full_name,email,role,password_hash,permissions&limit=1`,
+    `staff_members?email=eq.${encodeURIComponent(normEmail)}&select=id,full_name,email,role,password_hash,permissions&limit=1`,
   );
 
   if (!rows || rows.length === 0) {
@@ -73,8 +74,55 @@ async function handleStaffLogin(req, res) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
+  // provision=true: migrate staff member to Supabase auth so unified login works
+  if (provision) {
+    const isAdmin = user.role === "admin";
+    let authUserId = null;
+    const existing = await findAuthUserByEmail(normEmail);
+    if (existing) {
+      await fetch(`${SB_URL}/auth/v1/admin/users/${existing.id}`, {
+        method: "PUT",
+        headers: SERVICE_HEADERS,
+        body: JSON.stringify({ password, user_metadata: { full_name: user.full_name } }),
+      }).catch(() => {});
+      authUserId = existing.id;
+    } else {
+      const createRes = await fetch(`${SB_URL}/auth/v1/admin/users`, {
+        method: "POST",
+        headers: SERVICE_HEADERS,
+        body: JSON.stringify({ email: normEmail, password, email_confirm: true, user_metadata: { full_name: user.full_name } }),
+      });
+      if (createRes.ok) authUserId = (await createRes.json()).id;
+    }
+
+    if (authUserId) {
+      // Upsert public.users so routeByRoles can route them
+      const pubExisting = await fetch(`${SB_URL}/rest/v1/users?id=eq.${authUserId}&select=id`, { headers: SERVICE_HEADERS });
+      const pubRows = pubExisting.ok ? await pubExisting.json() : [];
+      if (!Array.isArray(pubRows) || pubRows.length === 0) {
+        await fetch(`${SB_URL}/rest/v1/users`, {
+          method: "POST",
+          headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
+          body: JSON.stringify({
+            id: authUserId, full_name: user.full_name, email: normEmail,
+            is_admin: isAdmin, is_warehouse: !isAdmin,
+            is_student: false, is_lecturer: false,
+            permissions: user.permissions || {},
+          }),
+        }).catch(() => {});
+      } else {
+        await fetch(`${SB_URL}/rest/v1/users?id=eq.${authUserId}`, {
+          method: "PATCH",
+          headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
+          body: JSON.stringify({ is_admin: isAdmin, is_warehouse: !isAdmin, updated_at: new Date().toISOString() }),
+        }).catch(() => {});
+      }
+    }
+  }
+
   return res.status(200).json({
     success: true,
+    provisioned: !!provision,
     user: {
       id:          user.id,
       full_name:   user.full_name,
@@ -117,6 +165,15 @@ async function findEligibleRecord(normalizedEmail) {
       (s) => normalizeEmail(s.email) === normalizedEmail,
     );
     if (match) return { role: "student", id: String(match.id), name: String(match.name || "") };
+  }
+
+  // Also check staff_members so forgot-password works for staff/admin
+  const staffRows = await sbQuery(
+    `staff_members?email=eq.${encodeURIComponent(normalizedEmail)}&select=id,full_name,role&limit=1`,
+  );
+  if (Array.isArray(staffRows) && staffRows.length > 0) {
+    const s = staffRows[0];
+    return { role: s.role === "admin" ? "admin" : "staff", id: String(s.id), name: String(s.full_name || "") };
   }
 
   return null;
@@ -302,8 +359,10 @@ async function handleEnsureUser(req, res) {
       } else {
         // Merge: set the role flag true without clearing other roles
         const updates = { updated_at: new Date().toISOString() };
-        if (record.role === "student") updates.is_student = true;
-        if (record.role === "lecturer") updates.is_lecturer = true;
+        if (record.role === "student")  updates.is_student   = true;
+        if (record.role === "lecturer") updates.is_lecturer  = true;
+        if (record.role === "admin")    updates.is_admin     = true;
+        if (record.role === "staff")    updates.is_warehouse = true;
         await fetch(`${SB_URL}/rest/v1/users?id=eq.${authUser.id}`, {
           method: "PATCH",
           headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
