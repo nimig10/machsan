@@ -1561,7 +1561,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       if (event === "PASSWORD_RECOVERY") {
         recoveryModeRef.current = true;
         setRecoveryMode(true);
-        setRecoverySessionReady(true); // session is now ready — safe to call updateUser
+        setRecoverySessionReady(true);
         return;
       }
       if (event !== "SIGNED_IN" || !session?.user?.email) return;
@@ -1571,6 +1571,22 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 
     return () => subscription.unsubscribe();
   }, [lecturers, certifications]);
+
+  // Recovery session may already be established before the listener registered —
+  // poll getSession() until a session appears (handles the early-fire race).
+  useEffect(() => {
+    if (!isRecoveryInitial || recoverySessionReady) return;
+    let cancelled = false;
+    const check = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (session) { setRecoverySessionReady(true); return; }
+      // Not ready yet — retry after 600ms (PKCE exchange in progress)
+      setTimeout(check, 600);
+    };
+    check();
+    return () => { cancelled = true; };
+  }, [isRecoveryInitial]);
 
   // Check for existing session on mount (e.g. after magic link redirect)
   useEffect(() => {
