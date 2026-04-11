@@ -1115,6 +1115,8 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [recoveryMode, setRecoveryMode] = useState(isRecoveryInitial);
   const recoveryModeRef = useRef(isRecoveryInitial);
   useEffect(() => { recoveryModeRef.current = recoveryMode; }, [recoveryMode]);
+  // true only after onAuthStateChange(PASSWORD_RECOVERY) fires — session is ready
+  const [recoverySessionReady, setRecoverySessionReady] = useState(false);
   const [recoveryPassword, setRecoveryPassword] = useState("");
   const [recoveryConfirm, setRecoveryConfirm] = useState("");
   const [recoveryBusy, setRecoveryBusy] = useState(false);
@@ -1559,6 +1561,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       if (event === "PASSWORD_RECOVERY") {
         recoveryModeRef.current = true;
         setRecoveryMode(true);
+        setRecoverySessionReady(true); // session is now ready — safe to call updateUser
         return;
       }
       if (event !== "SIGNED_IN" || !session?.user?.email) return;
@@ -2501,9 +2504,10 @@ ${inventory}
             onKeyDown={e=>e.key==="Enter"&&handleUpdatePassword()}
             disabled={recoveryBusy}/>
         </div>
+        {!recoverySessionReady && <div style={{fontSize:12,color:"var(--text3)",marginBottom:8}}>מאמת קישור...</div>}
         {recoveryError && <div style={{color:"var(--red)",fontSize:13,fontWeight:700,marginBottom:12}}>{recoveryError}</div>}
         <button className="btn btn-primary" style={{width:"100%",padding:"12px",fontSize:15}} onClick={handleUpdatePassword}
-          disabled={!recoveryPassword||!recoveryConfirm||recoveryBusy}>
+          disabled={!recoveryPassword||!recoveryConfirm||recoveryBusy||!recoverySessionReady}>
           {recoveryBusy ? "מעדכן..." : "עדכן סיסמה"}
         </button>
       </div>
