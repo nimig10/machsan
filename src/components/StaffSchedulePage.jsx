@@ -1001,7 +1001,8 @@ function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEd
   const startEdit = (b) => {
     if (!canEdit) return;
     setEditingId(b.id);
-    setEditVals({ startTime: b.startTime, endTime: b.endTime, studioId: b.studioId || "" });
+    const normTime = t => t ? t.slice(0, 5) : "";
+    setEditVals({ startTime: normTime(b.startTime), endTime: normTime(b.endTime), studioId: b.studioId || "" });
   };
   const cancelEdit = () => { setEditingId(null); setEditVals({}); };
   const saveEdit = async (b) => {
@@ -1094,6 +1095,7 @@ function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEd
                     <div style={{ ...tdBase }}>
                       {isEditing ? (
                         <select className="form-select" value={editVals.startTime} onClick={e => e.stopPropagation()} onChange={e => setEditVals(v => ({ ...v, startTime: e.target.value }))} style={{ fontSize: 12, padding: "2px 4px", height: 26, width: "100%" }}>
+                          {editVals.startTime && !TIME_SLOTS.includes(editVals.startTime) && <option value={editVals.startTime}>{editVals.startTime}</option>}
                           {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                       ) : <span style={{ fontWeight: 700 }}>{b.startTime || "—"}</span>}
@@ -1101,6 +1103,7 @@ function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEd
                     <div style={{ ...tdBase }}>
                       {isEditing ? (
                         <select className="form-select" value={editVals.endTime} onClick={e => e.stopPropagation()} onChange={e => setEditVals(v => ({ ...v, endTime: e.target.value }))} style={{ fontSize: 12, padding: "2px 4px", height: 26, width: "100%" }}>
+                          {editVals.endTime && !TIME_SLOTS.includes(editVals.endTime) && <option value={editVals.endTime}>{editVals.endTime}</option>}
                           {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                       ) : <span style={{ fontWeight: 700 }}>{b.endTime || "—"}</span>}
