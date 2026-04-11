@@ -48,6 +48,12 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
   const [editingId,    setEditingId]    = useState(null);
   const [xlImporting,  setXlImporting]  = useState(false);
   const importRef = useRef(null);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   // Add-modal state
   const [addName,  setAddName]  = useState("");
@@ -478,7 +484,61 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
           <div style={{ fontWeight: 700 }}>{search || trackFilter.length ? "לא נמצאו תוצאות" : "אין מרצים עדיין"}</div>
           {!search && !trackFilter.length && <button className="btn btn-primary" style={{ marginTop: 14 }} onClick={openAddModal}>הוסף מרצה ראשון</button>}
         </div>
+      ) : isMobile ? (
+        /* ── Mobile card layout ── */
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {filtered.map(lec => {
+            const isEditing = editingId === lec.id;
+            const tracks = lecturerTracks[lec.id] ? [...lecturerTracks[lec.id]] : [];
+            const isLinked = linkedLecturerIds.has(lec.id);
+
+            if (isEditing) {
+              return (
+                <div key={lec.id} style={{ background: "rgba(245,166,35,0.06)", border: "1px solid var(--accent)", borderRadius: 10, padding: "12px 14px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <input className="form-input" value={editName} onChange={e => setEditName(e.target.value)}
+                      placeholder="שם מלא" style={{ ...inpStyle, fontWeight: 700 }} autoFocus />
+                    <input className="form-input" value={editPhone} onChange={e => setEditPhone(e.target.value)}
+                      placeholder="טלפון" style={inpStyle} />
+                    <input className="form-input" type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)}
+                      placeholder="מייל" style={{ ...inpStyle, fontSize: 12 }} />
+                    <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                      <button className="btn btn-primary btn-sm" style={{ flex: 1, fontSize: 13 }} onClick={() => saveInlineEdit(lec)}>✓ שמור</button>
+                      <button className="btn btn-secondary btn-sm" style={{ flex: 1, fontSize: 13 }} onClick={() => setEditingId(null)}>✕ בטל</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div key={lec.id}
+                style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "11px 14px", display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", touchAction: "pan-y" }}
+                onClick={() => void startEdit(lec)}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{lec.fullName}</div>
+                  {!isLinked && <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 3 }}>לא משויך לקורס</div>}
+                  {tracks.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 5 }}>
+                      {tracks.map(t => (
+                        <span key={t} style={{ background: t===UNASSIGNED?"rgba(239,68,68,0.15)":"rgba(245,166,35,0.15)", color: t===UNASSIGNED?"#ef4444":"#f5a623", borderRadius: 12, padding: "2px 8px", fontSize: 11, fontWeight: 600 }}>{t}</span>
+                      ))}
+                    </div>
+                  )}
+                  {lec.phone && <div style={{ fontSize: 12, color: "var(--text2)", marginBottom: 2 }}>📱 {lec.phone}</div>}
+                  {lec.email && <div style={{ fontSize: 12, color: "var(--text2)", wordBreak: "break-all" }}>✉️ {lec.email}</div>}
+                </div>
+                <button className="btn btn-secondary btn-sm"
+                  style={{ color: "var(--red)", borderColor: "var(--red)", fontSize: 13, flexShrink: 0 }}
+                  onClick={e => { e.stopPropagation(); deleteLecturer(lec); }}>
+                  🗑️
+                </button>
+              </div>
+            );
+          })}
+        </div>
       ) : (
+        /* ── Desktop table layout ── */
         <div style={{ overflowX: "auto" }}>
           <table className="lecturers-table" style={{ width: "100%", borderCollapse: "collapse", background: "var(--surface2)", borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", tableLayout: "fixed" }}>
             <colgroup>
