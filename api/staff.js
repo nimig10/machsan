@@ -114,13 +114,17 @@ function handleLegacy(req, res) {
       if (!full_name || !email || !password) {
         return res.status(400).json({ error: "Missing required fields" });
       }
+      const normEmail = normalizeEmail(email);
+      const isAdmin = role === "admin";
       const password_hash = await bcrypt.hash(password, 10);
+
+      // 1. Insert into legacy staff_members table
       const result = await sbFetch("staff_members", {
         method: "POST",
         body: JSON.stringify({
           full_name: full_name.trim(),
-          email: email.trim().toLowerCase(),
-          role: role === "admin" ? "admin" : "staff",
+          email: normEmail,
+          role: isAdmin ? "admin" : "staff",
           password_hash,
           permissions: { ...DEFAULT_PERMISSIONS, ...(permissions || {}) },
         }),
@@ -130,6 +134,62 @@ function handleLegacy(req, res) {
         return res.status(result.status).json({ error: msg });
       }
       const user = Array.isArray(result.data) ? result.data[0] : result.data;
+
+      // 2. Provision Supabase auth user with the given password
+      let authUserId = null;
+      const existingAuth = await findAuthUserByEmail(normEmail);
+      if (existingAuth) {
+        // Update password + metadata on existing auth user
+        await fetch(`${SB_URL}/auth/v1/admin/users/${existingAuth.id}`, {
+          method: "PUT", headers,
+          body: JSON.stringify({ password, user_metadata: { full_name: full_name.trim() } }),
+        }).catch(() => {});
+        authUserId = existingAuth.id;
+      } else {
+        const authRes = await fetch(`${SB_URL}/auth/v1/admin/users`, {
+          method: "POST", headers,
+          body: JSON.stringify({
+            email: normEmail,
+            password,
+            email_confirm: true,
+            user_metadata: { full_name: full_name.trim() },
+          }),
+        });
+        if (authRes.ok) {
+          authUserId = (await authRes.json()).id;
+        }
+      }
+
+      // 3. Upsert public.users row so routeByRoles can route the staff member
+      if (authUserId) {
+        const existingPublic = await sbFetch(`users?id=eq.${authUserId}&select=id`);
+        if (!existingPublic.ok || !Array.isArray(existingPublic.data) || existingPublic.data.length === 0) {
+          await sbFetch("users", {
+            method: "POST",
+            body: JSON.stringify({
+              id: authUserId,
+              full_name: full_name.trim(),
+              email: normEmail,
+              is_admin: isAdmin,
+              is_warehouse: !isAdmin,
+              is_student: false,
+              is_lecturer: false,
+              permissions: { ...DEFAULT_PERMISSIONS, ...(permissions || {}) },
+            }),
+          }).catch(() => {});
+        } else {
+          // Exists — just ensure role flags are set correctly
+          await sbFetch(`users?id=eq.${authUserId}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              is_admin: isAdmin,
+              is_warehouse: !isAdmin,
+              updated_at: new Date().toISOString(),
+            }),
+          }).catch(() => {});
+        }
+      }
+
       return res.status(201).json({ success: true, user: { id: user.id, full_name: user.full_name, email: user.email, role: user.role, permissions: user.permissions } });
     })();
   }
@@ -157,6 +217,21 @@ function handleLegacy(req, res) {
         body: JSON.stringify(updates),
       });
       if (!result.ok) return res.status(result.status).json({ error: "Failed to update" });
+
+      // Sync password change to Supabase auth if provided
+      if (password && email) {
+        const normEmail = normalizeEmail(email);
+        const authUser = await findAuthUserByEmail(normEmail);
+        if (authUser) {
+          const authUpdate = { password };
+          if (full_name) authUpdate.user_metadata = { ...(authUser.user_metadata || {}), full_name: full_name.trim() };
+          await fetch(`${SB_URL}/auth/v1/admin/users/${authUser.id}`, {
+            method: "PUT", headers,
+            body: JSON.stringify(authUpdate),
+          }).catch(() => {});
+        }
+      }
+
       return res.status(200).json({ success: true });
     })();
   }
