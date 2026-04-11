@@ -70,6 +70,7 @@ export function LecturerPortal({
   setKits,
   showToast,
   siteSettings = {},
+  onLogout,
 }) {
   const [loggedInLecturer, setLoggedInLecturer] = useState(() => {
     try {
@@ -611,16 +612,6 @@ export function LecturerPortal({
                   ניהול מערכת
                 </button>
               )}
-              <button
-                className="btn btn-secondary"
-                onClick={() => {
-                  sessionStorage.removeItem("active_role");
-                  setLoggedInLecturer(null);
-                  setEditorState(null);
-                }}
-              >
-                התנתקות
-              </button>
             </div>
           </div>
         </div>
@@ -916,6 +907,16 @@ export function LecturerPortal({
           </div>
         </div>
       )}
+
+      {/* ── כפתור התנתקות בתחתית ── */}
+      <div style={{ marginTop: 8, marginBottom: 16, display: "flex", justifyContent: "center" }}>
+        <button
+          onClick={() => onLogout ? onLogout() : (() => { sessionStorage.removeItem("active_role"); sessionStorage.removeItem("lecturer_portal_user"); window.location.assign("/"); })()}
+          style={{ background: "rgba(239,68,68,0.08)", border: "2px solid var(--red, #ef4444)", color: "var(--red, #ef4444)", borderRadius: 10, padding: "10px 32px", fontWeight: 700, fontSize: 15, cursor: "pointer", letterSpacing: 0.3 }}
+        >
+          התנתקות
+        </button>
+      </div>
     </div>
   );
 }

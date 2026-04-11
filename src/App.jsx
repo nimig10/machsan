@@ -7833,6 +7833,12 @@ export default function App() {
               setKits={setKits}
               showToast={showToast}
               siteSettings={siteSettings}
+              onLogout={async () => {
+                sessionStorage.removeItem("active_role");
+                sessionStorage.removeItem("lecturer_portal_user");
+                await supabase.auth.signOut().catch(() => {});
+                window.location.assign("/");
+              }}
             />
           )}
         </div>
