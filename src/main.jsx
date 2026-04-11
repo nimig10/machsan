@@ -12,9 +12,12 @@ const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/
 );
 
 let hasReloadedForSwUpdate = false;
+const swStartTime = Date.now();
 
 const triggerReloadForSwUpdate = () => {
   if (hasReloadedForSwUpdate) return;
+  // Don't reload if the page just loaded (< 12s) — avoids mid-load reload loops
+  if (Date.now() - swStartTime < 12_000) return;
   hasReloadedForSwUpdate = true;
   window.location.reload();
 };
@@ -29,7 +32,9 @@ if (isMobile && 'serviceWorker' in navigator) {
         registration.update().catch(() => {});
       };
 
-      checkForUpdates();
+      // Delay first update check by 10s so the app finishes loading before
+      // a new SW can activate and trigger a mid-load reload.
+      setTimeout(checkForUpdates, 10_000);
       window.setInterval(checkForUpdates, 60_000);
       window.addEventListener('focus', checkForUpdates);
       document.addEventListener('visibilitychange', () => {
