@@ -47,13 +47,9 @@ export default async function handler(req, res) {
   for (const model of models) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
     try {
-      const referer = req.headers?.origin || req.headers?.referer || "https://app.camera.org.il";
       const response = await fetch(url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Referer": referer,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
       });
       const data = await response.json();
