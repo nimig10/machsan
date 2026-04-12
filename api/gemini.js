@@ -49,7 +49,7 @@ export default async function handler(req, res) {
     try {
       const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Referer": "https://app.camera.org.il/" },
         body: JSON.stringify(requestBody),
       });
       const data = await response.json();
