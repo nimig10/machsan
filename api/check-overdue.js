@@ -1,13 +1,11 @@
-// check-overdue.js — Vercel Cron job (every 5 min).
+// check-overdue.js — called by cron-job.org every 5 min.
 //
 // Runs two passes on the reservations array from the store table:
 //
-//  1. OVERDUE EMAILS: reservations that are ≥30 min past their return time,
-//     status "באיחור", and haven't had overdue_email_sent set yet.
+//  1. OVERDUE EMAILS: reservations ≥30 min past return time, status "באיחור".
+//  2. PUSH REMINDERS: reservations 15–25 min before return, status "פעילה".
 //
-//  2. PUSH REMINDERS: reservations whose return time is 25–35 min away,
-//     reminderSent is not true, and status is not terminal.
-//     Sends a Web Push notification to the student (if subscribed).
+// ?force_push=email — skip time-window filter and send a test push to that email.
 
 import { isVapidReady, fetchUserByEmail, sendPushToUser } from "./_push.js";
 
@@ -19,20 +17,25 @@ const SB_HEADERS = {
   "Content-Type": "application/json",
 };
 
-const TERMINAL_STATUSES = new Set(["הוחזר", "נדחה", "בוטל"]);
-
-function parseLocalDate(dateStr) {
-  if (!dateStr) return null;
-  const [y, m, d] = String(dateStr).split("-").map(Number);
-  return new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0);
-}
-
+// ── Timezone-aware date parser ───────────────────────────────────────────────
+// return_date ("YYYY-MM-DD") and return_time ("HH:MM") are stored as Israel
+// local time. Vercel servers run UTC, so we must convert explicitly.
+// Israel DST: UTC+3 from ~last Fri of March through ~last Sun of October,
+// UTC+2 otherwise. We approximate by month (close enough for reminder logic).
 function toDateTime(dateStr, timeStr) {
-  const d = parseLocalDate(dateStr);
-  if (!d) return 0;
-  const [h, m] = String(timeStr || "00:00").split(":").map(Number);
-  d.setHours(Number.isFinite(h) ? h : 0, Number.isFinite(m) ? m : 0, 0, 0);
-  return d.getTime();
+  if (!dateStr) return 0;
+  const [y, m, d] = String(dateStr).split("-").map(Number);
+  const [h, min] = String(timeStr || "00:00").split(":").map(Number);
+  const isrOffsetHours = (m >= 4 && m <= 10) ? 3 : 2; // UTC+3 Apr–Oct, UTC+2 otherwise
+  // Build UTC timestamp directly: subtract Israel offset so we get true UTC ms
+  return Date.UTC(
+    y,
+    (m || 1) - 1,
+    d || 1,
+    (Number.isFinite(h) ? h : 0) - isrOffsetHours,
+    Number.isFinite(min) ? min : 0,
+    0, 0
+  );
 }
 
 function formatDate(dateStr) {
@@ -42,10 +45,29 @@ function formatDate(dateStr) {
 }
 
 export default async function handler(req, res) {
-  // Vercel Cron passes Authorization: Bearer <CRON_SECRET>
   const authHeader = req.headers["authorization"];
   if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  // ── ?force_push=email — test mode: send push to a specific user now ────────
+  const forcePushEmail = String(req.query?.force_push || "").trim().toLowerCase();
+  if (forcePushEmail) {
+    if (!isVapidReady()) return res.status(500).json({ error: "VAPID not configured" });
+    try {
+      const user = await fetchUserByEmail(forcePushEmail);
+      if (!user) return res.status(404).json({ error: "user not found" });
+      if (!user.is_push_enabled || !user.push_subscription)
+        return res.status(400).json({ error: "user has no active push subscription" });
+      await sendPushToUser(user, {
+        title: "🔔 בדיקת התראה",
+        body: "זוהי הודעת בדיקה — מערכת ההתראות עובדת תקין!",
+        url: "/",
+      });
+      return res.status(200).json({ ok: true, message: `test push sent to ${forcePushEmail}` });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
   }
 
   try {
@@ -60,11 +82,42 @@ export default async function handler(req, res) {
       Array.isArray(supaJson) && supaJson.length > 0 ? supaJson[0].data : [];
 
     if (!Array.isArray(reservations) || !reservations.length) {
+      console.log("check-overdue: no reservations in store");
       return res.status(200).json({ emails: 0, pushes: 0, message: "no reservations" });
     }
 
-    const now = Date.now();
-    let dirty = false; // true if any reservation object was mutated
+    const nowMs = Date.now();
+    const nowIL = new Date(nowMs).toLocaleString("he-IL", { timeZone: "Asia/Jerusalem" });
+
+    // ── Pass 2 window (for logging) ─────────────────────────────────────────
+    const MIN_MS = 15 * 60 * 1000;
+    const MAX_MS = 25 * 60 * 1000;
+    const windowStartMs = nowMs + MIN_MS;
+    const windowEndMs   = nowMs + MAX_MS;
+    const fmtUtc = (ms) => new Date(ms).toISOString();
+    const fmtIL  = (ms) => new Date(ms).toLocaleString("he-IL", { timeZone: "Asia/Jerusalem" });
+
+    console.log([
+      `check-overdue | server UTC: ${fmtUtc(nowMs)}`,
+      `IL time: ${nowIL}`,
+      `reminder window: ${fmtIL(windowStartMs)} – ${fmtIL(windowEndMs)} (IL)`,
+      `total reservations: ${reservations.length}`,
+    ].join(" | "));
+
+    // Log all "פעילה" reservations with their parsed times for debugging
+    const active = reservations.filter(r => r.status === "פעילה" && r.return_date);
+    console.log(`active reservations (פעילה): ${active.length}`);
+    for (const r of active) {
+      const returnMs = toDateTime(r.return_date, r.return_time || "23:59");
+      const deltaMin = Math.round((returnMs - nowMs) / 60000);
+      console.log(
+        `  [${r.id || "?"}] ${r.student_name || "?"} | ` +
+        `return ${r.return_date} ${r.return_time || ""} IL → ` +
+        `UTC ${fmtUtc(returnMs)} | delta: ${deltaMin} min | reminderSent: ${r.reminderSent}`
+      );
+    }
+
+    let dirty = false;
 
     // ── Pass 1: Overdue emails ──────────────────────────────────────────────
     const THIRTY_MIN = 30 * 60 * 1000;
@@ -75,7 +128,7 @@ export default async function handler(req, res) {
         r.email &&
         r.loan_type !== "שיעור" &&
         r.return_date &&
-        now - toDateTime(r.return_date, r.return_time || "23:59") >= THIRTY_MIN
+        nowMs - toDateTime(r.return_date, r.return_time || "23:59") >= THIRTY_MIN
     );
 
     const baseUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
@@ -108,41 +161,40 @@ export default async function handler(req, res) {
     }
 
     // ── Pass 2: Push reminders (15–25 min before return; target ≈20 min) ──
-    const MIN_MS = 15 * 60 * 1000;
-    const MAX_MS = 25 * 60 * 1000;
     const pushCandidates = reservations.filter((r) => {
       if (!r || r.reminderSent === true) return false;
-      // Only send reminders for reservations that the warehouse has approved
-      // (status "פעילה"). Pending/rejected/returned/cancelled are all skipped.
       if (r.status !== "פעילה") return false;
       if (!r.return_date) return false;
-      const delta = toDateTime(r.return_date, r.return_time || "23:59") - now;
+      const delta = toDateTime(r.return_date, r.return_time || "23:59") - nowMs;
       return delta >= MIN_MS && delta <= MAX_MS;
     });
+
+    console.log(`push candidates in window: ${pushCandidates.length} | vapidReady: ${isVapidReady()}`);
 
     let pushesSent = 0;
     if (isVapidReady() && pushCandidates.length > 0) {
       for (const r of pushCandidates) {
         const email = String(r.email || "").trim().toLowerCase();
-
-        // Always mark as processed so we don't retry on every tick.
         r.reminderSent = true;
         dirty = true;
 
-        if (!email) continue;
+        if (!email) { console.log(`  skip ${r.id}: no email`); continue; }
         try {
           const user = await fetchUserByEmail(email);
-          if (!user?.is_push_enabled || !user?.push_subscription) continue;
-
+          if (!user?.is_push_enabled || !user?.push_subscription) {
+            console.log(`  skip ${email}: push disabled or no subscription`);
+            continue;
+          }
           await sendPushToUser(user, {
             title: "תזכורת החזרת ציוד",
             body: `${r.student_name || ""} אנא גש למחסן המכללה להחזיר את הציוד. צוות המכללה מאחל לך המשך יום נעים:)`,
             url: "/",
           });
           pushesSent++;
+          console.log(`  push sent → ${email}`);
         } catch (err) {
-          // expired subscription: already cleared inside sendPushToUser
-          if (!err?.expired) console.error("push error for", r.id, err?.message);
+          if (!err?.expired) console.error(`  push error for ${r.id}:`, err?.message);
+          else console.log(`  skip ${email}: subscription expired, cleared from DB`);
         }
       }
     }
@@ -156,7 +208,7 @@ export default async function handler(req, res) {
       });
     }
 
-    console.log(`check-overdue: emails=${emailsSent} pushes=${pushesSent}`);
+    console.log(`check-overdue done: emails=${emailsSent} pushes=${pushesSent}`);
     return res.status(200).json({ emails: emailsSent, pushes: pushesSent });
   } catch (e) {
     console.error("check-overdue error:", e.message);
