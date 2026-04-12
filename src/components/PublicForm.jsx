@@ -1331,6 +1331,13 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     if (!email || !password) return;
     setLoginBusy(true);
     setLoginError("");
+
+    // Safety net: guarantee the button unfreezes even if something below hangs.
+    const safety = setTimeout(() => {
+      setLoginBusy(false);
+      setLoginError("זמן התגובה חרג מהצפוי. רענן את הדף ונסה שוב.");
+    }, 20_000);
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error || !data?.user) {
@@ -1346,18 +1353,26 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
             // Auth account was provisioned — retry Supabase sign-in
             const { data: data2, error: error2 } = await supabase.auth.signInWithPassword({ email, password });
             if (!error2 && data2?.user) {
+              clearTimeout(safety);
+              // Directly route — don't rely solely on onAuthStateChange
+              try { await routeByRoles(data2.session); } catch {}
               setLoginBusy(false);
-              return; // success — onAuthStateChange handles routing
+              return;
             }
           }
         } catch {}
+        clearTimeout(safety);
         setLoginError("אימייל או סיסמה שגויים. אם זו הכניסה הראשונה שלך, לחץ/י על \"שכחת סיסמה?\" ליצירת סיסמה.");
         setLoginBusy(false);
         return;
       }
-      // Success — onAuthStateChange(SIGNED_IN) will handle role-based routing
+      // Success — directly route rather than depending on the auth listener,
+      // which can be missed if the SW or a stale state interferes.
+      clearTimeout(safety);
+      try { await routeByRoles(data.session); } catch {}
       setLoginBusy(false);
     } catch {
+      clearTimeout(safety);
       setLoginError("שגיאה בתקשורת. נסו שוב.");
       setLoginBusy(false);
     }
