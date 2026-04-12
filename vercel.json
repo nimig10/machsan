@@ -1,11 +1,5 @@
 {
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
-  ],
-  "crons": [
-    {
-      "path": "/api/check-overdue",
-      "schedule": "*/5 * * * *"
-    }
   ]
 }
