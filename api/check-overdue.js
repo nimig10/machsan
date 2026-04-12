@@ -112,7 +112,9 @@ export default async function handler(req, res) {
     const MAX_MS = 25 * 60 * 1000;
     const pushCandidates = reservations.filter((r) => {
       if (!r || r.reminderSent === true) return false;
-      if (TERMINAL_STATUSES.has(r.status)) return false;
+      // Only send reminders for reservations that the warehouse has approved
+      // (status "פעילה"). Pending/rejected/returned/cancelled are all skipped.
+      if (r.status !== "פעילה") return false;
       if (!r.return_date) return false;
       const delta = toDateTime(r.return_date, r.return_time || "23:59") - now;
       return delta >= MIN_MS && delta <= MAX_MS;
