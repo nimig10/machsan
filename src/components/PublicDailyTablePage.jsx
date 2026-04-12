@@ -142,10 +142,11 @@ export function PublicDailyTablePage() {
               <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:15,minWidth:700}}>
                 <thead>
                   <tr style={{background:"#151515"}}>
-                    <th style={{...thBase,width:180}}>מסלול לימודים</th>
+                    <th style={{...thBase,width:160}}>מסלול לימודים</th>
                     <th style={{...thBase}}>קורס</th>
-                    <th style={{...thBase,width:180}}>מרצה</th>
+                    <th style={{...thBase,width:170}}>מרצה</th>
                     <th style={{...thBase,width:140}}>שעות</th>
+                    <th style={{...thBase,width:170}}>כיתת לימוד</th>
                     <th style={{...thBase}}>שם שיעור</th>
                   </tr>
                 </thead>
@@ -156,6 +157,7 @@ export function PublicDailyTablePage() {
                       <td style={{...cellBase,fontWeight:700,color:"#fff"}}>{r.course||"—"}</td>
                       <td style={{...cellBase,color:"#ddd"}}>{r.instructor||"—"}</td>
                       <td style={{...cellBase,color:accent,fontWeight:700,whiteSpace:"nowrap"}}>{r.startTime&&r.endTime?`${r.startTime}–${r.endTime}`:r.startTime||"—"}</td>
+                      <td style={{...cellBase,color:"#ddd"}}>{stName(r.studioId)}</td>
                       <td style={{...cellBase,color:"#ddd"}}>{r.topic||"—"}</td>
                     </tr>
                   ))}
