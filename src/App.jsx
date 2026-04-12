@@ -1046,6 +1046,208 @@ function CategoryLoanTypesModal({ categoryLoanTypes = {}, onSave, onClose }) {
   );
 }
 
+// ── EqForm: extracted outside EquipmentPage so React keeps a stable component identity ──
+// Previously defined inline → every parent re-render destroyed form state (quantity, description, etc.)
+function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, saving, onSave, onCancel }) {
+  const [f, setF] = useState({
+    name:"",
+    category:"מצלמות",
+    description:"",
+    technical_details:"",
+    total_quantity:1,
+    image:"📷",
+    notes:"",
+    status:"תקין",
+    certification_id:"",
+    ...(initial || {}),
+  });
+  const s = (k,v) => setF(p=>({...p,[k]:v}));
+  const [imgUploading, setImgUploading] = useState(false);
+  const [imgError, setImgError]         = useState("");
+  const imgInputRef = useRef(null);
+  const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
+  const [isGeneratingTechDetails, setIsGeneratingTechDetails] = useState(false);
+
+  const generateGeminiField = async ({ itemName, systemInstruction, onSuccess, setLoading, errorPrefix }) => {
+    if (!itemName) {
+      alert("נא להזין שם פריט קודם");
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetch('/api/gemini', {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: itemName }] }],
+          systemInstruction: { parts: [{ text: systemInstruction }] },
+        }),
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "API request failed");
+      }
+      const data = await response.json();
+      const generatedText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!generatedText) throw new Error("לא התקבל טקסט מה־API");
+      onSuccess(generatedText);
+    } catch (error) {
+      console.error("Error generating description:", error);
+      alert(`${errorPrefix}. ${error?.message || "נסה שוב."}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateAutoDescription = async (itemName) => {
+    await generateGeminiField({
+      itemName,
+      systemInstruction: "You are a professional AV and film equipment expert. The user will provide an equipment name. Write a concise, professional description of this item in Hebrew (around 2-3 sentences), highlighting its main uses and features. Output ONLY the Hebrew text, without formatting or markdown.",
+      onSuccess: (generatedText) => setF(prev => ({ ...prev, description: generatedText })),
+      setLoading: setIsGeneratingDesc,
+      errorPrefix: "שגיאה ביצירת התיאור",
+    });
+  };
+
+  const generateAutoTechnicalDetails = async (itemName) => {
+    await generateGeminiField({
+      itemName,
+      systemInstruction: "You are a professional AV and film equipment technical specialist. The user will provide an equipment name. Write concise technical details in Hebrew for this item (around 3-5 short lines), focusing on relevant specs, connections, power or battery, compatibility, operating range, mounting, or practical setup details when appropriate. Output ONLY the Hebrew text, without formatting or markdown.",
+      onSuccess: (generatedText) => setF(prev => ({ ...prev, technical_details: generatedText })),
+      setLoading: setIsGeneratingTechDetails,
+      errorPrefix: "שגיאה ביצירת הפרטים הטכניים",
+    });
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    console.log("[IMG] handleImageUpload fired, file:", file?.name, file?.size);
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setImgError("נא לבחור קובץ תמונה בלבד"); return; }
+    if (file.size > 15 * 1024 * 1024) { setImgError("התמונה גדולה מדי (מקסימום 15MB)"); return; }
+    setImgError("");
+    setImgUploading(true);
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error("Image load timeout (10s)")), 10000);
+        const blobUrl = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          clearTimeout(timeout);
+          URL.revokeObjectURL(blobUrl);
+          const MAX = 500;
+          let w = img.width, h = img.height;
+          if (w > MAX || h > MAX) {
+            if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+            else       { w = Math.round(w * MAX / h); h = MAX; }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          ctx.fillStyle = "#FFFFFF";
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", 0.70));
+        };
+        img.onerror = () => { clearTimeout(timeout); URL.revokeObjectURL(blobUrl); reject(new Error("Failed to load image")); };
+        img.src = blobUrl;
+      });
+      console.log("[IMG] Compressed, uploading to server...");
+      const res  = await fetch("/api/upload-image", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ data: dataUrl }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.url) throw new Error(json.error || "שגיאת שרת");
+      console.log("[IMG] Upload success:", json.url);
+      s("image", json.url);
+      if (onImageUploaded) onImageUploaded(json.url);
+    } catch (err) {
+      console.error("[IMG] Upload failed:", err);
+      setImgError("שגיאה בהעלאת התמונה — נסה שנית");
+    } finally {
+      setImgUploading(false);
+      if (imgInputRef.current) imgInputRef.current.value = "";
+    }
+  };
+
+  const isImage = f.image?.startsWith("data:") || f.image?.startsWith("http");
+
+  return (
+    <div>
+      <div className="grid-2">
+        <div className="form-group"><label className="form-label">שם הציוד *</label><input className="form-input" value={f.name} onChange={e=>s("name",e.target.value)}/></div>
+        <div className="form-group"><label className="form-label">קטגוריה</label><select className="form-select" value={f.category} onChange={e=>s("category",e.target.value)}>{categories.map(c=><option key={c}>{c}</option>)}</select></div>
+      </div>
+      <div className="form-group">
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap",direction:"ltr"}}>
+          <button type="button" className="btn btn-primary btn-sm" onClick={()=>generateAutoDescription(f.name)} disabled={isGeneratingDesc} style={{display:"inline-flex",alignItems:"center",gap:6,fontWeight:800}}>
+            <span aria-hidden="true">✨</span>
+            {isGeneratingDesc ? "מייצר תיאור..." : "תיאור אוטומטי"}
+          </button>
+          <label className="form-label" style={{margin:0,textAlign:"right"}}>תיאור</label>
+        </div>
+        <textarea className="form-textarea" rows={2} value={f.description} onChange={e=>s("description",e.target.value)}/>
+      </div>
+      <div className="form-group">
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap",direction:"ltr"}}>
+          <button type="button" className="btn btn-primary btn-sm" onClick={()=>generateAutoTechnicalDetails(f.name)} disabled={isGeneratingTechDetails} style={{display:"inline-flex",alignItems:"center",gap:6,fontWeight:800}}>
+            <span aria-hidden="true">✨</span>
+            {isGeneratingTechDetails ? "מייצר פרטים..." : "פרטים טכניים אוטומטיים"}
+          </button>
+          <label className="form-label" style={{margin:0,textAlign:"right"}}>פרטים טכניים</label>
+        </div>
+        <textarea className="form-textarea" rows={3} placeholder="לדוגמה: טווחי עבודה, חיבורים, משקל, סוללה, פורמטים נתמכים..." value={f.technical_details || ""} onChange={e=>s("technical_details",e.target.value)}/>
+      </div>
+      <div className="grid-2">
+        <div className="form-group"><label className="form-label">כמות *</label><input type="number" min="0" className="form-input" value={f.total_quantity} onChange={e=>s("total_quantity",Number(e.target.value))}/></div>
+        <div className="form-group">
+          <label className="form-label">תמונה / אימוג׳י</label>
+          <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
+            {imgUploading
+              ? <div style={{width:48,height:48,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:8,border:"1px solid var(--border)",background:"var(--surface2)",fontSize:20}}>⏳</div>
+              : isImage
+                ? <img src={f.image} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:8,border:"1px solid var(--border)"}}/>
+                : <span style={{fontSize:36}}>{f.image}</span>
+            }
+            <div style={{flex:1}}>
+              <input className="form-input" value={isImage?"":f.image} placeholder="אימוג׳י (למשל 📷)" onChange={e=>s("image",e.target.value)} style={{marginBottom:6}} disabled={imgUploading}/>
+              <input ref={imgInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleImageUpload}/>
+              <button type="button" onClick={()=>imgInputRef.current?.click()} disabled={imgUploading}
+                style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",cursor:imgUploading?"not-allowed":"pointer",fontSize:12,color:"var(--text2)",opacity:imgUploading?0.6:1,width:"100%"}}>
+                {imgUploading ? "⏳ מעלה תמונה..." : "🖼️ העלה תמונה מהמחשב"}
+              </button>
+              {f.name && <button type="button" onClick={()=>window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(f.name)}`, "_blank")} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",cursor:"pointer",fontSize:12,color:"var(--text2)",marginTop:4,width:"100%"}}>
+                🔍 חפש תמונה ב-Google Images
+              </button>}
+              {imgError && <div style={{color:"#e74c3c",fontSize:11,marginTop:4}}>{imgError}</div>}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="grid-2">
+        <div className="form-group"><label className="form-label">מצב</label><select className="form-select" value={f.status} onChange={e=>s("status",e.target.value)}>{STATUSES.map(st=><option key={st}>{st}</option>)}</select></div>
+        <div className="form-group"><label className="form-label">הערות</label><input className="form-input" value={f.notes} onChange={e=>s("notes",e.target.value)}/></div>
+      </div>
+      <div className="form-group">
+        <label className="form-label">🎓 הסמכה נדרשת</label>
+        <select className="form-select" value={f.certification_id||""} onChange={e=>s("certification_id",e.target.value)}>
+          <option value="">ללא הסמכה (כולם רשאים)</option>
+          {equipmentCertTypes.map(ct=>(
+            <option key={ct.id} value={ct.id}>{ct.name}</option>
+          ))}
+        </select>
+        <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>רק סטודנטים שעברו הסמכה זו יוכלו להשאיל פריט זה</div>
+      </div>
+      <div className="flex gap-2" style={{paddingTop:8}}>
+        <button className="btn btn-primary" disabled={!f.name||saving||imgUploading} onClick={()=>onSave(f)}>{saving?"⏳ שומר...":initial?"💾 שמור":"➕ הוסף"}</button>
+        <button className="btn btn-secondary" onClick={onCancel}>ביטול</button>
+      </div>
+    </div>
+  );
+}
+
 function EquipmentPage({ equipment, reservations, setEquipment, showToast, categories=DEFAULT_CATEGORIES, setCategories, categoryTypes={}, setCategoryTypes, categoryLoanTypes={}, setCategoryLoanTypes=()=>{}, certifications={types:[],students:[]}, studios=[], collegeManager={}, managerToken="", onLogCreated=()=>{}, equipmentReports:eqReports=[], fetchEquipmentReports:fetchEqReports=()=>{} }) {
   const [eqSubView, setEqSubView] = useState("active"); // "active" | "damaged" | "reports"
   const [eqReportsLoading] = useState(false);
@@ -1355,230 +1557,8 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     })
     .reduce((s,r)=>s+(r.items?.find(i=>i.equipment_id==id)?.quantity||0),0);
 
-  const EqForm = ({ initial, onImageUploaded }) => {
-    const [f, setF] = useState({
-      name:"",
-      category:"מצלמות",
-      description:"",
-      technical_details:"",
-      total_quantity:1,
-      image:"📷",
-      notes:"",
-      status:"תקין",
-      certification_id:"",
-      ...(initial || {}),
-    });
-    const s = (k,v) => setF(p=>({...p,[k]:v}));
-    const [imgUploading, setImgUploading] = useState(false);
-    const [imgError, setImgError]         = useState("");
-    const imgInputRef = useRef(null);
-    const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
-    const [isGeneratingTechDetails, setIsGeneratingTechDetails] = useState(false);
-
-    const generateGeminiField = async ({ itemName, systemInstruction, onSuccess, setLoading, errorPrefix }) => {
-      if (!itemName) {
-        alert("נא להזין שם פריט קודם");
-        return;
-      }
-
-      setLoading(true);
-      try {
-        const response = await fetch('/api/gemini', {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: itemName }] }],
-            systemInstruction: { parts: [{ text: systemInstruction }] },
-          }),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || "API request failed");
-        }
-
-        const data = await response.json();
-        const generatedText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!generatedText) throw new Error("לא התקבל טקסט מה־API");
-
-        onSuccess(generatedText);
-      } catch (error) {
-        console.error("Error generating description:", error);
-        alert(`${errorPrefix}. ${error?.message || "נסה שוב."}`);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    const generateAutoDescription = async (itemName) => {
-      await generateGeminiField({
-        itemName,
-        systemInstruction: "You are a professional AV and film equipment expert. The user will provide an equipment name. Write a concise, professional description of this item in Hebrew (around 2-3 sentences), highlighting its main uses and features. Output ONLY the Hebrew text, without formatting or markdown.",
-        onSuccess: (generatedText) => setF(prev => ({ ...prev, description: generatedText })),
-        setLoading: setIsGeneratingDesc,
-        errorPrefix: "שגיאה ביצירת התיאור",
-      });
-    };
-
-    const generateAutoTechnicalDetails = async (itemName) => {
-      await generateGeminiField({
-        itemName,
-        systemInstruction: "You are a professional AV and film equipment technical specialist. The user will provide an equipment name. Write concise technical details in Hebrew for this item (around 3-5 short lines), focusing on relevant specs, connections, power or battery, compatibility, operating range, mounting, or practical setup details when appropriate. Output ONLY the Hebrew text, without formatting or markdown.",
-        onSuccess: (generatedText) => setF(prev => ({ ...prev, technical_details: generatedText })),
-        setLoading: setIsGeneratingTechDetails,
-        errorPrefix: "שגיאה ביצירת הפרטים הטכניים",
-      });
-    };
-
-    const handleImageUpload = async (e) => {
-      const file = e.target.files?.[0];
-      console.log("[IMG] handleImageUpload fired, file:", file?.name, file?.size);
-      if (!file) return;
-      if (!file.type.startsWith("image/")) { setImgError("נא לבחור קובץ תמונה בלבד"); return; }
-      if (file.size > 15 * 1024 * 1024) { setImgError("התמונה גדולה מדי (מקסימום 15MB)"); return; }
-      setImgError("");
-      setImgUploading(true);
-      try {
-        // Resize + compress client-side: 500x500 max, JPEG 70% quality (~30-60KB per image)
-        const dataUrl = await new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => reject(new Error("Image load timeout (10s)")), 10000);
-          const blobUrl = URL.createObjectURL(file);
-          const img = new Image();
-          img.onload = () => {
-            clearTimeout(timeout);
-            URL.revokeObjectURL(blobUrl);
-            const MAX = 500;
-            let w = img.width, h = img.height;
-            if (w > MAX || h > MAX) {
-              if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
-              else       { w = Math.round(w * MAX / h); h = MAX; }
-            }
-            const canvas = document.createElement("canvas");
-            canvas.width = w; canvas.height = h;
-            // White background (handles PNG transparency)
-            const ctx = canvas.getContext("2d");
-            ctx.fillStyle = "#FFFFFF";
-            ctx.fillRect(0, 0, w, h);
-            ctx.drawImage(img, 0, 0, w, h);
-            resolve(canvas.toDataURL("image/jpeg", 0.70));
-          };
-          img.onerror = () => { clearTimeout(timeout); URL.revokeObjectURL(blobUrl); reject(new Error("Failed to load image")); };
-          img.src = blobUrl;
-        });
-        console.log("[IMG] Compressed, uploading to server...");
-        const res  = await fetch("/api/upload-image", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ data: dataUrl }),
-        });
-        const json = await res.json();
-        if (!res.ok || !json.url) throw new Error(json.error || "שגיאת שרת");
-        console.log("[IMG] Upload success:", json.url);
-        s("image", json.url);
-        if (onImageUploaded) onImageUploaded(json.url);
-      } catch (err) {
-        console.error("[IMG] Upload failed:", err);
-        setImgError("שגיאה בהעלאת התמונה — נסה שנית");
-      } finally {
-        setImgUploading(false);
-        if (imgInputRef.current) imgInputRef.current.value = "";
-      }
-    };
-
-    // Legacy Base64 items (data:) still preview correctly; new items use https: URLs
-    const isImage = f.image?.startsWith("data:") || f.image?.startsWith("http");
-
-    return (
-      <div>
-        <div className="grid-2">
-          <div className="form-group"><label className="form-label">שם הציוד *</label><input className="form-input" value={f.name} onChange={e=>s("name",e.target.value)}/></div>
-          <div className="form-group"><label className="form-label">קטגוריה</label><select className="form-select" value={f.category} onChange={e=>s("category",e.target.value)}>{categories.map(c=><option key={c}>{c}</option>)}</select></div>
-        </div>
-        <div className="form-group">
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap",direction:"ltr"}}>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={()=>generateAutoDescription(f.name)}
-              disabled={isGeneratingDesc}
-              style={{display:"inline-flex",alignItems:"center",gap:6,fontWeight:800}}
-            >
-              <span aria-hidden="true">✨</span>
-              {isGeneratingDesc ? "מייצר תיאור..." : "תיאור אוטומטי"}
-            </button>
-            <label className="form-label" style={{margin:0,textAlign:"right"}}>תיאור</label>
-          </div>
-          <textarea className="form-textarea" rows={2} value={f.description} onChange={e=>s("description",e.target.value)}/>
-        </div>
-        <div className="form-group">
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap",direction:"ltr"}}>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={()=>generateAutoTechnicalDetails(f.name)}
-              disabled={isGeneratingTechDetails}
-              style={{display:"inline-flex",alignItems:"center",gap:6,fontWeight:800}}
-            >
-              <span aria-hidden="true">✨</span>
-              {isGeneratingTechDetails ? "מייצר פרטים..." : "פרטים טכניים אוטומטיים"}
-            </button>
-            <label className="form-label" style={{margin:0,textAlign:"right"}}>פרטים טכניים</label>
-          </div>
-          <textarea
-            className="form-textarea"
-            rows={3}
-            placeholder="לדוגמה: טווחי עבודה, חיבורים, משקל, סוללה, פורמטים נתמכים..."
-            value={f.technical_details || ""}
-            onChange={e=>s("technical_details",e.target.value)}
-          />
-        </div>
-        <div className="grid-2">
-          <div className="form-group"><label className="form-label">כמות *</label><input type="number" min="0" className="form-input" value={f.total_quantity} onChange={e=>s("total_quantity",Number(e.target.value))}/></div>
-          <div className="form-group">
-            <label className="form-label">תמונה / אימוג׳י</label>
-            <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
-              {imgUploading
-                ? <div style={{width:48,height:48,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:8,border:"1px solid var(--border)",background:"var(--surface2)",fontSize:20}}>⏳</div>
-                : isImage
-                  ? <img src={f.image} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:8,border:"1px solid var(--border)"}}/>
-                  : <span style={{fontSize:36}}>{f.image}</span>
-              }
-              <div style={{flex:1}}>
-                <input className="form-input" value={isImage?"":f.image} placeholder="אימוג׳י (למשל 📷)" onChange={e=>s("image",e.target.value)} style={{marginBottom:6}} disabled={imgUploading}/>
-                <input ref={imgInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleImageUpload}/>
-                <button type="button" onClick={()=>imgInputRef.current?.click()} disabled={imgUploading}
-                  style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",cursor:imgUploading?"not-allowed":"pointer",fontSize:12,color:"var(--text2)",opacity:imgUploading?0.6:1,width:"100%"}}>
-                  {imgUploading ? "⏳ מעלה תמונה..." : "🖼️ העלה תמונה מהמחשב"}
-                </button>
-                {f.name && <button type="button" onClick={()=>window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(f.name)}`, "_blank")} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",cursor:"pointer",fontSize:12,color:"var(--text2)",marginTop:4,width:"100%"}}>
-                  🔍 חפש תמונה ב-Google Images
-                </button>}
-                {imgError && <div style={{color:"#e74c3c",fontSize:11,marginTop:4}}>{imgError}</div>}
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="grid-2">
-          <div className="form-group"><label className="form-label">מצב</label><select className="form-select" value={f.status} onChange={e=>s("status",e.target.value)}>{STATUSES.map(st=><option key={st}>{st}</option>)}</select></div>
-          <div className="form-group"><label className="form-label">הערות</label><input className="form-input" value={f.notes} onChange={e=>s("notes",e.target.value)}/></div>
-        </div>
-        <div className="form-group">
-          <label className="form-label">🎓 הסמכה נדרשת</label>
-          <select className="form-select" value={f.certification_id||""} onChange={e=>s("certification_id",e.target.value)}>
-            <option value="">ללא הסמכה (כולם רשאים)</option>
-            {equipmentCertTypes.map(ct=>(
-              <option key={ct.id} value={ct.id}>{ct.name}</option>
-            ))}
-          </select>
-          <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>רק סטודנטים שעברו הסמכה זו יוכלו להשאיל פריט זה</div>
-        </div>
-        <div className="flex gap-2" style={{paddingTop:8}}>
-          <button className="btn btn-primary" disabled={!f.name||saving||imgUploading} onClick={()=>save(f)}>{saving?"⏳ שומר...":initial?"💾 שמור":"➕ הוסף"}</button>
-          <button className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button>
-        </div>
-      </div>
-    );
-  };
+  // EqForm is defined OUTSIDE EquipmentPage (above) to maintain stable React identity.
+  // See the EqForm function before EquipmentPage for the actual component.
 
   const damagedCount = equipment.reduce((n,eq) => n + (eq.units||[]).filter(u=>u.status!=="תקין").length, 0);
   const visibleCategories = [...new Set([...(categories || []), ...existingCategories])];
@@ -1789,13 +1769,20 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
           ))}
         </>
       )}
-      {(modal?.type==="add"||modal?.type==="edit") && <Modal title={modal.type==="add"?"➕ הוספת ציוד":"✏️ עריכת ציוד"} onClose={()=>setModal(null)}><EqForm initial={modal.type==="edit"?modal.item:null} onImageUploaded={(url) => {
-              if (modal.type==="edit" && modal.item?.id) {
-                const updated = equipment.map(e => e.id===modal.item.id ? {...e, image: url} : e);
-                persistEquipmentChange(updated, { successMessage: "תמונה עודכנה ✅" });
-              }
-              setModal(prev => ({...prev, item: {...(prev.item||{}), image: url}}));
-            }}/></Modal>}
+      {(modal?.type==="add"||modal?.type==="edit") && <Modal title={modal.type==="add"?"➕ הוספת ציוד":"✏️ עריכת ציוד"} onClose={()=>setModal(null)}><EqForm
+              initial={modal.type==="edit"?modal.item:null}
+              categories={categories}
+              equipmentCertTypes={equipmentCertTypes}
+              saving={saving}
+              onSave={save}
+              onCancel={()=>setModal(null)}
+              onImageUploaded={(url) => {
+                if (modal.type==="edit" && modal.item?.id) {
+                  const updated = equipment.map(e => e.id===modal.item.id ? {...e, image: url} : e);
+                  persistEquipmentChange(updated, { successMessage: "תמונה עודכנה ✅" });
+                }
+                setModal(prev => ({...prev, item: {...(prev.item||{}), image: url}}));
+              }}/></Modal>}
       {modal?.type==="units" && <UnitsModal eq={modal.item} equipment={equipment} setEquipment={setEquipment} showToast={showToast} onClose={()=>setModal(null)}/>}
       {modal?.type==="delete" && <Modal title="🗑️ מחיקת ציוד" onClose={()=>setModal(null)} footer={<><button className="btn btn-danger" onClick={()=>del(modal.item)}>כן, מחק</button><button className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button></>}><p>האם למחוק את <strong>{modal.item.name}</strong>?</p></Modal>}
       {modal?.type==="loan-types" && <CategoryLoanTypesModal categoryLoanTypes={categoryLoanTypes} onSave={saveCategoryLoanTypes} onClose={()=>setModal(null)}/>}
