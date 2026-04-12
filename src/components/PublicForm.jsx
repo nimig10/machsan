@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus } from "../utils.js";
 import { supabase } from "../supabaseClient.js";
+import { useNotifications } from "../hooks/useNotifications.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import AIChatBot from "./AIChatBot.jsx";
 
@@ -909,6 +910,16 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
   const [phone,    setPhone]    = useState(String(student?.phone || ""));
   const [busy,     setBusy]     = useState(false);
   const [error,    setError]    = useState("");
+  const notifications = useNotifications();
+
+  const handleToggleNotifications = async (nextEnabled) => {
+    const ok = nextEnabled ? await notifications.enable() : await notifications.disable();
+    if (ok && showToast) {
+      showToast("success", nextEnabled ? "התראות הופעלו" : "התראות כובו");
+    } else if (!ok && showToast && notifications.error) {
+      showToast("error", notifications.error);
+    }
+  };
 
   const handleSave = async () => {
     setError("");
@@ -1056,6 +1067,43 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
             <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>
               ישמש אותנו ליצירת קשר בנוגע להשאלות שלך.
             </div>
+          </div>
+
+          {/* ── Push notifications toggle ── */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"10px 0",borderTop:"1px solid var(--border)"}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:700,color:"var(--text2)"}}>🔔 קבלת התראות למכשיר</div>
+              <div style={{fontSize:11,color:"var(--text3)",marginTop:4,lineHeight:1.5}}>
+                {notifications.isSupported
+                  ? "נשלח אליך התראות על עדכונים בהזמנות ובהחזרות."
+                  : "הדפדפן אינו תומך בהתראות Push."}
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={notifications.isEnabled}
+              disabled={!notifications.isSupported || notifications.loading || notifications.busy || busy}
+              onClick={()=>void handleToggleNotifications(!notifications.isEnabled)}
+              style={{
+                flexShrink:0,
+                width:44, height:24, borderRadius:999,
+                border:"1px solid var(--border)",
+                background: notifications.isEnabled ? (accentColor||"var(--accent)") : "var(--surface3)",
+                position:"relative", cursor: notifications.isSupported ? "pointer" : "not-allowed",
+                opacity: (!notifications.isSupported || notifications.loading || notifications.busy || busy) ? 0.55 : 1,
+                transition:"background 0.18s ease",
+                padding:0,
+              }}
+            >
+              <span style={{
+                position:"absolute", top:1,
+                [notifications.isEnabled ? "left" : "right"]: 1,
+                width:20, height:20, borderRadius:"50%",
+                background:"#fff", boxShadow:"0 1px 3px rgba(0,0,0,0.35)",
+                transition:"all 0.18s ease",
+              }} />
+            </button>
           </div>
 
           {error && (

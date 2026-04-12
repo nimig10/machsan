@@ -7,12 +7,16 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      // Use a custom service worker so we can handle push notifications.
+      // The build plugin injects the precache manifest into src/sw.js via
+      // self.__WB_MANIFEST (handled with workbox-precaching).
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.js',
       injectRegister: false,
       registerType: 'autoUpdate',
       includeAssets: ['LOGON1.png'],
-      workbox: {
-        skipWaiting: true,
-        clientsClaim: true,
+      injectManifest: {
         // Main bundle is ~2.1 MB; default precache limit is 2 MiB, which
         // breaks the Vercel build. Raise to 5 MiB so the SW precaches the
         // full app shell.

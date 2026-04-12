@@ -503,7 +503,7 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                     <input className="form-input" type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)}
                       placeholder="מייל" style={{ ...inpStyle, fontSize: 12 }} />
                     <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                      <button className="btn btn-primary btn-sm" style={{ flex: 1, fontSize: 13 }} onClick={() => saveInlineEdit(lec)}>✓ שמור</button>
+                      <button className="btn btn-primary btn-sm" style={{ flex: 1, fontSize: 13 }} onClick={() => saveInlineEdit(lec, { closeOnSuccess: true })}>✓ שמור</button>
                       <button className="btn btn-secondary btn-sm" style={{ flex: 1, fontSize: 13 }} onClick={() => setEditingId(null)}>✕ בטל</button>
                     </div>
                   </div>
