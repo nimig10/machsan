@@ -119,18 +119,27 @@ export function useNotifications() {
       const userId = userIdRef.current;
       if (!userId) throw new Error('לא מחובר');
 
-      // Unsubscribe locally so the browser stops receiving pushes.
-      try {
-        const registration = await navigator.serviceWorker.ready;
-        const existing = await registration.pushManager.getSubscription();
-        if (existing) await existing.unsubscribe();
-      } catch { /* ignore local unsubscribe failures */ }
-
+      // Update DB first — this is the source of truth the backend reads.
       const { error: dbErr } = await supabase
         .from('users')
         .update({ is_push_enabled: false, push_subscription: null })
         .eq('id', userId);
       if (dbErr) throw new Error(dbErr.message);
+
+      // Then try local unsubscribe with a timeout so a stuck SW can't hang us.
+      try {
+        const swReady = 'serviceWorker' in navigator
+          ? Promise.race([
+              navigator.serviceWorker.ready,
+              new Promise((_, rej) => setTimeout(() => rej(new Error('sw_timeout')), 2500)),
+            ])
+          : null;
+        if (swReady) {
+          const registration = await swReady;
+          const existing = await registration.pushManager.getSubscription();
+          if (existing) await existing.unsubscribe();
+        }
+      } catch { /* ignore local unsubscribe failures */ }
 
       hasSubscriptionRef.current = false;
       setIsEnabled(false);
