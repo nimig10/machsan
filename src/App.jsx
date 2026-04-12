@@ -1355,7 +1355,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     })
     .reduce((s,r)=>s+(r.items?.find(i=>i.equipment_id==id)?.quantity||0),0);
 
-  const EqForm = ({ initial }) => {
+  const EqForm = ({ initial, onImageUploaded }) => {
     const [f, setF] = useState({
       name:"",
       category:"מצלמות",
@@ -1469,6 +1469,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
         if (!res.ok || !json.url) throw new Error(json.error || "שגיאת שרת");
         console.log("[IMG] Upload success:", json.url);
         s("image", json.url);
+        if (onImageUploaded) onImageUploaded(json.url);
       } catch (err) {
         console.error("[IMG] Upload failed:", err);
         setImgError("שגיאה בהעלאת התמונה — נסה שנית");
@@ -1782,7 +1783,13 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
           ))}
         </>
       )}
-      {(modal?.type==="add"||modal?.type==="edit") && <Modal title={modal.type==="add"?"➕ הוספת ציוד":"✏️ עריכת ציוד"} onClose={()=>setModal(null)}><EqForm initial={modal.type==="edit"?modal.item:null}/></Modal>}
+      {(modal?.type==="add"||modal?.type==="edit") && <Modal title={modal.type==="add"?"➕ הוספת ציוד":"✏️ עריכת ציוד"} onClose={()=>setModal(null)}><EqForm initial={modal.type==="edit"?modal.item:null} onImageUploaded={(url) => {
+              if (modal.type==="edit" && modal.item?.id) {
+                const updated = equipment.map(e => e.id===modal.item.id ? {...e, image: url} : e);
+                persistEquipmentChange(updated, { successMessage: "תמונה עודכנה ✅" });
+                setModal(prev => ({...prev, item: {...prev.item, image: url}}));
+              }
+            }}/></Modal>}
       {modal?.type==="units" && <UnitsModal eq={modal.item} equipment={equipment} setEquipment={setEquipment} showToast={showToast} onClose={()=>setModal(null)}/>}
       {modal?.type==="delete" && <Modal title="🗑️ מחיקת ציוד" onClose={()=>setModal(null)} footer={<><button className="btn btn-danger" onClick={()=>del(modal.item)}>כן, מחק</button><button className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button></>}><p>האם למחוק את <strong>{modal.item.name}</strong>?</p></Modal>}
       {modal?.type==="loan-types" && <CategoryLoanTypesModal categoryLoanTypes={categoryLoanTypes} onSave={saveCategoryLoanTypes} onClose={()=>setModal(null)}/>}
