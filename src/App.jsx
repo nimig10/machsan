@@ -1371,6 +1371,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     const s = (k,v) => setF(p=>({...p,[k]:v}));
     const [imgUploading, setImgUploading] = useState(false);
     const [imgError, setImgError]         = useState("");
+    const imgInputRef = useRef(null);
     const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
     const [isGeneratingTechDetails, setIsGeneratingTechDetails] = useState(false);
 
@@ -1430,15 +1431,20 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     };
 
     const handleImageUpload = async (e) => {
-      const file = e.target.files[0];
+      const file = e.target.files?.[0];
+      console.log("[IMG] handleImageUpload fired, file:", file?.name, file?.size);
       if (!file) return;
       setImgError("");
       setImgUploading(true);
       try {
         // Resize image client-side to fit under Vercel 4.5MB body limit
         const dataUrl = await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error("Image load timeout (10s)")), 10000);
+          const blobUrl = URL.createObjectURL(file);
           const img = new Image();
           img.onload = () => {
+            clearTimeout(timeout);
+            URL.revokeObjectURL(blobUrl);
             const MAX = 800;
             let w = img.width, h = img.height;
             if (w > MAX || h > MAX) {
@@ -1450,10 +1456,10 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
             canvas.getContext("2d").drawImage(img, 0, 0, w, h);
             resolve(canvas.toDataURL("image/jpeg", 0.85));
           };
-          img.onerror = reject;
-          img.src = URL.createObjectURL(file);
+          img.onerror = () => { clearTimeout(timeout); URL.revokeObjectURL(blobUrl); reject(new Error("Failed to load image")); };
+          img.src = blobUrl;
         });
-        // POST to Cloudinary proxy — returns { ok, url }
+        console.log("[IMG] Resized, uploading to server...");
         const res  = await fetch("/api/upload-image", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
@@ -1461,12 +1467,14 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
         });
         const json = await res.json();
         if (!res.ok || !json.url) throw new Error(json.error || "שגיאת שרת");
-        s("image", json.url);          // store only the URL — no Base64 in DB
+        console.log("[IMG] Upload success:", json.url);
+        s("image", json.url);
       } catch (err) {
-        console.error("Image upload failed:", err);
+        console.error("[IMG] Upload failed:", err);
         setImgError("שגיאה בהעלאת התמונה — נסה שנית");
       } finally {
         setImgUploading(false);
+        if (imgInputRef.current) imgInputRef.current.value = "";
       }
     };
 
@@ -1530,10 +1538,11 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
               }
               <div style={{flex:1}}>
                 <input className="form-input" value={isImage?"":f.image} placeholder="אימוג׳י (למשל 📷)" onChange={e=>s("image",e.target.value)} style={{marginBottom:6}} disabled={imgUploading}/>
-                <label style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",cursor:imgUploading?"not-allowed":"pointer",fontSize:12,color:"var(--text2)",opacity:imgUploading?0.6:1}}>
+                <input ref={imgInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleImageUpload}/>
+                <button type="button" onClick={()=>imgInputRef.current?.click()} disabled={imgUploading}
+                  style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",cursor:imgUploading?"not-allowed":"pointer",fontSize:12,color:"var(--text2)",opacity:imgUploading?0.6:1,width:"100%"}}>
                   {imgUploading ? "⏳ מעלה תמונה..." : "🖼️ העלה תמונה מהמחשב"}
-                  <input type="file" accept="image/*" style={{display:"none"}} onChange={handleImageUpload} disabled={imgUploading}/>
-                </label>
+                </button>
                 {f.name && <button type="button" onClick={()=>window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(f.name)}`, "_blank")} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",cursor:"pointer",fontSize:12,color:"var(--text2)",marginTop:4,width:"100%"}}>
                   🔍 חפש תמונה ב-Google Images
                 </button>}
