@@ -1435,12 +1435,23 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       setImgError("");
       setImgUploading(true);
       try {
-        // Read file as base64 data-URI
+        // Resize image client-side to fit under Vercel 4.5MB body limit
         const dataUrl = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload  = ev => resolve(ev.target.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
+          const img = new Image();
+          img.onload = () => {
+            const MAX = 800;
+            let w = img.width, h = img.height;
+            if (w > MAX || h > MAX) {
+              if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+              else       { w = Math.round(w * MAX / h); h = MAX; }
+            }
+            const canvas = document.createElement("canvas");
+            canvas.width = w; canvas.height = h;
+            canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL("image/jpeg", 0.85));
+          };
+          img.onerror = reject;
+          img.src = URL.createObjectURL(file);
         });
         // POST to Cloudinary proxy — returns { ok, url }
         const res  = await fetch("/api/upload-image", {
