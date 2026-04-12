@@ -3826,8 +3826,8 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, cal
 
   // ── Combined daily schedule ──────────────────────────────────────
   const todayFmt = () => { const d=new Date(); return `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,"0")}-${d.getDate().toString().padStart(2,"0")}`; };
-  const [teamDayDate, setTeamDayDate] = React.useState(todayFmt);
-  const teamDayLabel = React.useMemo(() => {
+  const [teamDayDate, setTeamDayDate] = useState(todayFmt);
+  const teamDayLabel = useMemo(() => {
     const HE=["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
     const [y,m,d]=teamDayDate.split("-").map(Number);
     const nd=new Date(y,m-1,d);
@@ -3841,7 +3841,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, cal
   const LESSON_C="#f5a623", STUDENT_C="#2ecc71", NIGHT_C="#2196f3";
   const getKind = b => { if(b.bookingKind==="lesson"||b.lesson_auto||(b.lesson_id!=null&&b.lesson_id!=="")) return "lesson"; if(b.bookingKind==="team"||b.teamMemberId||b.teamMemberName) return "team"; return "student"; };
   const stName = id => (studios||[]).find(s=>String(s.id)===String(id))?.name || id || "—";
-  const teamDayRows = React.useMemo(() => {
+  const teamDayRows = useMemo(() => {
     const rows=[];
     const usedKeys=new Set();
     (studioBookings||[]).forEach(b => {
