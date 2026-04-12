@@ -1084,27 +1084,25 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     return result;
   };
 
-  const handleCSVImport = async (e) => {
+  const handleExcelImport = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    let rows = [];
     const isExcel = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
-    if (isExcel) {
+    if (!isExcel) { showToast("error", "נא לבחור קובץ Excel בלבד (.xlsx / .xls)"); e.target.value = ""; return; }
+    let rows = [];
+    try {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
-    } else {
-      const text = await file.text();
-      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-      if (lines.length < 2) { showToast("error", "הקובץ ריק או לא תקין"); return; }
-      const header = parseCSVLine(lines[0]).map(h => h.replace(/^\uFEFF/, "").trim());
-      for (let i = 1; i < lines.length; i++) {
-        const cols = parseCSVLine(lines[i]);
-        const row = {};
-        header.forEach((h, idx) => { row[h] = cols[idx]?.trim() || ""; });
-        rows.push(row);
-      }
+      // Read raw rows with header row as array, then normalize keys (trim spaces/BOM)
+      const rawRows = XLSX.utils.sheet_to_json(ws, { defval: "", raw: false });
+      rows = rawRows.map(row => {
+        const normalized = {};
+        Object.keys(row).forEach(k => { normalized[k.replace(/^\uFEFF/, "").trim()] = row[k]; });
+        return normalized;
+      });
+    } catch (err) {
+      showToast("error", "שגיאה בקריאת הקובץ. ודא שהקובץ תקין."); e.target.value = ""; return;
     }
     if (!rows.length) { showToast("error", "הקובץ ריק"); return; }
     const findKey = (row, keys) => keys.find(k => row[k] !== undefined);
@@ -1160,11 +1158,13 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   };
 
   const downloadTemplate = () => {
-    const csv = "\uFEFFשם פריט,כמות,רובריקה,תיאור,הערות\nגמביל DJI RS3,3,מייצבי מצלמה,גמביל 3 צירים,\n";
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    a.download = "תבנית_ייבוא_ציוד.csv";
-    a.click();
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["שם פריט", "כמות", "רובריקה", "תיאור", "הערות"],
+      ["גמביל DJI RS3", 3, "מייצבי מצלמה", "גמביל 3 צירים", ""],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, "ציוד");
+    XLSX.writeFile(wb, "תבנית_ייבוא_ציוד.xlsx");
   };
 
   const handleAiEquipmentImport = async (newItems, approvedCategories = []) => {
@@ -1626,9 +1626,9 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       <div className="flex-between mb-4">
         <div className="search-bar"><span>🔍</span><input placeholder="חיפוש ציוד..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
         <div className="flex gap-2" style={{flexWrap:"wrap",justifyContent:"flex-end"}}>
-          <button className="btn btn-secondary" onClick={downloadTemplate} title="הורד תבנית CSV">📥 תבנית</button>
-          <button className="btn btn-secondary" onClick={()=>csvInputRef.current?.click()}>📤 ייבוא CSV</button>
-          <input ref={csvInputRef} type="file" accept=".csv,.xlsx,.xls,text/csv" style={{display:"none"}} onChange={handleCSVImport}/>
+          <button className="btn btn-secondary" onClick={downloadTemplate} title="הורד תבנית Excel">📥 תבנית</button>
+          <button className="btn btn-secondary" onClick={()=>csvInputRef.current?.click()}>📤 ייבוא Excel</button>
+          <input ref={csvInputRef} type="file" accept=".xlsx,.xls" style={{display:"none"}} onChange={handleExcelImport}/>
           <SmartEquipmentImportButton
             showToast={showToast}
             existingCategories={existingCategories}
