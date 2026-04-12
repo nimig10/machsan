@@ -15,6 +15,7 @@ import { LecturersPage, makeLecturer } from "./components/LecturersPage.jsx";
 import SmartEquipmentImportButton from "./components/SmartEquipmentImportButton.jsx";
 import { SecretaryDashboardPage } from "./components/SecretaryDashboardPage.jsx";
 import { PublicDisplayPage } from "./components/PublicDisplayPage.jsx";
+import { PublicDailyTablePage } from "./components/PublicDailyTablePage.jsx";
 import { StaffHub } from "./components/StaffHub.jsx";
 import { StaffManagementPage } from "./components/StaffManagementPage.jsx";
 import { SystemSettingsPage } from "./components/SystemSettingsPage.jsx";
@@ -3683,7 +3684,7 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
 }
 
 // ─── TEAM PAGE ────────────────────────────────────────────────────────────────
-function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, calendarToken="", collegeManager={}, setCollegeManager, showToast, managerToken="", studioBookings=[], studios=[], lessons=[] }) {
+function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, calendarToken="", collegeManager={}, setCollegeManager, showToast, managerToken="" }) {
   const LOAN_TYPES = ["פרטית","הפקה","סאונד","קולנוע יומית"];
   const LOAN_ICONS = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️", "קולנוע יומית":"🎥" };
   const emptyForm = { name:"", email:"", phone:"", loanTypes:[...LOAN_TYPES] };
@@ -3824,44 +3825,6 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, cal
     </div>
   );
 
-  // ── Combined daily schedule ──────────────────────────────────────
-  const todayFmt = () => { const d=new Date(); return `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,"0")}-${d.getDate().toString().padStart(2,"0")}`; };
-  const [teamDayDate, setTeamDayDate] = useState(todayFmt);
-  const teamDayLabel = useMemo(() => {
-    const HE=["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
-    const [y,m,d]=teamDayDate.split("-").map(Number);
-    const nd=new Date(y,m-1,d);
-    return `${HE[nd.getDay()]} ${(d).toString().padStart(2,"0")}/${(m).toString().padStart(2,"0")}`;
-  },[teamDayDate]);
-  const shiftTeamDay = (delta) => setTeamDayDate(prev => {
-    const [y,m,d]=prev.split("-").map(Number);
-    const nd=new Date(y,m-1,d+delta);
-    return `${nd.getFullYear()}-${(nd.getMonth()+1).toString().padStart(2,"0")}-${nd.getDate().toString().padStart(2,"0")}`;
-  });
-  const LESSON_C="#f5a623", STUDENT_C="#2ecc71", NIGHT_C="#2196f3";
-  const getKind = b => { if(b.bookingKind==="lesson"||b.lesson_auto||(b.lesson_id!=null&&b.lesson_id!=="")) return "lesson"; if(b.bookingKind==="team"||b.teamMemberId||b.teamMemberName) return "team"; return "student"; };
-  const stName = id => (studios||[]).find(s=>String(s.id)===String(id))?.name || id || "—";
-  const teamDayRows = useMemo(() => {
-    const rows=[];
-    const usedKeys=new Set();
-    (studioBookings||[]).forEach(b => {
-      if(b.date!==teamDayDate||b.status==="נדחה") return;
-      const kind=getKind(b);
-      rows.push({ startTime:b.startTime||"", endTime:b.endTime||"", studioId:b.studioId||"", label:kind==="lesson"?(b.courseName||"שיעור"):(b.studentName||b.teamMemberName||"סטודנט"), instructor:b.instructorName||b.teamMemberName||"", kind, isNight:!!b.isNight, color:kind==="lesson"?LESSON_C:b.isNight?NIGHT_C:STUDENT_C });
-      usedKeys.add(`${b.studioId}_${b.startTime}`);
-    });
-    (lessons||[]).forEach(lesson => {
-      (lesson.schedule||[]).forEach(session => {
-        if(session.date!==teamDayDate) return;
-        const k=`${session.studioId||lesson.studioId||""}_${session.startTime||""}`;
-        if(usedKeys.has(k)) return;
-        usedKeys.add(k);
-        rows.push({ startTime:session.startTime||"", endTime:session.endTime||"", studioId:session.studioId||lesson.studioId||"", label:lesson.courseName||lesson.name||"", instructor:lesson.instructorName||lesson.lecturer||"", kind:"lesson", isNight:false, color:LESSON_C });
-      });
-    });
-    return rows.sort((a,b)=>(a.startTime||"").localeCompare(b.startTime||""));
-  },[studioBookings,lessons,teamDayDate]);
-
   return (
     <div className="page">
       {/* ── College manager section ── */}
@@ -3901,6 +3864,23 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, cal
           <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>הצג על מסך/טלוויזיה בלובי — מתחלף אוטומטית בין לוז שיעורים לקביעות חדרים</div>
         </div>
 
+        {/* Daily table link */}
+        <div style={{marginTop:10,background:"rgba(46,204,113,0.08)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",fontSize:12}}>
+          <div style={{fontWeight:700,marginBottom:6,color:"#2ecc71"}}>📋 לינק לוח לוז יומי בפורמט טבלה</div>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            <code style={{fontSize:11,background:"var(--surface3)",padding:"3px 8px",borderRadius:4,flex:1,wordBreak:"break-all",color:"var(--text2)"}}>
+              {window.location.origin}/daily-table
+            </code>
+            <button className="btn btn-secondary btn-sm" onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/daily-table`);showToast("success","הקישור הועתק!");}}>
+              📋 העתק
+            </button>
+            <a href="/daily-table" target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm" style={{textDecoration:"none"}}>
+              🔗 פתח
+            </a>
+          </div>
+          <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>תצוגת טבלה פשוטה של כל קביעות היום</div>
+        </div>
+
         {managerToken&&(
           <div style={{marginTop:14,background:"rgba(52,152,219,0.08)",border:"1px solid rgba(52,152,219,0.25)",borderRadius:"var(--r-sm)",padding:"10px 14px",fontSize:12}}>
             <div style={{fontWeight:700,marginBottom:6,color:"#3498db"}}>🔗 קישור לוח שנה למנהל המכללה</div>
@@ -3915,56 +3895,6 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, cal
             <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>שלח קישור זה למנהל — הוא יוכל לצפות ולשנות סטטוסים של כל הבקשות</div>
           </div>
         )}
-      </div>
-
-      {/* ── Combined daily schedule table ── */}
-      <div className="card" style={{marginBottom:24}}>
-        <div className="card-header" style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
-          <div className="card-title">📋 לו״ז יומי משולב — {teamDayLabel}</div>
-          <div style={{display:"flex",gap:6}}>
-            <button className="btn btn-secondary btn-sm" onClick={()=>shiftTeamDay(1)}>›</button>
-            <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={()=>setTeamDayDate(todayFmt())}>היום</button>
-            <button className="btn btn-secondary btn-sm" onClick={()=>shiftTeamDay(-1)}>‹</button>
-          </div>
-        </div>
-        <div style={{padding:"0 16px 16px",overflowX:"auto"}}>
-          {teamDayRows.length===0 ? (
-            <div style={{color:"var(--text3)",fontSize:13,padding:"16px 0",textAlign:"center"}}>אין קביעות ביום זה</div>
-          ) : (
-            <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:12,tableLayout:"fixed",minWidth:480,direction:"rtl"}}>
-              <thead>
-                <tr>
-                  <th style={{width:90,padding:"8px 10px",textAlign:"right",fontWeight:700,color:"var(--text2)",borderBottom:"2px solid var(--border)",whiteSpace:"nowrap"}}>שעה</th>
-                  <th style={{width:140,padding:"8px 10px",textAlign:"right",fontWeight:700,color:"var(--text2)",borderBottom:"2px solid var(--border)",overflow:"hidden",textOverflow:"ellipsis"}}>חדר / אולפן</th>
-                  <th style={{padding:"8px 10px",textAlign:"right",fontWeight:700,color:"var(--text2)",borderBottom:"2px solid var(--border)"}}>שם / קורס</th>
-                  <th style={{width:130,padding:"8px 10px",textAlign:"right",fontWeight:700,color:"var(--text2)",borderBottom:"2px solid var(--border)",overflow:"hidden",textOverflow:"ellipsis"}}>מרצה</th>
-                  <th style={{width:76,padding:"8px 8px",textAlign:"center",fontWeight:700,color:"var(--text2)",borderBottom:"2px solid var(--border)"}}>סוג</th>
-                </tr>
-              </thead>
-              <tbody>
-                {teamDayRows.map((r,i)=>{
-                  const typeLabel=r.kind==="lesson"?"שיעור":r.isNight?"לילה":r.kind==="team"?"צוות":"יום";
-                  return (
-                    <tr key={i} style={{background:i%2===0?"transparent":"rgba(255,255,255,0.02)"}}>
-                      <td style={{padding:"7px 10px",borderBottom:"1px solid var(--border)",fontWeight:700,color:r.color,whiteSpace:"nowrap",fontSize:11}}>{r.startTime&&r.endTime?`${r.startTime}–${r.endTime}`:r.startTime||"—"}</td>
-                      <td style={{padding:"7px 10px",borderBottom:"1px solid var(--border)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:"var(--text2)",fontSize:11}} title={stName(r.studioId)}>{stName(r.studioId)}</td>
-                      <td style={{padding:"7px 10px",borderBottom:"1px solid var(--border)",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={r.label}>{r.label||"—"}</td>
-                      <td style={{padding:"7px 10px",borderBottom:"1px solid var(--border)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:"var(--text2)",fontSize:11}} title={r.instructor}>{r.instructor||"—"}</td>
-                      <td style={{padding:"7px 8px",borderBottom:"1px solid var(--border)",textAlign:"center"}}>
-                        <span style={{display:"inline-block",padding:"2px 7px",borderRadius:10,fontSize:10,fontWeight:700,background:`${r.color}22`,color:r.color,border:`1px solid ${r.color}55`,whiteSpace:"nowrap"}}>{typeLabel}</span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-          <div style={{display:"flex",gap:12,marginTop:10,fontSize:11,color:"var(--text3)",flexWrap:"wrap"}}>
-            <span><span style={{display:"inline-block",width:10,height:10,background:`${LESSON_C}33`,border:`1px solid ${LESSON_C}`,borderRadius:2,marginLeft:4}}/>שיעור</span>
-            <span><span style={{display:"inline-block",width:10,height:10,background:`${STUDENT_C}33`,border:`1px solid ${STUDENT_C}`,borderRadius:2,marginLeft:4}}/>סטודנט יום</span>
-            <span><span style={{display:"inline-block",width:10,height:10,background:`${NIGHT_C}33`,border:`1px solid ${NIGHT_C}`,borderRadius:2,marginLeft:4}}/>סטודנט לילה</span>
-          </div>
-        </div>
       </div>
 
       {/* ── Dept heads section ── */}
@@ -6950,8 +6880,9 @@ export default function App() {
   const isCalendarView = pathname.startsWith("/calendar");
   const isManagerCalendarView = pathname.startsWith("/manager-calendar");
   const isPublicDisplayView = pathname === "/daily";
+  const isPublicDailyTableView = pathname === "/daily-table";
   const isLecturerPortalView = pathname.startsWith("/lecturer");
-  const isPublicFormView = !isAdmin && !isCalendarView && !isManagerCalendarView && !isPublicDisplayView && !isLecturerPortalView;
+  const isPublicFormView = !isAdmin && !isCalendarView && !isManagerCalendarView && !isPublicDisplayView && !isPublicDailyTableView && !isLecturerPortalView;
   const urlToken = new URLSearchParams(window.location.search).get("token")||"";
   const { canInstall: canInstallPwa, install: installPwa } = useInstallPrompt();
   const [page, setPage]               = useState(() => sessionStorage.getItem("admin_page") || "dashboard");
@@ -7882,6 +7813,9 @@ export default function App() {
       {/* ── דף לוז יומי ציבורי ── */}
       {isPublicDisplayView && <PublicDisplayPage/>}
 
+      {/* ── דף לוז יומי ציבורי בפורמט טבלה ── */}
+      {isPublicDailyTableView && <PublicDailyTablePage/>}
+
       {/* ── טופס ציבורי ── */}
       {isManagerCalendarView ? (
         <div style={{minHeight:"100vh",background:"var(--bg)",direction:"rtl"}}>
@@ -7966,7 +7900,7 @@ export default function App() {
                 <span className="topbar-title" style={{flex:1}}>ניהול צוות</span>
               </div>
             </div>
-            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <StaffManagementPage showToast={showToast} teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} managerToken={managerToken} studioBookings={studioBookings} studios={studios} lessons={lessons}/>}
+            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <StaffManagementPage showToast={showToast} teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} managerToken={managerToken}/>}
           </div>
         </div>
       )}
@@ -8112,7 +8046,7 @@ export default function App() {
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}
                 initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports}/></div>
-              <div style={{display:page==="team"?"block":"none"}}><TeamPage teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken} studioBookings={studioBookings} studios={studios} lessons={lessons}/></div>
+              <div style={{display:page==="team"?"block":"none"}}><TeamPage teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/></div>
               <div style={{display:page==="kits"?"block":"none"}}><KitsPage kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons}/></div>
               <div style={{display:page==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} lecturers={lecturers} setLecturers={setLecturers} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length
                 ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean)

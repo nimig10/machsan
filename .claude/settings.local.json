@@ -26,7 +26,30 @@
       "Bash(node -e \":*)",
       "Bash(git rm:*)",
       "Bash(git revert:*)",
-      "Bash(grep -v \"^.*//.*reserv\\\\|_set\\\\|archiv\\\\|Ref\\\\|resR\\\\.\\\\|resSrc\\\\|resSearch\\\\|resStatus\\\\|resSortBy\\\\|resLoanType\\\\|overdue\\\\|submitted\\\\|returned\")"
+      "Bash(grep -v \"^.*//.*reserv\\\\|_set\\\\|archiv\\\\|Ref\\\\|resR\\\\.\\\\|resSrc\\\\|resSearch\\\\|resStatus\\\\|resSortBy\\\\|resLoanType\\\\|overdue\\\\|submitted\\\\|returned\")",
+      "Bash(curl -s \"https://machsan.vercel.app/api/migrate-staff\" -X POST -H \"Content-Type: application/json\" -d '{\"secret\":\"machsan-migrate-2026\"}')",
+      "Bash(curl -sL \"https://machsan.vercel.app/api/migrate-staff\" -X POST -H \"Content-Type: application/json\" -d '{\"secret\":\"machsan-migrate-2026\"}')",
+      "Bash(ls /c/machsan/api/*.js)",
+      "Bash(curl -sL \"https://machsan.vercel.app/api/auth\" -X POST -H \"Content-Type: application/json\" -d '{}')",
+      "Bash(curl -sL -X POST \"https://machsan.vercel.app/api/staff\" -H \"Content-Type: application/json\" -d '{\"action\":\"migrate\",\"secret\":\"machsan-migrate-2026\"}')",
+      "Bash(curl -sv -X POST \"https://machsan.vercel.app/api/staff\" -H \"Content-Type: application/json\" -d '{\"action\":\"migrate\",\"secret\":\"machsan-migrate-2026\"}')",
+      "Bash(curl -sv -X POST \"https://machsan.vercel.app/api/staff\" -H \"Content-Type: application/json\" -d '{\"action\":\"migrate\"}')",
+      "Bash(curl -sL -X POST \"https://app.camera.org.il/api/staff\" -H \"Content-Type: application/json\" -d '{\"action\":\"migrate\",\"secret\":\"machsan-migrate-2026\"}')",
+      "Bash(curl -s -X POST \"https://app.camera.org.il/api/staff\" -H \"Content-Type: application/json\" -d '{\"action\":\"invite\",\"full_name\":\"נמרוד\",\"email\":\"nimig10@gmail.com\",\"is_admin\":true,\"is_warehouse\":true}')",
+      "mcp__claude_ai_Vercel__list_teams",
+      "mcp__claude_ai_Vercel__list_deployments",
+      "Bash(node -c C:/machsan/api/auth.js)",
+      "Bash(git show:*)",
+      "Bash(ls api/*.js)",
+      "mcp__claude_ai_Vercel__get_deployment_build_logs",
+      "mcp__claude_ai_Vercel__deploy_to_vercel",
+      "mcp__claude_ai_Vercel__get_runtime_logs",
+      "Bash(npx tsc:*)",
+      "Bash(node --input-type=module --eval ':*)",
+      "Bash(awk -F: '$1 > 3686 && $1 < 4200')",
+      "Bash(awk 'NR>=3750 && NR<=3760' src/App.jsx)",
+      "Bash(awk 'NR>=3800 && NR<=3815' src/App.jsx)",
+      "Bash(awk 'NR>=3815 && NR<=3835' src/App.jsx)"
     ]
   }
 }
