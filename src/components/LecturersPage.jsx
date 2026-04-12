@@ -291,35 +291,41 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
     try {
       const data = await file.arrayBuffer();
       const wb = XLSX.read(data, { type: "array" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
-      if (rows.length < 2) { showToast("error", "הקובץ ריק או חסרת שורת כותרת"); return; }
-
-      const header = rows[0].map(h => String(h || "").trim().toLowerCase());
-      const nameIdx  = header.findIndex(h => /שם/.test(h));
-      const phoneIdx = header.findIndex(h => /טלפון|נייד|phone/.test(h));
-      const emailIdx = header.findIndex(h => /מייל|אימייל|email/.test(h));
-
-      if (nameIdx < 0) { showToast("error", "לא נמצאה עמודת שם בקובץ"); return; }
 
       let addedCount = 0;
       let skippedCount = 0;
       const existingNames = new Set(lecturers.map(l => String(l.fullName || "").trim().toLowerCase()));
       const newLecs = [];
 
-      for (let i = 1; i < rows.length; i++) {
-        const row = rows[i];
-        const fullName = String(row[nameIdx] || "").trim();
-        if (!fullName) continue;
-        if (existingNames.has(fullName.toLowerCase())) { skippedCount++; continue; }
-        existingNames.add(fullName.toLowerCase());
-        newLecs.push(makeLecturer({
-          fullName,
-          phone: phoneIdx >= 0 ? String(row[phoneIdx] || "").trim() : "",
-          email: emailIdx >= 0 ? String(row[emailIdx] || "").trim() : "",
-        }));
-        addedCount++;
+      // Read every sheet in the workbook so multi-sheet files are fully imported
+      for (const sheetName of wb.SheetNames) {
+        const ws = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        if (rows.length < 2) continue; // skip empty / header-only sheets
+
+        const header = rows[0].map(h => String(h || "").trim().toLowerCase());
+        const nameIdx  = header.findIndex(h => /שם/.test(h));
+        const phoneIdx = header.findIndex(h => /טלפון|נייד|phone/.test(h));
+        const emailIdx = header.findIndex(h => /מייל|אימייל|email/.test(h));
+
+        if (nameIdx < 0) continue; // sheet has no name column — skip it
+
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          const fullName = String(row[nameIdx] || "").trim();
+          if (!fullName) continue;
+          if (existingNames.has(fullName.toLowerCase())) { skippedCount++; continue; }
+          existingNames.add(fullName.toLowerCase());
+          newLecs.push(makeLecturer({
+            fullName,
+            phone: phoneIdx >= 0 ? String(row[phoneIdx] || "").trim() : "",
+            email: emailIdx >= 0 ? String(row[emailIdx] || "").trim() : "",
+          }));
+          addedCount++;
+        }
       }
+
+      if (addedCount === 0 && skippedCount === 0) { showToast("error", "לא נמצאה עמודת שם בקובץ"); return; }
 
       if (newLecs.length > 0) {
         const updated = [...lecturers, ...newLecs];
