@@ -1,6 +1,15 @@
-// Vercel Cron Job — runs server-side every hour
-// Checks for overdue reservations and sends reminder emails
-// No browser required
+// check-overdue.js — Vercel Cron job (every 5 min).
+//
+// Runs two passes on the reservations array from the store table:
+//
+//  1. OVERDUE EMAILS: reservations that are ≥30 min past their return time,
+//     status "באיחור", and haven't had overdue_email_sent set yet.
+//
+//  2. PUSH REMINDERS: reservations whose return time is 25–35 min away,
+//     reminderSent is not true, and status is not terminal.
+//     Sends a Web Push notification to the student (if subscribed).
+
+import { isVapidReady, fetchUserByEmail, sendPushToUser } from "./_push.js";
 
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -9,6 +18,8 @@ const SB_HEADERS = {
   Authorization: `Bearer ${SB_KEY}`,
   "Content-Type": "application/json",
 };
+
+const TERMINAL_STATUSES = new Set(["הוחזר", "נדחה", "בוטל"]);
 
 function parseLocalDate(dateStr) {
   if (!dateStr) return null;
@@ -31,14 +42,14 @@ function formatDate(dateStr) {
 }
 
 export default async function handler(req, res) {
-  // Vercel automatically passes Authorization: Bearer <CRON_SECRET> for cron jobs
+  // Vercel Cron passes Authorization: Bearer <CRON_SECRET>
   const authHeader = req.headers["authorization"];
   if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
   try {
-    // 1. Fetch reservations from Supabase
+    // ── Fetch reservations ──────────────────────────────────────────────────
     const supaRes = await fetch(
       `${SB_URL}/rest/v1/store?key=eq.reservations&select=data`,
       { headers: SB_HEADERS }
@@ -49,13 +60,15 @@ export default async function handler(req, res) {
       Array.isArray(supaJson) && supaJson.length > 0 ? supaJson[0].data : [];
 
     if (!Array.isArray(reservations) || !reservations.length) {
-      return res.status(200).json({ sent: 0, message: "no reservations" });
+      return res.status(200).json({ emails: 0, pushes: 0, message: "no reservations" });
     }
 
-    // 2. Find overdue ones that need emails (30+ minutes past return time)
     const now = Date.now();
+    let dirty = false; // true if any reservation object was mutated
+
+    // ── Pass 1: Overdue emails ──────────────────────────────────────────────
     const THIRTY_MIN = 30 * 60 * 1000;
-    const toSend = reservations.filter(
+    const overdueToSend = reservations.filter(
       (r) =>
         r.status === "באיחור" &&
         !r.overdue_email_sent &&
@@ -65,19 +78,14 @@ export default async function handler(req, res) {
         now - toDateTime(r.return_date, r.return_time || "23:59") >= THIRTY_MIN
     );
 
-    if (!toSend.length) {
-      return res.status(200).json({ sent: 0, message: "nothing to send" });
-    }
-
-    // 3. Send emails via the existing /api/send-email endpoint
     const baseUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
       ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
       : process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : "http://localhost:3000";
 
-    let sentCount = 0;
-    for (const r of toSend) {
+    let emailsSent = 0;
+    for (const r of overdueToSend) {
       try {
         await fetch(`${baseUrl}/api/send-email`, {
           method: "POST",
@@ -91,25 +99,64 @@ export default async function handler(req, res) {
             return_time: r.return_time || "",
           }),
         });
-        sentCount++;
+        r.overdue_email_sent = true;
+        dirty = true;
+        emailsSent++;
       } catch (e) {
         console.error("overdue email error for", r.id, e.message);
       }
     }
 
-    // 4. Mark as sent in Supabase
-    const sentIds = new Set(toSend.map((r) => r.id));
-    const updated = reservations.map((r) =>
-      sentIds.has(r.id) ? { ...r, overdue_email_sent: true } : r
-    );
-    await fetch(`${SB_URL}/rest/v1/store`, {
-      method: "POST",
-      headers: { ...SB_HEADERS, Prefer: "resolution=merge-duplicates" },
-      body: JSON.stringify({ key: "reservations", data: updated }),
+    // ── Pass 2: Push reminders (25–35 min before return) ───────────────────
+    const MIN_MS = 25 * 60 * 1000;
+    const MAX_MS = 35 * 60 * 1000;
+    const pushCandidates = reservations.filter((r) => {
+      if (!r || r.reminderSent === true) return false;
+      if (TERMINAL_STATUSES.has(r.status)) return false;
+      if (!r.return_date) return false;
+      const delta = toDateTime(r.return_date, r.return_time || "23:59") - now;
+      return delta >= MIN_MS && delta <= MAX_MS;
     });
 
-    console.log(`check-overdue: sent ${sentCount} emails`);
-    return res.status(200).json({ sent: sentCount });
+    let pushesSent = 0;
+    if (isVapidReady() && pushCandidates.length > 0) {
+      for (const r of pushCandidates) {
+        const email = String(r.email || "").trim().toLowerCase();
+
+        // Always mark as processed so we don't retry on every tick.
+        r.reminderSent = true;
+        dirty = true;
+
+        if (!email) continue;
+        try {
+          const user = await fetchUserByEmail(email);
+          if (!user?.is_push_enabled || !user?.push_subscription) continue;
+
+          const endTimeStr = String(r.return_time || "").trim();
+          await sendPushToUser(user, {
+            title: "תזכורת החזרת ציוד",
+            body: `היי ${r.student_name || ""} הציוד שהשאלת צריך לחזור למחסן עד השעה ${endTimeStr} ללא איחורים. המשך יום נעים`,
+            url: "/",
+          });
+          pushesSent++;
+        } catch (err) {
+          // expired subscription: already cleared inside sendPushToUser
+          if (!err?.expired) console.error("push error for", r.id, err?.message);
+        }
+      }
+    }
+
+    // ── Write back if anything changed ─────────────────────────────────────
+    if (dirty) {
+      await fetch(`${SB_URL}/rest/v1/store`, {
+        method: "POST",
+        headers: { ...SB_HEADERS, Prefer: "resolution=merge-duplicates" },
+        body: JSON.stringify({ key: "reservations", data: reservations }),
+      });
+    }
+
+    console.log(`check-overdue: emails=${emailsSent} pushes=${pushesSent}`);
+    return res.status(200).json({ emails: emailsSent, pushes: pushesSent });
   } catch (e) {
     console.error("check-overdue error:", e.message);
     return res.status(500).json({ error: e.message });
