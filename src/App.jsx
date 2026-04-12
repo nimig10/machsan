@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { logActivity } from "./utils.js";
+import { logActivity, cloudinaryThumb } from "./utils.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
 import { CalendarGrid } from "./components/CalendarGrid.jsx";
@@ -1434,10 +1434,12 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       const file = e.target.files?.[0];
       console.log("[IMG] handleImageUpload fired, file:", file?.name, file?.size);
       if (!file) return;
+      if (!file.type.startsWith("image/")) { setImgError("נא לבחור קובץ תמונה בלבד"); return; }
+      if (file.size > 15 * 1024 * 1024) { setImgError("התמונה גדולה מדי (מקסימום 15MB)"); return; }
       setImgError("");
       setImgUploading(true);
       try {
-        // Resize image client-side to fit under Vercel 4.5MB body limit
+        // Resize + compress client-side: 500x500 max, JPEG 70% quality (~30-60KB per image)
         const dataUrl = await new Promise((resolve, reject) => {
           const timeout = setTimeout(() => reject(new Error("Image load timeout (10s)")), 10000);
           const blobUrl = URL.createObjectURL(file);
@@ -1445,7 +1447,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
           img.onload = () => {
             clearTimeout(timeout);
             URL.revokeObjectURL(blobUrl);
-            const MAX = 800;
+            const MAX = 500;
             let w = img.width, h = img.height;
             if (w > MAX || h > MAX) {
               if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
@@ -1453,13 +1455,17 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
             }
             const canvas = document.createElement("canvas");
             canvas.width = w; canvas.height = h;
-            canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-            resolve(canvas.toDataURL("image/jpeg", 0.85));
+            // White background (handles PNG transparency)
+            const ctx = canvas.getContext("2d");
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL("image/jpeg", 0.70));
           };
           img.onerror = () => { clearTimeout(timeout); URL.revokeObjectURL(blobUrl); reject(new Error("Failed to load image")); };
           img.src = blobUrl;
         });
-        console.log("[IMG] Resized, uploading to server...");
+        console.log("[IMG] Compressed, uploading to server...");
         const res  = await fetch("/api/upload-image", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
@@ -1751,7 +1757,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                     )}
                     <div style={{marginBottom:10,display:"flex",justifyContent:"center"}}>
                       {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
-                        ? <img src={eq.image} alt={eq.name} style={{width:72,height:72,objectFit:"cover",borderRadius:10,border:"1px solid var(--border)"}}/>
+                        ? <img src={cloudinaryThumb(eq.image)} alt={eq.name} style={{width:72,height:72,objectFit:"cover",borderRadius:10,border:"1px solid var(--border)"}}/>
                         : <span style={{fontSize:36}}>{eq.image||"📦"}</span>
                       }
                     </div>
@@ -1787,8 +1793,8 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
               if (modal.type==="edit" && modal.item?.id) {
                 const updated = equipment.map(e => e.id===modal.item.id ? {...e, image: url} : e);
                 persistEquipmentChange(updated, { successMessage: "תמונה עודכנה ✅" });
-                setModal(prev => ({...prev, item: {...prev.item, image: url}}));
               }
+              setModal(prev => ({...prev, item: {...(prev.item||{}), image: url}}));
             }}/></Modal>}
       {modal?.type==="units" && <UnitsModal eq={modal.item} equipment={equipment} setEquipment={setEquipment} showToast={showToast} onClose={()=>setModal(null)}/>}
       {modal?.type==="delete" && <Modal title="🗑️ מחיקת ציוד" onClose={()=>setModal(null)} footer={<><button className="btn btn-danger" onClick={()=>del(modal.item)}>כן, מחק</button><button className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button></>}><p>האם למחוק את <strong>{modal.item.name}</strong>?</p></Modal>}
@@ -2184,7 +2190,7 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
                     {/* Image — fixed left */}
                     <div style={{width:"clamp(100px,28vw,240px)",flexShrink:0,background:"var(--surface2)",overflow:"hidden",borderLeft:"1px solid var(--border)"}}>
                       {isImg
-                        ? <img src={eq.image} alt={eq.name} style={{width:"100%",height:"100%",objectFit:"contain",display:"block",background:"var(--surface2)"}}/>
+                        ? <img src={cloudinaryThumb(eq.image)} alt={eq.name} style={{width:"100%",height:"100%",objectFit:"contain",display:"block",background:"var(--surface2)"}}/>
                         : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:64}}>{eq.image||"📦"}</div>
                       }
                     </div>
@@ -2389,7 +2395,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
               return (
                 <div key={eq.id} className="item-row" style={{opacity:effectiveMax===0?0.4:1}}>
                   {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
-                    ? <img src={eq.image} alt="" style={{width:36,height:36,objectFit:"cover",borderRadius:6}}/>
+                    ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:36,height:36,objectFit:"cover",borderRadius:6}}/>
                     : <span style={{fontSize:26}}>{eq.image||"📦"}</span>}
                   <div style={{flex:1}}>
                     <div style={{fontWeight:600,fontSize:14}}>{eq.name}</div>
@@ -2584,7 +2590,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                           onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--border)";e.currentTarget.style.transform="none";}}>
                           <div style={{display:"flex",justifyContent:"center",marginBottom:12}}>
                             {isImg
-                              ? <img src={eq.image} alt={eq.name} style={{width:80,height:80,objectFit:"contain",borderRadius:8}}/>
+                              ? <img src={cloudinaryThumb(eq.image)} alt={eq.name} style={{width:80,height:80,objectFit:"contain",borderRadius:8}}/>
                               : <span style={{fontSize:48}}>{eq.image||"📦"}</span>}
                           </div>
                           <div style={{fontWeight:800,fontSize:14,textAlign:"center",marginBottom:4}}>{eq.name}</div>
@@ -2678,7 +2684,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                         return (
                           <div key={j} style={{display:"flex",alignItems:"center",gap:12,background:"var(--surface)",borderRadius:"var(--r-sm)",padding:"10px 14px",border:"1px solid var(--border)"}}>
                             <div style={{width:40,height:40,flexShrink:0,borderRadius:6,overflow:"hidden",background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                              {isImg ? <img src={eq.image} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{fontSize:22}}>{eq?.image||"📦"}</span>}
+                              {isImg ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{fontSize:22}}>{eq?.image||"📦"}</span>}
                             </div>
                             <div style={{flex:1}}>
                               <div style={{fontWeight:700,fontSize:14}}>{item.name}</div>
@@ -4380,7 +4386,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                   const qty = getQty(eq.id);
                   return (
                     <div key={eq.id} className="item-row" style={{marginBottom:4,opacity:max===0?0.4:1,background:qty>0?"rgba(245,166,35,0.05)":"",border:qty>0?"1px solid rgba(245,166,35,0.2)":""}}>
-                      <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={eq.image} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||"📦"}</span>
+                      <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||"📦"}</span>
                       <div style={{flex:1,fontSize:13,fontWeight:600}}>
                         {eq.name}
                         <span style={{fontSize:11,color:"var(--text3)",marginRight:6,fontWeight:400}}>מלאי: {max}</span>
@@ -4890,7 +4896,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                     const max=maxQty(eq.id); const qty=getQty(eq.id);
                     return (
                       <div key={eq.id} className="item-row" style={{marginBottom:4,opacity:max===0?0.4:1,background:qty>0?"rgba(245,166,35,0.05)":"",border:qty>0?"1px solid rgba(245,166,35,0.2)":""}}>
-                        <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={eq.image} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||"📦"}</span>
+                        <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||"📦"}</span>
                         <div style={{flex:1,fontSize:13,fontWeight:600}}>
                           {eq.name}
                           <span style={{fontSize:11,color:"var(--text3)",marginRight:6,fontWeight:400}}>מלאי: {max}</span>
@@ -5225,7 +5231,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                     const eq=equipment.find(e=>e.id==item.equipment_id);
                     return (
                       <div key={j} style={{display:"flex",alignItems:"center",gap:8,background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"5px 10px"}}>
-                        <span style={{fontSize:16}}>{eq?.image&&(eq.image.startsWith("data:")||eq.image.startsWith("http"))?<img src={eq.image} alt="" style={{width:20,height:20,objectFit:"cover",borderRadius:4}}/>:(eq?.image||"📦")}</span>
+                        <span style={{fontSize:16}}>{eq?.image&&(eq.image.startsWith("data:")||eq.image.startsWith("http"))?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:20,height:20,objectFit:"cover",borderRadius:4}}/>:(eq?.image||"📦")}</span>
                         <span style={{flex:1,fontSize:13,fontWeight:600}}>{eq?.name||item.name||"פריט"}</span>
                         <span style={{fontSize:13,fontWeight:700,color:"var(--accent)"}}>×{item.quantity}</span>
                       </div>
@@ -5287,7 +5293,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                   {(kit.items||[]).map((i,j)=>{
                     const eq=equipment.find(e=>e.id==i.equipment_id);
                     return <span key={j} className="chip">
-                      {eq?.image&&(eq.image.startsWith("data:")||eq.image.startsWith("http"))?<img src={eq.image} alt="" style={{width:14,height:14,objectFit:"cover",borderRadius:2,verticalAlign:"middle"}}/>:<span>{eq?.image||"📦"}</span>}
+                      {eq?.image&&(eq.image.startsWith("data:")||eq.image.startsWith("http"))?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:14,height:14,objectFit:"cover",borderRadius:2,verticalAlign:"middle"}}/>:<span>{eq?.image||"📦"}</span>}
                       {' '}{eq?.name||i.name} ×{i.quantity}
                     </span>;
                   })}
@@ -5344,7 +5350,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                     {(kit.items||[]).map((i,j)=>{
                       const eq=equipment.find(e=>e.id==i.equipment_id);
                       return <span key={j} className="chip">
-                        {eq?.image&&(eq.image.startsWith("data:")||eq.image.startsWith("http"))?<img src={eq.image} alt="" style={{width:14,height:14,objectFit:"cover",borderRadius:2,verticalAlign:"middle"}}/>:<span>{eq?.image||"📦"}</span>}
+                        {eq?.image&&(eq.image.startsWith("data:")||eq.image.startsWith("http"))?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:14,height:14,objectFit:"cover",borderRadius:2,verticalAlign:"middle"}}/>:<span>{eq?.image||"📦"}</span>}
                         {' '}{eq?.name||i.name} ×{i.quantity}
                       </span>;
                     })}
@@ -5437,7 +5443,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
               const qty = getQty(eq.id);
               return (
               <div key={eq.id} className="item-row" style={{marginBottom:4,opacity:max===0?0.4:1}}>
-                <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http") ? <img src={eq.image} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/> : eq.image||"📦"}</span>
+                <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http") ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/> : eq.image||"📦"}</span>
                 <div style={{flex:1,fontSize:13,fontWeight:600}}>
                   {eq.name}
                   <span style={{fontSize:11,color:"var(--text3)",marginRight:6,fontWeight:400}}>מלאי: {max}</span>
@@ -6066,7 +6072,7 @@ function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equi
                             <div key={idx} style={{display:"flex",alignItems:"center",gap:12,background:"var(--surface2)",borderRadius:8,padding:"10px 12px",border:"1px solid var(--border)"}}>
                               <div style={{width:56,height:56,borderRadius:8,overflow:"hidden",background:"var(--surface)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid var(--border)"}}>
                                 {eq?.image
-                                  ? <img src={eq.image} alt={item.name} style={{width:"100%",height:"100%",objectFit:"contain"}}/>
+                                  ? <img src={cloudinaryThumb(eq.image)} alt={item.name} style={{width:"100%",height:"100%",objectFit:"contain"}}/>
                                   : <span style={{fontSize:24}}>📦</span>}
                               </div>
                               <div style={{flex:1,minWidth:0}}>
@@ -6800,7 +6806,7 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
             return (
               <div key={unit.id} style={{background:"var(--surface)",border:`2px solid ${STATUS_COLORS[unit.status]||"var(--border)"}22`,borderRight:`4px solid ${STATUS_COLORS[unit.status]||"var(--border)"}`,borderRadius:"var(--r)",padding:"14px 16px",display:"flex",gap:12,alignItems:"flex-start"}}>
                 <div style={{width:48,height:48,flexShrink:0,borderRadius:8,overflow:"hidden",background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  {isImg ? <img src={eq.image} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{fontSize:28}}>{eq.image||"📦"}</span>}
+                  {isImg ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{fontSize:28}}>{eq.image||"📦"}</span>}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:4}}>

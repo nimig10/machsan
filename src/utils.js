@@ -16,6 +16,15 @@ export async function logActivity({ user_id, user_name, action, entity, entity_i
   }
 }
 
+// ─── CLOUDINARY IMAGE OPTIMIZATION ───────────────────────────────────────────
+// Adds auto-format + auto-quality + width transforms to Cloudinary URLs for CDN delivery
+// e.g. cloudinaryThumb("https://res.cloudinary.com/.../upload/v123/img.jpg", 200)
+//   → "https://res.cloudinary.com/.../upload/w_200,q_auto,f_auto/v123/img.jpg"
+export function cloudinaryThumb(url, width = 400) {
+  if (!url || !url.includes("res.cloudinary.com")) return url;
+  return url.replace("/upload/", `/upload/w_${width},q_auto,f_auto/`);
+}
+
 // ─── SUPABASE STORAGE ─────────────────────────────────────────────────────────
 export const SB_URL = import.meta.env.VITE_SUPABASE_URL;
 export const SB_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;

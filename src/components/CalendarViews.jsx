@@ -1,7 +1,7 @@
 // CalendarViews.jsx — DeptHeadCalendarPage and ManagerCalendarPage
 import { useState } from "react";
 import { CalendarGrid } from "./CalendarGrid.jsx";
-import { formatDate, today, storageGet, storageSet } from "../utils.js";
+import { formatDate, today, storageGet, storageSet, cloudinaryThumb } from "../utils.js";
 
 export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equipment=[], siteSettings={} }) {
   const [localRes, setLocalRes]   = useState(initialReservations);
@@ -168,7 +168,7 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
                             <div key={idx} style={{display:"flex",alignItems:"center",gap:12,background:"var(--surface2)",borderRadius:8,padding:"10px 12px",border:"1px solid var(--border)"}}>
                               <div style={{width:56,height:56,borderRadius:8,overflow:"hidden",background:"var(--surface)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid var(--border)"}}>
                                 {eq?.image
-                                  ? <img src={eq.image} alt={item.name} style={{width:"100%",height:"100%",objectFit:"contain"}}/>
+                                  ? <img src={cloudinaryThumb(eq.image)} alt={item.name} style={{width:"100%",height:"100%",objectFit:"contain"}}/>
                                   : <span style={{fontSize:24}}>📦</span>}
                               </div>
                               <div style={{flex:1,minWidth:0}}>

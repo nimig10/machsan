@@ -1,6 +1,6 @@
 // CertificationsPage.jsx — certifications management with equipment/studio modes
 import { useRef, useState } from "react";
-import { storageSet } from "../utils.js";
+import { storageSet, cloudinaryThumb } from "../utils.js";
 import { Modal } from "./ui.jsx";
 
 const NIGHT_CERT_ID = "cert_night_studio";
@@ -620,7 +620,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                         return (
                           <label key={eq.id} style={{display:"flex",alignItems:"center",gap:10,fontSize:13,cursor:"pointer",padding:"8px 12px",borderRadius:10,border:`1px solid ${checked?"var(--accent)":"var(--border)"}`,background:checked?"var(--accent-glow)":"var(--surface2)",marginBottom:6}}>
                             <input type="checkbox" checked={checked} onChange={()=>toggleEditEquipmentId(eq.id)} style={{accentColor:"var(--accent)"}}/>
-                            <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={eq.image} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||"📦"}</span>
+                            <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||"📦"}</span>
                             <div style={{flex:1}}>
                               <div style={{fontWeight:700,color:"var(--text)"}}>{eq.name}</div>
                               <div style={{fontSize:11,color:"var(--text3)"}}>

@@ -6,6 +6,7 @@ import {
   toDateTime,
   FAR_FUTURE,
   getReservationApprovalConflicts,
+  cloudinaryThumb,
 } from "../utils.js";
 
 export function EditReservationModal({ reservation, equipment, reservations, onSave, onApprove, onClose, collegeManager={}, managerToken="", siteSettings={} }) {
@@ -355,7 +356,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                           }}
                         >
                           {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
-                            ? <img src={eq.image} alt="" style={{width:32,height:32,objectFit:"cover",borderRadius:6}}/>
+                            ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:32,height:32,objectFit:"cover",borderRadius:6}}/>
                             : <span style={{fontSize:22}}>{eq.image||"📦"}</span>}
                           <div style={{flex:1}}>
                             <div style={{fontWeight:700,fontSize:13,color:!isOverdueReservation && hasApprovalConflict?"var(--yellow)":"var(--text)"}}>{eq.name}</div>
