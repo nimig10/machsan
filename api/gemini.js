@@ -53,8 +53,6 @@ export default async function handler(req, res) {
         headers: {
           "Content-Type": "application/json",
           "Referer": referer,
-          "Origin": referer,
-          "X-Referer": referer,
         },
         body: JSON.stringify(requestBody),
       });
