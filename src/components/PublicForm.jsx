@@ -913,11 +913,11 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
   const notifications = useNotifications();
 
   const handleToggleNotifications = async (nextEnabled) => {
-    const ok = nextEnabled ? await notifications.enable() : await notifications.disable();
-    if (ok && showToast) {
+    const result = nextEnabled ? await notifications.enable() : await notifications.disable();
+    if (result?.ok && showToast) {
       showToast("success", nextEnabled ? "התראות הופעלו" : "התראות כובו");
-    } else if (!ok && showToast && notifications.error) {
-      showToast("error", notifications.error);
+    } else if (!result?.ok && showToast) {
+      showToast("error", result?.error || "הפעולה נכשלה");
     }
   };
 

@@ -33,6 +33,7 @@ export function useNotifications() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const userIdRef = useRef(null);
+  const hasSubscriptionRef = useRef(false);
 
   // Load initial state from the DB for the current session user.
   useEffect(() => {
@@ -50,7 +51,11 @@ export function useNotifications() {
           .maybeSingle();
         if (cancelled) return;
         if (dbErr) { setError(dbErr.message || 'שגיאה בטעינת הגדרות התראות'); }
-        else setIsEnabled(!!data?.is_push_enabled && !!data?.push_subscription);
+        else {
+          // Default-on: reflect the DB's is_push_enabled (defaults to TRUE for new users)
+          hasSubscriptionRef.current = !!data?.push_subscription;
+          setIsEnabled(!!data?.is_push_enabled);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -59,7 +64,7 @@ export function useNotifications() {
   }, []);
 
   const enable = useCallback(async () => {
-    if (!isSupported) { setError('הדפדפן אינו תומך בהתראות Push'); return false; }
+    if (!isSupported) { const m = 'הדפדפן אינו תומך בהתראות Push'; setError(m); return { ok: false, error: m }; }
     setError('');
     setBusy(true);
     try {
@@ -69,8 +74,9 @@ export function useNotifications() {
       const perm = await Notification.requestPermission();
       setPermission(perm);
       if (perm !== 'granted') {
-        setError('ההרשאה להתראות נדחתה');
-        return false;
+        const m = 'ההרשאה להתראות נדחתה — אפשר להפעיל מחדש בהגדרות הדפדפן';
+        setError(m);
+        return { ok: false, error: m };
       }
 
       const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
@@ -94,11 +100,13 @@ export function useNotifications() {
         .eq('id', userId);
       if (dbErr) throw new Error(dbErr.message);
 
+      hasSubscriptionRef.current = true;
       setIsEnabled(true);
-      return true;
+      return { ok: true };
     } catch (err) {
-      setError(err?.message || 'הפעלת ההתראות נכשלה');
-      return false;
+      const m = err?.message || 'הפעלת ההתראות נכשלה';
+      setError(m);
+      return { ok: false, error: m };
     } finally {
       setBusy(false);
     }
@@ -124,11 +132,13 @@ export function useNotifications() {
         .eq('id', userId);
       if (dbErr) throw new Error(dbErr.message);
 
+      hasSubscriptionRef.current = false;
       setIsEnabled(false);
-      return true;
+      return { ok: true };
     } catch (err) {
-      setError(err?.message || 'כיבוי ההתראות נכשל');
-      return false;
+      const m = err?.message || 'כיבוי ההתראות נכשל';
+      setError(m);
+      return { ok: false, error: m };
     } finally {
       setBusy(false);
     }
