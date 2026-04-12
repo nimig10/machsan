@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 
 const NIGHT_COLOR   = "#2196f3";
 const STUDENT_COLOR = "#2ecc71";
@@ -40,6 +40,7 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
   const today = todayStr();
   const [weekOffset, setWeekOffset] = useState(0);
   const [mobileDayStart, setMobileDayStart] = useState(0);
+  const [dayViewDate, setDayViewDate] = useState(todayStr);
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth < 769);
 
   useEffect(() => {
@@ -158,6 +159,74 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
     });
     return rows.sort((a,b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)).slice(0, 8);
   }, [lessons]);
+
+  // ── Combined daily view (lessons + bookings) ─────────────────────
+  const instructorByLessonId = useMemo(() => {
+    const m = {};
+    (lessons || []).forEach(l => {
+      const lid = String(l.id ?? l._id ?? "");
+      if (lid) m[lid] = l.instructorName || l.lecturer || "";
+    });
+    return m;
+  }, [lessons]);
+
+  const dayViewRows = useMemo(() => {
+    const rows = [];
+    // Student / team bookings
+    (studioBookings || []).forEach(b => {
+      if (b.date !== dayViewDate) return;
+      if (b.status === "נדחה") return;
+      const kind = getBookingKind(b);
+      const lid = String(b.lesson_id ?? "");
+      rows.push({
+        startTime: b.startTime || "",
+        endTime:   b.endTime   || "",
+        studioId:  b.studioId  || "",
+        label:     bookingLabel(b),
+        instructor: kind === "lesson" ? (instructorByLessonId[lid] || b.instructorName || "") : (b.teamMemberName || ""),
+        kind,
+        isNight:   !!b.isNight,
+        color:     bookingColor(b),
+      });
+    });
+    // Lesson sessions not already represented via studioBookings
+    const usedLessonStudioTimes = new Set(
+      rows.filter(r => r.kind === "lesson").map(r => `${r.studioId}_${r.startTime}`)
+    );
+    (lessons || []).forEach(lesson => {
+      (lesson.schedule || []).forEach(session => {
+        if (session.date !== dayViewDate) return;
+        const key = `${session.studioId || lesson.studioId || ""}_${session.startTime || ""}`;
+        if (usedLessonStudioTimes.has(key)) return;
+        usedLessonStudioTimes.add(key);
+        rows.push({
+          startTime:  session.startTime || "",
+          endTime:    session.endTime   || "",
+          studioId:   session.studioId  || lesson.studioId || "",
+          label:      lesson.courseName || lesson.name || "",
+          instructor: lesson.instructorName || lesson.lecturer || "",
+          kind:       "lesson",
+          isNight:    false,
+          color:      LESSON_COLOR,
+        });
+      });
+    });
+    return rows.sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
+  }, [studioBookings, lessons, dayViewDate, instructorByLessonId]);
+
+  const shiftDayView = (delta) => {
+    setDayViewDate(prev => {
+      const [y, m, d] = prev.split("-").map(Number);
+      const nd = new Date(y, m - 1, d + delta);
+      return fmtDate(nd);
+    });
+  };
+
+  const dayViewLabel = useMemo(() => {
+    const [y, m, d] = dayViewDate.split("-").map(Number);
+    const nd = new Date(y, m - 1, d);
+    return `${HE_DAYS[nd.getDay()]} ${displayDate(dayViewDate)}`;
+  }, [dayViewDate]);
 
   // ── Mobile day navigation ─────────────────────────────────────────
   const goMobilePrev = () => {
@@ -330,6 +399,70 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
             <span><span style={{display:"inline-block",width:10,height:10,background:`${STUDENT_COLOR}33`,border:`1px solid ${STUDENT_COLOR}`,borderRadius:2,marginLeft:4}}/>סטודנט יום</span>
             <span><span style={{display:"inline-block",width:10,height:10,background:`${NIGHT_COLOR}33`,border:`1px solid ${NIGHT_COLOR}`,borderRadius:2,marginLeft:4}}/>סטודנט לילה</span>
             <span><span style={{display:"inline-block",width:10,height:10,background:`${LESSON_COLOR}33`,border:`1px solid ${LESSON_COLOR}`,borderRadius:2,marginLeft:4}}/>שיעור</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Combined daily schedule table ── */}
+      <div className="card" style={{marginBottom:20}}>
+        <div className="card-header" style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+          <div className="card-title">📋 לו״ז יומי משולב — {dayViewLabel}</div>
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <button className="btn btn-secondary btn-sm" onClick={() => shiftDayView(1)}>›</button>
+            <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={() => setDayViewDate(today)}>היום</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => shiftDayView(-1)}>‹</button>
+          </div>
+        </div>
+        <div style={{padding:"0 16px 16px",overflowX:"auto"}}>
+          {dayViewRows.length === 0 ? (
+            <div style={{color:"var(--text3)",fontSize:13,padding:"16px 0",textAlign:"center"}}>אין קביעות ביום זה</div>
+          ) : (
+            <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:12,tableLayout:"fixed",minWidth:480,direction:"rtl"}}>
+              <thead>
+                <tr>
+                  <th style={{width:90,padding:"8px 10px",textAlign:"right",fontWeight:700,color:"var(--text2)",borderBottom:"2px solid var(--border)",whiteSpace:"nowrap"}}>שעה</th>
+                  <th style={{width:isMobile?90:140,padding:"8px 10px",textAlign:"right",fontWeight:700,color:"var(--text2)",borderBottom:"2px solid var(--border)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>חדר / אולפן</th>
+                  <th style={{padding:"8px 10px",textAlign:"right",fontWeight:700,color:"var(--text2)",borderBottom:"2px solid var(--border)"}}>שם / קורס</th>
+                  {!isMobile && <th style={{width:130,padding:"8px 10px",textAlign:"right",fontWeight:700,color:"var(--text2)",borderBottom:"2px solid var(--border)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>מרצה</th>}
+                  <th style={{width:isMobile?70:80,padding:"8px 8px",textAlign:"center",fontWeight:700,color:"var(--text2)",borderBottom:"2px solid var(--border)"}}>סוג</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dayViewRows.map((r, i) => {
+                  const sName = studioName(r.studioId);
+                  const typeLabel = r.kind === "lesson" ? "שיעור" : r.isNight ? "לילה" : r.kind === "team" ? "צוות" : "יום";
+                  return (
+                    <tr key={i} style={{background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)"}}>
+                      <td style={{padding:"7px 10px",borderBottom:"1px solid var(--border)",fontWeight:700,color:r.color,whiteSpace:"nowrap",fontSize:11}}>
+                        {r.startTime && r.endTime ? `${r.startTime}–${r.endTime}` : r.startTime || "—"}
+                      </td>
+                      <td style={{padding:"7px 10px",borderBottom:"1px solid var(--border)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:"var(--text2)",fontSize:11}} title={sName}>
+                        {sName || "—"}
+                      </td>
+                      <td style={{padding:"7px 10px",borderBottom:"1px solid var(--border)",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={r.label}>
+                        {r.label || "—"}
+                      </td>
+                      {!isMobile && (
+                        <td style={{padding:"7px 10px",borderBottom:"1px solid var(--border)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:"var(--text2)",fontSize:11}} title={r.instructor}>
+                          {r.instructor || "—"}
+                        </td>
+                      )}
+                      <td style={{padding:"7px 8px",borderBottom:"1px solid var(--border)",textAlign:"center"}}>
+                        <span style={{display:"inline-block",padding:"2px 7px",borderRadius:10,fontSize:10,fontWeight:700,background:`${r.color}22`,color:r.color,border:`1px solid ${r.color}55`,whiteSpace:"nowrap"}}>
+                          {typeLabel}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+          {/* Legend */}
+          <div style={{display:"flex",gap:12,marginTop:10,fontSize:11,color:"var(--text3)",flexWrap:"wrap"}}>
+            <span><span style={{display:"inline-block",width:10,height:10,background:`${LESSON_COLOR}33`,border:`1px solid ${LESSON_COLOR}`,borderRadius:2,marginLeft:4}}/>שיעור</span>
+            <span><span style={{display:"inline-block",width:10,height:10,background:`${STUDENT_COLOR}33`,border:`1px solid ${STUDENT_COLOR}`,borderRadius:2,marginLeft:4}}/>סטודנט יום</span>
+            <span><span style={{display:"inline-block",width:10,height:10,background:`${NIGHT_COLOR}33`,border:`1px solid ${NIGHT_COLOR}`,borderRadius:2,marginLeft:4}}/>סטודנט לילה</span>
           </div>
         </div>
       </div>
