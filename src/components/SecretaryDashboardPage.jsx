@@ -263,10 +263,10 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
         )}
 
         <div style={{padding:"0 16px 16px",overflowX:"auto",maxWidth:"100%"}} className="no-swipe-nav">
-          <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:12,tableLayout:"fixed",minWidth: isMobile ? undefined : 520}}>
+          <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:12,tableLayout:"fixed",minWidth: isMobile ? undefined : 600}}>
             <thead>
               <tr>
-                <th style={{padding: isMobile ? "8px 6px" : "8px 10px",textAlign:"right",fontWeight:700,color:"var(--text2)",borderBottom:"2px solid var(--border)",whiteSpace:"nowrap",width: isMobile ? 60 : 90}}>חדר</th>
+                <th style={{padding: isMobile ? "8px 6px" : "8px 10px",textAlign:"right",fontWeight:700,color:"var(--text2)",borderBottom:"2px solid var(--border)",width: isMobile ? 72 : 150,maxWidth: isMobile ? 72 : 150}}>חדר</th>
                 {visibleDays.map(d => (
                   <th key={d.date} style={{
                     padding: isMobile ? "7px 4px" : "7px 6px",
@@ -287,7 +287,7 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
               )}
               {(studios || []).map(studio => (
                 <tr key={studio.id}>
-                  <td style={{padding: isMobile ? "6px 4px" : "6px 10px",fontWeight:700,borderBottom:"1px solid var(--border)",whiteSpace:"nowrap",fontSize: isMobile ? 10 : 12}}>{studio.name}</td>
+                  <td style={{padding: isMobile ? "6px 4px" : "6px 10px",fontWeight:700,borderBottom:"1px solid var(--border)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontSize: isMobile ? 10 : 12,maxWidth: isMobile ? 72 : 150}} title={studio.name}>{studio.name}</td>
                   {visibleDays.map(d => {
                     const bookings = bMap[`${studio.id}_${d.date}`] || [];
                     return (
