@@ -107,9 +107,9 @@ export default async function handler(req, res) {
       }
     }
 
-    // ── Pass 2: Push reminders (25–35 min before return) ───────────────────
-    const MIN_MS = 25 * 60 * 1000;
-    const MAX_MS = 35 * 60 * 1000;
+    // ── Pass 2: Push reminders (15–25 min before return; target ≈20 min) ──
+    const MIN_MS = 15 * 60 * 1000;
+    const MAX_MS = 25 * 60 * 1000;
     const pushCandidates = reservations.filter((r) => {
       if (!r || r.reminderSent === true) return false;
       if (TERMINAL_STATUSES.has(r.status)) return false;
@@ -132,10 +132,9 @@ export default async function handler(req, res) {
           const user = await fetchUserByEmail(email);
           if (!user?.is_push_enabled || !user?.push_subscription) continue;
 
-          const endTimeStr = String(r.return_time || "").trim();
           await sendPushToUser(user, {
             title: "תזכורת החזרת ציוד",
-            body: `היי ${r.student_name || ""} הציוד שהשאלת צריך לחזור למחסן עד השעה ${endTimeStr} ללא איחורים. המשך יום נעים`,
+            body: `${r.student_name || ""} אנא גש למחסן המכללה להחזיר את הציוד. צוות המכללה מאחל לך המשך יום נעים:)`,
             url: "/",
           });
           pushesSent++;
