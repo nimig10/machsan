@@ -5,11 +5,6 @@ import { storageGet } from "../utils.js";
 const HE_DAYS   = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 
-const LESSON_C  = "#f5a623";
-const STUDENT_C = "#2ecc71";
-const NIGHT_C   = "#2196f3";
-const TEAM_C    = "#9b59b6";
-
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -18,10 +13,21 @@ function dateLabel() {
   const d = new Date();
   return `יום ${HE_DAYS[d.getDay()]}, ${d.getDate()} ב${HE_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
-function getKind(b) {
+function getBookingKind(b) {
   if (b.bookingKind === "lesson" || b.lesson_auto || (b.lesson_id != null && b.lesson_id !== "")) return "lesson";
-  if (b.bookingKind === "team" || b.teamMemberId || b.teamMemberName) return "team";
+  if (b.bookingKind === "team"   || b.teamMemberId || b.teamMemberName) return "team";
   return "student";
+}
+
+// Inject Heebo font (once)
+function injectHeeboFont() {
+  if (typeof document === "undefined") return;
+  if (document.getElementById("heebo-font")) return;
+  const link = document.createElement("link");
+  link.id = "heebo-font";
+  link.rel = "stylesheet";
+  link.href = "https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap";
+  document.head.appendChild(link);
 }
 
 export function PublicDailyTablePage() {
@@ -45,6 +51,7 @@ export function PublicDailyTablePage() {
   };
 
   useEffect(() => {
+    injectHeeboFont();
     loadData();
     const refresh = setInterval(loadData, 5*60*1000);
     const reload  = setInterval(() => window.location.reload(), 30*60*1000);
@@ -53,105 +60,144 @@ export function PublicDailyTablePage() {
 
   const stName = id => studios.find(s=>String(s.id)===String(id))?.name || id || "—";
 
-  const rows = useMemo(() => {
+  // ── Lessons today ──
+  const lessonRows = useMemo(() => {
     const out = [];
-    const used = new Set();
-    bookings.forEach(b => {
-      if (b.date !== today || b.status === "נדחה") return;
-      const kind = getKind(b);
-      out.push({
-        startTime: b.startTime || "",
-        endTime:   b.endTime   || "",
-        studioId:  b.studioId  || "",
-        label: kind === "lesson" ? (b.courseName||"שיעור")
-             : kind === "team"   ? (b.teamMemberName||"צוות")
-             : (b.studentName || "סטודנט"),
-        instructor: b.instructorName || b.teamMemberName || "",
-        kind,
-        isNight: !!b.isNight,
-        color: kind === "lesson" ? LESSON_C
-             : kind === "team"   ? TEAM_C
-             : b.isNight ? NIGHT_C : STUDENT_C,
-      });
-      used.add(`${b.studioId}_${b.startTime}`);
-    });
+    // From lesson schedules
     lessons.forEach(lesson => {
       (lesson.schedule||[]).forEach(s => {
         if (s.date !== today) return;
-        const k = `${s.studioId||lesson.studioId||""}_${s.startTime||""}`;
-        if (used.has(k)) return;
-        used.add(k);
         out.push({
-          startTime: s.startTime || "",
-          endTime:   s.endTime   || "",
-          studioId:  s.studioId  || lesson.studioId || "",
-          label:     lesson.courseName || lesson.name || "שיעור",
+          track:      lesson.track || "",
+          course:     lesson.courseName || lesson.name || "",
           instructor: lesson.instructorName || lesson.lecturer || "",
-          kind: "lesson",
-          isNight: false,
-          color: LESSON_C,
+          startTime:  s.startTime || "",
+          endTime:    s.endTime   || "",
+          studioId:   s.studioId  || lesson.studioId || "",
+          topic:      s.topic     || "",
         });
       });
     });
+    // From bookings marked as lesson (in case lesson session not represented in schedule)
+    bookings.forEach(b => {
+      if (b.date !== today || b.status === "נדחה") return;
+      if (getBookingKind(b) !== "lesson") return;
+      // Skip duplicates (same time/studio already in out)
+      if (out.some(r => r.startTime===b.startTime && String(r.studioId)===String(b.studioId))) return;
+      out.push({
+        track:      b.track || "",
+        course:     b.courseName || "",
+        instructor: b.instructorName || "",
+        startTime:  b.startTime || "",
+        endTime:    b.endTime   || "",
+        studioId:   b.studioId  || "",
+        topic:      b.topic     || b.sessionName || "",
+      });
+    });
     return out.sort((a,b)=>(a.startTime||"").localeCompare(b.startTime||""));
-  }, [bookings, lessons, studios, today]);
+  }, [lessons, bookings, today]);
+
+  // ── Student/team bookings today ──
+  const studentRows = useMemo(() => {
+    return bookings
+      .filter(b => b.date === today && b.status !== "נדחה" && getBookingKind(b) !== "lesson")
+      .map(b => ({
+        name:      b.studentName || b.teamMemberName || "—",
+        track:     b.track || b.course || "",
+        studioId:  b.studioId || "",
+        startTime: b.startTime || "",
+        endTime:   b.endTime   || "",
+        note:      b.note || b.purpose || "",
+      }))
+      .sort((a,b)=>(a.startTime||"").localeCompare(b.startTime||""));
+  }, [bookings, today]);
 
   const accent = settings.accentColor || "#f5a623";
 
+  const cellBase = { padding:"14px 18px", borderBottom:"1px solid #222", color:"#e8e8e8" };
+  const thBase   = { padding:"14px 18px", textAlign:"right", fontWeight:700, color:"#bdbdbd", borderBottom:`2px solid ${accent}`, fontSize:14, letterSpacing:0.3 };
+
   return (
-    <div style={{minHeight:"100vh",background:"#0a0a0a",color:"#f5f5f5",direction:"rtl",fontFamily:"system-ui, -apple-system, sans-serif",padding:"24px 16px"}}>
-      <div style={{maxWidth:1200,margin:"0 auto"}}>
+    <div style={{minHeight:"100vh",background:"#0a0a0a",color:"#f5f5f5",direction:"rtl",fontFamily:"'Heebo', system-ui, -apple-system, sans-serif",padding:"24px 16px"}}>
+      <div style={{maxWidth:1280,margin:"0 auto"}}>
         {/* Header */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12,marginBottom:24,paddingBottom:16,borderBottom:`2px solid ${accent}`}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12,marginBottom:28,paddingBottom:16,borderBottom:`2px solid ${accent}`}}>
           <div>
-            {settings.logo && <img src={settings.logo} alt="logo" style={{height:48,marginBottom:8}}/>}
-            <div style={{fontSize:28,fontWeight:900,color:accent}}>📋 לוח לו״ז יומי</div>
-            <div style={{fontSize:14,color:"#aaa",marginTop:4}}>{dateLabel()}</div>
+            {settings.logo && <img src={settings.logo} alt="logo" style={{height:52,marginBottom:10}}/>}
+            <div style={{fontSize:28,fontWeight:800,color:accent,letterSpacing:0.3}}>📋 לוח לו״ז יומי</div>
+            <div style={{fontSize:34,color:"#fff",marginTop:10,fontWeight:800,letterSpacing:0.3}}>{dateLabel()}</div>
           </div>
-          <div style={{fontSize:12,color:"#666"}}>מתעדכן אוטומטית כל 5 דקות</div>
+          <div style={{fontSize:12,color:"#666",fontWeight:500}}>מתעדכן אוטומטית כל 5 דקות</div>
         </div>
 
-        {/* Table */}
-        {rows.length === 0 ? (
-          <div style={{textAlign:"center",padding:"60px 20px",color:"#666",fontSize:16}}>אין קביעות היום</div>
-        ) : (
-          <div style={{overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:14,minWidth:600}}>
-              <thead>
-                <tr style={{background:"#1a1a1a"}}>
-                  <th style={{width:120,padding:"14px 16px",textAlign:"right",fontWeight:800,color:"#ccc",borderBottom:`2px solid ${accent}`}}>שעה</th>
-                  <th style={{width:180,padding:"14px 16px",textAlign:"right",fontWeight:800,color:"#ccc",borderBottom:`2px solid ${accent}`}}>חדר / אולפן</th>
-                  <th style={{padding:"14px 16px",textAlign:"right",fontWeight:800,color:"#ccc",borderBottom:`2px solid ${accent}`}}>שם / קורס</th>
-                  <th style={{width:180,padding:"14px 16px",textAlign:"right",fontWeight:800,color:"#ccc",borderBottom:`2px solid ${accent}`}}>מרצה</th>
-                  <th style={{width:100,padding:"14px 16px",textAlign:"center",fontWeight:800,color:"#ccc",borderBottom:`2px solid ${accent}`}}>סוג</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r,i) => {
-                  const typeLabel = r.kind==="lesson"?"שיעור":r.kind==="team"?"צוות":r.isNight?"לילה":"יום";
-                  return (
-                    <tr key={i} style={{background:i%2===0?"transparent":"rgba(255,255,255,0.03)"}}>
-                      <td style={{padding:"14px 16px",borderBottom:"1px solid #222",fontWeight:800,color:r.color,whiteSpace:"nowrap"}}>{r.startTime&&r.endTime?`${r.startTime}–${r.endTime}`:r.startTime||"—"}</td>
-                      <td style={{padding:"14px 16px",borderBottom:"1px solid #222",color:"#ddd"}}>{stName(r.studioId)}</td>
-                      <td style={{padding:"14px 16px",borderBottom:"1px solid #222",fontWeight:700,color:"#fff"}}>{r.label||"—"}</td>
-                      <td style={{padding:"14px 16px",borderBottom:"1px solid #222",color:"#bbb"}}>{r.instructor||"—"}</td>
-                      <td style={{padding:"14px 16px",borderBottom:"1px solid #222",textAlign:"center"}}>
-                        <span style={{display:"inline-block",padding:"4px 12px",borderRadius:16,fontSize:12,fontWeight:800,background:`${r.color}22`,color:r.color,border:`1px solid ${r.color}66`,whiteSpace:"nowrap"}}>{typeLabel}</span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        {/* ─── Lessons section ─── */}
+        <div style={{marginBottom:40}}>
+          <div style={{fontSize:22,fontWeight:800,color:"#fff",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:24}}>🎓</span> שיעורים היום
           </div>
-        )}
+          {lessonRows.length === 0 ? (
+            <div style={{padding:"30px 20px",textAlign:"center",color:"#666",fontSize:15,background:"#111",borderRadius:10}}>אין שיעורים היום</div>
+          ) : (
+            <div style={{overflowX:"auto",background:"#111",borderRadius:10,border:"1px solid #1e1e1e"}}>
+              <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:15,minWidth:700}}>
+                <thead>
+                  <tr style={{background:"#151515"}}>
+                    <th style={{...thBase,width:180}}>מסלול לימודים</th>
+                    <th style={{...thBase}}>קורס</th>
+                    <th style={{...thBase,width:180}}>מרצה</th>
+                    <th style={{...thBase,width:140}}>שעות</th>
+                    <th style={{...thBase}}>שם שיעור</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lessonRows.map((r,i) => (
+                    <tr key={i} style={{background:i%2===0?"transparent":"rgba(255,255,255,0.025)"}}>
+                      <td style={{...cellBase,color:"#bbb",fontWeight:500}}>{r.track||"—"}</td>
+                      <td style={{...cellBase,fontWeight:700,color:"#fff"}}>{r.course||"—"}</td>
+                      <td style={{...cellBase,color:"#ddd"}}>{r.instructor||"—"}</td>
+                      <td style={{...cellBase,color:accent,fontWeight:700,whiteSpace:"nowrap"}}>{r.startTime&&r.endTime?`${r.startTime}–${r.endTime}`:r.startTime||"—"}</td>
+                      <td style={{...cellBase,color:"#ddd"}}>{r.topic||"—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
 
-        {/* Legend */}
-        <div style={{display:"flex",gap:20,marginTop:20,fontSize:13,color:"#888",flexWrap:"wrap",justifyContent:"center"}}>
-          <span><span style={{display:"inline-block",width:12,height:12,background:`${LESSON_C}33`,border:`1px solid ${LESSON_C}`,borderRadius:3,marginLeft:6,verticalAlign:"middle"}}/>שיעור</span>
-          <span><span style={{display:"inline-block",width:12,height:12,background:`${STUDENT_C}33`,border:`1px solid ${STUDENT_C}`,borderRadius:3,marginLeft:6,verticalAlign:"middle"}}/>סטודנט יום</span>
-          <span><span style={{display:"inline-block",width:12,height:12,background:`${NIGHT_C}33`,border:`1px solid ${NIGHT_C}`,borderRadius:3,marginLeft:6,verticalAlign:"middle"}}/>סטודנט לילה</span>
-          <span><span style={{display:"inline-block",width:12,height:12,background:`${TEAM_C}33`,border:`1px solid ${TEAM_C}`,borderRadius:3,marginLeft:6,verticalAlign:"middle"}}/>צוות</span>
+        {/* ─── Student bookings section ─── */}
+        <div>
+          <div style={{fontSize:22,fontWeight:800,color:"#fff",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:24}}>🎙️</span> קביעות סטודנטים היום
+          </div>
+          {studentRows.length === 0 ? (
+            <div style={{padding:"30px 20px",textAlign:"center",color:"#666",fontSize:15,background:"#111",borderRadius:10}}>אין קביעות סטודנטים היום</div>
+          ) : (
+            <div style={{overflowX:"auto",background:"#111",borderRadius:10,border:"1px solid #1e1e1e"}}>
+              <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:15,minWidth:600}}>
+                <thead>
+                  <tr style={{background:"#151515"}}>
+                    <th style={{...thBase,width:220}}>שם</th>
+                    <th style={{...thBase,width:180}}>מסלול לימודים</th>
+                    <th style={{...thBase,width:200}}>חדר / אולפן</th>
+                    <th style={{...thBase,width:140}}>שעות</th>
+                    <th style={{...thBase}}>הערה</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {studentRows.map((r,i) => (
+                    <tr key={i} style={{background:i%2===0?"transparent":"rgba(255,255,255,0.025)"}}>
+                      <td style={{...cellBase,fontWeight:700,color:"#fff"}}>{r.name}</td>
+                      <td style={{...cellBase,color:"#bbb",fontWeight:500}}>{r.track||"—"}</td>
+                      <td style={{...cellBase,color:"#ddd"}}>{stName(r.studioId)}</td>
+                      <td style={{...cellBase,color:"#2ecc71",fontWeight:700,whiteSpace:"nowrap"}}>{r.startTime&&r.endTime?`${r.startTime}–${r.endTime}`:r.startTime||"—"}</td>
+                      <td style={{...cellBase,color:"#aaa",fontSize:13}}>{r.note||"—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>
