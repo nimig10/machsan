@@ -138,11 +138,15 @@ export async function storageSet(key, value) {
     try {
       const existing = lsGet(key);
       if (existing && Array.isArray(existing) && existing.length > 0) {
+        const bc = new AbortController();
+        const bt = setTimeout(() => bc.abort(), 6000);
         await fetch("/api/store", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ key: `backup_${key}`, data: existing }),
+          signal: bc.signal,
         });
+        clearTimeout(bt);
       }
     } catch(e) { /* backup failure should not block the write */ }
   }
@@ -157,11 +161,15 @@ export async function storageSet(key, value) {
   const previousCachedValue = lsGet(key);
   lsSet(key, value); // cache immediately
   try {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 8000); // 8s timeout
     const res = await fetch("/api/store", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ key, data: value }),
+      signal:  ctrl.signal,
     });
+    clearTimeout(timeout);
     if (!res.ok) {
       const err = await res.text();
       console.error("storageSet error", key, err);

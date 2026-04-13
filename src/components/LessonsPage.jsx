@@ -271,8 +271,12 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       ? lessons.map(l=>l.id===editTarget.id?lesson:l)
       : [...lessons, lesson];
     setLessons(updated);
-    await storageSet("lessons", updated);
-    showToast("success", `קורס "${lesson.name}" ${editTarget?"עודכן":"נוצר"}`);
+    const result = await storageSet("lessons", updated);
+    if (result?.ok === false) {
+      showToast("error", "השינויים נשמרו מקומית אך לא נשמרו בשרת. נסה שוב מאוחר יותר.");
+    } else {
+      showToast("success", `קורס "${lesson.name}" ${editTarget?"עודכן":"נוצר"}`);
+    }
     setMode(null);
     setEditTarget(null);
   };
