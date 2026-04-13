@@ -1305,8 +1305,8 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
   const isMultiSelect = isAdmin && mode === "assignment" && !existing && selectedStaffIds.length > 0;
 
   const [shiftType, setShiftType] = useState(existing?.shift_type || defaultShift || "morning");
-  const [startTime, setStartTime] = useState(existing?.start_time || "09:00");
-  const [endTime, setEndTime] = useState(existing?.end_time || "17:00");
+  const [startTime, setStartTime] = useState(existing?.start_time || "12:00");
+  const [endTime, setEndTime] = useState(existing?.end_time || "20:00");
   // In preference mode → note = staff note (editable); in assignment mode → note = manager note (editable)
   const [note, setNote] = useState(existing?.note || "");
   const [notePublic, setNotePublic] = useState(existing?.note_public ?? true);
@@ -1380,7 +1380,14 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
           <label style={{ ...labelStyle, marginBottom: 6 }}>סוג משמרת</label>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {Object.entries(SHIFT_TYPES).map(([key, s]) => (
-              <button key={key} onClick={() => setShiftType(key)}
+              <button key={key} onClick={() => {
+                // When switching TO custom, reset to default 12:00–20:00 (unless editing existing custom)
+                if (key === "custom" && shiftType !== "custom") {
+                  setStartTime(existing?.start_time || "12:00");
+                  setEndTime(existing?.end_time || "20:00");
+                }
+                setShiftType(key);
+              }}
                 style={{
                   padding: "8px 14px", borderRadius: 8,
                   border: `1.5px solid ${shiftType === key ? s.color : "var(--border)"}`,
