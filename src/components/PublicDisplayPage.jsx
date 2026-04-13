@@ -163,7 +163,7 @@ export function PublicDisplayPage() {
       <div style={{
         background: "var(--surface)",
         borderBottom: "2px solid var(--border)",
-        padding: "10px 32px",
+        padding: "clamp(6px, 0.8vh, 10px) clamp(16px, 2.5vw, 32px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -172,16 +172,16 @@ export function PublicDisplayPage() {
         position: "relative",
       }}>
         {/* View tabs */}
-        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",position:"absolute",right:24}}>
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",position:"absolute",right:16}}>
           {views.map((view, i) => {
             const label = view.type === "lessons"
               ? (view.total > 1 ? `📚 שיעורים ${view.page}/${view.total}` : "📚 שיעורים")
               : (view.total > 1 ? `🎙️ קביעות חדרים ${view.page}/${view.total}` : "🎙️ קביעות חדרים");
             return (
               <div key={i} style={{
-                padding: "5px 14px",
+                padding: "4px 12px",
                 borderRadius: 20,
-                fontSize: 13,
+                fontSize: "clamp(11px, 1.3vh, 13px)",
                 fontWeight: 800,
                 background: viewIndex === i ? accent : "var(--surface2)",
                 color: viewIndex === i ? "#000" : "var(--text3)",
@@ -196,11 +196,11 @@ export function PublicDisplayPage() {
         {/* Date + logo */}
         <div style={{display:"flex",alignItems:"center",gap:14,flexShrink:0}}>
           <div style={{textAlign:"center"}}>
-            <div style={{fontSize:15,color:"var(--text3)",fontWeight:700}}>לוז יומי — מכללת קמרה אובסקורה וסאונד</div>
-            <div style={{fontSize:22,fontWeight:900,color:"var(--text)"}}>{dateLabel}</div>
+            <div style={{fontSize:"clamp(11px, 1.4vh, 15px)",color:"var(--text3)",fontWeight:700}}>לוז יומי — מכללת קמרה אובסקורה וסאונד</div>
+            <div style={{fontSize:"clamp(16px, 2.4vh, 22px)",fontWeight:900,color:"var(--text)"}}>{dateLabel}</div>
           </div>
           {siteSettings.logo && (
-            <img src={siteSettings.logo} alt="לוגו" style={{height:44,objectFit:"contain",borderRadius:6}}/>
+            <img src={siteSettings.logo} alt="לוגו" style={{height:"clamp(32px, 4.2vh, 44px)",objectFit:"contain",borderRadius:6}}/>
           )}
         </div>
       </div>
@@ -214,7 +214,7 @@ export function PublicDisplayPage() {
       <div style={{
         flex: 1,
         overflow: "hidden",
-        padding: "16px 32px",
+        padding: "clamp(8px, 1.4vh, 16px) clamp(12px, 2.5vw, 32px)",
         opacity: visible ? 1 : 0,
         transition: "opacity 0.6s ease",
         display: "flex",
@@ -227,16 +227,16 @@ export function PublicDisplayPage() {
           {/* Lessons view */}
           {currentView?.type === "lessons" && (
             <div style={{width:"100%"}}>
-              <div style={{fontSize:20,fontWeight:900,color:"var(--text)",marginBottom:14,textAlign:"center"}}>
+              <div style={{fontSize:"clamp(14px, 1.9vh, 20px)",fontWeight:900,color:"var(--text)",marginBottom:"clamp(6px, 1.1vh, 14px)",textAlign:"center"}}>
                 📚 שיעורים מתוכננים להיום
                 {todayLessons.length > 0 && (
                   <span style={{marginRight:8,color:accent,fontWeight:900}}>{todayLessons.length} שיעורים</span>
                 )}
               </div>
               {todayLessons.length === 0 ? (
-                <div style={{textAlign:"center",color:"var(--text3)",fontSize:20,padding:"60px 0"}}>אין שיעורים מתוכננים להיום</div>
+                <div style={{textAlign:"center",color:"var(--text3)",fontSize:"clamp(14px, 2vh, 20px)",padding:"60px 0"}}>אין שיעורים מתוכננים להיום</div>
               ) : (
-                <div style={{display:"flex",flexDirection:"column",gap:8,width:"100%"}}>
+                <div style={{display:"flex",flexDirection:"column",gap:"clamp(4px, 0.7vh, 8px)",width:"100%"}}>
                   {currentView.items.map((s,i) => {
                     const studio   = findStudio(s.studioId);
                     const roomName = studio?.name || "";
@@ -247,7 +247,7 @@ export function PublicDisplayPage() {
                         width:"100%",
                         background:"var(--surface)",
                         border:"1px solid var(--border)",
-                        borderRadius:12,
+                        borderRadius:10,
                         display:"flex",
                         alignItems:"stretch",
                         overflow:"hidden",
@@ -255,41 +255,41 @@ export function PublicDisplayPage() {
                         {/* Time block */}
                         <div style={{
                           background:`${accent}18`,
-                          borderRight:`5px solid ${accent}`,
-                          padding:"10px 20px",
+                          borderRight:`4px solid ${accent}`,
+                          padding:"clamp(6px, 0.9vh, 10px) clamp(12px, 1.5vw, 20px)",
                           display:"flex",
                           alignItems:"center",
                           justifyContent:"center",
                           flexShrink:0,
-                          minWidth:140,
+                          minWidth:"clamp(100px, 12vw, 140px)",
                         }}>
-                          <div style={{fontWeight:900,fontSize:22,color:accent,textAlign:"center",whiteSpace:"nowrap"}}>
-                            {s.startTime}<br/><span style={{fontSize:14,opacity:0.7}}>—</span><br/>{s.endTime}
+                          <div style={{fontWeight:900,fontSize:"clamp(15px, 2vh, 22px)",color:accent,textAlign:"center",whiteSpace:"nowrap"}}>
+                            {s.startTime}<br/><span style={{fontSize:"clamp(10px, 1.2vh, 14px)",opacity:0.7}}>—</span><br/>{s.endTime}
                           </div>
                         </div>
                         {/* Info block */}
-                        <div style={{flex:1,padding:"10px 18px",display:"flex",flexDirection:"column",justifyContent:"center",gap:4}}>
-                          <div style={{fontWeight:900,fontSize:23,color:"var(--text)",lineHeight:1.2}}>
+                        <div style={{flex:1,padding:"clamp(6px, 0.9vh, 10px) clamp(10px, 1.5vw, 18px)",display:"flex",flexDirection:"column",justifyContent:"center",gap:"clamp(2px, 0.4vh, 4px)"}}>
+                          <div style={{fontWeight:900,fontSize:"clamp(14px, 2.1vh, 23px)",color:"var(--text)",lineHeight:1.2}}>
                             {s.courseName}
                           </div>
                           {s.instructorName && (
-                            <div style={{fontSize:16,fontWeight:700,color:"var(--text2)"}}>
+                            <div style={{fontSize:"clamp(12px, 1.5vh, 16px)",fontWeight:700,color:"var(--text2)"}}>
                               👤 שם המורה: {s.instructorName}
                             </div>
                           )}
                           {roomName && (
-                            <div style={{fontSize:15,fontWeight:800,color:"var(--text2)"}}>
+                            <div style={{fontSize:"clamp(11px, 1.4vh, 15px)",fontWeight:800,color:"var(--text2)"}}>
                               🏫 כיתת לימוד: {roomName}
                             </div>
                           )}
                           {s.topic && (
-                            <div style={{fontSize:15,fontWeight:700,color:"var(--text3)"}}>
+                            <div style={{fontSize:"clamp(11px, 1.4vh, 15px)",fontWeight:700,color:"var(--text3)"}}>
                               📖 נושא השיעור: {s.topic}
                             </div>
                           )}
-                          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:2}}>
+                          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:1}}>
                             {s.track && (
-                              <span style={{fontSize:12,fontWeight:700,color:accent,background:`${accent}1a`,borderRadius:20,padding:"2px 12px",border:`1px solid ${accent}55`}}>
+                              <span style={{fontSize:"clamp(10px, 1.1vh, 12px)",fontWeight:700,color:accent,background:`${accent}1a`,borderRadius:20,padding:"2px 10px",border:`1px solid ${accent}55`}}>
                                 🎓 {s.track}
                               </span>
                             )}
@@ -299,7 +299,7 @@ export function PublicDisplayPage() {
                         {(hasImg || (!hasImg && roomImg)) && (
                           <div style={{
                             flexShrink:0,
-                            width:110,
+                            width:"clamp(70px, 9vw, 110px)",
                             display:"flex",
                             alignItems:"center",
                             justifyContent:"center",
@@ -309,7 +309,7 @@ export function PublicDisplayPage() {
                           }}>
                             {hasImg
                               ? <img src={roomImg} alt={roomName} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                              : <span style={{fontSize:42}}>{roomImg}</span>
+                              : <span style={{fontSize:"clamp(28px, 3.5vh, 42px)"}}>{roomImg}</span>
                             }
                           </div>
                         )}
@@ -324,16 +324,16 @@ export function PublicDisplayPage() {
           {/* Rooms view */}
           {currentView?.type === "rooms" && (
             <div style={{width:"100%"}}>
-              <div style={{fontSize:20,fontWeight:900,color:"var(--text)",marginBottom:14,textAlign:"center"}}>
+              <div style={{fontSize:"clamp(14px, 1.9vh, 20px)",fontWeight:900,color:"var(--text)",marginBottom:"clamp(6px, 1.1vh, 14px)",textAlign:"center"}}>
                 🎙️ קביעות חדרים להיום
                 {todayRoomBookings.length > 0 && (
                   <span style={{marginRight:8,color:accent,fontWeight:900}}>{todayRoomBookings.length} קביעות</span>
                 )}
               </div>
               {todayRoomBookings.length === 0 ? (
-                <div style={{textAlign:"center",color:"var(--text3)",fontSize:20,padding:"60px 0"}}>אין קביעות חדרים להיום</div>
+                <div style={{textAlign:"center",color:"var(--text3)",fontSize:"clamp(14px, 2vh, 20px)",padding:"60px 0"}}>אין קביעות חדרים להיום</div>
               ) : (
-                <div style={{display:"flex",flexDirection:"column",gap:8,width:"100%"}}>
+                <div style={{display:"flex",flexDirection:"column",gap:"clamp(4px, 0.7vh, 8px)",width:"100%"}}>
                   {currentView.items.map((b,i) => {
                     const kind  = getBookingKind(b);
                     const name  = kind === "team" ? (b.teamMemberName||"איש צוות") : (b.studentName||"סטודנט");
@@ -345,7 +345,7 @@ export function PublicDisplayPage() {
                         width:"100%",
                         background:"var(--surface)",
                         border:"1px solid var(--border)",
-                        borderRadius:12,
+                        borderRadius:10,
                         display:"flex",
                         alignItems:"stretch",
                         overflow:"hidden",
@@ -353,30 +353,30 @@ export function PublicDisplayPage() {
                         {/* Time block */}
                         <div style={{
                           background:`${color}18`,
-                          borderRight:`5px solid ${color}`,
-                          padding:"10px 20px",
+                          borderRight:`4px solid ${color}`,
+                          padding:"clamp(6px, 0.9vh, 10px) clamp(12px, 1.5vw, 20px)",
                           display:"flex",
                           alignItems:"center",
                           justifyContent:"center",
                           flexShrink:0,
-                          minWidth:140,
+                          minWidth:"clamp(100px, 12vw, 140px)",
                         }}>
-                          <div style={{fontWeight:900,fontSize:20,color,textAlign:"center",whiteSpace:"nowrap"}}>
-                            {b.isNight ? "לילה" : <>{b.startTime}<br/><span style={{fontSize:13,opacity:0.7}}>—</span><br/>{b.endTime}</>}
+                          <div style={{fontWeight:900,fontSize:"clamp(14px, 1.9vh, 20px)",color,textAlign:"center",whiteSpace:"nowrap"}}>
+                            {b.isNight ? "לילה" : <>{b.startTime}<br/><span style={{fontSize:"clamp(10px, 1.2vh, 13px)",opacity:0.7}}>—</span><br/>{b.endTime}</>}
                           </div>
                         </div>
                         {/* Info block */}
-                        <div style={{flex:1,padding:"10px 18px",display:"flex",flexDirection:"column",justifyContent:"center",gap:4}}>
-                          <div style={{fontWeight:900,fontSize:18,color:"var(--text)"}}>
+                        <div style={{flex:1,padding:"clamp(6px, 0.9vh, 10px) clamp(10px, 1.5vw, 18px)",display:"flex",flexDirection:"column",justifyContent:"center",gap:"clamp(2px, 0.4vh, 4px)"}}>
+                          <div style={{fontWeight:900,fontSize:"clamp(13px, 1.8vh, 18px)",color:"var(--text)"}}>
                             {icon} {name}
                           </div>
                           {roomName && (
-                            <div style={{fontSize:15,fontWeight:700,color:"var(--text3)"}}>
+                            <div style={{fontSize:"clamp(11px, 1.4vh, 15px)",fontWeight:700,color:"var(--text3)"}}>
                               🏫 {roomName}
                             </div>
                           )}
                           {b.notes && (
-                            <div style={{fontSize:12,color:"var(--text3)"}}>💬 {b.notes}</div>
+                            <div style={{fontSize:"clamp(10px, 1.2vh, 12px)",color:"var(--text3)"}}>💬 {b.notes}</div>
                           )}
                         </div>
                       </div>
