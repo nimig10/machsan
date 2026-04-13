@@ -1773,7 +1773,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                     <div className="flex gap-2" style={{marginTop:12,flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
                       <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"edit",item:eq})}>✏️ עריכה</button>
                       <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"units",item:eq})}>🔧 יחידות</button>
-                      <button className="btn btn-danger btn-sm" onClick={()=>setModal({type:"delete",item:eq})}>🗑️</button>
+                      <button className="btn btn-danger btn-sm" onClick={(e)=>{e.stopPropagation();del(eq)}}>🗑️</button>
                     </div>
                   </div>
                 );})}
@@ -1797,7 +1797,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                 setModal(prev => ({...prev, item: {...(prev.item||{}), image: url}}));
               }}/></Modal>}
       {modal?.type==="units" && <UnitsModal eq={modal.item} equipment={equipment} setEquipment={setEquipment} showToast={showToast} onClose={()=>setModal(null)}/>}
-      {modal?.type==="delete" && <Modal title="🗑️ מחיקת ציוד" onClose={()=>setModal(null)} footer={<><button className="btn btn-danger" onClick={()=>del(modal.item)}>כן, מחק</button><button className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button></>}><p>האם למחוק את <strong>{modal.item.name}</strong>?</p></Modal>}
+      {/* Delete confirmation removed — del() is called directly, undo via top bar */}
       {modal?.type==="loan-types" && <CategoryLoanTypesModal categoryLoanTypes={categoryLoanTypes} onSave={saveCategoryLoanTypes} onClose={()=>setModal(null)}/>}
       {modal?.type==="addcat" && <ManageCategoriesModal
         categories={categories}
