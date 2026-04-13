@@ -12,6 +12,9 @@ const headers = {
 async function sbFetch(path, options = {}) {
   const res = await fetch(`${SB_URL}/rest/v1/${path}`, { headers, ...options });
   const text = await res.text();
+  if (!res.ok) {
+    console.error(`[staff-schedule] sbFetch FAILED: ${options.method||"GET"} ${path} → ${res.status}`, text?.slice(0, 500));
+  }
   return { ok: res.ok, status: res.status, data: text ? JSON.parse(text) : null };
 }
 
