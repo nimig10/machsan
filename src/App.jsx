@@ -1261,6 +1261,9 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   const [selectedCats, setSelectedCats] = useState([]);
   const [typeFilter, setTypeFilter] = useState("הכל"); // "הכל" | "סאונד" | "צילום"
   const [modal, setModal] = useState(null);
+  const [editingCatPill, setEditingCatPill] = useState(null);
+  const [editCatPillVal, setEditCatPillVal] = useState("");
+  const [editCatPillType, setEditCatPillType] = useState("");
   const [saving, setSaving] = useState(false);
   const [importModal, setImportModal] = useState(null);
   const csvInputRef = useRef(null);
@@ -1478,6 +1481,24 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     }
   };
 
+  const handleCatPillRename = async (oldName, newName) => {
+    const type = editCatPillType;
+    const updatedCats = categories.map(c => c === oldName ? newName : c);
+    const updatedEq = equipment.map(e => {
+      if (e.category !== oldName) return e;
+      return { ...e, category: newName, soundOnly: type === "סאונד", photoOnly: type === "צילום" };
+    });
+    const updatedTypes = { ...categoryTypes };
+    if (oldName !== newName) delete updatedTypes[oldName];
+    if (type) updatedTypes[newName] = type;
+    else delete updatedTypes[newName];
+    setCategories(updatedCats);
+    setEquipment(updatedEq);
+    setCategoryTypes(updatedTypes);
+    await Promise.all([storageSet("categories", updatedCats), storageSet("equipment", updatedEq), storageSet("categoryTypes", updatedTypes)]);
+    showToast("success", `קטגוריה "${oldName}" עודכנה`);
+  };
+
   const setCategoryClassification = async (categoryName, nextType) => {
     const updated = equipment.map((item) => (
       item.category === categoryName
@@ -1647,7 +1668,6 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
             existingCategories={existingCategories}
             onImportSuccess={handleAiEquipmentImport}
           />
-          <button className="btn btn-primary" onClick={()=>setModal({type:"addcat"})}>📂 ניהול קטגוריות</button>
           <button className="btn btn-primary" onClick={()=>setModal({type:"loan-types"})}>🗂️ סיווג לסוגי ההשאלות</button>
           <button className="btn btn-primary" onClick={()=>setModal({type:"add"})}>➕ הוסף ציוד</button>
         </div>
@@ -1666,35 +1686,68 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       </div>
 
       {/* ── Category pills ── */}
-      <div className="flex gap-2 mb-6" style={{flexWrap:"wrap",alignItems:"center"}}>
+      <div className="flex gap-2 mb-6" style={{flexWrap:"wrap",alignItems:"center",gap:6,marginBottom:14}}>
         {filteredCategoryOptions.map(c=>{
           const active = selectedCats.includes(c);
           const isEmptyCategory = !equipment.some((item) => item.category === c);
+          const isEditing = editingCatPill === c;
           return (
             <div key={c} style={{display:"flex",alignItems:"center",borderRadius:8,overflow:"hidden",border:`1px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"var(--surface2)"}}>
-              <button
-                className="btn btn-sm"
-                style={{borderRadius:0,border:"none",background:"transparent",color:active?"var(--accent)":"var(--text2)",fontWeight:700,padding:"5px 10px"}}
-                onClick={()=>setSelectedCats(prev=>active?prev.filter(x=>x!==c):[...prev,c])}>
-                {c}
-              </button>
-              {isEmptyCategory && (
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  style={{borderRadius:0,border:"none",borderRight:"1px solid var(--border)",background:"transparent",color:"var(--red)",fontWeight:900,padding:"5px 8px"}}
-                  title="מחק רובריקה ריקה"
-                  onClick={(e)=>{
-                    e.stopPropagation();
-                    deleteEmptyCategoryFromFilters(c);
-                  }}
-                >
-                  ×
-                </button>
+              {isEditing ? (
+                <>
+                  <input
+                    autoFocus
+                    value={editCatPillVal}
+                    onChange={e=>setEditCatPillVal(e.target.value)}
+                    onKeyDown={async e=>{
+                      if(e.key==="Enter"&&editCatPillVal.trim()){
+                        await handleCatPillRename(c, editCatPillVal.trim());
+                        setEditingCatPill(null);
+                      } else if(e.key==="Escape") setEditingCatPill(null);
+                    }}
+                    style={{width:110,padding:"4px 8px",fontSize:12,background:"var(--surface)",border:"none",color:"var(--text)",outline:"none"}}
+                  />
+                  <select
+                    value={editCatPillType}
+                    onChange={e=>setEditCatPillType(e.target.value)}
+                    style={{fontSize:11,background:"var(--surface)",border:"none",borderRight:"1px solid var(--border)",color:"var(--text2)",padding:"4px 4px",cursor:"pointer"}}
+                  >
+                    <option value="">כללי</option>
+                    <option value="סאונד">🎙️ סאונד</option>
+                    <option value="צילום">🎥 צילום</option>
+                  </select>
+                  <button type="button" className="btn btn-sm" style={{borderRadius:0,border:"none",background:"transparent",color:"var(--accent)",fontWeight:800,padding:"4px 7px",fontSize:12}} title="שמור"
+                    onClick={async()=>{if(editCatPillVal.trim()){await handleCatPillRename(c,editCatPillVal.trim());setEditingCatPill(null);}}}>✓</button>
+                  <button type="button" className="btn btn-sm" style={{borderRadius:0,border:"none",background:"transparent",color:"var(--text3)",fontWeight:800,padding:"4px 7px",fontSize:12}} title="ביטול"
+                    onClick={()=>setEditingCatPill(null)}>✕</button>
+                </>
+              ) : (
+                <>
+                  <button className="btn btn-sm" style={{borderRadius:0,border:"none",background:"transparent",color:active?"var(--accent)":"var(--text2)",fontWeight:700,padding:"5px 10px"}}
+                    onClick={()=>setSelectedCats(prev=>active?prev.filter(x=>x!==c):[...prev,c])}>
+                    {c}
+                  </button>
+                  <button type="button" className="btn btn-sm" title="ערוך שם"
+                    style={{borderRadius:0,border:"none",borderRight:"1px solid var(--border)",background:"transparent",color:"var(--text3)",padding:"5px 7px",fontSize:11}}
+                    onClick={e=>{e.stopPropagation();setEditingCatPill(c);setEditCatPillVal(c);setEditCatPillType(getCatType(c)||"");}}>
+                    ✏️
+                  </button>
+                  {isEmptyCategory && (
+                    <button type="button" className="btn btn-sm"
+                      style={{borderRadius:0,border:"none",borderRight:"1px solid var(--border)",background:"transparent",color:"var(--red)",fontWeight:900,padding:"5px 8px"}}
+                      title="מחק רובריקה ריקה" onClick={e=>{e.stopPropagation();deleteEmptyCategoryFromFilters(c);}}>
+                      ×
+                    </button>
+                  )}
+                </>
               )}
             </div>
           );
         })}
+        <button type="button" className="btn btn-sm btn-primary" style={{borderRadius:8,fontSize:12,padding:"5px 12px"}}
+          onClick={()=>setModal({type:"newcat"})}>
+          ➕ קטגוריה חדשה
+        </button>
       </div>
 
       {filtered.length===0 ? <div className="empty-state"><div className="emoji">📦</div><p>לא נמצא ציוד</p></div> : (
@@ -1799,6 +1852,19 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       {modal?.type==="units" && <UnitsModal eq={modal.item} equipment={equipment} setEquipment={setEquipment} showToast={showToast} onClose={()=>setModal(null)}/>}
       {/* Delete confirmation removed — del() is called directly, undo via top bar */}
       {modal?.type==="loan-types" && <CategoryLoanTypesModal categoryLoanTypes={categoryLoanTypes} onSave={saveCategoryLoanTypes} onClose={()=>setModal(null)}/>}
+      {modal?.type==="newcat" && <AddCategoryModal
+        categories={categories}
+        onClose={()=>setModal(null)}
+        onAdd={async(name,type)=>{
+          const updatedCats=[...categories, name];
+          const updatedTypes={...categoryTypes,...(type?{[name]:type}:{})};
+          setCategories(updatedCats);
+          setCategoryTypes(updatedTypes);
+          await Promise.all([storageSet("categories",updatedCats),storageSet("categoryTypes",updatedTypes)]);
+          showToast("success",`קטגוריה "${name}" נוספה`);
+          setModal(null);
+        }}
+      />}
       {modal?.type==="addcat" && <ManageCategoriesModal
         categories={categories}
         categoryTypes={categoryTypes}
@@ -1874,6 +1940,38 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
 }
 
 // ─── MANAGE CATEGORIES MODAL ──────────────────────────────────────────────────
+function AddCategoryModal({ categories, onClose, onAdd }) {
+  const [name, setName] = useState("");
+  const [type, setType] = useState("");
+  const exists = categories.includes(name.trim());
+  return (
+    <Modal title="➕ הוספת קטגוריה חדשה" onClose={onClose}>
+      <div className="form-group">
+        <label className="form-label">שם הקטגוריה *</label>
+        <input className="form-input" autoFocus value={name} onChange={e=>setName(e.target.value)}
+          placeholder="לדוגמה: מצלמות, מיקרופונים..."
+          onKeyDown={e=>{if(e.key==="Enter"&&name.trim()&&!exists)onAdd(name.trim(),type);}}/>
+        {exists&&<div style={{color:"var(--red)",fontSize:11,marginTop:4}}>קטגוריה זו כבר קיימת</div>}
+      </div>
+      <div className="form-group">
+        <label className="form-label">סוג ציוד</label>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {[{v:"",l:"🧩 כללי"},{v:"סאונד",l:"🎙️ סאונד"},{v:"צילום",l:"🎥 צילום"}].map(({v,l})=>(
+            <button key={v} type="button" onClick={()=>setType(v)}
+              style={{padding:"6px 16px",borderRadius:8,border:`2px solid ${type===v?"var(--accent)":"var(--border)"}`,background:type===v?"var(--accent-glow)":"transparent",color:type===v?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+              {l}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:8}}>
+        <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+        <button className="btn btn-primary" disabled={!name.trim()||exists} onClick={()=>onAdd(name.trim(),type)}>+ הוסף</button>
+      </div>
+    </Modal>
+  );
+}
+
 function ManageCategoriesModal({ categories, categoryTypes, onSave, onClose, equipment=[] }) {
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState(""); // "" | "סאונד" | "צילום"
