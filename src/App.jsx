@@ -7811,6 +7811,18 @@ export default function App() {
     const currentStudioBookings = studioBookingsRef.current;
 
     const { reservations: generatedLessonReservations, linkedKitIds } = buildLessonReservations(lessons, kits);
+
+    // Safety guard: if we currently have lesson-auto reservations but the new generation
+    // produced nothing (0 results) while lessons still exist — something is transiently wrong
+    // (e.g. kits items temporarily 0 during a mid-save state update). Skip this run entirely
+    // rather than wiping all lesson reservations from memory and Supabase.
+    const currentLessonAutoCount = currentReservations.filter(
+      (r) => r.lesson_auto || hasLinkedValue(r.lesson_id)
+    ).length;
+    if (lessons.length > 0 && kits.length > 0 && generatedLessonReservations.length === 0 && currentLessonAutoCount > 0) {
+      return; // transient empty generation — preserve existing lesson reservations
+    }
+
     const nextReservations = normalizeReservationsForArchive([
       ...currentReservations.filter((reservation) => {
         if (reservation.lesson_auto || hasLinkedValue(reservation.lesson_id)) return false;

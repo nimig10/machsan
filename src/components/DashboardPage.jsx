@@ -444,40 +444,75 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
 
       {/* Dashboard quick-view modal */}
       {dashViewRes&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}} onClick={e=>e.target===e.currentTarget&&setDashViewRes(null)}>
-          <div style={{width:"100%",maxWidth:520,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl",maxHeight:"90vh",overflowY:"auto"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0",position:"sticky",top:0}}>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}} onClick={e=>e.target===e.currentTarget&&setDashViewRes(null)}>
+          <div style={{width:"100%",maxWidth:640,background:"var(--surface)",borderRadius:18,border:"1px solid var(--border)",direction:"rtl",maxHeight:"92vh",overflowY:"auto"}}>
+            {/* Header */}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 22px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"18px 18px 0 0",position:"sticky",top:0,zIndex:1}}>
               <div>
-                <div style={{fontWeight:900,fontSize:16}}>📋 {dashViewRes.student_name}</div>
-                <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{dashViewRes.email}</div>
+                <div style={{fontWeight:900,fontSize:17,display:"flex",alignItems:"center",gap:8}}>
+                  {dashViewRes.loan_type==="שיעור"?"🎬":"📋"} {dashViewRes.student_name}
+                  {statusBadge(getEffectiveStatus(dashViewRes))}
+                </div>
+                <div style={{fontSize:12,color:"var(--text3)",marginTop:3,display:"flex",gap:12,flexWrap:"wrap"}}>
+                  {dashViewRes.email&&<span>📧 {dashViewRes.email}</span>}
+                  {dashViewRes.phone&&<span>📞 {dashViewRes.phone}</span>}
+                </div>
               </div>
-              <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                {statusBadge(getEffectiveStatus(dashViewRes))}
-                <button className="btn btn-secondary btn-sm" onClick={()=>setDashViewRes(null)}>✕</button>
-              </div>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setDashViewRes(null)}>✕</button>
             </div>
-            <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:14}}>
-              <div style={{background:"var(--accent-glow)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:"var(--r-sm)",padding:14}}>
-                {[["📅 השאלה",`${getDayName(dashViewRes.borrow_date)} · ${formatDate(dashViewRes.borrow_date)}${dashViewRes.borrow_time?" · "+dashViewRes.borrow_time:""}`],["↩ החזרה",`${getDayName(dashViewRes.return_date)} · ${formatDate(dashViewRes.return_date)}${dashViewRes.return_time?" · "+dashViewRes.return_time:""}`],["📚 קורס",dashViewRes.course],["🎬 סוג",dashViewRes.loan_type]].map(([l,v])=>(
-                  <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"4px 0",borderBottom:"1px solid rgba(245,166,35,0.15)"}}>
-                    <span style={{color:"var(--text3)"}}>{l}</span>
-                    <strong>{v}</strong>
+            <div style={{padding:"20px 22px",display:"flex",flexDirection:"column",gap:16}}>
+              {/* Dates & info */}
+              <div style={{background:"var(--accent-glow)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:12,padding:"14px 16px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 16px"}}>
+                {[
+                  ["📅 השאלה",`${getDayName(dashViewRes.borrow_date)} · ${formatDate(dashViewRes.borrow_date)}${dashViewRes.borrow_time?" · "+dashViewRes.borrow_time:""}`],
+                  ["↩ החזרה",`${getDayName(dashViewRes.return_date)} · ${formatDate(dashViewRes.return_date)}${dashViewRes.return_time?" · "+dashViewRes.return_time:""}`],
+                  ["📚 קורס",dashViewRes.course||"—"],
+                  ["🎬 סוג",dashViewRes.loan_type||"—"],
+                  ...(dashViewRes.project_name?[["🎥 פרויקט",dashViewRes.project_name]]:[]),
+                  ["⏱️ משך",`${getLoanDurationDays(dashViewRes.borrow_date, dashViewRes.return_date)} ימים`],
+                ].map(([l,v])=>(
+                  <div key={l} style={{display:"flex",flexDirection:"column",gap:1}}>
+                    <span style={{fontSize:10,color:"var(--text3)",fontWeight:700}}>{l}</span>
+                    <strong style={{fontSize:13}}>{v}</strong>
                   </div>
                 ))}
               </div>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:13,paddingTop:8,marginTop:8,borderTop:"1px solid rgba(245,166,35,0.15)"}}>
-                <span style={{color:"var(--text3)"}}>⏱️ משך ההשאלה</span>
-                <strong>{getLoanDurationDays(dashViewRes.borrow_date, dashViewRes.return_date)} ימים</strong>
-              </div>
+              {/* Production crew */}
+              {(dashViewRes.crew_photographer_name||dashViewRes.crew_sound_name)&&(
+                <div style={{background:"var(--surface2)",borderRadius:10,padding:"10px 14px",fontSize:12,display:"flex",gap:16,flexWrap:"wrap"}}>
+                  {dashViewRes.crew_photographer_name&&<span>📸 צלם: <strong>{dashViewRes.crew_photographer_name}</strong>{dashViewRes.crew_photographer_phone&&` · ${dashViewRes.crew_photographer_phone}`}</span>}
+                  {dashViewRes.crew_sound_name&&<span>🎙️ סאונד: <strong>{dashViewRes.crew_sound_name}</strong>{dashViewRes.crew_sound_phone&&` · ${dashViewRes.crew_sound_phone}`}</span>}
+                </div>
+              )}
+              {/* Items with images */}
               <div>
-                <div style={{fontWeight:700,fontSize:13,marginBottom:8}}>ציוד ({dashViewRes.items?.length||0} פריטים)</div>
-                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                <div style={{fontWeight:800,fontSize:14,marginBottom:10}}>ציוד ({dashViewRes.items?.length||0} פריטים)</div>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {dashViewRes.items?.map((i,j)=>{
-                    const hasReport=equipmentReports.some(rp=>rp.equipment_id===String(i.equipment_id)&&rp.reservation_id===String(dashViewRes.id)&&rp.status==="open");
-                    return <div key={j} style={{display:"flex",justifyContent:"space-between",padding:"6px 12px",background:hasReport?"rgba(231,76,60,0.1)":"var(--surface2)",borderRadius:"var(--r-sm)",fontSize:13,border:hasReport?"1px solid rgba(231,76,60,0.3)":"none"}}>
-                      <span>{hasReport&&<span style={{color:"#e74c3c",marginLeft:4}}>⚠️</span>}{equipment.find(e=>e.id==i.equipment_id)?.name||"?"}</span>
-                      <strong style={{color:"var(--accent)"}}>×{i.quantity}</strong>
-                    </div>;
+                    const eq = equipment.find(e=>e.id==i.equipment_id);
+                    const hasReport = equipmentReports.some(rp=>rp.equipment_id===String(i.equipment_id)&&rp.reservation_id===String(dashViewRes.id)&&rp.status==="open");
+                    const img = eq?.image || eq?.img || "";
+                    const showImg = img && (img.startsWith("data:") || img.startsWith("http"));
+                    return (
+                      <div key={j} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:hasReport?"rgba(231,76,60,0.08)":"var(--surface2)",borderRadius:12,border:hasReport?"1px solid rgba(231,76,60,0.3)":"1px solid var(--border)"}}>
+                        {/* Equipment image */}
+                        <div style={{width:52,height:52,borderRadius:10,background:"var(--surface3)",flexShrink:0,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>
+                          {showImg
+                            ? <img src={img} alt={eq?.name||""} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                            : "📦"}
+                        </div>
+                        {/* Name + category */}
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontWeight:800,fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                            {hasReport&&<span style={{color:"#e74c3c",marginLeft:6}}>⚠️</span>}
+                            {eq?.name||i.name||"?"}
+                          </div>
+                          {eq?.category&&<div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>{eq.category}</div>}
+                        </div>
+                        {/* Quantity */}
+                        <div style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:8,padding:"5px 14px",fontSize:16,fontWeight:900,color:"var(--accent)",flexShrink:0}}>×{i.quantity}</div>
+                      </div>
+                    );
                   })}
                 </div>
               </div>
