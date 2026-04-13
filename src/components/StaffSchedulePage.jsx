@@ -326,15 +326,42 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
     await fetchWeekData();
   };
   const claimTask = async (staffId, date, taskKey) => {
+    // Optimistic update — instant UI response
+    const optimistic = { id: `opt-${taskKey}-${date}`, date, task_key: taskKey, staff_id: staffId, assigned_by: effectiveStaffId, locked: false };
+    setDailyTasks(prev => [...prev.filter(t => !(t.date === date && t.task_key === taskKey)), optimistic]);
+    if (weekCache.current[startDate]) weekCache.current[startDate].dailyTasks = [...(weekCache.current[startDate].dailyTasks || []).filter(t => !(t.date === date && t.task_key === taskKey)), optimistic];
+
     const r = await scheduleApi("claim-daily-task", { staffId, date, taskKey, callerRole: isAdmin ? "admin" : "staff", callerId: effectiveStaffId });
-    if (r.error) { showToast("error", r.error); return false; }
+    if (r.error) {
+      showToast("error", r.error);
+      // Revert optimistic
+      setDailyTasks(prev => prev.filter(t => t.id !== optimistic.id));
+      delete weekCache.current[startDate];
+      return false;
+    }
     showToast("success", "✅ המשימה נשמרה");
-    await fetchWeekData(); return true;
+    // Swap optimistic placeholder with real DB row
+    if (r.data) {
+      setDailyTasks(prev => prev.map(t => t.id === optimistic.id ? r.data : t));
+      if (weekCache.current[startDate]) weekCache.current[startDate].dailyTasks = (weekCache.current[startDate].dailyTasks || []).map(t => t.id === optimistic.id ? r.data : t);
+    }
+    return true;
   };
   const unclaimTask = async (staffId, date, taskKey) => {
+    // Optimistic update — instant UI response
+    const removed = dailyTasks.find(t => t.date === date && t.task_key === taskKey);
+    setDailyTasks(prev => prev.filter(t => !(t.date === date && t.task_key === taskKey)));
+    if (weekCache.current[startDate]) weekCache.current[startDate].dailyTasks = (weekCache.current[startDate].dailyTasks || []).filter(t => !(t.date === date && t.task_key === taskKey));
+
     const r = await scheduleApi("unclaim-daily-task", { staffId, date, taskKey, callerRole: isAdmin ? "admin" : "staff", callerId: effectiveStaffId });
-    if (r.error) { showToast("error", r.error); return false; }
-    await fetchWeekData(); return true;
+    if (r.error) {
+      showToast("error", r.error);
+      // Revert optimistic
+      if (removed) setDailyTasks(prev => [...prev, removed]);
+      delete weekCache.current[startDate];
+      return false;
+    }
+    return true;
   };
 
   /* ── Day slots builder ── */
