@@ -84,6 +84,7 @@ export function LecturerPortal({
     }
   });
   const [search, setSearch] = useState("");
+  const [courseFilter, setCourseFilter] = useState("הכל");
   const [editorState, setEditorState] = useState(null);
   const [draftName, setDraftName] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
@@ -253,9 +254,15 @@ export function LecturerPortal({
   }, [lecturerLessons, lessonKits]);
 
   const filteredCourseEntries = useMemo(() => {
+    let entries = lecturerCourseEntries;
+    // Apply course name filter
+    if (courseFilter && courseFilter !== "הכל") {
+      entries = entries.filter(({ lesson }) => lesson?.name === courseFilter);
+    }
+    // Apply text search
     const term = String(search || "").trim().toLowerCase();
-    if (!term) return lecturerCourseEntries;
-    return lecturerCourseEntries.filter(({ lesson, courseKit }) => {
+    if (!term) return entries;
+    return entries.filter(({ lesson, courseKit }) => {
       const haystack = [
         lesson?.name,
         lesson?.track,
@@ -264,7 +271,7 @@ export function LecturerPortal({
       ].map((value) => String(value || "").toLowerCase()).join(" ");
       return haystack.includes(term);
     });
-  }, [lecturerCourseEntries, search]);
+  }, [lecturerCourseEntries, search, courseFilter]);
 
   const editorContext = useMemo(() => {
     if (!editorState) return null;
@@ -659,7 +666,7 @@ export function LecturerPortal({
     <div className="form-page" style={{ "--accent": siteSettings.accentColor || "#f5a623", direction: "rtl" }}>
       <div style={{ width: "min(1180px, 100%)", display: "flex", flexDirection: "column", gap: 20 }}>
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 18, padding: "22px 24px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap", marginBottom: lecturerCourseEntries.length > 1 ? 14 : 0 }}>
             <div>
               <div style={{ fontSize: 24, fontWeight: 900, color: "var(--accent)", marginBottom: 4 }}>פורטל מרצה</div>
               <div style={{ fontSize: 14, color: "var(--text2)" }}>שלום, {currentLecturer?.fullName || loggedInLecturer.fullName}</div>
@@ -670,7 +677,7 @@ export function LecturerPortal({
                 style={{ width: 260 }}
                 placeholder="חיפוש קורס לפי שם או מסלול"
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) => { setSearch(event.target.value); setCourseFilter("הכל"); }}
               />
               {(() => { try { const r = loggedInLecturer || {}; return r.is_admin || r.is_warehouse; } catch { return false; } })() && (
                 <button
@@ -683,6 +690,20 @@ export function LecturerPortal({
               )}
             </div>
           </div>
+          {/* Course filter pills — only shown when there are 2+ courses */}
+          {lecturerCourseEntries.length > 1 && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", paddingTop: 2 }}>
+              {["הכל", ...lecturerCourseEntries.map(e => e.lesson?.name).filter(Boolean)].map(name => {
+                const active = courseFilter === name;
+                return (
+                  <button key={name} type="button" onClick={() => { setCourseFilter(name); setSearch(""); }}
+                    style={{ padding: "5px 14px", borderRadius: 20, border: `2px solid ${active ? "var(--accent)" : "var(--border)"}`, background: active ? "var(--accent-glow)" : "var(--surface2)", color: active ? "var(--accent)" : "var(--text2)", fontWeight: active ? 800 : 600, fontSize: 12, cursor: "pointer", transition: "all 0.15s" }}>
+                    {name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
         {/* ── Dept Head Approval Panel ── */}
         {myDeptHead && (
@@ -814,17 +835,21 @@ export function LecturerPortal({
                         ? lessonKits.find((kit) => String(kit.id) === String(session.kitId)) || null
                         : null;
                       const inheritedKit = !sessionKit && courseKit ? courseKit : null;
+                      const isPast = session._isPast;
                       return (
-                        <div key={session._lecturerUid} style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 14, padding: "14px 16px", display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                        <div key={session._lecturerUid} style={{ background: isPast ? "rgba(0,0,0,0.12)" : "var(--surface2)", border: `1px solid ${isPast ? "rgba(128,128,128,0.15)" : "var(--border)"}`, borderRadius: 14, padding: "14px 16px", display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap", opacity: isPast ? 0.45 : 1, transition: "opacity 0.15s" }}>
                           <div>
-                            <div style={{ fontWeight: 800, color: "var(--text)" }}>
-                              {formatDate(session.date)} · {session.startTime || "--:--"}-{session.endTime || "--:--"}
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <div style={{ fontWeight: 800, color: isPast ? "var(--text3)" : "var(--text)" }}>
+                                {formatDate(session.date)} · {session.startTime || "--:--"}-{session.endTime || "--:--"}
+                              </div>
+                              {isPast && <span style={{ fontSize: 10, fontWeight: 700, background: "rgba(128,128,128,0.2)", color: "var(--text3)", borderRadius: 6, padding: "2px 7px" }}>עבר</span>}
                             </div>
                             <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 4 }}>
                               {session.topic ? `${session.topic} · ` : ""}
                               {session.studioId && studioNameById[String(session.studioId)] ? `כיתה: ${studioNameById[String(session.studioId)]}` : "ללא כיתה משויכת"}
                             </div>
-                            <div style={{ fontSize: 12, marginTop: 6, color: sessionKit ? "#4ade80" : inheritedKit ? "#f5a623" : "var(--text3)" }}>
+                            <div style={{ fontSize: 12, marginTop: 6, color: isPast ? "var(--text3)" : sessionKit ? "#4ade80" : inheritedKit ? "#f5a623" : "var(--text3)" }}>
                               {sessionKit
                                 ? `השאלת מפגש: ${sessionKit.name}`
                                 : inheritedKit
@@ -835,7 +860,7 @@ export function LecturerPortal({
                           <button
                             className="btn btn-secondary"
                             onClick={() => setEditorState({ scope: "session", lessonId: lesson.id, sessionUid: session._lecturerUid })}
-                            disabled={session._isPast}
+                            disabled={isPast}
                           >
                             {sessionKit ? "עדכון השאלת מפגש" : "יצירת השאלת מפגש"}
                           </button>
