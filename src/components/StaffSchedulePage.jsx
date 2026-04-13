@@ -1464,7 +1464,7 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
         )}
 
         {/* ── Daily Tasks checkboxes ── */}
-        {shiftType !== "absent" && !isMultiSelect && (
+        {shiftType !== "absent" && selectedStaffIds.length <= 1 && (
           <div style={{ marginBottom: 14, padding: "10px 12px", background: "var(--surface2)", borderRadius: 8 }}>
             <label style={{ ...labelStyle, marginBottom: 8, fontSize: 13, color: "var(--text)" }}>📋 משימות יומיות</label>
             {DAILY_TASKS.map(t => {
