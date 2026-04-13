@@ -45,21 +45,27 @@ function tintLottieData(data, hex) {
   return walk(JSON.parse(JSON.stringify(data)));
 }
 
-const MIN_DISPLAY_MS = 4000;
+const MIN_DISPLAY_MS = 1500;
+const FADE_OUT_MS = 350;
 
 export function Loading({ accentColor, ready = false, onDone }) {
   const ref = useRef(null);
   const [minDone, setMinDone] = useState(false);
+  const [fading, setFading] = useState(false);
+  const firedRef = useRef(false);
 
-  // 4-second minimum display timer
   useEffect(() => {
     const t = setTimeout(() => setMinDone(true), MIN_DISPLAY_MS);
     return () => clearTimeout(t);
   }, []);
 
-  // Fire onDone only when BOTH conditions are met
+  // When both ready & minDone — start fade-out, then call onDone
   useEffect(() => {
-    if (minDone && ready) onDone?.();
+    if (!(minDone && ready) || firedRef.current) return;
+    firedRef.current = true;
+    setFading(true);
+    const t = setTimeout(() => onDone?.(), FADE_OUT_MS);
+    return () => clearTimeout(t);
   }, [minDone, ready]);
 
   const colorRef = useRef(null);
@@ -77,7 +83,7 @@ export function Loading({ accentColor, ready = false, onDone }) {
   }, []);
 
   return (
-    <div style={{position:"fixed",inset:0,width:"100vw",height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",zIndex:9999}}>
+    <div style={{position:"fixed",inset:0,width:"100vw",height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",zIndex:9999,opacity:fading?0:1,transition:`opacity ${FADE_OUT_MS}ms ease`}}>
       <style>{`@media(max-width:600px){.lottie-load{width:250px!important;height:250px!important}}`}</style>
       <div ref={ref} className="lottie-load" style={{width:350,height:350}} />
     </div>

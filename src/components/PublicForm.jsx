@@ -1336,7 +1336,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     const safety = setTimeout(() => {
       setLoginBusy(false);
       setLoginError("זמן התגובה חרג מהצפוי. רענן את הדף ונסה שוב.");
-    }, 20_000);
+    }, 10_000);
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -1478,7 +1478,16 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   };
 
   // ── Unified role-based routing helper ────────────────────────────────────────
+  const routingRef = useRef(false);
   const routeByRoles = async (session) => {
+    // Prevent concurrent calls — handleLogin + onAuthStateChange + mount check
+    // can all fire at the same time and cause race conditions / freezes.
+    if (routingRef.current) return;
+    routingRef.current = true;
+    try { return await routeByRolesCore(session); }
+    finally { routingRef.current = false; }
+  };
+  const routeByRolesCore = async (session) => {
     const authEmail = session.user.email.toLowerCase().trim();
     const authUserId = session.user.id;
 
@@ -1618,7 +1627,9 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     return true;
   };
 
-  // Listen for Supabase auth state changes
+  // Listen for Supabase auth state changes — subscribe ONCE (mount-only).
+  // routeByRoles already reads lecturers/certifications from component scope
+  // via closure, and the routingRef guard prevents duplicate calls.
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "PASSWORD_RECOVERY") {
@@ -1633,7 +1644,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     });
 
     return () => subscription.unsubscribe();
-  }, [lecturers, certifications]);
+  }, []);
 
   // Recovery session may already be established before the listener registered —
   // poll getSession() until a session appears (handles the early-fire race).
@@ -1651,16 +1662,23 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     return () => { cancelled = true; };
   }, [isRecoveryInitial]);
 
-  // Check for existing session on mount (e.g. after magic link redirect)
+  // Check for existing session on mount (e.g. after magic link redirect).
+  // Mount-only — the routingRef guard prevents races with onAuthStateChange.
   useEffect(() => {
     if (loggedInStudent) return;
-    if (recoveryModeRef.current || recoveryMode) return; // don't route during password recovery
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session?.user?.email) return;
-      if (recoveryModeRef.current) return; // re-check after async
-      routeByRoles(session);
-    });
-  }, [lecturers, certifications]);
+    if (recoveryModeRef.current || recoveryMode) return;
+    // Small delay: give onAuthStateChange a chance to fire first (it's the
+    // primary handler). This is a fallback for cases where the listener
+    // misses the event (e.g. session already existed before subscription).
+    const t = setTimeout(() => {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!session?.user?.email) return;
+        if (recoveryModeRef.current) return;
+        routeByRoles(session);
+      });
+    }, 300);
+    return () => clearTimeout(t);
+  }, []);
 
   // Validate any student state restored from sessionStorage against the active
   // Supabase session. A manually injected sessionStorage value alone must not
