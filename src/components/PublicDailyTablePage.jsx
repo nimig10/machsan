@@ -53,7 +53,7 @@ export function PublicDailyTablePage() {
   useEffect(() => {
     injectHeeboFont();
     loadData();
-    const refresh = setInterval(loadData, 5*60*1000);
+    const refresh = setInterval(loadData, 10*60*1000); // was 5 min
     const reload  = setInterval(() => window.location.reload(), 30*60*1000);
     return () => { clearInterval(refresh); clearInterval(reload); };
   }, []);

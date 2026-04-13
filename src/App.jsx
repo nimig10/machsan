@@ -7520,10 +7520,11 @@ export default function App() {
     if (loading || isPublicFormView || isLecturerPortalView) return;
     const handleFocus = () => void refreshAdminData();
     const handleVisibility = () => { if (document.visibilityState === "visible") void refreshAdminData(); };
+    // Poll every 2 min (was 30s); Supabase Realtime already pushes live changes
     const intervalId = window.setInterval(() => {
       if (document.visibilityState === "hidden") return;
       void refreshAdminData();
-    }, 30000);
+    }, 120000);
     window.addEventListener("focus", handleFocus);
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
@@ -7620,10 +7621,11 @@ export default function App() {
     };
 
     void refreshPublicInventory();
+    // Poll every 60s (was 10s — major Disk IO savings; realtime handles live updates)
     const intervalId = window.setInterval(() => {
       if (document.visibilityState === "hidden") return;
       void refreshPublicInventory();
-    }, 10000);
+    }, 60000);
 
     window.addEventListener("focus", handleFocus);
     window.addEventListener("storage", handleStorage);
@@ -7664,10 +7666,11 @@ export default function App() {
     };
 
     void refreshLecturerData();
+    // Poll every 60s (was 10s — major Disk IO savings)
     const intervalId = window.setInterval(() => {
       if (document.visibilityState === "hidden") return;
       void refreshLecturerData();
-    }, 10000);
+    }, 60000);
 
     window.addEventListener("focus", handleFocus);
     window.addEventListener("storage", handleStorage);
@@ -7716,14 +7719,15 @@ export default function App() {
     const syncArchivedReservations = () => {
       _setReservations((currentReservations) => {
         const normalizedReservations = normalizeReservationsForArchive(currentReservations);
-        if (JSON.stringify(normalizedReservations) === JSON.stringify(currentReservations)) {
+        if (normalizedReservations.length === currentReservations.length && dataEquals(normalizedReservations, currentReservations)) {
           return currentReservations;
         }
         void storageSet("reservations", normalizedReservations);
         return normalizedReservations;
       });
     };
-    const timerId = window.setInterval(syncArchivedReservations, 60000);
+    // Sync every 5 min (was 60s) — archiving is not time-sensitive
+    const timerId = window.setInterval(syncArchivedReservations, 300000);
     return () => window.clearInterval(timerId);
   }, [loading]);
 
@@ -7766,7 +7770,7 @@ export default function App() {
       await storageSet("reservations", updated);
     };
     const t = setTimeout(checkOverdueEmails, 90000); // first check after 90s
-    const i = setInterval(checkOverdueEmails, 5 * 60 * 1000); // then every 5 min
+    const i = setInterval(checkOverdueEmails, 15 * 60 * 1000); // then every 15 min (was 5 min)
     return () => { clearTimeout(t); clearInterval(i); };
   }, [loading, reservations]);
 
