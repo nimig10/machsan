@@ -114,41 +114,42 @@ export function PublicDailyTablePage() {
 
   const accent = settings.accentColor || "#f5a623";
 
-  const cellBase = { padding:"10px 14px", borderBottom:"1px solid #222", color:"#e8e8e8" };
-  const thBase   = { padding:"10px 14px", textAlign:"right", fontWeight:700, color:"#bdbdbd", borderBottom:`2px solid ${accent}`, fontSize:13, letterSpacing:0.3 };
+  // vh/vw units calibrated for 1920×1080 HD TV (1vh=10.8px, 1vw=19.2px)
+  const cellBase = { padding:"1vh 1.2vw", borderBottom:"1px solid #222", color:"#e8e8e8", fontSize:"1.6vh" };
+  const thBase   = { padding:"0.9vh 1.2vw", textAlign:"right", fontWeight:700, color:"#bdbdbd", borderBottom:`2px solid ${accent}`, fontSize:"1.4vh", letterSpacing:0.3 };
 
   return (
-    <div style={{minHeight:"100vh",background:"#0a0a0a",color:"#f5f5f5",direction:"rtl",fontFamily:"'Heebo', system-ui, -apple-system, sans-serif",padding:"12px 16px"}}>
-      <div style={{maxWidth:1280,margin:"0 auto"}}>
+    <div style={{minHeight:"100vh",background:"#0a0a0a",color:"#f5f5f5",direction:"rtl",fontFamily:"'Heebo', system-ui, -apple-system, sans-serif",padding:"1.1vh 1.7vw"}}>
+      <div style={{maxWidth:"90vw",margin:"0 auto"}}>
         {/* Header */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8,marginBottom:14,paddingBottom:10,borderBottom:`2px solid ${accent}`}}>
-          <div style={{display:"flex",alignItems:"center",gap:14}}>
-            {settings.logo && <img src={settings.logo} alt="logo" style={{height:36}}/>}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"0.7vh",marginBottom:"1.3vh",paddingBottom:"0.9vh",borderBottom:`2px solid ${accent}`}}>
+          <div style={{display:"flex",alignItems:"center",gap:"1vw"}}>
+            {settings.logo && <img src={settings.logo} alt="logo" style={{height:"3.3vh"}}/>}
             <div>
-              <div style={{fontSize:13,fontWeight:700,color:accent,letterSpacing:0.3}}>📋 לוח לו״ז יומי</div>
-              <div style={{fontSize:22,color:"#fff",fontWeight:800,letterSpacing:0.3}}>{dateLabel()}</div>
+              <div style={{fontSize:"1.3vh",fontWeight:700,color:accent,letterSpacing:0.3}}>📋 לוח לו״ז יומי</div>
+              <div style={{fontSize:"2.2vh",color:"#fff",fontWeight:800,letterSpacing:0.3}}>{dateLabel()}</div>
             </div>
           </div>
-          <div style={{fontSize:11,color:"#666",fontWeight:500}}>מתעדכן אוטומטית כל 5 דקות</div>
+          <div style={{fontSize:"1.1vh",color:"#666",fontWeight:500}}>מתעדכן אוטומטית כל 5 דקות</div>
         </div>
 
         {/* ─── Lessons section ─── */}
-        <div style={{marginBottom:20}}>
-          <div style={{fontSize:16,fontWeight:800,color:"#fff",marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontSize:18}}>🎓</span> שיעורים היום
+        <div style={{marginBottom:"1.8vh"}}>
+          <div style={{fontSize:"1.7vh",fontWeight:800,color:"#fff",marginBottom:"0.7vh",display:"flex",alignItems:"center",gap:"0.5vw"}}>
+            <span style={{fontSize:"1.9vh"}}>🎓</span> שיעורים היום
           </div>
           {lessonRows.length === 0 ? (
-            <div style={{padding:"30px 20px",textAlign:"center",color:"#666",fontSize:15,background:"#111",borderRadius:10}}>אין שיעורים היום</div>
+            <div style={{padding:"2.8vh 1.5vw",textAlign:"center",color:"#666",fontSize:"1.5vh",background:"#111",borderRadius:"0.8vh"}}>אין שיעורים היום</div>
           ) : (
-            <div style={{overflowX:"auto",background:"#111",borderRadius:10,border:"1px solid #1e1e1e"}}>
-              <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:14,minWidth:700}}>
+            <div style={{overflowX:"auto",background:"#111",borderRadius:"0.8vh",border:"1px solid #1e1e1e"}}>
+              <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0}}>
                 <thead>
                   <tr style={{background:"#151515"}}>
-                    <th style={{...thBase,width:160}}>מסלול לימודים</th>
+                    <th style={{...thBase,width:"13vw"}}>מסלול לימודים</th>
                     <th style={{...thBase}}>קורס</th>
-                    <th style={{...thBase,width:170}}>מרצה</th>
-                    <th style={{...thBase,width:140}}>שעות</th>
-                    <th style={{...thBase,width:170}}>כיתת לימוד</th>
+                    <th style={{...thBase,width:"14vw"}}>מרצה</th>
+                    <th style={{...thBase,width:"11vw"}}>שעות</th>
+                    <th style={{...thBase,width:"14vw"}}>כיתת לימוד</th>
                     <th style={{...thBase}}>שם שיעור</th>
                   </tr>
                 </thead>
@@ -171,20 +172,20 @@ export function PublicDailyTablePage() {
 
         {/* ─── Student bookings section ─── */}
         <div>
-          <div style={{fontSize:16,fontWeight:800,color:"#fff",marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontSize:18}}>🎙️</span> קביעות סטודנטים היום
+          <div style={{fontSize:"1.7vh",fontWeight:800,color:"#fff",marginBottom:"0.7vh",display:"flex",alignItems:"center",gap:"0.5vw"}}>
+            <span style={{fontSize:"1.9vh"}}>🎙️</span> קביעות סטודנטים היום
           </div>
           {studentRows.length === 0 ? (
-            <div style={{padding:"20px",textAlign:"center",color:"#666",fontSize:14,background:"#111",borderRadius:10}}>אין קביעות סטודנטים היום</div>
+            <div style={{padding:"1.8vh",textAlign:"center",color:"#666",fontSize:"1.4vh",background:"#111",borderRadius:"0.8vh"}}>אין קביעות סטודנטים היום</div>
           ) : (
-            <div style={{overflowX:"auto",background:"#111",borderRadius:10,border:"1px solid #1e1e1e"}}>
-              <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:14,minWidth:600}}>
+            <div style={{overflowX:"auto",background:"#111",borderRadius:"0.8vh",border:"1px solid #1e1e1e"}}>
+              <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0}}>
                 <thead>
                   <tr style={{background:"#151515"}}>
-                    <th style={{...thBase,width:220}}>שם</th>
-                    <th style={{...thBase,width:180}}>מסלול לימודים</th>
-                    <th style={{...thBase,width:200}}>חדר / אולפן</th>
-                    <th style={{...thBase,width:140}}>שעות</th>
+                    <th style={{...thBase,width:"16vw"}}>שם</th>
+                    <th style={{...thBase,width:"14vw"}}>מסלול לימודים</th>
+                    <th style={{...thBase,width:"15vw"}}>חדר / אולפן</th>
+                    <th style={{...thBase,width:"11vw"}}>שעות</th>
                     <th style={{...thBase}}>הערה</th>
                   </tr>
                 </thead>
@@ -195,7 +196,7 @@ export function PublicDailyTablePage() {
                       <td style={{...cellBase,color:"#bbb",fontWeight:500}}>{r.track||"—"}</td>
                       <td style={{...cellBase,color:"#ddd"}}>{stName(r.studioId)}</td>
                       <td style={{...cellBase,color:"#2ecc71",fontWeight:700,whiteSpace:"nowrap"}}>{r.startTime&&r.endTime?`${r.startTime}–${r.endTime}`:r.startTime||"—"}</td>
-                      <td style={{...cellBase,color:"#aaa",fontSize:13}}>{r.note||"—"}</td>
+                      <td style={{...cellBase,color:"#aaa"}}>{r.note||"—"}</td>
                     </tr>
                   ))}
                 </tbody>
