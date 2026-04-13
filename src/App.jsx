@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { logActivity, cloudinaryThumb } from "./utils.js";
+import { logActivity, cloudinaryThumb, getEffectiveStatus } from "./utils.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
 import { CalendarGrid } from "./components/CalendarGrid.jsx";
