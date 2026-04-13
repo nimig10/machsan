@@ -340,9 +340,12 @@ function StaffTab({ showToast, teamMembers, setTeamMembers }) {
 }
 
 // ─── Tab: מנהל ומחלקות (legacy teamMembers / deptHeads) ──────────────────────
-function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, calendarToken, collegeManager, setCollegeManager, managerToken, showToast }) {
+function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, calendarToken, collegeManager, setCollegeManager, managerToken, showToast, lecturers }) {
   const emptyForm    = { name:"", email:"", phone:"", loanTypes:[...LOAN_TYPES] };
-  const emptyDhForm  = { name:"", email:"", role:"", loanTypes:[] };
+  const emptyDhForm  = { name:"", email:"", role:"", loanTypes:[], lecturerId:"" };
+  const activeLecturers = (lecturers||[]).filter(l => l?.isActive !== false && l?.fullName);
+  const [dhLecturerInput, setDhLecturerInput] = useState("");
+  const [editDhLecturerInput, setEditDhLecturerInput] = useState("");
 
   const [mgrForm, setMgrForm]   = useState({ name: collegeManager?.name||"", email: collegeManager?.email||"" });
   const [mgrSaving, setMgrSaving] = useState(false);
@@ -370,23 +373,29 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
     setForm(p => ({ ...p, loanTypes: p.loanTypes.includes(lt) ? p.loanTypes.filter(x=>x!==lt) : [...p.loanTypes, lt] }));
 
   const saveDeptHead = async () => {
+    if (!dhForm.lecturerId) { showToast("error","יש לבחור מרצה מהרשימה"); return; }
     const name = dhForm.name.trim(); const email = dhForm.email.toLowerCase().trim();
     if (!name || !email || !isValidEmailAddress(email)) { showToast("error","שם ומייל תקני חובה"); return; }
     if (dhForm.loanTypes.length === 0) { showToast("error","יש לסמן לפחות סוג השאלה אחד"); return; }
+    // Check for duplicate lecturer
+    if ((deptHeads||[]).some(dh => dh.lecturerId === dhForm.lecturerId)) { showToast("error","מרצה זה כבר מוגדר כראש מחלקה"); return; }
     setDhSaving(true);
-    const updated = [...(deptHeads||[]), { id:`dh_${Date.now()}`, name, email, role:dhForm.role.trim(), loanTypes:dhForm.loanTypes }];
+    const updated = [...(deptHeads||[]), { id:`dh_${Date.now()}`, name, email, role:dhForm.role.trim(), loanTypes:dhForm.loanTypes, lecturerId:dhForm.lecturerId }];
     setDeptHeads(updated);
     const r = await storageSet("deptHeads", updated);
     setDhSaving(false);
-    if (r.ok) { showToast("success", `${name} נוסף/ה כראש מחלקה`); setDhForm(emptyDhForm); setAddingDh(false); }
+    if (r.ok) { showToast("success", `${name} נוסף/ה כראש מחלקה`); setDhForm(emptyDhForm); setDhLecturerInput(""); setAddingDh(false); }
     else showToast("error","❌ שגיאה בשמירה");
   };
 
   const saveEditDh = async () => {
+    if (!editDhForm.lecturerId) { showToast("error","יש לבחור מרצה מהרשימה"); return; }
     const name = editDhForm.name.trim(); const email = editDhForm.email.toLowerCase().trim();
     if (!name || !email || !isValidEmailAddress(email)) { showToast("error","שם ומייל תקני חובה"); return; }
+    // Check for duplicate lecturer (excluding current)
+    if ((deptHeads||[]).some(dh => dh.id!==editDh.id && dh.lecturerId === editDhForm.lecturerId)) { showToast("error","מרצה זה כבר מוגדר כראש מחלקה"); return; }
     setDhSaving(true);
-    const updated = (deptHeads||[]).map(dh => dh.id===editDh.id ? {...dh,name,email,role:editDhForm.role.trim(),loanTypes:editDhForm.loanTypes} : dh);
+    const updated = (deptHeads||[]).map(dh => dh.id===editDh.id ? {...dh,name,email,role:editDhForm.role.trim(),loanTypes:editDhForm.loanTypes,lecturerId:editDhForm.lecturerId} : dh);
     setDeptHeads(updated);
     const r = await storageSet("deptHeads", updated);
     setDhSaving(false);
@@ -511,9 +520,22 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
           {addingDh && (
             <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"16px",marginBottom:16,border:"1px solid var(--border)"}}>
               <div style={{fontWeight:800,fontSize:14,marginBottom:12}}>➕ הוספת ראש מחלקה</div>
-              <div className="grid-2" style={{marginBottom:10}}>
-                <div className="form-group"><label className="form-label">שם מלא *</label><input className="form-input" placeholder="רפי כהן" value={dhForm.name} onChange={e=>setDhForm(p=>({...p,name:e.target.value}))}/></div>
-                <div className="form-group"><label className="form-label">כתובת מייל *</label><input className="form-input" type="email" value={dhForm.email} onChange={e=>setDhForm(p=>({...p,email:e.target.value}))}/></div>
+              <div className="form-group" style={{marginBottom:10}}>
+                <label className="form-label">בחירת מרצה *</label>
+                <div style={{position:"relative"}}>
+                  <input className="form-input" list="dh-lecturer-list" placeholder="הקלד שם מרצה..." value={dhLecturerInput}
+                    style={{borderColor:dhLecturerInput&&!dhForm.lecturerId?"var(--red)":undefined}}
+                    onChange={e=>{
+                      const val=e.target.value; setDhLecturerInput(val);
+                      const matched=activeLecturers.find(l=>l.fullName.trim().toLowerCase()===val.trim().toLowerCase());
+                      if(matched){setDhForm(p=>({...p,name:matched.fullName,email:matched.email||"",lecturerId:String(matched.id)}));}
+                      else{setDhForm(p=>({...p,name:"",email:"",lecturerId:""}));}
+                    }}/>
+                  <datalist id="dh-lecturer-list">{activeLecturers.sort((a,b)=>a.fullName.localeCompare(b.fullName,"he")).map(l=>(<option key={l.id} value={l.fullName}/>))}</datalist>
+                  {dhLecturerInput&&<button type="button" onClick={()=>{setDhLecturerInput("");setDhForm(p=>({...p,name:"",email:"",lecturerId:""}));}} style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:16,color:"var(--text3)"}}>✕</button>}
+                </div>
+                {dhLecturerInput&&!dhForm.lecturerId&&<div style={{fontSize:11,color:"var(--red)",marginTop:4}}>יש לבחור מרצה מהרשימה</div>}
+                {dhForm.lecturerId&&<div style={{fontSize:11,color:"var(--green)",marginTop:4}}>✅ {dhForm.name} — {dhForm.email||"ללא מייל"}</div>}
               </div>
               <div className="form-group" style={{marginBottom:10}}>
                 <label className="form-label">שם התפקיד</label>
@@ -530,7 +552,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
                   );})}
                 </div>
               </div>
-              <button className="btn btn-primary" disabled={!dhForm.name.trim()||!dhForm.email.trim()||dhForm.loanTypes.length===0||dhSaving} onClick={saveDeptHead}>
+              <button className="btn btn-primary" disabled={!dhForm.lecturerId||dhForm.loanTypes.length===0||dhSaving} onClick={saveDeptHead}>
                 {dhSaving?"⏳ שומר...":"✅ הוסף ראש מחלקה"}
               </button>
             </div>
@@ -552,7 +574,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
                     </div>
                   </div>
                   <div style={{display:"flex",gap:6}}>
-                    <button className="btn btn-secondary btn-sm" onClick={()=>{setEditDh(dh);setEditDhForm({name:dh.name,email:dh.email,role:dh.role||"",loanTypes:dh.loanTypes||[]});}}>✏️</button>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>{setEditDh(dh);setEditDhForm({name:dh.name,email:dh.email,role:dh.role||"",loanTypes:dh.loanTypes||[],lecturerId:dh.lecturerId||""});setEditDhLecturerInput(dh.name||"");}}>✏️</button>
                     <button className="btn btn-danger btn-sm" onClick={()=>delDh(dh.id)}>🗑️</button>
                   </div>
                 </div>
@@ -571,9 +593,22 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
               <button className="btn btn-secondary btn-sm" onClick={()=>setEditDh(null)}>✕</button>
             </div>
             <div style={{padding:"20px"}}>
-              <div className="grid-2" style={{marginBottom:10}}>
-                <div className="form-group"><label className="form-label">שם מלא *</label><input className="form-input" value={editDhForm.name} onChange={e=>setEditDhForm(p=>({...p,name:e.target.value}))}/></div>
-                <div className="form-group"><label className="form-label">כתובת מייל *</label><input className="form-input" type="email" value={editDhForm.email} onChange={e=>setEditDhForm(p=>({...p,email:e.target.value}))}/></div>
+              <div className="form-group" style={{marginBottom:10}}>
+                <label className="form-label">בחירת מרצה *</label>
+                <div style={{position:"relative"}}>
+                  <input className="form-input" list="dh-edit-lecturer-list" placeholder="הקלד שם מרצה..." value={editDhLecturerInput}
+                    style={{borderColor:editDhLecturerInput&&!editDhForm.lecturerId?"var(--red)":undefined}}
+                    onChange={e=>{
+                      const val=e.target.value; setEditDhLecturerInput(val);
+                      const matched=activeLecturers.find(l=>l.fullName.trim().toLowerCase()===val.trim().toLowerCase());
+                      if(matched){setEditDhForm(p=>({...p,name:matched.fullName,email:matched.email||"",lecturerId:String(matched.id)}));}
+                      else{setEditDhForm(p=>({...p,name:"",email:"",lecturerId:""}));}
+                    }}/>
+                  <datalist id="dh-edit-lecturer-list">{activeLecturers.sort((a,b)=>a.fullName.localeCompare(b.fullName,"he")).map(l=>(<option key={l.id} value={l.fullName}/>))}</datalist>
+                  {editDhLecturerInput&&<button type="button" onClick={()=>{setEditDhLecturerInput("");setEditDhForm(p=>({...p,name:"",email:"",lecturerId:""}));}} style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:16,color:"var(--text3)"}}>✕</button>}
+                </div>
+                {editDhLecturerInput&&!editDhForm.lecturerId&&<div style={{fontSize:11,color:"var(--red)",marginTop:4}}>יש לבחור מרצה מהרשימה</div>}
+                {editDhForm.lecturerId&&<div style={{fontSize:11,color:"var(--green)",marginTop:4}}>✅ {editDhForm.name} — {editDhForm.email||"ללא מייל"}</div>}
               </div>
               <div className="form-group" style={{marginBottom:10}}>
                 <label className="form-label">שם התפקיד</label>
@@ -591,7 +626,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
                 </div>
               </div>
               <div style={{display:"flex",gap:8}}>
-                <button className="btn btn-primary" disabled={!editDhForm.name.trim()||!editDhForm.email.trim()||editDhForm.loanTypes.length===0||dhSaving} onClick={saveEditDh}>
+                <button className="btn btn-primary" disabled={!editDhForm.lecturerId||editDhForm.loanTypes.length===0||dhSaving} onClick={saveEditDh}>
                   {dhSaving?"⏳ שומר...":"💾 שמור"}
                 </button>
                 <button className="btn btn-secondary" onClick={()=>setEditDh(null)}>ביטול</button>
@@ -661,7 +696,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
 }
 
 // ─── Main export ─────────────────────────────────────────────────────────────
-export function StaffManagementPage({ showToast, teamMembers, setTeamMembers, deptHeads, setDeptHeads, calendarToken, collegeManager, setCollegeManager, managerToken }) {
+export function StaffManagementPage({ showToast, teamMembers, setTeamMembers, deptHeads, setDeptHeads, calendarToken, collegeManager, setCollegeManager, managerToken, lecturers }) {
   const [tab, setTab] = useState("staff");
 
   const TABS = [
@@ -685,7 +720,7 @@ export function StaffManagementPage({ showToast, teamMembers, setTeamMembers, de
       </div>
 
       {tab === "staff"  && <StaffTab showToast={showToast} teamMembers={teamMembers} setTeamMembers={setTeamMembers} />}
-      {tab === "legacy" && <LegacyTeamTab teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} managerToken={managerToken} showToast={showToast}/>}
+      {tab === "legacy" && <LegacyTeamTab teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} managerToken={managerToken} showToast={showToast} lecturers={lecturers}/>}
     </div>
   );
 }

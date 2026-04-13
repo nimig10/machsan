@@ -8000,8 +8000,10 @@ export default function App() {
               studios={studios}
               setLessons={setLessons}
               setKits={setKits}
+              setReservations={setReservations}
               showToast={showToast}
               siteSettings={siteSettings}
+              deptHeads={deptHeads}
               onLogout={async () => {
                 sessionStorage.removeItem("active_role");
                 sessionStorage.removeItem("lecturer_portal_user");
@@ -8047,7 +8049,7 @@ export default function App() {
                 <span className="topbar-title" style={{flex:1}}>ניהול צוות</span>
               </div>
             </div>
-            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <StaffManagementPage showToast={showToast} teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} managerToken={managerToken}/>}
+            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <StaffManagementPage showToast={showToast} teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} managerToken={managerToken} lecturers={lecturers}/>}
           </div>
         </div>
       )}

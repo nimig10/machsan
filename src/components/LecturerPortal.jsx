@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { formatDate, getAvailable, normalizeName, storageSet } from "../utils.js";
+import { formatDate, getAvailable, normalizeName, storageSet, storageGet } from "../utils.js";
+import { statusBadge } from "./ui.jsx";
 
 function hasLinkedValue(value) {
   return value !== null && value !== undefined && String(value).trim() !== "";
@@ -68,8 +69,10 @@ export function LecturerPortal({
   studios = [],
   setLessons,
   setKits,
+  setReservations,
   showToast,
   siteSettings = {},
+  deptHeads = [],
   onLogout,
 }) {
   const [loggedInLecturer, setLoggedInLecturer] = useState(() => {
@@ -103,6 +106,72 @@ export function LecturerPortal({
     const entries = (studios || []).map((studio) => [String(studio.id), studio.name]);
     return Object.fromEntries(entries);
   }, [studios]);
+
+  // ── Dept head panel ──
+  const [dhView, setDhView] = useState("requests"); // requests | courses
+  const [approvingId, setApprovingId] = useState(null);
+
+  const myDeptHead = useMemo(() => {
+    if (!currentLecturer) return null;
+    const lecId = String(currentLecturer.id);
+    const lecEmail = String(currentLecturer.email || "").trim().toLowerCase();
+    return (deptHeads || []).find(dh => {
+      if (dh.lecturerId && String(dh.lecturerId) === lecId) return true;
+      if (lecEmail && dh.email?.toLowerCase().trim() === lecEmail) return true;
+      return false;
+    }) || null;
+  }, [currentLecturer, deptHeads]);
+
+  const pendingDhRequests = useMemo(() => {
+    if (!myDeptHead) return [];
+    const myLoanTypes = myDeptHead.loanTypes || [];
+    return (reservations || []).filter(r =>
+      r.status === "אישור ראש מחלקה" &&
+      myLoanTypes.includes(r.loan_type)
+    ).sort((a, b) => (b.id || 0) - (a.id || 0));
+  }, [myDeptHead, reservations]);
+
+  const approveDhRequest = async (res) => {
+    setApprovingId(res.id);
+    try {
+      const freshRes = await storageGet("reservations");
+      const all = Array.isArray(freshRes) ? freshRes : reservations;
+      const updated = all.map(r => String(r.id) === String(res.id) ? { ...r, status: "ממתין" } : r);
+      if (setReservations) setReservations(updated);
+      const result = await storageSet("reservations", updated);
+      if (result?.ok === false) {
+        showToast("error", "השינוי נשמר מקומית אך לא נשמר בשרת.");
+      } else {
+        showToast("success", `בקשת "${res.student_name}" אושרה והועברה לצוות המחסן`);
+      }
+    } catch (err) {
+      console.error("approveDhRequest error:", err);
+      showToast("error", "שגיאה באישור הבקשה");
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
+  const rejectDhRequest = async (res) => {
+    setApprovingId(res.id);
+    try {
+      const freshRes = await storageGet("reservations");
+      const all = Array.isArray(freshRes) ? freshRes : reservations;
+      const updated = all.map(r => String(r.id) === String(res.id) ? { ...r, status: "נדחה" } : r);
+      if (setReservations) setReservations(updated);
+      const result = await storageSet("reservations", updated);
+      if (result?.ok === false) {
+        showToast("error", "השינוי נשמר מקומית אך לא נשמר בשרת.");
+      } else {
+        showToast("success", `בקשת "${res.student_name}" נדחתה`);
+      }
+    } catch (err) {
+      console.error("rejectDhRequest error:", err);
+      showToast("error", "שגיאה בדחיית הבקשה");
+    } finally {
+      setApprovingId(null);
+    }
+  };
 
   const currentLecturer = useMemo(() => {
     if (!loggedInLecturer) return null;
@@ -615,6 +684,92 @@ export function LecturerPortal({
             </div>
           </div>
         </div>
+        {/* ── Dept Head Approval Panel ── */}
+        {myDeptHead && (
+          <div style={{ background: "var(--surface)", border: "2px solid rgba(155,89,182,0.3)", borderRadius: 18, overflow: "hidden" }}>
+            <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", background: "rgba(155,89,182,0.06)" }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: "#9b59b6" }}>🎓 אישור בקשות השאלה — ראש מחלקה</div>
+                <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 4 }}>
+                  {myDeptHead.role ? `${myDeptHead.role} · ` : ""}סוגי השאלה: {(myDeptHead.loanTypes || []).join(", ")}
+                </div>
+              </div>
+              {pendingDhRequests.length > 0 && (
+                <div style={{ background: "#9b59b6", color: "#fff", borderRadius: 999, padding: "4px 14px", fontSize: 13, fontWeight: 800 }}>
+                  {pendingDhRequests.length} ממתינות
+                </div>
+              )}
+            </div>
+            <div style={{ padding: "16px 22px" }}>
+              {pendingDhRequests.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "20px 0", color: "var(--text3)", fontSize: 14 }}>
+                  ✅ אין בקשות הממתינות לאישורך כרגע
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {pendingDhRequests.map(res => {
+                    const LOAN_ICONS = { "פרטית": "👤", "הפקה": "🎬", "סאונד": "🎙️", "קולנוע יומית": "🎥", "שיעור": "📚" };
+                    return (
+                      <div key={res.id} style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+                          <div style={{ flex: 1, minWidth: 200 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                              <div style={{ fontWeight: 900, fontSize: 15, color: "var(--text)" }}>{res.student_name}</div>
+                              {statusBadge(res.status)}
+                            </div>
+                            <div style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.8 }}>
+                              <div>{LOAN_ICONS[res.loan_type] || "📦"} סוג: <strong>{res.loan_type}</strong></div>
+                              {res.project_name && <div>🎬 פרויקט: {res.project_name}</div>}
+                              <div>📅 {formatDate(res.borrow_date)}{res.borrow_time ? ` ${res.borrow_time}` : ""} — {formatDate(res.return_date)}{res.return_time ? ` ${res.return_time}` : ""}</div>
+                              {res.email && <div>📧 {res.email}</div>}
+                              {res.phone && <div>📞 {res.phone}</div>}
+                              {res.crew_photographer_name && <div>📸 צלם: {res.crew_photographer_name}</div>}
+                              {res.crew_sound_name && <div>🎙️ סאונד: {res.crew_sound_name}</div>}
+                            </div>
+                            {Array.isArray(res.items) && res.items.length > 0 && (
+                              <div style={{ marginTop: 8 }}>
+                                <div style={{ fontSize: 11, fontWeight: 800, color: "var(--text3)", marginBottom: 4 }}>ציוד מבוקש:</div>
+                                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                  {res.items.map((item, idx) => {
+                                    const eq = equipment.find(e => String(e.id) === String(item.equipment_id));
+                                    return (
+                                      <span key={idx} style={{ background: "rgba(155,89,182,0.1)", border: "1px solid rgba(155,89,182,0.25)", borderRadius: 999, padding: "3px 10px", fontSize: 11, fontWeight: 700, color: "#9b59b6" }}>
+                                        {eq?.name || item.name || "פריט"} ×{item.quantity}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "flex-start" }}>
+                            <button
+                              className="btn"
+                              onClick={() => approveDhRequest(res)}
+                              disabled={approvingId === res.id}
+                              style={{ background: "#2ecc71", color: "#fff", border: "none", fontWeight: 800, fontSize: 13, padding: "10px 20px", borderRadius: 10, cursor: "pointer", opacity: approvingId === res.id ? 0.5 : 1 }}
+                            >
+                              {approvingId === res.id ? "⏳ מאשר..." : "✅ אשר"}
+                            </button>
+                            <button
+                              className="btn"
+                              onClick={() => rejectDhRequest(res)}
+                              disabled={approvingId === res.id}
+                              style={{ background: "rgba(231,76,60,0.12)", color: "#e74c3c", border: "2px solid rgba(231,76,60,0.3)", fontWeight: 800, fontSize: 13, padding: "10px 20px", borderRadius: 10, cursor: "pointer", opacity: approvingId === res.id ? 0.5 : 1 }}
+                            >
+                              ❌ דחה
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {filteredCourseEntries.length === 0 ? (
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 18, padding: 28, textAlign: "center", color: "var(--text2)" }}>
             {lecturerCourseEntries.length === 0
