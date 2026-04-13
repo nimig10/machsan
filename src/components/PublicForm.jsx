@@ -1487,6 +1487,11 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     try { return await routeByRolesCore(session); }
     finally { routingRef.current = false; }
   };
+  // Keep a ref to always-latest routeByRoles so mount-only effects can call it
+  // without stale closures over certifications/lecturers.
+  const routeByRolesLatest = useRef(routeByRoles);
+  useEffect(() => { routeByRolesLatest.current = routeByRoles; });
+
   const routeByRolesCore = async (session) => {
     const authEmail = session.user.email.toLowerCase().trim();
     const authUserId = session.user.id;
@@ -1628,8 +1633,8 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   };
 
   // Listen for Supabase auth state changes — subscribe ONCE (mount-only).
-  // routeByRoles already reads lecturers/certifications from component scope
-  // via closure, and the routingRef guard prevents duplicate calls.
+  // Uses routeByRolesLatest ref to always call the latest version with
+  // current certifications/lecturers (avoids stale closure).
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "PASSWORD_RECOVERY") {
@@ -1640,7 +1645,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       }
       if (event !== "SIGNED_IN" || !session?.user?.email) return;
       if (recoveryModeRef.current) return;
-      await routeByRoles(session);
+      await routeByRolesLatest.current(session);
     });
 
     return () => subscription.unsubscribe();
@@ -1663,7 +1668,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   }, [isRecoveryInitial]);
 
   // Check for existing session on mount (e.g. after magic link redirect).
-  // Mount-only — the routingRef guard prevents races with onAuthStateChange.
+  // Mount-only — uses ref to avoid stale closure, routingRef prevents races.
   useEffect(() => {
     if (loggedInStudent) return;
     if (recoveryModeRef.current || recoveryMode) return;
@@ -1674,7 +1679,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (!session?.user?.email) return;
         if (recoveryModeRef.current) return;
-        routeByRoles(session);
+        routeByRolesLatest.current(session);
       });
     }, 300);
     return () => clearTimeout(t);

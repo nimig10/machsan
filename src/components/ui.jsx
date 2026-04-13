@@ -83,7 +83,7 @@ export function Loading({ accentColor, ready = false, onDone }) {
   }, []);
 
   return (
-    <div style={{position:"fixed",inset:0,width:"100vw",height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",zIndex:9999,opacity:fading?0:1,transition:`opacity ${FADE_OUT_MS}ms ease`}}>
+    <div style={{position:"fixed",inset:0,width:"100vw",height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",zIndex:9999,background:"#1a1a2e",opacity:fading?0:1,transition:`opacity ${FADE_OUT_MS}ms ease`}}>
       <style>{`@media(max-width:600px){.lottie-load{width:250px!important;height:250px!important}}`}</style>
       <div ref={ref} className="lottie-load" style={{width:350,height:350}} />
     </div>

@@ -53,7 +53,7 @@ export function PublicDailyTablePage() {
   useEffect(() => {
     injectHeeboFont();
     loadData();
-    const refresh = setInterval(loadData, 2*60*1000); // every 2 min
+    const refresh = setInterval(loadData, 5*60*1000); // every 5 min
     const reload  = setInterval(() => window.location.reload(), 30*60*1000);
     return () => { clearInterval(refresh); clearInterval(reload); };
   }, []);
@@ -130,7 +130,7 @@ export function PublicDailyTablePage() {
               <div style={{fontSize:"2.2vh",color:"#fff",fontWeight:800,letterSpacing:0.3}}>{dateLabel()}</div>
             </div>
           </div>
-          <div style={{fontSize:"1.1vh",color:"#666",fontWeight:500}}>מתעדכן אוטומטית כל 2 דקות</div>
+          <div style={{fontSize:"1.1vh",color:"#666",fontWeight:500}}>מתעדכן אוטומטית כל 5 דקות</div>
         </div>
 
         {/* ─── Lessons section ─── */}

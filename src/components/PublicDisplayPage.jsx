@@ -49,7 +49,7 @@ export function PublicDisplayPage() {
 
   useEffect(() => {
     loadData();
-    const dataRefresh = setInterval(loadData, 2 * 60 * 1000); // every 2 min
+    const dataRefresh = setInterval(loadData, 5 * 60 * 1000); // every 5 min
     const pageReload  = setInterval(() => window.location.reload(), 15 * 60 * 1000); // was 5 min
     return () => { clearInterval(dataRefresh); clearInterval(pageReload); };
   }, []);
