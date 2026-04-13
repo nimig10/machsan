@@ -596,6 +596,10 @@ export const css = `
   .form-label { display:block; font-size:13px; font-weight:600; color:var(--text2); margin-bottom:6px; }
   .form-input,.form-select,.form-textarea { width:100%; padding:9px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:var(--r-sm); color:var(--text); font-family:'Heebo',sans-serif; font-size:14px; outline:none; transition:border-color 0.15s; }
   .form-input:focus,.form-select:focus,.form-textarea:focus { border-color:var(--accent); }
+  input[type="date"].form-input::-webkit-calendar-picker-indicator,
+  input[type="date"]::-webkit-calendar-picker-indicator { filter:invert(80%) sepia(60%) saturate(400%) hue-rotate(5deg) brightness(110%); opacity:0.85; cursor:pointer; }
+  input[type="date"].form-input::-webkit-calendar-picker-indicator:hover,
+  input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity:1; }
   .form-textarea { resize:vertical; min-height:80px; }
   .table-wrap { overflow-x:auto; }
   table { width:100%; border-collapse:collapse; }
