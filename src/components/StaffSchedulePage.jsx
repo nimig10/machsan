@@ -1430,12 +1430,6 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
               <button className="btn btn-secondary" style={{ color: "#ef4444", fontSize: 12 }}
                 onClick={async () => { await onDelete(existing.id); onClose(); }}>🗑️ מחק</button>
             )}
-            {existing && onLock && isAdmin && mode === "assignment" && !isEditingSelf && (
-              <button className="btn btn-secondary" style={{ fontSize: 12 }}
-                onClick={async () => { await onLock(existing.id, existing.locked); onClose(); }}>
-                {existing.locked ? "🔓 פתח נעילה" : "🔒 נעל"}
-              </button>
-            )}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
