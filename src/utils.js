@@ -53,7 +53,10 @@ function restoreCacheValue(key, value) {
 
 export async function storageGet(key) {
   try {
-    const res  = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers: SB_HEADERS });
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 6000); // 6s timeout
+    const res  = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers: SB_HEADERS, signal: ctrl.signal });
+    clearTimeout(timeout);
     const json = await res.json();
     if (Array.isArray(json) && json.length > 0) {
       lsSet(key, json[0].data);
