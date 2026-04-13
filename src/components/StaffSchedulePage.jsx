@@ -751,7 +751,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                                 </span>
                                 {dailyTasks.filter(dt => dt.date === date && String(dt.staff_id) === String(block.memberId)).map(dt => {
                                   const td = DAILY_TASKS.find(t => t.key === dt.task_key);
-                                  return td ? <span key={dt.task_key} style={{ fontSize: 8, flexShrink: 0 }} title={td.label}>{td.icon}</span> : null;
+                                  return td ? <span key={dt.task_key} style={{ fontSize: 12, flexShrink: 0, lineHeight: 1 }} title={td.label}>{td.icon}</span> : null;
                                 })}
                                 {slotKey === "custom" && block.startTime && block.endTime && (
                                   <span style={{ fontSize: 9, color: "rgba(255,255,255,0.6)", whiteSpace: "nowrap", flexShrink: 0 }}>
