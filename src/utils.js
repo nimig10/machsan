@@ -399,10 +399,12 @@ export function getAvailable(eqId, borrowDate, returnDate, reservations, equipme
   let used = 0;
   for (const res of reservations) {
     if (res.id === excludeId) continue;
-    if (res.status !== "מאושר" && res.status !== "באיחור") continue;
+    // Only count items physically out of the warehouse (פעילה / באיחור)
+    const effStatus = getEffectiveStatus(res);
+    if (effStatus !== "פעילה" && effStatus !== "באיחור") continue;
     const resStart = toDateTime(res.borrow_date, res.borrow_time || "00:00");
     // Overdue items are physically out of the warehouse — block every future request regardless of return_date
-    const resEnd = res.status === "באיחור" ? FAR_FUTURE : toDateTime(res.return_date, res.return_time || "23:59");
+    const resEnd = effStatus === "באיחור" ? FAR_FUTURE : toDateTime(res.return_date, res.return_time || "23:59");
     // Overlap: new period starts before existing ends AND new period ends after existing starts
     if (bStart < resEnd && rEnd > resStart) {
       const item = res.items?.find(i => i.equipment_id == eqId);

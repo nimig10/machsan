@@ -1549,11 +1549,12 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     ...(studios || []).flatMap(s => Array.isArray(s?.studioCertIds) ? s.studioCertIds.filter(Boolean) : (s?.studioCertId ? [s.studioCertId] : [])),
   ]);
   const equipmentCertTypes = (certifications?.types || []).filter(t => !studioCertIdsForEquipment.has(t.id));
+  // Only count items that have PHYSICALLY left the warehouse (פעילה / באיחור)
+  // "מאושר" and "ממתין" items are still in the warehouse — don't deduct from stock
   const used = (id) => reservations
     .filter(r=>{
-      if(r.status==="באיחור") return true; // overdue = item still out, regardless of dates
-      if(r.status!=="מאושר"&&r.status!=="ממתין") return false;
-      return r.borrow_date<=todayStr2 && r.return_date>=todayStr2;
+      const eff = getEffectiveStatus(r);
+      return eff === "פעילה" || eff === "באיחור";
     })
     .reduce((s,r)=>s+(r.items?.find(i=>i.equipment_id==id)?.quantity||0),0);
 
