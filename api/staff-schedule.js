@@ -48,9 +48,10 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Missing startDate or endDate" });
     }
     const dateFilter = `date=gte.${encodeURIComponent(startDate)}&date=lte.${encodeURIComponent(endDate)}`;
-    const [prefResult, assignResult] = await Promise.all([
+    const [prefResult, assignResult, taskResult] = await Promise.all([
       sbFetch(`staff_schedule_preferences?${dateFilter}&order=date.asc`),
       sbFetch(`staff_schedule_assignments?${dateFilter}&order=date.asc`),
+      sbFetch(`staff_daily_tasks?${dateFilter}&order=date.asc`),
     ]);
     if (!prefResult.ok || !assignResult.ok) {
       return res.status(500).json({ error: "Failed to fetch schedule data" });
@@ -58,6 +59,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       preferences: prefResult.data || [],
       assignments: assignResult.data || [],
+      dailyTasks: taskResult.ok ? (taskResult.data || []) : [],
     });
   }
 
@@ -221,15 +223,87 @@ export default async function handler(req, res) {
     return res.status(result.ok ? 200 : 500).json({ ok: result.ok });
   }
 
+  // CLAIM-DAILY-TASK — assign a daily task to a staff member
+  if (action === "claim-daily-task") {
+    const { staffId, date, taskKey, callerId } = req.body;
+    if (!staffId || !date || !taskKey) {
+      return res.status(400).json({ error: "Missing required fields (staffId, date, taskKey)" });
+    }
+    if (!["open", "close", "prep"].includes(taskKey)) {
+      return res.status(400).json({ error: "Invalid taskKey" });
+    }
+    // Check if already claimed by someone else
+    const existing = await sbFetch(
+      `staff_daily_tasks?date=eq.${encodeURIComponent(date)}&task_key=eq.${encodeURIComponent(taskKey)}&select=id,staff_id,locked`
+    );
+    if (existing.ok && Array.isArray(existing.data) && existing.data.length > 0) {
+      const task = existing.data[0];
+      if (task.staff_id === staffId) {
+        // Already claimed by this staff — no-op success
+        return res.status(200).json({ ok: true, data: task });
+      }
+      if (callerRole !== "admin") {
+        return res.status(409).json({ error: "המשימה כבר תפוסה על ידי עובד אחר" });
+      }
+      // Admin override — falls through to upsert below
+    }
+    const result = await sbFetch("staff_daily_tasks?on_conflict=date,task_key", {
+      method: "POST",
+      headers: {
+        ...headers,
+        Prefer: "return=representation,resolution=merge-duplicates",
+      },
+      body: JSON.stringify({
+        date,
+        task_key: taskKey,
+        staff_id: staffId,
+        assigned_by: callerId || null,
+        locked: false,
+        updated_at: new Date().toISOString(),
+      }),
+    });
+    if (!result.ok) {
+      return res.status(500).json({ error: "Failed to claim task", detail: result.data });
+    }
+    return res.status(200).json({ ok: true, data: result.data?.[0] || null });
+  }
+
+  // UNCLAIM-DAILY-TASK — remove a daily task assignment
+  if (action === "unclaim-daily-task") {
+    const { staffId, date, taskKey, callerId } = req.body;
+    if (!staffId || !date || !taskKey) {
+      return res.status(400).json({ error: "Missing required fields (staffId, date, taskKey)" });
+    }
+    const existing = await sbFetch(
+      `staff_daily_tasks?date=eq.${encodeURIComponent(date)}&task_key=eq.${encodeURIComponent(taskKey)}&select=id,staff_id,locked`
+    );
+    if (!existing.ok || !Array.isArray(existing.data) || existing.data.length === 0) {
+      return res.status(404).json({ error: "Task not found" });
+    }
+    const task = existing.data[0];
+    if (callerRole !== "admin" && task.staff_id !== callerId) {
+      return res.status(403).json({ error: "לא ניתן לבטל משימה של עובד אחר" });
+    }
+    if (task.locked && callerRole !== "admin") {
+      return res.status(409).json({ error: "המשימה נעולה — פנה למנהל" });
+    }
+    const result = await sbFetch(
+      `staff_daily_tasks?date=eq.${encodeURIComponent(date)}&task_key=eq.${encodeURIComponent(taskKey)}`,
+      { method: "DELETE" }
+    );
+    return res.status(result.ok ? 200 : 500).json({ ok: result.ok });
+  }
+
   // PURGE-OLD — delete preferences & assignments older than a given date (admin only)
   if (action === "purge-old") {
     if (callerRole !== "admin") return res.status(403).json({ error: "Admin only" });
     const { beforeDate } = req.body;
     if (!beforeDate) return res.status(400).json({ error: "Missing beforeDate" });
     const filter = `date=lt.${encodeURIComponent(beforeDate)}`;
-    const [pr, ar] = await Promise.all([
+    const [pr, ar, tr] = await Promise.all([
       sbFetch(`staff_schedule_preferences?${filter}`, { method: "DELETE" }),
       sbFetch(`staff_schedule_assignments?${filter}`, { method: "DELETE" }),
+      sbFetch(`staff_daily_tasks?${filter}`, { method: "DELETE" }),
     ]);
     return res.status(pr.ok && ar.ok ? 200 : 500).json({ ok: pr.ok && ar.ok });
   }

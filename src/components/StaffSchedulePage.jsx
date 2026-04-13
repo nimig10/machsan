@@ -20,6 +20,12 @@ const SHIFT_TYPES = {
 
 const SLOT_ORDER = ["morning", "custom", "evening"];
 
+const DAILY_TASKS = [
+  { key: "open",  label: "פתיחת מכללה", icon: "☀️" },
+  { key: "close", label: "סגירת מכללה", icon: "🌙" },
+  { key: "prep",  label: "הכנת כיתות",  icon: "🏫" },
+];
+
 const HE_DAYS   = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 const MIN_WEEK_OFFSET = -26; // 6 months back
@@ -133,6 +139,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
   const weekCache = useRef({});       // { startDate: { preferences, assignments } }
   const activeStartRef = useRef(null);
   const [holidays, setHolidays] = useState([]);
+  const [dailyTasks, setDailyTasks] = useState([]);
   const [editModal, setEditModal] = useState(null);
   const [notePopup, setNotePopup] = useState(null); // { memberName, note }
   const [myShiftsOnly, setMyShiftsOnly] = useState(false);
@@ -226,6 +233,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
     if (start !== activeStartRef.current) return;
     setPreferences(data.preferences);
     setAssignments(data.assignments);
+    setDailyTasks(data.dailyTasks || []);
   }, []);
 
   // Core loader: fetches one week (with caching). background=true skips loading UI.
@@ -239,7 +247,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
     }
     try {
       const data = await scheduleApi("list-week", { startDate: start, endDate: end });
-      const result = { preferences: data.preferences || [], assignments: data.assignments || [] };
+      const result = { preferences: data.preferences || [], assignments: data.assignments || [], dailyTasks: data.dailyTasks || [] };
       weekCache.current[start] = result;
       applyWeek(start, result);
     } catch { if (!background) showToast("error", "שגיאה בטעינת לוז"); }
@@ -306,6 +314,17 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
     const r = await scheduleApi(locked ? "unlock" : "lock", { id: aId, callerRole: "admin" });
     if (r.error) { showToast("error", r.error); return; }
     await fetchWeekData();
+  };
+  const claimTask = async (staffId, date, taskKey) => {
+    const r = await scheduleApi("claim-daily-task", { staffId, date, taskKey, callerRole: isAdmin ? "admin" : "staff", callerId: currentStaffId });
+    if (r.error) { showToast("error", r.error); return false; }
+    showToast("success", "✅ המשימה נשמרה");
+    await fetchWeekData(); return true;
+  };
+  const unclaimTask = async (staffId, date, taskKey) => {
+    const r = await scheduleApi("unclaim-daily-task", { staffId, date, taskKey, callerRole: isAdmin ? "admin" : "staff", callerId: currentStaffId });
+    if (r.error) { showToast("error", r.error); return false; }
+    await fetchWeekData(); return true;
   };
 
   /* ── Day slots builder ── */
@@ -620,6 +639,19 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                     ...(isToday ? { background: "#3b82f6", borderRadius: "50%", width: 34, height: 34, display: "inline-flex", alignItems: "center", justifyContent: "center" } : {}),
                   }}>{new Date(date + "T00:00:00").getDate()}</div>
                   {hol && <div style={{ fontSize: 9, color: "#f59e0b", fontWeight: 600, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{hol.isErev ? `ערב ${hol.name}` : hol.name}</div>}
+                  {/* Daily task status dots */}
+                  <div style={{ display: "flex", gap: 3, justifyContent: "center", marginTop: 3 }}>
+                    {DAILY_TASKS.map(t => {
+                      const task = dailyTasks.find(dt => dt.date === date && dt.task_key === t.key);
+                      const assigneeName = task ? (allMembers.find(m => String(m.id) === String(task.staff_id))?.name || "משובץ") : null;
+                      return (
+                        <span key={t.key}
+                          title={`${t.icon} ${t.label}: ${assigneeName || "לא משובץ"}`}
+                          style={{ width: 7, height: 7, borderRadius: "50%", display: "inline-block", background: task ? "#22c55e" : "#ef4444", opacity: 0.85 }}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
               );
             })}
@@ -706,6 +738,10 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                                 <span style={{ fontSize: 10, fontWeight: 700, color: "#fff", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                   {block.memberName}
                                 </span>
+                                {dailyTasks.filter(dt => dt.date === date && String(dt.staff_id) === String(block.memberId)).map(dt => {
+                                  const td = DAILY_TASKS.find(t => t.key === dt.task_key);
+                                  return td ? <span key={dt.task_key} style={{ fontSize: 8, flexShrink: 0 }} title={td.label}>{td.icon}</span> : null;
+                                })}
                                 {slotKey === "custom" && block.startTime && block.endTime && (
                                   <span style={{ fontSize: 9, color: "rgba(255,255,255,0.6)", whiteSpace: "nowrap", flexShrink: 0 }}>
                                     {block.startTime}–{block.endTime}
@@ -858,6 +894,10 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
           onDelete={editModal.mode === "preference" ? deletePref : deleteAssignment}
           onLock={editModal.mode === "assignment" ? toggleLock : null}
           onClose={() => setEditModal(null)}
+          dailyTasks={dailyTasks}
+          allMembers={allMembers}
+          onClaimTask={claimTask}
+          onUnclaimTask={unclaimTask}
         />
       )}
     </div>
@@ -1245,7 +1285,7 @@ function LoansRow({ workDays, reservations, today }) {
 }
 
 /* ══════════ Editor Modal ══════════ */
-function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSave, onDelete, onLock, onClose }) {
+function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSave, onDelete, onLock, onClose, dailyTasks = [], allMembers = [], onClaimTask, onUnclaimTask }) {
   const { staffId: initStaffId, date, mode, existing, defaultShift, prefEntry, asgnEntry } = modal;
   const [staffId, setStaffId] = useState(String(initStaffId));
   const [selectedStaffIds, setSelectedStaffIds] = useState([String(initStaffId)]);
@@ -1420,6 +1460,46 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
               <input type="checkbox" checked={locked} onChange={e => setLocked(e.target.checked)} />
               🔒 נעילת שיבוץ (מונע עריכה על ידי העובד)
             </label>
+          </div>
+        )}
+
+        {/* ── Daily Tasks checkboxes ── */}
+        {shiftType !== "absent" && !isMultiSelect && (
+          <div style={{ marginBottom: 14, padding: "10px 12px", background: "var(--surface2)", borderRadius: 8 }}>
+            <label style={{ ...labelStyle, marginBottom: 8, fontSize: 13, color: "var(--text)" }}>📋 משימות יומיות</label>
+            {DAILY_TASKS.map(t => {
+              const task = dailyTasks.find(dt => dt.date === date && dt.task_key === t.key);
+              const isClaimedByMe = task && String(task.staff_id) === String(staffId);
+              const isClaimedByOther = task && String(task.staff_id) !== String(staffId);
+              const otherName = isClaimedByOther ? (allMembers.find(m => String(m.id) === String(task.staff_id))?.name || "עובד אחר") : null;
+              const canToggle = isClaimedByMe || (!isClaimedByOther) || isAdmin;
+
+              return (
+                <label key={t.key} style={{
+                  display: "flex", alignItems: "center", gap: 8, fontSize: 13,
+                  cursor: canToggle ? "pointer" : "not-allowed",
+                  opacity: canToggle ? 1 : 0.55, marginBottom: 6,
+                  padding: "4px 0",
+                }}>
+                  <input type="checkbox" checked={!!isClaimedByMe} disabled={!canToggle}
+                    onChange={async () => {
+                      if (isClaimedByMe) {
+                        await onUnclaimTask(staffId, date, t.key);
+                      } else {
+                        await onClaimTask(staffId, date, t.key);
+                      }
+                    }}
+                  />
+                  <span>{t.icon} {t.label}</span>
+                  {isClaimedByOther && (
+                    <span style={{ fontSize: 11, color: "#f59e0b", fontWeight: 600 }}>
+                      (תפוס — {otherName})
+                    </span>
+                  )}
+                  {isClaimedByMe && <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 600 }}>✓</span>}
+                </label>
+              );
+            })}
           </div>
         )}
 
