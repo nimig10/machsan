@@ -101,7 +101,10 @@ async function keepAlive() {
     const now = Date.now();
     const FOUR_DAYS = 4 * 24 * 60 * 60 * 1000;
     if (lastPing && now - Number(lastPing) < FOUR_DAYS) return;
-    await fetch(`${SB_URL}/rest/v1/store?key=eq.equipment&select=key`, { headers: SB_HEADERS });
+    const ac = new AbortController();
+    const tid = setTimeout(() => ac.abort(), 4000);
+    await fetch(`${SB_URL}/rest/v1/store?key=eq.equipment&select=key`, { headers: SB_HEADERS, signal: ac.signal });
+    clearTimeout(tid);
     localStorage.setItem("sb_last_ping", String(now));
     console.log("Supabase keep-alive ping sent");
   } catch(e) { /* silent */ }
@@ -3076,7 +3079,10 @@ function PublicForm_REMOVED({ equipment, reservations, setReservations, showToas
       if (relevantDeptHeads.length > 0) {
         const approveUrl = `${window.location.origin}/api/approve-production?id=${res.id}`;
         const calendarUrl = calendarToken ? `${window.location.origin}/calendar?token=${calendarToken}` : "";
+        const dhAc = new AbortController();
+        const dhTid = setTimeout(() => dhAc.abort(), 20000);
         for (let i = 0; i < relevantDeptHeads.length; i++) {
+          if (dhAc.signal.aborted) break;
           const dh = relevantDeptHeads[i];
           // delay between emails to avoid Gmail rate limiting
           if (i > 0) await new Promise(r => setTimeout(r, 1500));
@@ -3084,6 +3090,7 @@ function PublicForm_REMOVED({ equipment, reservations, setReservations, showToas
             const response = await fetch("/api/send-email", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
+              signal: dhAc.signal,
               body: JSON.stringify({
                 to:             dh.email,
                 type:           "dept_head_notify",
@@ -3113,6 +3120,7 @@ function PublicForm_REMOVED({ equipment, reservations, setReservations, showToas
             console.error("dept head email error", dh.email, dhErr);
           }
         }
+        clearTimeout(dhTid);
       }
     } catch(e) {
       console.error("send email error:", e);
@@ -7867,45 +7875,57 @@ export default function App() {
   }, [loading]);
 
   // ── Auto-send overdue email 30 minutes after return time ──
+  const overdueInFlightRef = useRef(false);
   useEffect(() => {
     if (loading) return;
     const checkOverdueEmails = async () => {
-      const now = Date.now();
-      const THIRTY_MIN = 30 * 60 * 1000;
-      const toSend = reservations.filter(r =>
-        r.status === "באיחור" &&
-        !r.overdue_email_sent &&
-        r.email &&
-        r.loan_type !== "שיעור"
-      ).filter(r => {
-        const returnAt = getReservationReturnTimestamp(r);
-        return returnAt && (now - returnAt) >= THIRTY_MIN;
-      });
-      if (!toSend.length) return;
-      for (const r of toSend) {
-        try {
-          await fetch("/api/send-email", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              to: r.email,
-              type: "overdue",
-              student_name: r.student_name,
-              borrow_date: formatDate(r.borrow_date),
-              return_date: formatDate(r.return_date),
-              return_time: r.return_time || "",
-            }),
-          });
-        } catch (e) { console.error("overdue email error", e); }
+      if (overdueInFlightRef.current) return; // prevent concurrent stacking
+      overdueInFlightRef.current = true;
+      try {
+        const now = Date.now();
+        const THIRTY_MIN = 30 * 60 * 1000;
+        const toSend = reservations.filter(r =>
+          r.status === "באיחור" &&
+          !r.overdue_email_sent &&
+          r.email &&
+          r.loan_type !== "שיעור"
+        ).filter(r => {
+          const returnAt = getReservationReturnTimestamp(r);
+          return returnAt && (now - returnAt) >= THIRTY_MIN;
+        });
+        if (!toSend.length) return;
+        const ac = new AbortController();
+        const tid = setTimeout(() => ac.abort(), 15000);
+        for (const r of toSend) {
+          if (ac.signal.aborted) break;
+          try {
+            await fetch("/api/send-email", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              signal: ac.signal,
+              body: JSON.stringify({
+                to: r.email,
+                type: "overdue",
+                student_name: r.student_name,
+                borrow_date: formatDate(r.borrow_date),
+                return_date: formatDate(r.return_date),
+                return_time: r.return_time || "",
+              }),
+            });
+          } catch (e) { console.error("overdue email error", e); }
+        }
+        clearTimeout(tid);
+        // Mark as sent
+        const sentIds = new Set(toSend.map(r => r.id));
+        const updated = reservations.map(r => sentIds.has(r.id) ? { ...r, overdue_email_sent: true } : r);
+        _setReservations(updated);
+        await storageSet("reservations", updated);
+      } finally {
+        overdueInFlightRef.current = false;
       }
-      // Mark as sent
-      const sentIds = new Set(toSend.map(r => r.id));
-      const updated = reservations.map(r => sentIds.has(r.id) ? { ...r, overdue_email_sent: true } : r);
-      _setReservations(updated);
-      await storageSet("reservations", updated);
     };
     const t = setTimeout(checkOverdueEmails, 90000); // first check after 90s
-    const i = setInterval(checkOverdueEmails, 15 * 60 * 1000); // then every 15 min (was 5 min)
+    const i = setInterval(checkOverdueEmails, 15 * 60 * 1000); // then every 15 min
     return () => { clearTimeout(t); clearInterval(i); };
   }, [loading, reservations]);
 

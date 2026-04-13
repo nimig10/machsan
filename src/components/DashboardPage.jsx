@@ -563,7 +563,10 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                       if (res.email) {
                         const itemsList = res.items?.map(i=>`<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${equipment.find(e=>e.id==i.equipment_id)?.name||i.name||"?"}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${i.quantity}</td></tr>`).join("")||"";
                         try {
-                          await fetch("/api/send-email",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:res.email,type:"approved",student_name:res.student_name,items_list:itemsList,borrow_date:formatDate(res.borrow_date),return_date:formatDate(res.return_date),borrow_time:res.borrow_time||"",return_time:res.return_time||"",sound_logo_url:siteSettings.soundLogo||""})});
+                          const emailAc = new AbortController();
+                          const emailTid = setTimeout(() => emailAc.abort(), 8000);
+                          await fetch("/api/send-email",{method:"POST",headers:{"Content-Type":"application/json"},signal:emailAc.signal,body:JSON.stringify({to:res.email,type:"approved",student_name:res.student_name,items_list:itemsList,borrow_date:formatDate(res.borrow_date),return_date:formatDate(res.return_date),borrow_time:res.borrow_time||"",return_time:res.return_time||"",sound_logo_url:siteSettings.soundLogo||""})});
+                          clearTimeout(emailTid);
                           if(showToast) showToast("success",`📧 מייל אישור נשלח ל-${res.email}`);
                         } catch { if(showToast) showToast("error","שגיאה בשליחת המייל"); }
                       }
