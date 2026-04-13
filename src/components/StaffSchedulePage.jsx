@@ -193,12 +193,12 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
   }, [staffList, staffUser]);
 
   const displayMembers = useMemo(() => {
-    if (myShiftsOnly && currentStaffId) {
-      const me = allMembers.find(m => String(m.id) === String(currentStaffId));
+    if (myShiftsOnly && effectiveStaffId) {
+      const me = allMembers.find(m => String(m.id) === String(effectiveStaffId));
       return me ? [me] : [];
     }
     return allMembers;
-  }, [allMembers, myShiftsOnly, currentStaffId]);
+  }, [allMembers, myShiftsOnly, effectiveStaffId]);
 
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
   const workDays = useMemo(() => weekDates.slice(0, 6), [weekDates]); // Sun–Fri, no Saturday
@@ -707,11 +707,11 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                         {/* Member list */}
                         <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                           {members.map(block => {
-                            const isMe = block.memberId === String(currentStaffId);
+                            const isMe = block.memberId === String(effectiveStaffId);
                             // Staff can edit own preferences OR own unlocked assignments
                             const canEdit = isAdmin || (isMe && canStaffEditDate(date) && (block.type === "preference" || !block.locked));
-                            // Lock icon: only visible to admin or to the locked staff member
-                            const showLock = block.locked && (isAdmin || isMe);
+                            // Lock icon: always show on locked shifts (so staff knows they can't edit)
+                            const showLock = block.locked;
                             // Notes: staff note (from preference) + manager note (from assignment)
                             const canSeeStaffNote = !!block.staffNote && (block.staffNotePublic || isAdmin);
                             const canSeeManagerNote = !!block.managerNote && (isAdmin || isMe);
@@ -802,7 +802,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                     }}>
                       <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                         {absent.map(block => {
-                          const isMe = block.memberId === String(currentStaffId);
+                          const isMe = block.memberId === String(effectiveStaffId);
                           const canEdit = isAdmin || (isMe && canStaffEditDate(date) && (block.type === "preference" || !block.locked));
                           return (
                             <div key={block.id}
