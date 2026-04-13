@@ -114,32 +114,34 @@ export function PublicDailyTablePage() {
 
   const accent = settings.accentColor || "#f5a623";
 
-  const cellBase = { padding:"14px 18px", borderBottom:"1px solid #222", color:"#e8e8e8" };
-  const thBase   = { padding:"14px 18px", textAlign:"right", fontWeight:700, color:"#bdbdbd", borderBottom:`2px solid ${accent}`, fontSize:14, letterSpacing:0.3 };
+  const cellBase = { padding:"10px 14px", borderBottom:"1px solid #222", color:"#e8e8e8" };
+  const thBase   = { padding:"10px 14px", textAlign:"right", fontWeight:700, color:"#bdbdbd", borderBottom:`2px solid ${accent}`, fontSize:13, letterSpacing:0.3 };
 
   return (
-    <div style={{minHeight:"100vh",background:"#0a0a0a",color:"#f5f5f5",direction:"rtl",fontFamily:"'Heebo', system-ui, -apple-system, sans-serif",padding:"24px 16px"}}>
+    <div style={{minHeight:"100vh",background:"#0a0a0a",color:"#f5f5f5",direction:"rtl",fontFamily:"'Heebo', system-ui, -apple-system, sans-serif",padding:"12px 16px"}}>
       <div style={{maxWidth:1280,margin:"0 auto"}}>
         {/* Header */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12,marginBottom:28,paddingBottom:16,borderBottom:`2px solid ${accent}`}}>
-          <div>
-            {settings.logo && <img src={settings.logo} alt="logo" style={{height:52,marginBottom:10}}/>}
-            <div style={{fontSize:28,fontWeight:800,color:accent,letterSpacing:0.3}}>📋 לוח לו״ז יומי</div>
-            <div style={{fontSize:34,color:"#fff",marginTop:10,fontWeight:800,letterSpacing:0.3}}>{dateLabel()}</div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8,marginBottom:14,paddingBottom:10,borderBottom:`2px solid ${accent}`}}>
+          <div style={{display:"flex",alignItems:"center",gap:14}}>
+            {settings.logo && <img src={settings.logo} alt="logo" style={{height:36}}/>}
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:accent,letterSpacing:0.3}}>📋 לוח לו״ז יומי</div>
+              <div style={{fontSize:22,color:"#fff",fontWeight:800,letterSpacing:0.3}}>{dateLabel()}</div>
+            </div>
           </div>
-          <div style={{fontSize:12,color:"#666",fontWeight:500}}>מתעדכן אוטומטית כל 5 דקות</div>
+          <div style={{fontSize:11,color:"#666",fontWeight:500}}>מתעדכן אוטומטית כל 5 דקות</div>
         </div>
 
         {/* ─── Lessons section ─── */}
-        <div style={{marginBottom:40}}>
-          <div style={{fontSize:22,fontWeight:800,color:"#fff",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
-            <span style={{fontSize:24}}>🎓</span> שיעורים היום
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:16,fontWeight:800,color:"#fff",marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:18}}>🎓</span> שיעורים היום
           </div>
           {lessonRows.length === 0 ? (
             <div style={{padding:"30px 20px",textAlign:"center",color:"#666",fontSize:15,background:"#111",borderRadius:10}}>אין שיעורים היום</div>
           ) : (
             <div style={{overflowX:"auto",background:"#111",borderRadius:10,border:"1px solid #1e1e1e"}}>
-              <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:15,minWidth:700}}>
+              <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:14,minWidth:700}}>
                 <thead>
                   <tr style={{background:"#151515"}}>
                     <th style={{...thBase,width:160}}>מסלול לימודים</th>
@@ -169,14 +171,14 @@ export function PublicDailyTablePage() {
 
         {/* ─── Student bookings section ─── */}
         <div>
-          <div style={{fontSize:22,fontWeight:800,color:"#fff",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
-            <span style={{fontSize:24}}>🎙️</span> קביעות סטודנטים היום
+          <div style={{fontSize:16,fontWeight:800,color:"#fff",marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:18}}>🎙️</span> קביעות סטודנטים היום
           </div>
           {studentRows.length === 0 ? (
-            <div style={{padding:"30px 20px",textAlign:"center",color:"#666",fontSize:15,background:"#111",borderRadius:10}}>אין קביעות סטודנטים היום</div>
+            <div style={{padding:"20px",textAlign:"center",color:"#666",fontSize:14,background:"#111",borderRadius:10}}>אין קביעות סטודנטים היום</div>
           ) : (
             <div style={{overflowX:"auto",background:"#111",borderRadius:10,border:"1px solid #1e1e1e"}}>
-              <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:15,minWidth:600}}>
+              <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:14,minWidth:600}}>
                 <thead>
                   <tr style={{background:"#151515"}}>
                     <th style={{...thBase,width:220}}>שם</th>
