@@ -1137,16 +1137,21 @@ function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, savi
           URL.revokeObjectURL(blobUrl);
           const MAX = 500;
           let w = img.width, h = img.height;
+          // Scale down so longest side fits MAX
           if (w > MAX || h > MAX) {
             if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
             else       { w = Math.round(w * MAX / h); h = MAX; }
           }
+          // Pad to square so non-square images display fully with object-fit:cover
+          const side = Math.max(w, h);
+          const ox = Math.round((side - w) / 2);
+          const oy = Math.round((side - h) / 2);
           const canvas = document.createElement("canvas");
-          canvas.width = w; canvas.height = h;
+          canvas.width = side; canvas.height = side;
           const ctx = canvas.getContext("2d");
           ctx.fillStyle = "#FFFFFF";
-          ctx.fillRect(0, 0, w, h);
-          ctx.drawImage(img, 0, 0, w, h);
+          ctx.fillRect(0, 0, side, side);
+          ctx.drawImage(img, ox, oy, w, h);
           resolve(canvas.toDataURL("image/jpeg", 0.70));
         };
         img.onerror = () => { clearTimeout(timeout); URL.revokeObjectURL(blobUrl); reject(new Error("Failed to load image")); };
