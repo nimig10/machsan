@@ -7629,16 +7629,23 @@ export default function App() {
 
   useEffect(() => {
     if (loading || isPublicFormView || isLecturerPortalView) return;
-    const handleFocus = () => void refreshAdminData();
-    const handleVisibility = () => { if (document.visibilityState === "visible") void refreshAdminData(); };
-    // Poll every 2 min (was 30s); Supabase Realtime already pushes live changes
+    // Debounce rapid focus/visibility events to prevent back-to-tab flicker
+    let focusDebounce = null;
+    const triggerRefresh = () => {
+      clearTimeout(focusDebounce);
+      focusDebounce = setTimeout(() => void refreshAdminData(), 500);
+    };
+    const handleFocus = () => triggerRefresh();
+    const handleVisibility = () => { if (document.visibilityState === "visible") triggerRefresh(); };
+    // Poll every 3 min — Supabase Realtime already pushes live changes instantly
     const intervalId = window.setInterval(() => {
       if (document.visibilityState === "hidden") return;
       void refreshAdminData();
-    }, 120000);
+    }, 180000);
     window.addEventListener("focus", handleFocus);
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
+      clearTimeout(focusDebounce);
       window.clearInterval(intervalId);
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
@@ -7797,10 +7804,15 @@ export default function App() {
 
   useEffect(() => {
     if (loading) return;
+    // Use refs for current reservations/studioBookings so this effect only
+    // fires when lessons or kits change — NOT on every reservation write.
+    // This breaks the feedback loop: effect → _setReservations → effect → …
+    const currentReservations = reservationsRef.current;
+    const currentStudioBookings = studioBookingsRef.current;
 
     const { reservations: generatedLessonReservations, linkedKitIds } = buildLessonReservations(lessons, kits);
     const nextReservations = normalizeReservationsForArchive([
-      ...reservations.filter((reservation) => {
+      ...currentReservations.filter((reservation) => {
         if (reservation.lesson_auto || hasLinkedValue(reservation.lesson_id)) return false;
         if (hasLinkedValue(reservation.lesson_kit_id) && linkedKitIds.has(String(reservation.lesson_kit_id))) return false;
         return true;
@@ -7808,22 +7820,22 @@ export default function App() {
       ...generatedLessonReservations,
     ]);
 
-    if (!dataEquals(nextReservations, reservations)) {
+    if (!dataEquals(nextReservations, currentReservations)) {
       _setReservations(nextReservations);
       void storageSet("reservations", nextReservations);
     }
 
     const generatedLessonBookings = buildLessonStudioBookings(lessons);
     const nextStudioBookings = [
-      ...studioBookings.filter((booking) => !(booking.lesson_auto || hasLinkedValue(booking.lesson_id))),
+      ...currentStudioBookings.filter((booking) => !(booking.lesson_auto || hasLinkedValue(booking.lesson_id))),
       ...generatedLessonBookings,
     ];
 
-    if (!dataEquals(nextStudioBookings, studioBookings)) {
+    if (!dataEquals(nextStudioBookings, currentStudioBookings)) {
       _setStudioBookings(nextStudioBookings);
       void storageSet("studio_bookings", nextStudioBookings);
     }
-  }, [loading, lessons, kits, reservations, studioBookings]);
+  }, [loading, lessons, kits]); // intentionally excludes reservations/studioBookings
 
   useEffect(() => {
     if (loading) return undefined;
