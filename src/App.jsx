@@ -1728,6 +1728,13 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                   >
                     לא מוגבל בהשאלה פרטית
                   </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-primary"
+                    onClick={(e)=>{e.stopPropagation();setModal({type:"add",defaultCategory:c})}}
+                  >
+                    ➕ הוסף ציוד
+                  </button>
                 </div>
               </div>
               <div className="eq-grid">
@@ -1776,7 +1783,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
         </>
       )}
       {(modal?.type==="add"||modal?.type==="edit") && <Modal title={modal.type==="add"?"➕ הוספת ציוד":"✏️ עריכת ציוד"} onClose={()=>setModal(null)}><EqForm
-              initial={modal.type==="edit"?modal.item:null}
+              initial={modal.type==="edit"?modal.item:modal.defaultCategory?{category:modal.defaultCategory}:null}
               categories={categories}
               equipmentCertTypes={equipmentCertTypes}
               saving={saving}
