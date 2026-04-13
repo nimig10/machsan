@@ -107,7 +107,14 @@ export function LecturerPortal({
     return Object.fromEntries(entries);
   }, [studios]);
 
-  // ── Dept head panel ──
+  const currentLecturer = useMemo(() => {
+    if (!loggedInLecturer) return null;
+    const byId = activeLecturers.find((lecturer) => String(lecturer.id) === String(loggedInLecturer.id));
+    if (byId) return byId;
+    return activeLecturers.find((lecturer) => normalizeName(lecturer.fullName) === normalizeName(loggedInLecturer.fullName)) || null;
+  }, [activeLecturers, loggedInLecturer]);
+
+  // ── Dept head panel ── (MUST come after currentLecturer)
   const [dhView, setDhView] = useState("requests"); // requests | courses
   const [approvingId, setApprovingId] = useState(null);
 
@@ -172,13 +179,6 @@ export function LecturerPortal({
       setApprovingId(null);
     }
   };
-
-  const currentLecturer = useMemo(() => {
-    if (!loggedInLecturer) return null;
-    const byId = activeLecturers.find((lecturer) => String(lecturer.id) === String(loggedInLecturer.id));
-    if (byId) return byId;
-    return activeLecturers.find((lecturer) => normalizeName(lecturer.fullName) === normalizeName(loggedInLecturer.fullName)) || null;
-  }, [activeLecturers, loggedInLecturer]);
 
   useEffect(() => {
     if (loggedInLecturer) {
