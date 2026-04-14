@@ -2669,7 +2669,7 @@ ${inventory}
               {loginBusy ? "מתחבר..." : "כניסה"}
             </button>
             <button type="button"
-              style={{marginTop:24,background:"transparent",border:"2px solid var(--accent)",color:"var(--accent)",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"6px 18px",display:"inline-block"}}
+              style={{marginTop:32,background:"transparent",border:"2px solid var(--accent)",color:"var(--accent)",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"6px 18px",display:"inline-block"}}
               onClick={()=>{setAuthView("forgot");setLoginError("");setLoginPassword("");}}>
               שכחת סיסמה?
             </button>
@@ -2697,11 +2697,11 @@ ${inventory}
               {loginBusy ? "שולח..." : "שלח קישור לאיפוס"}
             </button>
             <button type="button"
-              style={{marginTop:24,background:"transparent",border:"2px solid var(--accent)",color:"var(--accent)",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"6px 18px",display:"inline-block"}}
+              style={{marginTop:32,background:"transparent",border:"2px solid var(--accent)",color:"var(--accent)",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"6px 18px",display:"inline-block"}}
               onClick={()=>{setAuthView("login");setLoginError("");}}>
               ← חזרה למסך הכניסה
             </button>
-            <div style={{fontSize:13,color:"#aaa",marginTop:14,lineHeight:1.6}}>
+            <div style={{fontSize:13,color:"var(--accent)",marginTop:10,fontWeight:700,lineHeight:1.6}}>
               נשלח אליך קישור במייל ליצירת/איפוס סיסמה. הקישור תקף לשעה.
             </div>
           </>
