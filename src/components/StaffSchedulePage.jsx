@@ -656,7 +656,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
             all share the same 80px + 6-col layout
         ══════════════════════════════════════════════════ */}
         <style>{`.staff-schedule-scroll::-webkit-scrollbar{display:none}`}</style>
-        <div style={{ borderRadius: 10, border: "1px solid var(--border)", position: "relative", overflow: "hidden", background: "var(--surface)", opacity: fetching ? 0.55 : 1, transition: "opacity 0.18s" }}>
+        <div style={{ borderRadius: 10, border: "1px solid var(--border)", position: "relative", background: "var(--surface)", opacity: fetching ? 0.55 : 1, transition: "opacity 0.18s", minWidth: viewMode === "day" ? (showLessons ? 980 : 280) : 500, touchAction: "pan-x pan-y" }}>
           {fetching && <div style={{ position: "absolute", inset: 0, zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}><div style={{ background: "var(--surface2)", padding: "6px 16px", borderRadius: 20, fontSize: 12, color: "var(--text3)", border: "1px solid var(--border)" }}>טוען...</div></div>}
           <div style={{
             display: "grid",

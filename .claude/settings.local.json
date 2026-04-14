@@ -49,7 +49,15 @@
       "Bash(awk -F: '$1 > 3686 && $1 < 4200')",
       "Bash(awk 'NR>=3750 && NR<=3760' src/App.jsx)",
       "Bash(awk 'NR>=3800 && NR<=3815' src/App.jsx)",
-      "Bash(awk 'NR>=3815 && NR<=3835' src/App.jsx)"
+      "Bash(awk 'NR>=3815 && NR<=3835' src/App.jsx)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"http://localhost:5173/calendar?token=abc123\")",
+      "Bash(curl -s \"http://localhost:5174/calendar?token=abc123\")",
+      "Bash(kill %1)",
+      "Bash(git pull:*)",
+      "Bash(npx --no-install vite build)",
+      "Bash(git fetch:*)",
+      "Bash(identify /c/machsan/public/LOGON1.png)",
+      "Bash(python3 -c \"from PIL import Image; img=Image.open\\('/c/machsan/public/LOGON1.png'\\); print\\(img.size\\)\")"
     ]
   }
 }
