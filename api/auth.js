@@ -184,6 +184,24 @@ async function findEligibleRecord(normalizedEmail) {
 // filter — it silently ignores unknown query params and returns the full
 // (paginated) list. We therefore paginate and filter client-side.
 async function findAuthUserByEmail(normalizedEmail) {
+  // Fast path: look up the auth id via public.users.email (indexed) and
+  // fetch the auth row by id directly. Avoids scanning up to 50k users.
+  try {
+    const r = await fetch(
+      `${SB_URL}/rest/v1/users?email=eq.${encodeURIComponent(normalizedEmail)}&select=id&limit=1`,
+      { headers: SERVICE_HEADERS },
+    );
+    if (r.ok) {
+      const rows = await r.json();
+      if (Array.isArray(rows) && rows[0]?.id) {
+        const byId = await fetch(`${SB_URL}/auth/v1/admin/users/${rows[0].id}`, { headers: SERVICE_HEADERS });
+        if (byId.ok) {
+          const u = await byId.json();
+          if (u && normalizeEmail(u.email) === normalizedEmail) return u;
+        }
+      }
+    }
+  } catch {}
   const perPage = 1000;
   // Safety cap — 50k users is plenty for this app.
   for (let page = 1; page <= 50; page++) {

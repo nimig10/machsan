@@ -46,6 +46,20 @@ async function sbFetch(path, options = {}) {
 }
 
 async function findAuthUserByEmail(email) {
+  // Fast path: public.users has an indexed email column; resolve the auth id
+  // there first and fetch the auth row by id directly (O(1) instead of O(n)).
+  try {
+    const r = await sbFetch(`users?email=eq.${encodeURIComponent(email)}&select=id&limit=1`);
+    if (r.ok && Array.isArray(r.data) && r.data[0]?.id) {
+      const byId = await fetch(`${SB_URL}/auth/v1/admin/users/${r.data[0].id}`, { headers });
+      if (byId.ok) {
+        const u = await byId.json();
+        if (u && normalizeEmail(u.email) === email) return u;
+      }
+    }
+  } catch {}
+  // Fallback: paginated admin scan (handles cases where public.users row is
+  // missing or out of sync with the auth record).
   const perPage = 1000;
   for (let page = 1; page <= 50; page++) {
     const res = await fetch(
@@ -206,6 +220,15 @@ function handleLegacy(req, res) {
           return res.status(400).json({ error: "last_admin" });
         }
       }
+      // Capture previous email BEFORE patching, so we can locate the existing
+      // auth user even if the admin is changing their email address.
+      let prevEmail = null;
+      if (email) {
+        const prev = await sbFetch(`staff_members?id=eq.${id}&select=email`);
+        prevEmail = Array.isArray(prev.data) && prev.data[0]?.email
+          ? normalizeEmail(prev.data[0].email) : null;
+      }
+
       const updates = { updated_at: new Date().toISOString() };
       if (full_name) updates.full_name = full_name.trim();
       if (email) updates.email = email.trim().toLowerCase();
@@ -218,16 +241,36 @@ function handleLegacy(req, res) {
       });
       if (!result.ok) return res.status(result.status).json({ error: "Failed to update" });
 
-      // Sync password change to Supabase auth if provided
-      if (password && email) {
+      // Sync changes (email / password / name) to Supabase auth + public.users.
+      // Email sync is critical: without it, an admin's email change leaves the
+      // auth account pinned to the old address → user cannot log in.
+      if (email) {
         const normEmail = normalizeEmail(email);
-        const authUser = await findAuthUserByEmail(normEmail);
+        let authUser = await findAuthUserByEmail(normEmail);
+        if (!authUser && prevEmail && prevEmail !== normEmail) {
+          authUser = await findAuthUserByEmail(prevEmail);
+        }
         if (authUser) {
-          const authUpdate = { password };
+          const authUpdate = {};
+          if (password) authUpdate.password = password;
+          if (normEmail && normalizeEmail(authUser.email || "") !== normEmail) {
+            authUpdate.email = normEmail;
+            authUpdate.email_confirm = true;
+          }
           if (full_name) authUpdate.user_metadata = { ...(authUser.user_metadata || {}), full_name: full_name.trim() };
-          await fetch(`${SB_URL}/auth/v1/admin/users/${authUser.id}`, {
-            method: "PUT", headers,
-            body: JSON.stringify(authUpdate),
+          if (Object.keys(authUpdate).length) {
+            await fetch(`${SB_URL}/auth/v1/admin/users/${authUser.id}`, {
+              method: "PUT", headers,
+              body: JSON.stringify(authUpdate),
+            }).catch(() => {});
+          }
+          // Mirror onto public.users (keyed by auth user id)
+          const publicUpdate = { updated_at: new Date().toISOString() };
+          if (normEmail) publicUpdate.email = normEmail;
+          if (full_name) publicUpdate.full_name = full_name.trim();
+          await sbFetch(`users?id=eq.${authUser.id}`, {
+            method: "PATCH",
+            body: JSON.stringify(publicUpdate),
           }).catch(() => {});
         }
       }
@@ -323,10 +366,16 @@ async function handleUpdateUser(req, res) {
   if (permissions !== undefined) updates.permissions = { ...DEFAULT_PERMISSIONS, ...permissions };
   const result = await sbFetch(`users?id=eq.${id}`, { method: "PATCH", body: JSON.stringify(updates) });
   if (!result.ok) return res.status(result.status).json({ error: "update_failed" });
-  if (full_name !== undefined) {
+  if (full_name !== undefined || email !== undefined) {
+    const authUpdate = {};
+    if (full_name !== undefined) authUpdate.user_metadata = { full_name: full_name.trim() };
+    if (email !== undefined) {
+      authUpdate.email = normalizeEmail(email);
+      authUpdate.email_confirm = true;
+    }
     await fetch(`${SB_URL}/auth/v1/admin/users/${id}`, {
       method: "PUT", headers,
-      body: JSON.stringify({ user_metadata: { full_name: full_name.trim() } }),
+      body: JSON.stringify(authUpdate),
     }).catch(() => {});
   }
   return res.status(200).json({ success: true });

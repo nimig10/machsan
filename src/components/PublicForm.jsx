@@ -1504,11 +1504,22 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       .single();
 
     if (userError || !userRow) {
-      // No public.users row — check if this email belongs to a student or lecturer
-      // and auto-create the row so they can proceed
+      // No public.users row — check if this email belongs to a student, lecturer,
+      // or staff member (staff_members) and auto-create the row so they can proceed.
       const isStudent = (certifications?.students || []).some(s => s.email?.toLowerCase().trim() === authEmail);
       const isLecturer = (lecturers || []).some(l => l.isActive !== false && l.email?.toLowerCase().trim() === authEmail);
+      let isStaff = false;
       if (!isStudent && !isLecturer) {
+        try {
+          const { data: staffRows } = await supabase
+            .from("staff_members")
+            .select("id")
+            .eq("email", authEmail)
+            .limit(1);
+          isStaff = Array.isArray(staffRows) && staffRows.length > 0;
+        } catch {}
+      }
+      if (!isStudent && !isLecturer && !isStaff) {
         setLoginError("המשתמש לא נמצא במערכת. פנה/י למנהל.");
         await supabase.auth.signOut();
         return;
@@ -1656,11 +1667,19 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   useEffect(() => {
     if (!isRecoveryInitial || recoverySessionReady) return;
     let cancelled = false;
+    const startedAt = Date.now();
     const check = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (cancelled) return;
       if (session) { setRecoverySessionReady(true); return; }
-      // Not ready yet — retry after 600ms (PKCE exchange in progress)
+      // Give up after 8 seconds — surface an actionable error instead of
+      // leaving the user stuck on "מאמת קישור...". Common cause: link opened
+      // in an in-app browser (WhatsApp/Telegram) where the token couldn't
+      // be exchanged, or the link already expired / was used.
+      if (Date.now() - startedAt > 8000) {
+        setRecoveryError("הקישור לא זמין בדפדפן הזה. פתח/י את הקישור ישירות ב-Chrome/Safari, או בקש/י קישור חדש.");
+        return;
+      }
       setTimeout(check, 600);
     };
     check();
