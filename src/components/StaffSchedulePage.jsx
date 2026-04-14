@@ -650,7 +650,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
       {loading ? (
         <div style={{ textAlign: "center", padding: 60, color: "var(--text3)" }}>טוען...</div>
       ) : (
-        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", msOverflowStyle: "none", scrollbarWidth: "none" }}>
+        <div className="no-swipe-nav staff-schedule-scroll" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", msOverflowStyle: "none", scrollbarWidth: "none" }}>
         {/* ══════════════════════════════════════════════════
             ONE unified grid: shifts + lessons + bookings + loans
             all share the same 80px + 6-col layout
