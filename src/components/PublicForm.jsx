@@ -1379,44 +1379,27 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   };
 
   // ── Forgot password (unified — all roles) ───────────────────────────────────
+  // Uses server-side send-reset-email: generates Supabase recovery link via
+  // Admin API and delivers it via Gmail, bypassing Supabase's shared SMTP which
+  // is often blocked by organizational email servers (Exchange / Office 365).
   const handleForgotPassword = async () => {
     const email = loginEmail.toLowerCase().trim();
     if (!email) return;
     setLoginBusy(true);
     setLoginError("");
     try {
-      // Use ensure-user API: validates email in students/lecturers AND
-      // provisions auth.users row if needed so resetPasswordForEmail works
-      const ensureRes = await fetch("/api/auth", {
+      const res = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "ensure-user", email, provision: true }),
+        body: JSON.stringify({ action: "send-reset-email", email }),
       });
-      if (!ensureRes.ok) {
-        const ej = await ensureRes.json().catch(() => ({}));
+      if (!res.ok) {
+        const ej = await res.json().catch(() => ({}));
         if (ej.error === "not_registered") {
-          // Also check public.users (staff) — ensure-user only checks students/lecturers
-          const { data: userRows } = await supabase
-            .from("users")
-            .select("id")
-            .eq("email", email)
-            .limit(1);
-          if (!userRows || userRows.length === 0) {
-            setLoginError("המייל לא קיים במערכת, אנא פנה/י למזכירות המכללה.");
-            setLoginBusy(false);
-            return;
-          }
+          setLoginError("המייל לא קיים במערכת, אנא פנה/י למזכירות המכללה.");
         } else {
           setLoginError("שליחת הקישור נכשלה. נסו שוב.");
-          setLoginBusy(false);
-          return;
         }
-      }
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/?reset=1`,
-      });
-      if (error) {
-        setLoginError("שליחת הקישור נכשלה. נסו שוב.");
         setLoginBusy(false);
         return;
       }

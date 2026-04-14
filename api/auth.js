@@ -11,6 +11,7 @@
 // `email` + `password` are treated as "staff-login".
 
 import bcrypt from "bcryptjs";
+import nodemailer from "nodemailer";
 
 const SB_URL         = process.env.SUPABASE_URL;
 const SB_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -744,6 +745,144 @@ async function handleDeleteStudentAuth(req, res) {
   return res.status(200).json({ ok: true, deleted: true });
 }
 
+// ── send-reset-email ──────────────────────────────────────────────────────────
+// Replaces client-side supabase.auth.resetPasswordForEmail() so the email is
+// delivered via Gmail (which reaches org/Exchange servers reliably) instead of
+// Supabase's shared SMTP (which often lands in spam or gets rejected by strict
+// DMARC policies on organizational domains like atid.org.il).
+//
+// Flow:
+//  1. Verify the email is registered (lecturers / students / staff / public.users)
+//  2. Provision auth.users row if this is the user's first login
+//  3. Generate a recovery link via POST /auth/v1/admin/generate_link (no email sent)
+//  4. Send the link via Gmail/nodemailer
+
+function buildResetEmail(name, resetUrl) {
+  return `<!DOCTYPE html>
+<html lang="he">
+<head><meta charset="UTF-8"/></head>
+<body style="margin:0;padding:20px;background:#f0f0f0;font-family:Arial,sans-serif;direction:rtl;text-align:right">
+  <div style="max-width:480px;margin:0 auto;background:#0a0c10;color:#e8eaf0;border-radius:12px;overflow:hidden">
+    <div style="background:linear-gradient(135deg,#111318,#1e232e);padding:28px;text-align:center;border-bottom:1px solid #252b38">
+      <h1 style="color:#f5a623;font-size:20px;margin:0">מכללת קמרה אובסקורה וסאונד</h1>
+    </div>
+    <div style="padding:32px;direction:rtl;text-align:right">
+      <div style="background:#f5a6231a;border:1px solid #f5a623;border-radius:10px;padding:18px;text-align:center;margin-bottom:24px">
+        <div style="font-size:32px;margin-bottom:6px">&#128273;</div>
+        <h2 style="color:#f5a623;margin:0;font-size:17px">איפוס סיסמה</h2>
+      </div>
+      <p style="font-size:14px;line-height:1.8;color:#e8eaf0;margin:0 0 12px">שלום <strong>${name}</strong>,</p>
+      <p style="font-size:13px;line-height:1.9;color:#8891a8;margin:0 0 24px">
+        קיבלנו בקשה לאיפוס הסיסמה שלך במערכת המחסן הדיגיטלי.<br/>
+        לחץ/י על הכפתור למטה כדי לקבוע סיסמה חדשה:
+      </p>
+      <div style="text-align:center;margin:0 0 24px">
+        <a href="${resetUrl}" style="display:inline-block;padding:16px 36px;background:#f5a623;color:#0a0c10;font-weight:900;font-size:15px;border-radius:10px;text-decoration:none;box-shadow:0 4px 18px rgba(245,166,35,0.35)">
+          קביעת סיסמה חדשה
+        </a>
+      </div>
+      <p style="font-size:11px;color:#555f72;text-align:center;margin:0">
+        הקישור בתוקף ל-24 שעות.<br/>
+        אם לא ביקשת איפוס סיסמה &#8212; אפשר להתעלם ממייל זה.
+      </p>
+    </div>
+    <div style="padding:16px 32px;border-top:1px solid #252b38;text-align:center;font-size:11px;color:#555f72">
+      מכללת קמרה אובסקורה וסאונד &middot; מכללה
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+async function handleSendResetEmail(req, res) {
+  const { email } = req.body || {};
+  if (!email || typeof email !== "string") {
+    return res.status(400).json({ error: "Missing email" });
+  }
+
+  const normalizedEmail = normalizeEmail(email);
+  if (!isValidEmail(normalizedEmail)) {
+    return res.status(400).json({ error: "Invalid email format" });
+  }
+
+  // 1. Check eligibility (lecturers + students + staff_members)
+  let record = await findEligibleRecord(normalizedEmail);
+
+  // Final fallback: public.users (covers staff provisioned via admin API)
+  if (!record) {
+    const userRows = await sbQuery(
+      `users?email=eq.${encodeURIComponent(normalizedEmail)}&select=id,full_name,is_admin,is_warehouse,is_lecturer,is_student&limit=1`,
+    );
+    if (Array.isArray(userRows) && userRows.length > 0) {
+      const u = userRows[0];
+      const role = u.is_admin ? "admin" : u.is_warehouse ? "staff" : u.is_lecturer ? "lecturer" : "student";
+      record = { role, id: String(u.id), name: String(u.full_name || "") };
+    }
+  }
+
+  if (!record) {
+    return res.status(403).json({ error: "not_registered" });
+  }
+
+  // 2. Provision auth.users row if this is the first login
+  await ensureAuthUserExists(normalizedEmail, record.name);
+
+  // 3. Generate recovery link (Admin API — does NOT send any email)
+  const appUrl = process.env.APP_URL || "https://app.camera.org.il";
+  const linkRes = await fetch(`${SB_URL}/auth/v1/admin/generate_link`, {
+    method: "POST",
+    headers: SERVICE_HEADERS,
+    body: JSON.stringify({
+      type: "recovery",
+      email: normalizedEmail,
+      options: { redirect_to: `${appUrl}/?reset=1` },
+    }),
+  });
+
+  if (!linkRes.ok) {
+    const txt = await linkRes.text();
+    console.warn("generate_link failed:", linkRes.status, txt);
+    return res.status(500).json({ error: "link_generation_failed", details: txt });
+  }
+
+  const linkData = await linkRes.json();
+  const resetUrl = linkData.action_link || linkData.properties?.action_link;
+
+  if (!resetUrl) {
+    console.warn("No action_link in generate_link response:", JSON.stringify(linkData));
+    return res.status(500).json({ error: "no_reset_link" });
+  }
+
+  // 4. Send via Gmail (reliable delivery to org/Exchange servers)
+  const GMAIL_USER = process.env.GMAIL_USER;
+  const GMAIL_PASS = process.env.GMAIL_PASS;
+
+  if (!GMAIL_USER || !GMAIL_PASS) {
+    console.warn("Gmail credentials not configured — cannot send reset email");
+    return res.status(500).json({ error: "smtp_not_configured" });
+  }
+
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: { user: GMAIL_USER, pass: GMAIL_PASS },
+  });
+
+  const displayName = record.name || normalizedEmail.split("@")[0];
+
+  try {
+    await transporter.sendMail({
+      from: `"מכללת קמרה אובסקורה וסאונד" <${GMAIL_USER}>`,
+      to: normalizedEmail,
+      subject: "איפוס סיסמה — מכללת קמרה אובסקורה וסאונד",
+      html: buildResetEmail(displayName, resetUrl),
+    });
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error("send-reset-email smtp error:", err);
+    return res.status(500).json({ error: "email_send_failed", details: err.message });
+  }
+}
+
 // ── main handler ──────────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
@@ -759,6 +898,7 @@ export default async function handler(req, res) {
   try {
     if (resolvedAction === "staff-login")            return await handleStaffLogin(req, res);
     if (resolvedAction === "ensure-user")            return await handleEnsureUser(req, res);
+    if (resolvedAction === "send-reset-email")       return await handleSendResetEmail(req, res);
     if (resolvedAction === "update-student-credentials") return await handleUpdateStudentCredentials(req, res);
     if (resolvedAction === "sync-student-auth")      return await handleSyncStudentAuth(req, res);
     if (resolvedAction === "sync-lecturer-auth")     return await handleSyncLecturerAuth(req, res);
