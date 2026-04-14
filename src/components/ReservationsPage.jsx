@@ -114,13 +114,18 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
   const deleteReservation = async (id) => {
     const res = reservations.find(r => r.id === id);
     const updated = reservations.filter(r => r.id !== id);
+    // Optimistic UI — close modal + toast immediately, persist + log in background
     setReservations(updated);
-    await storageSet("reservations", updated);
+    setSelected(null);
     showToast("success", "הבקשה נמחקה");
     const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
-    const logId = await logActivity({ user_id: caller.id, user_name: caller.full_name, action: "reservation_delete", entity: "reservation", entity_id: String(id), details: { student: res?.student_name, loan_type: res?.loan_type } });
-    onLogCreated(logId);
-    setSelected(null);
+    storageSet("reservations", updated).catch(err => {
+      console.error("delete reservation persist failed:", err);
+      showToast("error", "המחיקה לא נשמרה בשרת — ייתכן שתחזור לאחר ריענון");
+    });
+    logActivity({ user_id: caller.id, user_name: caller.full_name, action: "reservation_delete", entity: "reservation", entity_id: String(id), details: { student: res?.student_name, loan_type: res?.loan_type } })
+      .then(logId => onLogCreated(logId))
+      .catch(err => console.error("delete reservation log failed:", err));
   };
 
   const sendStatusEmail = async (reservation, status) => {

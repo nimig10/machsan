@@ -2531,7 +2531,8 @@ ${inventory}
     const updated = [...freshReservations, newRes];
     setReservations(updated);
     await storageSet("reservations", updated);
-    await sendEmail(newRes);
+    // Fire-and-forget emails in background — don't block the user on Gmail rate-limit delays
+    sendEmail(newRes).catch(err => console.error("sendEmail background error:", err));
     setSub(false);
     setDone(true);
     showToast("success","הבקשה נשלחה בהצלחה!");
