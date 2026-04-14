@@ -2668,13 +2668,16 @@ ${inventory}
               disabled={!loginEmail.trim()||!loginPassword||loginBusy}>
               {loginBusy ? "מתחבר..." : "כניסה"}
             </button>
-            <button type="button" style={{marginTop:14,background:"none",border:"none",color:"var(--accent)",fontSize:13,fontWeight:700,cursor:"pointer",textDecoration:"underline"}}
+            <button type="button"
+              style={{marginTop:12,background:"var(--accent)",border:"none",color:"#000",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"7px 18px",display:"inline-block"}}
               onClick={()=>{setAuthView("forgot");setLoginError("");setLoginPassword("");}}>
               שכחת סיסמה?
             </button>
-            <div style={{fontSize:13,color:"var(--text2)",marginTop:14,lineHeight:1.6}}>
-              רק משתמשים רשומים יכולים להיכנס.<br/>
+            <div style={{fontSize:13,color:"var(--accent)",marginTop:10,fontWeight:700,lineHeight:1.6}}>
               כניסה ראשונה? לחץ/י על <strong>"שכחת סיסמה?"</strong> ליצירת סיסמה.
+            </div>
+            <div style={{fontSize:12,color:"var(--text3)",marginTop:18,paddingTop:14,borderTop:"1px solid var(--border)",lineHeight:1.5}}>
+              רק משתמשים רשומים יכולים להיכנס.
             </div>
           </>
         )}
@@ -2693,7 +2696,8 @@ ${inventory}
               disabled={!loginEmail.trim()||loginBusy}>
               {loginBusy ? "שולח..." : "שלח קישור לאיפוס"}
             </button>
-            <button type="button" style={{marginTop:12,background:"none",border:"none",color:"var(--accent)",fontSize:13,cursor:"pointer",fontWeight:600}}
+            <button type="button"
+              style={{marginTop:12,background:"var(--accent)",border:"none",color:"#000",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"7px 18px",display:"inline-block"}}
               onClick={()=>{setAuthView("login");setLoginError("");}}>
               ← חזרה למסך הכניסה
             </button>
@@ -2714,7 +2718,8 @@ ${inventory}
                 פתח/י את המייל ולחץ/י על הקישור כדי להגדיר סיסמה חדשה.
               </div>
             </div>
-            <button type="button" className="btn btn-secondary" style={{width:"100%"}}
+            <button type="button"
+              style={{marginTop:4,background:"var(--accent)",border:"none",color:"#000",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"7px 18px",display:"inline-block"}}
               onClick={()=>{setAuthView("login");setLoginError("");}}>
               ← חזרה למסך הכניסה
             </button>
