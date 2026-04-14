@@ -2669,7 +2669,7 @@ ${inventory}
               {loginBusy ? "מתחבר..." : "כניסה"}
             </button>
             <button type="button"
-              style={{marginTop:32,background:"transparent",border:"2px solid var(--accent)",color:"var(--accent)",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"6px 18px",display:"inline-block"}}
+              style={{marginTop:40,background:"var(--accent)",border:"none",color:"#000",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"7px 20px",display:"inline-block"}}
               onClick={()=>{setAuthView("forgot");setLoginError("");setLoginPassword("");}}>
               שכחת סיסמה?
             </button>
@@ -2697,7 +2697,7 @@ ${inventory}
               {loginBusy ? "שולח..." : "שלח קישור לאיפוס"}
             </button>
             <button type="button"
-              style={{marginTop:32,background:"transparent",border:"2px solid var(--accent)",color:"var(--accent)",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"6px 18px",display:"inline-block"}}
+              style={{marginTop:40,background:"var(--accent)",border:"none",color:"#000",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"7px 20px",display:"inline-block"}}
               onClick={()=>{setAuthView("login");setLoginError("");}}>
               ← חזרה למסך הכניסה
             </button>
@@ -2719,7 +2719,7 @@ ${inventory}
               </div>
             </div>
             <button type="button"
-              style={{marginTop:4,background:"transparent",border:"2px solid var(--accent)",color:"var(--accent)",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"6px 18px",display:"inline-block"}}
+              style={{marginTop:4,background:"var(--accent)",border:"none",color:"#000",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"7px 20px",display:"inline-block"}}
               onClick={()=>{setAuthView("login");setLoginError("");}}>
               ← חזרה למסך הכניסה
             </button>
