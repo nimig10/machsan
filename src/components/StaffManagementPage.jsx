@@ -340,7 +340,7 @@ function StaffTab({ showToast, teamMembers, setTeamMembers }) {
 }
 
 // ─── Tab: מנהל ומחלקות (legacy teamMembers / deptHeads) ──────────────────────
-function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, calendarToken, collegeManager, setCollegeManager, managerToken, showToast, lecturers }) {
+function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, collegeManager, setCollegeManager, managerToken, showToast, lecturers }) {
   const emptyForm    = { name:"", email:"", phone:"", loanTypes:[...LOAN_TYPES] };
   const emptyDhForm  = { name:"", email:"", role:"", loanTypes:[], lecturerId:"" };
   const activeLecturers = (lecturers||[]).filter(l => l?.isActive !== false && l?.fullName);
@@ -687,7 +687,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
 }
 
 // ─── Main export ─────────────────────────────────────────────────────────────
-export function StaffManagementPage({ showToast, teamMembers, setTeamMembers, deptHeads, setDeptHeads, calendarToken, collegeManager, setCollegeManager, managerToken, lecturers }) {
+export function StaffManagementPage({ showToast, teamMembers, setTeamMembers, deptHeads, setDeptHeads, collegeManager, setCollegeManager, managerToken, lecturers }) {
   const [tab, setTab] = useState("staff");
 
   const TABS = [
@@ -711,7 +711,7 @@ export function StaffManagementPage({ showToast, teamMembers, setTeamMembers, de
       </div>
 
       {tab === "staff"  && <StaffTab showToast={showToast} teamMembers={teamMembers} setTeamMembers={setTeamMembers} />}
-      {tab === "legacy" && <LegacyTeamTab teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} managerToken={managerToken} showToast={showToast} lecturers={lecturers}/>}
+      {tab === "legacy" && <LegacyTeamTab teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} collegeManager={collegeManager} setCollegeManager={setCollegeManager} managerToken={managerToken} showToast={showToast} lecturers={lecturers}/>}
     </div>
   );
 }

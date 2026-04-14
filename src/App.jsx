@@ -164,7 +164,7 @@ async function storageSet(key, value) {
 
 // ─── DB DIAGNOSTICS (accessible from browser console) ────────────────────────
 window.dbDiag = async () => {
-  const keys = ["equipment","reservations","categories","categoryTypes","categoryLoanTypes","teamMembers","kits","policies","certifications","deptHeads","calendarToken","collegeManager","managerToken","siteSettings"];
+  const keys = ["equipment","reservations","categories","categoryTypes","categoryLoanTypes","teamMembers","kits","policies","certifications","deptHeads","collegeManager","managerToken","siteSettings"];
   console.log("🔍 Supabase DB Diagnostic Report");
   console.log("=".repeat(50));
   for (const key of keys) {
@@ -3824,7 +3824,7 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
 }
 
 // ─── TEAM PAGE ────────────────────────────────────────────────────────────────
-function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, calendarToken="", collegeManager={}, setCollegeManager, showToast, managerToken="" }) {
+function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, collegeManager={}, setCollegeManager, showToast, managerToken="" }) {
   const LOAN_TYPES = ["פרטית","הפקה","סאונד","קולנוע יומית"];
   const LOAN_ICONS = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️", "קולנוע יומית":"🎥" };
   const emptyForm = { name:"", email:"", phone:"", loanTypes:[...LOAN_TYPES] };
@@ -6007,206 +6007,6 @@ function CertificationsPage_REMOVED({ certifications, setCertifications, showToa
   );
 }
 
-// ─── DEPT HEAD CALENDAR PAGE ─────────────────────────────────────────────────
-function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equipment=[], siteSettings={} }) {
-  const [localRes, setLocalRes]   = useState(initialReservations);
-  const [calDate, setCalDate]     = useState(new Date());
-  const [statusF, setStatusF]     = useState([]);   // empty = all
-  const [loanTypeF, setLoanTypeF] = useState("הכל");
-  const [selected, setSelected]   = useState(null);
-  const [approving, setApproving] = useState(null); // reservation id being approved
-
-  const approveReservation = async (r) => {
-    setApproving(r.id);
-    try {
-      const approveUrl = `/api/approve-production?id=${r.id}`;
-      const res = await fetch(approveUrl);
-      if (res.ok) {
-        // Update local state immediately
-        setLocalRes(prev => prev.map(x => x.id===r.id ? {...x, status:"ממתין"} : x));
-        setSelected(null);
-      }
-    } catch(e) {
-      console.error("approve error", e);
-    }
-    setApproving(null);
-  };
-
-  const reservations = localRes;
-  const yr = calDate.getFullYear();
-  const mo = calDate.getMonth();
-  const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
-  const HE_D = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
-  const todayStr = today();
-
-  const days = [];
-  const startOffset = new Date(yr,mo,1).getDay();
-  for(let i=0;i<startOffset;i++) days.push(null);
-  for(let d=1;d<=new Date(yr,mo+1,0).getDate();d++) days.push(new Date(yr,mo,d));
-  while(days.length<42) days.push(null);
-
-  const SPAN_COLORS = [
-    ["rgba(52,152,219,0.75)","#fff"],["rgba(46,204,113,0.75)","#fff"],
-    ["rgba(155,89,182,0.75)","#fff"],["rgba(230,126,34,0.75)","#fff"],
-    ["rgba(26,188,156,0.75)","#fff"],["rgba(236,72,153,0.75)","#fff"],
-    ["rgba(200,160,0,0.75)","#fff"], ["rgba(231,76,60,0.75)","#fff"],
-  ];
-
-  const STATUS_OPTIONS = ["ממתין","אישור ראש מחלקה","מאושר","נדחה"];
-  const STATUS_COLORS  = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","אישור ראש מחלקה":"#9b59b6" };
-  const LOAN_ICONS     = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥" };
-
-  const activeRes = reservations.filter(r =>
-    r.status !== "הוחזר" && r.borrow_date && r.return_date &&
-    (statusF.length===0 || statusF.includes(r.status)) &&
-    (loanTypeF==="הכל" || r.loan_type===loanTypeF)
-  );
-  const colorMap = {};
-  activeRes.forEach((r,i) => { colorMap[r.id] = SPAN_COLORS[i % SPAN_COLORS.length]; });
-
-  // Month reservations for list
-  const monthStart = `${yr}-${String(mo+1).padStart(2,"0")}-01`;
-  const monthEnd   = `${yr}-${String(mo+1).padStart(2,"0")}-${String(new Date(yr,mo+1,0).getDate()).padStart(2,"0")}`;
-  const monthRes = activeRes.filter(r => r.borrow_date <= monthEnd && r.return_date >= monthStart)
-    .sort((a,b)=>a.borrow_date<b.borrow_date?-1:1);
-
-  return (
-    <div style={{maxWidth:1100,margin:"0 auto",padding:"24px 16px",direction:"rtl","--accent":siteSettings.accentColor||"#f5a623","--accent-glow":`${siteSettings.accentColor||"#f5a623"}2e`}}>
-      {/* Header */}
-      <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:24,flexWrap:"wrap"}}>
-        {siteSettings.logo
-          ? <img src={siteSettings.logo} alt="לוגו" style={{width:56,height:56,objectFit:"contain",borderRadius:8}}/>
-          : <div style={{fontSize:32}}>🎬</div>}
-        {siteSettings.soundLogo && (
-          <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:44,height:44,objectFit:"contain",borderRadius:6}}/>
-        )}
-        <div>
-          <div style={{fontWeight:900,fontSize:20,color:"var(--accent)"}}>לוח השאלות — מבט ראש מחלקה</div>
-          <div style={{fontSize:12,color:"var(--text3)"}}>קריאה בלבד · כל הסטטוסים</div>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"14px 16px",marginBottom:16,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
-        <span style={{fontSize:12,fontWeight:700,color:"var(--text3)"}}>סינון:</span>
-        {/* Status filters */}
-        {STATUS_OPTIONS.map(s=>{
-          const active = statusF.includes(s);
-          return (
-            <button key={s} type="button" onClick={()=>setStatusF(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s])}
-              style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?(STATUS_COLORS[s]||"var(--accent)"):"var(--border)"}`,background:active?"rgba(255,255,255,0.06)":"transparent",color:active?(STATUS_COLORS[s]||"var(--accent)"):"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-              {s}
-            </button>
-          );
-        })}
-        <span style={{fontSize:12,color:"var(--border)"}}>|</span>
-        {/* Loan type */}
-        {["הכל","פרטית","הפקה","סאונד","קולנוע יומית"].map(lt=>{
-          const active=loanTypeF===lt;
-          return <button key={lt} type="button" onClick={()=>setLoanTypeF(lt)}
-            style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-            {LOAN_ICONS[lt]||"📦"} {lt}
-          </button>;
-        })}
-        {(statusF.length>0||loanTypeF!=="הכל")&&(
-          <button type="button" onClick={()=>{setStatusF([]);setLoanTypeF("הכל");}}
-            style={{marginRight:"auto",padding:"4px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>
-            ✕ נקה סינון
-          </button>
-        )}
-      </div>
-
-      {/* Calendar */}
-      <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"12px",marginBottom:20}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-          <div style={{display:"flex",alignItems:"center",gap:6}}>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo-1,1))}>‹</button>
-            <span style={{fontWeight:800,fontSize:15,minWidth:130,textAlign:"center"}}>{HE_M[mo]} {yr}</span>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo+1,1))}>›</button>
-          </div>
-          <span style={{fontSize:12,color:"var(--text3)"}}>{monthRes.length} בקשות בחודש</span>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
-          {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,color:"var(--text3)",padding:"4px 0"}}>{d}</div>)}
-        </div>
-        <CalendarGrid days={days} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={90} fontSize={10}/>
-      </div>
-
-      {/* Reservations list */}
-      <div style={{fontWeight:800,fontSize:15,marginBottom:10}}>📋 בקשות {HE_M[mo]} {yr}</div>
-      {monthRes.length===0
-        ? <div style={{textAlign:"center",color:"var(--text3)",padding:"24px",fontSize:14}}>אין בקשות בחודש זה</div>
-        : <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {monthRes.map(r=>(
-            <div key={r.id} onClick={()=>setSelected(r===selected?null:r)}
-              style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"12px 16px",cursor:"pointer",transition:"border-color 0.15s"}}
-              onMouseEnter={e=>e.currentTarget.style.borderColor="var(--accent)"}
-              onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}
-            >
-              <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                <span style={{fontWeight:800,fontSize:14}}>{r.student_name}</span>
-                <span style={{fontSize:12,color:"var(--text3)"}}>{LOAN_ICONS[r.loan_type]||"📦"} {r.loan_type}</span>
-                <span style={{fontSize:11,color:"var(--text3)"}}>📅 {formatDate(r.borrow_date)} → {formatDate(r.return_date)}</span>
-                <span className={`badge badge-${r.status==="מאושר"?"green":r.status==="ממתין"?"yellow":r.status==="נדחה"?"red":r.status==="באיחור"?"orange":"purple"}`} style={{marginRight:"auto"}}>
-                  {r.status}
-                </span>
-              </div>
-              {selected===r&&(
-                <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid var(--border)"}}>
-                  {/* פרטי סטודנט */}
-                  <div style={{display:"flex",flexWrap:"wrap",gap:14,marginBottom:14}}>
-                    {r.email&&<div style={{fontSize:13,color:"var(--text2)"}}>📧 {r.email}</div>}
-                    {r.phone&&<div style={{fontSize:13,color:"var(--text2)"}}>📞 {r.phone}</div>}
-                    {r.course&&<div style={{fontSize:13,color:"var(--text2)"}}>📚 {r.course}</div>}
-                    {r.project_name&&<div style={{fontSize:13,color:"var(--text2)"}}>📽️ {r.project_name}</div>}
-                    {r.crew_photographer_name&&<div style={{fontSize:13,color:"var(--text2)"}}>🎥 צלם: {r.crew_photographer_name}</div>}
-                    {r.crew_sound_name&&<div style={{fontSize:13,color:"var(--text2)"}}>🎙️ סאונד: {r.crew_sound_name}</div>}
-                  </div>
-                  {/* ציוד מבוקש */}
-                  {r.items?.length>0&&(
-                    <div>
-                      <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>ציוד מבוקש</div>
-                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                        {r.items.map((item,idx)=>{
-                          const eq = equipment.find(e=>e.name===item.name);
-                          return (
-                            <div key={idx} style={{display:"flex",alignItems:"center",gap:12,background:"var(--surface2)",borderRadius:8,padding:"10px 12px",border:"1px solid var(--border)"}}>
-                              <div style={{width:56,height:56,borderRadius:8,overflow:"hidden",background:"var(--surface)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid var(--border)"}}>
-                                {eq?.image
-                                  ? <img src={cloudinaryThumb(eq.image)} alt={item.name} style={{width:"100%",height:"100%",objectFit:"contain"}}/>
-                                  : <span style={{fontSize:24}}>📦</span>}
-                              </div>
-                              <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontWeight:800,fontSize:14}}>{item.name}</div>
-                                {eq?.description&&<div style={{fontSize:11,color:"var(--text3)",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{eq.description}</div>}
-                              </div>
-                              <div style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:8,padding:"5px 14px",fontSize:15,fontWeight:900,color:"var(--accent)",flexShrink:0}}>×{item.quantity}</div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                  {(r.status==="אישור ראש מחלקה"||r.status==="ממתין לאישור ראש המחלקה")&&(
-                    <div style={{marginTop:14}}>
-                      <button
-                        onClick={e=>{e.stopPropagation();approveReservation(r);}}
-                        disabled={approving===r.id}
-                        style={{padding:"10px 24px",borderRadius:"var(--r-sm)",border:"none",background:"#9b59b6",color:"#fff",fontWeight:900,fontSize:14,cursor:"pointer",opacity:approving===r.id?0.6:1,display:"flex",alignItems:"center",gap:8}}>
-                        {approving===r.id ? "⏳ מאשר..." : "✅ אשר הפקה — העבר לממתין"}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      }
-    </div>
-  );
-}
-
 // ─── MANAGER CALENDAR PAGE ───────────────────────────────────────────────────
 function ManagerCalendarPage({ reservations: initialReservations, setReservations, collegeManager, equipment=[], kits=[], siteSettings={} }) {
   const [localRes, setLocalRes]   = useState(initialReservations);
@@ -7028,7 +6828,6 @@ export default function App() {
   const [teamMembers, _setTeamMembers] = useState([]);
   const [deptHeads, _setDeptHeads]       = useState([]);
   const [collegeManager, _setCollegeManager] = useState({ name:"", email:"" });
-  const [calendarToken, setCalendarToken] = useState("");
   const [managerToken, setManagerToken]   = useState("");
   const [kits, _setKits]               = useState([]);
   const [policies, _setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"", לילה:"" });
@@ -7460,7 +7259,7 @@ export default function App() {
     (async()=>{
         try {
           historySuspendedRef.current = true;
-          const [eqR, resR, catsR, catTypesR, catLoanTypesR, tmR, ktsR, polR, certsR, dhsR, calTokR, mgrR, mgrTokR, siteSetR, studiosR, studioBkR, lessonsR, lecturersR] = await Promise.all([
+          const [eqR, resR, catsR, catTypesR, catLoanTypesR, tmR, ktsR, polR, certsR, dhsR, mgrR, mgrTokR, siteSetR, studiosR, studioBkR, lessonsR, lecturersR] = await Promise.all([
             storageGet("equipment"),
           storageGet("reservations"),
           storageGet("categories"),
@@ -7471,7 +7270,6 @@ export default function App() {
           storageGet("policies"),
           storageGet("certifications"),
           storageGet("deptHeads"),
-          storageGet("calendarToken"),
           storageGet("collegeManager"),
           storageGet("managerToken"),
           storageGet("siteSettings"),
@@ -7491,7 +7289,6 @@ export default function App() {
           const pol = polR.value, polSrc = polR.source;
           const certs = certsR.value, certsSrc = certsR.source;
           const dhs = dhsR.value, dhsSrc = dhsR.source;
-          const calTok = calTokR.value, calTokSrc = calTokR.source;
           const mgr = mgrR.value, mgrSrc = mgrR.source;
           const mgrTok = mgrTokR.value, mgrTokSrc = mgrTokR.source;
           const siteSet = siteSetR.value;
@@ -7513,7 +7310,6 @@ export default function App() {
         _setPolicies(pol || { פרטית:"", הפקה:"", סאונד:"", לילה:"" });
         _setCertifications(certs || { types:[], students:[] });
         _setDeptHeads(Array.isArray(dhs) ? dhs : []);
-          setCalendarToken(calTok || "");
         _setCollegeManager(mgr || { name:"", email:"" });
           setManagerToken(mgrTok || "");
         _setStudios(Array.isArray(stds) ? stds : []);
@@ -7575,11 +7371,6 @@ export default function App() {
         if(!pol && polSrc === "supabase_empty")   await storageSet("policies",        { פרטית:"", הפקה:"", סאונד:"", לילה:"" });
         if(!certs && certsSrc === "supabase_empty") await storageSet("certifications", { types:[], students:[] });
         if(!dhs && dhsSrc === "supabase_empty")     await storageSet("deptHeads",       []);
-        if(!calTok && calTokSrc === "supabase_empty") {
-          const tok = Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10);
-          await storageSet("calendarToken", tok);
-          setCalendarToken(tok);
-        }
         if(!mgrTok && mgrTokSrc === "supabase_empty") {
           const tok = "mgr_"+Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10);
           await storageSet("managerToken", tok);
@@ -8054,7 +7845,7 @@ export default function App() {
         </div>
       ) : isPublicFormView && (
         <div className="public-page-shell">
-          {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes} refreshInventory={refreshPublicInventory} lecturers={lecturers} canInstall={canInstallPwa} onInstall={installPwa}/>}
+          {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes} refreshInventory={refreshPublicInventory} lecturers={lecturers} canInstall={canInstallPwa} onInstall={installPwa}/>}
         </div>
       )}
 
@@ -8088,7 +7879,7 @@ export default function App() {
                 <span className="topbar-title" style={{flex:1}}>ניהול צוות</span>
               </div>
             </div>
-            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <StaffManagementPage showToast={showToast} teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} managerToken={managerToken} lecturers={lecturers}/>}
+            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <StaffManagementPage showToast={showToast} teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} collegeManager={collegeManager} setCollegeManager={setCollegeManager} managerToken={managerToken} lecturers={lecturers}/>}
           </div>
         </div>
       )}
@@ -8233,8 +8024,8 @@ export default function App() {
               <div style={{display:page==="reservations"?"block":"none"}}><ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}
-                initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} calendarToken={calendarToken} siteSettings={siteSettings} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports}/></div>
-              <div style={{display:page==="team"?"block":"none"}}><TeamPage teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} calendarToken={calendarToken} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/></div>
+                initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} siteSettings={siteSettings} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports}/></div>
+              <div style={{display:page==="team"?"block":"none"}}><TeamPage teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/></div>
               <div style={{display:page==="kits"?"block":"none"}}><KitsPage kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons}/></div>
               <div style={{display:page==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} lecturers={lecturers} setLecturers={setLecturers} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length
                 ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean)

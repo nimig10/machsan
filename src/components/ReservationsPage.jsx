@@ -7,7 +7,7 @@ import { ArchivePage } from "./ArchivePage.jsx";
 
 export function ReservationsPage({ reservations, setReservations, equipment, showToast,
     search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy, mode="active", initialSubView="active", collegeManager={}, managerToken="",
-    categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], calendarToken="", siteSettings={}, onLogCreated = () => {}, equipmentReports=[] }) {
+    categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], siteSettings={}, onLogCreated = () => {}, equipmentReports=[] }) {
   const [subView, setSubView] = useState("active"); // "active" | "rejected" | "archive"
   const [selected, setSelected] = useState(null);
   const [editing, setEditing]   = useState(null);
