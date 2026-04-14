@@ -32,8 +32,10 @@ export default defineConfig({
         theme_color: '#f5a623',
         background_color: '#0a0c10',
         display: 'standalone',
+        orientation: 'any',
         lang: 'he',
         dir: 'rtl',
+        categories: ['productivity', 'education'],
         icons: [
           {
             src: 'LOGON1.png',
