@@ -1136,7 +1136,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [step, setStep]       = useState(initialStep);
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const swipeTouchRef = useRef(null);
-  const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""});
+  const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:"",production_reason:""});
   const [items, setItems]     = useState([]);
   const [agreed, setAgreed]   = useState(false);
   const [done, setDone]       = useState(false);
@@ -1896,7 +1896,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     d.setDate(d.getDate() + minDays);
     return moveToNextWeekday(formatLocalDateInput(d));
   })();
-  const maxDays = form.loan_type==="פרטית" ? 4 : isCinemaLoan ? 1 : 7;
+  const maxDays = form.loan_type==="פרטית" ? 4 : isCinemaLoan ? 1 : form.loan_type==="הפקה" ? 9 : 7;
   const tooSoon = form.loan_type!=="סאונד" && !isCinemaLoan && !!form.borrow_date && form.borrow_date < minDate;
   const cinemaTooSoon = isCinemaLoan && !!form.borrow_date && form.borrow_date < minDate;
   const loanDays = (form.borrow_date && form.return_date)
@@ -2536,7 +2536,7 @@ ${inventory}
     showToast("success","הבקשה נשלחה בהצלחה!");
   };
 
-  const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""}); setItems([]); setAgreed(false); };
+  const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:"",production_reason:""}); setItems([]); setAgreed(false); };
 
   const VIEWS = ["equipment", "studios", "daily", "my-bookings"];
   const handleFormSwipeStart = (e) => {
@@ -2909,6 +2909,24 @@ ${inventory}
                   <div className="form-group"><label className="form-label">טלפון</label><input className="form-input" placeholder="05x-xxxxxxx" name="crew_sound_phone" autoComplete="tel" value={form.crew_sound_phone} onChange={e=>set("crew_sound_phone",e.target.value)}/></div>
                 </div>
               </div>
+            {/* ── סיבת ההפקה ── */}
+            {isProductionLoan && (
+              <>
+                <div className="form-section-title" style={{marginTop:20}}>סיבת ההפקה</div>
+                <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"16px",marginBottom:16}}>
+                  <div style={{fontSize:13,color:"var(--text2)",marginBottom:10}}>📝 פרט/י בקצרה מדוע ההפקה רלוונטית ללמידה שלך. ההסבר יועבר לאישור ראש המחלקה.</div>
+                  <textarea
+                    className="form-input"
+                    placeholder="לדוגמה: הפקת סרט גמר בקורס צילום קולנועי — נדרש ציוד צילום לתרגיל הצילום הסופי..."
+                    value={form.production_reason}
+                    onChange={e => set("production_reason", e.target.value.slice(0, 400))}
+                    rows={4}
+                    style={{resize:"vertical",minHeight:90}}
+                  />
+                  <div style={{fontSize:11,color:"var(--text3)",marginTop:4,textAlign:"left"}}>{form.production_reason.length}/400</div>
+                </div>
+              </>
+            )}
             </>)}
 
             <button className="btn btn-primary" disabled={!ok1} onClick={()=>setStep(2)}>{isSoundLoan ? "המשך ← שיוך קביעת חדר" : "המשך ← תאריכים"}</button>

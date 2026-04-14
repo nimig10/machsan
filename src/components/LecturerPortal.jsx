@@ -747,6 +747,12 @@ export function LecturerPortal({
                               {res.crew_photographer_name && <div>📸 צלם: {res.crew_photographer_name}</div>}
                               {res.crew_sound_name && <div>🎙️ סאונד: {res.crew_sound_name}</div>}
                             </div>
+                            {res.production_reason && (
+                              <div style={{ background: "rgba(245,166,35,0.07)", border: "1px solid rgba(245,166,35,0.25)", borderRadius: 10, padding: "10px 14px", marginTop: 8 }}>
+                                <div style={{ fontSize: 11, fontWeight: 800, color: "var(--accent)", marginBottom: 4 }}>📝 סיבת ההפקה</div>
+                                <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{res.production_reason}</div>
+                              </div>
+                            )}
                             {Array.isArray(res.items) && res.items.length > 0 && (
                               <div style={{ marginTop: 8 }}>
                                 <div style={{ fontSize: 11, fontWeight: 800, color: "var(--text3)", marginBottom: 4 }}>ציוד מבוקש:</div>

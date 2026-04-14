@@ -484,6 +484,13 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                   {dashViewRes.crew_sound_name&&<span>🎙️ סאונד: <strong>{dashViewRes.crew_sound_name}</strong>{dashViewRes.crew_sound_phone&&` · ${dashViewRes.crew_sound_phone}`}</span>}
                 </div>
               )}
+              {/* Production reason */}
+              {dashViewRes.production_reason&&(
+                <div style={{background:"rgba(245,166,35,0.07)",border:"1px solid rgba(245,166,35,0.25)",borderRadius:10,padding:"12px 14px"}}>
+                  <div style={{fontSize:11,fontWeight:800,color:"var(--accent)",marginBottom:6}}>📝 סיבת ההפקה</div>
+                  <div style={{fontSize:13,color:"var(--text)",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{dashViewRes.production_reason}</div>
+                </div>
+              )}
               {/* Items with images */}
               <div>
                 <div style={{fontWeight:800,fontSize:14,marginBottom:10}}>ציוד ({dashViewRes.items?.length||0} פריטים)</div>
