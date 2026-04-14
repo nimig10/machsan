@@ -2919,11 +2919,11 @@ ${inventory}
                     className="form-input"
                     placeholder="לדוגמה: הפקת סרט גמר בקורס צילום קולנועי — נדרש ציוד צילום לתרגיל הצילום הסופי..."
                     value={form.production_reason}
-                    onChange={e => set("production_reason", e.target.value.slice(0, 400))}
+                    onChange={e => set("production_reason", e.target.value.slice(0, 600))}
                     rows={4}
                     style={{resize:"vertical",minHeight:90}}
                   />
-                  <div style={{fontSize:11,color:"var(--text3)",marginTop:4,textAlign:"left"}}>{form.production_reason.length}/400</div>
+                  <div style={{fontSize:11,color:"var(--text3)",marginTop:4,textAlign:"left"}}>{form.production_reason.length}/600</div>
                 </div>
               </>
             )}
