@@ -1896,7 +1896,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     d.setDate(d.getDate() + minDays);
     return moveToNextWeekday(formatLocalDateInput(d));
   })();
-  const maxDays = form.loan_type==="פרטית" ? 4 : isCinemaLoan ? 1 : form.loan_type==="הפקה" ? 9 : 7;
+  const maxDays = form.loan_type==="פרטית" ? 4 : isCinemaLoan ? 1 : 7;
   const tooSoon = form.loan_type!=="סאונד" && !isCinemaLoan && !!form.borrow_date && form.borrow_date < minDate;
   const cinemaTooSoon = isCinemaLoan && !!form.borrow_date && form.borrow_date < minDate;
   const loanDays = (form.borrow_date && form.return_date)
