@@ -2669,14 +2669,14 @@ ${inventory}
               {loginBusy ? "מתחבר..." : "כניסה"}
             </button>
             <button type="button"
-              style={{marginTop:12,background:"var(--accent)",border:"none",color:"#000",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"7px 18px",display:"inline-block"}}
+              style={{marginTop:12,background:"transparent",border:"2px solid var(--accent)",color:"var(--accent)",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"6px 18px",display:"inline-block"}}
               onClick={()=>{setAuthView("forgot");setLoginError("");setLoginPassword("");}}>
               שכחת סיסמה?
             </button>
             <div style={{fontSize:13,color:"var(--accent)",marginTop:10,fontWeight:700,lineHeight:1.6}}>
               כניסה ראשונה? לחץ/י על <strong>"שכחת סיסמה?"</strong> ליצירת סיסמה.
             </div>
-            <div style={{fontSize:12,color:"var(--text3)",marginTop:18,paddingTop:14,borderTop:"1px solid var(--border)",lineHeight:1.5}}>
+            <div style={{fontSize:13,color:"#aaa",marginTop:18,paddingTop:14,borderTop:"1px solid var(--border)",lineHeight:1.5}}>
               רק משתמשים רשומים יכולים להיכנס.
             </div>
           </>
@@ -2697,11 +2697,11 @@ ${inventory}
               {loginBusy ? "שולח..." : "שלח קישור לאיפוס"}
             </button>
             <button type="button"
-              style={{marginTop:12,background:"var(--accent)",border:"none",color:"#000",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"7px 18px",display:"inline-block"}}
+              style={{marginTop:12,background:"transparent",border:"2px solid var(--accent)",color:"var(--accent)",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"6px 18px",display:"inline-block"}}
               onClick={()=>{setAuthView("login");setLoginError("");}}>
               ← חזרה למסך הכניסה
             </button>
-            <div style={{fontSize:11,color:"var(--text3)",marginTop:14}}>
+            <div style={{fontSize:13,color:"#aaa",marginTop:14,lineHeight:1.6}}>
               נשלח אליך קישור במייל ליצירת/איפוס סיסמה. הקישור תקף לשעה.
             </div>
           </>
@@ -2719,7 +2719,7 @@ ${inventory}
               </div>
             </div>
             <button type="button"
-              style={{marginTop:4,background:"var(--accent)",border:"none",color:"#000",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"7px 18px",display:"inline-block"}}
+              style={{marginTop:4,background:"transparent",border:"2px solid var(--accent)",color:"var(--accent)",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"6px 18px",display:"inline-block"}}
               onClick={()=>{setAuthView("login");setLoginError("");}}>
               ← חזרה למסך הכניסה
             </button>
