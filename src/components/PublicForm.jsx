@@ -1982,7 +1982,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     ? cinemaMaxReturnSlots.filter((slot) => availableReturnSlotsBase.includes(slot))
     : availableReturnSlotsBase;
   const ok1 = form.student_name && form.email && form.phone && form.course && form.loan_type &&
-    (!isProductionLoan || form.crew_photographer_name);
+    (!isProductionLoan || (form.crew_photographer_name && form.crew_photographer_phone));
 
   // ── Certification lookup ──
   const normalizePhone = (p) => (p||"").replace(/[^0-9]/g,"");
@@ -2899,7 +2899,11 @@ ${inventory}
                 <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>🎥 צלם ההפקה <span style={{color:"var(--red)",fontSize:11}}>* חובה</span></div>
                 <div className="grid-2">
                   <div className="form-group"><label className="form-label">שם מלא *</label><input className="form-input" placeholder="שם הצלם" name="crew_photographer_name" autoComplete="name" value={form.crew_photographer_name} onChange={e=>set("crew_photographer_name",e.target.value)}/></div>
-                  <div className="form-group"><label className="form-label">טלפון</label><input className="form-input" placeholder="05x-xxxxxxx" name="crew_photographer_phone" autoComplete="tel" value={form.crew_photographer_phone} onChange={e=>set("crew_photographer_phone",e.target.value)}/></div>
+                  <div className="form-group">
+                    <label className="form-label">טלפון * <span style={{color:"var(--red)",fontSize:11,fontWeight:700}}>חובה</span></label>
+                    <input className="form-input" placeholder="05x-xxxxxxx" name="crew_photographer_phone" autoComplete="tel" value={form.crew_photographer_phone} onChange={e=>set("crew_photographer_phone",e.target.value)}/>
+                    <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>המערכת מצליבה את הנתונים לפי הסמכות הציוד של הצלם</div>
+                  </div>
                 </div>
               </div>
               <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"16px",marginBottom:16}}>
