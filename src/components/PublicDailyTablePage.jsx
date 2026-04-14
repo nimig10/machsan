@@ -112,6 +112,9 @@ export function PublicDailyTablePage() {
       .sort((a,b)=>(a.startTime||"").localeCompare(b.startTime||""));
   }, [bookings, today]);
 
+  const morningRows = useMemo(() => lessonRows.filter(r => (r.startTime||"") < "17:00"), [lessonRows]);
+  const eveningRows = useMemo(() => lessonRows.filter(r => (r.startTime||"") >= "17:00"), [lessonRows]);
+
   const accent = settings.accentColor || "#f5a623";
 
   // vh/vw units calibrated for 1920×1080 HD TV (1vh=10.8px, 1vw=19.2px)
@@ -154,12 +157,38 @@ export function PublicDailyTablePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {lessonRows.map((r,i) => (
-                    <tr key={i} style={{background:i%2===0?"transparent":"rgba(255,255,255,0.025)"}}>
+                  {/* ── שיעורי בוקר ── */}
+                  {morningRows.length > 0 && (
+                    <tr>
+                      <td colSpan={6} style={{padding:"0.6vh 1.2vw",background:"rgba(245,166,35,0.07)",borderBottom:"1px solid #2a2a2a",borderTop:"1px solid #2a2a2a",color:accent,fontWeight:700,fontSize:"1.3vh",letterSpacing:0.5}}>
+                        ☀️ שיעורי בוקר &nbsp;<span style={{fontWeight:400,color:"#888",fontSize:"1.2vh"}}>09:00–17:00</span>
+                      </td>
+                    </tr>
+                  )}
+                  {morningRows.map((r,i) => (
+                    <tr key={`m${i}`} style={{background:i%2===0?"transparent":"rgba(255,255,255,0.025)"}}>
                       <td style={{...cellBase,color:"#bbb",fontWeight:500}}>{r.track||"—"}</td>
                       <td style={{...cellBase,fontWeight:700,color:"#fff"}}>{r.course||"—"}</td>
                       <td style={{...cellBase,color:"#ddd"}}>{r.instructor||"—"}</td>
                       <td style={{...cellBase,color:accent,fontWeight:700,whiteSpace:"nowrap"}}>{r.startTime&&r.endTime?`${r.startTime}–${r.endTime}`:r.startTime||"—"}</td>
+                      <td style={{...cellBase,color:"#ddd"}}>{stName(r.studioId)}</td>
+                      <td style={{...cellBase,color:"#ddd"}}>{r.topic||"—"}</td>
+                    </tr>
+                  ))}
+                  {/* ── שיעורי ערב ── */}
+                  {eveningRows.length > 0 && (
+                    <tr>
+                      <td colSpan={6} style={{padding:"0.6vh 1.2vw",background:"rgba(100,149,237,0.07)",borderBottom:"1px solid #2a2a2a",borderTop:`2px solid #333`,color:"#7eb3ff",fontWeight:700,fontSize:"1.3vh",letterSpacing:0.5}}>
+                        🌙 שיעורי ערב &nbsp;<span style={{fontWeight:400,color:"#888",fontSize:"1.2vh"}}>17:00–22:00</span>
+                      </td>
+                    </tr>
+                  )}
+                  {eveningRows.map((r,i) => (
+                    <tr key={`e${i}`} style={{background:i%2===0?"transparent":"rgba(255,255,255,0.025)"}}>
+                      <td style={{...cellBase,color:"#bbb",fontWeight:500}}>{r.track||"—"}</td>
+                      <td style={{...cellBase,fontWeight:700,color:"#fff"}}>{r.course||"—"}</td>
+                      <td style={{...cellBase,color:"#ddd"}}>{r.instructor||"—"}</td>
+                      <td style={{...cellBase,color:"#7eb3ff",fontWeight:700,whiteSpace:"nowrap"}}>{r.startTime&&r.endTime?`${r.startTime}–${r.endTime}`:r.startTime||"—"}</td>
                       <td style={{...cellBase,color:"#ddd"}}>{stName(r.studioId)}</td>
                       <td style={{...cellBase,color:"#ddd"}}>{r.topic||"—"}</td>
                     </tr>
