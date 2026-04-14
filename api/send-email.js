@@ -24,6 +24,7 @@ function buildEmail({
   crew_sound,
   approve_url,
   calendar_url,
+  portal_url,
   report_note,
   reservation_id,
   custom_message,
@@ -166,7 +167,14 @@ function buildEmail({
       </div>
     </div>` : "";
 
-  const calendarButton = (isDeptHead || isManagerReport) && calendar_url ? `
+  const portalButton = isDeptHead && portal_url ? `
+    <div style="text-align:center;margin:0 0 24px">
+      <a href="${portal_url}" style="display:inline-block;padding:12px 26px;background:#111318;color:#e8eaf0;font-weight:800;font-size:14px;border-radius:10px;text-decoration:none;border:1px solid #2d3244">
+        🎓 כניסה לפורטל
+      </a>
+    </div>` : "";
+
+  const calendarButton = isManagerReport && calendar_url ? `
     <div style="text-align:center;margin:0 0 24px">
       <a href="${calendar_url}" style="display:inline-block;padding:12px 26px;background:#111318;color:#e8eaf0;font-weight:800;font-size:14px;border-radius:10px;text-decoration:none;border:1px solid #2d3244">
         📅 לצפייה בלוח השנה
@@ -222,6 +230,7 @@ function buildEmail({
         </div>` : ""}
       </div>
       ${approveButton}
+      ${portalButton}
       ${calendarButton}
       ${isApproved ? `
       <div style="background:rgba(46,204,113,0.08);border:1px solid rgba(46,204,113,0.2);border-radius:8px;padding:16px;font-size:13px;color:#8891a8;margin-bottom:20px;direction:rtl;text-align:right">
@@ -256,6 +265,7 @@ export default async function handler(req, res) {
     crew_sound,
     approve_url,
     calendar_url,
+    portal_url,
     report_note,
     reservation_id,
     custom_message,
@@ -324,6 +334,7 @@ export default async function handler(req, res) {
         crew_sound,
         approve_url,
         calendar_url,
+        portal_url,
         report_note,
         reservation_id,
         custom_message,

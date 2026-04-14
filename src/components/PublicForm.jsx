@@ -2427,7 +2427,7 @@ ${inventory}
       );
       if (relevantDeptHeads.length > 0) {
         const approveUrl = `${window.location.origin}/api/approve-production?id=${res.id}`;
-        const calendarUrl = calendarToken ? `${window.location.origin}/calendar?token=${calendarToken}` : "";
+        const portalUrl = `${window.location.origin}/`;
         for (let i = 0; i < relevantDeptHeads.length; i++) {
           const dh = relevantDeptHeads[i];
           // delay between emails to avoid Gmail rate limiting
@@ -2452,7 +2452,7 @@ ${inventory}
                 crew_photographer: res.crew_photographer_name||"",
                 crew_sound:        res.crew_sound_name||"",
                 approve_url:       approveUrl,
-                calendar_url:   calendarUrl,
+                portal_url:     portalUrl,
                 reservation_id: String(res.id),
                 logo_url:       siteSettings.logo || "",
                 sound_logo_url: siteSettings.soundLogo || "",

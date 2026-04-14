@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, getAvailable, normalizeName, storageSet, storageGet } from "../utils.js";
 import { statusBadge } from "./ui.jsx";
+import { DeptHeadCalendarPage } from "./CalendarViews.jsx";
 
 function hasLinkedValue(value) {
   return value !== null && value !== undefined && String(value).trim() !== "";
@@ -116,7 +117,7 @@ export function LecturerPortal({
   }, [activeLecturers, loggedInLecturer]);
 
   // ── Dept head panel ── (MUST come after currentLecturer)
-  const [dhView, setDhView] = useState("requests"); // requests | courses
+  const [activeTab, setActiveTab] = useState("courses"); // courses | journal
   const [approvingId, setApprovingId] = useState(null);
 
   const myDeptHead = useMemo(() => {
@@ -669,16 +670,25 @@ export function LecturerPortal({
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap", marginBottom: lecturerCourseEntries.length > 1 ? 14 : 0 }}>
             <div>
               <div style={{ fontSize: 24, fontWeight: 900, color: "var(--accent)", marginBottom: 4 }}>פורטל מרצה</div>
-              <div style={{ fontSize: 14, color: "var(--text2)" }}>שלום, {currentLecturer?.fullName || loggedInLecturer.fullName}</div>
+              <div style={{ fontSize: 14, color: "var(--text2)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span>שלום, {currentLecturer?.fullName || loggedInLecturer.fullName}</span>
+                {myDeptHead?.role && (
+                  <span style={{ background: "rgba(155,89,182,0.12)", border: "1px solid rgba(155,89,182,0.35)", color: "#9b59b6", borderRadius: 999, padding: "2px 10px", fontSize: 12, fontWeight: 800 }}>
+                    🎓 {myDeptHead.role}
+                  </span>
+                )}
+              </div>
             </div>
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <input
-                className="form-input"
-                style={{ width: 260 }}
-                placeholder="חיפוש קורס לפי שם או מסלול"
-                value={search}
-                onChange={(event) => { setSearch(event.target.value); setCourseFilter("הכל"); }}
-              />
+              {activeTab === "courses" && (
+                <input
+                  className="form-input"
+                  style={{ width: 260 }}
+                  placeholder="חיפוש קורס לפי שם או מסלול"
+                  value={search}
+                  onChange={(event) => { setSearch(event.target.value); setCourseFilter("הכל"); }}
+                />
+              )}
               {(() => { try { const r = loggedInLecturer || {}; return r.is_admin || r.is_warehouse; } catch { return false; } })() && (
                 <button
                   className="btn"
@@ -691,7 +701,7 @@ export function LecturerPortal({
             </div>
           </div>
           {/* Course filter pills — only shown when there are 2+ courses */}
-          {lecturerCourseEntries.length > 1 && (
+          {activeTab === "courses" && lecturerCourseEntries.length > 1 && (
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", paddingTop: 2 }}>
               {["הכל", ...lecturerCourseEntries.map(e => e.lesson?.name).filter(Boolean)].map(name => {
                 const active = courseFilter === name;
@@ -704,9 +714,26 @@ export function LecturerPortal({
               })}
             </div>
           )}
+          {/* Tabs — only when lecturer is also dept head */}
+          {myDeptHead && (
+            <div style={{ display: "flex", gap: 8, marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+              {[
+                { id: "courses", label: "📚 הקורסים שלי" },
+                { id: "journal", label: "🎓 יומן השאלות תלמידים" },
+              ].map(tab => {
+                const active = activeTab === tab.id;
+                return (
+                  <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)}
+                    style={{ padding: "10px 20px", borderRadius: 12, border: `2px solid ${active ? "var(--accent)" : "var(--border)"}`, background: active ? "var(--accent-glow)" : "var(--surface2)", color: active ? "var(--accent)" : "var(--text2)", fontWeight: active ? 900 : 700, fontSize: 14, cursor: "pointer", transition: "all 0.15s" }}>
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
         {/* ── Dept Head Approval Panel ── */}
-        {myDeptHead && (
+        {myDeptHead && activeTab === "journal" && (
           <div style={{ background: "var(--surface)", border: "2px solid rgba(155,89,182,0.3)", borderRadius: 18, overflow: "hidden" }}>
             <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", background: "rgba(155,89,182,0.06)" }}>
               <div>
@@ -797,7 +824,7 @@ export function LecturerPortal({
           </div>
         )}
 
-        {filteredCourseEntries.length === 0 ? (
+        {activeTab === "courses" && (filteredCourseEntries.length === 0 ? (
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 18, padding: 28, textAlign: "center", color: "var(--text2)" }}>
             {lecturerCourseEntries.length === 0
               ? "עדיין לא נמצאו קורסים שמקושרים למרצה הזה."
@@ -878,6 +905,18 @@ export function LecturerPortal({
               </div>
             </div>
           ))
+        ))}
+
+        {/* ── Dept Head Calendar (journal tab) ── */}
+        {myDeptHead && activeTab === "journal" && (
+          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 18, overflow: "hidden" }}>
+            <DeptHeadCalendarPage
+              reservations={(reservations || []).filter(r => (myDeptHead.loanTypes || []).includes(r.loan_type))}
+              kits={kits}
+              equipment={equipment}
+              siteSettings={siteSettings}
+            />
+          </div>
         )}
 
         {/* ── כפתור התנתקות בתחתית ── */}

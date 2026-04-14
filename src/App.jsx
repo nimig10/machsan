@@ -4049,21 +4049,6 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, cal
           ראש מחלקה מקבל מייל על השאלות מהסוגים שסומנו ויכול לאשר אותן לפני שהצוות רואה אותן.
           אם לא מוגדר ראש מחלקה לסוג ההשאלה — הבקשה תעבור ישירות לסטטוס <strong style={{color:"var(--text)"}}>ממתין</strong>.
         </div>
-        {calendarToken && (
-          <div style={{background:"rgba(155,89,182,0.08)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:14,fontSize:12}}>
-            <div style={{fontWeight:700,marginBottom:6,color:"#9b59b6"}}>🔗 קישור לוח שנה לראשי מחלקות</div>
-            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-              <code style={{fontSize:11,background:"var(--surface3)",padding:"3px 8px",borderRadius:4,flex:1,wordBreak:"break-all",color:"var(--text2)"}}>
-                {window.location.origin}/calendar?token={calendarToken}
-              </code>
-              <button className="btn btn-secondary btn-sm" onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/calendar?token=${calendarToken}`);showToast("success","הקישור הועתק!");}}>
-                📋 העתק
-              </button>
-            </div>
-            <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>שלח קישור זה לראשי המחלקות — הם יוכלו לצפות בכל הבקשות ללא גישה לניהול</div>
-          </div>
-        )}
-
         {/* Add form */}
         {addingDh && (
           <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"16px",marginBottom:16,border:"1px solid var(--border)"}}>
