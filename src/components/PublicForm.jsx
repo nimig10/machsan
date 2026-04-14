@@ -1504,8 +1504,9 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       .single();
 
     if (userError || !userRow) {
-      // No public.users row — check if this email belongs to a student, lecturer,
-      // or staff member (staff_members) and auto-create the row so they can proceed.
+      // No public.users row — verify eligibility via multiple paths so a
+      // transient store load delay or local drift cannot cause a spurious
+      // "not found" for a legitimate user.
       const isStudent = (certifications?.students || []).some(s => s.email?.toLowerCase().trim() === authEmail);
       const isLecturer = (lecturers || []).some(l => l.isActive !== false && l.email?.toLowerCase().trim() === authEmail);
       let isStaff = false;
@@ -1519,19 +1520,39 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
           isStaff = Array.isArray(staffRows) && staffRows.length > 0;
         } catch {}
       }
+
+      // Final fallback — ask the server (which uses the service-role key and
+      // has direct access to the authoritative store data). This protects
+      // against the race where certifications/lecturers haven't yet loaded
+      // into props when a fast user signs in.
+      let eligibleByServer = false;
       if (!isStudent && !isLecturer && !isStaff) {
+        try {
+          const r = await fetch("/api/auth", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "ensure-user", email: authEmail, provision: true }),
+          });
+          eligibleByServer = r.ok;
+        } catch {}
+      }
+
+      if (!isStudent && !isLecturer && !isStaff && !eligibleByServer) {
         setLoginError("המשתמש לא נמצא במערכת. פנה/י למנהל.");
         await supabase.auth.signOut();
         return;
       }
-      // Auto-provision public.users row via ensure-user API
-      try {
-        await fetch("/api/auth", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "ensure-user", email: authEmail, provision: true }),
-        });
-      } catch {}
+      // Auto-provision public.users row via ensure-user API (skip if the
+      // server-fallback above already called it).
+      if (!eligibleByServer) {
+        try {
+          await fetch("/api/auth", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "ensure-user", email: authEmail, provision: true }),
+          });
+        } catch {}
+      }
       // Re-fetch the newly created row
       const { data: retryRow } = await supabase
         .from("users")

@@ -159,6 +159,9 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
     lastFailedInlineDraftRef.current = "";
   };
 
+  const originalEmailRef = useRef("");
+  const originalNameRef  = useRef("");
+
   const openInlineEdit = (lec) => {
     resetInlineSaveState();
     setInlineSaving(false);
@@ -167,6 +170,29 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
     setEditPhone(lec.phone || "");
     setEditEmail(lec.email || "");
     setEditNotes(lec.notes || "");
+    originalEmailRef.current = String(lec.email    || "").trim().toLowerCase();
+    originalNameRef.current  = String(lec.fullName || "").trim();
+  };
+
+  const syncLecturerAuthUser = async (oldEmail, newEmail, newName) => {
+    const o = String(oldEmail || "").trim().toLowerCase();
+    const n = String(newEmail || "").trim().toLowerCase();
+    const name = String(newName || "").trim();
+    if (!o || !n) return;
+    if (o === n && name === originalNameRef.current) return;
+    try {
+      const resp = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync-lecturer-auth", oldEmail: o, newEmail: n, newName: name }),
+      });
+      if (!resp.ok) {
+        const j = await resp.json().catch(() => ({}));
+        if (j?.reason !== "no_auth_user") console.warn("sync-lecturer-auth failed:", j);
+      }
+    } catch (err) {
+      console.warn("sync-lecturer-auth error:", err);
+    }
   };
 
   const buildInlineDraft = () => ({
@@ -223,6 +249,15 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
     lastSavedInlineDraftRef.current = draftKey;
     lastFailedInlineDraftRef.current = "";
     setLecturers(updated);
+    // Propagate name/email change to Supabase Auth + public.users so the
+    // lecturer's login keeps working after the admin renames them.
+    const prevEmail = originalEmailRef.current;
+    const prevName  = originalNameRef.current;
+    if (prevEmail && (prevEmail !== draft.email.toLowerCase() || prevName !== draft.fullName)) {
+      void syncLecturerAuthUser(prevEmail, draft.email, draft.fullName);
+    }
+    originalEmailRef.current = draft.email.toLowerCase();
+    originalNameRef.current  = draft.fullName;
     if (!silent) showToast("success", "המרצה עודכן");
     if (closeOnSuccess) setEditingId(null);
     return true;

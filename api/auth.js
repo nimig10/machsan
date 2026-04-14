@@ -608,6 +608,63 @@ async function handleSyncStudentAuth(req, res) {
   return res.status(200).json({ ok: true, synced: true });
 }
 
+// ── sync-lecturer-auth ────────────────────────────────────────────────────────
+// Admin-triggered — called from LecturersPage after an inline edit successfully
+// writes the store. Updates the auth.users row + public.users row to match the
+// new email/name in store.lecturers so the lecturer's login continues to work
+// after the admin renames them. Mirrors handleSyncStudentAuth.
+async function handleSyncLecturerAuth(req, res) {
+  const { oldEmail, newEmail, newName } = req.body || {};
+  if (!oldEmail || !newEmail) return res.status(400).json({ error: "missing_email" });
+
+  const normOld  = normalizeEmail(oldEmail);
+  const normNew  = normalizeEmail(newEmail);
+  const nextName = String(newName || "").trim();
+  if (!isValidEmail(normNew)) return res.status(400).json({ error: "invalid_new_email" });
+
+  // Verify newEmail is present in store.lecturers (admin must have saved first)
+  const lecturers = await fetchStoreKey("lecturers");
+  const match = Array.isArray(lecturers)
+    ? lecturers.find((l) => l.isActive !== false && normalizeEmail(l.email) === normNew)
+    : null;
+  if (!match) return res.status(403).json({ error: "new_email_not_in_lecturers" });
+
+  const authUser = await findAuthUserByEmail(normOld);
+  if (!authUser) return res.status(200).json({ ok: true, synced: false, reason: "no_auth_user" });
+
+  const currentMeta = (authUser.user_metadata && typeof authUser.user_metadata === "object") ? authUser.user_metadata : {};
+  const nextMeta = { ...currentMeta };
+  if (nextName) nextMeta.full_name = nextName;
+
+  const updateBody = { user_metadata: nextMeta };
+  if (normOld !== normNew) {
+    updateBody.email = normNew;
+    updateBody.email_confirm = true;
+  }
+
+  const r = await fetch(`${SB_URL}/auth/v1/admin/users/${authUser.id}`, {
+    method: "PUT", headers: SERVICE_HEADERS, body: JSON.stringify(updateBody),
+  });
+  if (!r.ok) {
+    const txt = await r.text();
+    console.warn("sync-lecturer-auth update failed:", r.status, txt);
+    return res.status(500).json({ error: "auth_update_failed", details: txt });
+  }
+
+  // Mirror onto public.users if row exists
+  const puUpdates = { updated_at: new Date().toISOString() };
+  if (normOld !== normNew) puUpdates.email = normNew;
+  if (nextName) puUpdates.full_name = nextName;
+  if (Object.keys(puUpdates).length > 1) {
+    await fetch(`${SB_URL}/rest/v1/users?id=eq.${authUser.id}`, {
+      method: "PATCH", headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
+      body: JSON.stringify(puUpdates),
+    }).catch(() => {});
+  }
+
+  return res.status(200).json({ ok: true, synced: true });
+}
+
 // ── delete-student-auth ───────────────────────────────────────────────────────
 // Admin-triggered endpoint called from StudentsPage after deleting a student.
 // Removes the corresponding auth.users row so the deleted student can no
@@ -704,6 +761,7 @@ export default async function handler(req, res) {
     if (resolvedAction === "ensure-user")            return await handleEnsureUser(req, res);
     if (resolvedAction === "update-student-credentials") return await handleUpdateStudentCredentials(req, res);
     if (resolvedAction === "sync-student-auth")      return await handleSyncStudentAuth(req, res);
+    if (resolvedAction === "sync-lecturer-auth")     return await handleSyncLecturerAuth(req, res);
     if (resolvedAction === "delete-student-auth")    return await handleDeleteStudentAuth(req, res);
     return res.status(400).json({ error: "Missing or unknown action" });
   } catch (err) {
