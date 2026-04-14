@@ -1015,7 +1015,7 @@ function LessonsRow({ workDays, studioBookings, studios, today, holidays }) {
                   <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 11, lineHeight: 1.3 }}>{b.courseName || b.studentName || "שיעור"}</div>
                   {b.instructorName && <div style={{ color: "#f5a623", fontSize: 11, fontWeight: 700 }}>👨‍🏫 {b.instructorName}</div>}
                   {b.track && <div style={{ color: "var(--text3)", fontSize: 9, fontWeight: 600 }}>📍 {b.track}</div>}
-                  {studio && <div style={{ color: "var(--text2)", fontSize: 11, fontWeight: 600 }}>🏛️ {studio.name}</div>}
+                  <div style={{ color: studio ? "var(--text2)" : "var(--text3)", fontSize: 11, fontWeight: 600, fontStyle: studio ? "normal" : "italic" }}>🏛️ {studio ? studio.name : "לא משויך"}</div>
                 </div>
               );
             })}
@@ -1196,7 +1196,7 @@ function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEd
                           <option value="">ללא שיוך</option>
                           {classroomStudios.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
-                      ) : <span style={{ fontWeight: 600 }}>{studio?.name || "—"}</span>}
+                      ) : <span style={{ fontWeight: 600, color: studio ? "inherit" : "var(--text3)", fontStyle: studio ? "normal" : "italic" }}>{studio?.name || "לא משויך"}</span>}
                     </div>
                     <div style={{ ...tdBase }}><span style={{ color: "var(--text3)", fontSize: 11 }}>{fmtDate(endDate)}</span></div>
                     {canEdit && (

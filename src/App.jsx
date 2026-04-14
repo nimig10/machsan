@@ -564,7 +564,7 @@ function buildLessonStudioBookings(lessons = []) {
       // שיוך כיתה ברמת המפגש עוקף שיוך ברמת הקורס
       const effectiveStudioId = hasLinkedValue(session.studioId) ? session.studioId
         : hasLinkedValue(lesson.studioId) ? lesson.studioId : null;
-      if (!hasLinkedValue(effectiveStudioId)) return;
+      // שיעור ללא כיתה עדיין מופיע בלו"ז — studioId יהיה null
 
       const lessonName = String(lesson.name || "").trim();
       const instructorName = String(lesson.instructorName || "").trim();
