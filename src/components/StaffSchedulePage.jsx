@@ -496,6 +496,26 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
         </div>
       </div>
 
+      {/* ── Current week button (always visible, above nav) ── */}
+      <div style={{ marginBottom: 6, direction: "rtl" }}>
+        <button
+          onClick={() => {
+            setWeekOffset(0);
+            if (viewMode === "day") {
+              const todayIdx = workDays.findIndex(d => d === today);
+              setDayViewIdx(todayIdx >= 0 ? todayIdx : 0);
+            }
+          }}
+          style={{
+            fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 8, cursor: weekOffset === 0 ? "default" : "pointer",
+            border: `1.5px solid ${weekOffset === 0 ? "var(--accent)" : "var(--border)"}`,
+            background: weekOffset === 0 ? "rgba(245,166,35,0.18)" : "transparent",
+            color: weekOffset === 0 ? "var(--accent)" : "var(--text3)",
+            transition: "all 0.15s",
+          }}
+        >השבוע הנוכחי</button>
+      </div>
+
       {/* ── Week/Day Navigation + Filters ── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, flexWrap: "wrap", gap: 8, direction: "rtl" }}>
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
@@ -567,19 +587,6 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
               } else { setWeekOffset(w => w + 1); }
             }}>←</button>
 
-          {/* Return to current week */}
-          {weekOffset !== 0 && (
-            <button className="btn btn-secondary btn-sm"
-              onClick={() => {
-                setWeekOffset(0);
-                if (viewMode === "day") {
-                  const todayIdx = workDays.findIndex(d => d === today);
-                  setDayViewIdx(todayIdx >= 0 ? todayIdx : 0);
-                }
-              }}
-              style={{ fontSize: 11, opacity: 0.85 }}
-            >השבוע הנוכחי</button>
-          )}
 
           {/* Month picker dropdown */}
           <div style={{ position: "relative" }} ref={monthMenuRef}>
