@@ -73,9 +73,9 @@ function restoreCacheValue(key, value) {
 //   source: "supabase" — row found in DB
 //   source: "supabase_empty" — DB responded OK but key doesn't exist (first-time)
 //   source: "cache" — network/fetch failed, fell back to localStorage
-async function storageGet(key) {
+async function storageGet(key, signal) {
   try {
-    const res  = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers: SB_HEADERS });
+    const res  = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers: SB_HEADERS, signal });
     if (!res.ok) {
       console.warn("storageGet HTTP error", key, res.status);
       return { value: lsGet(key), source: "cache" };
@@ -88,6 +88,7 @@ async function storageGet(key) {
     // DB responded OK but no row — this is a genuine first-time setup
     return { value: null, source: "supabase_empty" };
   } catch(e) {
+    if (e.name === "AbortError") return { value: null, source: "aborted" };
     console.warn("storageGet error", key, e);
     return { value: lsGet(key), source: "cache" };
   }
@@ -4792,6 +4793,15 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         return;
       }
 
+      // Pre-build Map: eqId → relevant reservations — avoids O(n²) scan inside the loop
+      const eqResMap = new Map();
+      for (const res of baseRes) {
+        if (res.status !== "מאושר" && res.status !== "באיחור") continue;
+        for (const ri of res.items || []) {
+          if (!eqResMap.has(ri.equipment_id)) eqResMap.set(ri.equipment_id, []);
+          eqResMap.get(ri.equipment_id).push(res);
+        }
+      }
       const sessionConflicts = [];
       for (let si = 0; si < finalSchedule.length; si++) {
         const s = finalSchedule[si];
@@ -4800,8 +4810,8 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         for (const item of kitItems) {
           const eq = equipment.find(e=>e.id==item.equipment_id);
           if (!eq) continue;
-          // Build list of reservations to check against: baseRes + earlier sessions from THIS kit
-          const checkRes = [...baseRes];
+          // Build list of reservations to check against: pre-filtered base + earlier sessions from THIS kit
+          const checkRes = [...(eqResMap.get(item.equipment_id) || [])];
           for (let pi = 0; pi < si; pi++) {
             const ps = finalSchedule[pi];
             checkRes.push({
@@ -7117,6 +7127,7 @@ export default function App() {
   const historySuspendedRef = useRef(true);
   const historyQueuedRef = useRef(false);
   const undoInFlightRef = useRef(false);
+  const refreshAbortRef = useRef(null);
   const swipeTouchRef = useRef(null);
 
   equipmentRef.current = equipment;
@@ -7608,14 +7619,19 @@ export default function App() {
   useEffect(() => { if (!loading && !isPublicFormView) fetchEquipmentReports(); },[loading]);
 
   const refreshAdminData = async () => {
-    if (historySuspendedRef.current) return;
+    if (historySuspendedRef.current) return false;
+    // ביטול קריאה קודמת שעדיין רצה
+    refreshAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    refreshAbortRef.current = ctrl;
     try {
       const [resR, bookingsR, lecturersR, certsR] = await Promise.all([
-        storageGet("reservations"),
-        storageGet("studio_bookings"),
-        storageGet("lecturers"),
-        storageGet("certifications"),
+        storageGet("reservations", ctrl.signal),
+        storageGet("studio_bookings", ctrl.signal),
+        storageGet("lecturers", ctrl.signal),
+        storageGet("certifications", ctrl.signal),
       ]);
+      if (ctrl.signal.aborted) return false;
       if (Array.isArray(resR?.value)) {
         const normalized = normalizeReservationsForArchive(resR.value);
         if (!dataEquals(reservationsRef.current, normalized)) _setReservations(normalized);
@@ -7632,7 +7648,9 @@ export default function App() {
       if (certsR?.value && typeof certsR.value === "object" && !dataEquals(certificationsRef.current, certsR.value)) {
         _setCertifications(certsR.value);
       }
-    } catch {}
+      // Return true if at least one response came from supabase (network is up)
+      return [resR, bookingsR, lecturersR, certsR].some(r => r?.source === "supabase");
+    } catch { return false; }
   };
 
   useEffect(() => {
@@ -7645,18 +7663,27 @@ export default function App() {
     };
     const handleFocus = () => triggerRefresh();
     const handleVisibility = () => { if (document.visibilityState === "visible") triggerRefresh(); };
-    // Poll every 3 min — Supabase Realtime already pushes live changes instantly
-    const intervalId = window.setInterval(() => {
-      if (document.visibilityState === "hidden") return;
-      void refreshAdminData();
-    }, 180000);
+    // Poll with exponential backoff: 3 min base, doubles on failure, max 15 min
+    const BASE_POLL = 180000;
+    const MAX_POLL  = 900000;
+    let pollDelay = BASE_POLL;
+    let pollTimerId;
+    const poll = async () => {
+      if (document.visibilityState !== "hidden") {
+        const ok = await refreshAdminData();
+        pollDelay = ok ? BASE_POLL : Math.min(pollDelay * 2, MAX_POLL);
+      }
+      pollTimerId = setTimeout(poll, pollDelay);
+    };
+    pollTimerId = setTimeout(poll, BASE_POLL);
     window.addEventListener("focus", handleFocus);
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       clearTimeout(focusDebounce);
-      window.clearInterval(intervalId);
+      clearTimeout(pollTimerId);
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
+      refreshAbortRef.current?.abort();
     };
   }, [loading, isPublicFormView, isLecturerPortalView]);
 
