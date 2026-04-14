@@ -26,15 +26,32 @@ export default defineConfig({
         name: 'קמרה סאונד APP',
         short_name: 'קמרה סאונד APP',
         description: 'מערכת המחסן הדיגיטלי',
+        id: '/',
+        start_url: '/',
+        scope: '/',
         theme_color: '#f5a623',
         background_color: '#0a0c10',
         display: 'standalone',
+        lang: 'he',
+        dir: 'rtl',
         icons: [
           {
             src: 'LOGON1.png',
-            sizes: '192x192 512x512',
+            sizes: '192x192',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'any'
+          },
+          {
+            src: 'LOGON1.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any'
+          },
+          {
+            src: 'LOGON1.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable'
           }
         ]
       }
