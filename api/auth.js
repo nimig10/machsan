@@ -827,6 +827,46 @@ async function handleSendResetEmail(req, res) {
   // 2. Provision auth.users row if this is the first login
   await ensureAuthUserExists(normalizedEmail, record.name);
 
+  // 2b. Also provision public.users row with the right role flags so the
+  // first login after reset routes correctly without an extra ensure-user
+  // round-trip. Non-destructive — existing flags are merged, not cleared.
+  try {
+    const authUser = await findAuthUserByEmail(normalizedEmail);
+    if (authUser) {
+      const existing = await sbQuery(`users?id=eq.${authUser.id}&select=id`);
+      if (!existing || existing.length === 0) {
+        await fetch(`${SB_URL}/rest/v1/users`, {
+          method: "POST",
+          headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
+          body: JSON.stringify({
+            id: authUser.id,
+            email: normalizedEmail,
+            full_name: record.name || "",
+            is_student:   record.role === "student",
+            is_lecturer:  record.role === "lecturer",
+            is_admin:     record.role === "admin",
+            is_warehouse: record.role === "staff",
+          }),
+        }).catch(() => {});
+      } else {
+        const updates = { updated_at: new Date().toISOString() };
+        if (record.role === "student")  updates.is_student   = true;
+        if (record.role === "lecturer") updates.is_lecturer  = true;
+        if (record.role === "admin")    updates.is_admin     = true;
+        if (record.role === "staff")    updates.is_warehouse = true;
+        if (Object.keys(updates).length > 1) {
+          await fetch(`${SB_URL}/rest/v1/users?id=eq.${authUser.id}`, {
+            method: "PATCH",
+            headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
+            body: JSON.stringify(updates),
+          }).catch(() => {});
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("send-reset-email: public.users provisioning warning:", err);
+  }
+
   // 3. Generate recovery link (Admin API — does NOT send any email)
   const appUrl = process.env.APP_URL || "https://app.camera.org.il";
   const linkRes = await fetch(`${SB_URL}/auth/v1/admin/generate_link`, {
