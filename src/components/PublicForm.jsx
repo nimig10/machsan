@@ -2669,7 +2669,7 @@ ${inventory}
               {loginBusy ? "מתחבר..." : "כניסה"}
             </button>
             <button type="button"
-              style={{marginTop:12,background:"transparent",border:"2px solid var(--accent)",color:"var(--accent)",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"6px 18px",display:"inline-block"}}
+              style={{marginTop:24,background:"transparent",border:"2px solid var(--accent)",color:"var(--accent)",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"6px 18px",display:"inline-block"}}
               onClick={()=>{setAuthView("forgot");setLoginError("");setLoginPassword("");}}>
               שכחת סיסמה?
             </button>
@@ -2697,7 +2697,7 @@ ${inventory}
               {loginBusy ? "שולח..." : "שלח קישור לאיפוס"}
             </button>
             <button type="button"
-              style={{marginTop:12,background:"transparent",border:"2px solid var(--accent)",color:"var(--accent)",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"6px 18px",display:"inline-block"}}
+              style={{marginTop:24,background:"transparent",border:"2px solid var(--accent)",color:"var(--accent)",fontSize:12,fontWeight:700,cursor:"pointer",borderRadius:8,padding:"6px 18px",display:"inline-block"}}
               onClick={()=>{setAuthView("login");setLoginError("");}}>
               ← חזרה למסך הכניסה
             </button>
