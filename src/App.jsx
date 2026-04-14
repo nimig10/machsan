@@ -8021,16 +8021,11 @@ export default function App() {
           )}
         </div>
       ) : isCalendarView ? (
-        <div style={{minHeight:"100vh",background:"var(--bg)",direction:"rtl"}}>
-          {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : (
-            calendarToken && urlToken === calendarToken
-              ? <DeptHeadCalendarPage reservations={reservations} calendarToken={calendarToken} kits={kits} equipment={equipment} siteSettings={siteSettings}/>
-              : <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",flexDirection:"column",gap:16,color:"var(--text2)"}}>
-                  <div style={{fontSize:48}}>🔒</div>
-                  <div style={{fontSize:18,fontWeight:700}}>קישור לא תקין</div>
-                  <div style={{fontSize:13}}>הקישור שבידך אינו תקין או פג תוקפו</div>
-                </div>
-          )}
+        <div style={{minHeight:"100vh",background:"var(--bg)",direction:"rtl",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16,color:"var(--text2)"}}>
+          <div style={{fontSize:48}}>🎓</div>
+          <div style={{fontSize:18,fontWeight:700}}>הקישור הזה בוטל</div>
+          <div style={{fontSize:13}}>הגישה לצפייה בבקשות עברה לפורטל המרצה — ראש מחלקה, אנא התחבר דרך הפורטל</div>
+          <a href="/" style={{marginTop:8,padding:"10px 22px",background:"var(--accent)",color:"#000",fontWeight:800,borderRadius:10,textDecoration:"none"}}>🎓 כניסה לפורטל</a>
         </div>
       ) : isLecturerPortalView ? (
         <div className="public-page-shell">
