@@ -292,18 +292,18 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
     const draft = buildDraft();
     const key   = getDraftKey(draft);
 
-    if (!draft.name) { showToast("error", "שם מלא הוא שדה חובה"); return false; }
-    if (!draft.email || !draft.email.includes("@")) { showToast("error", "נדרש אימייל תקין"); return false; }
-
-    const dup = students.find(s => s.email === draft.email && s.id !== stu.id);
-    if (dup) { showToast("error", "מייל זה כבר קיים לסטודנט אחר"); return false; }
-
     if (!isDirty(stu, draft)) {
       lastSavedDraftRef.current = key;
       lastFailedDraftRef.current = "";
       if (closeOnSuccess) setEditingId(null);
       return true;
     }
+
+    if (!draft.name) { if (!silent) showToast("error", "שם מלא הוא שדה חובה"); return false; }
+    if (!draft.email || !draft.email.includes("@")) { if (!silent) showToast("error", "נדרש אימייל תקין"); return false; }
+
+    const dup = students.find(s => s.email === draft.email && s.id !== stu.id);
+    if (dup) { if (!silent) showToast("error", "מייל זה כבר קיים לסטודנט אחר"); return false; }
 
     setInlineSaving(true);
     const updatedStudents = students.map(s => s.id === stu.id ? { ...s, ...draft } : s);
@@ -336,16 +336,15 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
   };
 
   const closeInlineEdit = async (stu) => {
-    const ok = await saveInlineEdit(stu, { closeOnSuccess: false, silent: true });
-    if (ok) setEditingId(null);
+    await saveInlineEdit(stu, { closeOnSuccess: false, silent: true });
+    setEditingId(null);
   };
 
   const startEdit = async (stu) => {
     if (editingId === stu.id) { await closeInlineEdit(stu); return; }
     if (editingId) {
       const cur = students.find(s => s.id === editingId);
-      const ok  = await saveInlineEdit(cur, { closeOnSuccess: false, silent: true });
-      if (!ok) return;
+      await saveInlineEdit(cur, { closeOnSuccess: false, silent: true });
       setEditingId(null);
     }
     openInlineEdit(stu);

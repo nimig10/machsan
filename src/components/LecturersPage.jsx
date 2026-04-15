@@ -221,16 +221,16 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
     const draft = buildInlineDraft();
     const draftKey = getInlineDraftKey(draft);
 
-    if (!draft.fullName) {
-      showToast("error", "שם מלא הוא שדה חובה");
-      return false;
-    }
-
     if (!isInlineDraftDirty(lec, draft)) {
       lastSavedInlineDraftRef.current = draftKey;
       lastFailedInlineDraftRef.current = "";
       if (closeOnSuccess) setEditingId(null);
       return true;
+    }
+
+    if (!draft.fullName) {
+      if (!silent) showToast("error", "שם מלא הוא שדה חובה");
+      return false;
     }
 
     setInlineSaving(true);
@@ -264,8 +264,8 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
   };
 
   const closeInlineEdit = async (lec) => {
-    const didSave = await saveInlineEdit(lec, { closeOnSuccess: false, silent: true });
-    if (didSave) setEditingId(null);
+    await saveInlineEdit(lec, { closeOnSuccess: false, silent: true });
+    setEditingId(null);
   };
 
   const startEdit = async (lec) => {
