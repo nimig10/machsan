@@ -154,12 +154,24 @@ async function storageSet(key, value) {
       restoreCacheValue(key, previousCachedValue);
       return { ok: false, error: err };
     }
+    mirrorReservationsIfNeeded(key, value);
     return { ok: true };
   } catch(e) {
     console.error("storageSet network error", key, e);
     restoreCacheValue(key, previousCachedValue);
     return { ok: false, error: e.message };
   }
+}
+
+// Dual-write mirror for reservations. Fire-and-forget — failures are logged,
+// never block the primary write. See migration 004.
+function mirrorReservationsIfNeeded(key, value) {
+  if (key !== "reservations" || !Array.isArray(value)) return;
+  fetch("/api/sync-reservations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reservations: value }),
+  }).catch(e => console.warn("mirror(reservations) failed:", e?.message || e));
 }
 
 // ─── DB DIAGNOSTICS (accessible from browser console) ────────────────────────
