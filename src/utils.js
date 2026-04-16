@@ -186,6 +186,66 @@ export async function storageSet(key, value) {
   }
 }
 
+// ─── ATOMIC RESERVATION STATUS UPDATE ────────────────────────────────────────
+// Routes a status change (approve / reject / return / cancel) through the
+// atomic RPC update_reservation_status_v1 (migration 009), via the server
+// endpoint /api/update-reservation-status. Replaces the old pattern of
+// fetch-list → mutate → storageSet("reservations", fullList) which had three
+// real problems:
+//   1) Whole-list overwrite could silently undo a concurrent public-form
+//      submit or another admin's write.
+//   2) No recompute of available_units, so transitioning into the "currently
+//      out of warehouse" window drifted the cached counter.
+//   3) Two admins clicking "approve" at once both "succeeded" — both emailed,
+//      both wrote the DB. The RPC's FOR UPDATE lock serializes them now.
+//
+// The helper does NOT rewrite the reservations JSON blob — callers still
+// do that via their existing storageSet() path to refresh the shared cache.
+// This function is the source-of-truth write; storageSet is now the cache
+// refresh. If the blob write races, the next mirror cycle reconciles it.
+//
+// Returns:
+//   { ok: true,  id, old_status, new_status, changed }   on success
+//   { ok: false, error, detail }                          on failure
+//
+// Callers should check `ok` before updating local state / sending emails.
+export async function updateReservationStatus(id, status, options = {}) {
+  const { returned_at = null, timeoutMs = 8000 } = options;
+  if (!id || !status) {
+    return { ok: false, error: "missing_arg", detail: "id and status are required" };
+  }
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    const res = await fetch("/api/update-reservation-status", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ id: String(id), status, returned_at }),
+      signal:  ctrl.signal,
+    });
+    clearTimeout(t);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      console.error("updateReservationStatus error:", res.status, data);
+      return {
+        ok:     false,
+        error:  data.error  || "rpc_error",
+        detail: data.detail || `HTTP ${res.status}`,
+      };
+    }
+    return {
+      ok:         true,
+      id:         data.id,
+      old_status: data.old_status,
+      new_status: data.new_status,
+      changed:    data.changed,
+    };
+  } catch (e) {
+    console.error("updateReservationStatus network error:", e);
+    return { ok: false, error: "network_error", detail: e.message };
+  }
+}
+
 // ─── DUAL-WRITE MIRRORS: reservations + equipment → new normalized tables ────
 // Fire-and-forget. Failures are logged but never block the primary write.
 // Removed when migration stage 5 retires the store blobs.

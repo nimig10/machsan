@@ -1,6 +1,6 @@
 // ReservationsPage.jsx — admin reservations management page (includes rejected + archive tabs)
 import { useEffect, useState } from "react";
-import { storageSet, storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb } from "../utils.js";
+import { storageSet, storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
@@ -155,11 +155,23 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
   };
 
   const doApprove = async (reservationToApprove) => {
+    // Route through the atomic RPC (migration 009). Two admins hitting
+    // "approve" simultaneously used to both "succeed" and both email the
+    // student; the FOR UPDATE lock inside the RPC serializes them now.
+    const rpcResult = await updateReservationStatus(reservationToApprove.id, "מאושר");
+    if (!rpcResult.ok) {
+      console.error("doApprove RPC failed:", rpcResult);
+      showToast("error", "שגיאה באישור הבקשה בשרת");
+      return false;
+    }
     const updated = normalizeReservationsForArchive(reservations.map((r) =>
       r.id === reservationToApprove.id ? { ...reservationToApprove, status: "מאושר" } : r
     ));
     setReservations(updated);
-    await storageSet("reservations", updated);
+    // Cache refresh — best-effort, DB is already updated.
+    storageSet("reservations", updated).catch(err =>
+      console.warn("blob cache refresh failed (DB is already updated):", err)
+    );
     await sendStatusEmail({ ...reservationToApprove, status: "מאושר" }, "מאושר");
     showToast("success", "הבקשה אושרה");
     const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
@@ -197,12 +209,25 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
 
     if (status === "מאושר") return approveReservation({ ...res, status: "מאושר" });
 
+    // Route through the atomic RPC (migration 009). For "הוחזר" we also
+    // pass returned_at so the DB stores the return timestamp, matching what
+    // markReservationReturned does in local state.
+    const returnedAt = status === "הוחזר" ? new Date().toISOString() : null;
+    const rpcResult = await updateReservationStatus(id, status, { returned_at: returnedAt });
+    if (!rpcResult.ok) {
+      console.error("updateStatus RPC failed:", rpcResult);
+      showToast("error", "שגיאה בעדכון הסטטוס בשרת");
+      return false;
+    }
     const updated = normalizeReservationsForArchive(reservations.map((r) => {
       if (r.id !== id) return r;
       return status === "הוחזר" ? markReservationReturned(r) : { ...r, status };
     }));
     setReservations(updated);
-    await storageSet("reservations", updated);
+    // Cache refresh — best-effort, DB is already updated.
+    storageSet("reservations", updated).catch(err =>
+      console.warn("blob cache refresh failed (DB is already updated):", err)
+    );
     showToast("success", `סטטוס עודכן ל-${status}`);
     if (status === "נדחה") await sendStatusEmail({ ...res, status: "נדחה" }, "נדחה");
     const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");

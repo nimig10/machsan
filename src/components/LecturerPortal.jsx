@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { formatDate, getAvailable, normalizeName, storageSet, storageGet } from "../utils.js";
+import { formatDate, getAvailable, normalizeName, storageSet, storageGet, updateReservationStatus } from "../utils.js";
 import { statusBadge } from "./ui.jsx";
 import { DeptHeadCalendarPage } from "./CalendarViews.jsx";
 
@@ -140,47 +140,41 @@ export function LecturerPortal({
     ).sort((a, b) => (b.id || 0) - (a.id || 0));
   }, [myDeptHead, reservations]);
 
-  const approveDhRequest = async (res) => {
+  // Route status changes through the atomic RPC (migration 009).
+  // The RPC locks the reservation row FOR UPDATE, so two dept-heads clicking
+  // approve at the same time can't both "succeed". The blob write afterwards
+  // is just a cache refresh — the DB is already the source of truth.
+  const changeDhStatus = async (res, newStatus, successMsg) => {
     setApprovingId(res.id);
     try {
+      const rpcResult = await updateReservationStatus(res.id, newStatus);
+      if (!rpcResult.ok) {
+        console.error("changeDhStatus RPC failed:", rpcResult);
+        showToast("error", "שגיאה בעדכון הסטטוס בשרת");
+        return;
+      }
+      // Local state + blob cache refresh (non-blocking for UI feedback).
       const freshRes = await storageGet("reservations");
       const all = Array.isArray(freshRes) ? freshRes : reservations;
-      const updated = all.map(r => String(r.id) === String(res.id) ? { ...r, status: "ממתין" } : r);
+      const updated = all.map(r => String(r.id) === String(res.id) ? { ...r, status: newStatus } : r);
       if (setReservations) setReservations(updated);
-      const result = await storageSet("reservations", updated);
-      if (result?.ok === false) {
-        showToast("error", "השינוי נשמר מקומית אך לא נשמר בשרת.");
-      } else {
-        showToast("success", `בקשת "${res.student_name}" אושרה והועברה לצוות המחסן`);
-      }
+      storageSet("reservations", updated).catch(err =>
+        console.warn("blob cache refresh failed (DB is already updated):", err)
+      );
+      showToast("success", successMsg);
     } catch (err) {
-      console.error("approveDhRequest error:", err);
-      showToast("error", "שגיאה באישור הבקשה");
+      console.error("changeDhStatus error:", err);
+      showToast("error", "שגיאה בעדכון הסטטוס");
     } finally {
       setApprovingId(null);
     }
   };
 
-  const rejectDhRequest = async (res) => {
-    setApprovingId(res.id);
-    try {
-      const freshRes = await storageGet("reservations");
-      const all = Array.isArray(freshRes) ? freshRes : reservations;
-      const updated = all.map(r => String(r.id) === String(res.id) ? { ...r, status: "נדחה" } : r);
-      if (setReservations) setReservations(updated);
-      const result = await storageSet("reservations", updated);
-      if (result?.ok === false) {
-        showToast("error", "השינוי נשמר מקומית אך לא נשמר בשרת.");
-      } else {
-        showToast("success", `בקשת "${res.student_name}" נדחתה`);
-      }
-    } catch (err) {
-      console.error("rejectDhRequest error:", err);
-      showToast("error", "שגיאה בדחיית הבקשה");
-    } finally {
-      setApprovingId(null);
-    }
-  };
+  const approveDhRequest = (res) =>
+    changeDhStatus(res, "ממתין", `בקשת "${res.student_name}" אושרה והועברה לצוות המחסן`);
+
+  const rejectDhRequest = (res) =>
+    changeDhStatus(res, "נדחה", `בקשת "${res.student_name}" נדחתה`);
 
   useEffect(() => {
     if (loggedInLecturer) {
