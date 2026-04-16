@@ -267,70 +267,70 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
     }
   };
 
-  // ── Admin Manual Reservation Form (inner component) ──
-  const AdminManualForm = () => {
+  // ── Staff Loan Form (inner component) ──
+  // איש צוות יוצר לעצמו בקשת השאלה. הטופס מזהה אוטומטית את המשתמש המחובר
+  // מתוך sessionStorage.staff_user. אם התאריכים לא חופפים עם השאלות קיימות,
+  // הבקשה עוברת מיידית ל-status="מאושר" עם loan_type="צוות". החזרה ידנית
+  // בלבד (לחיצה על כפתור "הוחזר"), ו-check-overdue.js לא יהפוך אותה ל"באיחור".
+  const StaffLoanForm = () => {
     const ALL_TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
-    const ADMIN_LOAN_TYPES = [{val:"פרטית",icon:"👤"},{val:"הפקה",icon:"🎬"},{val:"סאונד",icon:"🎙️"},{val:"קולנוע יומית",icon:"🎥"}];
-    const [mf, setMf] = useState({student_name:"",email:"",phone:"",course:"",project_name:"",loan_type:"פרטית",borrow_date:"",borrow_time:"",return_date:"",return_time:"",status:"ממתין",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:""});
+    // Identify the logged-in staff member from sessionStorage. Fall back to
+    // teamMembers entry for phone (sessionStorage doesn't store phone).
+    const staffUser = (() => {
+      try { const s = sessionStorage.getItem("staff_user"); return s ? JSON.parse(s) : {}; } catch { return {}; }
+    })();
+    const staffTeamRow = (teamMembers||[]).find(m => (m.email||"").toLowerCase() === (staffUser.email||"").toLowerCase()) || {};
+    const [mf, setMf] = useState({
+      borrow_date: "",
+      borrow_time: "",
+      return_date: "",
+      return_time: "",
+    });
     const [mItems, setMItems] = useState([]);
     const [mSaving, setMSaving] = useState(false);
     const [mStep, setMStep] = useState(1);
     const mSet = (k,v) => setMf(p=>({...p,[k]:v}));
-    const mIsCinema = mf.loan_type==="קולנוע יומית";
-    const mIsProductionLoan = mf.loan_type==="הפקה";
-    const mTimeSlots = (mf.loan_type==="סאונד"||mIsCinema) ? ALL_TIME_SLOTS : ["09:00","09:30","14:30","15:00","15:30","16:00","16:30","17:00","17:30"];
     const mSameDay = mf.borrow_date && mf.return_date && mf.borrow_date === mf.return_date;
     const mTimeOrderError = mSameDay && mf.borrow_time && mf.return_time && toDateTime(mf.return_date, mf.return_time) <= toDateTime(mf.borrow_date, mf.borrow_time);
     const mReturnBeforeBorrow = mf.borrow_date && mf.return_date && parseLocalDate(mf.return_date) < parseLocalDate(mf.borrow_date);
-    const handleCinemaBorrowDate = (val) => setMf(p=>({...p, borrow_date:val, return_date:val, borrow_time:"", return_time:""}));
-    const mOk1 = mf.student_name && mf.email && mf.phone && mf.course && mf.loan_type;
-    const mOk2 = !!mf.borrow_date && !!mf.return_date && !!mf.borrow_time && !!mf.return_time && !mReturnBeforeBorrow && !mTimeOrderError;
-    const mOk3 = mItems.some(i=>Number(i.quantity)>0);
-    // Certification — same logic as PublicForm
-    const normalizePhoneM = (p) => (p||"").replace(/[^0-9]/g,"");
-    const studentRecordM = (certifications.students||[]).find(s => s.email?.toLowerCase().trim()===mf.email?.toLowerCase().trim() && normalizePhoneM(s.phone)===normalizePhoneM(mf.phone));
-    const studentCertsM = studentRecordM?.certs || {};
-    const matchCertM = (name, phone) => { const nn=normalizeName(name), np=normalizePhoneM(phone); if(!nn||!np)return null; return (certifications.students||[]).find(s=>normalizeName(s.name)===nn&&normalizePhoneM(s.phone)===np)||null; };
-    const crewPhotoRecM = mIsProductionLoan ? matchCertM(mf.crew_photographer_name, mf.crew_photographer_phone) : null;
-    const crewSoundRecM = mIsProductionLoan&&mf.crew_sound_name ? matchCertM(mf.crew_sound_name, mf.crew_sound_phone) : null;
-    const canBorrowEqM = (eq) => { if(!eq.certification_id)return true; const cid=eq.certification_id; if(mIsProductionLoan)return (crewPhotoRecM?.certs||{})[cid]==="עבר"||(crewSoundRecM?.certs||{})[cid]==="עבר"; return studentCertsM[cid]==="עבר"; };
+    const mOk1 = !!mf.borrow_date && !!mf.return_date && !!mf.borrow_time && !!mf.return_time && !mReturnBeforeBorrow && !mTimeOrderError;
+    const mOk2 = mItems.some(i=>Number(i.quantity)>0);
+    // No certification checks — staff can borrow any equipment.
     const mAvailEq = (mf.borrow_date&&mf.return_date) ? equipment.map(eq=>({...eq, avail: getAvailable(eq.id,mf.borrow_date,mf.return_date,reservations,equipment,null,mf.borrow_time,mf.return_time)})) : [];
     const mGetItem = id => mItems.find(i=>i.equipment_id==id)||{quantity:0};
     const mSetQty = (id,qty) => { const av=mAvailEq.find(e=>e.id==id)?.avail||0; const q=Math.max(0,Math.min(qty,av)); const nm=equipment.find(e=>e.id==id)?.name||""; setMItems(prev=>q===0?prev.filter(i=>i.equipment_id!=id):prev.find(i=>i.equipment_id==id)?prev.map(i=>i.equipment_id==id?{...i,quantity:q}:i):[...prev,{equipment_id:id,quantity:q,name:nm}]); };
-    const mPLLE = mf.loan_type==="פרטית" && getPrivateLoanLimitedQty(mItems, equipment)>4;
     const [meqTypeF, setMeqTypeF] = useState("all");
     const [meqCatF, setMeqCatF] = useState([]);
     const [meqSearch, setMeqSearch] = useState("");
     const mSave = async () => {
-      if(!mOk1||!mOk2||!mOk3){showToast("error","יש להשלים את כל השדות");return;}
+      if(!mOk1||!mOk2){showToast("error","יש להשלים את כל השדות");return;}
+      if(!staffUser?.email){showToast("error","לא הצלחנו לזהות את המשתמש המחובר");return;}
       setMSaving(true);
       let freshRes=reservations;
       try{const fr=await storageGet("reservations");if(Array.isArray(fr)){freshRes=fr;setReservations(fr);}}catch(e){}
-      // Route through atomic RPC (migration 008 create_reservation_v2). Same
-      // guarantee as the public form: if a student's parallel submit grabs
-      // the last unit, the admin's manual entry gets rejected with 409
-      // instead of silently overbooking. The RPC also recomputes
-      // available_units so the cached counter stays aligned.
+      // Route through the atomic RPC (create_reservation_v2, migration 008).
+      // The RPC locks equipment rows with FOR UPDATE and does a date-range
+      // overlap check. If any requested item overlaps an existing active
+      // reservation, the RPC rejects with 409 "not_enough_stock" — which is
+      // exactly the overbooking guarantee the user asked for.
       const clientId = String(Date.now());
       const submittedAtIso = new Date().toISOString();
+      const staffName = staffUser.full_name || staffTeamRow.name || staffUser.email;
+      const staffPhone = staffTeamRow.phone || "";
       const rpcResult = await createReservation(
         {
           id:                      clientId,
-          student_name:            mf.student_name,
-          email:                   mf.email,
-          phone:                   mf.phone,
-          course:                  mf.course,
-          project_name:            mf.project_name || null,
-          loan_type:               mf.loan_type,
-          status:                  mf.status,
+          student_name:            staffName,
+          email:                   staffUser.email,
+          phone:                   staffPhone,
+          course:                  "צוות",
+          project_name:            null,
+          loan_type:               "צוות",
+          status:                  "מאושר",
           borrow_date:             mf.borrow_date,
           borrow_time:             mf.borrow_time,
           return_date:             mf.return_date,
           return_time:             mf.return_time,
-          crew_photographer_name:  mf.crew_photographer_name || null,
-          crew_photographer_phone: mf.crew_photographer_phone || null,
-          crew_sound_name:         mf.crew_sound_name || null,
-          crew_sound_phone:        mf.crew_sound_phone || null,
           created_at:              today(),
           submitted_at:            submittedAtIso,
         },
@@ -344,9 +344,9 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       if (!rpcResult.ok) {
         setMSaving(false);
         if (rpcResult.error === "not_enough_stock") {
-          showToast("error", "חלק מהציוד כבר לא זמין — נא לעדכן את הבחירה ולנסות שוב");
+          showToast("error", "התאריכים חופפים עם השאלה קיימת — נא לבחור תאריכים אחרים");
         } else {
-          console.error("AdminManualForm create failed:", rpcResult);
+          console.error("StaffLoanForm create failed:", rpcResult);
           showToast("error", "שגיאה בשמירת הבקשה. נסה שוב.");
         }
         return;
@@ -355,68 +355,65 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       // refreshes immediately. The DB is already the source of truth.
       const serverId = rpcResult.id || clientId;
       const newRes = {
-        ...mf,
-        id:           serverId,
-        status:       mf.status,
-        created_at:   today(),
-        submitted_at: new Date().toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"}),
-        items:        mItems,
-        manual_by_admin: true,
+        id:              serverId,
+        student_name:    staffName,
+        email:           staffUser.email,
+        phone:           staffPhone,
+        course:          "צוות",
+        project_name:    null,
+        loan_type:       "צוות",
+        status:          "מאושר",
+        borrow_date:     mf.borrow_date,
+        borrow_time:     mf.borrow_time,
+        return_date:     mf.return_date,
+        return_time:     mf.return_time,
+        created_at:      today(),
+        submitted_at:    new Date().toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"}),
+        items:           mItems,
+        staff_loan:      true,
       };
       const updated = [...freshRes, newRes];
       setReservations(updated);
       storageSet("reservations", updated).catch(err =>
         console.warn("blob cache refresh failed (DB is already updated):", err)
       );
+      logActivity({ user_id: staffUser.id, user_name: staffName, action: "staff_loan_create", entity: "reservation", entity_id: String(serverId), details: { borrow_date: mf.borrow_date, return_date: mf.return_date, items_count: mItems.length } });
       setMSaving(false);
-      showToast("success",`בקשה ידנית נוצרה · ${mf.student_name}`);
+      showToast("success", `השאלת איש צוות נוצרה ואושרה · ${staffName}`);
       setShowManualForm(false);
     };
     return (
       <div className="card" style={{marginBottom:20}}>
-        <div className="card-header"><div className="card-title">➕ הקמת בקשה ידנית</div><button className="btn btn-secondary btn-sm" onClick={()=>setShowManualForm(false)}>✕ ביטול</button></div>
+        <div className="card-header"><div className="card-title">💼 השאלת איש צוות</div><button className="btn btn-secondary btn-sm" onClick={()=>setShowManualForm(false)}>✕ ביטול</button></div>
+        {/* Identification badge */}
+        <div style={{background:"rgba(100,120,150,0.12)",border:"1px solid rgba(100,120,150,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:10,fontSize:13}}>
+          <span style={{fontSize:22}}>💼</span>
+          <div>
+            <div style={{fontWeight:800}}>{staffUser.full_name || staffTeamRow.name || "—"}</div>
+            <div style={{fontSize:11,color:"var(--text3)"}}>{staffUser.email || ""}</div>
+          </div>
+          <div style={{marginRight:"auto",fontSize:11,color:"var(--text3)"}}>
+            הבקשה תאושר אוטומטית אם התאריכים פנויים. החזרה ידנית בלבד.
+          </div>
+        </div>
         <div style={{display:"flex",gap:4,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4,marginBottom:16}}>
-          {[{n:1,l:"פרטים ותאריכים",i:"👤"},{n:2,l:"ציוד",i:"📦"},{n:3,l:"סיכום",i:"✅"}].map(s=>(
+          {[{n:1,l:"תאריכים",i:"📅"},{n:2,l:"ציוד",i:"📦"},{n:3,l:"סיכום",i:"✅"}].map(s=>(
             <button key={s.n} type="button" onClick={()=>setMStep(s.n)} style={{flex:1,padding:"8px 4px",borderRadius:6,border:"none",background:mStep===s.n?"var(--accent)":"transparent",color:mStep===s.n?"#000":"var(--text2)",fontWeight:mStep===s.n?800:500,fontSize:12,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
               <span style={{fontSize:14}}>{s.i}</span><span>{s.l}</span></button>))}
         </div>
         {mStep===1&&<>
-          <div className="form-section-title">סוג ההשאלה</div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
-            {ADMIN_LOAN_TYPES.map(lt=>(<button key={lt.val} type="button" onClick={()=>{setMf(p=>({...p,loan_type:lt.val,borrow_date:"",return_date:"",borrow_time:"",return_time:""}));setMItems([]);}} style={{padding:"8px 16px",borderRadius:"var(--r-sm)",border:`2px solid ${mf.loan_type===lt.val?"var(--accent)":"var(--border)"}`,background:mf.loan_type===lt.val?"var(--accent-glow)":"transparent",color:mf.loan_type===lt.val?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>{lt.icon} {lt.val}</button>))}
-          </div>
-          <div className="form-section-title">פרטי הסטודנט</div>
+          <div className="form-section-title">תאריכים ושעות <span style={{fontSize:11,color:"var(--text3)",fontWeight:400}}>· ללא מגבלות</span></div>
           <div className="grid-2">
-            <div className="form-group"><label className="form-label">שם מלא *</label><input className="form-input" value={mf.student_name} onChange={e=>mSet("student_name",e.target.value)}/></div>
-            <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" value={mf.phone} onChange={e=>mSet("phone",e.target.value)}/></div>
-          </div>
-          <div className="form-group"><label className="form-label">אימייל *</label><input type="email" className="form-input" value={mf.email} onChange={e=>mSet("email",e.target.value)}/></div>
-          <div className="grid-2">
-            <div className="form-group"><label className="form-label">קורס / כיתה *</label><input className="form-input" value={mf.course} onChange={e=>mSet("course",e.target.value)}/></div>
-            <div className="form-group"><label className="form-label">שם הפרויקט</label><input className="form-input" value={mf.project_name} onChange={e=>mSet("project_name",e.target.value)}/></div>
-          </div>
-          {mIsProductionLoan&&<><div className="form-section-title" style={{marginTop:16}}>צוות הפקה</div>
-            <div className="grid-2"><div className="form-group"><label className="form-label">שם צלם *</label><input className="form-input" value={mf.crew_photographer_name} onChange={e=>mSet("crew_photographer_name",e.target.value)}/></div>
-            <div className="form-group"><label className="form-label">טלפון צלם</label><input className="form-input" value={mf.crew_photographer_phone} onChange={e=>mSet("crew_photographer_phone",e.target.value)}/></div></div>
-            <div className="grid-2"><div className="form-group"><label className="form-label">שם איש סאונד</label><input className="form-input" value={mf.crew_sound_name} onChange={e=>mSet("crew_sound_name",e.target.value)}/></div>
-            <div className="form-group"><label className="form-label">טלפון איש סאונד</label><input className="form-input" value={mf.crew_sound_phone} onChange={e=>mSet("crew_sound_phone",e.target.value)}/></div></div></>}
-          <div className="form-section-title" style={{marginTop:16}}>תאריכים ושעות <span style={{fontSize:11,color:"var(--text3)",fontWeight:400}}>· ללא מגבלות</span></div>
-          {mIsCinema?(<div className="grid-2">
-            <div className="form-group"><label className="form-label">📅 תאריך *</label><input type="date" className="form-input" value={mf.borrow_date} onChange={e=>handleCinemaBorrowDate(e.target.value)}/></div>
-            <div className="form-group"><label className="form-label">שעת התחלה *</label><select className="form-select" value={mf.borrow_time} onChange={e=>setMf(p=>({...p,borrow_time:e.target.value,return_time:""}))}><option value="">-- בחר --</option>{mTimeSlots.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
-            <div/><div className="form-group"><label className="form-label">שעת סיום *</label><select className="form-select" value={mf.return_time} onChange={e=>mSet("return_time",e.target.value)} disabled={!mf.borrow_time}><option value="">-- בחר --</option>{mTimeSlots.filter(t=>t>mf.borrow_time).map(t=><option key={t} value={t}>{t}</option>)}</select></div>
-          </div>):(<><div className="grid-2">
             <div className="form-group"><label className="form-label">📅 תאריך השאלה *</label><input type="date" className="form-input" value={mf.borrow_date} onChange={e=>mSet("borrow_date",e.target.value)}/></div>
-            <div className="form-group"><label className="form-label">שעת איסוף *</label><select className="form-select" value={mf.borrow_time} onChange={e=>mSet("borrow_time",e.target.value)}><option value="">-- בחר --</option>{mTimeSlots.map(t=><option key={t} value={t}>{t}</option>)}</select></div></div>
-            <div className="grid-2"><div className="form-group"><label className="form-label">📅 תאריך החזרה *</label><input type="date" className="form-input" value={mf.return_date} onChange={e=>mSet("return_date",e.target.value)}/></div>
-            <div className="form-group"><label className="form-label">שעת החזרה *</label><select className="form-select" value={mf.return_time} onChange={e=>mSet("return_time",e.target.value)}><option value="">-- בחר --</option>{mTimeSlots.map(t=><option key={t} value={t}>{t}</option>)}</select></div></div></>)}
+            <div className="form-group"><label className="form-label">שעת איסוף *</label><select className="form-select" value={mf.borrow_time} onChange={e=>mSet("borrow_time",e.target.value)}><option value="">-- בחר --</option>{ALL_TIME_SLOTS.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+          </div>
+          <div className="grid-2">
+            <div className="form-group"><label className="form-label">📅 תאריך החזרה *</label><input type="date" className="form-input" value={mf.return_date} onChange={e=>mSet("return_date",e.target.value)}/></div>
+            <div className="form-group"><label className="form-label">שעת החזרה *</label><select className="form-select" value={mf.return_time} onChange={e=>mSet("return_time",e.target.value)}><option value="">-- בחר --</option>{ALL_TIME_SLOTS.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+          </div>
           {mTimeOrderError&&<div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:12,fontSize:12}}>🚫 שעת החזרה חייבת להיות אחרי שעת האיסוף.</div>}
           {mReturnBeforeBorrow&&<div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:12,fontSize:12}}>🚫 תאריך החזרה חייב להיות אחרי תאריך ההשאלה.</div>}
-          <div className="form-section-title" style={{marginTop:16}}>סטטוס בקשה</div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
-            {["ממתין","מאושר"].map(s=>(<button key={s} type="button" onClick={()=>mSet("status",s)} style={{padding:"8px 16px",borderRadius:"var(--r-sm)",border:`2px solid ${mf.status===s?(s==="מאושר"?"var(--green)":"var(--accent)"):"var(--border)"}`,background:mf.status===s?(s==="מאושר"?"rgba(46,204,113,0.12)":"var(--accent-glow)"):"transparent",color:mf.status===s?(s==="מאושר"?"var(--green)":"var(--accent)"):"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer"}}>{s==="מאושר"?"✅ מאושר":"⏳ ממתין"}</button>))}
-          </div>
-          <button className="btn btn-primary" disabled={!mOk1||!mOk2} onClick={()=>setMStep(2)}>המשך ← ציוד</button>
+          <button className="btn btn-primary" disabled={!mOk1} onClick={()=>setMStep(2)}>המשך ← ציוד</button>
         </>}
         {mStep===2&&<>
           <div className="form-section-title">בחירת ציוד</div>
@@ -439,54 +436,55 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
               if(!catEq.length)return null;
               return (<div key={cat} style={{marginBottom:10}}>
                 <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:5,textTransform:"uppercase",letterSpacing:1}}>{cat}</div>
-                {catEq.map(eq=>{const av=eq.avail,qty=mGetItem(eq.id)?.quantity||0,cb=!canBorrowEqM(eq),ct=(certifications.types||[]).find(c=>c.id===eq.certification_id);
-                  return (<div key={eq.id} className="item-row" style={{marginBottom:4,opacity:av===0||cb?0.4:1,background:qty>0?"rgba(245,166,35,0.05)":"",border:qty>0?"1px solid rgba(245,166,35,0.2)":""}}>
+                {catEq.map(eq=>{const av=eq.avail,qty=mGetItem(eq.id)?.quantity||0;
+                  return (<div key={eq.id} className="item-row" style={{marginBottom:4,opacity:av===0?0.4:1,background:qty>0?"rgba(245,166,35,0.05)":"",border:qty>0?"1px solid rgba(245,166,35,0.2)":""}}>
                     <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||"📦"}</span>
-                    <div style={{flex:1,fontSize:13,fontWeight:600}}>{eq.name}<span style={{fontSize:11,color:"var(--text3)",marginRight:6,fontWeight:400}}>זמין: {av}</span>{cb&&<span style={{fontSize:10,color:"var(--red)",fontWeight:700,marginRight:4}}>🔒 {ct?.name||"הסמכה חסרה"}</span>}</div>
-                    {av>0&&!cb?<div className="qty-ctrl"><button className="qty-btn" onClick={()=>mSetQty(eq.id,qty-1)}>−</button><span className="qty-num" style={{color:qty>0?"var(--accent)":"inherit"}}>{qty}</span><button className="qty-btn" disabled={qty>=av} onClick={()=>mSetQty(eq.id,qty+1)} style={{opacity:qty>=av?0.3:1}}>+</button></div>
-                    :<span style={{fontSize:11,color:"var(--red)",fontWeight:700}}>{cb?"חסרה הסמכה":"אין מלאי"}</span>}
+                    <div style={{flex:1,fontSize:13,fontWeight:600}}>{eq.name}<span style={{fontSize:11,color:"var(--text3)",marginRight:6,fontWeight:400}}>זמין: {av}</span></div>
+                    {av>0?<div className="qty-ctrl"><button className="qty-btn" onClick={()=>mSetQty(eq.id,qty-1)}>−</button><span className="qty-num" style={{color:qty>0?"var(--accent)":"inherit"}}>{qty}</span><button className="qty-btn" disabled={qty>=av} onClick={()=>mSetQty(eq.id,qty+1)} style={{opacity:qty>=av?0.3:1}}>+</button></div>
+                    :<span style={{fontSize:11,color:"var(--red)",fontWeight:700}}>אין מלאי</span>}
                   </div>);})}
               </div>);});
           })()}
           {mItems.length>0&&<div className="highlight-box" style={{marginTop:8}}>🎒 {mItems.length} סוגי ציוד · {mItems.reduce((s,i)=>s+i.quantity,0)} יחידות</div>}
-          {mPLLE&&<div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginTop:8,fontSize:12}}>🚫 חריגה ממגבלת 4 פריטים בהשאלה פרטית</div>}
-          <div className="flex gap-2" style={{marginTop:16}}><button className="btn btn-secondary" onClick={()=>setMStep(1)}>← חזור</button><button className="btn btn-primary" disabled={!mOk3||mPLLE} onClick={()=>setMStep(3)}>המשך ← סיכום</button></div>
+          <div className="flex gap-2" style={{marginTop:16}}><button className="btn btn-secondary" onClick={()=>setMStep(1)}>← חזור</button><button className="btn btn-primary" disabled={!mOk2} onClick={()=>setMStep(3)}>המשך ← סיכום</button></div>
         </>}
         {mStep===3&&<>
-          <div className="form-section-title">סיכום הבקשה</div>
+          <div className="form-section-title">סיכום ההשאלה</div>
           <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
-            {[["שם",mf.student_name],["אימייל",mf.email],["טלפון",mf.phone],["קורס",mf.course],["סוג",mf.loan_type],["תאריך השאלה",mf.borrow_date?formatDate(mf.borrow_date)+" · "+mf.borrow_time:""],["תאריך החזרה",mf.return_date?formatDate(mf.return_date)+" · "+mf.return_time:""],["סטטוס",mf.status]].filter(([,v])=>v).map(([l,v])=>(
+            {[["שם",staffUser.full_name || staffTeamRow.name || ""],["אימייל",staffUser.email || ""],["סוג","💼 השאלת איש צוות"],["תאריך השאלה",mf.borrow_date?formatDate(mf.borrow_date)+" · "+mf.borrow_time:""],["תאריך החזרה",mf.return_date?formatDate(mf.return_date)+" · "+mf.return_time:""],["סטטוס","✅ מאושר (אוטומטי)"]].filter(([,v])=>v).map(([l,v])=>(
               <div key={l} style={{display:"flex",gap:8,marginBottom:6,fontSize:13}}><span style={{color:"var(--text3)",minWidth:100}}>{l}:</span><strong>{v}</strong></div>))}
             <div style={{marginTop:10,fontWeight:700,fontSize:13}}>ציוד ({mItems.reduce((s,i)=>s+i.quantity,0)} יחידות):</div>
             {mItems.map(i=><div key={i.equipment_id} style={{fontSize:12,color:"var(--text2)",marginTop:4}}>• {i.name} ×{i.quantity}</div>)}
           </div>
           <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setMStep(2)}>← חזור</button>
-            <button className="btn btn-primary" disabled={mSaving||!mOk1||!mOk2||!mOk3} onClick={mSave} style={{fontSize:15,padding:"12px 28px"}}>{mSaving?"⏳ שומר...":"💾 צור בקשה"}</button></div>
+            <button className="btn btn-primary" disabled={mSaving||!mOk1||!mOk2} onClick={mSave} style={{fontSize:15,padding:"12px 28px"}}>{mSaving?"⏳ שומר...":"💾 צור השאלה"}</button></div>
         </>}
       </div>
     );
   };
 
-  const studentReqs = filtered.filter(r => r.loan_type !== "שיעור");
+  const studentReqs = filtered.filter(r => r.loan_type !== "שיעור" && r.loan_type !== "צוות");
   const lessonReqs  = filtered.filter(r => r.loan_type === "שיעור");
+  const staffReqs   = filtered.filter(r => r.loan_type === "צוות");
   const renderResCard = (r) => {
             const isLesson = r.loan_type==="שיעור";
             const isCinema = r.loan_type==="קולנוע יומית";
+            const isStaff  = r.loan_type==="צוות";
             const isOverdue = r.status==="באיחור";
-            const loanColor = isOverdue?"rgba(230,126,34,0.08)":isLesson?"rgba(155,89,182,0.12)":isCinema?"rgba(52,152,219,0.08)":r.loan_type==="הפקה"?"rgba(52,152,219,0.06)":r.loan_type==="סאונד"?"rgba(245,166,35,0.06)":"var(--surface)";
-            const loanBorder = isOverdue?"1px solid rgba(230,126,34,0.5)":isLesson?"1px solid rgba(155,89,182,0.35)":isCinema?"1px solid rgba(52,152,219,0.3)":r.loan_type==="הפקה"?"1px solid rgba(52,152,219,0.2)":"1px solid var(--border)";
-            const loanIcon = isLesson?"📽️":isCinema?"🎥":r.loan_type==="פרטית"?"👤":r.loan_type==="הפקה"?"🎬":"🎙️";
-            const loanLabel = isLesson?"השאלת שיעור":isCinema?"קולנוע יומית":r.loan_type==="סאונד"?"השאלת סאונד":`השאלה ${r.loan_type}`;
+            const loanColor = isOverdue?"rgba(230,126,34,0.08)":isStaff?"rgba(100,120,150,0.10)":isLesson?"rgba(155,89,182,0.12)":isCinema?"rgba(52,152,219,0.08)":r.loan_type==="הפקה"?"rgba(52,152,219,0.06)":r.loan_type==="סאונד"?"rgba(245,166,35,0.06)":"var(--surface)";
+            const loanBorder = isOverdue?"1px solid rgba(230,126,34,0.5)":isStaff?"1px solid rgba(100,120,150,0.35)":isLesson?"1px solid rgba(155,89,182,0.35)":isCinema?"1px solid rgba(52,152,219,0.3)":r.loan_type==="הפקה"?"1px solid rgba(52,152,219,0.2)":"1px solid var(--border)";
+            const loanIcon = isStaff?"💼":isLesson?"📽️":isCinema?"🎥":r.loan_type==="פרטית"?"👤":r.loan_type==="הפקה"?"🎬":"🎙️";
+            const loanLabel = isStaff?"השאלת איש צוות":isLesson?"השאלת שיעור":isCinema?"קולנוע יומית":r.loan_type==="סאונד"?"השאלת סאונד":`השאלה ${r.loan_type}`;
             return (
             <div key={r.id} className="res-card"
               style={{background:loanColor,border:loanBorder,cursor:"pointer"}}
               onClick={()=>setSelected(selected?.id===r.id?null:r)}
-              onMouseEnter={e=>e.currentTarget.style.borderColor=isOverdue?"#e67e22":isLesson?"rgba(155,89,182,0.7)":"var(--accent)"}
-              onMouseLeave={e=>e.currentTarget.style.borderColor=isOverdue?"rgba(230,126,34,0.5)":isLesson?"rgba(155,89,182,0.35)":"var(--border)"}>
+              onMouseEnter={e=>e.currentTarget.style.borderColor=isOverdue?"#e67e22":isStaff?"rgba(100,120,150,0.7)":isLesson?"rgba(155,89,182,0.7)":"var(--accent)"}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=isOverdue?"rgba(230,126,34,0.5)":isStaff?"rgba(100,120,150,0.35)":isLesson?"rgba(155,89,182,0.35)":"var(--border)"}>
               <div className="res-card-top">
                 <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{width:38,height:38,borderRadius:"50%",background:isOverdue?"rgba(230,126,34,0.2)":isLesson?"rgba(155,89,182,0.2)":"var(--surface3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,flexShrink:0,color:isOverdue?"#e67e22":isLesson?"#9b59b6":"inherit"}}>
-                    {isOverdue?"⚠️":isLesson?"🎬":r.student_name?.[0]||"?"}
+                  <div style={{width:38,height:38,borderRadius:"50%",background:isOverdue?"rgba(230,126,34,0.2)":isStaff?"rgba(100,120,150,0.22)":isLesson?"rgba(155,89,182,0.2)":"var(--surface3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,flexShrink:0,color:isOverdue?"#e67e22":isStaff?"#6a7d95":isLesson?"#9b59b6":"inherit"}}>
+                    {isOverdue?"⚠️":isStaff?"💼":isLesson?"🎬":r.student_name?.[0]||"?"}
                   </div>
                   <div>
                     <div style={{fontWeight:700,fontSize:15}}>{r.student_name}</div>
@@ -505,7 +503,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                   <span>📚 {r.course}</span>
                   <span>📅 {formatDate(r.borrow_date)}{r.borrow_time&&<span style={{color:"var(--accent)",marginRight:4,fontWeight:700}}> {r.borrow_time}</span>} ← {formatDate(r.return_date)}{r.return_time&&<span style={{color:"var(--accent)",marginRight:4,fontWeight:700}}> {r.return_time}</span>}{(()=>{const diff=Math.ceil((new Date(r.borrow_date)-new Date())/(1000*60*60*24));return diff>0?<span style={{marginRight:6,color:"var(--yellow)",fontWeight:700}}>({diff} ימים)</span>:diff===0?<span style={{marginRight:6,color:"var(--green)",fontWeight:700}}>(היום!)</span>:null;})()}</span>
                   <span>📦 {r.items?.length||0} פריטים</span>
-                  {r.loan_type&&<span style={{background:isLesson?"rgba(155,89,182,0.2)":"var(--surface3)",border:isLesson?"1px solid rgba(155,89,182,0.4)":"1px solid var(--border)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,color:isLesson?"#9b59b6":"var(--accent)"}}>
+                  {r.loan_type&&<span style={{background:isStaff?"rgba(100,120,150,0.2)":isLesson?"rgba(155,89,182,0.2)":"var(--surface3)",border:isStaff?"1px solid rgba(100,120,150,0.4)":isLesson?"1px solid rgba(155,89,182,0.4)":"1px solid var(--border)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,color:isStaff?"#8a9bb3":isLesson?"#9b59b6":"var(--accent)"}}>
                     {loanIcon} {loanLabel}
                   </span>}
                 </div>
@@ -550,22 +548,22 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       {/* Active / Rejected sub-views */}
       {subView!=="archive" && <>
 
-      {/* Manual reservation button */}
+      {/* Staff loan button — visible only on the active sub-view */}
       {!isRejectedPage && (
         <div style={{marginBottom:16,display:"flex",justifyContent:"flex-end"}}>
           <button className="btn btn-primary" onClick={()=>setShowManualForm(p=>!p)} style={{fontSize:13}}>
-            {showManualForm?"✕ סגור טופס":"➕ הקם בקשה ידנית"}
+            {showManualForm?"✕ סגור טופס":"💼 השאלת איש צוות"}
           </button>
         </div>
       )}
-      {showManualForm && <AdminManualForm/>}
+      {showManualForm && <StaffLoanForm/>}
 
       {filtered.length===0
         ? <div className="empty-state"><div className="emoji">{isRejectedPage ? "❌" : "📭"}</div><div>{isRejectedPage ? "אין בקשות דחויות או מאחרות" : "אין בקשות"}</div></div>
         : <>
           {/* בקשות סטודנטים */}
           {studentReqs.length > 0 && <>
-            {lessonReqs.length > 0 && (
+            {(lessonReqs.length > 0 || staffReqs.length > 0) && (
               <div style={{fontWeight:900,fontSize:14,marginBottom:10,color:"var(--text2)",display:"flex",alignItems:"center",gap:8}}>
                 👤 בקשות סטודנטים
                 <span style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:20,padding:"1px 10px",fontSize:12,fontWeight:700,color:"var(--text3)"}}>{studentReqs.length}</span>
@@ -583,6 +581,16 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:12}}>
               {lessonReqs.map(r => renderResCard(r))}
+            </div>
+          </>}
+          {/* השאלות צוות */}
+          {staffReqs.length > 0 && <>
+            <div style={{fontWeight:900,fontSize:14,margin:`${(studentReqs.length>0||lessonReqs.length>0)?"24px":"0px"} 0 10px`,color:"#8a9bb3",display:"flex",alignItems:"center",gap:8,borderTop:(studentReqs.length>0||lessonReqs.length>0)?"1px solid var(--border)":"none",paddingTop:(studentReqs.length>0||lessonReqs.length>0)?20:0}}>
+              💼 השאלות צוות
+              <span style={{background:"rgba(100,120,150,0.14)",border:"1px solid rgba(100,120,150,0.3)",borderRadius:20,padding:"1px 10px",fontSize:12,fontWeight:700,color:"#8a9bb3"}}>{staffReqs.length}</span>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {staffReqs.map(r => renderResCard(r))}
             </div>
           </>}
         </>

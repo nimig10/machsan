@@ -49,7 +49,7 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
 
   const STATUS_OPTIONS = ["ממתין","אישור ראש מחלקה","מאושר","נדחה"];
   const STATUS_COLORS  = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","אישור ראש מחלקה":"#9b59b6" };
-  const LOAN_ICONS     = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥" };
+  const LOAN_ICONS     = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥","צוות":"💼","הכל":"📦" };
 
   const activeRes = reservations.filter(r =>
     r.status !== "הוחזר" && r.borrow_date && r.return_date &&
@@ -96,11 +96,12 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
         })}
         <span style={{fontSize:12,color:"var(--border)"}}>|</span>
         {/* Loan type */}
-        {["הכל","פרטית","הפקה","סאונד","קולנוע יומית"].map(lt=>{
+        {["הכל","פרטית","הפקה","סאונד","קולנוע יומית","צוות"].map(lt=>{
           const active=loanTypeF===lt;
+          const label = lt==="צוות" ? "איש צוות" : lt;
           return <button key={lt} type="button" onClick={()=>setLoanTypeF(lt)}
             style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-            {LOAN_ICONS[lt]||"📦"} {lt}
+            {LOAN_ICONS[lt]||"📦"} {label}
           </button>;
         })}
         {(statusF.length>0||loanTypeF!=="הכל")&&(
@@ -214,7 +215,7 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
   const ALL_STATUSES  = ["ממתין","אישור ראש מחלקה","מאושר","נדחה"];
   const STATUS_COLORS = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","אישור ראש מחלקה":"#9b59b6" };
   const STATUS_BADGE  = { "מאושר":"green","ממתין":"yellow","נדחה":"red","באיחור":"orange","אישור ראש מחלקה":"purple" };
-  const LOAN_ICONS    = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥" };
+  const LOAN_ICONS    = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥","צוות":"💼","הכל":"📦" };
   const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
   const HE_D = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
   const SPAN_COLORS = [
@@ -312,11 +313,12 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
           );
         })}
         <span style={{fontSize:12,color:"var(--border)"}}>|</span>
-        {["הכל","פרטית","הפקה","סאונד","קולנוע יומית"].map(lt=>{
+        {["הכל","פרטית","הפקה","סאונד","קולנוע יומית","צוות"].map(lt=>{
           const active=loanTypeF===lt;
+          const label = lt==="צוות" ? "איש צוות" : lt;
           return <button key={lt} type="button" onClick={()=>setLoanTypeF(lt)}
             style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-            {LOAN_ICONS[lt]||"📦"} {lt}
+            {LOAN_ICONS[lt]||"📦"} {label}
           </button>;
         })}
         {(statusF.length>0||loanTypeF!=="הכל")&&(

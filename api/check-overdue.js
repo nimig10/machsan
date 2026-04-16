@@ -127,6 +127,7 @@ export default async function handler(req, res) {
         !r.overdue_email_sent &&
         r.email &&
         r.loan_type !== "שיעור" &&
+        r.loan_type !== "צוות" &&
         r.return_date &&
         nowMs - toDateTime(r.return_date, r.return_time || "23:59") >= THIRTY_MIN
     );

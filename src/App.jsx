@@ -434,9 +434,14 @@ function normalizeReservationsForArchive(reservations, now = new Date()) {
     }
     const returnAt = getReservationReturnTimestamp(normalizedReservation);
     if (normalizedReservation.status === "מאושר" && returnAt !== null && nowMs >= returnAt) {
-      // Lessons auto-archive, regular loans go to "באיחור"
+      // Lessons auto-archive, regular loans go to "באיחור".
+      // Staff loans (loan_type="צוות") stay "מאושר" (effective "פעילה") until
+      // a staff member manually clicks "הוחזר" — they never auto-escalate.
       if (normalizedReservation.loan_type === "שיעור") {
         return markReservationReturned(normalizedReservation, now);
+      }
+      if (normalizedReservation.loan_type === "צוות") {
+        return normalizedReservation;
       }
       return { ...normalizedReservation, status: "באיחור" };
     }
