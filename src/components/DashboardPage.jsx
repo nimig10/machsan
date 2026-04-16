@@ -331,7 +331,10 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
               if(r.borrow_date===todayStr) return (r.return_time||"23:59") > nowHHMM;
               return true;
             })
-            .sort((a,b)=>a.borrow_date<b.borrow_date?-1:a.borrow_time<b.borrow_time?-1:1)
+            .sort((a,b)=>{
+              if (a.borrow_date !== b.borrow_date) return a.borrow_date < b.borrow_date ? -1 : 1;
+              return (a.borrow_time||"") < (b.borrow_time||"") ? -1 : 1;
+            })
             .slice(0,5);
           if(!upcomingLessons.length) return null;
           return (
@@ -358,9 +361,13 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                       <div style={{fontWeight:700,fontSize:13,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
                         {tag}{r.course||r.student_name}
                       </div>
+                      {r.student_name&&r.student_name!==r.course&&(
+                        <div style={{fontSize:12,fontWeight:700,color:"#9b59b6",marginTop:3,display:"flex",alignItems:"center",gap:4}}>
+                          👨‍🏫 {r.student_name}
+                        </div>
+                      )}
                       <div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>
                         📅 {formatDate(r.borrow_date)} · 🕐 {r.borrow_time||"?"} – {r.return_time||"?"}
-                        {r.student_name&&r.student_name!==r.course&&<span style={{marginRight:6}}>· 👨‍🏫 {r.student_name}</span>}
                       </div>
                       {r.items?.length>0&&(
                         <div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:4}}>
