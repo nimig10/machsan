@@ -7,6 +7,25 @@ import SmartExcelImportButton from "./SmartExcelImportButton.jsx";
 const TRACK_LOAN_TYPES = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
 const TRACK_TYPE_LABELS = { sound: "🎧 הנדסאי סאונד", cinema: "🎬 הנדסאי קולנוע", "": "ללא סיווג" };
 const normalizeTrackName = (value = "") => String(value || "").trim();
+
+// Name helpers — support both new {firstName,lastName} shape and legacy {name} records.
+// `name` is always kept in sync on write so the rest of the app (cascades, auth sync,
+// reservation.student_name lookups) continues to work without changes.
+const getDisplayName = (s) => {
+  const fn = String(s?.firstName || "").trim();
+  const ln = String(s?.lastName || "").trim();
+  if (fn || ln) return [fn, ln].filter(Boolean).join(" ");
+  return String(s?.name || "").trim();
+};
+const splitName = (full) => {
+  const parts = String(full || "").trim().split(/\s+/).filter(Boolean);
+  return { firstName: parts[0] || "", lastName: parts.slice(1).join(" ") };
+};
+const getFirstName = (s) => {
+  const fn = String(s?.firstName || "").trim();
+  if (fn) return fn;
+  return splitName(s?.name).firstName;
+};
 const buildTrackSettings = (students = [], existingTrackSettings = [], explicitTracks = []) => {
   const existing = Array.isArray(existingTrackSettings) ? existingTrackSettings : [];
   const explicitNames = (Array.isArray(explicitTracks) ? explicitTracks : []).map(t => normalizeTrackName(t?.name)).filter(Boolean);
@@ -31,11 +50,12 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
   const { types = [], students = [], tracks: explicitTracks = [] } = certifications;
   const trackSettings = buildTrackSettings(students, certifications?.trackSettings, explicitTracks);
   const [addingStudent, setAddingStudent] = useState(false);
-  const [studentForm, setStudentForm] = useState({ name:"", email:"", phone:"", track:"" });
+  const [studentForm, setStudentForm] = useState({ firstName:"", lastName:"", email:"", phone:"", track:"" });
 
   // ── Inline-edit state (replaces modal) ──
   const [editingId,      setEditingId]      = useState(null);
-  const [editName,       setEditName]       = useState("");
+  const [editFirstName,  setEditFirstName]  = useState("");
+  const [editLastName,   setEditLastName]   = useState("");
   const [editEmail,      setEditEmail]      = useState("");
   const [editPhone,      setEditPhone]      = useState("");
   const [editTrackInl,   setEditTrackInl]   = useState("");
@@ -113,14 +133,20 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
     const seenKeys = new Set();
     const baseId = Date.now();
     const normalizedStudents = (Array.isArray(newStudents) ? newStudents : [])
-      .map((student, index) => ({
-        id: student?.id || `stu_ai_${baseId}_${index}`,
-        name: String(student?.name || "").trim(),
-        email: String(student?.email || "").trim().toLowerCase(),
-        phone: String(student?.phone || "").trim(),
-        track: String(student?.track || "").trim(),
-        certs: typeof student?.certs === "object" && student?.certs ? student.certs : {},
-      }))
+      .map((student, index) => {
+        const name = String(student?.name || "").trim();
+        const split = splitName(name);
+        return {
+          id: student?.id || `stu_ai_${baseId}_${index}`,
+          firstName: split.firstName,
+          lastName: split.lastName,
+          name,
+          email: String(student?.email || "").trim().toLowerCase(),
+          phone: String(student?.phone || "").trim(),
+          track: String(student?.track || "").trim(),
+          certs: typeof student?.certs === "object" && student?.certs ? student.certs : {},
+        };
+      })
       .filter((student) => {
         if (!student.name) return false;
         // dedup key: prefer email, fallback to name
@@ -155,17 +181,20 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
 
   // ── Add student ──
   const addStudent = async () => {
-    const { name, email, phone } = studentForm;
-    if(!name.trim()||!email.trim()) return;
+    const { firstName, lastName, email, phone } = studentForm;
+    const fn = firstName.trim();
+    const ln = lastName.trim();
+    if(!fn || !email.trim()) return;
     if(students.find(s=>s.email?.toLowerCase()===email.toLowerCase().trim())) {
       showToast("error","סטודנט עם מייל זה כבר קיים"); return;
     }
     const id = `stu_${Date.now()}`;
-    const newStu = {id,name:name.trim(),email:email.toLowerCase().trim(),phone:phone.trim(),track:studentForm.track.trim(),certs:{}};
+    const fullName = [fn, ln].filter(Boolean).join(" ");
+    const newStu = {id, firstName: fn, lastName: ln, name: fullName, email:email.toLowerCase().trim(), phone:phone.trim(), track:studentForm.track.trim(), certs:{}};
     const updated = { types, students:[...students, newStu] };
     if(await save(updated)) {
-      showToast("success",`${name} נוסף/ה`);
-      setStudentForm({name:"",email:"",phone:"",track:""});
+      showToast("success",`${fullName} נוסף/ה`);
+      setStudentForm({firstName:"",lastName:"",email:"",phone:"",track:""});
       setAddingStudent(false);
       const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
       logActivity({ user_id: caller.id, user_name: caller.full_name, action: "student_add", entity: "student", entity_id: id, details: { name: newStu.name, email: newStu.email } });
@@ -176,7 +205,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
   const deleteStudent = async (stuId) => {
     const stu = students.find(s => s.id === stuId);
     if (!stu) return;
-    const stuName = stu.name;
+    const stuName = getDisplayName(stu);
     const stuEmail = (stu.email || "").toLowerCase().trim();
     const updated = { types, students: students.filter(s=>s.id!==stuId) };
     if(await save(updated)) {
@@ -230,21 +259,40 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
   // ── Inline-edit helpers ──
   const clearInlineSaveTimeout = () => { clearTimeout(inlineSaveTimeout.current); };
 
-  const buildDraft = () => ({
-    name:  String(editName  || "").trim(),
-    email: String(editEmail || "").trim().toLowerCase(),
-    phone: String(editPhone || "").trim(),
-    track: String(editTrackInl || "").trim(),
-  });
+  const buildDraft = () => {
+    const fn = String(editFirstName || "").trim();
+    const ln = String(editLastName  || "").trim();
+    return {
+      firstName: fn,
+      lastName:  ln,
+      name:  [fn, ln].filter(Boolean).join(" "),
+      email: String(editEmail || "").trim().toLowerCase(),
+      phone: String(editPhone || "").trim(),
+      track: String(editTrackInl || "").trim(),
+    };
+  };
 
-  const getDraftKey = (d) => [d.name, d.email, d.phone, d.track].join("\u0001");
+  const getDraftKey = (d) => [d.firstName, d.lastName, d.email, d.phone, d.track].join("\u0001");
 
-  const isDirty = (stu, d) => (
-    String(stu?.name  || "").trim()                    !== d.name  ||
-    String(stu?.email || "").trim().toLowerCase()      !== d.email ||
-    String(stu?.phone || "").trim()                    !== d.phone ||
-    String(stu?.track || "").trim()                    !== d.track
-  );
+  const isDirty = (stu, d) => {
+    const prev = {
+      firstName: String(stu?.firstName || "").trim(),
+      lastName:  String(stu?.lastName  || "").trim(),
+    };
+    // If stu has no firstName/lastName yet (legacy), derive from name for comparison
+    if (!prev.firstName && !prev.lastName) {
+      const split = splitName(stu?.name);
+      prev.firstName = split.firstName;
+      prev.lastName  = split.lastName;
+    }
+    return (
+      prev.firstName                                     !== d.firstName ||
+      prev.lastName                                      !== d.lastName  ||
+      String(stu?.email || "").trim().toLowerCase()      !== d.email     ||
+      String(stu?.phone || "").trim()                    !== d.phone     ||
+      String(stu?.track || "").trim()                    !== d.track
+    );
+  };
 
   const openInlineEdit = (stu) => {
     clearInlineSaveTimeout();
@@ -252,12 +300,21 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
     lastFailedDraftRef.current = "";
     setInlineSaving(false);
     setEditingId(stu.id);
-    setEditName(stu.name  || "");
+    // Prefer new fields; fallback to splitting legacy `name`
+    let fn = String(stu.firstName || "").trim();
+    let ln = String(stu.lastName  || "").trim();
+    if (!fn && !ln) {
+      const split = splitName(stu.name);
+      fn = split.firstName;
+      ln = split.lastName;
+    }
+    setEditFirstName(fn);
+    setEditLastName(ln);
     setEditEmail(stu.email || "");
     setEditPhone(stu.phone || "");
     setEditTrackInl(stu.track || "");
     originalEmailRef.current = String(stu.email || "").trim().toLowerCase();
-    originalNameRef.current  = String(stu.name  || "").trim();
+    originalNameRef.current  = [fn, ln].filter(Boolean).join(" ");
   };
 
   // Fire-and-forget: push admin edits (name / email) to the Supabase Auth user.
@@ -299,7 +356,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
       return true;
     }
 
-    if (!draft.name) { if (!silent) showToast("error", "שם מלא הוא שדה חובה"); return false; }
+    if (!draft.firstName) { if (!silent) showToast("error", "שם פרטי הוא שדה חובה"); return false; }
     if (!draft.email || !draft.email.includes("@")) { if (!silent) showToast("error", "נדרש אימייל תקין"); return false; }
 
     const dup = students.find(s => s.email === draft.email && s.id !== stu.id);
@@ -358,13 +415,13 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
     if (!editingStudent || inlineSaving) return;
     const draft = buildDraft();
     const key   = getDraftKey(draft);
-    if (!draft.name || !isDirty(editingStudent, draft)) return;
+    if (!draft.firstName || !isDirty(editingStudent, draft)) return;
     if (lastSavedDraftRef.current === key || lastFailedDraftRef.current === key) return;
     inlineSaveTimeout.current = setTimeout(() => {
       void saveInlineEdit(editingStudent, { closeOnSuccess: false, silent: true });
     }, 700);
     return () => clearInlineSaveTimeout();
-  }, [editingStudent, editName, editEmail, editPhone, editTrackInl, inlineSaving]);
+  }, [editingStudent, editFirstName, editLastName, editEmail, editPhone, editTrackInl, inlineSaving]);
 
 
 
@@ -447,7 +504,9 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
           if(!email||!email.includes("@")) { skipped++; continue; }
           if(newStudents.find(s=>s.email===email)) { skipped++; continue; }
           const track = trackIdx>=0 ? String(rows[i][trackIdx]||"").trim() : "";
-          newStudents.push({ id:`stu_${Date.now()}_${i}`, name:name||email, email, phone, track, certs:{} });
+          const fullName = name || email;
+          const split = splitName(fullName);
+          newStudents.push({ id:`stu_${Date.now()}_${i}`, firstName: split.firstName, lastName: split.lastName, name: fullName, email, phone, track, certs:{} });
           added++;
         }
         const updated = { types, students: newStudents };
@@ -545,7 +604,9 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
         // Track: use cell value; fallback to sheet name if empty
         let track = trackIdx >= 0 ? String(row[trackIdx]||"").trim() : "";
         if (!track) track = sheetName || "";
-        newStudents.push({ id: `stu_${Date.now()}_${i}_${Math.random().toString(36).slice(2,6)}`, name: name || email, email, phone, track, certs: {} });
+        const fullName = name || email;
+        const split = splitName(fullName);
+        newStudents.push({ id: `stu_${Date.now()}_${i}_${Math.random().toString(36).slice(2,6)}`, firstName: split.firstName, lastName: split.lastName, name: fullName, email, phone, track, certs: {} });
         added++;
       }
       return { added, skipped };
@@ -630,20 +691,24 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
     ));
   };
   const filteredStudents = students
-    .filter(s=>
-      (allTracksSelected || trackFilter.includes(s.track||"")) &&
-      (!search || s.name?.includes(search) || s.email?.includes(search) || s.phone?.includes(search))
-    )
+    .filter(s=>{
+      const display = getDisplayName(s);
+      return (allTracksSelected || trackFilter.includes(s.track||"")) &&
+        (!search || display.includes(search) || s.email?.includes(search) || s.phone?.includes(search));
+    })
     .sort((a, b) => {
       const ta = a.track || "";
       const tb = b.track || "";
-      if (ta === tb) return 0;
-      if (!ta) return 1;
-      if (!tb) return -1;
-      return ta.localeCompare(tb, "he");
+      if (ta !== tb) {
+        if (!ta) return 1;
+        if (!tb) return -1;
+        return ta.localeCompare(tb, "he");
+      }
+      // Same track — sort alphabetically by first letter of first name (Hebrew-aware)
+      return getFirstName(a).localeCompare(getFirstName(b), "he");
     });
 
-  const closeAddModal = () => { setAddingStudent(false); setStudentForm({name:"",email:"",phone:"",track:""}); };
+  const closeAddModal = () => { setAddingStudent(false); setStudentForm({firstName:"",lastName:"",email:"",phone:"",track:""}); };
 
   return (
     <div className="page" style={{direction:"rtl"}}>
@@ -659,15 +724,20 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
             </div>
             <div style={{padding:"20px"}}>
               <div className="grid-2" style={{marginBottom:12}}>
-                <div className="form-group"><label className="form-label">שם מלא *</label>
-                  <input className="form-input" autoFocus value={studentForm.name} onChange={e=>setStudentForm(p=>({...p,name:e.target.value}))}
-                    onKeyDown={e=>e.key==="Enter"&&addStudent()} placeholder="שם מלא"/></div>
+                <div className="form-group"><label className="form-label">שם פרטי *</label>
+                  <input className="form-input" autoFocus value={studentForm.firstName} onChange={e=>setStudentForm(p=>({...p,firstName:e.target.value}))}
+                    onKeyDown={e=>e.key==="Enter"&&addStudent()} placeholder="שם פרטי"/></div>
+                <div className="form-group"><label className="form-label">שם משפחה</label>
+                  <input className="form-input" value={studentForm.lastName} onChange={e=>setStudentForm(p=>({...p,lastName:e.target.value}))}
+                    onKeyDown={e=>e.key==="Enter"&&addStudent()} placeholder="שם משפחה"/></div>
+              </div>
+              <div className="grid-2" style={{marginBottom:12}}>
                 <div className="form-group"><label className="form-label">אימייל *</label>
                   <input className="form-input" type="email" value={studentForm.email} onChange={e=>setStudentForm(p=>({...p,email:e.target.value}))}
                     onKeyDown={e=>e.key==="Enter"&&addStudent()} placeholder="email@example.com"/></div>
+                <div className="form-group"><label className="form-label">טלפון</label>
+                  <input className="form-input" value={studentForm.phone} onChange={e=>setStudentForm(p=>({...p,phone:e.target.value}))} placeholder="05x-xxxxxxx"/></div>
               </div>
-              <div className="form-group"><label className="form-label">טלפון</label>
-                <input className="form-input" value={studentForm.phone} onChange={e=>setStudentForm(p=>({...p,phone:e.target.value}))} placeholder="05x-xxxxxxx"/></div>
               <div className="form-group"><label className="form-label">מסלול לימודים</label>
                 <select className="form-input" value={studentForm.track||""} onChange={e=>setStudentForm(p=>({...p,track:e.target.value}))}>
                   <option value="">-- בחר מסלול --</option>
@@ -676,7 +746,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
               </div>
               <div style={{display:"flex",gap:8,marginTop:16,justifyContent:"flex-end"}}>
                 <button className="btn btn-secondary" onClick={closeAddModal}>ביטול</button>
-                <button className="btn btn-primary" disabled={!studentForm.name.trim()||!studentForm.email.trim()||saving} onClick={addStudent}>
+                <button className="btn btn-primary" disabled={!studentForm.firstName.trim()||!studentForm.email.trim()||saving} onClick={addStudent}>
                   {saving?"⏳ שומר...":"✅ הוסף סטודנט"}
                 </button>
               </div>
@@ -794,9 +864,14 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                           style={{background:"rgba(245,166,35,0.06)",borderBottom:"1px solid var(--border)",cursor:"pointer"}}
                           onClick={()=>void startEdit(s)}>
                           <td style={{...tdS,padding:"4px 8px"}}>
-                            <input style={{...inpS,fontWeight:700}} value={editName} autoFocus
-                              onClick={e=>e.stopPropagation()}
-                              onChange={e=>setEditName(e.target.value)}/>
+                            <div style={{display:"flex",gap:4,minWidth:0}}>
+                              <input style={{...inpS,fontWeight:700,flex:1,minWidth:0}} value={editFirstName} autoFocus placeholder="שם פרטי"
+                                onClick={e=>e.stopPropagation()}
+                                onChange={e=>setEditFirstName(e.target.value)}/>
+                              <input style={{...inpS,fontWeight:700,flex:1,minWidth:0}} value={editLastName} placeholder="שם משפחה"
+                                onClick={e=>e.stopPropagation()}
+                                onChange={e=>setEditLastName(e.target.value)}/>
+                            </div>
                           </td>
                           <td style={{...tdS,padding:"4px 8px"}}>
                             <input style={{...inpS,fontSize:12}} type="email" value={editEmail}
@@ -824,7 +899,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                         <tr key={s.id} className="students-row"
                           onClick={()=>void startEdit(s)}
                           style={{borderBottom:"1px solid var(--border)",cursor:"pointer"}}>
-                          <td style={{...tdS,fontWeight:700,fontSize:14}}>{s.name}</td>
+                          <td style={{...tdS,fontWeight:700,fontSize:14}}>{getDisplayName(s)}</td>
                           <td style={{...tdS,fontSize:12,color:"var(--text3)"}}>{s.email}</td>
                           <td style={{...tdS,fontSize:12,color:"var(--text3)"}}>{s.phone||"—"}</td>
                           <td style={tdS}>
@@ -855,7 +930,10 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                   style={{background:"rgba(245,166,35,0.06)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:"var(--r)",padding:"14px 16px",direction:"rtl",cursor:"pointer"}}
                   onClick={()=>void startEdit(s)}>
                   <div style={{display:"flex",flexDirection:"column",gap:8}} onClick={e=>e.stopPropagation()}>
-                    <input className="form-input" placeholder="שם מלא" value={editName} autoFocus onChange={e=>setEditName(e.target.value)}/>
+                    <div style={{display:"flex",gap:8}}>
+                      <input className="form-input" style={{flex:1,minWidth:0}} placeholder="שם פרטי" value={editFirstName} autoFocus onChange={e=>setEditFirstName(e.target.value)}/>
+                      <input className="form-input" style={{flex:1,minWidth:0}} placeholder="שם משפחה" value={editLastName} onChange={e=>setEditLastName(e.target.value)}/>
+                    </div>
                     <input className="form-input" placeholder="אימייל" type="email" value={editEmail} onChange={e=>setEditEmail(e.target.value)}/>
                     <input className="form-input" placeholder="טלפון" value={editPhone} onChange={e=>setEditPhone(e.target.value)}/>
                     <select className="form-input" value={editTrackInl} onChange={e=>setEditTrackInl(e.target.value)}>
@@ -876,7 +954,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                   onMouseEnter={e=>e.currentTarget.style.background="rgba(245,166,35,0.08)"}
                   onMouseLeave={e=>e.currentTarget.style.background="var(--surface)"}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontWeight:800,fontSize:15}}>{s.name}</div>
+                    <div style={{fontWeight:800,fontSize:15}}>{getDisplayName(s)}</div>
                     {s.track&&<div style={{fontSize:11,color:"var(--accent)",fontWeight:700}}>🎓 {s.track}</div>}
                     <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{s.email}</div>
                     {s.phone&&<div style={{fontSize:11,color:"var(--text3)"}}>{s.phone}</div>}
