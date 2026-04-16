@@ -239,6 +239,71 @@ export async function createReservation(reservation, items, options = {}) {
   }
 }
 
+// ─── ATOMIC LESSON-KIT BATCH RESERVATION CREATION ───────────────────────────
+// Routes a whole lesson kit's schedule through /api/create-lesson-reservations
+// → create_lesson_reservations_v1 (migration 010). That RPC:
+//   1) Deletes existing reservations where lesson_kit_id = kitId.
+//   2) For each session runs the same date-range overlap availability check
+//      as create_reservation_v2, under FOR UPDATE locks held for the whole
+//      transaction — so concurrent public-form submits serialize behind us.
+//   3) Recomputes available_units for every touched equipment row.
+//
+// Replaces the old pattern in EditLessonKit.save:
+//   baseRes = reservations.filter(r => r.lesson_kit_id !== kitId);
+//   newRes  = finalSchedule.map(s => ({ ... }));
+//   storageSet("reservations", [...baseRes, ...newRes]);
+//
+// Returns:
+//   { ok: true, inserted, deleted, ids }                     on success
+//   { ok: false, error: "not_enough_stock", detail, conflictDetail }  on conflict
+//   { ok: false, error, detail }                             on any other failure
+//
+// Callers should still refresh the reservations cache (storageSet) afterwards
+// so other clients pick up the new state before the next mirror cycle.
+export async function createLessonReservations(kitId, reservations, items, options = {}) {
+  const { timeoutMs = 15000 } = options;
+  if (!kitId) {
+    return { ok: false, error: "missing_arg", detail: "kitId is required" };
+  }
+  if (!Array.isArray(reservations)) {
+    return { ok: false, error: "missing_arg", detail: "reservations must be an array" };
+  }
+  if (!Array.isArray(items)) {
+    return { ok: false, error: "missing_arg", detail: "items must be an array" };
+  }
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    const res = await fetch("/api/create-lesson-reservations", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ kit_id: String(kitId), reservations, items }),
+      signal:  ctrl.signal,
+    });
+    clearTimeout(t);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      const stockIssue = res.status === 409 || data.error === "not_enough_stock";
+      return {
+        ok:             false,
+        status:         res.status,
+        error:          stockIssue ? "not_enough_stock" : (data.error || "rpc_error"),
+        detail:         data.detail || `HTTP ${res.status}`,
+        conflictDetail: data.detail || null,
+      };
+    }
+    return {
+      ok:       true,
+      inserted: data.inserted ?? 0,
+      deleted:  data.deleted  ?? 0,
+      ids:      Array.isArray(data.ids) ? data.ids : [],
+    };
+  } catch (e) {
+    console.error("createLessonReservations network error:", e);
+    return { ok: false, error: "network_error", detail: e.message };
+  }
+}
+
 // ─── ATOMIC RESERVATION STATUS UPDATE ────────────────────────────────────────
 // Routes a status change (approve / reject / return / cancel) through the
 // atomic RPC update_reservation_status_v1 (migration 009), via the server
