@@ -7932,7 +7932,7 @@ export default function App() {
                 <span className="topbar-title" style={{flex:1}}>ניהול צוות</span>
               </div>
             </div>
-            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <StaffManagementPage showToast={showToast} teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} collegeManager={collegeManager} setCollegeManager={setCollegeManager} managerToken={managerToken} lecturers={lecturers}/>}
+            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <StaffManagementPage showToast={showToast} teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} collegeManager={collegeManager} setCollegeManager={setCollegeManager} managerToken={managerToken} lecturers={lecturers} reservations={reservations} setReservations={setReservations}/>}
           </div>
         </div>
       )}

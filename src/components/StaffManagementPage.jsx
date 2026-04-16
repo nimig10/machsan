@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Modal } from "./ui.jsx";
-import { storageSet, isValidEmailAddress, logActivity } from "../utils.js";
+import { storageSet, storageGet, isValidEmailAddress, logActivity } from "../utils.js";
 
 const WAREHOUSE_SECTIONS = [
   { id: "reservations", label: "📋 בקשות" },
@@ -53,7 +53,7 @@ function toggleArr(arr, val) {
 }
 
 // ─── Tab: אנשי צוות (staff_members in Supabase) ─────────────────────────────
-function StaffTab({ showToast, teamMembers, setTeamMembers }) {
+function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setReservations }) {
   const [staff, setStaff]       = useState([]);
   const [loading, setLoading]   = useState(true);
   const [editUser, setEditUser] = useState(null);
@@ -108,12 +108,45 @@ function StaffTab({ showToast, teamMembers, setTeamMembers }) {
         } else {
           // UPDATE — update matching entry in teamMembers
           const idx = current.findIndex(m => m.id === id || m.email?.toLowerCase() === emailLower);
+          const prevName = idx >= 0 ? (current[idx].name || "") : "";
+          const newName  = full_name.trim();
           if (idx >= 0) {
             const updated = [...current];
-            updated[idx] = { ...updated[idx], name: full_name.trim(), email: emailLower, loanTypes: notifyTypes };
+            updated[idx] = { ...updated[idx], name: newName, email: emailLower, loanTypes: notifyTypes };
             setTeamMembers(updated);
             storageSet("teamMembers", updated);
           }
+          // Cascade rename through historical reservations so the new name shows
+          // everywhere (calendar, dashboard, archive, …) instead of the snapshot
+          // that was taken at submission time. Matches by email (case-insensitive).
+          if (prevName !== newName && emailLower) {
+            try {
+              const freshRes = await storageGet("reservations");
+              const src = Array.isArray(freshRes) ? freshRes : (Array.isArray(reservations) ? reservations : []);
+              let touched = false;
+              const renamed = src.map(r => {
+                if ((r?.email || "").toLowerCase() === emailLower && r.student_name !== newName) {
+                  touched = true;
+                  return { ...r, student_name: newName };
+                }
+                return r;
+              });
+              if (touched) {
+                await storageSet("reservations", renamed);
+                if (typeof setReservations === "function") setReservations(renamed);
+              }
+            } catch (err) {
+              console.warn("reservation rename cascade failed:", err);
+            }
+          }
+          // If the admin renamed themselves, refresh their session cache so
+          // newly-created staff loans immediately use the updated name.
+          try {
+            const sUser = JSON.parse(sessionStorage.getItem("staff_user") || "{}");
+            if (sUser?.email && sUser.email.toLowerCase() === emailLower) {
+              sessionStorage.setItem("staff_user", JSON.stringify({ ...sUser, full_name: newName }));
+            }
+          } catch {}
         }
         showToast?.("success", id ? "המשתמש עודכן" : "המשתמש נוצר"); setEditUser(null); fetchStaff();
       }
@@ -687,7 +720,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
 }
 
 // ─── Main export ─────────────────────────────────────────────────────────────
-export function StaffManagementPage({ showToast, teamMembers, setTeamMembers, deptHeads, setDeptHeads, collegeManager, setCollegeManager, managerToken, lecturers }) {
+export function StaffManagementPage({ showToast, teamMembers, setTeamMembers, deptHeads, setDeptHeads, collegeManager, setCollegeManager, managerToken, lecturers, reservations, setReservations }) {
   const [tab, setTab] = useState("staff");
 
   const TABS = [
@@ -710,7 +743,7 @@ export function StaffManagementPage({ showToast, teamMembers, setTeamMembers, de
         ))}
       </div>
 
-      {tab === "staff"  && <StaffTab showToast={showToast} teamMembers={teamMembers} setTeamMembers={setTeamMembers} />}
+      {tab === "staff"  && <StaffTab showToast={showToast} teamMembers={teamMembers} setTeamMembers={setTeamMembers} reservations={reservations} setReservations={setReservations} />}
       {tab === "legacy" && <LegacyTeamTab teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} collegeManager={collegeManager} setCollegeManager={setCollegeManager} managerToken={managerToken} showToast={showToast} lecturers={lecturers}/>}
     </div>
   );
