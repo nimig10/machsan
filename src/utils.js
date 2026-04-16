@@ -186,6 +186,59 @@ export async function storageSet(key, value) {
   }
 }
 
+// ─── ATOMIC RESERVATION CREATE ───────────────────────────────────────────────
+// Routes a new reservation through /api/create-reservation → create_reservation_v2
+// RPC (migration 008). The RPC takes FOR UPDATE on every equipment row the
+// reservation touches, runs a date-range overlap availability check, and only
+// then inserts — so two concurrent callers competing for the last available
+// unit cannot both succeed. Used by:
+//   * PublicForm (student self-service)
+//   * ReservationsPage.AdminManualForm (admin-created manual reservations)
+//
+// Returns:
+//   { ok: true,  id }                            on success (id is the new row id)
+//   { ok: false, error: "not_enough_stock", detail }  on 409 stock conflict
+//   { ok: false, error, detail }                 on any other failure
+//
+// The `reservation` object must include at least: student_name, email, phone,
+// course, loan_type, borrow_date, return_date, borrow_time, return_time.
+// The `items` array must be non-empty; each item needs equipment_id + quantity.
+// Optional: `id` on the reservation (server will generate one if missing).
+export async function createReservation(reservation, items, options = {}) {
+  const { timeoutMs = 12000 } = options;
+  if (!reservation || typeof reservation !== "object") {
+    return { ok: false, error: "missing_arg", detail: "reservation object required" };
+  }
+  if (!Array.isArray(items) || items.length === 0) {
+    return { ok: false, error: "missing_arg", detail: "items must be a non-empty array" };
+  }
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    const res = await fetch("/api/create-reservation", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ reservation, items }),
+      signal:  ctrl.signal,
+    });
+    clearTimeout(t);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      const stockIssue = res.status === 409 || data.error === "not_enough_stock";
+      return {
+        ok:     false,
+        status: res.status,
+        error:  stockIssue ? "not_enough_stock" : (data.error || "rpc_error"),
+        detail: data.detail || `HTTP ${res.status}`,
+      };
+    }
+    return { ok: true, id: data.id };
+  } catch (e) {
+    console.error("createReservation network error:", e);
+    return { ok: false, error: "network_error", detail: e.message };
+  }
+}
+
 // ─── ATOMIC RESERVATION STATUS UPDATE ────────────────────────────────────────
 // Routes a status change (approve / reject / return / cancel) through the
 // atomic RPC update_reservation_status_v1 (migration 009), via the server

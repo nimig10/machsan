@@ -1,6 +1,6 @@
 // PublicForm.jsx — public loan request form
 import { useEffect, useState, useRef, useMemo } from "react";
-import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus, cloudinaryThumb } from "../utils.js";
+import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus, cloudinaryThumb, createReservation } from "../utils.js";
 import { supabase } from "../supabaseClient.js";
 import { useNotifications } from "../hooks/useNotifications.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
@@ -2563,51 +2563,44 @@ ${inventory}
     const newRes = { ...form, id: reservationId, status: initStatus, created_at: today(), submitted_at: submittedAtHebrew, items };
 
     // ── ATOMIC SERVER-SIDE CREATE ─────────────────────────────────────────
-    // create_reservation_v2 takes FOR UPDATE locks on each equipment row,
-    // re-checks availability, inserts into reservations_new + items, and
-    // decrements available_units — all in one transaction. Fixes the
-    // concurrent-submit race that the old "fetch → modify → write" pattern
-    // had (documented 2026-03-20 data loss).
-    try {
-      const resp = await fetch("/api/create-reservation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          reservation: {
-            ...newRes,
-            // created_at from today() is ISO "YYYY-MM-DD" — castable as-is.
-            // submitted_at needs to be ISO for the RPC's TIMESTAMPTZ cast.
-            submitted_at: submittedAtIso,
-          },
-          items: items.map(it => ({
-            equipment_id: it.equipment_id,
-            name:         it.name,
-            quantity:     Number(it.quantity) || 1,
-            unit_id:      it.unit_id || null,
-          })),
-        }),
-      });
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        setSub(false);
-        if (resp.status === 409) {
-          // Stock became unavailable between pre-check and atomic insert.
-          showToast("error", "חלק מהציוד כבר לא זמין — נא לעדכן את הבחירה ולנסות שוב");
-        } else {
-          console.error("create-reservation failed", resp.status, data);
-          showToast("error", "שגיאה בשליחת הבקשה. נסה שוב בעוד רגע.");
-        }
-        return;
-      }
-      // The RPC may have generated its own id if ours was blank; sync up.
-      if (data?.id && String(data.id) !== reservationId) {
-        newRes.id = data.id;
-      }
-    } catch(e) {
-      console.error("create-reservation network error", e);
+    // create_reservation_v2 (migration 008) takes FOR UPDATE locks on each
+    // equipment row, runs a date-range overlap availability check, inserts
+    // into reservations_new + reservation_items, and recomputes
+    // available_units — all in one transaction. Fixes the concurrent-submit
+    // race that the old "fetch → modify → write" pattern had (documented
+    // 2026-03-20 data loss). Routed via the shared createReservation()
+    // helper (utils.js) so the public form and the admin manual form share
+    // error handling.
+    const rpcResult = await createReservation(
+      {
+        ...newRes,
+        // created_at from today() is ISO "YYYY-MM-DD" — castable as-is.
+        // submitted_at needs to be ISO for the RPC's TIMESTAMPTZ cast.
+        submitted_at: submittedAtIso,
+      },
+      items.map(it => ({
+        equipment_id: it.equipment_id,
+        name:         it.name,
+        quantity:     Number(it.quantity) || 1,
+        unit_id:      it.unit_id || null,
+      }))
+    );
+    if (!rpcResult.ok) {
       setSub(false);
-      showToast("error", "תקלת רשת. בדוק חיבור ונסה שוב.");
+      if (rpcResult.error === "not_enough_stock") {
+        // Stock became unavailable between pre-check and atomic insert.
+        showToast("error", "חלק מהציוד כבר לא זמין — נא לעדכן את הבחירה ולנסות שוב");
+      } else if (rpcResult.error === "network_error") {
+        showToast("error", "תקלת רשת. בדוק חיבור ונסה שוב.");
+      } else {
+        console.error("create-reservation failed", rpcResult);
+        showToast("error", "שגיאה בשליחת הבקשה. נסה שוב בעוד רגע.");
+      }
       return;
+    }
+    // The RPC may have generated its own id if ours was blank; sync up.
+    if (rpcResult.id && String(rpcResult.id) !== reservationId) {
+      newRes.id = rpcResult.id;
     }
 
     // ── Keep store.reservations (JSON blob) in sync so existing read paths ──
