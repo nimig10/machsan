@@ -9,11 +9,51 @@ function makeLecturerId() {
   return `lec_${Date.now()}_${++_idCounter}`;
 }
 
+// Name helpers — mirror StudentsPage approach: keep legacy `fullName` alongside
+// new `firstName`/`lastName` fields. On every write we keep them in sync so
+// anything that reads `fullName` (lessons.instructorName lookups, auth sync,
+// excel import dedup) continues to work without schema changes.
+const splitLecturerName = (full) => {
+  const parts = String(full || "").trim().split(/\s+/).filter(Boolean);
+  return { firstName: parts[0] || "", lastName: parts.slice(1).join(" ") };
+};
+export const getLecturerFirstName = (l) => {
+  const fn = String(l?.firstName || "").trim();
+  if (fn) return fn;
+  return splitLecturerName(l?.fullName).firstName;
+};
+export const getLecturerLastName = (l) => {
+  const ln = String(l?.lastName || "").trim();
+  if (ln) return ln;
+  if (String(l?.firstName || "").trim()) return "";
+  return splitLecturerName(l?.fullName).lastName;
+};
+export const getLecturerDisplayName = (l) => {
+  const fn = String(l?.firstName || "").trim();
+  const ln = String(l?.lastName  || "").trim();
+  if (fn || ln) return [fn, ln].filter(Boolean).join(" ");
+  return String(l?.fullName || "").trim();
+};
+
 export function makeLecturer(fields = {}) {
   const now = new Date().toISOString();
+  // If caller provided firstName/lastName, build fullName from them; otherwise
+  // keep the provided fullName (legacy path) and split it into the new fields.
+  let firstName = String(fields.firstName || "").trim();
+  let lastName  = String(fields.lastName  || "").trim();
+  let fullName  = String(fields.fullName  || "").trim();
+  if (firstName || lastName) {
+    fullName = [firstName, lastName].filter(Boolean).join(" ");
+  } else if (fullName) {
+    const split = splitLecturerName(fullName);
+    firstName = split.firstName;
+    lastName  = split.lastName;
+  }
   return {
     id:          fields.id          || makeLecturerId(),
-    fullName:    String(fields.fullName  || "").trim(),
+    firstName,
+    lastName,
+    fullName,
     phone:       String(fields.phone     || "").trim(),
     email:       String(fields.email     || "").trim(),
     studyTracks: Array.isArray(fields.studyTracks) ? fields.studyTracks : [],
@@ -56,7 +96,8 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
   }, []);
 
   // Add-modal state
-  const [addName,  setAddName]  = useState("");
+  const [addFirstName, setAddFirstName] = useState("");
+  const [addLastName,  setAddLastName]  = useState("");
   const [addPhone, setAddPhone] = useState("");
   const [addEmail, setAddEmail] = useState("");
   const [addNotes, setAddNotes] = useState("");
@@ -64,7 +105,8 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
   const [addSaving, setAddSaving] = useState(false);
 
   // Inline-edit state
-  const [editName,  setEditName]  = useState("");
+  const [editFirstName, setEditFirstName] = useState("");
+  const [editLastName,  setEditLastName]  = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editNotes, setEditNotes] = useState("");
@@ -122,18 +164,21 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
 
   /* ── Actions ── */
   const openAddModal = () => {
-    setAddName(""); setAddPhone(""); setAddEmail(""); setAddNotes(""); setAddDup(null); setAddSaving(false);
+    setAddFirstName(""); setAddLastName(""); setAddPhone(""); setAddEmail(""); setAddNotes(""); setAddDup(null); setAddSaving(false);
     setShowAddModal(true);
   };
 
   const saveAdd = async (force = false) => {
-    if (!addName.trim()) { showToast("error", "שם מלא הוא שדה חובה"); return; }
+    const fn = addFirstName.trim();
+    const ln = addLastName.trim();
+    if (!fn) { showToast("error", "שם פרטי הוא שדה חובה"); return; }
+    const fullName = [fn, ln].filter(Boolean).join(" ");
     if (!force) {
-      const dup = findDuplicate(lecturers, { fullName: addName, email: addEmail, phone: addPhone });
+      const dup = findDuplicate(lecturers, { fullName, email: addEmail, phone: addPhone });
       if (dup) { setAddDup(dup); return; }
     }
     setAddSaving(true);
-    const newLec = makeLecturer({ fullName: addName.trim(), phone: addPhone.trim(), email: addEmail.trim(), notes: addNotes.trim() });
+    const newLec = makeLecturer({ firstName: fn, lastName: ln, phone: addPhone.trim(), email: addEmail.trim(), notes: addNotes.trim() });
     const updated = [...lecturers, newLec];
     const result = await storageSet("lecturers", updated);
     if (!result?.ok) {
@@ -166,12 +211,21 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
     resetInlineSaveState();
     setInlineSaving(false);
     setEditingId(lec.id);
-    setEditName(lec.fullName || "");
+    // Prefer new fields; split legacy `fullName` as fallback
+    let fn = String(lec.firstName || "").trim();
+    let ln = String(lec.lastName  || "").trim();
+    if (!fn && !ln) {
+      const split = splitLecturerName(lec.fullName);
+      fn = split.firstName;
+      ln = split.lastName;
+    }
+    setEditFirstName(fn);
+    setEditLastName(ln);
     setEditPhone(lec.phone || "");
     setEditEmail(lec.email || "");
     setEditNotes(lec.notes || "");
-    originalEmailRef.current = String(lec.email    || "").trim().toLowerCase();
-    originalNameRef.current  = String(lec.fullName || "").trim();
+    originalEmailRef.current = String(lec.email || "").trim().toLowerCase();
+    originalNameRef.current  = [fn, ln].filter(Boolean).join(" ");
   };
 
   const syncLecturerAuthUser = async (oldEmail, newEmail, newName) => {
@@ -195,21 +249,39 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
     }
   };
 
-  const buildInlineDraft = () => ({
-    fullName: String(editName || "").trim(),
-    phone: String(editPhone || "").trim(),
-    email: String(editEmail || "").trim(),
-    notes: String(editNotes || "").trim(),
-  });
+  const buildInlineDraft = () => {
+    const fn = String(editFirstName || "").trim();
+    const ln = String(editLastName  || "").trim();
+    return {
+      firstName: fn,
+      lastName:  ln,
+      fullName:  [fn, ln].filter(Boolean).join(" "),
+      phone: String(editPhone || "").trim(),
+      email: String(editEmail || "").trim(),
+      notes: String(editNotes || "").trim(),
+    };
+  };
 
-  const getInlineDraftKey = (draft) => [draft.fullName, draft.phone, draft.email, draft.notes].join("\u0001");
+  const getInlineDraftKey = (draft) => [draft.firstName, draft.lastName, draft.phone, draft.email, draft.notes].join("\u0001");
 
-  const isInlineDraftDirty = (lec, draft) => (
-    String(lec?.fullName || "").trim() !== draft.fullName
-    || String(lec?.phone || "").trim() !== draft.phone
-    || String(lec?.email || "").trim() !== draft.email
-    || String(lec?.notes || "").trim() !== draft.notes
-  );
+  const isInlineDraftDirty = (lec, draft) => {
+    const prev = {
+      firstName: String(lec?.firstName || "").trim(),
+      lastName:  String(lec?.lastName  || "").trim(),
+    };
+    if (!prev.firstName && !prev.lastName) {
+      const split = splitLecturerName(lec?.fullName);
+      prev.firstName = split.firstName;
+      prev.lastName  = split.lastName;
+    }
+    return (
+      prev.firstName !== draft.firstName
+      || prev.lastName  !== draft.lastName
+      || String(lec?.phone || "").trim() !== draft.phone
+      || String(lec?.email || "").trim() !== draft.email
+      || String(lec?.notes || "").trim() !== draft.notes
+    );
+  };
 
   const saveInlineEdit = async (lec, { closeOnSuccess = false, silent = false } = {}) => {
     clearInlineSaveTimeout();
@@ -228,8 +300,8 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
       return true;
     }
 
-    if (!draft.fullName) {
-      if (!silent) showToast("error", "שם מלא הוא שדה חובה");
+    if (!draft.firstName) {
+      if (!silent) showToast("error", "שם פרטי הוא שדה חובה");
       return false;
     }
 
@@ -292,7 +364,7 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
 
     const draft = buildInlineDraft();
     const draftKey = getInlineDraftKey(draft);
-    if (!draft.fullName || !isInlineDraftDirty(editingLecturer, draft)) return undefined;
+    if (!draft.firstName || !isInlineDraftDirty(editingLecturer, draft)) return undefined;
     if (lastSavedInlineDraftRef.current === draftKey || lastFailedInlineDraftRef.current === draftKey) return undefined;
 
     inlineSaveTimeoutRef.current = setTimeout(() => {
@@ -300,7 +372,7 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
     }, 700);
 
     return () => clearInlineSaveTimeout();
-  }, [editingLecturer, editName, editPhone, editEmail, editNotes, inlineSaving]);
+  }, [editingLecturer, editFirstName, editLastName, editPhone, editEmail, editNotes, inlineSaving]);
 
   const deleteLecturer = async (lec) => {
     const updated = lecturers.filter(l => l.id !== lec.id);
@@ -385,13 +457,16 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
     const q = search.trim().toLowerCase();
     return lecturers
       .filter(l => l.isActive !== false)
-      .filter(l => !q || l.fullName.toLowerCase().includes(q) || (l.email||"").toLowerCase().includes(q) || (l.phone||"").includes(q))
+      .filter(l => !q
+        || getLecturerDisplayName(l).toLowerCase().includes(q)
+        || (l.email||"").toLowerCase().includes(q)
+        || (l.phone||"").includes(q))
       .filter(l => {
         if (trackFilter.length === 0) return true;
         const tracks = lecturerTracks[l.id];
         return tracks && trackFilter.some(t => tracks.has(t));
       })
-      .sort((a, b) => a.fullName.localeCompare(b.fullName, "he"));
+      .sort((a, b) => getLecturerFirstName(a).localeCompare(getLecturerFirstName(b), "he"));
   }, [lecturers, search, trackFilter, lecturerTracks]);
 
   const th = { padding: "8px 12px", textAlign: "right", fontWeight: 800, fontSize: 12, color: "var(--text3)", borderBottom: "2px solid var(--border)", whiteSpace: "nowrap" };
@@ -442,10 +517,17 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                   </div>
                 </div>
               )}
-              <div style={{ marginBottom: 14 }}>
-                <span style={lbl}>שם מלא *</span>
-                <input className="form-input" style={{ width: "100%", boxSizing: "border-box" }} placeholder='ד"ר ישראל ישראלי'
-                  value={addName} onChange={e => setAddName(e.target.value)} autoFocus />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+                <div>
+                  <span style={lbl}>שם פרטי *</span>
+                  <input className="form-input" style={{ width: "100%", boxSizing: "border-box" }} placeholder="ישראל"
+                    value={addFirstName} onChange={e => setAddFirstName(e.target.value)} autoFocus />
+                </div>
+                <div>
+                  <span style={lbl}>שם משפחה</span>
+                  <input className="form-input" style={{ width: "100%", boxSizing: "border-box" }} placeholder="ישראלי"
+                    value={addLastName} onChange={e => setAddLastName(e.target.value)} />
+                </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
                 <div>
@@ -537,8 +619,12 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
               return (
                 <div key={lec.id} style={{ background: "rgba(245,166,35,0.06)", border: "1px solid var(--accent)", borderRadius: 10, padding: "12px 14px" }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <input className="form-input" value={editName} onChange={e => setEditName(e.target.value)}
-                      placeholder="שם מלא" style={{ ...inpStyle, fontWeight: 700 }} autoFocus />
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input className="form-input" value={editFirstName} onChange={e => setEditFirstName(e.target.value)}
+                        placeholder="שם פרטי" style={{ ...inpStyle, fontWeight: 700, flex: 1, minWidth: 0 }} autoFocus />
+                      <input className="form-input" value={editLastName} onChange={e => setEditLastName(e.target.value)}
+                        placeholder="שם משפחה" style={{ ...inpStyle, fontWeight: 700, flex: 1, minWidth: 0 }} />
+                    </div>
                     <input className="form-input" value={editPhone} onChange={e => setEditPhone(e.target.value)}
                       placeholder="טלפון" style={inpStyle} />
                     <input className="form-input" type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)}
@@ -557,7 +643,7 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                 style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "11px 14px", display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", touchAction: "pan-y" }}
                 onClick={() => void startEdit(lec)}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{lec.fullName}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{getLecturerDisplayName(lec)}</div>
                   {!isLinked && <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 3 }}>לא משויך לקורס</div>}
                   {tracks.length > 0 && (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 5 }}>
@@ -583,15 +669,17 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
         <div style={{ overflowX: "auto" }}>
           <table className="lecturers-table" style={{ width: "100%", borderCollapse: "collapse", background: "var(--surface2)", borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", tableLayout: "fixed" }}>
             <colgroup>
-              <col style={{ width: "22%" }} />
-              <col style={{ width: "16%" }} />
-              <col style={{ width: "22%" }} />
+              <col style={{ width: "13%" }} />
+              <col style={{ width: "13%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "20%" }} />
               <col style={{ width: "28%" }} />
               <col style={{ width: "12%" }} />
             </colgroup>
             <thead>
               <tr style={{ background: "rgba(245,166,35,0.08)" }}>
-                <th style={th}>שם מלא</th>
+                <th style={th}>שם פרטי</th>
+                <th style={th}>שם משפחה</th>
                 <th style={th}>טלפון</th>
                 <th style={th}>מייל</th>
                 <th style={th}>מסלולי לימוד</th>
@@ -609,8 +697,12 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                     <tr key={lec.id} style={{ background: "rgba(245,166,35,0.06)", cursor: "pointer" }}
                       onClick={e => { if (e.target.tagName !== "INPUT" && e.target.tagName !== "BUTTON") void closeInlineEdit(lec); }}>
                       <td style={td}>
-                        <input className="form-input" value={editName} onChange={e => setEditName(e.target.value)}
+                        <input className="form-input" value={editFirstName} onChange={e => setEditFirstName(e.target.value)}
                           style={{ ...inpStyle, fontWeight: 700 }} autoFocus />
+                      </td>
+                      <td style={td}>
+                        <input className="form-input" value={editLastName} onChange={e => setEditLastName(e.target.value)}
+                          style={{ ...inpStyle, fontWeight: 700 }} />
                       </td>
                       <td style={td}>
                         <input className="form-input" value={editPhone} onChange={e => setEditPhone(e.target.value)}
@@ -652,10 +744,13 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                     style={{ cursor: "pointer" }}
                   >
                     <td style={{ ...td, fontWeight: 700 }}>
-                      {lec.fullName}
+                      {getLecturerFirstName(lec) || <span style={{ color: "var(--text3)" }}>—</span>}
                       {!isLinked && (
                         <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 400, marginTop: 2 }}>לא משויך לקורס</div>
                       )}
+                    </td>
+                    <td style={{ ...td, fontWeight: 700 }}>
+                      {getLecturerLastName(lec) || <span style={{ color: "var(--text3)" }}>—</span>}
                     </td>
                     <td style={td}>{lec.phone || <span style={{ color: "var(--text3)" }}>—</span>}</td>
                     <td style={td}><span style={{ fontSize: 12 }}>{lec.email || <span style={{ color: "var(--text3)" }}>—</span>}</span></td>

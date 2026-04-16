@@ -26,6 +26,13 @@ const getFirstName = (s) => {
   if (fn) return fn;
   return splitName(s?.name).firstName;
 };
+const getLastName = (s) => {
+  const ln = String(s?.lastName || "").trim();
+  if (ln) return ln;
+  // If firstName is present but lastName is missing, assume record was edited with firstName only
+  if (String(s?.firstName || "").trim()) return "";
+  return splitName(s?.name).lastName;
+};
 const buildTrackSettings = (students = [], existingTrackSettings = [], explicitTracks = []) => {
   const existing = Array.isArray(existingTrackSettings) ? existingTrackSettings : [];
   const explicitNames = (Array.isArray(explicitTracks) ? explicitTracks : []).map(t => normalizeTrackName(t?.name)).filter(Boolean);
@@ -824,17 +831,19 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
         <>
           {/* Desktop — table */}
           <div className="cert-desktop" style={{overflowX:"auto",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
-            <table className="students-table" style={{width:"100%",borderCollapse:"collapse",minWidth:540,direction:"rtl",tableLayout:"fixed"}}>
+            <table className="students-table" style={{width:"100%",borderCollapse:"collapse",minWidth:620,direction:"rtl",tableLayout:"fixed"}}>
               <colgroup>
-                <col style={{width:"22%"}}/>
-                <col style={{width:"28%"}}/>
-                <col style={{width:"16%"}}/>
+                <col style={{width:"13%"}}/>
+                <col style={{width:"13%"}}/>
+                <col style={{width:"26%"}}/>
+                <col style={{width:"14%"}}/>
                 <col style={{width:"26%"}}/>
                 <col style={{width:"8%"}}/>
               </colgroup>
               <thead>
                 <tr style={{background:"var(--surface2)",borderBottom:"2px solid var(--border)"}}>
-                  <th style={thS}>שם סטודנט</th>
+                  <th style={thS}>שם פרטי</th>
+                  <th style={thS}>שם משפחה</th>
                   <th style={thS}>אימייל</th>
                   <th style={thS}>טלפון</th>
                   <th style={thS}>מסלול לימודים</th>
@@ -850,7 +859,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                     if(t!==lastTrack){
                       rows.push(
                         <tr key={`grp_${t}_${i}`}>
-                          <td colSpan={5} style={{background:"rgba(245,166,35,0.06)",padding:"5px 14px",fontWeight:800,fontSize:11,color:"var(--accent)",borderBottom:"1px solid var(--border)",letterSpacing:0.5}}>
+                          <td colSpan={6} style={{background:"rgba(245,166,35,0.06)",padding:"5px 14px",fontWeight:800,fontSize:11,color:"var(--accent)",borderBottom:"1px solid var(--border)",letterSpacing:0.5}}>
                             {t?"🎓 "+t:"📋 ללא מסלול"}
                           </td>
                         </tr>
@@ -864,14 +873,14 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                           style={{background:"rgba(245,166,35,0.06)",borderBottom:"1px solid var(--border)",cursor:"pointer"}}
                           onClick={()=>void startEdit(s)}>
                           <td style={{...tdS,padding:"4px 8px"}}>
-                            <div style={{display:"flex",gap:4,minWidth:0}}>
-                              <input style={{...inpS,fontWeight:700,flex:1,minWidth:0}} value={editFirstName} autoFocus placeholder="שם פרטי"
-                                onClick={e=>e.stopPropagation()}
-                                onChange={e=>setEditFirstName(e.target.value)}/>
-                              <input style={{...inpS,fontWeight:700,flex:1,minWidth:0}} value={editLastName} placeholder="שם משפחה"
-                                onClick={e=>e.stopPropagation()}
-                                onChange={e=>setEditLastName(e.target.value)}/>
-                            </div>
+                            <input style={{...inpS,fontWeight:700}} value={editFirstName} autoFocus placeholder="שם פרטי"
+                              onClick={e=>e.stopPropagation()}
+                              onChange={e=>setEditFirstName(e.target.value)}/>
+                          </td>
+                          <td style={{...tdS,padding:"4px 8px"}}>
+                            <input style={{...inpS,fontWeight:700}} value={editLastName} placeholder="שם משפחה"
+                              onClick={e=>e.stopPropagation()}
+                              onChange={e=>setEditLastName(e.target.value)}/>
                           </td>
                           <td style={{...tdS,padding:"4px 8px"}}>
                             <input style={{...inpS,fontSize:12}} type="email" value={editEmail}
@@ -899,7 +908,8 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                         <tr key={s.id} className="students-row"
                           onClick={()=>void startEdit(s)}
                           style={{borderBottom:"1px solid var(--border)",cursor:"pointer"}}>
-                          <td style={{...tdS,fontWeight:700,fontSize:14}}>{getDisplayName(s)}</td>
+                          <td style={{...tdS,fontWeight:700,fontSize:14}}>{getFirstName(s) || <span style={{color:"var(--text3)"}}>—</span>}</td>
+                          <td style={{...tdS,fontWeight:700,fontSize:14}}>{getLastName(s) || <span style={{color:"var(--text3)"}}>—</span>}</td>
                           <td style={{...tdS,fontSize:12,color:"var(--text3)"}}>{s.email}</td>
                           <td style={{...tdS,fontSize:12,color:"var(--text3)"}}>{s.phone||"—"}</td>
                           <td style={tdS}>
