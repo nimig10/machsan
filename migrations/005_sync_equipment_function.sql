@@ -102,7 +102,9 @@ BEGIN
 
   -- ── Recompute available_units ─────────────────────────────────────────────
   -- healthy units  = units with status = 'תקין'
-  -- reserved qty   = open reservations (not returned/cancelled) in reservation_items
+  -- reserved qty   = open reservations (not returned/cancelled) CURRENTLY ACTIVE
+  --                  i.e. borrow_date <= today AND return_date >= today.
+  --                  Future reservations don't reduce availability today.
   UPDATE public.equipment eq
   SET available_units = GREATEST(
         (
@@ -118,6 +120,8 @@ BEGIN
             JOIN public.reservations_new r ON r.id = ri.reservation_id
             WHERE ri.equipment_id = eq.id
               AND r.status NOT IN ('הוחזר', 'בוטל', 'מבוטל')
+              AND r.borrow_date <= CURRENT_DATE
+              AND r.return_date >= CURRENT_DATE
           ), 0
         ),
         0
