@@ -54,9 +54,9 @@ const LOAN_TYPE_EQUIPMENT_CLASSIFICATIONS = ["סאונד", "צילום", "כלל
 const DEFAULT_STUDIO_FUTURE_HOURS = 16;
 const DEFAULT_LOAN_TYPE_EQUIPMENT_CLASSIFICATION = {
   פרטית: ["כללי", "צילום", "סאונד"],
-  הפקה: ["צילום"],
-  סאונד: ["סאונד"],
-  "קולנוע יומית": ["צילום"],
+  הפקה: ["צילום", "כללי"],
+  סאונד: ["סאונד", "כללי"],
+  "קולנוע יומית": ["צילום", "כללי"],
 };
 
 function getLoanTypeEquipmentClassifications(loanType, categoryLoanTypes = {}) {

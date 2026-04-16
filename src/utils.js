@@ -475,7 +475,9 @@ export const INITIAL_EQUIPMENT = [
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 export const DEFAULT_CATEGORIES = ["מצלמות","עדשות","מיקרופונים","מקליטי אודיו","תאורה","חצובות","אביזרים"];
-export const SOUND_CATEGORIES = ["מיקרופונים","מקליטי אודיו","כבלים"];
+// Note: "כבלים" intentionally NOT included — cables are general gear used by both
+// sound and photo crews, so they default to "כללי" unless admin overrides.
+export const SOUND_CATEGORIES = ["מיקרופונים","מקליטי אודיו"];
 export const STATUSES    = ["תקין","פגום","בתיקון","נעלם"];
 export const PHOTO_CATEGORIES = ["מצלמות","עדשות","תאורה","חצובות","אביזרים","אביזרי צילום","מייצבי מצלמה","גימבלים","רחפנים","מוניטורים"];
 export const RESEND_API_KEY = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_RESEND_KEY : "";
@@ -547,14 +549,25 @@ export function getFutureTimeSlotsForDate(dateStr, slots = []) {
   });
 }
 
-export function normalizeEquipmentTagFlags(list = []) {
+export function normalizeEquipmentTagFlags(list = [], categoryTypes = {}) {
   return (list || []).map((item) => {
     if (!item || typeof item !== "object") return item;
     const normalized = { ...item };
-    if (typeof normalized.soundOnly !== "boolean") {
+    const hasAdminType = categoryTypes && Object.prototype.hasOwnProperty.call(categoryTypes, normalized.category);
+    const adminType = hasAdminType ? categoryTypes[normalized.category] : undefined;
+    if (adminType === "סאונד") {
+      normalized.soundOnly = true;
+      normalized.photoOnly = false;
+    } else if (adminType === "צילום") {
+      normalized.soundOnly = false;
+      normalized.photoOnly = true;
+    } else if (hasAdminType) {
+      // Admin explicitly classified as "כללי" (stored as "") → neither
+      normalized.soundOnly = false;
+      normalized.photoOnly = false;
+    } else {
+      // No admin override → auto-derive from hardcoded category defaults.
       normalized.soundOnly = SOUND_CATEGORIES.includes(normalized.category);
-    }
-    if (typeof normalized.photoOnly !== "boolean") {
       normalized.photoOnly = PHOTO_CATEGORIES.includes(normalized.category);
     }
     if (typeof normalized.privateLoanUnlimited !== "boolean") {

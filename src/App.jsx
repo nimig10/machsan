@@ -270,7 +270,9 @@ const INITIAL_EQUIPMENT = [
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const DEFAULT_CATEGORIES = ["מצלמות","עדשות","מיקרופונים","מקליטי אודיו","תאורה","חצובות","אביזרים"];
-const SOUND_CATEGORIES = ["מיקרופונים","מקליטי אודיו","כבלים"];
+// Note: "כבלים" intentionally NOT in SOUND_CATEGORIES — cables are general gear used
+// by both sound and photo crews, so they default to "כללי" unless admin overrides.
+const SOUND_CATEGORIES = ["מיקרופונים","מקליטי אודיו"];
 const STATUSES    = ["תקין","פגום","בתיקון","נעלם"];
 const PHOTO_CATEGORIES = ["מצלמות","עדשות","תאורה","חצובות","אביזרים","אביזרי צילום","מייצבי מצלמה","גימבלים","רחפנים","מוניטורים"];
 const RESEND_API_KEY = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_RESEND_KEY : "";
@@ -344,14 +346,29 @@ function getFutureTimeSlotsForDate(dateStr, slots = []) {
   });
 }
 
-function normalizeEquipmentTagFlags(list = []) {
+function normalizeEquipmentTagFlags(list = [], categoryTypes = {}) {
   return (list || []).map((item) => {
     if (!item || typeof item !== "object") return item;
     const normalized = { ...item };
-    if (typeof normalized.soundOnly !== "boolean") {
+    const hasAdminType = categoryTypes && Object.prototype.hasOwnProperty.call(categoryTypes, normalized.category);
+    const adminType = hasAdminType ? categoryTypes[normalized.category] : undefined;
+    if (adminType === "סאונד") {
+      // Admin-pinned as sound → honor
+      normalized.soundOnly = true;
+      normalized.photoOnly = false;
+    } else if (adminType === "צילום") {
+      // Admin-pinned as photo → honor
+      normalized.soundOnly = false;
+      normalized.photoOnly = true;
+    } else if (hasAdminType) {
+      // Admin explicitly classified as "כללי" (stored as "") → neither
+      normalized.soundOnly = false;
+      normalized.photoOnly = false;
+    } else {
+      // No admin override → auto-derive from hardcoded category defaults.
+      // ALWAYS re-apply (even if already boolean) so changes to defaults propagate
+      // to existing items (e.g. removing "כבלים" from SOUND_CATEGORIES).
       normalized.soundOnly = SOUND_CATEGORIES.includes(normalized.category);
-    }
-    if (typeof normalized.photoOnly !== "boolean") {
       normalized.photoOnly = PHOTO_CATEGORIES.includes(normalized.category);
     }
     if (typeof normalized.privateLoanUnlimited !== "boolean") {
@@ -995,9 +1012,9 @@ const CATEGORY_LOAN_TYPE_OPTIONS = ["פרטית", "הפקה", "סאונד", "ק�
 const EQUIPMENT_CLASSIFICATION_OPTIONS = ["סאונד", "צילום", "כללי"];
 const DEFAULT_LOAN_TYPE_CLASSIFICATIONS = {
   פרטית: ["כללי", "צילום", "סאונד"],
-  הפקה: ["צילום"],
-  סאונד: ["סאונד"],
-  "קולנוע יומית": ["צילום"],
+  הפקה: ["צילום", "כללי"],
+  סאונד: ["סאונד", "כללי"],
+  "קולנוע יומית": ["צילום", "כללי"],
 };
 
 function getLoanTypeEquipmentClassifications(loanType, categoryLoanTypes = {}) {
@@ -1372,7 +1389,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
         id: Date.now() + i + Math.random(),
         name, category: cat, description: desc, notes,
         total_quantity: qty, image: "📦", status: "תקין",
-      }])[0]));
+      }], categoryTypes)[0]));
       added++;
     });
     const previousEquipment = equipment;
@@ -1409,7 +1426,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   };
 
   const handleAiEquipmentImport = async (newItems, approvedCategories = []) => {
-    const normalizedItems = ensureUnits(normalizeEquipmentTagFlags(newItems || []));
+    const normalizedItems = ensureUnits(normalizeEquipmentTagFlags(newItems || [], categoryTypes));
     const updatedEquipment = [...(equipment || []), ...normalizedItems];
     const previousEquipment = equipment;
     const previousCategories = categories;
@@ -1476,7 +1493,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
 
   const save = async (form) => {
     setSaving(true);
-    const normalizedForm = normalizeEquipmentTagFlags([form])[0];
+    const normalizedForm = normalizeEquipmentTagFlags([form], categoryTypes)[0];
     let updated;
     if (modal.type==="add") {
       const item = ensureUnits({ ...normalizedForm, id: Date.now() });
@@ -1537,8 +1554,9 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
         : item
     ));
     const updatedTypes = { ...categoryTypes };
-    if (nextType === "סאונד" || nextType === "צילום") updatedTypes[categoryName] = nextType;
-    else delete updatedTypes[categoryName];
+    // Store "" for explicit "כללי" (general) so it's distinguishable from "never touched".
+    // This lets load-time normalization honor the admin's explicit general classification.
+    updatedTypes[categoryName] = (nextType === "סאונד" || nextType === "צילום") ? nextType : "";
     const previousEquipment = equipment;
     const previousTypes = categoryTypes;
     setEquipment(updated);
@@ -1888,7 +1906,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
         onClose={()=>setModal(null)}
         onAdd={async(name,type)=>{
           const updatedCats=[...categories, name];
-          const updatedTypes={...categoryTypes,...(type?{[name]:type}:{})};
+          const updatedTypes={...categoryTypes,...(type!==undefined?{[name]:type}:{})};
           setCategories(updatedCats);
           setCategoryTypes(updatedTypes);
           await Promise.all([storageSet("categories",updatedCats),storageSet("categoryTypes",updatedTypes)]);
@@ -1905,7 +1923,8 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
         onSave={async(action)=>{
           if(action.action==="add") {
             const updatedCats = [...categories, action.name];
-            const updatedTypes = {...categoryTypes, ...(action.type ? {[action.name]: action.type} : {})};
+            // Store "" for explicit "כללי" (general). Only skip when action.type is undefined.
+            const updatedTypes = {...categoryTypes, ...(action.type !== undefined ? {[action.name]: action.type} : {})};
             setCategories(updatedCats);
             setCategoryTypes(updatedTypes);
             await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes)]);
@@ -1924,8 +1943,9 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
             });
             const updatedTypes = {...categoryTypes};
             if(action.oldName !== action.newName) { delete updatedTypes[action.oldName]; }
-            if(action.type) updatedTypes[action.newName] = action.type;
-            else delete updatedTypes[action.newName];
+            // Store "" for explicit "כללי" so load-time normalization can honor it.
+            // action.type may be "סאונד" | "צילום" | "" (explicit general) | undefined (no change).
+            if(action.type !== undefined) updatedTypes[action.newName] = action.type;
             setCategories(updatedCats);
             setEquipment(updatedEq);
             setCategoryTypes(updatedTypes);
@@ -7194,7 +7214,7 @@ export default function App() {
 
   const applyPublicLiveSync = (key, value) => {
     if (key === "equipment" && Array.isArray(value)) {
-      const normalizedEquipment = normalizeEquipmentTagFlags(value).map(ensureUnits);
+      const normalizedEquipment = normalizeEquipmentTagFlags(value, categoryTypesRef.current).map(ensureUnits);
       if (!dataEquals(equipmentRef.current, normalizedEquipment)) {
         _setEquipment(normalizedEquipment);
       }
@@ -7235,7 +7255,7 @@ export default function App() {
 
       return {
         equipment: Array.isArray(eqR)
-          ? normalizeEquipmentTagFlags(eqR).map(ensureUnits)
+          ? normalizeEquipmentTagFlags(eqR, categoryTypesRef.current).map(ensureUnits)
           : equipmentRef.current,
         reservations: Array.isArray(resR)
           ? normalizeReservationsForArchive(resR)
@@ -7258,7 +7278,7 @@ export default function App() {
 
   const applyLecturerLiveSync = (key, value) => {
     if (key === "equipment" && Array.isArray(value)) {
-      const normalizedEquipment = normalizeEquipmentTagFlags(value).map(ensureUnits);
+      const normalizedEquipment = normalizeEquipmentTagFlags(value, categoryTypesRef.current).map(ensureUnits);
       if (!dataEquals(equipmentRef.current, normalizedEquipment)) _setEquipment(normalizedEquipment);
       return;
     }
@@ -7556,7 +7576,7 @@ export default function App() {
           const stds = studiosR.value;
           const stdBk = studioBkR.value;
 
-          const rawEquipment = normalizeEquipmentTagFlags(eq || INITIAL_EQUIPMENT);
+          const rawEquipment = normalizeEquipmentTagFlags(eq || INITIAL_EQUIPMENT, catTypes || {});
           const normalizedEquipment = rawEquipment.map(ensureUnits);
           const equipmentChanged = eq && JSON.stringify(normalizedEquipment) !== JSON.stringify(eq);
           const normalizedReservations = normalizeReservationsForArchive(res || []);

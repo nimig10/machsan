@@ -69,7 +69,17 @@
       "Bash(node -e ':*)",
       "Bash(node --check src/utils.js)",
       "Bash(node --check api/create-lesson-reservations.js)",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "Bash(git checkout:*)",
+      "Bash(git merge:*)",
+      "Bash(supabase --version)",
+      "Bash(winget --version)",
+      "Bash(powershell -Command ':*)",
+      "mcp__954344f7-d9a5-4d20-8d60-b2484bd62dea__list_migrations",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //PID 41168 //F)",
+      "Bash(ls dist/assets/*.js)",
+      "Bash(grep -l \"student_first_name\" dist/assets/*.js)"
     ]
   }
 }
