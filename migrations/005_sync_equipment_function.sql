@@ -102,9 +102,21 @@ BEGIN
 
   -- ── Recompute available_units ─────────────────────────────────────────────
   -- healthy units  = units with status = 'תקין'
-  -- reserved qty   = open reservations (not returned/cancelled) CURRENTLY ACTIVE
-  --                  i.e. borrow_date <= today AND return_date >= today.
-  --                  Future reservations don't reduce availability today.
+  -- reserved qty   = OPEN reservations whose date range overlaps today.
+  --
+  -- Reservation status taxonomy (CRITICAL — verified against src/):
+  --   OPEN (reduces availability):
+  --     'ממתין'             — pending approval
+  --     'אישור ראש מחלקה'   — pending dept head approval
+  --     'מאושר'             — approved
+  --     'פעילה'             — active
+  --     'באיחור'            — overdue (computed from 'מאושר' + past return_date)
+  --   CLOSED (does NOT reduce availability):
+  --     'הוחזר'             — returned
+  --     'נדחה'              — rejected
+  --     'בוטל' / 'מבוטל'    — cancelled (legacy, kept for safety)
+  --
+  -- Future reservations don't reduce availability today.
   UPDATE public.equipment eq
   SET available_units = GREATEST(
         (
@@ -119,7 +131,7 @@ BEGIN
             FROM public.reservation_items ri
             JOIN public.reservations_new r ON r.id = ri.reservation_id
             WHERE ri.equipment_id = eq.id
-              AND r.status NOT IN ('הוחזר', 'בוטל', 'מבוטל')
+              AND r.status NOT IN ('הוחזר', 'נדחה', 'בוטל', 'מבוטל')
               AND r.borrow_date <= CURRENT_DATE
               AND r.return_date >= CURRENT_DATE
           ), 0
