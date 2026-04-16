@@ -174,6 +174,20 @@ export async function storageSet(key, value) {
       const err = await res.text();
       console.error("storageSet error", key, err);
       restoreCacheValue(key, previousCachedValue);
+      // Shrink-guard hit: the server refused because this write would have
+      // shrunk a protected list by >20%. This is almost always a cache-
+      // staleness bug (another user added rows we don't know about). Tell
+      // the user to refresh instead of losing data.
+      if (res.status === 409 && /shrink_guard/i.test(err)) {
+        try {
+          const alertMsg = `🛑 פעולת השמירה נחסמה על ידי מנגנון הבטיחות בשרת.\n\nכנראה שמשתמש אחר הוסיף נתונים מאז שטענת את הדף. נתוני הדפדפן שלך מיושנים ואם היו נשמרים, הם היו מוחקים את השינויים האחרים.\n\nהעמוד ירוענן כעת כדי לקבל את המצב העדכני.`;
+          if (typeof window !== "undefined" && window.alert) window.alert(alertMsg);
+          if (typeof window !== "undefined" && window.location) {
+            setTimeout(() => window.location.reload(), 300);
+          }
+        } catch {}
+        return { ok: false, error: "shrink_guard_blocked", detail: err };
+      }
       return { ok: false, error: err };
     }
     mirrorReservationsIfNeeded(key, value);
