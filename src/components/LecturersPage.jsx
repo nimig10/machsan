@@ -628,7 +628,7 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                     <input className="form-input" value={editPhone} onChange={e => setEditPhone(e.target.value)}
                       placeholder="טלפון" style={inpStyle} />
                     <input className="form-input" type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)}
-                      placeholder="מייל" style={{ ...inpStyle, fontSize: 12 }} />
+                      placeholder="מייל" style={{ ...inpStyle, fontWeight: 700 }} />
                     <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
                       <button className="btn btn-primary btn-sm" style={{ flex: 1, fontSize: 13 }} onClick={() => saveInlineEdit(lec, { closeOnSuccess: true })}>✓ שמור</button>
                       <button className="btn btn-secondary btn-sm" style={{ flex: 1, fontSize: 13 }} onClick={() => setEditingId(null)}>✕ בטל</button>
@@ -653,7 +653,7 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                     </div>
                   )}
                   {lec.phone && <div style={{ fontSize: 12, color: "var(--text2)", marginBottom: 2 }}>📱 {lec.phone}</div>}
-                  {lec.email && <div style={{ fontSize: 12, color: "var(--text2)", wordBreak: "break-all" }}>✉️ {lec.email}</div>}
+                  {lec.email && <div style={{ fontSize: 14, fontWeight: 700, wordBreak: "break-all" }}>✉️ {lec.email}</div>}
                 </div>
                 <button className="btn btn-secondary btn-sm"
                   style={{ color: "var(--red)", borderColor: "var(--red)", fontSize: 13, flexShrink: 0 }}
@@ -710,7 +710,7 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                       </td>
                       <td style={td}>
                         <input className="form-input" type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)}
-                          style={{ ...inpStyle, fontSize: 12 }} />
+                          style={{ ...inpStyle, fontWeight: 700 }} />
                       </td>
                       <td style={td}>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
@@ -753,7 +753,7 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                       {getLecturerLastName(lec) || <span style={{ color: "var(--text3)" }}>—</span>}
                     </td>
                     <td style={td}>{lec.phone || <span style={{ color: "var(--text3)" }}>—</span>}</td>
-                    <td style={td}><span style={{ fontSize: 12 }}>{lec.email || <span style={{ color: "var(--text3)" }}>—</span>}</span></td>
+                    <td style={{ ...td, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis" }}>{lec.email || <span style={{ color: "var(--text3)" }}>—</span>}</td>
                     <td style={td}>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                         {tracks.length > 0

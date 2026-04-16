@@ -883,7 +883,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                               onChange={e=>setEditLastName(e.target.value)}/>
                           </td>
                           <td style={{...tdS,padding:"4px 8px"}}>
-                            <input style={{...inpS,fontSize:12}} type="email" value={editEmail}
+                            <input style={{...inpS,fontWeight:700,fontSize:14}} type="email" value={editEmail}
                               onClick={e=>e.stopPropagation()}
                               onChange={e=>setEditEmail(e.target.value)}/>
                           </td>
@@ -910,7 +910,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                           style={{borderBottom:"1px solid var(--border)",cursor:"pointer"}}>
                           <td style={{...tdS,fontWeight:700,fontSize:14}}>{getFirstName(s) || <span style={{color:"var(--text3)"}}>—</span>}</td>
                           <td style={{...tdS,fontWeight:700,fontSize:14}}>{getLastName(s) || <span style={{color:"var(--text3)"}}>—</span>}</td>
-                          <td style={{...tdS,fontSize:12,color:"var(--text3)"}}>{s.email}</td>
+                          <td style={{...tdS,fontWeight:700,fontSize:14,overflow:"hidden",textOverflow:"ellipsis"}}>{s.email || <span style={{color:"var(--text3)"}}>—</span>}</td>
                           <td style={{...tdS,fontSize:12,color:"var(--text3)"}}>{s.phone||"—"}</td>
                           <td style={tdS}>
                             {s.track
@@ -966,7 +966,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontWeight:800,fontSize:15}}>{getDisplayName(s)}</div>
                     {s.track&&<div style={{fontSize:11,color:"var(--accent)",fontWeight:700}}>🎓 {s.track}</div>}
-                    <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{s.email}</div>
+                    <div style={{fontSize:15,fontWeight:800,marginTop:2,wordBreak:"break-all"}}>{s.email}</div>
                     {s.phone&&<div style={{fontSize:11,color:"var(--text3)"}}>{s.phone}</div>}
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
