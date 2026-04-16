@@ -102,21 +102,24 @@ BEGIN
 
   -- ── Recompute available_units ─────────────────────────────────────────────
   -- healthy units  = units with status = 'תקין'
-  -- reserved qty   = OPEN reservations whose date range overlaps today.
+  -- reserved qty   = reservations whose equipment has PHYSICALLY LEFT the
+  --                  warehouse (mirrors src/App.jsx:1604-1611 "used()" and
+  --                  getEffectiveStatus in src/utils.js:339).
   --
-  -- Reservation status taxonomy (CRITICAL — verified against src/):
-  --   OPEN (reduces availability):
-  --     'ממתין'             — pending approval
-  --     'אישור ראש מחלקה'   — pending dept head approval
-  --     'מאושר'             — approved
-  --     'פעילה'             — active
-  --     'באיחור'            — overdue (computed from 'מאושר' + past return_date)
-  --   CLOSED (does NOT reduce availability):
-  --     'הוחזר'             — returned
-  --     'נדחה'              — rejected
-  --     'בוטל' / 'מבוטל'    — cancelled (legacy, kept for safety)
+  -- Reservation status taxonomy (verified against src/):
+  --   Stored values:  ממתין, אישור ראש מחלקה, מאושר, באיחור, הוחזר, נדחה
+  --   (also legacy:   פעילה, בוטל, מבוטל — kept for safety)
   --
-  -- Future reservations don't reduce availability today.
+  -- Equipment is OUT of warehouse iff:
+  --   * status = 'באיחור'                               (overdue, item not returned)
+  --   * status = 'פעילה'                                (legacy/explicit active)
+  --   * status = 'מאושר' AND borrow_date+borrow_time ≤ now (Israel local)
+  --     → this matches getEffectiveStatus() in src/utils.js:339 exactly.
+  --
+  -- All other statuses (ממתין, אישור ראש מחלקה, מאושר-future, הוחזר, נדחה,
+  -- בוטל, מבוטל) keep the equipment IN the warehouse. This matches the app's
+  -- existing used() logic at src/App.jsx:1604-1611 — logic unchanged, just
+  -- moved to SQL.
   UPDATE public.equipment eq
   SET available_units = GREATEST(
         (
@@ -131,9 +134,17 @@ BEGIN
             FROM public.reservation_items ri
             JOIN public.reservations_new r ON r.id = ri.reservation_id
             WHERE ri.equipment_id = eq.id
-              AND r.status NOT IN ('הוחזר', 'נדחה', 'בוטל', 'מבוטל')
-              AND r.borrow_date <= CURRENT_DATE
-              AND r.return_date >= CURRENT_DATE
+              AND (
+                r.status IN ('באיחור', 'פעילה')
+                OR (
+                  r.status = 'מאושר'
+                  AND r.borrow_date IS NOT NULL
+                  AND (
+                    r.borrow_date
+                    + COALESCE(NULLIF(r.borrow_time, '')::TIME, '00:00'::TIME)
+                  ) <= (NOW() AT TIME ZONE 'Asia/Jerusalem')
+                )
+              )
           ), 0
         ),
         0
