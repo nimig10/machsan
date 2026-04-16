@@ -57,7 +57,19 @@
       "Bash(npx --no-install vite build)",
       "Bash(git fetch:*)",
       "Bash(identify /c/machsan/public/LOGON1.png)",
-      "Bash(python3 -c \"from PIL import Image; img=Image.open\\('/c/machsan/public/LOGON1.png'\\); print\\(img.size\\)\")"
+      "Bash(python3 -c \"from PIL import Image; img=Image.open\\('/c/machsan/public/LOGON1.png'\\); print\\(img.size\\)\")",
+      "Bash(grep -nB1 \"jsonb_array_elements\" migrations/003_copy_data_from_store.sql)",
+      "mcp__0bf7b223-3594-4abb-86ee-c259d5ed16db__list_projects",
+      "mcp__0bf7b223-3594-4abb-86ee-c259d5ed16db__list_teams",
+      "mcp__0bf7b223-3594-4abb-86ee-c259d5ed16db__list_deployments",
+      "mcp__0bf7b223-3594-4abb-86ee-c259d5ed16db__get_runtime_logs",
+      "mcp__954344f7-d9a5-4d20-8d60-b2484bd62dea__execute_sql",
+      "mcp__954344f7-d9a5-4d20-8d60-b2484bd62dea__list_projects",
+      "mcp__954344f7-d9a5-4d20-8d60-b2484bd62dea__apply_migration",
+      "Bash(node -e ':*)",
+      "Bash(node --check src/utils.js)",
+      "Bash(node --check api/create-lesson-reservations.js)",
+      "Bash(npx eslint:*)"
     ]
   }
 }

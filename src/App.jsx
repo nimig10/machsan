@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus } from "./utils.js";
+import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, createLessonReservations } from "./utils.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
 import { CalendarGrid } from "./components/CalendarGrid.jsx";
@@ -4776,7 +4776,9 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       const kitId = initial?.id||`lk_${Date.now()}`;
       const baseRes = (reservations||[]).filter(r=>r.lesson_kit_id!==kitId);
 
-      // If no schedule — just save kit without reservations
+      // If no schedule — just save kit without reservations.
+      // We still route through the batch RPC so that any existing rows for
+      // this kit are deleted atomically and available_units is recomputed.
       if (finalSchedule.length === 0) {
         setSaving(true);
         const kit = {
@@ -4790,7 +4792,18 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         };
         const updatedKits = initial ? kits.map(k=>k.id===initial.id?kit:k) : [...kits, kit];
         setKits(updatedKits);
-        // Remove old reservations for this kit
+
+        // Empty reservations array → RPC just deletes old rows + re-syncs
+        // available_units. Items array is irrelevant in that path but we
+        // pass kitItems for completeness.
+        const rpcRes = await createLessonReservations(kitId, [], kitItems);
+        if (!rpcRes.ok) {
+          setSaving(false);
+          setLocalMsg({ type:"error", text:`❌ שגיאה בשמירה — ${rpcRes.detail || rpcRes.error || ""}` });
+          return;
+        }
+
+        // Remove old reservations for this kit from the local cache/state
         if(setReservations) setReservations(baseRes);
         const [r1, r2] = await Promise.all([
           storageSet("kits", updatedKits),
@@ -4875,30 +4888,20 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       const updatedKits = initial ? kits.map(k=>k.id===initial.id?kit:k) : [...kits, kit];
       setKits(updatedKits);
 
-      // Create/replace associated reservations (one per session)
-      //
-      // TODO (Stage 2b / migration 010): Route this through a dedicated
-      // batch RPC `create_lesson_reservations_v1(kit_id, reservations[], items)`
-      // that:
-      //   1. Deletes existing reservations where lesson_kit_id = kit_id
-      //   2. For each session, runs the same date-range overlap check as
-      //      create_reservation_v2 under a single transaction (so that
-      //      one session's inserts are visible to the next session's check)
-      //   3. Recomputes available_units for all touched equipment
-      //
-      // The current fetch-list → storageSet("reservations", fullList)
-      // pattern can theoretically race with a concurrent public-form submit
-      // (lesson creator's blob write could overwrite the student's row in
-      // the JSON cache). This is mitigated by migration 007's 60s grace
-      // period in sync_reservations_from_json — the normalized row in
-      // reservations_new is preserved even if the blob briefly drops it.
-      // Lessons are created infrequently and by a single admin, so the
-      // practical race window is small enough to defer to Stage 2b.
+      // Create/replace associated reservations (one per session) via the
+      // atomic batch RPC (migration 010, Stage 2b). The RPC deletes existing
+      // rows where lesson_kit_id = kitId, re-checks every session against
+      // reservations_new under FOR UPDATE locks held for the whole txn, and
+      // recomputes available_units for every touched equipment. A concurrent
+      // public-form submit for the same item serializes behind us — no more
+      // whole-blob overwrites silently dropping student reservations.
       const newRes = finalSchedule.map((s,i)=>({
         id: `${kitId}_s${i}`,
         lesson_kit_id: kitId,
         status: "מאושר",
         loan_type: "שיעור",
+        booking_kind: "lesson",
+        lesson_auto: true,
         student_name: effectiveInstructorName || instructorName.trim() || effectiveName || name.trim(),
         email: effectiveInstructorEmail || instructorEmail.trim(),
         phone: effectiveInstructorPhone || instructorPhone.trim(),
@@ -4907,11 +4910,34 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         borrow_time: s.startTime,
         return_date: s.date,
         return_time: s.endTime,
-        items: kitItems,
         created_at: new Date().toISOString(),
         overdue_notified: true,
       }));
-      const updatedRes = [...baseRes, ...newRes];
+
+      const rpcRes = await createLessonReservations(kitId, newRes, kitItems);
+      if (!rpcRes.ok) {
+        setSaving(false);
+        if (rpcRes.error === "not_enough_stock") {
+          // The pre-check above should normally catch this, but the RPC is
+          // the backstop — if a concurrent write made stock insufficient
+          // between our check and the RPC, surface it as a conflict message.
+          setLocalMsg({ type:"error", text:"❌ לא ניתן לשמור — חוסר ציוד זמין (ייתכן שהשאלה מתחרה נרשמה בדיוק עכשיו). נא לרענן ולנסות שוב." });
+        } else {
+          setLocalMsg({ type:"error", text:`❌ שגיאה בשמירת שיעורים — ${rpcRes.detail || rpcRes.error || "שגיאה לא ידועה"}` });
+        }
+        return;
+      }
+
+      // RPC succeeded — the normalized tables are now source-of-truth for this
+      // kit's reservations. Refresh local state + the JSON blob cache so the
+      // rest of the app (calendars, availability widget, etc.) sees the new
+      // rows before the next mirror cycle.
+      const newResForCache = newRes.map((r, i) => ({
+        ...r,
+        items: kitItems,
+        id: rpcRes.ids[i] || r.id,
+      }));
+      const updatedRes = [...baseRes, ...newResForCache];
       if(setReservations) setReservations(updatedRes);
 
       const [r1, r2] = await Promise.all([
