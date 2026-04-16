@@ -1,6 +1,6 @@
 // ReservationsPage.jsx — admin reservations management page (includes rejected + archive tabs)
 import { useEffect, useState } from "react";
-import { storageSet, storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, createReservation } from "../utils.js";
+import { storageSet, storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, createReservation, deleteReservation as deleteReservationRpc } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
@@ -334,16 +334,27 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
   const deleteReservation = async (id) => {
     const res = reservations.find(r => r.id === id);
     const updated = reservations.filter(r => r.id !== id);
-    // Optimistic UI — close modal + toast immediately, persist + log in background
+    // Optimistic UI — close modal + toast immediately, persist atomically via RPC.
+    // The old path used fire-and-forget storageSet('reservations', list),
+    // which took 2–14s across backup-write + real-write + mirror. During that
+    // window, the 3-min poll or realtime listener could see the stale row and
+    // briefly re-insert the card ("trash-button flicker"). `deleteReservation`
+    // (utils.js → /api/delete-reservation → delete_reservation_v1) runs the
+    // normalized delete + JSON strip + available_units recompute in one txn,
+    // so any subsequent listener sees the consistent post-delete state.
     setReservations(updated);
     setSelected(null);
     showToast("success", "הבקשה נמחקה");
     const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
-    storageSet("reservations", updated).catch(err => {
-      console.error("delete reservation persist failed:", err);
-      showToast("error", "המחיקה לא נשמרה בשרת — ייתכן שתחזור לאחר ריענון");
-    });
-    logActivity({ user_id: caller.id, user_name: caller.full_name, action: "reservation_delete", entity: "reservation", entity_id: String(id), details: { student: res?.student_name, loan_type: res?.loan_type } })
+    const rpc = await deleteReservationRpc(id);
+    if (!rpc.ok) {
+      console.error("deleteReservation RPC failed:", rpc);
+      showToast("error", "המחיקה נכשלה בשרת — הפריט עלול לחזור לאחר ריענון");
+      // Revert optimistic removal so the UI matches server truth on next poll.
+      if (res) setReservations(prev => prev.some(r => r.id === id) ? prev : [...prev, res]);
+      return;
+    }
+    logActivity({ user_id: caller.id, user_name: caller.full_name, action: "reservation_delete", entity: "reservation", entity_id: String(id), details: { student: res?.student_name, loan_type: res?.loan_type, rpc_source: rpc.source } })
       .then(logId => onLogCreated(logId))
       .catch(err => console.error("delete reservation log failed:", err));
   };

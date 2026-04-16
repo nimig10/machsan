@@ -1,6 +1,6 @@
 // ArchivePage.jsx — archive of returned reservations
 import { useState } from "react";
-import { storageSet, formatDate } from "../utils.js";
+import { formatDate, deleteReservation as deleteReservationRpc } from "../utils.js";
 
 export function ArchivePage({ reservations, setReservations, equipment, showToast }) {
   const archived = reservations.filter(r => r.status === "הוחזר");
@@ -11,11 +11,21 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
 
   const deleteRes = async (id) => {
     if(!window.confirm("למחוק בקשה זו מהארכיון לצמיתות?")) return;
+    // Atomic delete via delete_reservation_v1 RPC (migration 012). The old
+    // path — setReservations + storageSet('reservations', list) — had a
+    // 2–14s window during which polls/realtime could re-insert the row.
+    const prev = reservations;
     const updated = reservations.filter(r=>r.id!==id);
     setReservations(updated);
-    await storageSet("reservations", updated);
-    showToast("success", "הבקשה נמחקה מהארכיון");
     if(viewRes?.id===id) setViewRes(null);
+    const rpc = await deleteReservationRpc(id);
+    if (!rpc.ok) {
+      console.error("ArchivePage deleteRes RPC failed:", rpc);
+      showToast("error", "המחיקה נכשלה בשרת — הפריט עלול לחזור לאחר ריענון");
+      setReservations(prev);
+      return;
+    }
+    showToast("success", "הבקשה נמחקה מהארכיון");
   };
 
   const eqName = id => equipment.find(e=>e.id==id)?.name||"?";
