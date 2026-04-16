@@ -1893,6 +1893,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
           setCategoryTypes(updatedTypes);
           await Promise.all([storageSet("categories",updatedCats),storageSet("categoryTypes",updatedTypes)]);
           showToast("success",`קטגוריה "${name}" נוספה`);
+          { const _c = JSON.parse(sessionStorage.getItem("staff_user")||"{}"); logActivity({ user_id: _c.id, user_name: _c.full_name, action: "category_add", entity: "categories", entity_id: name, details: { name, type } }); }
           setModal(null);
         }}
       />}
@@ -1909,6 +1910,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
             setCategoryTypes(updatedTypes);
             await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes)]);
             showToast("success", `קטגוריה "${action.name}" נוספה`);
+            { const _c = JSON.parse(sessionStorage.getItem("staff_user")||"{}"); logActivity({ user_id: _c.id, user_name: _c.full_name, action: "category_add", entity: "categories", entity_id: action.name, details: { name: action.name, type: action.type } }); }
           } else if(action.action==="rename") {
             const updatedCats = categories.map(c => c===action.oldName ? action.newName : c);
             const updatedEq = equipment.map(e => {
@@ -1929,6 +1931,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
             setCategoryTypes(updatedTypes);
             await Promise.all([storageSet("categories", updatedCats), storageSet("equipment", updatedEq), storageSet("categoryTypes", updatedTypes)]);
             showToast("success", `קטגוריה עודכנה`);
+            { const _c = JSON.parse(sessionStorage.getItem("staff_user")||"{}"); logActivity({ user_id: _c.id, user_name: _c.full_name, action: "category_rename", entity: "categories", entity_id: action.newName, details: { old_name: action.oldName, new_name: action.newName, type: action.type } }); }
           } else if(action.action==="delete") {
             const hasItems = equipment.some(e => e.category===action.name);
             if(hasItems) { showToast("error", "לא ניתן למחוק — יש ציוד בקטגוריה זו"); return; }
@@ -1939,6 +1942,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
             setCategoryTypes(updatedTypes);
             await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes)]);
             showToast("success", `קטגוריה "${action.name}" נמחקה`);
+            { const _c = JSON.parse(sessionStorage.getItem("staff_user")||"{}"); logActivity({ user_id: _c.id, user_name: _c.full_name, action: "category_delete", entity: "categories", entity_id: action.name, details: { name: action.name } }); }
           }
         }}
       />}
@@ -3888,7 +3892,12 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
     setDeptHeads(updated);
     const r = await storageSet("deptHeads", updated);
     setDhSaving(false);
-    if(r.ok) { showToast("success", `${name} נוסף/ה כראש מחלקה`); setDhForm(emptyDhForm); setAddingDh(false); }
+    if(r.ok) {
+      showToast("success", `${name} נוסף/ה כראש מחלקה`);
+      const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+      logActivity({ user_id: caller.id, user_name: caller.full_name, action: "dept_head_add", entity: "deptHeads", entity_id: String(updated[updated.length-1].id), details: { name, email, role: dhForm.role } });
+      setDhForm(emptyDhForm); setAddingDh(false);
+    }
     else showToast("error","❌ שגיאה בשמירה");
   };
 
@@ -3901,15 +3910,23 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
     setDeptHeads(updated);
     const r = await storageSet("deptHeads", updated);
     setDhSaving(false);
-    if(r.ok) { showToast("success","פרטי ראש המחלקה עודכנו"); setEditDh(null); }
+    if(r.ok) {
+      showToast("success","פרטי ראש המחלקה עודכנו");
+      const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+      logActivity({ user_id: caller.id, user_name: caller.full_name, action: "dept_head_edit", entity: "deptHeads", entity_id: String(editDh.id), details: { name, email } });
+      setEditDh(null);
+    }
     else showToast("error","❌ שגיאה בשמירה");
   };
 
   const delDh = async (id) => {
+    const target = deptHeads.find(dh=>dh.id===id);
     const updated = deptHeads.filter(dh=>dh.id!==id);
     setDeptHeads(updated);
     await storageSet("deptHeads", updated);
     showToast("success","ראש המחלקה הוסר");
+    const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+    logActivity({ user_id: caller.id, user_name: caller.full_name, action: "dept_head_delete", entity: "deptHeads", entity_id: String(id), details: { name: target?.name, email: target?.email } });
   };
 
   // Add-new form state
@@ -3948,7 +3965,11 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
     setTeamMembers(updated);
     const _tmNew = await storageSet("teamMembers", updated);
     if(!_tmNew.ok) showToast("error", "❌ שגיאה בשמירה — נסה שוב");
-    else showToast("success", `${name} נוסף לצוות`);
+    else {
+      showToast("success", `${name} נוסף לצוות`);
+      const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+      logActivity({ user_id: caller.id, user_name: caller.full_name, action: "team_member_add", entity: "teamMembers", entity_id: String(updated[updated.length-1].id), details: { name, email, role: addForm.role } });
+    }
     setAddForm(emptyForm);
   };
 
@@ -3968,16 +3989,25 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
     setTeamMembers(updated);
     const _tmEditRes = await storageSet("teamMembers", updated);
     if(!_tmEditRes.ok) showToast("error", "❌ שגיאה בשמירה — נסה שוב");
-    else showToast("success", "איש צוות עודכן");
+    else {
+      showToast("success", "איש צוות עודכן");
+      const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+      logActivity({ user_id: caller.id, user_name: caller.full_name, action: "team_member_edit", entity: "teamMembers", entity_id: String(editMember.id), details: { name, email } });
+    }
     setEditMember(null);
   };
 
   const del = async (id) => {
+    const target = teamMembers.find(m => m.id===id);
     const updated = teamMembers.filter(m => m.id!==id);
     setTeamMembers(updated);
     const _tmDelRes = await storageSet("teamMembers", updated);
     if(!_tmDelRes.ok) showToast("error", "❌ שגיאה בשמירה");
-    else showToast("success", "איש צוות הוסר");
+    else {
+      showToast("success", "איש צוות הוסר");
+      const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+      logActivity({ user_id: caller.id, user_name: caller.full_name, action: "team_member_delete", entity: "teamMembers", entity_id: String(id), details: { name: target?.name, email: target?.email } });
+    }
   };
 
   const renderLoanTypeButtons = (form, setForm) => (
