@@ -1135,7 +1135,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [step, setStep]       = useState(initialStep);
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const swipeTouchRef = useRef(null);
-  const [form, setForm]       = useState({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:"",production_reason:""});
+  const [form, setForm]       = useState({student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:"",production_reason:""});
   const [items, setItems]     = useState([]);
   const [agreed, setAgreed]   = useState(false);
   const [done, setDone]       = useState(false);
@@ -1241,13 +1241,27 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   useEffect(() => {
     if (loggedInStudent) {
       sessionStorage.setItem("public_student", JSON.stringify(loggedInStudent));
-      setForm(p => ({
-        ...p,
-        student_name: loggedInStudent.name || p.student_name,
-        email: loggedInStudent.email || p.email,
-        ...(loggedInStudent.phone ? { phone: loggedInStudent.phone } : {}),
-        ...(loggedInStudent.track ? { course: loggedInStudent.track } : {}),
-      }));
+      setForm(p => {
+        // Prefer explicit firstName/lastName; fall back to splitting `name`.
+        const explicitFn = String(loggedInStudent.firstName||"").trim();
+        const explicitLn = String(loggedInStudent.lastName ||"").trim();
+        let fn = explicitFn;
+        let ln = explicitLn;
+        if (!fn && !ln) {
+          const parts = String(loggedInStudent.name||"").trim().split(/\s+/).filter(Boolean);
+          fn = parts[0] || ""; ln = parts.slice(1).join(" ");
+        }
+        const combined = [fn, ln].filter(Boolean).join(" ");
+        return {
+          ...p,
+          student_first_name: fn || p.student_first_name,
+          student_last_name:  ln || p.student_last_name,
+          student_name: combined || p.student_name,
+          email: loggedInStudent.email || p.email,
+          ...(loggedInStudent.phone ? { phone: loggedInStudent.phone } : {}),
+          ...(loggedInStudent.track ? { course: loggedInStudent.track } : {}),
+        };
+      });
     } else {
       sessionStorage.removeItem("public_student");
       sessionStorage.removeItem("public_view");
@@ -1639,7 +1653,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     } catch {}
     setLoggedInStudent(matchedStudent);
     setLoginError("");
-    set("student_name", matchedStudent.name);
+    applyStudentIdentity(matchedStudent);
     set("email", matchedStudent.email);
     if (matchedStudent.phone) set("phone", matchedStudent.phone);
     if (matchedStudent.track) set("course", matchedStudent.track);
@@ -1777,6 +1791,45 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   }, [certifications, loggedInStudent]);
 
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  // ── Name split helpers ──────────────────────────────────────────────────
+  // The public form keeps three fields in lockstep: student_first_name,
+  // student_last_name, and the combined student_name used by every payload,
+  // reservation, certification lookup, etc.
+  const splitFullName = (full) => {
+    const parts = String(full||"").trim().split(/\s+/).filter(Boolean);
+    return { first: parts[0] || "", last: parts.slice(1).join(" ") };
+  };
+  const setStudentFirstName = (v) => setForm(p => {
+    const fn = String(v||"");
+    const ln = String(p.student_last_name||"").trim();
+    const combined = [fn.trim(), ln].filter(Boolean).join(" ");
+    return { ...p, student_first_name: fn, student_name: combined };
+  });
+  const setStudentLastName = (v) => setForm(p => {
+    const fn = String(p.student_first_name||"").trim();
+    const ln = String(v||"");
+    const combined = [fn, ln.trim()].filter(Boolean).join(" ");
+    return { ...p, student_last_name: ln, student_name: combined };
+  });
+  // Use when we receive a canonical student record (login, account update).
+  // Prefer explicit firstName/lastName; fall back to splitting `name`.
+  const applyStudentIdentity = (stu) => setForm(p => {
+    const explicitFn = String(stu?.firstName||"").trim();
+    const explicitLn = String(stu?.lastName ||"").trim();
+    let fn = explicitFn;
+    let ln = explicitLn;
+    if (!fn && !ln) {
+      const sp = splitFullName(stu?.name);
+      fn = sp.first; ln = sp.last;
+    }
+    return {
+      ...p,
+      student_first_name: fn,
+      student_last_name:  ln,
+      student_name: [fn, ln].filter(Boolean).join(" "),
+    };
+  });
   const setSoundDayLoan = (enabled) => {
     if (!enabled) {
       setForm((prev) => ({ ...prev, sound_day_loan:false, sound_night_loan:false, studio_booking_id:"" }));
@@ -2003,7 +2056,10 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const availableReturnSlots = isCinemaLoan
     ? cinemaMaxReturnSlots.filter((slot) => availableReturnSlotsBase.includes(slot))
     : availableReturnSlotsBase;
-  const ok1 = form.student_name && form.email && form.phone && form.course && form.loan_type &&
+  // Production flow → student_name is the director's full name (single input).
+  // Private / sound flow → student_first_name is the required field (last name optional).
+  const nameOk = isProductionLoan ? !!form.student_name : !!form.student_first_name;
+  const ok1 = nameOk && form.email && form.phone && form.course && form.loan_type &&
     (!isProductionLoan || (form.crew_photographer_name && form.crew_photographer_phone));
 
   // ── Certification lookup ──
@@ -2616,7 +2672,7 @@ ${inventory}
     showToast("success","הבקשה נשלחה בהצלחה!");
   };
 
-  const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:"",production_reason:""}); setItems([]); setAgreed(false); };
+  const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:"",production_reason:""}); setItems([]); setAgreed(false); };
 
   const VIEWS = ["equipment", "studios", "daily", "my-bookings"];
   const handleFormSwipeStart = (e) => {
@@ -2963,11 +3019,30 @@ ${inventory}
                 💡 <strong>במאי ההפקה</strong> הוא האחראי הראשי על קבלתו והחזרתו התקינה של הציוד
               </div>
             )}
-            <div className="grid-2">
-              <div className="form-group"><label className="form-label">{isProductionLoan?"שם במאי ההפקה *":"שם מלא *"}</label><input className="form-input" name="student_name" autoComplete="name" value={form.student_name} onChange={e=>set("student_name",e.target.value)}/></div>
-              <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" name="phone" autoComplete="tel" value={form.phone} onChange={e=>set("phone",e.target.value)}/></div>
-            </div>
-            <div className="form-group"><label className="form-label">אימייל *</label><input type="email" className="form-input" name="email" autoComplete="email" value={form.email} onChange={e=>set("email",e.target.value)}/></div>
+            {isProductionLoan ? (
+              <div className="grid-2">
+                <div className="form-group"><label className="form-label">שם במאי ההפקה *</label><input className="form-input" name="student_name" autoComplete="name" value={form.student_name} onChange={e=>{
+                  const v = e.target.value;
+                  const parts = String(v||"").trim().split(/\s+/).filter(Boolean);
+                  setForm(p => ({ ...p, student_name: v, student_first_name: parts[0]||"", student_last_name: parts.slice(1).join(" ") }));
+                }}/></div>
+                <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" name="phone" autoComplete="tel" value={form.phone} onChange={e=>set("phone",e.target.value)}/></div>
+              </div>
+            ) : (
+              <>
+                <div className="grid-2">
+                  <div className="form-group"><label className="form-label">שם פרטי *</label><input className="form-input" name="student_first_name" autoComplete="given-name" value={form.student_first_name} onChange={e=>setStudentFirstName(e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label">שם משפחה</label><input className="form-input" name="student_last_name" autoComplete="family-name" value={form.student_last_name} onChange={e=>setStudentLastName(e.target.value)}/></div>
+                </div>
+                <div className="grid-2">
+                  <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" name="phone" autoComplete="tel" value={form.phone} onChange={e=>set("phone",e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label">אימייל *</label><input type="email" className="form-input" name="email" autoComplete="email" value={form.email} onChange={e=>set("email",e.target.value)}/></div>
+                </div>
+              </>
+            )}
+            {isProductionLoan && (
+              <div className="form-group"><label className="form-label">אימייל *</label><input type="email" className="form-input" name="email" autoComplete="email" value={form.email} onChange={e=>set("email",e.target.value)}/></div>
+            )}
             <div className="grid-2">
               <div className="form-group"><label className="form-label">קורס / כיתה *</label><input className="form-input" value={form.course} onChange={e=>set("course",e.target.value)}/></div>
               <div className="form-group"><label className="form-label">שם הפרויקט</label><input className="form-input" value={form.project_name} onChange={e=>set("project_name",e.target.value)}/></div>
@@ -3467,7 +3542,7 @@ ${inventory}
           };
           // Update local state so the UI reflects the change immediately.
           setLoggedInStudent(updatedStudent);
-          set("student_name", updatedStudent.name || "");
+          applyStudentIdentity(updatedStudent);
           set("email",        updatedStudent.email || "");
           if (updatedStudent.phone != null) set("phone", updatedStudent.phone || "");
           // The backend already wrote the updated certifications.students[]
