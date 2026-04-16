@@ -141,8 +141,8 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
     const baseId = Date.now();
     const normalizedStudents = (Array.isArray(newStudents) ? newStudents : [])
       .map((student, index) => {
-        // Prefer explicit firstName/lastName from AI (שם פרטי + שם משפחה columns);
-        // fall back to splitting the combined `name` when only one column exists.
+        // Prefer explicit firstName/lastName from AI (שם פרטי + שם משפחה columns).
+        // Fall back to splitting the combined `name` when only one column exists.
         const rawFirst = String(student?.firstName || "").trim();
         const rawLast  = String(student?.lastName  || "").trim();
         let firstName  = rawFirst;
@@ -150,6 +150,12 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
         let name       = String(student?.name || "").trim();
         if (!firstName && !lastName && name) {
           const split = splitName(name);
+          firstName = split.firstName;
+          lastName  = split.lastName;
+        } else if (firstName && !lastName && /\s/.test(firstName)) {
+          // Legacy 1-column file: AI dumped the full name into firstName.
+          // Split it so firstName/lastName stay clean.
+          const split = splitName(firstName);
           firstName = split.firstName;
           lastName  = split.lastName;
         }
