@@ -155,6 +155,7 @@ async function storageSet(key, value) {
       return { ok: false, error: err };
     }
     mirrorReservationsIfNeeded(key, value);
+    mirrorEquipmentIfNeeded(key, value);
     return { ok: true };
   } catch(e) {
     console.error("storageSet network error", key, e);
@@ -163,8 +164,8 @@ async function storageSet(key, value) {
   }
 }
 
-// Dual-write mirror for reservations. Fire-and-forget — failures are logged,
-// never block the primary write. See migration 004.
+// Dual-write mirrors — fire-and-forget, failures are logged, never block the
+// primary write. See migrations 004 (reservations) and 005 (equipment).
 function mirrorReservationsIfNeeded(key, value) {
   if (key !== "reservations" || !Array.isArray(value)) return;
   fetch("/api/sync-reservations", {
@@ -172,6 +173,15 @@ function mirrorReservationsIfNeeded(key, value) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ reservations: value }),
   }).catch(e => console.warn("mirror(reservations) failed:", e?.message || e));
+}
+
+function mirrorEquipmentIfNeeded(key, value) {
+  if (key !== "equipment" || !Array.isArray(value)) return;
+  fetch("/api/sync-equipment", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ equipment: value }),
+  }).catch(e => console.warn("mirror(equipment) failed:", e?.message || e));
 }
 
 // ─── DB DIAGNOSTICS (accessible from browser console) ────────────────────────

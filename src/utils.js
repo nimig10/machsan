@@ -177,6 +177,7 @@ export async function storageSet(key, value) {
       return { ok: false, error: err };
     }
     mirrorReservationsIfNeeded(key, value);
+    mirrorEquipmentIfNeeded(key, value);
     return { ok: true };
   } catch(e) {
     console.error("storageSet network error", key, e);
@@ -185,9 +186,9 @@ export async function storageSet(key, value) {
   }
 }
 
-// ─── DUAL-WRITE MIRROR: reservations → new normalized tables ────────────────
+// ─── DUAL-WRITE MIRRORS: reservations + equipment → new normalized tables ────
 // Fire-and-forget. Failures are logged but never block the primary write.
-// Removed when migration stage 5 retires the store.reservations blob.
+// Removed when migration stage 5 retires the store blobs.
 function mirrorReservationsIfNeeded(key, value) {
   if (key !== "reservations" || !Array.isArray(value)) return;
   fetch("/api/sync-reservations", {
@@ -195,6 +196,15 @@ function mirrorReservationsIfNeeded(key, value) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ reservations: value }),
   }).catch(e => console.warn("mirror(reservations) failed:", e?.message || e));
+}
+
+function mirrorEquipmentIfNeeded(key, value) {
+  if (key !== "equipment" || !Array.isArray(value)) return;
+  fetch("/api/sync-equipment", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ equipment: value }),
+  }).catch(e => console.warn("mirror(equipment) failed:", e?.message || e));
 }
 
 // ─── INITIAL DATA ─────────────────────────────────────────────────────────────
