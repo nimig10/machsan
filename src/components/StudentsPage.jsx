@@ -141,12 +141,23 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
     const baseId = Date.now();
     const normalizedStudents = (Array.isArray(newStudents) ? newStudents : [])
       .map((student, index) => {
-        const name = String(student?.name || "").trim();
-        const split = splitName(name);
+        // Prefer explicit firstName/lastName from AI (שם פרטי + שם משפחה columns);
+        // fall back to splitting the combined `name` when only one column exists.
+        const rawFirst = String(student?.firstName || "").trim();
+        const rawLast  = String(student?.lastName  || "").trim();
+        let firstName  = rawFirst;
+        let lastName   = rawLast;
+        let name       = String(student?.name || "").trim();
+        if (!firstName && !lastName && name) {
+          const split = splitName(name);
+          firstName = split.firstName;
+          lastName  = split.lastName;
+        }
+        if (!name) name = [firstName, lastName].filter(Boolean).join(" ");
         return {
           id: student?.id || `stu_ai_${baseId}_${index}`,
-          firstName: split.firstName,
-          lastName: split.lastName,
+          firstName,
+          lastName,
           name,
           email: String(student?.email || "").trim().toLowerCase(),
           phone: String(student?.phone || "").trim(),

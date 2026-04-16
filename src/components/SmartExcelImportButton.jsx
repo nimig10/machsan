@@ -3,11 +3,17 @@ import * as XLSX from "xlsx";
 
 const DEFAULT_GUIDANCE = `אני מעביר לך תוכן גולמי (CSV) שחולץ מקובץ אקסל של סטודנטים.
 המשימה שלך:
-1. חלץ את הסטודנטים: שם מלא (name), טלפון (phone), אימייל (email).
+1. חלץ את הסטודנטים: שם פרטי (firstName), שם משפחה (lastName), טלפון (phone), אימייל (email).
 2. חפש מסלול לימודים — עשוי להופיע כ"מסלול", "תוכנית לימודים", "מחלקה", "קורס", "מגמה" — ושייך אותו (track) לכל הסטודנטים.
-3. זיהוי חכם של שמות עמודות: "תלמיד"/"סטודנט"/"שם" = name, "דוא"ל"/"מייל"/"email"/"mail" = email, "נייד"/"סל"/"טל"/"phone" = phone.
-4. IMPORTANT: חלץ את כתובת המייל בדיוק כפי שהיא מופיעה — כולל כתובות @example.com, @test.com, כתובות פיקטיביות, או כל כתובת אחרת. אל תסנן ואל תדלג על כתובות מייל.
-5. התעלם משורות ריקות, כותרות לא רלוונטיות, מספרי סידורי ושורות סיכום.`;
+3. זיהוי חכם של שמות עמודות:
+   - "שם פרטי"/"first"/"given" = firstName
+   - "שם משפחה"/"משפחה"/"last"/"surname"/"family" = lastName
+   - "שם"/"שם מלא"/"תלמיד"/"סטודנט" לבד (בלי עמודה של שם משפחה) = הכנס ל-firstName ואת lastName השאר ריק
+   - "דוא"ל"/"מייל"/"email"/"mail" = email
+   - "נייד"/"סל"/"טל"/"phone" = phone
+4. IMPORTANT: אם יש שתי עמודות נפרדות — שם פרטי ושם משפחה — החזר אותן בנפרד ב-firstName ו-lastName. אל תדרוס ואל תאחד אותן.
+5. IMPORTANT: חלץ את כתובת המייל בדיוק כפי שהיא מופיעה — כולל כתובות @example.com, @test.com, כתובות פיקטיביות, או כל כתובת אחרת. אל תסנן ואל תדלג על כתובות מייל.
+6. התעלם משורות ריקות, כותרות לא רלוונטיות, מספרי סידורי ושורות סיכום.`;
 
 const fetchWithRetry = async (url, options, maxRetries = 5) => {
   const delays = [2000, 5000, 10000, 20000, 32000];
@@ -63,18 +69,24 @@ const parseGeneratedJson = (text = "") => {
 const normalizeImportedStudents = (students = []) => (
   (Array.isArray(students) ? students : [])
     .map((student) => {
-      const name = String(student?.name || "").trim();
-      const email = String(student?.email || "").trim().toLowerCase();
-      const phone = String(student?.phone || "").trim();
-      const track = String(student?.track || "").trim();
+      const firstName = String(student?.firstName || "").trim();
+      const lastName  = String(student?.lastName  || "").trim();
+      // Prefer explicit first/last if provided; otherwise fall back to combined name.
+      const combined  = [firstName, lastName].filter(Boolean).join(" ");
+      const name      = combined || String(student?.name || "").trim();
+      const email     = String(student?.email || "").trim().toLowerCase();
+      const phone     = String(student?.phone || "").trim();
+      const track     = String(student?.track || "").trim();
       return {
+        firstName,
+        lastName,
         name,
         email: email.includes("@") ? email : "",
         phone,
         track,
       };
     })
-    .filter((student) => student.name)
+    .filter((student) => student.name || student.firstName)
 );
 
 export default function SmartExcelImportButton({ onImportSuccess, showToast }) {
@@ -106,12 +118,14 @@ ${csvText}
           items: {
             type: "OBJECT",
             properties: {
+              firstName: { type: "STRING" },
+              lastName: { type: "STRING" },
               name: { type: "STRING" },
               phone: { type: "STRING" },
               email: { type: "STRING" },
               track: { type: "STRING" },
             },
-            required: ["name", "email", "phone", "track"],
+            required: ["firstName", "email", "phone", "track"],
           },
         },
       },
