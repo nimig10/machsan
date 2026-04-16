@@ -410,6 +410,26 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
   const allowedEquipmentClassifications = getLoanTypeEquipmentClassifications(loanType, categoryLoanTypes);
   const visibleAvailEq = availEq.filter((eq) => matchesEquipmentLoanType(eq, loanType, categoryLoanTypes));
   const baseCategories = categories.filter((category) => visibleAvailEq.some((eq) => eq.category === category));
+
+  // DIAGNOSTIC: expose "ציוד נוסף" state for debugging — remove once resolved
+  if (typeof window !== "undefined") {
+    const target = "ציוד נוסף";
+    const targetItems = availEq.filter((e) => e.category === target);
+    window.__DEBUG_ZIUD_NOSAF__ = {
+      loanType,
+      allowedEquipmentClassifications,
+      categoryLoanTypesForLoanType: categoryLoanTypes?.[loanType],
+      totalInAvailEq: targetItems.length,
+      totalInVisibleAvailEq: visibleAvailEq.filter((e) => e.category === target).length,
+      targetCategoryInCategoriesArray: categories.includes(target),
+      items: targetItems.map((e) => ({
+        id: e.id, name: e.name, category: e.category,
+        soundOnly: e.soundOnly, photoOnly: e.photoOnly,
+        avail: e.avail, passesFilter: matchesEquipmentLoanType(e, loanType, categoryLoanTypes),
+      })),
+    };
+    console.log("[DEBUG ציוד נוסף]", window.__DEBUG_ZIUD_NOSAF__);
+  }
   const filteredCategories = selectedCats.length===0 ? baseCategories : baseCategories.filter(c=>selectedCats.includes(c));
 
   return (
