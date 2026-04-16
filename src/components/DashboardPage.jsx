@@ -84,8 +84,9 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
     { key:"סאונד", label:"סאונד", icon:"🎙️" },
     { key:"קולנוע יומית", label:"קולנוע יומית", icon:"🎥" },
     { key:"שיעור", label:"שיעור", icon:"📽️" },
+    { key:"צוות", label:"איש צוות", icon:"💼" },
   ];
-  const LOAN_TYPE_ICON = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","שיעור":"📽️","קולנוע יומית":"🎥" };
+  const LOAN_TYPE_ICON = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","שיעור":"📽️","קולנוע יומית":"🎥","צוות":"💼" };
 
   const activeRes = reservations.filter(r =>
     r.status !== "הוחזר" && r.borrow_date && r.return_date &&
@@ -97,6 +98,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
   let nonLessonIdx = 0;
   activeRes.forEach(r => {
     if(r.loan_type==="שיעור") colorMap[r.id] = ["rgba(155,89,182,0.7)","#fff"];
+    else if(r.loan_type==="צוות") colorMap[r.id] = ["rgba(100,120,150,0.75)","#fff"];
     else { colorMap[r.id] = SPAN_COLORS[nonLessonIdx % SPAN_COLORS.length]; nonLessonIdx++; }
   });
   // aggregate by equipment
