@@ -378,6 +378,66 @@ export async function updateReservationStatus(id, status, options = {}) {
   }
 }
 
+// ─── DELETE RESERVATION (atomic, no flicker) ──────────────────────────────────
+// Wraps POST /api/delete-reservation, which calls the RPC delete_reservation_v1
+// (migration 012). That RPC deletes the row from reservations_new +
+// reservation_items, strips it from the store.reservations JSON mirror, and
+// recomputes available_units for touched equipment — ALL in one transaction.
+//
+// Why this exists:
+//   The legacy path was `setReservations(list without row)` + fire-and-forget
+//   `storageSet('reservations', list)`. The storageSet pipeline takes 2–14s
+//   (backup write → real write → mirror). During that window, concurrent polls
+//   or realtime events could refetch the stale state and briefly re-insert the
+//   deleted card ("trash-button flicker"). By routing through this single
+//   atomic RPC, a concurrent listener fires AFTER the commit and sees the
+//   consistent post-delete state.
+//
+// Returns:
+//   { ok: true,  id, source, normalized_deleted, items_deleted,
+//                json_shrunk_by, recomputed_equipment }  on success
+//     source ∈ 'normalized' | 'json_only' | 'not_found'
+//     'not_found' is still treated as ok=true (idempotent retry).
+//   { ok: false, error, detail }                           on failure
+export async function deleteReservation(id, options = {}) {
+  const { timeoutMs = 12000 } = options;
+  if (!id) {
+    return { ok: false, error: "missing_arg", detail: "id is required" };
+  }
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    const res = await fetch("/api/delete-reservation", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ id: String(id) }),
+      signal:  ctrl.signal,
+    });
+    clearTimeout(t);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      console.error("deleteReservation error:", res.status, data);
+      return {
+        ok:     false,
+        error:  data.error  || "rpc_error",
+        detail: data.detail || `HTTP ${res.status}`,
+      };
+    }
+    return {
+      ok:                   true,
+      id:                   data.id,
+      source:               data.source,
+      normalized_deleted:   data.normalized_deleted ?? 0,
+      items_deleted:        data.items_deleted      ?? 0,
+      json_shrunk_by:       data.json_shrunk_by     ?? 0,
+      recomputed_equipment: data.recomputed_equipment ?? 0,
+    };
+  } catch (e) {
+    console.error("deleteReservation network error:", e);
+    return { ok: false, error: "network_error", detail: e.message };
+  }
+}
+
 // ─── DUAL-WRITE MIRRORS: reservations + equipment → new normalized tables ────
 // Fire-and-forget. Failures are logged but never block the primary write.
 // Removed when migration stage 5 retires the store blobs.

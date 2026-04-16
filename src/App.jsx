@@ -4288,18 +4288,40 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     kits.some(k=>k.id!==excludeId && normalizeKitName(k.name)===normalizeKitName(name));
 
   const del = async (id, name) => {
+    const prevKit = kits.find(k=>k.id===id);
     const updated = kits.filter(k=>k.id!==id);
     setKits(updated);
     // also remove associated lesson reservations
+    let removedReservations = 0;
     if(reservations && setReservations) {
       const updatedRes = reservations.filter(r=>r.lesson_kit_id!==id);
       if(updatedRes.length!==reservations.length) {
+        removedReservations = reservations.length - updatedRes.length;
         setReservations(updatedRes);
         await storageSet("reservations", updatedRes);
       }
     }
     await storageSet("kits", updated);
     showToast("success", `ערכה "${name}" נמחקה`);
+    // Audit log — without this, the 2026-04-16 silent-delete incident left no
+    // trace. A logged "kit_delete" tells us who clicked the button and when.
+    try {
+      const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+      logActivity({
+        user_id: caller.id,
+        user_name: caller.full_name,
+        action: "kit_delete",
+        entity: "kit",
+        entity_id: String(id),
+        details: {
+          name,
+          kitType: prevKit?.kitType || "student",
+          lessonId: prevKit?.lessonId || null,
+          item_count: (prevKit?.items||[]).length,
+          removed_reservations: removedReservations,
+        },
+      }).catch(err => console.error("kit_delete log failed:", err));
+    } catch (e) { console.error("kit_delete log setup failed:", e); }
   };
 
   // ── Student Kit Form ──────────────────────────────────────────────────────
@@ -4349,7 +4371,29 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       setKits(updated);
       const r = await storageSet("kits", updated);
       showToast(r.ok?"success":"error", r.ok ? (initial?"הערכה עודכנה":`ערכה "${trimmedName}" נוצרה`) : "❌ שגיאה בשמירה");
-      if(r.ok) onDone();
+      if(r.ok) {
+        // Audit log for kit create/edit — critical context for silent-delete
+        // investigations (e.g. 2026-04-16 incident where a stale cache wiped
+        // 3 kits + 14 reservations with no trace in activity_logs).
+        try {
+          const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+          logActivity({
+            user_id: caller.id,
+            user_name: caller.full_name,
+            action: initial ? "kit_edit" : "kit_create",
+            entity: "kit",
+            entity_id: String(kit.id),
+            details: {
+              name: kit.name,
+              kitType: kit.kitType,
+              lessonId: kit.lessonId,
+              loanType: kit.loanType,
+              item_count: kit.items.length,
+            },
+          }).catch(err => console.error("kit save log failed:", err));
+        } catch (e) { console.error("kit save log setup failed:", e); }
+        onDone();
+      }
       setSaving(false);
     };
 
@@ -4811,6 +4855,23 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         ]);
         setSaving(false);
         if(r1.ok&&r2.ok) {
+          // Audit log — lesson kit without schedule (pure save/edit)
+          try {
+            const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+            logActivity({
+              user_id: caller.id,
+              user_name: caller.full_name,
+              action: initial ? "lesson_kit_edit" : "lesson_kit_create",
+              entity: "kit",
+              entity_id: String(kit.id),
+              details: {
+                name: kit.name,
+                instructor: kit.instructorName,
+                item_count: kit.items.length,
+                schedule_size: 0,
+              },
+            }).catch(err => console.error("lesson_kit save log failed:", err));
+          } catch (e) { console.error("lesson_kit save log setup failed:", e); }
           onDone();
           showToast("success", `ערכת שיעור "${effectiveName || name.trim()}" נשמרה`);
         } else setLocalMsg({type:"error",text:"❌ שגיאה בשמירה"});
@@ -4946,6 +5007,24 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       ]);
       setSaving(false);
       if(r1.ok&&r2.ok) {
+        // Audit log — lesson kit with schedule (reservations generated)
+        try {
+          const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+          logActivity({
+            user_id: caller.id,
+            user_name: caller.full_name,
+            action: initial ? "lesson_kit_edit" : "lesson_kit_create",
+            entity: "kit",
+            entity_id: String(kit.id),
+            details: {
+              name: kit.name,
+              instructor: kit.instructorName,
+              item_count: kit.items.length,
+              schedule_size: finalSchedule.length,
+              reservations_created: newResForCache.length,
+            },
+          }).catch(err => console.error("lesson_kit save log failed:", err));
+        } catch (e) { console.error("lesson_kit save log setup failed:", e); }
         onDone();
         showToast("success", `ערכת שיעור "${effectiveName || name.trim()}" נשמרה · ${finalSchedule.length} שיעורים שוריינו`);
       } else setLocalMsg({type:"error",text:"❌ שגיאה בשמירה"});
@@ -5574,7 +5653,26 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       setKits(updated);
       const _kitRes = await storageSet("kits", updated);
       if(!_kitRes.ok) showToast("error", "❌ שגיאה בשמירה — נסה שוב");
-      else showToast("success", initial ? "הערכה עודכנה" : `ערכה "${trimmedName}" נוצרה`);
+      else {
+        showToast("success", initial ? "הערכה עודכנה" : `ערכה "${trimmedName}" נוצרה`);
+        // Audit log — legacy kit form
+        try {
+          const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+          logActivity({
+            user_id: caller.id,
+            user_name: caller.full_name,
+            action: initial ? "kit_edit" : "kit_create",
+            entity: "kit",
+            entity_id: String(kit.id),
+            details: {
+              name: kit.name,
+              loanType: kit.loanType,
+              item_count: kit.items.length,
+              form: "legacy",
+            },
+          }).catch(err => console.error("legacy kit save log failed:", err));
+        } catch (e) { console.error("legacy kit save log setup failed:", e); }
+      }
       onDone();
     };
 
