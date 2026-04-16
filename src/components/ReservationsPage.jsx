@@ -45,6 +45,8 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
   const [meqTypeF, setMeqTypeF] = useState("all");
   const [meqCatF, setMeqCatF] = useState([]);
   const [meqSearch, setMeqSearch] = useState("");
+  const [mShowSelectedOnly, setMShowSelectedOnly] = useState(false);
+  const mSelectedCount = mItems.reduce((s,i)=>s+(Number(i.quantity)||0),0);
   // Restrict date/time pickers to future only — staff can't book in the past.
   const todayStr = formatLocalDateInput(new Date());
   const nowMin = (() => { const d = new Date(); return d.getHours()*60 + d.getMinutes(); })();
@@ -174,6 +176,11 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
         <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px",marginBottom:12}}>
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
             <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סינון:</span>
+            <button type="button" onClick={()=>setMShowSelectedOnly(p=>!p)}
+              style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${mShowSelectedOnly?"var(--green)":"var(--border)"}`,background:mShowSelectedOnly?"rgba(46,204,113,0.12)":"transparent",color:mShowSelectedOnly?"var(--green)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>
+              {mShowSelectedOnly?"✅ נבחרו":"⬜"} {mShowSelectedOnly?"הצג הכל":`הצג נבחרים בלבד${mSelectedCount>0?` (${mSelectedCount})`:""}`}
+            </button>
+            <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
             {[{k:"all",l:"📦 הכל"},{k:"sound",l:"🎙️ סאונד"},{k:"photo",l:"🎥 צילום"}].map(({k,l})=>(<button key={k} type="button" onClick={()=>setMeqTypeF(k)} style={{padding:"4px 10px",borderRadius:20,border:`2px solid ${meqTypeF===k?"var(--accent)":"var(--border)"}`,background:meqTypeF===k?"var(--accent-glow)":"transparent",color:meqTypeF===k?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>{l}</button>))}
             <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
             {(categories||[]).map(cat=>(<button key={cat} type="button" onClick={()=>setMeqCatF(p=>p.includes(cat)?p.filter(c=>c!==cat):[...p,cat])} style={{padding:"4px 8px",borderRadius:20,border:`2px solid ${meqCatF.includes(cat)?"var(--accent)":"var(--border)"}`,background:meqCatF.includes(cat)?"var(--accent-glow)":"transparent",color:meqCatF.includes(cat)?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>{cat}</button>))}
@@ -183,10 +190,11 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
         </div>
         {(()=>{
           const meqMatch=(e)=>{const g=(!e.soundOnly&&!e.photoOnly)||(e.soundOnly&&e.photoOnly);return meqTypeF==="all"||(meqTypeF==="sound"&&(e.soundOnly||g))||(meqTypeF==="photo"&&(e.photoOnly||g));};
-          const visCats=(meqCatF.length>0?meqCatF:(categories||[])).filter(cat=>mAvailEq.some(e=>e.category===cat&&meqMatch(e)&&(!meqSearch||e.name.includes(meqSearch))));
-          if(!visCats.length)return <div style={{textAlign:"center",color:"var(--text3)",padding:16,fontSize:13}}>לא נמצא ציוד תואם</div>;
+          const mSelectedFilter=(e)=>!mShowSelectedOnly || (mGetItem(e.id)?.quantity||0) > 0;
+          const visCats=(meqCatF.length>0?meqCatF:(categories||[])).filter(cat=>mAvailEq.some(e=>e.category===cat&&meqMatch(e)&&mSelectedFilter(e)&&(!meqSearch||e.name.includes(meqSearch))));
+          if(!visCats.length)return <div style={{textAlign:"center",color:"var(--text3)",padding:16,fontSize:13}}>{mShowSelectedOnly?"עדיין לא בחרת ציוד":"לא נמצא ציוד תואם"}</div>;
           return visCats.map(cat=>{
-            const catEq=mAvailEq.filter(e=>e.category===cat&&meqMatch(e)&&(!meqSearch||e.name.includes(meqSearch)));
+            const catEq=mAvailEq.filter(e=>e.category===cat&&meqMatch(e)&&mSelectedFilter(e)&&(!meqSearch||e.name.includes(meqSearch)));
             if(!catEq.length)return null;
             return (<div key={cat} style={{marginBottom:10}}>
               <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:5,textTransform:"uppercase",letterSpacing:1}}>{cat}</div>
