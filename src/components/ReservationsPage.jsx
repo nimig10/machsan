@@ -5,6 +5,218 @@ import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
 
+// ── Staff Loan Form (module-scope component) ──
+// איש צוות יוצר לעצמו בקשת השאלה. הטופס מזהה אוטומטית את המשתמש המחובר
+// מתוך sessionStorage.staff_user. אם התאריכים לא חופפים עם השאלות קיימות,
+// הבקשה עוברת מיידית ל-status="מאושר" עם loan_type="צוות". החזרה ידנית
+// בלבד (לחיצה על כפתור "הוחזר"), ו-check-overdue.js לא יהפוך אותה ל"באיחור".
+// IMPORTANT: declared at module scope (not inside ReservationsPage) so React
+// keeps the same component type across parent re-renders. Previously it was
+// an inner component, causing the entire form state to reset whenever the
+// parent re-rendered (e.g. on a `showToast`/`setReservations` call inside
+// mSave), which is exactly what happened when an overlap error came back.
+function StaffLoanForm({ onClose, showToast, reservations, setReservations, teamMembers, equipment, categories }) {
+  const ALL_TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
+  // Identify the logged-in staff member from sessionStorage. Fall back to
+  // teamMembers entry for phone (sessionStorage doesn't store phone).
+  const staffUser = (() => {
+    try { const s = sessionStorage.getItem("staff_user"); return s ? JSON.parse(s) : {}; } catch { return {}; }
+  })();
+  const staffTeamRow = (teamMembers||[]).find(m => (m.email||"").toLowerCase() === (staffUser.email||"").toLowerCase()) || {};
+  const [mf, setMf] = useState({
+    borrow_date: "",
+    borrow_time: "",
+    return_date: "",
+    return_time: "",
+  });
+  const [mItems, setMItems] = useState([]);
+  const [mSaving, setMSaving] = useState(false);
+  const [mStep, setMStep] = useState(1);
+  const mSet = (k,v) => setMf(p=>({...p,[k]:v}));
+  const mSameDay = mf.borrow_date && mf.return_date && mf.borrow_date === mf.return_date;
+  const mTimeOrderError = mSameDay && mf.borrow_time && mf.return_time && toDateTime(mf.return_date, mf.return_time) <= toDateTime(mf.borrow_date, mf.borrow_time);
+  const mReturnBeforeBorrow = mf.borrow_date && mf.return_date && parseLocalDate(mf.return_date) < parseLocalDate(mf.borrow_date);
+  const mOk1 = !!mf.borrow_date && !!mf.return_date && !!mf.borrow_time && !!mf.return_time && !mReturnBeforeBorrow && !mTimeOrderError;
+  const mOk2 = mItems.some(i=>Number(i.quantity)>0);
+  // No certification checks — staff can borrow any equipment.
+  const mAvailEq = (mf.borrow_date&&mf.return_date) ? equipment.map(eq=>({...eq, avail: getAvailable(eq.id,mf.borrow_date,mf.return_date,reservations,equipment,null,mf.borrow_time,mf.return_time)})) : [];
+  const mGetItem = id => mItems.find(i=>i.equipment_id==id)||{quantity:0};
+  const mSetQty = (id,qty) => { const av=mAvailEq.find(e=>e.id==id)?.avail||0; const q=Math.max(0,Math.min(qty,av)); const nm=equipment.find(e=>e.id==id)?.name||""; setMItems(prev=>q===0?prev.filter(i=>i.equipment_id!=id):prev.find(i=>i.equipment_id==id)?prev.map(i=>i.equipment_id==id?{...i,quantity:q}:i):[...prev,{equipment_id:id,quantity:q,name:nm}]); };
+  const [meqTypeF, setMeqTypeF] = useState("all");
+  const [meqCatF, setMeqCatF] = useState([]);
+  const [meqSearch, setMeqSearch] = useState("");
+  // Restrict date/time pickers to future only — staff can't book in the past.
+  const todayStr = formatLocalDateInput(new Date());
+  const nowMin = (() => { const d = new Date(); return d.getHours()*60 + d.getMinutes(); })();
+  const timeToMin = t => { const [h,m]=(t||"0:0").split(":").map(Number); return (h||0)*60+(m||0); };
+  const borrowMin = timeToMin(mf.borrow_time);
+  const borrowTimeOptions = ALL_TIME_SLOTS.filter(t => mf.borrow_date !== todayStr || timeToMin(t) > nowMin);
+  const returnTimeOptions = ALL_TIME_SLOTS.filter(t => {
+    const tm = timeToMin(t);
+    if (mf.return_date === todayStr && tm <= nowMin) return false;
+    if (mSameDay && mf.borrow_time && tm <= borrowMin) return false;
+    return true;
+  });
+  const mSave = async () => {
+    if(!mOk1||!mOk2){showToast("error","יש להשלים את כל השדות");return;}
+    if(!staffUser?.email){showToast("error","לא הצלחנו לזהות את המשתמש המחובר");return;}
+    setMSaving(true);
+    let freshRes=reservations;
+    try{const fr=await storageGet("reservations");if(Array.isArray(fr)){freshRes=fr;setReservations(fr);}}catch(e){}
+    // Route through the atomic RPC (create_reservation_v2, migration 008).
+    // The RPC locks equipment rows with FOR UPDATE and does a date-range
+    // overlap check. If any requested item overlaps an existing active
+    // reservation, the RPC rejects with 409 "not_enough_stock" — which is
+    // exactly the overbooking guarantee the user asked for.
+    const clientId = String(Date.now());
+    const submittedAtIso = new Date().toISOString();
+    const staffName = staffUser.full_name || staffTeamRow.name || staffUser.email;
+    const staffPhone = staffTeamRow.phone || "";
+    const rpcResult = await createReservation(
+      {
+        id:                      clientId,
+        student_name:            staffName,
+        email:                   staffUser.email,
+        phone:                   staffPhone,
+        course:                  "צוות",
+        project_name:            null,
+        loan_type:               "צוות",
+        status:                  "מאושר",
+        borrow_date:             mf.borrow_date,
+        borrow_time:             mf.borrow_time,
+        return_date:             mf.return_date,
+        return_time:             mf.return_time,
+        created_at:              today(),
+        submitted_at:            submittedAtIso,
+      },
+      mItems.map(it => ({
+        equipment_id: it.equipment_id,
+        name:         it.name,
+        quantity:     Number(it.quantity) || 1,
+        unit_id:      it.unit_id || null,
+      }))
+    );
+    if (!rpcResult.ok) {
+      setMSaving(false);
+      if (rpcResult.error === "not_enough_stock") {
+        showToast("error", "התאריכים חופפים עם השאלה קיימת — נא לבחור תאריכים אחרים");
+      } else {
+        console.error("StaffLoanForm create failed:", rpcResult);
+        showToast("error", "שגיאה בשמירת הבקשה. נסה שוב.");
+      }
+      return;
+    }
+    // Mirror the new row into local state + blob cache so the list
+    // refreshes immediately. The DB is already the source of truth.
+    const serverId = rpcResult.id || clientId;
+    const newRes = {
+      id:              serverId,
+      student_name:    staffName,
+      email:           staffUser.email,
+      phone:           staffPhone,
+      course:          "צוות",
+      project_name:    null,
+      loan_type:       "צוות",
+      status:          "מאושר",
+      borrow_date:     mf.borrow_date,
+      borrow_time:     mf.borrow_time,
+      return_date:     mf.return_date,
+      return_time:     mf.return_time,
+      created_at:      today(),
+      submitted_at:    new Date().toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"}),
+      items:           mItems,
+      staff_loan:      true,
+    };
+    const updated = [...freshRes, newRes];
+    setReservations(updated);
+    storageSet("reservations", updated).catch(err =>
+      console.warn("blob cache refresh failed (DB is already updated):", err)
+    );
+    logActivity({ user_id: staffUser.id, user_name: staffName, action: "staff_loan_create", entity: "reservation", entity_id: String(serverId), details: { borrow_date: mf.borrow_date, return_date: mf.return_date, items_count: mItems.length } });
+    setMSaving(false);
+    showToast("success", `השאלת איש צוות נוצרה ואושרה · ${staffName}`);
+    onClose();
+  };
+  return (
+    <Modal title="💼 השאלת איש צוות" onClose={onClose} size="modal-lg">
+      {/* Identification badge */}
+      <div style={{background:"rgba(100,120,150,0.12)",border:"1px solid rgba(100,120,150,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:10,fontSize:13}}>
+        <span style={{fontSize:22}}>💼</span>
+        <div>
+          <div style={{fontWeight:800}}>{staffUser.full_name || staffTeamRow.name || "—"}</div>
+          <div style={{fontSize:11,color:"var(--text3)"}}>{staffUser.email || ""}</div>
+        </div>
+        <div style={{marginRight:"auto",fontSize:11,color:"var(--text3)"}}>
+          הבקשה תאושר אוטומטית אם התאריכים פנויים. החזרה ידנית בלבד.
+        </div>
+      </div>
+      <div style={{display:"flex",gap:4,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4,marginBottom:16}}>
+        {[{n:1,l:"תאריכים",i:"📅"},{n:2,l:"ציוד",i:"📦"},{n:3,l:"סיכום",i:"✅"}].map(s=>(
+          <button key={s.n} type="button" onClick={()=>setMStep(s.n)} style={{flex:1,padding:"8px 4px",borderRadius:6,border:"none",background:mStep===s.n?"var(--accent)":"transparent",color:mStep===s.n?"#000":"var(--text2)",fontWeight:mStep===s.n?800:500,fontSize:12,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+            <span style={{fontSize:14}}>{s.i}</span><span>{s.l}</span></button>))}
+      </div>
+      {mStep===1&&<>
+        <div className="form-section-title">תאריכים ושעות <span style={{fontSize:11,color:"var(--text3)",fontWeight:400}}>· ללא מגבלות</span></div>
+        <div className="grid-2">
+          <div className="form-group"><label className="form-label">📅 תאריך השאלה *</label><input type="date" className="form-input" min={todayStr} value={mf.borrow_date} onChange={e=>mSet("borrow_date",e.target.value)}/></div>
+          <div className="form-group"><label className="form-label">שעת איסוף *</label><select className="form-select" value={mf.borrow_time} onChange={e=>mSet("borrow_time",e.target.value)}><option value="">-- בחר --</option>{borrowTimeOptions.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+        </div>
+        <div className="grid-2">
+          <div className="form-group"><label className="form-label">📅 תאריך החזרה *</label><input type="date" className="form-input" min={mf.borrow_date || todayStr} value={mf.return_date} onChange={e=>mSet("return_date",e.target.value)}/></div>
+          <div className="form-group"><label className="form-label">שעת החזרה *</label><select className="form-select" value={mf.return_time} onChange={e=>mSet("return_time",e.target.value)}><option value="">-- בחר --</option>{returnTimeOptions.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+        </div>
+        {mTimeOrderError&&<div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:12,fontSize:12}}>🚫 שעת החזרה חייבת להיות אחרי שעת האיסוף.</div>}
+        {mReturnBeforeBorrow&&<div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:12,fontSize:12}}>🚫 תאריך החזרה חייב להיות אחרי תאריך ההשאלה.</div>}
+        <button className="btn btn-primary" disabled={!mOk1} onClick={()=>setMStep(2)}>המשך ← ציוד</button>
+      </>}
+      {mStep===2&&<>
+        <div className="form-section-title">בחירת ציוד</div>
+        <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px",marginBottom:12}}>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
+            <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סינון:</span>
+            {[{k:"all",l:"📦 הכל"},{k:"sound",l:"🎙️ סאונד"},{k:"photo",l:"🎥 צילום"}].map(({k,l})=>(<button key={k} type="button" onClick={()=>setMeqTypeF(k)} style={{padding:"4px 10px",borderRadius:20,border:`2px solid ${meqTypeF===k?"var(--accent)":"var(--border)"}`,background:meqTypeF===k?"var(--accent-glow)":"transparent",color:meqTypeF===k?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>{l}</button>))}
+            <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
+            {(categories||[]).map(cat=>(<button key={cat} type="button" onClick={()=>setMeqCatF(p=>p.includes(cat)?p.filter(c=>c!==cat):[...p,cat])} style={{padding:"4px 8px",borderRadius:20,border:`2px solid ${meqCatF.includes(cat)?"var(--accent)":"var(--border)"}`,background:meqCatF.includes(cat)?"var(--accent-glow)":"transparent",color:meqCatF.includes(cat)?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>{cat}</button>))}
+            {meqCatF.length>0&&<button type="button" onClick={()=>setMeqCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>✕ נקה</button>}
+          </div>
+          <div className="search-bar" style={{minWidth:150}}><span>🔍</span><input placeholder="חיפוש ציוד..." value={meqSearch} onChange={e=>setMeqSearch(e.target.value)}/></div>
+        </div>
+        {(()=>{
+          const meqMatch=(e)=>{const g=(!e.soundOnly&&!e.photoOnly)||(e.soundOnly&&e.photoOnly);return meqTypeF==="all"||(meqTypeF==="sound"&&(e.soundOnly||g))||(meqTypeF==="photo"&&(e.photoOnly||g));};
+          const visCats=(meqCatF.length>0?meqCatF:(categories||[])).filter(cat=>mAvailEq.some(e=>e.category===cat&&meqMatch(e)&&(!meqSearch||e.name.includes(meqSearch))));
+          if(!visCats.length)return <div style={{textAlign:"center",color:"var(--text3)",padding:16,fontSize:13}}>לא נמצא ציוד תואם</div>;
+          return visCats.map(cat=>{
+            const catEq=mAvailEq.filter(e=>e.category===cat&&meqMatch(e)&&(!meqSearch||e.name.includes(meqSearch)));
+            if(!catEq.length)return null;
+            return (<div key={cat} style={{marginBottom:10}}>
+              <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:5,textTransform:"uppercase",letterSpacing:1}}>{cat}</div>
+              {catEq.map(eq=>{const av=eq.avail,qty=mGetItem(eq.id)?.quantity||0;
+                return (<div key={eq.id} className="item-row" style={{marginBottom:4,opacity:av===0?0.4:1,background:qty>0?"rgba(245,166,35,0.05)":"",border:qty>0?"1px solid rgba(245,166,35,0.2)":""}}>
+                  <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||"📦"}</span>
+                  <div style={{flex:1,fontSize:13,fontWeight:600}}>{eq.name}<span style={{fontSize:11,color:"var(--text3)",marginRight:6,fontWeight:400}}>זמין: {av}</span></div>
+                  {av>0?<div className="qty-ctrl"><button className="qty-btn" onClick={()=>mSetQty(eq.id,qty-1)}>−</button><span className="qty-num" style={{color:qty>0?"var(--accent)":"inherit"}}>{qty}</span><button className="qty-btn" disabled={qty>=av} onClick={()=>mSetQty(eq.id,qty+1)} style={{opacity:qty>=av?0.3:1}}>+</button></div>
+                  :<span style={{fontSize:11,color:"var(--red)",fontWeight:700}}>אין מלאי</span>}
+                </div>);})}
+            </div>);});
+        })()}
+        {mItems.length>0&&<div className="highlight-box" style={{marginTop:8}}>🎒 {mItems.length} סוגי ציוד · {mItems.reduce((s,i)=>s+i.quantity,0)} יחידות</div>}
+        <div className="flex gap-2" style={{marginTop:16}}><button className="btn btn-secondary" onClick={()=>setMStep(1)}>← חזור</button><button className="btn btn-primary" disabled={!mOk2} onClick={()=>setMStep(3)}>המשך ← סיכום</button></div>
+      </>}
+      {mStep===3&&<>
+        <div className="form-section-title">סיכום ההשאלה</div>
+        <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
+          {[["שם",staffUser.full_name || staffTeamRow.name || ""],["אימייל",staffUser.email || ""],["סוג","💼 השאלת איש צוות"],["תאריך השאלה",mf.borrow_date?formatDate(mf.borrow_date)+" · "+mf.borrow_time:""],["תאריך החזרה",mf.return_date?formatDate(mf.return_date)+" · "+mf.return_time:""],["סטטוס","✅ מאושר (אוטומטי)"]].filter(([,v])=>v).map(([l,v])=>(
+            <div key={l} style={{display:"flex",gap:8,marginBottom:6,fontSize:13}}><span style={{color:"var(--text3)",minWidth:100}}>{l}:</span><strong>{v}</strong></div>))}
+          <div style={{marginTop:10,fontWeight:700,fontSize:13}}>ציוד ({mItems.reduce((s,i)=>s+i.quantity,0)} יחידות):</div>
+          {mItems.map(i=><div key={i.equipment_id} style={{fontSize:12,color:"var(--text2)",marginTop:4}}>• {i.name} ×{i.quantity}</div>)}
+        </div>
+        <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setMStep(2)}>← חזור</button>
+          <button className="btn btn-primary" disabled={mSaving||!mOk1||!mOk2} onClick={mSave} style={{fontSize:15,padding:"12px 28px"}}>{mSaving?"⏳ שומר...":"💾 צור השאלה"}</button></div>
+      </>}
+    </Modal>
+  );
+}
+
 export function ReservationsPage({ reservations, setReservations, equipment, showToast,
     search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy, mode="active", initialSubView="active", collegeManager={}, managerToken="",
     categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], siteSettings={}, onLogCreated = () => {}, equipmentReports=[] }) {
@@ -267,202 +479,6 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
     }
   };
 
-  // ── Staff Loan Form (inner component) ──
-  // איש צוות יוצר לעצמו בקשת השאלה. הטופס מזהה אוטומטית את המשתמש המחובר
-  // מתוך sessionStorage.staff_user. אם התאריכים לא חופפים עם השאלות קיימות,
-  // הבקשה עוברת מיידית ל-status="מאושר" עם loan_type="צוות". החזרה ידנית
-  // בלבד (לחיצה על כפתור "הוחזר"), ו-check-overdue.js לא יהפוך אותה ל"באיחור".
-  const StaffLoanForm = () => {
-    const ALL_TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
-    // Identify the logged-in staff member from sessionStorage. Fall back to
-    // teamMembers entry for phone (sessionStorage doesn't store phone).
-    const staffUser = (() => {
-      try { const s = sessionStorage.getItem("staff_user"); return s ? JSON.parse(s) : {}; } catch { return {}; }
-    })();
-    const staffTeamRow = (teamMembers||[]).find(m => (m.email||"").toLowerCase() === (staffUser.email||"").toLowerCase()) || {};
-    const [mf, setMf] = useState({
-      borrow_date: "",
-      borrow_time: "",
-      return_date: "",
-      return_time: "",
-    });
-    const [mItems, setMItems] = useState([]);
-    const [mSaving, setMSaving] = useState(false);
-    const [mStep, setMStep] = useState(1);
-    const mSet = (k,v) => setMf(p=>({...p,[k]:v}));
-    const mSameDay = mf.borrow_date && mf.return_date && mf.borrow_date === mf.return_date;
-    const mTimeOrderError = mSameDay && mf.borrow_time && mf.return_time && toDateTime(mf.return_date, mf.return_time) <= toDateTime(mf.borrow_date, mf.borrow_time);
-    const mReturnBeforeBorrow = mf.borrow_date && mf.return_date && parseLocalDate(mf.return_date) < parseLocalDate(mf.borrow_date);
-    const mOk1 = !!mf.borrow_date && !!mf.return_date && !!mf.borrow_time && !!mf.return_time && !mReturnBeforeBorrow && !mTimeOrderError;
-    const mOk2 = mItems.some(i=>Number(i.quantity)>0);
-    // No certification checks — staff can borrow any equipment.
-    const mAvailEq = (mf.borrow_date&&mf.return_date) ? equipment.map(eq=>({...eq, avail: getAvailable(eq.id,mf.borrow_date,mf.return_date,reservations,equipment,null,mf.borrow_time,mf.return_time)})) : [];
-    const mGetItem = id => mItems.find(i=>i.equipment_id==id)||{quantity:0};
-    const mSetQty = (id,qty) => { const av=mAvailEq.find(e=>e.id==id)?.avail||0; const q=Math.max(0,Math.min(qty,av)); const nm=equipment.find(e=>e.id==id)?.name||""; setMItems(prev=>q===0?prev.filter(i=>i.equipment_id!=id):prev.find(i=>i.equipment_id==id)?prev.map(i=>i.equipment_id==id?{...i,quantity:q}:i):[...prev,{equipment_id:id,quantity:q,name:nm}]); };
-    const [meqTypeF, setMeqTypeF] = useState("all");
-    const [meqCatF, setMeqCatF] = useState([]);
-    const [meqSearch, setMeqSearch] = useState("");
-    const mSave = async () => {
-      if(!mOk1||!mOk2){showToast("error","יש להשלים את כל השדות");return;}
-      if(!staffUser?.email){showToast("error","לא הצלחנו לזהות את המשתמש המחובר");return;}
-      setMSaving(true);
-      let freshRes=reservations;
-      try{const fr=await storageGet("reservations");if(Array.isArray(fr)){freshRes=fr;setReservations(fr);}}catch(e){}
-      // Route through the atomic RPC (create_reservation_v2, migration 008).
-      // The RPC locks equipment rows with FOR UPDATE and does a date-range
-      // overlap check. If any requested item overlaps an existing active
-      // reservation, the RPC rejects with 409 "not_enough_stock" — which is
-      // exactly the overbooking guarantee the user asked for.
-      const clientId = String(Date.now());
-      const submittedAtIso = new Date().toISOString();
-      const staffName = staffUser.full_name || staffTeamRow.name || staffUser.email;
-      const staffPhone = staffTeamRow.phone || "";
-      const rpcResult = await createReservation(
-        {
-          id:                      clientId,
-          student_name:            staffName,
-          email:                   staffUser.email,
-          phone:                   staffPhone,
-          course:                  "צוות",
-          project_name:            null,
-          loan_type:               "צוות",
-          status:                  "מאושר",
-          borrow_date:             mf.borrow_date,
-          borrow_time:             mf.borrow_time,
-          return_date:             mf.return_date,
-          return_time:             mf.return_time,
-          created_at:              today(),
-          submitted_at:            submittedAtIso,
-        },
-        mItems.map(it => ({
-          equipment_id: it.equipment_id,
-          name:         it.name,
-          quantity:     Number(it.quantity) || 1,
-          unit_id:      it.unit_id || null,
-        }))
-      );
-      if (!rpcResult.ok) {
-        setMSaving(false);
-        if (rpcResult.error === "not_enough_stock") {
-          showToast("error", "התאריכים חופפים עם השאלה קיימת — נא לבחור תאריכים אחרים");
-        } else {
-          console.error("StaffLoanForm create failed:", rpcResult);
-          showToast("error", "שגיאה בשמירת הבקשה. נסה שוב.");
-        }
-        return;
-      }
-      // Mirror the new row into local state + blob cache so the list
-      // refreshes immediately. The DB is already the source of truth.
-      const serverId = rpcResult.id || clientId;
-      const newRes = {
-        id:              serverId,
-        student_name:    staffName,
-        email:           staffUser.email,
-        phone:           staffPhone,
-        course:          "צוות",
-        project_name:    null,
-        loan_type:       "צוות",
-        status:          "מאושר",
-        borrow_date:     mf.borrow_date,
-        borrow_time:     mf.borrow_time,
-        return_date:     mf.return_date,
-        return_time:     mf.return_time,
-        created_at:      today(),
-        submitted_at:    new Date().toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"}),
-        items:           mItems,
-        staff_loan:      true,
-      };
-      const updated = [...freshRes, newRes];
-      setReservations(updated);
-      storageSet("reservations", updated).catch(err =>
-        console.warn("blob cache refresh failed (DB is already updated):", err)
-      );
-      logActivity({ user_id: staffUser.id, user_name: staffName, action: "staff_loan_create", entity: "reservation", entity_id: String(serverId), details: { borrow_date: mf.borrow_date, return_date: mf.return_date, items_count: mItems.length } });
-      setMSaving(false);
-      showToast("success", `השאלת איש צוות נוצרה ואושרה · ${staffName}`);
-      setShowManualForm(false);
-    };
-    return (
-      <div className="card" style={{marginBottom:20}}>
-        <div className="card-header"><div className="card-title">💼 השאלת איש צוות</div><button className="btn btn-secondary btn-sm" onClick={()=>setShowManualForm(false)}>✕ ביטול</button></div>
-        {/* Identification badge */}
-        <div style={{background:"rgba(100,120,150,0.12)",border:"1px solid rgba(100,120,150,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:10,fontSize:13}}>
-          <span style={{fontSize:22}}>💼</span>
-          <div>
-            <div style={{fontWeight:800}}>{staffUser.full_name || staffTeamRow.name || "—"}</div>
-            <div style={{fontSize:11,color:"var(--text3)"}}>{staffUser.email || ""}</div>
-          </div>
-          <div style={{marginRight:"auto",fontSize:11,color:"var(--text3)"}}>
-            הבקשה תאושר אוטומטית אם התאריכים פנויים. החזרה ידנית בלבד.
-          </div>
-        </div>
-        <div style={{display:"flex",gap:4,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4,marginBottom:16}}>
-          {[{n:1,l:"תאריכים",i:"📅"},{n:2,l:"ציוד",i:"📦"},{n:3,l:"סיכום",i:"✅"}].map(s=>(
-            <button key={s.n} type="button" onClick={()=>setMStep(s.n)} style={{flex:1,padding:"8px 4px",borderRadius:6,border:"none",background:mStep===s.n?"var(--accent)":"transparent",color:mStep===s.n?"#000":"var(--text2)",fontWeight:mStep===s.n?800:500,fontSize:12,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-              <span style={{fontSize:14}}>{s.i}</span><span>{s.l}</span></button>))}
-        </div>
-        {mStep===1&&<>
-          <div className="form-section-title">תאריכים ושעות <span style={{fontSize:11,color:"var(--text3)",fontWeight:400}}>· ללא מגבלות</span></div>
-          <div className="grid-2">
-            <div className="form-group"><label className="form-label">📅 תאריך השאלה *</label><input type="date" className="form-input" value={mf.borrow_date} onChange={e=>mSet("borrow_date",e.target.value)}/></div>
-            <div className="form-group"><label className="form-label">שעת איסוף *</label><select className="form-select" value={mf.borrow_time} onChange={e=>mSet("borrow_time",e.target.value)}><option value="">-- בחר --</option>{ALL_TIME_SLOTS.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
-          </div>
-          <div className="grid-2">
-            <div className="form-group"><label className="form-label">📅 תאריך החזרה *</label><input type="date" className="form-input" value={mf.return_date} onChange={e=>mSet("return_date",e.target.value)}/></div>
-            <div className="form-group"><label className="form-label">שעת החזרה *</label><select className="form-select" value={mf.return_time} onChange={e=>mSet("return_time",e.target.value)}><option value="">-- בחר --</option>{ALL_TIME_SLOTS.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
-          </div>
-          {mTimeOrderError&&<div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:12,fontSize:12}}>🚫 שעת החזרה חייבת להיות אחרי שעת האיסוף.</div>}
-          {mReturnBeforeBorrow&&<div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:12,fontSize:12}}>🚫 תאריך החזרה חייב להיות אחרי תאריך ההשאלה.</div>}
-          <button className="btn btn-primary" disabled={!mOk1} onClick={()=>setMStep(2)}>המשך ← ציוד</button>
-        </>}
-        {mStep===2&&<>
-          <div className="form-section-title">בחירת ציוד</div>
-          <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px",marginBottom:12}}>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
-              <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סינון:</span>
-              {[{k:"all",l:"📦 הכל"},{k:"sound",l:"🎙️ סאונד"},{k:"photo",l:"🎥 צילום"}].map(({k,l})=>(<button key={k} type="button" onClick={()=>setMeqTypeF(k)} style={{padding:"4px 10px",borderRadius:20,border:`2px solid ${meqTypeF===k?"var(--accent)":"var(--border)"}`,background:meqTypeF===k?"var(--accent-glow)":"transparent",color:meqTypeF===k?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>{l}</button>))}
-              <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
-              {(categories||[]).map(cat=>(<button key={cat} type="button" onClick={()=>setMeqCatF(p=>p.includes(cat)?p.filter(c=>c!==cat):[...p,cat])} style={{padding:"4px 8px",borderRadius:20,border:`2px solid ${meqCatF.includes(cat)?"var(--accent)":"var(--border)"}`,background:meqCatF.includes(cat)?"var(--accent-glow)":"transparent",color:meqCatF.includes(cat)?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>{cat}</button>))}
-              {meqCatF.length>0&&<button type="button" onClick={()=>setMeqCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>✕ נקה</button>}
-            </div>
-            <div className="search-bar" style={{minWidth:150}}><span>🔍</span><input placeholder="חיפוש ציוד..." value={meqSearch} onChange={e=>setMeqSearch(e.target.value)}/></div>
-          </div>
-          {(()=>{
-            const meqMatch=(e)=>{const g=(!e.soundOnly&&!e.photoOnly)||(e.soundOnly&&e.photoOnly);return meqTypeF==="all"||(meqTypeF==="sound"&&(e.soundOnly||g))||(meqTypeF==="photo"&&(e.photoOnly||g));};
-            const visCats=(meqCatF.length>0?meqCatF:(categories||[])).filter(cat=>mAvailEq.some(e=>e.category===cat&&meqMatch(e)&&(!meqSearch||e.name.includes(meqSearch))));
-            if(!visCats.length)return <div style={{textAlign:"center",color:"var(--text3)",padding:16,fontSize:13}}>לא נמצא ציוד תואם</div>;
-            return visCats.map(cat=>{
-              const catEq=mAvailEq.filter(e=>e.category===cat&&meqMatch(e)&&(!meqSearch||e.name.includes(meqSearch)));
-              if(!catEq.length)return null;
-              return (<div key={cat} style={{marginBottom:10}}>
-                <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:5,textTransform:"uppercase",letterSpacing:1}}>{cat}</div>
-                {catEq.map(eq=>{const av=eq.avail,qty=mGetItem(eq.id)?.quantity||0;
-                  return (<div key={eq.id} className="item-row" style={{marginBottom:4,opacity:av===0?0.4:1,background:qty>0?"rgba(245,166,35,0.05)":"",border:qty>0?"1px solid rgba(245,166,35,0.2)":""}}>
-                    <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||"📦"}</span>
-                    <div style={{flex:1,fontSize:13,fontWeight:600}}>{eq.name}<span style={{fontSize:11,color:"var(--text3)",marginRight:6,fontWeight:400}}>זמין: {av}</span></div>
-                    {av>0?<div className="qty-ctrl"><button className="qty-btn" onClick={()=>mSetQty(eq.id,qty-1)}>−</button><span className="qty-num" style={{color:qty>0?"var(--accent)":"inherit"}}>{qty}</span><button className="qty-btn" disabled={qty>=av} onClick={()=>mSetQty(eq.id,qty+1)} style={{opacity:qty>=av?0.3:1}}>+</button></div>
-                    :<span style={{fontSize:11,color:"var(--red)",fontWeight:700}}>אין מלאי</span>}
-                  </div>);})}
-              </div>);});
-          })()}
-          {mItems.length>0&&<div className="highlight-box" style={{marginTop:8}}>🎒 {mItems.length} סוגי ציוד · {mItems.reduce((s,i)=>s+i.quantity,0)} יחידות</div>}
-          <div className="flex gap-2" style={{marginTop:16}}><button className="btn btn-secondary" onClick={()=>setMStep(1)}>← חזור</button><button className="btn btn-primary" disabled={!mOk2} onClick={()=>setMStep(3)}>המשך ← סיכום</button></div>
-        </>}
-        {mStep===3&&<>
-          <div className="form-section-title">סיכום ההשאלה</div>
-          <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
-            {[["שם",staffUser.full_name || staffTeamRow.name || ""],["אימייל",staffUser.email || ""],["סוג","💼 השאלת איש צוות"],["תאריך השאלה",mf.borrow_date?formatDate(mf.borrow_date)+" · "+mf.borrow_time:""],["תאריך החזרה",mf.return_date?formatDate(mf.return_date)+" · "+mf.return_time:""],["סטטוס","✅ מאושר (אוטומטי)"]].filter(([,v])=>v).map(([l,v])=>(
-              <div key={l} style={{display:"flex",gap:8,marginBottom:6,fontSize:13}}><span style={{color:"var(--text3)",minWidth:100}}>{l}:</span><strong>{v}</strong></div>))}
-            <div style={{marginTop:10,fontWeight:700,fontSize:13}}>ציוד ({mItems.reduce((s,i)=>s+i.quantity,0)} יחידות):</div>
-            {mItems.map(i=><div key={i.equipment_id} style={{fontSize:12,color:"var(--text2)",marginTop:4}}>• {i.name} ×{i.quantity}</div>)}
-          </div>
-          <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setMStep(2)}>← חזור</button>
-            <button className="btn btn-primary" disabled={mSaving||!mOk1||!mOk2} onClick={mSave} style={{fontSize:15,padding:"12px 28px"}}>{mSaving?"⏳ שומר...":"💾 צור השאלה"}</button></div>
-        </>}
-      </div>
-    );
-  };
-
   const studentReqs = filtered.filter(r => r.loan_type !== "שיעור" && r.loan_type !== "צוות");
   const lessonReqs  = filtered.filter(r => r.loan_type === "שיעור");
   const staffReqs   = filtered.filter(r => r.loan_type === "צוות");
@@ -551,12 +567,22 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       {/* Staff loan button — visible only on the active sub-view */}
       {!isRejectedPage && (
         <div style={{marginBottom:16,display:"flex",justifyContent:"flex-end"}}>
-          <button className="btn btn-primary" onClick={()=>setShowManualForm(p=>!p)} style={{fontSize:13}}>
-            {showManualForm?"✕ סגור טופס":"💼 השאלת איש צוות"}
+          <button className="btn btn-primary" onClick={()=>setShowManualForm(true)} style={{fontSize:13}}>
+            💼 השאלת איש צוות
           </button>
         </div>
       )}
-      {showManualForm && <StaffLoanForm/>}
+      {showManualForm && (
+        <StaffLoanForm
+          onClose={()=>setShowManualForm(false)}
+          showToast={showToast}
+          reservations={reservations}
+          setReservations={setReservations}
+          teamMembers={teamMembers}
+          equipment={equipment}
+          categories={categories}
+        />
+      )}
 
       {filtered.length===0
         ? <div className="empty-state"><div className="emoji">{isRejectedPage ? "❌" : "📭"}</div><div>{isRejectedPage ? "אין בקשות דחויות או מאחרות" : "אין בקשות"}</div></div>
