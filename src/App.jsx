@@ -5457,9 +5457,15 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         const vLinkedLessons = isLessonKit ? getLessonsLinkedToKit(vKit, lessons) : [];
         const vLinkedSchedule = vLinkedLessons.flatMap(getLessonScheduleEntries).sort(compareDateTimeParts);
         const vDisplaySchedule = vLinkedSchedule.length > 0 ? vLinkedSchedule : (vKit.schedule||[]);
-        const vInstructorName = vKit.instructorName || vLinkedLessons[0]?.instructorName || "";
-        const vInstructorEmail = vKit.instructorEmail || vLinkedLessons[0]?.instructorEmail || "";
-        const vInstructorPhone = vKit.instructorPhone || vLinkedLessons[0]?.instructorPhone || "";
+        // Prefer the instructor from currently-linked lessons. The kit's stored
+        // instructor* fields are a legacy snapshot from when the kit was first
+        // created; once the kit is linked to a lesson (e.g. moved to a different
+        // lecturer's course), that live linkage is the source of truth. Falling
+        // back to vKit.instructor* only when no lesson is linked keeps the UI
+        // in sync with the actual schedule.
+        const vInstructorName  = vLinkedLessons[0]?.instructorName  || vKit.instructorName  || "";
+        const vInstructorEmail = vLinkedLessons[0]?.instructorEmail || vKit.instructorEmail || "";
+        const vInstructorPhone = vLinkedLessons[0]?.instructorPhone || vKit.instructorPhone || "";
         return (
           <div onClick={()=>{setMode(null);setEditTarget(null);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
             <div onClick={e=>e.stopPropagation()} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"20px 24px",maxWidth:520,width:"100%",maxHeight:"85vh",overflowY:"auto",boxShadow:"0 12px 40px rgba(0,0,0,0.5)"}}>
