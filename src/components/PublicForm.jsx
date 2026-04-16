@@ -409,27 +409,18 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
   const kitEqIds = activeKit ? new Set((activeKit.items||[]).map(i=>String(i.equipment_id))) : null;
   const allowedEquipmentClassifications = getLoanTypeEquipmentClassifications(loanType, categoryLoanTypes);
   const visibleAvailEq = availEq.filter((eq) => matchesEquipmentLoanType(eq, loanType, categoryLoanTypes));
-  const baseCategories = categories.filter((category) => visibleAvailEq.some((eq) => eq.category === category));
-
-  // DIAGNOSTIC: expose "ציוד נוסף" state for debugging — remove once resolved
-  if (typeof window !== "undefined") {
-    const target = "ציוד נוסף";
-    const targetItems = availEq.filter((e) => e.category === target);
-    window.__DEBUG_ZIUD_NOSAF__ = {
-      loanType,
-      allowedEquipmentClassifications,
-      categoryLoanTypesForLoanType: categoryLoanTypes?.[loanType],
-      totalInAvailEq: targetItems.length,
-      totalInVisibleAvailEq: visibleAvailEq.filter((e) => e.category === target).length,
-      targetCategoryInCategoriesArray: categories.includes(target),
-      items: targetItems.map((e) => ({
-        id: e.id, name: e.name, category: e.category,
-        soundOnly: e.soundOnly, photoOnly: e.photoOnly,
-        avail: e.avail, passesFilter: matchesEquipmentLoanType(e, loanType, categoryLoanTypes),
-      })),
-    };
-    console.log("[DEBUG ציוד נוסף]", window.__DEBUG_ZIUD_NOSAF__);
-  }
+  // Include every category that has visible items — even if the admin-managed
+  // `categories` array is out of sync (missing a category that still has items).
+  // This protects the public form from silently hiding entire categories when
+  // `categories` drifts away from the equipment list.
+  const knownOrderedCategories = categories.filter((category) => visibleAvailEq.some((eq) => eq.category === category));
+  const knownCategorySet = new Set(knownOrderedCategories);
+  const orphanedCategories = [...new Set(
+    visibleAvailEq
+      .map((eq) => eq.category)
+      .filter((category) => category && !knownCategorySet.has(category))
+  )];
+  const baseCategories = [...knownOrderedCategories, ...orphanedCategories];
   const filteredCategories = selectedCats.length===0 ? baseCategories : baseCategories.filter(c=>selectedCats.includes(c));
 
   return (
