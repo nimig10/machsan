@@ -175,10 +175,9 @@ function PublicMiniCalendar({ reservations, initialLoanType="הכל", previewSta
     ["rgba(26,188,156,0.75)","#fff"],["rgba(236,72,153,0.75)","#fff"],
     ["rgba(200,160,0,0.75)","#fff"], ["rgba(231,76,60,0.75)","#fff"],
   ];
-  const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:"📦"},{key:"פרטית",label:"פרטית",icon:"👤"},{key:"הפקה",label:"הפקה",icon:"🎬"},{key:"סאונד",label:"סאונד",icon:"🎙️"},{key:"קולנוע יומית",label:"קולנוע יומית",icon:"🎥"},{key:"צוות",label:"איש צוות",icon:"💼"}];
+  const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:"📦"},{key:"פרטית",label:"פרטית",icon:"👤"},{key:"הפקה",label:"הפקה",icon:"🎬"},{key:"סאונד",label:"סאונד",icon:"🎙️"},{key:"קולנוע יומית",label:"קולנוע יומית",icon:"🎥"},{key:"שיעור",label:"שיעור",icon:"📽️"},{key:"צוות",label:"איש צוות",icon:"💼"}];
   const activeRes = reservations.filter(r=>
     (r.status==="מאושר"||r.status==="באיחור") && r.borrow_date && r.return_date &&
-    r.loan_type !== "שיעור" &&
     (loanTypeF==="הכל" || r.loan_type===loanTypeF)
   );
   // For "באיחור" reservations whose return_date is in the past, extend to today so they appear on the calendar
