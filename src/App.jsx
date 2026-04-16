@@ -5633,9 +5633,26 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
               const linkedKitSchedule = linkedKitLessons.flatMap(getLessonScheduleEntries).sort(compareDateTimeParts);
               const displaySchedule = linkedKitSchedule.length > 0 ? linkedKitSchedule : (kit.schedule||[]);
               const nextSession = displaySchedule.find(s=>s.date>=today());
-              const displayInstructorName = kit.instructorName || linkedKitLessons[0]?.instructorName || "";
-              const displayInstructorPhone = kit.instructorPhone || linkedKitLessons[0]?.instructorPhone || "";
-              const displayInstructorEmail = kit.instructorEmail || linkedKitLessons[0]?.instructorEmail || "";
+              // Instructor details come from the canonical lecturers[] list —
+              // the kit's stored instructor* fields are a stale snapshot and
+              // the lesson row may also be stale. Look up by lecturerId, then
+              // by name, and only fall back to stored snapshots as a last resort.
+              const linkedKitLesson = linkedKitLessons[0] || null;
+              const linkedKitLecturer = (() => {
+                if (linkedKitLesson?.lecturerId) {
+                  const byId = lecturers.find(l => String(l.id) === String(linkedKitLesson.lecturerId));
+                  if (byId) return byId;
+                }
+                const nameKey = String(linkedKitLesson?.instructorName || kit.instructorName || "").trim().toLowerCase();
+                if (nameKey) {
+                  const byName = lecturers.find(l => String(l.fullName||"").trim().toLowerCase() === nameKey);
+                  if (byName) return byName;
+                }
+                return null;
+              })();
+              const displayInstructorName  = linkedKitLecturer?.fullName || linkedKitLesson?.instructorName  || kit.instructorName  || "";
+              const displayInstructorPhone = linkedKitLecturer?.phone    || linkedKitLesson?.instructorPhone || kit.instructorPhone || "";
+              const displayInstructorEmail = linkedKitLecturer?.email    || linkedKitLesson?.instructorEmail || kit.instructorEmail || "";
               return (
                 <div key={kit.id} onClick={()=>{setEditTarget(kit);setMode("viewLesson");}} style={{background:"var(--surface)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:"var(--r)",padding:"16px 18px",cursor:"pointer",transition:"border-color 0.15s"}}
                   onMouseEnter={e=>e.currentTarget.style.borderColor="rgba(155,89,182,0.6)"}
