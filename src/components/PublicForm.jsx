@@ -2521,7 +2521,9 @@ ${inventory}
     setSub(true);
 
     // ── Fetch the freshest reservations from the server right before saving ──
-    // This prevents two students submitting simultaneously from both "seeing" free stock
+    // Used for a quick client-side availability pre-check. NOT the authoritative
+    // guard — that's /api/create-reservation → create_reservation_v2 RPC below,
+    // which takes a row-level lock on the equipment it touches.
     let freshReservations = reservations;
     try {
       const fresh = await storageGet("reservations");
@@ -2533,7 +2535,7 @@ ${inventory}
       console.warn("Could not refresh reservations before submit:", e);
     }
 
-    // ── Re-validate availability against fresh data ──
+    // ── Client-side pre-check (fast UX feedback). Server re-checks atomically. ──
     const overLimit = items.filter(item => {
       const avail = getAvailable(item.equipment_id, form.borrow_date, form.return_date, freshReservations, equipment, null, form.borrow_time, form.return_time);
       return item.quantity > avail;
@@ -2550,7 +2552,68 @@ ${inventory}
       Array.isArray(dh.loanTypes) && dh.loanTypes.includes(form.loan_type)
     );
     const initStatus = relevantDH ? "אישור ראש מחלקה" : "ממתין";
-    const newRes = { ...form, id:Date.now(), status:initStatus, created_at:today(), submitted_at:new Date().toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"}), items };
+
+    // One moment captured two ways: Hebrew for the blob (legacy UI format),
+    // ISO for the RPC (it casts to TIMESTAMPTZ and would reject Hebrew format).
+    const submittedAtDate   = new Date();
+    const submittedAtHebrew = submittedAtDate.toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"});
+    const submittedAtIso    = submittedAtDate.toISOString();
+
+    const reservationId = String(Date.now());
+    const newRes = { ...form, id: reservationId, status: initStatus, created_at: today(), submitted_at: submittedAtHebrew, items };
+
+    // ── ATOMIC SERVER-SIDE CREATE ─────────────────────────────────────────
+    // create_reservation_v2 takes FOR UPDATE locks on each equipment row,
+    // re-checks availability, inserts into reservations_new + items, and
+    // decrements available_units — all in one transaction. Fixes the
+    // concurrent-submit race that the old "fetch → modify → write" pattern
+    // had (documented 2026-03-20 data loss).
+    try {
+      const resp = await fetch("/api/create-reservation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reservation: {
+            ...newRes,
+            // created_at from today() is ISO "YYYY-MM-DD" — castable as-is.
+            // submitted_at needs to be ISO for the RPC's TIMESTAMPTZ cast.
+            submitted_at: submittedAtIso,
+          },
+          items: items.map(it => ({
+            equipment_id: it.equipment_id,
+            name:         it.name,
+            quantity:     Number(it.quantity) || 1,
+            unit_id:      it.unit_id || null,
+          })),
+        }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        setSub(false);
+        if (resp.status === 409) {
+          // Stock became unavailable between pre-check and atomic insert.
+          showToast("error", "חלק מהציוד כבר לא זמין — נא לעדכן את הבחירה ולנסות שוב");
+        } else {
+          console.error("create-reservation failed", resp.status, data);
+          showToast("error", "שגיאה בשליחת הבקשה. נסה שוב בעוד רגע.");
+        }
+        return;
+      }
+      // The RPC may have generated its own id if ours was blank; sync up.
+      if (data?.id && String(data.id) !== reservationId) {
+        newRes.id = data.id;
+      }
+    } catch(e) {
+      console.error("create-reservation network error", e);
+      setSub(false);
+      showToast("error", "תקלת רשת. בדוק חיבור ונסה שוב.");
+      return;
+    }
+
+    // ── Keep store.reservations (JSON blob) in sync so existing read paths ──
+    // see the new row until stage 4 switches reads to the new tables.
+    // Mirror's 60s grace period (migration 007) prevents a parallel stale
+    // blob from pruning this freshly-inserted row.
     const updated = [...freshReservations, newRes];
     setReservations(updated);
     await storageSet("reservations", updated);
