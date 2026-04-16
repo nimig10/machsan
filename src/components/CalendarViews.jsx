@@ -227,14 +227,24 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
   const changeStatus = async (r, newStatus) => {
     setChangingStatus(r.id);
     try {
+      // Atomic RPC (migration 009). Serializes concurrent status changes
+      // and recomputes available_units when transitioning into/out of the
+      // "currently out of warehouse" window.
+      const returnedAt = newStatus === "הוחזר" ? new Date().toISOString() : null;
+      const rpcResult = await updateReservationStatus(r.id, newStatus, { returned_at: returnedAt });
+      if (!rpcResult.ok) {
+        console.error("CalendarViews changeStatus RPC failed:", rpcResult);
+        return;
+      }
+      // Refresh local + blob cache. DB is already the source of truth.
       const allRes = await storageGet("reservations");
       const updated = (allRes||[]).map(x => x.id===r.id ? {...x, status:newStatus} : x);
-      const ok = await storageSet("reservations", updated);
-      if(ok.ok) {
-        setLocalRes(prev => prev.map(x => x.id===r.id ? {...x, status:newStatus} : x));
-        if(setReservations) setReservations(updated);
-        setSelected(null);
-      }
+      setLocalRes(prev => prev.map(x => x.id===r.id ? {...x, status:newStatus} : x));
+      if(setReservations) setReservations(updated);
+      setSelected(null);
+      storageSet("reservations", updated).catch(err =>
+        console.warn("blob cache refresh failed (DB is already updated):", err)
+      );
     } catch(e) { console.error("changeStatus error", e); }
     setChangingStatus(null);
   };

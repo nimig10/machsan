@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { logActivity, cloudinaryThumb, getEffectiveStatus } from "./utils.js";
+import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus } from "./utils.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
 import { CalendarGrid } from "./components/CalendarGrid.jsx";
@@ -6055,14 +6055,23 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
   const changeStatus = async (r, newStatus) => {
     setChangingStatus(r.id);
     try {
-      const allRes = (await storageGet("reservations")).value;
-      const updated = (allRes||[]).map(x => x.id===r.id ? {...x, status:newStatus} : x);
-      const ok = await storageSet("reservations", updated);
-      if(ok.ok) {
-        setLocalRes(prev => prev.map(x => x.id===r.id ? {...x, status:newStatus} : x));
-        if(setReservations) setReservations(updated);
-        setSelected(null);
+      // Atomic RPC (migration 009). Fixes concurrent-admin race + counter drift.
+      const returnedAt = newStatus === "הוחזר" ? new Date().toISOString() : null;
+      const rpcResult = await updateReservationStatus(r.id, newStatus, { returned_at: returnedAt });
+      if (!rpcResult.ok) {
+        console.error("ManagerCalendar changeStatus RPC failed:", rpcResult);
+        setChangingStatus(null);
+        return;
       }
+      const allRes = await storageGet("reservations");
+      const fresh = Array.isArray(allRes) ? allRes : ((allRes && allRes.value) || []);
+      const updated = fresh.map(x => x.id===r.id ? {...x, status:newStatus} : x);
+      setLocalRes(prev => prev.map(x => x.id===r.id ? {...x, status:newStatus} : x));
+      if(setReservations) setReservations(updated);
+      setSelected(null);
+      storageSet("reservations", updated).catch(err =>
+        console.warn("blob cache refresh failed (DB is already updated):", err)
+      );
     } catch(e) { console.error("changeStatus error", e); }
     setChangingStatus(null);
   };

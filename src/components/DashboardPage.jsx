@@ -1,6 +1,6 @@
 // DashboardPage.jsx — admin dashboard page
 import { useState } from "react";
-import { storageSet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus } from "../utils.js";
+import { storageSet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 
@@ -529,11 +529,23 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                   <button className="btn btn-secondary" style={{fontSize:14,padding:"10px 32px",background:"var(--blue)",borderColor:"var(--blue)",color:"#fff"}}
                     onClick={async()=>{
                       const res = dashViewRes;
+                      // Route through the atomic RPC (migration 009) so
+                      // available_units recomputes and concurrent admins
+                      // can't double-process the return.
+                      const returnedAt = new Date().toISOString();
+                      const rpcResult = await updateReservationStatus(res.id, "הוחזר", { returned_at: returnedAt });
+                      if (!rpcResult.ok) {
+                        console.error("return RPC failed:", rpcResult);
+                        if(showToast) showToast("error", "שגיאה ברישום ההחזרה בשרת");
+                        return;
+                      }
                       const updated = normalizeReservationsForArchive(reservations.map(r =>
                         r.id === res.id ? markReservationReturned(r) : r
                       ));
                       setReservations(updated);
-                      await storageSet("reservations", updated);
+                      storageSet("reservations", updated).catch(err =>
+                        console.warn("blob cache refresh failed (DB is already updated):", err)
+                      );
                       if(showToast) showToast("success", `הציוד של ${res.student_name} הוחזר ✅`);
                       setDashViewRes(null);
                     }}>
@@ -561,10 +573,20 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                         setDashViewRes(null);
                         return;
                       }
-                      // 3) Approve
+                      // 3) Approve — via atomic RPC (migration 009).
+                      // Prevents two admins from both emailing the student
+                      // if they click approve at the same time.
+                      const rpcResult = await updateReservationStatus(res.id, "מאושר");
+                      if (!rpcResult.ok) {
+                        console.error("dashboard approve RPC failed:", rpcResult);
+                        if(showToast) showToast("error", "שגיאה באישור הבקשה בשרת");
+                        return;
+                      }
                       const updated = reservations.map(r=>r.id===res.id?{...r,status:"מאושר"}:r);
                       setReservations(updated);
-                      await storageSet("reservations",updated);
+                      storageSet("reservations",updated).catch(err =>
+                        console.warn("blob cache refresh failed (DB is already updated):", err)
+                      );
                       if(showToast) showToast("success",`הבקשה של ${res.student_name} אושרה ✅`);
                       // Send approval email
                       if (res.email) {
@@ -645,9 +667,18 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
             <button className="btn btn-secondary" onClick={()=>setDashConsecutiveWarning(null)}>ביטול</button>
             <button className="btn btn-success" onClick={async()=>{
               const res = dashConsecutiveWarning.reservation;
+              // Atomic RPC (migration 009) — serializes concurrent approvers.
+              const rpcResult = await updateReservationStatus(res.id, "מאושר");
+              if (!rpcResult.ok) {
+                console.error("dashboard approve-anyway RPC failed:", rpcResult);
+                if(showToast) showToast("error", "שגיאה באישור הבקשה בשרת");
+                return;
+              }
               const updated = reservations.map(r=>r.id===res.id?{...r,status:"מאושר"}:r);
               setReservations(updated);
-              await storageSet("reservations",updated);
+              storageSet("reservations",updated).catch(err =>
+                console.warn("blob cache refresh failed (DB is already updated):", err)
+              );
               if(showToast) showToast("success",`הבקשה של ${res.student_name} אושרה ✅`);
               setDashConsecutiveWarning(null);
             }}>✅ אשר בכל זאת</button>
