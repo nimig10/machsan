@@ -1,6 +1,6 @@
 // ReservationsPage.jsx — admin reservations management page (includes rejected + archive tabs)
 import { useEffect, useState } from "react";
-import { storageSet, storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus } from "../utils.js";
+import { storageSet, storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, createReservation } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
@@ -306,10 +306,68 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       setMSaving(true);
       let freshRes=reservations;
       try{const fr=await storageGet("reservations");if(Array.isArray(fr)){freshRes=fr;setReservations(fr);}}catch(e){}
-      const newRes={...mf,id:Date.now(),status:mf.status,created_at:today(),submitted_at:new Date().toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"}),items:mItems,manual_by_admin:true};
-      const updated=[...freshRes,newRes];
+      // Route through atomic RPC (migration 008 create_reservation_v2). Same
+      // guarantee as the public form: if a student's parallel submit grabs
+      // the last unit, the admin's manual entry gets rejected with 409
+      // instead of silently overbooking. The RPC also recomputes
+      // available_units so the cached counter stays aligned.
+      const clientId = String(Date.now());
+      const submittedAtIso = new Date().toISOString();
+      const rpcResult = await createReservation(
+        {
+          id:                      clientId,
+          student_name:            mf.student_name,
+          email:                   mf.email,
+          phone:                   mf.phone,
+          course:                  mf.course,
+          project_name:            mf.project_name || null,
+          loan_type:               mf.loan_type,
+          status:                  mf.status,
+          borrow_date:             mf.borrow_date,
+          borrow_time:             mf.borrow_time,
+          return_date:             mf.return_date,
+          return_time:             mf.return_time,
+          crew_photographer_name:  mf.crew_photographer_name || null,
+          crew_photographer_phone: mf.crew_photographer_phone || null,
+          crew_sound_name:         mf.crew_sound_name || null,
+          crew_sound_phone:        mf.crew_sound_phone || null,
+          created_at:              today(),
+          submitted_at:            submittedAtIso,
+        },
+        mItems.map(it => ({
+          equipment_id: it.equipment_id,
+          name:         it.name,
+          quantity:     Number(it.quantity) || 1,
+          unit_id:      it.unit_id || null,
+        }))
+      );
+      if (!rpcResult.ok) {
+        setMSaving(false);
+        if (rpcResult.error === "not_enough_stock") {
+          showToast("error", "חלק מהציוד כבר לא זמין — נא לעדכן את הבחירה ולנסות שוב");
+        } else {
+          console.error("AdminManualForm create failed:", rpcResult);
+          showToast("error", "שגיאה בשמירת הבקשה. נסה שוב.");
+        }
+        return;
+      }
+      // Mirror the new row into local state + blob cache so the list
+      // refreshes immediately. The DB is already the source of truth.
+      const serverId = rpcResult.id || clientId;
+      const newRes = {
+        ...mf,
+        id:           serverId,
+        status:       mf.status,
+        created_at:   today(),
+        submitted_at: new Date().toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"}),
+        items:        mItems,
+        manual_by_admin: true,
+      };
+      const updated = [...freshRes, newRes];
       setReservations(updated);
-      await storageSet("reservations",updated);
+      storageSet("reservations", updated).catch(err =>
+        console.warn("blob cache refresh failed (DB is already updated):", err)
+      );
       setMSaving(false);
       showToast("success",`בקשה ידנית נוצרה · ${mf.student_name}`);
       setShowManualForm(false);

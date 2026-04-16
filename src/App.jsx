@@ -4872,6 +4872,24 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       setKits(updatedKits);
 
       // Create/replace associated reservations (one per session)
+      //
+      // TODO (Stage 2b / migration 010): Route this through a dedicated
+      // batch RPC `create_lesson_reservations_v1(kit_id, reservations[], items)`
+      // that:
+      //   1. Deletes existing reservations where lesson_kit_id = kit_id
+      //   2. For each session, runs the same date-range overlap check as
+      //      create_reservation_v2 under a single transaction (so that
+      //      one session's inserts are visible to the next session's check)
+      //   3. Recomputes available_units for all touched equipment
+      //
+      // The current fetch-list → storageSet("reservations", fullList)
+      // pattern can theoretically race with a concurrent public-form submit
+      // (lesson creator's blob write could overwrite the student's row in
+      // the JSON cache). This is mitigated by migration 007's 60s grace
+      // period in sync_reservations_from_json — the normalized row in
+      // reservations_new is preserved even if the blob briefly drops it.
+      // Lessons are created infrequently and by a single admin, so the
+      // practical race window is small enough to defer to Stage 2b.
       const newRes = finalSchedule.map((s,i)=>({
         id: `${kitId}_s${i}`,
         lesson_kit_id: kitId,
