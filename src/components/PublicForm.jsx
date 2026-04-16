@@ -1135,7 +1135,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [step, setStep]       = useState(initialStep);
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const swipeTouchRef = useRef(null);
-  const [form, setForm]       = useState({student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:"",production_reason:""});
+  const [form, setForm]       = useState({student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_first_name:"",crew_photographer_last_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_first_name:"",crew_sound_last_name:"",crew_sound_phone:"",production_reason:""});
   const [items, setItems]     = useState([]);
   const [agreed, setAgreed]   = useState(false);
   const [done, setDone]       = useState(false);
@@ -1812,6 +1812,29 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     const combined = [fn, ln.trim()].filter(Boolean).join(" ");
     return { ...p, student_last_name: ln, student_name: combined };
   });
+  // Crew name setters — keep crew_*_name (combined) in sync with the two halves
+  // so the certification-matching lookup (which joins on `name`) keeps working.
+  const setCrewPhotographerFirst = (v) => setForm(p => {
+    const fn = String(v||"");
+    const ln = String(p.crew_photographer_last_name||"").trim();
+    return { ...p, crew_photographer_first_name: fn, crew_photographer_name: [fn.trim(), ln].filter(Boolean).join(" ") };
+  });
+  const setCrewPhotographerLast = (v) => setForm(p => {
+    const fn = String(p.crew_photographer_first_name||"").trim();
+    const ln = String(v||"");
+    return { ...p, crew_photographer_last_name: ln, crew_photographer_name: [fn, ln.trim()].filter(Boolean).join(" ") };
+  });
+  const setCrewSoundFirst = (v) => setForm(p => {
+    const fn = String(v||"");
+    const ln = String(p.crew_sound_last_name||"").trim();
+    return { ...p, crew_sound_first_name: fn, crew_sound_name: [fn.trim(), ln].filter(Boolean).join(" ") };
+  });
+  const setCrewSoundLast = (v) => setForm(p => {
+    const fn = String(p.crew_sound_first_name||"").trim();
+    const ln = String(v||"");
+    return { ...p, crew_sound_last_name: ln, crew_sound_name: [fn, ln.trim()].filter(Boolean).join(" ") };
+  });
+
   // Use when we receive a canonical student record (login, account update).
   // Prefer explicit firstName/lastName; fall back to splitting `name`.
   const applyStudentIdentity = (stu) => setForm(p => {
@@ -2056,11 +2079,20 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const availableReturnSlots = isCinemaLoan
     ? cinemaMaxReturnSlots.filter((slot) => availableReturnSlotsBase.includes(slot))
     : availableReturnSlotsBase;
-  // Production flow → student_name is the director's full name (single input).
-  // Private / sound flow → student_first_name is the required field (last name optional).
-  const nameOk = isProductionLoan ? !!form.student_name : !!form.student_first_name;
+  // Name requirements:
+  //   Production flow → director's שם פרטי ושם משפחה שניהם חובה (single input split).
+  //   Private / sound flow → same, שני השדות חובה.
+  const nameOk = isProductionLoan
+    ? !!(form.student_first_name && form.student_last_name)
+    : !!(form.student_first_name && form.student_last_name);
+  // Photographer: שם פרטי + שם משפחה + טלפון — all required.
+  const photographerOk = !!(form.crew_photographer_first_name && form.crew_photographer_last_name && form.crew_photographer_phone);
+  // Sound tech: optional whole-block, but all-or-none — if the user typed
+  // anything (first/last/phone), must fill all three.
+  const soundAnyFilled = !!(form.crew_sound_first_name || form.crew_sound_last_name || form.crew_sound_phone);
+  const soundOk = !soundAnyFilled || (form.crew_sound_first_name && form.crew_sound_last_name && form.crew_sound_phone);
   const ok1 = nameOk && form.email && form.phone && form.course && form.loan_type &&
-    (!isProductionLoan || (form.crew_photographer_name && form.crew_photographer_phone));
+    (!isProductionLoan || (photographerOk && soundOk));
 
   // ── Certification lookup ──
   const normalizePhone = (p) => (p||"").replace(/[^0-9]/g,"");
@@ -2365,7 +2397,20 @@ ${inventory}
       };
 
       if (nextLoanType === "הפקה" && !nextForm.crew_photographer_name) {
-        nextForm.crew_photographer_name = form.student_name || loggedInStudent?.name || "";
+        const fallbackFn = form.student_first_name || String(loggedInStudent?.firstName||"").trim() || "";
+        const fallbackLn = form.student_last_name  || String(loggedInStudent?.lastName ||"").trim() || "";
+        const fallbackFull = [fallbackFn, fallbackLn].filter(Boolean).join(" ")
+          || form.student_name || loggedInStudent?.name || "";
+        // If we only have a combined name, split on first space.
+        let fn = fallbackFn;
+        let ln = fallbackLn;
+        if (!fn && !ln && fallbackFull) {
+          const parts = fallbackFull.trim().split(/\s+/).filter(Boolean);
+          fn = parts[0] || ""; ln = parts.slice(1).join(" ");
+        }
+        nextForm.crew_photographer_first_name = fn;
+        nextForm.crew_photographer_last_name  = ln;
+        nextForm.crew_photographer_name = [fn, ln].filter(Boolean).join(" ") || fallbackFull;
       }
 
       const policyError = getSmartEquipmentPolicyError(nextForm, resolvedItems);
@@ -2672,7 +2717,7 @@ ${inventory}
     showToast("success","הבקשה נשלחה בהצלחה!");
   };
 
-  const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_phone:"",production_reason:""}); setItems([]); setAgreed(false); };
+  const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_first_name:"",crew_photographer_last_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_first_name:"",crew_sound_last_name:"",crew_sound_phone:"",production_reason:""}); setItems([]); setAgreed(false); };
 
   const VIEWS = ["equipment", "studios", "daily", "my-bookings"];
   const handleFormSwipeStart = (e) => {
@@ -3019,30 +3064,14 @@ ${inventory}
                 💡 <strong>במאי ההפקה</strong> הוא האחראי הראשי על קבלתו והחזרתו התקינה של הציוד
               </div>
             )}
-            {isProductionLoan ? (
-              <div className="grid-2">
-                <div className="form-group"><label className="form-label">שם במאי ההפקה *</label><input className="form-input" name="student_name" autoComplete="name" value={form.student_name} onChange={e=>{
-                  const v = e.target.value;
-                  const parts = String(v||"").trim().split(/\s+/).filter(Boolean);
-                  setForm(p => ({ ...p, student_name: v, student_first_name: parts[0]||"", student_last_name: parts.slice(1).join(" ") }));
-                }}/></div>
-                <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" name="phone" autoComplete="tel" value={form.phone} onChange={e=>set("phone",e.target.value)}/></div>
-              </div>
-            ) : (
-              <>
-                <div className="grid-2">
-                  <div className="form-group"><label className="form-label">שם פרטי *</label><input className="form-input" name="student_first_name" autoComplete="given-name" value={form.student_first_name} onChange={e=>setStudentFirstName(e.target.value)}/></div>
-                  <div className="form-group"><label className="form-label">שם משפחה</label><input className="form-input" name="student_last_name" autoComplete="family-name" value={form.student_last_name} onChange={e=>setStudentLastName(e.target.value)}/></div>
-                </div>
-                <div className="grid-2">
-                  <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" name="phone" autoComplete="tel" value={form.phone} onChange={e=>set("phone",e.target.value)}/></div>
-                  <div className="form-group"><label className="form-label">אימייל *</label><input type="email" className="form-input" name="email" autoComplete="email" value={form.email} onChange={e=>set("email",e.target.value)}/></div>
-                </div>
-              </>
-            )}
-            {isProductionLoan && (
+            <div className="grid-2">
+              <div className="form-group"><label className="form-label">{isProductionLoan?"שם פרטי של במאי ההפקה *":"שם פרטי *"}</label><input className="form-input" name="student_first_name" autoComplete="given-name" value={form.student_first_name} onChange={e=>setStudentFirstName(e.target.value)}/></div>
+              <div className="form-group"><label className="form-label">{isProductionLoan?"שם משפחה של במאי ההפקה *":"שם משפחה *"}</label><input className="form-input" name="student_last_name" autoComplete="family-name" value={form.student_last_name} onChange={e=>setStudentLastName(e.target.value)}/></div>
+            </div>
+            <div className="grid-2">
+              <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" name="phone" autoComplete="tel" value={form.phone} onChange={e=>set("phone",e.target.value)}/></div>
               <div className="form-group"><label className="form-label">אימייל *</label><input type="email" className="form-input" name="email" autoComplete="email" value={form.email} onChange={e=>set("email",e.target.value)}/></div>
-            )}
+            </div>
             <div className="grid-2">
               <div className="form-group"><label className="form-label">קורס / כיתה *</label><input className="form-input" value={form.course} onChange={e=>set("course",e.target.value)}/></div>
               <div className="form-group"><label className="form-label">שם הפרויקט</label><input className="form-input" value={form.project_name} onChange={e=>set("project_name",e.target.value)}/></div>
@@ -3053,19 +3082,25 @@ ${inventory}
               <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"16px",marginBottom:16}}>
                 <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>🎥 צלם ההפקה <span style={{color:"var(--red)",fontSize:11}}>* חובה</span></div>
                 <div className="grid-2">
-                  <div className="form-group"><label className="form-label">שם מלא *</label><input className="form-input" placeholder="שם הצלם" name="crew_photographer_name" autoComplete="name" value={form.crew_photographer_name} onChange={e=>set("crew_photographer_name",e.target.value)}/></div>
-                  <div className="form-group">
-                    <label className="form-label">טלפון * <span style={{color:"var(--red)",fontSize:11,fontWeight:700}}>חובה</span></label>
-                    <input className="form-input" placeholder="05x-xxxxxxx" name="crew_photographer_phone" autoComplete="tel" value={form.crew_photographer_phone} onChange={e=>set("crew_photographer_phone",e.target.value)}/>
-                    <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>המערכת מצליבה את הנתונים לפי הסמכות הציוד של הצלם</div>
-                  </div>
+                  <div className="form-group"><label className="form-label">שם פרטי *</label><input className="form-input" placeholder="שם פרטי" name="crew_photographer_first_name" autoComplete="given-name" value={form.crew_photographer_first_name} onChange={e=>setCrewPhotographerFirst(e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label">שם משפחה *</label><input className="form-input" placeholder="שם משפחה" name="crew_photographer_last_name" autoComplete="family-name" value={form.crew_photographer_last_name} onChange={e=>setCrewPhotographerLast(e.target.value)}/></div>
+                </div>
+                <div className="form-group" style={{marginTop:8}}>
+                  <label className="form-label">טלפון * <span style={{color:"var(--red)",fontSize:11,fontWeight:700}}>חובה</span></label>
+                  <input className="form-input" placeholder="05x-xxxxxxx" name="crew_photographer_phone" autoComplete="tel" value={form.crew_photographer_phone} onChange={e=>set("crew_photographer_phone",e.target.value)}/>
+                  <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>המערכת מצליבה את הנתונים לפי הסמכות הציוד של הצלם</div>
                 </div>
               </div>
               <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"16px",marginBottom:16}}>
                 <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>🎙️ איש הסאונד <span style={{color:"var(--text3)",fontSize:11}}>רשות</span></div>
                 <div className="grid-2">
-                  <div className="form-group"><label className="form-label">שם מלא</label><input className="form-input" placeholder="שם איש הסאונד" name="crew_sound_name" autoComplete="name" value={form.crew_sound_name} onChange={e=>set("crew_sound_name",e.target.value)}/></div>
-                  <div className="form-group"><label className="form-label">טלפון</label><input className="form-input" placeholder="05x-xxxxxxx" name="crew_sound_phone" autoComplete="tel" value={form.crew_sound_phone} onChange={e=>set("crew_sound_phone",e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label">שם פרטי</label><input className="form-input" placeholder="שם פרטי" name="crew_sound_first_name" autoComplete="given-name" value={form.crew_sound_first_name} onChange={e=>setCrewSoundFirst(e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label">שם משפחה</label><input className="form-input" placeholder="שם משפחה" name="crew_sound_last_name" autoComplete="family-name" value={form.crew_sound_last_name} onChange={e=>setCrewSoundLast(e.target.value)}/></div>
+                </div>
+                <div className="form-group" style={{marginTop:8}}>
+                  <label className="form-label">טלפון</label>
+                  <input className="form-input" placeholder="05x-xxxxxxx" name="crew_sound_phone" autoComplete="tel" value={form.crew_sound_phone} onChange={e=>set("crew_sound_phone",e.target.value)}/>
+                  <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>אם איש הסאונד רשום במערכת, ציוד שהוא מוסמך עליו יהיה זמין — בדיוק כמו הצלם</div>
                 </div>
               </div>
             {/* ── סיבת ההפקה ── */}
