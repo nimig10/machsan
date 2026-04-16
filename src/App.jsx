@@ -4304,7 +4304,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
 }
 
 // ─── KITS PAGE ────────────────────────────────────────────────────────────────
-function KitsPage({ kits, setKits, equipment, categories, showToast, reservations=[], setReservations, lessons=[] }) {
+function KitsPage({ kits, setKits, equipment, categories, showToast, reservations=[], setReservations, lessons=[], lecturers=[] }) {
   const [mode, setMode] = useState(null); // null | "create" | "editStudent" | "editLesson"
   const [editTarget, setEditTarget] = useState(null);
   const LOAN_TYPES = ["פרטית","הפקה","סאונד","קולנוע יומית","הכל"];
@@ -5457,15 +5457,38 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         const vLinkedLessons = isLessonKit ? getLessonsLinkedToKit(vKit, lessons) : [];
         const vLinkedSchedule = vLinkedLessons.flatMap(getLessonScheduleEntries).sort(compareDateTimeParts);
         const vDisplaySchedule = vLinkedSchedule.length > 0 ? vLinkedSchedule : (vKit.schedule||[]);
-        // Prefer the instructor from currently-linked lessons. The kit's stored
-        // instructor* fields are a legacy snapshot from when the kit was first
-        // created; once the kit is linked to a lesson (e.g. moved to a different
-        // lecturer's course), that live linkage is the source of truth. Falling
-        // back to vKit.instructor* only when no lesson is linked keeps the UI
-        // in sync with the actual schedule.
-        const vInstructorName  = vLinkedLessons[0]?.instructorName  || vKit.instructorName  || "";
-        const vInstructorEmail = vLinkedLessons[0]?.instructorEmail || vKit.instructorEmail || "";
-        const vInstructorPhone = vLinkedLessons[0]?.instructorPhone || vKit.instructorPhone || "";
+        // Instructor details are ALWAYS sourced from the canonical lecturers
+        // table when possible. Lesson rows may carry stale instructorEmail /
+        // instructorPhone (copied at the time the lesson was created), and
+        // kits carry an even older snapshot. The lecturers[] list is the
+        // source of truth for personal details — look up by lecturerId if
+        // available, otherwise by name.
+        const vLinkedLesson = vLinkedLessons[0] || null;
+        const vLessonLecturerId = vLinkedLesson?.lecturerId || "";
+        const vLinkedLecturer = (() => {
+          if (vLessonLecturerId) {
+            const byId = lecturers.find(l => String(l.id) === String(vLessonLecturerId));
+            if (byId) return byId;
+          }
+          const nameKey = String(vLinkedLesson?.instructorName || vKit.instructorName || "").trim().toLowerCase();
+          if (nameKey) {
+            const byName = lecturers.find(l => String(l.fullName || "").trim().toLowerCase() === nameKey);
+            if (byName) return byName;
+          }
+          return null;
+        })();
+        const vInstructorName  = vLinkedLecturer?.fullName
+          || vLinkedLesson?.instructorName
+          || vKit.instructorName
+          || "";
+        const vInstructorEmail = vLinkedLecturer?.email
+          || vLinkedLesson?.instructorEmail
+          || vKit.instructorEmail
+          || "";
+        const vInstructorPhone = vLinkedLecturer?.phone
+          || vLinkedLesson?.instructorPhone
+          || vKit.instructorPhone
+          || "";
         return (
           <div onClick={()=>{setMode(null);setEditTarget(null);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
             <div onClick={e=>e.stopPropagation()} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"20px 24px",maxWidth:520,width:"100%",maxHeight:"85vh",overflowY:"auto",boxShadow:"0 12px 40px rgba(0,0,0,0.5)"}}>
@@ -5488,12 +5511,20 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
               {vLinkedLessons.length > 0 && (
                 <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:"var(--r)",padding:12,marginBottom:12}}>
                   <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:6}}>📚 קורסים משויכים</div>
-                  {vLinkedLessons.map(lesson => (
-                    <div key={lesson.id||lesson.name} style={{marginBottom:4}}>
-                      <span style={{fontWeight:700,fontSize:13}}>📖 {lesson.name}</span>
-                      {lesson.instructorName && <span style={{fontSize:12,color:"var(--text2)",marginRight:8}}>· 👨‍🏫 {lesson.instructorName}</span>}
-                    </div>
-                  ))}
+                  {vLinkedLessons.map(lesson => {
+                    // Prefer the canonical lecturer record; fall back to whatever
+                    // name is stored on the lesson row.
+                    const lessonLec = lesson.lecturerId
+                      ? lecturers.find(l => String(l.id) === String(lesson.lecturerId))
+                      : lecturers.find(l => String(l.fullName||"").trim().toLowerCase() === String(lesson.instructorName||"").trim().toLowerCase());
+                    const lessonInstructorName = lessonLec?.fullName || lesson.instructorName || "";
+                    return (
+                      <div key={lesson.id||lesson.name} style={{marginBottom:4}}>
+                        <span style={{fontWeight:700,fontSize:13}}>📖 {lesson.name}</span>
+                        {lessonInstructorName && <span style={{fontSize:12,color:"var(--text2)",marginRight:8}}>· 👨‍🏫 {lessonInstructorName}</span>}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
@@ -8239,7 +8270,7 @@ export default function App() {
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}
                 initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} siteSettings={siteSettings} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports}/></div>
               <div style={{display:page==="team"?"block":"none"}}><TeamPage teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/></div>
-              <div style={{display:page==="kits"?"block":"none"}}><KitsPage kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons}/></div>
+              <div style={{display:page==="kits"?"block":"none"}}><KitsPage kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons} lecturers={lecturers}/></div>
               <div style={{display:page==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} lecturers={lecturers} setLecturers={setLecturers} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length
                 ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean)
                 : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
