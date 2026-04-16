@@ -575,12 +575,21 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
       // Find the first row that looks like a header (contains recognizable column names)
       for (let ri = 0; ri < Math.min(rows.length, 5); ri++) {
         const normalized = rows[ri].map(h => String(h||"").trim().replace(/[\uFEFF\u200B-\u200D\u00A0]/g,"").toLowerCase());
-        const nameIdx  = normalized.findIndex(h=>h.includes("שם")||h.includes("name"));
+        // Separate first-name / last-name detection — must be checked BEFORE generic "שם"
+        const firstNameIdx = normalized.findIndex(h =>
+          h.includes("שם פרטי") || h === "פרטי" || h.includes("first") || h.includes("firstname") || h.includes("given"));
+        const lastNameIdx  = normalized.findIndex(h =>
+          h.includes("שם משפחה") || h.includes("משפחה") || h.includes("last") || h.includes("lastname") || h.includes("surname") || h.includes("family"));
+        // Generic name column — fallback when the sheet uses a single "שם" / "שם מלא" column.
+        // Exclude the already-matched firstName/lastName indices so we don't re-pick them.
+        const nameIdx = normalized.findIndex((h, idx) =>
+          idx !== firstNameIdx && idx !== lastNameIdx &&
+          (h.includes("שם") || h.includes("name")));
         const emailIdx = normalized.findIndex(h=>h.includes("מייל")||h.includes("mail")||h.includes("email")||h.includes("אימייל")||h.includes("e-mail"));
         const phoneIdx = normalized.findIndex(h=>h.includes("טלפון")||h.includes("phone")||h.includes("tel")||h.includes("נייד")||h.includes("מספר"));
         const trackIdx = normalized.findIndex(h=>h.includes("מסלול")||h.includes("קבוצה")||h.includes("כיתה")||h.includes("track")||h.includes("group")||h.includes("class"));
-        if (nameIdx >= 0 || emailIdx >= 0) {
-          return { headerRow: ri, nameIdx, emailIdx, phoneIdx, trackIdx };
+        if (firstNameIdx >= 0 || lastNameIdx >= 0 || nameIdx >= 0 || emailIdx >= 0) {
+          return { headerRow: ri, firstNameIdx, lastNameIdx, nameIdx, emailIdx, phoneIdx, trackIdx };
         }
       }
       return null;
@@ -590,7 +599,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
       if (!rows.length) return { added: 0, skipped: 0 };
       const detected = detectHeaders(rows);
       if (!detected) return { added: 0, skipped: 0 };
-      const { headerRow, nameIdx, emailIdx, phoneIdx, trackIdx } = detected;
+      const { headerRow, firstNameIdx, lastNameIdx, nameIdx, emailIdx, phoneIdx, trackIdx } = detected;
 
       // Try to find email column by scanning data rows if not found in headers
       let eIdx = emailIdx;
@@ -606,14 +615,36 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
         const email = String(row[eIdx]||"").toLowerCase().trim();
         if (!email || !email.includes("@")) { skipped++; continue; }
         if (newStudents.find(s => s.email === email)) { skipped++; continue; }
-        const name  = nameIdx >= 0 ? String(row[nameIdx]||"").trim() : "";
+
+        // ── Name handling: three supported layouts ──
+        //  A) Explicit firstName + lastName columns → use as-is
+        //  B) Only firstName column (no lastName) → treat as a single name; split on first space
+        //  C) Generic "שם" / "שם מלא" column → split on first space (backward compat)
+        let firstName = "";
+        let lastName  = "";
+        if (firstNameIdx >= 0 && lastNameIdx >= 0) {
+          firstName = String(row[firstNameIdx]||"").trim();
+          lastName  = String(row[lastNameIdx]||"").trim();
+        } else {
+          const raw = firstNameIdx >= 0
+            ? String(row[firstNameIdx]||"").trim()
+            : nameIdx >= 0 ? String(row[nameIdx]||"").trim() : "";
+          const sp = splitName(raw);
+          firstName = sp.firstName;
+          lastName  = sp.lastName;
+        }
+        const fullName = [firstName, lastName].filter(Boolean).join(" ") || email;
         const phone = phoneIdx >= 0 ? String(row[phoneIdx]||"").trim() : "";
         // Track: use cell value; fallback to sheet name if empty
         let track = trackIdx >= 0 ? String(row[trackIdx]||"").trim() : "";
         if (!track) track = sheetName || "";
-        const fullName = name || email;
-        const split = splitName(fullName);
-        newStudents.push({ id: `stu_${Date.now()}_${i}_${Math.random().toString(36).slice(2,6)}`, firstName: split.firstName, lastName: split.lastName, name: fullName, email, phone, track, certs: {} });
+        newStudents.push({
+          id: `stu_${Date.now()}_${i}_${Math.random().toString(36).slice(2,6)}`,
+          firstName,
+          lastName,
+          name: fullName,
+          email, phone, track, certs: {},
+        });
         added++;
       }
       return { added, skipped };
@@ -669,9 +700,9 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
 
   const downloadSampleFile = () => {
     const csv = [
-      "שם מלא,אימייל,טלפון,מסלול לימודים",
-      "נועה כהן,noa.cohen@example.com,0501234567,הנדסאי סאונד א",
-      "יואב לוי,yoav.levi@example.com,0527654321,הנדסאי קולנוע א",
+      "שם פרטי,שם משפחה,אימייל,טלפון,מסלול לימודים",
+      "נועה,כהן,noa.cohen@example.com,0501234567,הנדסאי סאונד א",
+      "יואב,לוי,yoav.levi@example.com,0527654321,הנדסאי קולנוע א",
     ].join("\n");
     const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);

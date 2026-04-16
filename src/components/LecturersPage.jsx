@@ -411,20 +411,43 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
         if (rows.length < 2) continue; // skip empty / header-only sheets
 
         const header = rows[0].map(h => String(h || "").trim().toLowerCase());
-        const nameIdx  = header.findIndex(h => /שם/.test(h));
+        // Separate first-name / last-name detection — must be checked BEFORE generic "שם"
+        const firstNameIdx = header.findIndex(h =>
+          h.includes("שם פרטי") || h === "פרטי" || /first|given/.test(h));
+        const lastNameIdx = header.findIndex(h =>
+          h.includes("שם משפחה") || h.includes("משפחה") || /last|surname|family/.test(h));
+        // Generic name column — excludes the already-matched firstName/lastName indices
+        const nameIdx = header.findIndex((h, idx) =>
+          idx !== firstNameIdx && idx !== lastNameIdx && /שם|name/.test(h));
         const phoneIdx = header.findIndex(h => /טלפון|נייד|phone/.test(h));
         const emailIdx = header.findIndex(h => /מייל|אימייל|email/.test(h));
 
-        if (nameIdx < 0) continue; // sheet has no name column — skip it
+        if (firstNameIdx < 0 && lastNameIdx < 0 && nameIdx < 0) continue; // no name column — skip
 
         for (let i = 1; i < rows.length; i++) {
           const row = rows[i];
-          const fullName = String(row[nameIdx] || "").trim();
+
+          // Resolve firstName/lastName using the same three-layout logic as StudentsPage
+          let firstName = "";
+          let lastName  = "";
+          if (firstNameIdx >= 0 && lastNameIdx >= 0) {
+            firstName = String(row[firstNameIdx] || "").trim();
+            lastName  = String(row[lastNameIdx] || "").trim();
+          } else {
+            const raw = firstNameIdx >= 0
+              ? String(row[firstNameIdx] || "").trim()
+              : nameIdx >= 0 ? String(row[nameIdx] || "").trim() : "";
+            const sp = splitLecturerName(raw);
+            firstName = sp.firstName;
+            lastName  = sp.lastName;
+          }
+          const fullName = [firstName, lastName].filter(Boolean).join(" ");
           if (!fullName) continue;
           if (existingNames.has(fullName.toLowerCase())) { skippedCount++; continue; }
           existingNames.add(fullName.toLowerCase());
           newLecs.push(makeLecturer({
-            fullName,
+            firstName,
+            lastName,
             phone: phoneIdx >= 0 ? String(row[phoneIdx] || "").trim() : "",
             email: emailIdx >= 0 ? String(row[emailIdx] || "").trim() : "",
           }));
