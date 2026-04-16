@@ -193,6 +193,7 @@ ${csvText}
       } else {
         csvData = sheets.map(s => `--- גיליון: ${s.name} ---\n${s.csv}`).join("\n\n");
         notify(showToast, "info", `מנתח ${sheets.length} גיליונות עם AI...`);
+        const failedSheets = [];
         for (let i = 0; i < sheets.length; i += 1) {
           notify(showToast, "info", `מנתח גיליון ${i + 1}/${sheets.length}: "${sheets[i].name}"...`);
           try {
@@ -200,7 +201,11 @@ ${csvText}
             if (result?.length) extractedStudents.push(...result);
           } catch (err) {
             console.warn(`Sheet "${sheets[i].name}" failed:`, err);
+            failedSheets.push(sheets[i].name);
           }
+        }
+        if (failedSheets.length) {
+          notify(showToast, "warning", `נכשל פענוח ${failedSheets.length} גיליונות: ${failedSheets.join(", ")}. התקבלו רק סטודנטים מגיליונות שהצליחו.`);
         }
       }
 
