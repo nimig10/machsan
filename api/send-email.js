@@ -1,7 +1,22 @@
 import nodemailer from "nodemailer";
+import { signApproveToken } from "./_approve-token.js";
 
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_PASS = process.env.GMAIL_PASS;
+
+// Build the dept-head approval URL server-side so the HMAC secret never
+// leaves the server. The client only tells us `reservation_id`; we sign it
+// here and embed the signature in the link.
+function buildApproveUrl(req, reservationId) {
+  const id = reservationId == null ? "" : String(reservationId);
+  if (!id) return "";
+  const token = signApproveToken(id);
+  if (!token) return "";
+  const proto = (req.headers["x-forwarded-proto"] || "https").split(",")[0].trim();
+  const host  = (req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
+  if (!host) return "";
+  return `${proto}://${host}/api/approve-production?id=${encodeURIComponent(id)}&token=${encodeURIComponent(token)}`;
+}
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -263,7 +278,6 @@ export default async function handler(req, res) {
     production_reason,
     crew_photographer,
     crew_sound,
-    approve_url,
     calendar_url,
     portal_url,
     report_note,
@@ -277,6 +291,11 @@ export default async function handler(req, res) {
   } = req.body;
 
   if (!to || !type) return res.status(400).json({ error: "חסרים שדות חובה" });
+
+  // approve_url is NEVER accepted from the client — it must be signed here.
+  const approve_url = type === "dept_head_notify"
+    ? buildApproveUrl(req, reservation_id)
+    : "";
 
   const subjects = {
     studio_approved:   "🎙️ קביעת החדר שלך אושרה – מכללת קמרה אובסקורה וסאונד",

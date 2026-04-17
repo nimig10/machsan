@@ -2561,7 +2561,9 @@ ${inventory}
         Array.isArray(dh.loanTypes) && dh.loanTypes.includes(res.loan_type)
       );
       if (relevantDeptHeads.length > 0) {
-        const approveUrl = `${window.location.origin}/api/approve-production?id=${res.id}`;
+        // approve_url is built server-side in /api/send-email — the client
+        // must not construct it, because the signing secret lives only on
+        // the server (see api/_approve-token.js).
         const portalUrl = `${window.location.origin}/`;
         for (let i = 0; i < relevantDeptHeads.length; i++) {
           const dh = relevantDeptHeads[i];
@@ -2586,7 +2588,6 @@ ${inventory}
                 production_reason: res.production_reason||"",
                 crew_photographer: res.crew_photographer_name||"",
                 crew_sound:        res.crew_sound_name||"",
-                approve_url:       approveUrl,
                 portal_url:     portalUrl,
                 reservation_id: String(res.id),
                 logo_url:       siteSettings.logo || "",

@@ -3152,7 +3152,7 @@ function PublicForm_REMOVED({ equipment, reservations, setReservations, showToas
         Array.isArray(dh.loanTypes) && dh.loanTypes.includes(res.loan_type)
       );
       if (relevantDeptHeads.length > 0) {
-        const approveUrl = `${window.location.origin}/api/approve-production?id=${res.id}`;
+        // approve_url is built + signed server-side in /api/send-email.
         const calendarUrl = calendarToken ? `${window.location.origin}/calendar?token=${calendarToken}` : "";
         const dhAc = new AbortController();
         const dhTid = setTimeout(() => dhAc.abort(), 20000);
@@ -3180,7 +3180,6 @@ function PublicForm_REMOVED({ equipment, reservations, setReservations, showToas
                 project_name:   res.project_name||"",
                 crew_photographer: res.crew_photographer_name||"",
                 crew_sound:     res.crew_sound_name||"",
-                approve_url:    approveUrl,
                 calendar_url:   calendarUrl,
                 reservation_id: String(res.id),
                 logo_url:       siteSettings.logo || "",

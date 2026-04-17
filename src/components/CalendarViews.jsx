@@ -1,7 +1,7 @@
 // CalendarViews.jsx — DeptHeadCalendarPage and ManagerCalendarPage
 import { useState } from "react";
 import { CalendarGrid } from "./CalendarGrid.jsx";
-import { formatDate, today, storageGet, storageSet, cloudinaryThumb } from "../utils.js";
+import { formatDate, today, storageGet, storageSet, cloudinaryThumb, getAuthToken } from "../utils.js";
 
 export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equipment=[], siteSettings={} }) {
   const [localRes, setLocalRes]   = useState(initialReservations);
@@ -14,8 +14,13 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
   const approveReservation = async (r) => {
     setApproving(r.id);
     try {
-      const approveUrl = `/api/approve-production?id=${r.id}`;
-      const res = await fetch(approveUrl);
+      // In-app dept-head approval — authenticates with the Supabase session
+      // JWT instead of an email signed token. /api/approve-production accepts
+      // either (see api/approve-production.js).
+      const token = await getAuthToken();
+      const res = await fetch(`/api/approve-production?id=${r.id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (res.ok) {
         // Update local state immediately
         setLocalRes(prev => prev.map(x => x.id===r.id ? {...x, status:"ממתין"} : x));
