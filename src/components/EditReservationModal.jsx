@@ -7,6 +7,7 @@ import {
   FAR_FUTURE,
   getReservationApprovalConflicts,
   cloudinaryThumb,
+  getAuthToken,
 } from "../utils.js";
 
 export function EditReservationModal({ reservation, equipment, reservations, onSave, onApprove, onClose, collegeManager={}, managerToken="", siteSettings={} }) {
@@ -30,8 +31,9 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
     setReportSending(true);
     try {
       const eqList = items.map(i=>`${i.name} ×${i.quantity}`).join(", ");
+      const tokMgr = await getAuthToken();
       await fetch("/api/send-email", {
-        method:"POST", headers:{"Content-Type":"application/json"},
+        method:"POST", headers:{"Content-Type":"application/json", ...(tokMgr ? { Authorization: `Bearer ${tokMgr}` } : {})},
         body: JSON.stringify({
           to: collegeManager.email,
           type: "manager_report",
@@ -82,9 +84,10 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
     if (!reservation?.email || !overdueEditMailText.trim()) return;
     setOverdueEditMailSending(true);
     try {
+      const tokOd = await getAuthToken();
       await fetch("/api/send-email", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(tokOd ? { Authorization: `Bearer ${tokOd}` } : {}) },
         body: JSON.stringify({
           to: reservation.email,
           type: "overdue",

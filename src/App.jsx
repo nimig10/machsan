@@ -4829,9 +4829,10 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
           const end = session?.endTime || "";
           return `<div style="margin-bottom:6px;color:#c7cedf">שיעור ${index + 1}: ${formatDate(session.date)} ${start}${end ? `–${end}` : ""}</div>`;
         }).join("");
+        const tok4832 = await getAuthToken();
         await fetch("/api/send-email", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(tok4832 ? { Authorization: `Bearer ${tok4832}` } : {}) },
           body: JSON.stringify({
             to: recipient,
             type: "lesson_kit_ready",
@@ -6924,8 +6925,9 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
     if(!editUnit||!collegeManager.email) return;
     setReportSending(true);
     try {
+      const tok6927 = await getAuthToken();
       await fetch("/api/send-email", {
-        method:"POST", headers:{"Content-Type":"application/json"},
+        method:"POST", headers:{"Content-Type":"application/json", ...(tok6927 ? { Authorization: `Bearer ${tok6927}` } : {})},
         body: JSON.stringify({
           to: collegeManager.email,
           type: "manager_report",
@@ -8044,12 +8046,13 @@ export default function App() {
         if (!toSend.length) return;
         const ac = new AbortController();
         const tid = setTimeout(() => ac.abort(), 15000);
+        const tokOverdue = await getAuthToken();
         for (const r of toSend) {
           if (ac.signal.aborted) break;
           try {
             await fetch("/api/send-email", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { "Content-Type": "application/json", ...(tokOverdue ? { Authorization: `Bearer ${tokOverdue}` } : {}) },
               signal: ac.signal,
               body: JSON.stringify({
                 to: r.email,

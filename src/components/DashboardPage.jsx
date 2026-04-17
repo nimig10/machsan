@@ -1,6 +1,6 @@
 // DashboardPage.jsx — admin dashboard page
 import { useState } from "react";
-import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus } from "../utils.js";
+import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 
@@ -597,7 +597,8 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                         try {
                           const emailAc = new AbortController();
                           const emailTid = setTimeout(() => emailAc.abort(), 8000);
-                          await fetch("/api/send-email",{method:"POST",headers:{"Content-Type":"application/json"},signal:emailAc.signal,body:JSON.stringify({to:res.email,type:"approved",student_name:res.student_name,items_list:itemsList,borrow_date:formatDate(res.borrow_date),return_date:formatDate(res.return_date),borrow_time:res.borrow_time||"",return_time:res.return_time||"",sound_logo_url:siteSettings.soundLogo||""})});
+                          const tokAp = await getAuthToken();
+                          await fetch("/api/send-email",{method:"POST",headers:{"Content-Type":"application/json",...(tokAp?{Authorization:`Bearer ${tokAp}`}:{})},signal:emailAc.signal,body:JSON.stringify({to:res.email,type:"approved",student_name:res.student_name,items_list:itemsList,borrow_date:formatDate(res.borrow_date),return_date:formatDate(res.return_date),borrow_time:res.borrow_time||"",return_time:res.return_time||"",sound_logo_url:siteSettings.soundLogo||""})});
                           clearTimeout(emailTid);
                           if(showToast) showToast("success",`📧 מייל אישור נשלח ל-${res.email}`);
                         } catch { if(showToast) showToast("error","שגיאה בשליחת המייל"); }

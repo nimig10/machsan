@@ -604,9 +604,10 @@ export default function StudioBookingPage(props) {
     const email = studentRecord?.email;
     if (!email) return;
     try {
+      const tokSb = await getAuthToken();
       await fetch("/api/send-email", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(tokSb ? { Authorization: `Bearer ${tokSb}` } : {}) },
         body: JSON.stringify({
           to: email,
           type,

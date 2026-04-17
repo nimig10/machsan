@@ -1,5 +1,15 @@
 import nodemailer from "nodemailer";
 import { signApproveToken } from "./_approve-token.js";
+import { resolveUserRole } from "./_auth-helper.js";
+
+// Types that the anonymous public form is allowed to trigger:
+//   new              — confirmation to the student
+//   team_notify      — warehouse staff notification
+//   dept_head_notify — dept head approval email
+// All other types are staff-initiated (approved/rejected/manager_report/
+// overdue/overdue_team/lesson_kit_ready/studio_*) — we reject them unless
+// the caller presents a valid user JWT.
+const ANON_ALLOWED_TYPES = new Set(["new", "team_notify", "dept_head_notify"]);
 
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_PASS = process.env.GMAIL_PASS;
@@ -291,6 +301,16 @@ export default async function handler(req, res) {
   } = req.body;
 
   if (!to || !type) return res.status(400).json({ error: "חסרים שדות חובה" });
+
+  // Authorization gate:
+  //   - Anonymous callers may only send public-form types (new/team_notify/dept_head_notify).
+  //   - Any other type requires a valid user JWT (student/lecturer/staff).
+  //   - This blocks attackers from using the endpoint to spoof "approved"/
+  //     "rejected"/"overdue"/etc. emails that appear to come from the warehouse.
+  const role = await resolveUserRole(req);
+  if (role.role === "anon" && !ANON_ALLOWED_TYPES.has(type)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
 
   // approve_url is NEVER accepted from the client — it must be signed here.
   const approve_url = type === "dept_head_notify"

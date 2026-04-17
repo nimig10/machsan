@@ -1,6 +1,6 @@
 // ReservationsPage.jsx — admin reservations management page (includes rejected + archive tabs)
 import { useEffect, useState } from "react";
-import { storageSet, storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, createReservation, deleteReservation as deleteReservationRpc } from "../utils.js";
+import { storageSet, storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, createReservation, deleteReservation as deleteReservationRpc, getAuthToken } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
@@ -363,9 +363,10 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
     if (!reservation?.email || (status !== "מאושר" && status !== "נדחה")) return;
     const itemsList = reservation.items?.map(i => `<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${i.name || eqName(i.equipment_id)}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${i.quantity}</td></tr>`).join("") || "";
     try {
+      const tokSt = await getAuthToken();
       await fetch("/api/send-email", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(tokSt ? { Authorization: `Bearer ${tokSt}` } : {}) },
         body: JSON.stringify({
           to:           reservation.email,
           type:         status === "מאושר" ? "approved" : "rejected",
@@ -472,9 +473,10 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
     if (!reservation?.email || !text.trim()) return;
     setOverdueEmailSending(true);
     try {
+      const tokOdm = await getAuthToken();
       await fetch("/api/send-email", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(tokOdm ? { Authorization: `Bearer ${tokOdm}` } : {}) },
         body: JSON.stringify({
           to: reservation.email,
           type: "overdue",

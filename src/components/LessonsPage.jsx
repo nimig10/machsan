@@ -356,9 +356,10 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
         const email = studentRecord?.email || booking.email;
         if (!email) return;
         try {
+          const tokConf = await getAuthToken();
           await fetch("/api/send-email", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...(tokConf ? { Authorization: `Bearer ${tokConf}` } : {}) },
             body: JSON.stringify({
               to: email,
               type: "studio_lesson_conflict",
@@ -1303,9 +1304,10 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
       const scheduleList = (schedule||[]).map((s,i)=>
         `<div style="margin-bottom:6px;color:#c7cedf">שיעור ${i+1}: ${formatDate(s.date)} ${s.startTime||""}${s.endTime?`–${s.endTime}`:""}${s.topic?` · ${s.topic}`:""}</div>`
       ).join("");
+      const tokLk = await getAuthToken();
       await fetch("/api/send-email", {
         method:"POST",
-        headers:{"Content-Type":"application/json"},
+        headers:{"Content-Type":"application/json", ...(tokLk ? { Authorization: `Bearer ${tokLk}` } : {})},
         body:JSON.stringify({
           to: recipient,
           type: "lesson_kit_ready",
