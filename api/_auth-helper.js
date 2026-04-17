@@ -41,31 +41,22 @@ export async function requireStaff(req, res) {
   const authHeader = req.headers.authorization || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
-  if (!token) {
-    console.warn("[auth] no bearer token in request");
-    res.status(401).json({ error: "Unauthorized", reason: "no_token" });
-    return null;
-  }
-
   const authUser = await verifyToken(token);
   if (!authUser) {
-    console.warn("[auth] verifyToken returned null");
-    res.status(401).json({ error: "Unauthorized", reason: "invalid_token" });
+    res.status(401).json({ error: "Unauthorized" });
     return null;
   }
 
   const email = String(authUser.email || "").toLowerCase();
-  const trace = { authId: authUser.id, email };
 
   // 1) Try public.users by auth id (unified system)
   try {
-    const url1 = `${SB_URL}/rest/v1/users?id=eq.${encodeURIComponent(authUser.id)}&select=id,email,is_admin,is_warehouse&limit=1`;
-    const r1 = await fetch(url1, { headers: SERVICE_HEADERS });
-    const text1 = await r1.text();
-    trace.users_status = r1.status;
-    trace.users_body = text1.slice(0, 300);
+    const r1 = await fetch(
+      `${SB_URL}/rest/v1/users?id=eq.${encodeURIComponent(authUser.id)}&select=id,email,is_admin,is_warehouse&limit=1`,
+      { headers: SERVICE_HEADERS }
+    );
     if (r1.ok) {
-      const rows = text1 ? JSON.parse(text1) : [];
+      const rows = await r1.json();
       const u = rows?.[0];
       if (u && (u.is_admin || u.is_warehouse)) {
         let staffId = u.id;
@@ -80,7 +71,7 @@ export async function requireStaff(req, res) {
         return { staffId, role: u.is_admin ? "admin" : "staff", email: u.email || email };
       }
     }
-  } catch (e) { trace.users_err = e.message; }
+  } catch {}
 
   // 2) Fallback: legacy staff_members by email
   try {
@@ -88,20 +79,14 @@ export async function requireStaff(req, res) {
       `${SB_URL}/rest/v1/staff_members?email=eq.${encodeURIComponent(email)}&select=id,role,email&limit=1`,
       { headers: SERVICE_HEADERS }
     );
-    const text2 = await r2.text();
-    trace.staff_status = r2.status;
-    trace.staff_body = text2.slice(0, 300);
     if (r2.ok) {
-      const rows = text2 ? JSON.parse(text2) : [];
+      const rows = await r2.json();
       const member = rows?.[0];
-      if (member) {
-        return { staffId: member.id, role: member.role, email: member.email };
-      }
+      if (member) return { staffId: member.id, role: member.role, email: member.email };
     }
-  } catch (e) { trace.staff_err = e.message; }
+  } catch {}
 
-  console.error("[auth-403] " + JSON.stringify(trace));
-  res.status(403).json({ error: "Forbidden", reason: "no_staff_record", trace });
+  res.status(403).json({ error: "Forbidden" });
   return null;
 }
 
