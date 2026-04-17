@@ -150,7 +150,19 @@ async function storageSet(key, value) {
     });
     if (!res.ok) {
       const err = await res.text();
-      console.error("storageSet error", key, err);
+      console.warn("storageSet error", key, err);
+      // Shrink guard → local state is stale. Refresh cache from DB and
+      // tell the app to re-render from truth instead of from our stale view.
+      if (/shrink_guard_blocked/i.test(err)) {
+        try {
+          const { value: fresh } = await storageGet(key);
+          if (fresh != null) {
+            lsSet(key, fresh);
+            window.dispatchEvent(new CustomEvent("storage-stale-refresh", { detail: { key, fresh } }));
+          }
+        } catch {}
+        return { ok: false, error: "shrink_guard_blocked", stale: true };
+      }
       restoreCacheValue(key, previousCachedValue);
       return { ok: false, error: err };
     }
