@@ -594,12 +594,19 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                         }
                         const updated = reservations.map(r=>r.id===res.id?{...r,status:"מאושר"}:r);
                         setReservations(updated);
-                        // Persist to the JSONB blob so the status survives refresh
-                        // (normalized table is updated by the RPC, blob is not).
-                        storageSet("reservations", updated).catch(err =>
-                          console.warn("blob cache refresh failed (DB is already updated):", err)
-                        );
-                        if(showToast) showToast("success",`הבקשה של ${res.student_name} אושרה ✅`);
+                        // Persist to the JSONB blob so the status survives refresh.
+                        // The RPC updates the normalized table but NOT the blob, and
+                        // the UI still reads from the blob — so without this, a
+                        // refresh resurrects the old "ממתין" status.
+                        // Await + log any failure so the admin retries instead of
+                        // silently thinking it was saved.
+                        const blobWrite = await storageSet("reservations", updated);
+                        if (!blobWrite || blobWrite.ok === false) {
+                          console.error("dashboard approve: blob write failed", blobWrite);
+                          if(showToast) showToast("error", "האישור נשמר ב-DB אך כתיבה ל-blob נכשלה — רענן את הדף");
+                        } else {
+                          if(showToast) showToast("success",`הבקשה של ${res.student_name} אושרה ✅`);
+                        }
                         // Only email when this click was the one that actually flipped the status.
                         if (rpcResult.changed && res.email) {
                           const itemsList = res.items?.map(i=>`<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${equipment.find(e=>e.id==i.equipment_id)?.name||i.name||"?"}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${i.quantity}</td></tr>`).join("")||"";
