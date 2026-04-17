@@ -9,6 +9,7 @@
 // Required env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, MIGRATION_SECRET (for migrate)
 
 import bcrypt from "bcryptjs";
+import { requireAdmin, requireStaff } from "./_auth-helper.js";
 
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -101,9 +102,9 @@ async function legacyAdminCount() {
   return Array.isArray(r.data) ? r.data.length : 0;
 }
 
-function handleLegacy(req, res) {
+function handleLegacy(req, res, callerRole) {
   const { method } = req;
-  const { action, callerRole } = req.body || {};
+  const { action } = req.body || {};
 
   // LIST
   if (method === "GET" || action === "list") {
@@ -531,15 +532,28 @@ async function handleMigrate(req, res) {
 export default async function handler(req, res) {
   const { action } = req.body || {};
 
-  // New unified-auth actions
-  if (action === "invite")      return await handleInvite(req, res);
-  if (action === "update_user") return await handleUpdateUser(req, res);
-  if (action === "delete_user") return await handleDeleteUser(req, res);
-  if (action === "migrate")     return await handleMigrate(req, res);
+  // Migration stays secret-protected — no JWT required
+  if (action === "migrate") return await handleMigrate(req, res);
+
+  // New unified-auth actions — admin only
+  if (["invite", "update_user", "delete_user"].includes(action)) {
+    const admin = await requireAdmin(req, res);
+    if (!admin) return;
+    if (action === "invite")      return await handleInvite(req, res);
+    if (action === "update_user") return await handleUpdateUser(req, res);
+    if (action === "delete_user") return await handleDeleteUser(req, res);
+  }
 
   // Legacy actions (staff_members table)
   if (req.method === "GET" || ["list", "create", "update", "delete"].includes(action)) {
-    const result = handleLegacy(req, res);
+    // list: any verified staff member (non-admins get limited fields)
+    // create/update/delete: admin only
+    const isListOnly = req.method === "GET" || action === "list";
+    const caller = isListOnly
+      ? await requireStaff(req, res)
+      : await requireAdmin(req, res);
+    if (!caller) return;
+    const result = handleLegacy(req, res, caller.role);
     if (result) return result;
   }
 

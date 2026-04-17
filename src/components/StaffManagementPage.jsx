@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Modal } from "./ui.jsx";
-import { storageSet, storageGet, isValidEmailAddress, logActivity } from "../utils.js";
+import { storageSet, storageGet, isValidEmailAddress, logActivity, getAuthToken } from "../utils.js";
 
 const WAREHOUSE_SECTIONS = [
   { id: "reservations", label: "📋 בקשות" },
@@ -63,10 +63,11 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
 
   const fetchStaff = async () => {
     try {
+      const token = await getAuthToken();
       const res = await fetch("/api/staff", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "list", callerRole: "admin" }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "list" }),
       });
       if (res.ok) setStaff(await res.json());
     } catch (e) { console.error(e); }
@@ -86,10 +87,11 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
     if (!id && !password?.trim()) { showToast?.("error", "יש להזין סיסמה למשתמש חדש"); return; }
     setSaving(true);
     try {
-      const body = { action: id ? "update" : "create", callerRole: "admin", full_name: full_name.trim(), email: email.trim(), role: role || "staff", permissions };
+      const token = await getAuthToken();
+      const body = { action: id ? "update" : "create", full_name: full_name.trim(), email: email.trim(), role: role || "staff", permissions };
       if (id) body.id = id;
       if (!id && password?.trim()) body.password = password.trim();
-      const res = await fetch("/api/staff", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const res = await fetch("/api/staff", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
       const data = await res.json();
       if (res.ok) {
         const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
@@ -161,7 +163,8 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
   const handleDelete = async (id) => {
     setDeleting(id);
     try {
-      const res = await fetch("/api/staff", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete", callerRole: "admin", id }) });
+      const token = await getAuthToken();
+      const res = await fetch("/api/staff", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ action: "delete", id }) });
       if (res.ok) {
           // Remove from teamMembers too
           const current = Array.isArray(teamMembers) ? teamMembers : [];

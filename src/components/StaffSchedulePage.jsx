@@ -168,10 +168,11 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
   useEffect(() => {
     (async () => {
       try {
+        const token = await getAuthToken();
         const res = await fetch("/api/staff", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "list", callerRole: isAdmin ? "admin" : "staff" }),
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: "list" }),
         });
         if (res.ok) {
           const list = await res.json();
