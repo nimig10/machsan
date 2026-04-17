@@ -7131,17 +7131,41 @@ export default function App() {
     // If we already have staffUser from sessionStorage, no need to wait
     try { return !!sessionStorage.getItem("staff_user"); } catch { return false; }
   });
-  // Recover staffUser from Supabase session if sessionStorage was cleared
+  // Validate staffUser against the live Supabase session on every /admin mount,
+  // and re-validate whenever the auth state changes (login as student in PublicForm,
+  // logout in another tab, etc). Without this, a stale sessionStorage.staff_user
+  // would let a non-admin session render the admin shell — the API still 403s
+  // but the UI should never have rendered.
   useEffect(() => {
-    if (!isAdmin || staffUser) return;
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session?.user?.id) { setStaffAuthChecked(true); return; }
+    if (!isAdmin) { setStaffAuthChecked(true); return; }
+
+    let cancelled = false;
+    const validate = async (session) => {
+      if (cancelled) return;
+      if (!session?.user?.id) {
+        sessionStorage.removeItem("staff_user");
+        setStaffUser(null);
+        setStaffAuthChecked(true);
+        return;
+      }
+      // Drop a stale cached staffUser before its DB row is checked.
+      const cached = staffUser;
+      if (cached?.id && cached.id !== session.user.id) {
+        sessionStorage.removeItem("staff_user");
+        setStaffUser(null);
+      }
       const { data: userRow } = await supabase
         .from("users")
         .select("id,full_name,email,is_student,is_lecturer,is_warehouse,is_admin,permissions")
         .eq("id", session.user.id)
         .single();
-      if (!userRow || (!userRow.is_admin && !userRow.is_warehouse)) { setStaffAuthChecked(true); return; }
+      if (cancelled) return;
+      if (!userRow || (!userRow.is_admin && !userRow.is_warehouse)) {
+        sessionStorage.removeItem("staff_user");
+        setStaffUser(null);
+        setStaffAuthChecked(true);
+        return;
+      }
       const recovered = {
         id: userRow.id,
         full_name: userRow.full_name,
@@ -7153,11 +7177,22 @@ export default function App() {
         is_student: userRow.is_student,
         is_lecturer: userRow.is_lecturer,
       };
+      const wasFresh = cached?.id === recovered.id;
       setStaffUser(recovered);
       setStaffAuthChecked(true);
-      logActivity({ user_id: recovered.id, user_name: recovered.full_name, action: "login", entity: "session", details: { email: recovered.email, method: "session_recovery" } });
-    }).catch(() => setStaffAuthChecked(true));
-  }, []);
+      if (!wasFresh) {
+        logActivity({ user_id: recovered.id, user_name: recovered.full_name, action: "login", entity: "session", details: { email: recovered.email, method: "session_recovery" } });
+      }
+    };
+
+    supabase.auth.getSession().then(({ data }) => validate(data.session)).catch(() => {
+      if (!cancelled) setStaffAuthChecked(true);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      validate(session);
+    });
+    return () => { cancelled = true; subscription?.unsubscribe?.(); };
+  }, [isAdmin]);
   const [staffView, setStaffView] = useState(() => sessionStorage.getItem("staff_view") || "hub"); // hub | warehouse | administration | staff-management
   const authed = !!staffUser;
   const isMainAdmin = isAdmin && authed;
