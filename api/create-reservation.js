@@ -86,6 +86,25 @@ export default async function handler(req, res) {
     // The RPC returns the new reservation id as a TEXT scalar.
     // PostgREST wraps it as a JSON scalar (string).
     const id = await r.json();
+
+    // Keep the store.reservations JSON blob in sync atomically on the server.
+    // Uses append_to_store_reservations (migration 021) — a pure growth
+    // update, so shrink_guard (migration 011) is never triggered.
+    try {
+      const finalReservation = { ...reservation, id, items };
+      await fetch(`${SB_URL}/rest/v1/rpc/append_to_store_reservations`, {
+        method: "POST",
+        headers: {
+          apikey: SB_KEY,
+          Authorization: `Bearer ${SB_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ p_reservation: finalReservation }),
+      });
+    } catch (appendErr) {
+      console.warn("append_to_store_reservations failed (non-fatal):", appendErr?.message || appendErr);
+    }
+
     return res.status(200).json({ ok: true, id });
   } catch (e) {
     console.error("create-reservation network error:", e);

@@ -2715,13 +2715,12 @@ ${inventory}
       newRes.id = rpcResult.id;
     }
 
-    // ── Keep store.reservations (JSON blob) in sync so existing read paths ──
-    // see the new row until stage 4 switches reads to the new tables.
-    // Mirror's 60s grace period (migration 007) prevents a parallel stale
-    // blob from pruning this freshly-inserted row.
+    // The store.reservations JSON blob is now kept in sync server-side by
+    // /api/create-reservation (via append_to_store_reservations, migration
+    // 021) — no client-side full-list write is needed. This avoids the
+    // shrink_guard false-positive when the client's cache is stale.
     const updated = [...freshReservations, newRes];
     setReservations(updated);
-    await storageSet("reservations", updated);
     // Fire-and-forget emails in background — don't block the user on Gmail rate-limit delays
     sendEmail(newRes).catch(err => console.error("sendEmail background error:", err));
     setSub(false);
