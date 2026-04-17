@@ -75,15 +75,18 @@ function restoreCacheValue(key, value) {
 //   source: "cache" — network/fetch failed, fell back to localStorage
 async function storageGet(key, signal) {
   try {
-    const res  = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers: await getSbAuthHeaders(), signal });
+    const token = await getAuthToken();
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res  = await fetch(`/api/store?key=${encodeURIComponent(key)}`, { headers, signal });
     if (!res.ok) {
       console.warn("storageGet HTTP error", key, res.status);
       return { value: lsGet(key), source: "cache" };
     }
     const json = await res.json();
-    if (Array.isArray(json) && json.length > 0) {
-      lsSet(key, json[0].data);
-      return { value: json[0].data, source: "supabase" };
+    if (json && json.data != null) {
+      lsSet(key, json.data);
+      return { value: json.data, source: "supabase" };
     }
     // DB responded OK but no row — this is a genuine first-time setup
     return { value: null, source: "supabase_empty" };
@@ -104,7 +107,7 @@ async function keepAlive() {
     if (lastPing && now - Number(lastPing) < FOUR_DAYS) return;
     const ac = new AbortController();
     const tid = setTimeout(() => ac.abort(), 4000);
-    await fetch(`${SB_URL}/rest/v1/store?key=eq.equipment&select=key`, { headers: await getSbAuthHeaders(), signal: ac.signal });
+    await fetch(`/api/store?key=equipment`, { signal: ac.signal });
     clearTimeout(tid);
     localStorage.setItem("sb_last_ping", String(now));
     console.log("Supabase keep-alive ping sent");
@@ -121,10 +124,13 @@ async function autoBackup(key) {
   const last = Number(localStorage.getItem(lastKey) || 0);
   if (Date.now() - last < BACKUP_COOLDOWN) return;
   try {
-    const r = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers: await getSbAuthHeaders() });
+    const token = await getAuthToken();
+    const headers = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const r = await fetch(`/api/store?key=${encodeURIComponent(key)}`, { headers });
     const json = await r.json();
-    if (Array.isArray(json) && json.length > 0 && json[0].data) {
-      const old = json[0].data;
+    if (json && json.data != null) {
+      const old = json.data;
       if (Array.isArray(old) && old.length > 0) {
         await fetch("/api/store", {
           method: "POST",

@@ -75,13 +75,16 @@ export async function storageGet(key) {
   try {
     const ctrl = new AbortController();
     const timeout = setTimeout(() => ctrl.abort(), 6000); // 6s timeout
-    const headers = await getSbAuthHeaders();
-    const res  = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers, signal: ctrl.signal });
+    const token = await getAuthToken();
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res  = await fetch(`/api/store?key=${encodeURIComponent(key)}`, { headers, signal: ctrl.signal });
     clearTimeout(timeout);
+    if (!res.ok) return lsGet(key);
     const json = await res.json();
-    if (Array.isArray(json) && json.length > 0) {
-      lsSet(key, json[0].data);
-      return json[0].data;
+    if (json && json.data != null) {
+      lsSet(key, json.data);
+      return json.data;
     }
     return lsGet(key);
   } catch(e) {
@@ -98,8 +101,9 @@ export async function keepAlive() {
     const now = Date.now();
     const FOUR_DAYS = 4 * 24 * 60 * 60 * 1000;
     if (lastPing && now - Number(lastPing) < FOUR_DAYS) return;
-    const headers = await getSbAuthHeaders();
-    await fetch(`${SB_URL}/rest/v1/store?key=eq.equipment&select=key`, { headers });
+    // Routes through /api/store which hits Supabase server-side, keeping the
+    // project from pausing after 7 days of inactivity.
+    await fetch(`/api/store?key=equipment`);
     localStorage.setItem("sb_last_ping", String(now));
     console.log("Supabase keep-alive ping sent");
   } catch(e) { /* silent */ }

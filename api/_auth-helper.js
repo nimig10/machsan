@@ -105,6 +105,36 @@ export async function requireUser(req, res) {
   return { id: authUser.id, email: String(authUser.email || "").toLowerCase() };
 }
 
+// Resolve the caller's role for data redaction purposes.
+// Returns one of: "staff" (admin/warehouse), "user" (student/lecturer), "anon".
+// Does not send any response — callers must still enforce access themselves.
+export async function resolveUserRole(req) {
+  const authHeader = req.headers.authorization || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const authUser = await verifyToken(token);
+  if (!authUser) return { role: "anon", email: null, id: null };
+
+  const email = String(authUser.email || "").toLowerCase();
+  try {
+    const r = await fetch(
+      `${SB_URL}/rest/v1/users?id=eq.${encodeURIComponent(authUser.id)}&select=is_admin,is_warehouse,is_student,is_lecturer&limit=1`,
+      { headers: SERVICE_HEADERS }
+    );
+    if (r.ok) {
+      const rows = await r.json();
+      const u = rows?.[0];
+      if (u && (u.is_admin || u.is_warehouse)) {
+        return { role: "staff", email, id: authUser.id };
+      }
+      if (u && (u.is_student || u.is_lecturer)) {
+        return { role: "user", email, id: authUser.id };
+      }
+    }
+  } catch {}
+  // Authenticated but no row in public.users — treat as regular user.
+  return { role: "user", email, id: authUser.id };
+}
+
 // Like requireStaff but also enforces role === "admin".
 export async function requireAdmin(req, res) {
   const staff = await requireStaff(req, res);
