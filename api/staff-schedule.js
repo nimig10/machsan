@@ -1,4 +1,6 @@
 // staff-schedule.js — manage staff schedule preferences & assignments
+import { requireStaff } from "./_auth-helper.js";
+
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -39,7 +41,11 @@ function normalizeShiftTimes(shiftType, startTime, endTime) {
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { action, callerRole, callerId } = req.body || {};
+  const staff = await requireStaff(req, res);
+  if (!staff) return;
+  const { staffId: callerStaffId, role: callerRole } = staff;
+
+  const { action } = req.body || {};
 
   // LIST-WEEK — fetch preferences and assignments for a date range
   if (action === "list-week") {
@@ -121,7 +127,7 @@ export default async function handler(req, res) {
     if (!existing.ok || !Array.isArray(existing.data) || existing.data.length === 0) {
       return res.status(404).json({ error: "Preference not found" });
     }
-    if (callerRole !== "admin" && existing.data[0].staff_id !== callerId) {
+    if (callerRole !== "admin" && existing.data[0].staff_id !== callerStaffId) {
       return res.status(403).json({ error: "Not authorized to delete this preference" });
     }
     const result = await sbFetch(`staff_schedule_preferences?id=eq.${encodeURIComponent(id)}`, {
@@ -135,7 +141,8 @@ export default async function handler(req, res) {
     if (callerRole !== "admin") {
       return res.status(403).json({ error: "Admin only" });
     }
-    const { staffId, date, shiftType, startTime, endTime, note, notePublic, locked, assignedBy, source } = req.body;
+    const { staffId, date, shiftType, startTime, endTime, note, notePublic, locked, source } = req.body;
+    const assignedBy = callerStaffId;
     if (!staffId || !date || !shiftType) {
       return res.status(400).json({ error: "Missing required fields (staffId, date, shiftType)" });
     }
@@ -225,7 +232,7 @@ export default async function handler(req, res) {
 
   // CLAIM-DAILY-TASK — assign a daily task to a staff member
   if (action === "claim-daily-task") {
-    const { staffId, date, taskKey, callerId } = req.body;
+    const { staffId, date, taskKey } = req.body;
     if (!staffId || !date || !taskKey) {
       return res.status(400).json({ error: "Missing required fields (staffId, date, taskKey)" });
     }
@@ -257,7 +264,7 @@ export default async function handler(req, res) {
         date,
         task_key: taskKey,
         staff_id: staffId,
-        assigned_by: callerId || null,
+        assigned_by: callerStaffId || null,
         locked: false,
         updated_at: new Date().toISOString(),
       }),
@@ -270,7 +277,7 @@ export default async function handler(req, res) {
 
   // UNCLAIM-DAILY-TASK — remove a daily task assignment
   if (action === "unclaim-daily-task") {
-    const { staffId, date, taskKey, callerId } = req.body;
+    const { staffId, date, taskKey } = req.body;
     if (!staffId || !date || !taskKey) {
       return res.status(400).json({ error: "Missing required fields (staffId, date, taskKey)" });
     }
@@ -281,7 +288,7 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: "Task not found" });
     }
     const task = existing.data[0];
-    if (callerRole !== "admin" && task.staff_id !== callerId) {
+    if (callerRole !== "admin" && task.staff_id !== callerStaffId) {
       return res.status(403).json({ error: "לא ניתן לבטל משימה של עובד אחר" });
     }
     if (task.locked && callerRole !== "admin") {

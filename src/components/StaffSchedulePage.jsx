@@ -1,7 +1,7 @@
 // StaffSchedulePage.jsx — Staff weekly schedule + daily activity summary
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
 import { Modal } from "./ui.jsx";
-import { storageSet } from "../utils.js";
+import { storageSet, getAuthToken } from "../utils.js";
 
 /* ── Half-hour time slots 09:00–22:00 ── */
 const TIME_SLOTS = (() => {
@@ -115,9 +115,10 @@ function getPreferenceWindowStatus(weekDates) {
 
 /* ── API helper ── */
 async function scheduleApi(action, body = {}) {
+  const token = await getAuthToken();
   const res = await fetch("/api/staff-schedule", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ action, ...body }),
   });
   return res.json();
@@ -301,27 +302,27 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
 
   /* ── Handlers ── */
   const savePref = async (data) => {
-    const r = await scheduleApi("upsert-preference", { ...data, callerRole: isAdmin ? "admin" : "staff", callerId: effectiveStaffId });
+    const r = await scheduleApi("upsert-preference", { ...data });
     if (r.error) { showToast("error", r.error); return false; }
     showToast("success", "ההעדפה נשמרה"); await fetchWeekData(); return true;
   };
   const saveAssignment = async (data) => {
-    const r = await scheduleApi("upsert-assignment", { ...data, assignedBy: effectiveStaffId, source: data.source || "manager", callerRole: "admin", callerId: effectiveStaffId });
+    const r = await scheduleApi("upsert-assignment", { ...data, source: data.source || "manager" });
     if (r.error) { showToast("error", r.error); return false; }
     showToast("success", "השיבוץ נשמר"); await fetchWeekData(); return true;
   };
   const deletePref = async (id) => {
-    const r = await scheduleApi("delete-preference", { id, callerRole: isAdmin ? "admin" : "staff", callerId: effectiveStaffId });
+    const r = await scheduleApi("delete-preference", { id });
     if (r.error) { showToast("error", r.error); return; }
     showToast("success", "ההעדפה נמחקה"); await fetchWeekData();
   };
   const deleteAssignment = async (id) => {
-    const r = await scheduleApi("delete-assignment", { id, callerRole: "admin" });
+    const r = await scheduleApi("delete-assignment", { id });
     if (r.error) { showToast("error", r.error); return; }
     showToast("success", "השיבוץ נמחק"); await fetchWeekData();
   };
   const toggleLock = async (aId, locked) => {
-    const r = await scheduleApi(locked ? "unlock" : "lock", { id: aId, callerRole: "admin" });
+    const r = await scheduleApi(locked ? "unlock" : "lock", { id: aId });
     if (r.error) { showToast("error", r.error); return; }
     await fetchWeekData();
   };
@@ -331,7 +332,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
     setDailyTasks(prev => [...prev.filter(t => !(t.date === date && t.task_key === taskKey)), optimistic]);
     if (weekCache.current[startDate]) weekCache.current[startDate].dailyTasks = [...(weekCache.current[startDate].dailyTasks || []).filter(t => !(t.date === date && t.task_key === taskKey)), optimistic];
 
-    const r = await scheduleApi("claim-daily-task", { staffId, date, taskKey, callerRole: isAdmin ? "admin" : "staff", callerId: effectiveStaffId });
+    const r = await scheduleApi("claim-daily-task", { staffId, date, taskKey });
     if (r.error) {
       showToast("error", r.error);
       // Revert optimistic
@@ -353,7 +354,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
     setDailyTasks(prev => prev.filter(t => !(t.date === date && t.task_key === taskKey)));
     if (weekCache.current[startDate]) weekCache.current[startDate].dailyTasks = (weekCache.current[startDate].dailyTasks || []).filter(t => !(t.date === date && t.task_key === taskKey));
 
-    const r = await scheduleApi("unclaim-daily-task", { staffId, date, taskKey, callerRole: isAdmin ? "admin" : "staff", callerId: effectiveStaffId });
+    const r = await scheduleApi("unclaim-daily-task", { staffId, date, taskKey });
     if (r.error) {
       showToast("error", r.error);
       // Revert optimistic

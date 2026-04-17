@@ -1,5 +1,6 @@
 // ActivityLogsPage.jsx — admin activity log viewer
 import { useState, useEffect } from "react";
+import { getAuthToken } from "../utils.js";
 
 const ACTION_LABELS = {
   login:                "🔑 כניסה למערכת",
@@ -43,12 +44,13 @@ export function ActivityLogsPage({ showToast, teamMembers = [] }) {
     if (!append) setLoading(true);
     else setLoadingMore(true);
     try {
-      const body = { action: "list", callerRole: "admin", limit: PAGE_SIZE, offset };
+      const token = await getAuthToken();
+      const body = { action: "list", limit: PAGE_SIZE, offset };
       if (filterAction) body.filterAction = filterAction;
       if (filterUser) body.filterUser = filterUser;
       const res = await fetch("/api/activity-log", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(body),
       });
       const data = await res.json();
@@ -61,9 +63,11 @@ export function ActivityLogsPage({ showToast, teamMembers = [] }) {
 
   const fetchFilters = async () => {
     try {
+      const token = await getAuthToken();
+      const authHeaders = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
       const [actRes, usrRes] = await Promise.all([
-        fetch("/api/activity-log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "actions", callerRole: "admin" }) }),
-        fetch("/api/activity-log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "users", callerRole: "admin" }) }),
+        fetch("/api/activity-log", { method: "POST", headers: authHeaders, body: JSON.stringify({ action: "actions" }) }),
+        fetch("/api/activity-log", { method: "POST", headers: authHeaders, body: JSON.stringify({ action: "users" }) }),
       ]);
       setActionTypes(await actRes.json());
       setUsers(await usrRes.json());

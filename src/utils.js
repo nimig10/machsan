@@ -1,4 +1,11 @@
 // utils.js — shared constants, storage helpers, and utility functions
+import { supabase } from "./supabaseClient.js";
+
+// ─── AUTH TOKEN ───────────────────────────────────────────────────────────────
+export async function getAuthToken() {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token || null;
+}
 
 // ─── ACTIVITY LOGGING ────────────────────────────────────────────────────────
 export async function logActivity({ user_id, user_name, action, entity, entity_id, details }) {
