@@ -468,11 +468,13 @@ export async function deleteReservation(id, options = {}) {
 // Removed when migration stage 5 retires the store blobs.
 function mirrorReservationsIfNeeded(key, value) {
   if (key !== "reservations" || !Array.isArray(value)) return;
-  fetch("/api/sync-reservations", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ reservations: value }),
-  }).catch(e => console.warn("mirror(reservations) failed:", e?.message || e));
+  getAuthToken().then(token => {
+    fetch("/api/sync-reservations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ reservations: value }),
+    }).catch(e => console.warn("mirror(reservations) failed:", e?.message || e));
+  });
 }
 
 function mirrorEquipmentIfNeeded(key, value) {
