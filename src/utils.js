@@ -356,9 +356,10 @@ export async function updateReservationStatus(id, status, options = {}) {
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    const token = await getAuthToken();
     const res = await fetch("/api/update-reservation-status", {
       method:  "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body:    JSON.stringify({ id: String(id), status, returned_at }),
       signal:  ctrl.signal,
     });
@@ -414,9 +415,10 @@ export async function deleteReservation(id, options = {}) {
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    const token = await getAuthToken();
     const res = await fetch("/api/delete-reservation", {
       method:  "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body:    JSON.stringify({ id: String(id) }),
       signal:  ctrl.signal,
     });
