@@ -233,6 +233,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
   const [editing, setEditing]   = useState(null);
   const [approvalConflict, setApprovalConflict] = useState(null);
   const [consecutiveWarning, setConsecutiveWarning] = useState(null); // {reservation, warnings}
+  const [busyIds, setBusyIds] = useState(() => new Set());
   const [showManualForm, setShowManualForm] = useState(false);
   const [overdueEmailText, setOverdueEmailText] = useState("");
   const [overdueEmailSending, setOverdueEmailSending] = useState(false);
@@ -387,30 +388,39 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
   };
 
   const doApprove = async (reservationToApprove) => {
-    // Route through the atomic RPC (migration 009). Two admins hitting
-    // "approve" simultaneously used to both "succeed" and both email the
-    // student; the FOR UPDATE lock inside the RPC serializes them now.
-    const rpcResult = await updateReservationStatus(reservationToApprove.id, "מאושר");
-    if (!rpcResult.ok) {
-      console.error("doApprove RPC failed:", rpcResult);
-      showToast("error", "שגיאה באישור הבקשה בשרת");
-      return false;
+    // Debounce: if a click for this id is already in flight, ignore.
+    if (busyIds.has(reservationToApprove.id)) return false;
+    setBusyIds(prev => { const n = new Set(prev); n.add(reservationToApprove.id); return n; });
+    try {
+      // Route through the atomic RPC (migration 009). The FOR UPDATE lock
+      // serializes concurrent approvers; rpcResult.changed is true only for
+      // the one caller that actually flipped the status.
+      const rpcResult = await updateReservationStatus(reservationToApprove.id, "מאושר");
+      if (!rpcResult.ok) {
+        console.error("doApprove RPC failed:", rpcResult);
+        showToast("error", "שגיאה באישור הבקשה בשרת");
+        return false;
+      }
+      const updated = normalizeReservationsForArchive(reservations.map((r) =>
+        r.id === reservationToApprove.id ? { ...reservationToApprove, status: "מאושר" } : r
+      ));
+      setReservations(updated);
+      storageSet("reservations", updated).catch(err =>
+        console.warn("blob cache refresh failed (DB is already updated):", err)
+      );
+      // Only email + log the activity for the caller that actually changed the status.
+      if (rpcResult.changed) {
+        await sendStatusEmail({ ...reservationToApprove, status: "מאושר" }, "מאושר");
+        const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+        logActivity({ user_id: caller.id, user_name: caller.full_name, action: "reservation_approve", entity: "reservation", entity_id: String(reservationToApprove.id), details: { student: reservationToApprove.student_name, loan_type: reservationToApprove.loan_type } });
+      }
+      showToast("success", "הבקשה אושרה");
+      setSelected(null);
+      setConsecutiveWarning(null);
+      return true;
+    } finally {
+      setBusyIds(prev => { const n = new Set(prev); n.delete(reservationToApprove.id); return n; });
     }
-    const updated = normalizeReservationsForArchive(reservations.map((r) =>
-      r.id === reservationToApprove.id ? { ...reservationToApprove, status: "מאושר" } : r
-    ));
-    setReservations(updated);
-    // Cache refresh — best-effort, DB is already updated.
-    storageSet("reservations", updated).catch(err =>
-      console.warn("blob cache refresh failed (DB is already updated):", err)
-    );
-    await sendStatusEmail({ ...reservationToApprove, status: "מאושר" }, "מאושר");
-    showToast("success", "הבקשה אושרה");
-    const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
-    logActivity({ user_id: caller.id, user_name: caller.full_name, action: "reservation_approve", entity: "reservation", entity_id: String(reservationToApprove.id), details: { student: reservationToApprove.student_name, loan_type: reservationToApprove.loan_type } });
-    setSelected(null);
-    setConsecutiveWarning(null);
-    return true;
   };
 
   const approveReservation = async (reservationToApprove, skipConsecutiveCheck=false) => {
@@ -441,32 +451,42 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
 
     if (status === "מאושר") return approveReservation({ ...res, status: "מאושר" });
 
-    // Route through the atomic RPC (migration 009). For "הוחזר" we also
-    // pass returned_at so the DB stores the return timestamp, matching what
-    // markReservationReturned does in local state.
-    const returnedAt = status === "הוחזר" ? new Date().toISOString() : null;
-    const rpcResult = await updateReservationStatus(id, status, { returned_at: returnedAt });
-    if (!rpcResult.ok) {
-      console.error("updateStatus RPC failed:", rpcResult);
-      showToast("error", "שגיאה בעדכון הסטטוס בשרת");
-      return false;
+    // Debounce: ignore repeated clicks on the same row while RPC is in flight.
+    if (busyIds.has(id)) return false;
+    setBusyIds(prev => { const n = new Set(prev); n.add(id); return n; });
+    try {
+      // Route through the atomic RPC (migration 009). For "הוחזר" we also
+      // pass returned_at so the DB stores the return timestamp, matching what
+      // markReservationReturned does in local state.
+      const returnedAt = status === "הוחזר" ? new Date().toISOString() : null;
+      const rpcResult = await updateReservationStatus(id, status, { returned_at: returnedAt });
+      if (!rpcResult.ok) {
+        console.error("updateStatus RPC failed:", rpcResult);
+        showToast("error", "שגיאה בעדכון הסטטוס בשרת");
+        return false;
+      }
+      const updated = normalizeReservationsForArchive(reservations.map((r) => {
+        if (r.id !== id) return r;
+        return status === "הוחזר" ? markReservationReturned(r) : { ...r, status };
+      }));
+      setReservations(updated);
+      // DB already updated by RPC. Skip storageSet — local state may be partial
+      // (e.g. 53/59 items) and would trigger shrink_guard. Next poll syncs the blob.
+      showToast("success", `סטטוס עודכן ל-${status}`);
+      // Only email / log when this click was the one that actually flipped the status.
+      if (rpcResult.changed) {
+        if (status === "נדחה") await sendStatusEmail({ ...res, status: "נדחה" }, "נדחה");
+        const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+        const actionMap = { "נדחה": "reservation_reject", "הוחזר": "reservation_return" };
+        if (actionMap[status]) {
+          logActivity({ user_id: caller.id, user_name: caller.full_name, action: actionMap[status], entity: "reservation", entity_id: String(id), details: { student: res.student_name, loan_type: res.loan_type } });
+        }
+      }
+      setSelected(null);
+      return true;
+    } finally {
+      setBusyIds(prev => { const n = new Set(prev); n.delete(id); return n; });
     }
-    const updated = normalizeReservationsForArchive(reservations.map((r) => {
-      if (r.id !== id) return r;
-      return status === "הוחזר" ? markReservationReturned(r) : { ...r, status };
-    }));
-    setReservations(updated);
-    // DB already updated by RPC. Skip storageSet — local state may be partial
-    // (e.g. 53/59 items) and would trigger shrink_guard. Next poll syncs the blob.
-    showToast("success", `סטטוס עודכן ל-${status}`);
-    if (status === "נדחה") await sendStatusEmail({ ...res, status: "נדחה" }, "נדחה");
-    const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
-    const actionMap = { "נדחה": "reservation_reject", "הוחזר": "reservation_return" };
-    if (actionMap[status]) {
-      logActivity({ user_id: caller.id, user_name: caller.full_name, action: actionMap[status], entity: "reservation", entity_id: String(id), details: { student: res.student_name, loan_type: res.loan_type } });
-    }
-    setSelected(null);
-    return true;
   };
 
   const sendOverdueManualEmail = async (reservation, text) => {
@@ -550,8 +570,8 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
               <div className="res-card-actions" onClick={e=>e.stopPropagation()}>
                 <button className="btn btn-secondary btn-sm" onClick={()=>exportPDF(r)}>📄 PDF</button>
                 {(r.status==="ממתין"||r.status==="מאושר"||r.status==="נדחה"||r.status==="באיחור")&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}>✏️ עריכת בקשה</button>}
-                {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" onClick={()=>updateStatus(r.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger btn-sm" onClick={()=>updateStatus(r.id,"נדחה")}>❌ דחה</button></>}
-                {(getEffectiveStatus(r)==="פעילה"||getEffectiveStatus(r)==="באיחור")&&<button className="btn btn-secondary btn-sm" onClick={()=>updateStatus(r.id,"הוחזר")}>🔄 הוחזר</button>}
+                {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"מאושר")}>{busyIds.has(r.id)?"⏳":"✅ אשר"}</button><button className="btn btn-danger btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"נדחה")}>❌ דחה</button></>}
+                {(getEffectiveStatus(r)==="פעילה"||getEffectiveStatus(r)==="באיחור")&&<button className="btn btn-secondary btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"הוחזר")}>🔄 הוחזר</button>}
                 <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${r.student_name}?`)) deleteReservation(r.id); }}>🗑️</button>
               </div>
             </div>
@@ -749,9 +769,9 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
         <Modal title={`📋 בקשה — ${selected.student_name}`} onClose={()=>{setSelected(null);setOverdueEmailText("");}} size="modal-lg"
           footer={<>
             {(selected.status==="ממתין"||selected.status==="מאושר"||selected.status==="נדחה"||selected.status==="באיחור")&&<button className="btn btn-secondary" onClick={()=>{setEditing(selected);setSelected(null);setOverdueEmailText("");}}>✏️ עריכת בקשה</button>}
-            {selected.status==="ממתין"&&<><button className="btn btn-success" onClick={()=>updateStatus(selected.id,"מאושר")}>✅ אשר</button><button className="btn btn-danger" onClick={()=>updateStatus(selected.id,"נדחה")}>❌ דחה</button></>}
-            {selected.status==="נדחה"&&<button className="btn btn-success" onClick={()=>updateStatus(selected.id,"מאושר")}>✅ אשר בקשה</button>}
-            {(getEffectiveStatus(selected)==="פעילה"||getEffectiveStatus(selected)==="באיחור")&&<button className="btn btn-secondary" onClick={()=>updateStatus(selected.id,"הוחזר")}>🔄 סמן כהוחזר</button>}
+            {selected.status==="ממתין"&&<><button className="btn btn-success" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"מאושר")}>{busyIds.has(selected.id)?"⏳ מאשר...":"✅ אשר"}</button><button className="btn btn-danger" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"נדחה")}>❌ דחה</button></>}
+            {selected.status==="נדחה"&&<button className="btn btn-success" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"מאושר")}>{busyIds.has(selected.id)?"⏳ מאשר...":"✅ אשר בקשה"}</button>}
+            {(getEffectiveStatus(selected)==="פעילה"||getEffectiveStatus(selected)==="באיחור")&&<button className="btn btn-secondary" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"הוחזר")}>🔄 סמן כהוחזר</button>}
             <button className="btn btn-secondary" onClick={()=>exportPDF(selected)}>📄 ייצא PDF</button>
             <button className="btn btn-danger" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${selected.student_name}?`)) deleteReservation(selected.id); }}>🗑️ מחק</button>
             <button className="btn btn-secondary" onClick={()=>{setSelected(null);setOverdueEmailText("");}}>סגור</button>

@@ -1,6 +1,6 @@
 // DashboardPage.jsx — admin dashboard page
 import { useState } from "react";
-import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken } from "../utils.js";
+import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, storageSet } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 
@@ -52,6 +52,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
   const [dashViewRes, setDashViewRes] = useState(null);
   const [dashApprovalConflict, setDashApprovalConflict] = useState(null);
   const [dashConsecutiveWarning, setDashConsecutiveWarning] = useState(null);
+  const [approvingId, setApprovingId] = useState(null);
   const [calStatusF, setCalStatusF] = useState([]);
   const [calLoanTypeF, setCalLoanTypeF] = useState("הכל");
   const [onLoanModal, setOnLoanModal] = useState(null); // "units" | "items" | null
@@ -563,8 +564,10 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
               {dashViewRes.status==="ממתין" && setReservations && (
                 <div style={{borderTop:"1px solid var(--border)",paddingTop:14,display:"flex",justifyContent:"center"}}>
                   <button className="btn btn-primary" style={{background:"var(--green)",borderColor:"var(--green)",fontSize:14,padding:"10px 32px"}}
+                    disabled={approvingId===dashViewRes.id}
                     onClick={async()=>{
                       const res = dashViewRes;
+                      if (approvingId===res.id) return;
                       // 1) Hard block
                       const conflicts = getReservationApprovalConflicts(res, reservations, equipment);
                       if (conflicts.length) {
@@ -580,32 +583,41 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                         return;
                       }
                       // 3) Approve — via atomic RPC (migration 009).
-                      // Prevents two admins from both emailing the student
-                      // if they click approve at the same time.
-                      const rpcResult = await updateReservationStatus(res.id, "מאושר");
-                      if (!rpcResult.ok) {
-                        console.error("dashboard approve RPC failed:", rpcResult);
-                        if(showToast) showToast("error", "שגיאה באישור הבקשה בשרת");
-                        return;
+                      // FOR UPDATE lock serializes concurrent approvers.
+                      setApprovingId(res.id);
+                      try {
+                        const rpcResult = await updateReservationStatus(res.id, "מאושר");
+                        if (!rpcResult.ok) {
+                          console.error("dashboard approve RPC failed:", rpcResult);
+                          if(showToast) showToast("error", "שגיאה באישור הבקשה בשרת");
+                          return;
+                        }
+                        const updated = reservations.map(r=>r.id===res.id?{...r,status:"מאושר"}:r);
+                        setReservations(updated);
+                        // Persist to the JSONB blob so the status survives refresh
+                        // (normalized table is updated by the RPC, blob is not).
+                        storageSet("reservations", updated).catch(err =>
+                          console.warn("blob cache refresh failed (DB is already updated):", err)
+                        );
+                        if(showToast) showToast("success",`הבקשה של ${res.student_name} אושרה ✅`);
+                        // Only email when this click was the one that actually flipped the status.
+                        if (rpcResult.changed && res.email) {
+                          const itemsList = res.items?.map(i=>`<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${equipment.find(e=>e.id==i.equipment_id)?.name||i.name||"?"}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${i.quantity}</td></tr>`).join("")||"";
+                          try {
+                            const emailAc = new AbortController();
+                            const emailTid = setTimeout(() => emailAc.abort(), 8000);
+                            const tokAp = await getAuthToken();
+                            await fetch("/api/send-email",{method:"POST",headers:{"Content-Type":"application/json",...(tokAp?{Authorization:`Bearer ${tokAp}`}:{})},signal:emailAc.signal,body:JSON.stringify({to:res.email,type:"approved",student_name:res.student_name,items_list:itemsList,borrow_date:formatDate(res.borrow_date),return_date:formatDate(res.return_date),borrow_time:res.borrow_time||"",return_time:res.return_time||"",sound_logo_url:siteSettings.soundLogo||""})});
+                            clearTimeout(emailTid);
+                            if(showToast) showToast("success",`📧 מייל אישור נשלח ל-${res.email}`);
+                          } catch { if(showToast) showToast("error","שגיאה בשליחת המייל"); }
+                        }
+                        setDashViewRes(null);
+                      } finally {
+                        setApprovingId(null);
                       }
-                      const updated = reservations.map(r=>r.id===res.id?{...r,status:"מאושר"}:r);
-                      setReservations(updated);
-                      if(showToast) showToast("success",`הבקשה של ${res.student_name} אושרה ✅`);
-                      // Send approval email
-                      if (res.email) {
-                        const itemsList = res.items?.map(i=>`<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${equipment.find(e=>e.id==i.equipment_id)?.name||i.name||"?"}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${i.quantity}</td></tr>`).join("")||"";
-                        try {
-                          const emailAc = new AbortController();
-                          const emailTid = setTimeout(() => emailAc.abort(), 8000);
-                          const tokAp = await getAuthToken();
-                          await fetch("/api/send-email",{method:"POST",headers:{"Content-Type":"application/json",...(tokAp?{Authorization:`Bearer ${tokAp}`}:{})},signal:emailAc.signal,body:JSON.stringify({to:res.email,type:"approved",student_name:res.student_name,items_list:itemsList,borrow_date:formatDate(res.borrow_date),return_date:formatDate(res.return_date),borrow_time:res.borrow_time||"",return_time:res.return_time||"",sound_logo_url:siteSettings.soundLogo||""})});
-                          clearTimeout(emailTid);
-                          if(showToast) showToast("success",`📧 מייל אישור נשלח ל-${res.email}`);
-                        } catch { if(showToast) showToast("error","שגיאה בשליחת המייל"); }
-                      }
-                      setDashViewRes(null);
                     }}>
-                    ✅ אשר בקשה
+                    {approvingId===dashViewRes.id ? "⏳ מאשר..." : "✅ אשר בקשה"}
                   </button>
                 </div>
               )}
@@ -669,20 +681,30 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
           onClose={()=>setDashConsecutiveWarning(null)} size="modal-lg"
           footer={<div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
             <button className="btn btn-secondary" onClick={()=>setDashConsecutiveWarning(null)}>ביטול</button>
-            <button className="btn btn-success" onClick={async()=>{
+            <button className="btn btn-success"
+              disabled={approvingId===dashConsecutiveWarning.reservation.id}
+              onClick={async()=>{
               const res = dashConsecutiveWarning.reservation;
-              // Atomic RPC (migration 009) — serializes concurrent approvers.
-              const rpcResult = await updateReservationStatus(res.id, "מאושר");
-              if (!rpcResult.ok) {
-                console.error("dashboard approve-anyway RPC failed:", rpcResult);
-                if(showToast) showToast("error", "שגיאה באישור הבקשה בשרת");
-                return;
+              if (approvingId===res.id) return;
+              setApprovingId(res.id);
+              try {
+                const rpcResult = await updateReservationStatus(res.id, "מאושר");
+                if (!rpcResult.ok) {
+                  console.error("dashboard approve-anyway RPC failed:", rpcResult);
+                  if(showToast) showToast("error", "שגיאה באישור הבקשה בשרת");
+                  return;
+                }
+                const updated = reservations.map(r=>r.id===res.id?{...r,status:"מאושר"}:r);
+                setReservations(updated);
+                storageSet("reservations", updated).catch(err =>
+                  console.warn("blob cache refresh failed (DB is already updated):", err)
+                );
+                if(showToast) showToast("success",`הבקשה של ${res.student_name} אושרה ✅`);
+                setDashConsecutiveWarning(null);
+              } finally {
+                setApprovingId(null);
               }
-              const updated = reservations.map(r=>r.id===res.id?{...r,status:"מאושר"}:r);
-              setReservations(updated);
-              if(showToast) showToast("success",`הבקשה של ${res.student_name} אושרה ✅`);
-              setDashConsecutiveWarning(null);
-            }}>✅ אשר בכל זאת</button>
+            }}>{approvingId===dashConsecutiveWarning.reservation.id?"⏳ מאשר...":"✅ אשר בכל זאת"}</button>
           </div>}>
           <div style={{background:"rgba(241,196,15,0.1)",border:"2px solid rgba(241,196,15,0.45)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16,display:"flex",gap:12,alignItems:"flex-start"}}>
             <span style={{fontSize:22,lineHeight:1}}>⚠️</span>
