@@ -33,6 +33,10 @@ async function verifyToken(token) {
 // Verify the request JWT and look up the caller's staff record.
 // Returns { staffId, role, email } on success.
 // On failure sends 401/403 and returns null — caller must `if (!staff) return`.
+//
+// Resolution order:
+//   1) public.users (new unified auth) — is_admin / is_warehouse decide role
+//   2) staff_members (legacy) — fallback for rows not yet migrated
 export async function requireStaff(req, res) {
   const authHeader = req.headers.authorization || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
@@ -43,19 +47,47 @@ export async function requireStaff(req, res) {
     return null;
   }
 
-  const r = await fetch(
-    `${SB_URL}/rest/v1/staff_members?email=eq.${encodeURIComponent(authUser.email)}&select=id,role,email&limit=1`,
-    { headers: SERVICE_HEADERS }
-  );
-  const rows = r.ok ? await r.json() : [];
-  const member = rows?.[0];
+  const email = String(authUser.email || "").toLowerCase();
 
-  if (!member) {
-    res.status(403).json({ error: "Forbidden" });
-    return null;
-  }
+  // 1) Try public.users by auth id (unified system)
+  try {
+    const r1 = await fetch(
+      `${SB_URL}/rest/v1/users?id=eq.${encodeURIComponent(authUser.id)}&select=id,email,is_admin,is_warehouse&limit=1`,
+      { headers: SERVICE_HEADERS }
+    );
+    const rows = r1.ok ? await r1.json() : [];
+    const u = rows?.[0];
+    if (u && (u.is_admin || u.is_warehouse)) {
+      // Look up legacy staff_members.id by email so callers that need it
+      // (e.g. staff-schedule assignedBy) still get a stable id.
+      let staffId = u.id;
+      try {
+        const sr = await fetch(
+          `${SB_URL}/rest/v1/staff_members?email=eq.${encodeURIComponent(email)}&select=id&limit=1`,
+          { headers: SERVICE_HEADERS }
+        );
+        const srows = sr.ok ? await sr.json() : [];
+        if (srows?.[0]?.id) staffId = srows[0].id;
+      } catch {}
+      return { staffId, role: u.is_admin ? "admin" : "staff", email: u.email || email };
+    }
+  } catch {}
 
-  return { staffId: member.id, role: member.role, email: member.email };
+  // 2) Fallback: legacy staff_members by email
+  try {
+    const r2 = await fetch(
+      `${SB_URL}/rest/v1/staff_members?email=eq.${encodeURIComponent(email)}&select=id,role,email&limit=1`,
+      { headers: SERVICE_HEADERS }
+    );
+    const rows = r2.ok ? await r2.json() : [];
+    const member = rows?.[0];
+    if (member) {
+      return { staffId: member.id, role: member.role, email: member.email };
+    }
+  } catch {}
+
+  res.status(403).json({ error: "Forbidden" });
+  return null;
 }
 
 // Like requireStaff but also enforces role === "admin".
