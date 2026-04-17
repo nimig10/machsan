@@ -55,14 +55,15 @@ export async function requireStaff(req, res) {
   }
 
   const email = String(authUser.email || "").toLowerCase();
-  console.log("[auth] verified authUser id=" + authUser.id + " email=" + email);
+  const trace = { authId: authUser.id, email };
 
   // 1) Try public.users by auth id (unified system)
   try {
     const url1 = `${SB_URL}/rest/v1/users?id=eq.${encodeURIComponent(authUser.id)}&select=id,email,is_admin,is_warehouse&limit=1`;
     const r1 = await fetch(url1, { headers: SERVICE_HEADERS });
     const text1 = await r1.text();
-    console.log("[auth] users-by-id status=" + r1.status + " body=" + text1.slice(0, 200));
+    trace.users_status = r1.status;
+    trace.users_body = text1.slice(0, 300);
     if (r1.ok) {
       const rows = text1 ? JSON.parse(text1) : [];
       const u = rows?.[0];
@@ -79,7 +80,7 @@ export async function requireStaff(req, res) {
         return { staffId, role: u.is_admin ? "admin" : "staff", email: u.email || email };
       }
     }
-  } catch (e) { console.warn("[auth] users-by-id error " + e.message); }
+  } catch (e) { trace.users_err = e.message; }
 
   // 2) Fallback: legacy staff_members by email
   try {
@@ -88,7 +89,8 @@ export async function requireStaff(req, res) {
       { headers: SERVICE_HEADERS }
     );
     const text2 = await r2.text();
-    console.log("[auth] staff_members-by-email status=" + r2.status + " body=" + text2.slice(0, 200));
+    trace.staff_status = r2.status;
+    trace.staff_body = text2.slice(0, 300);
     if (r2.ok) {
       const rows = text2 ? JSON.parse(text2) : [];
       const member = rows?.[0];
@@ -96,10 +98,10 @@ export async function requireStaff(req, res) {
         return { staffId: member.id, role: member.role, email: member.email };
       }
     }
-  } catch (e) { console.warn("[auth] staff_members-by-email error " + e.message); }
+  } catch (e) { trace.staff_err = e.message; }
 
-  console.warn("[auth] no staff record for id=" + authUser.id + " email=" + email);
-  res.status(403).json({ error: "Forbidden", reason: "no_staff_record" });
+  console.error("[auth-403] " + JSON.stringify(trace));
+  res.status(403).json({ error: "Forbidden", reason: "no_staff_record", trace });
   return null;
 }
 
