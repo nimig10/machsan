@@ -255,6 +255,30 @@ export async function storageSet(key, value) {
   }
 }
 
+// ─── ATOMIC BLOB STATUS PATCH ────────────────────────────────────────────────
+// Refresh → patch → write. Fixes the shrink_guard false-positive admins hit
+// when their cached reservations list is behind the DB: if a student submitted
+// a new reservation since page load, writing the stale full list back is
+// (correctly) rejected by the server's shrink_guard trigger (migration 011)
+// as a >10% array shrink. We pull the latest list from the server first so
+// the only change in the write is the single status field.
+//
+// Returns { ok, error?, list } — `list` is the full post-patch array, so
+// callers can feed it back into setReservations to pick up any new rows.
+export async function syncReservationStatusToBlob(reservationId, newStatus, options = {}) {
+  const { returnedAt = null } = options;
+  const fresh = await storageGet("reservations");
+  const freshList = Array.isArray(fresh) ? fresh : [];
+  const updated = freshList.map(r => {
+    if (String(r.id) !== String(reservationId)) return r;
+    const patched = { ...r, status: newStatus };
+    if (returnedAt != null) patched.returned_at = returnedAt;
+    return patched;
+  });
+  const result = await storageSet("reservations", updated);
+  return { ...result, list: updated };
+}
+
 // ─── ATOMIC RESERVATION CREATE ───────────────────────────────────────────────
 // Routes a new reservation through /api/create-reservation → create_reservation_v2
 // RPC (migration 008). The RPC takes FOR UPDATE on every equipment row the

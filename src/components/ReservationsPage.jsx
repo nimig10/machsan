@@ -1,6 +1,6 @@
 // ReservationsPage.jsx — admin reservations management page (includes rejected + archive tabs)
 import { useEffect, useState } from "react";
-import { storageSet, storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, createReservation, deleteReservation as deleteReservationRpc, getAuthToken } from "../utils.js";
+import { storageSet, storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, createReservation, deleteReservation as deleteReservationRpc, getAuthToken, syncReservationStatusToBlob } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
@@ -401,20 +401,26 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
         showToast("error", "שגיאה באישור הבקשה בשרת");
         return false;
       }
-      const updated = normalizeReservationsForArchive(reservations.map((r) =>
+      // Optimistic update from local (possibly stale) state — UI flips to מאושר
+      // right away. Blob sync below refreshes from the server to avoid tripping
+      // shrink_guard when students have submitted since page load.
+      setReservations(normalizeReservationsForArchive(reservations.map((r) =>
         r.id === reservationToApprove.id ? { ...reservationToApprove, status: "מאושר" } : r
-      ));
-      setReservations(updated);
-      storageSet("reservations", updated).catch(err =>
-        console.warn("blob cache refresh failed (DB is already updated):", err)
-      );
+      )));
+      const sync = await syncReservationStatusToBlob(reservationToApprove.id, "מאושר");
+      if (!sync.ok) {
+        console.error("doApprove: blob sync failed", sync);
+        showToast("error", "האישור נשמר ב-DB אך כתיבה ל-blob נכשלה — רענן את הדף");
+      } else {
+        setReservations(normalizeReservationsForArchive(sync.list));
+      }
       // Only email + log the activity for the caller that actually changed the status.
       if (rpcResult.changed) {
         await sendStatusEmail({ ...reservationToApprove, status: "מאושר" }, "מאושר");
         const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
         logActivity({ user_id: caller.id, user_name: caller.full_name, action: "reservation_approve", entity: "reservation", entity_id: String(reservationToApprove.id), details: { student: reservationToApprove.student_name, loan_type: reservationToApprove.loan_type } });
       }
-      showToast("success", "הבקשה אושרה");
+      if (sync.ok) showToast("success", "הבקשה אושרה");
       setSelected(null);
       setConsecutiveWarning(null);
       return true;

@@ -1,6 +1,6 @@
 // DashboardPage.jsx — admin dashboard page
 import { useState } from "react";
-import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, storageSet } from "../utils.js";
+import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, storageSet, syncReservationStatusToBlob } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 
@@ -592,19 +592,18 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                           if(showToast) showToast("error", "שגיאה באישור הבקשה בשרת");
                           return;
                         }
-                        const updated = reservations.map(r=>r.id===res.id?{...r,status:"מאושר"}:r);
-                        setReservations(updated);
-                        // Persist to the JSONB blob so the status survives refresh.
-                        // The RPC updates the normalized table but NOT the blob, and
-                        // the UI still reads from the blob — so without this, a
-                        // refresh resurrects the old "ממתין" status.
-                        // Await + log any failure so the admin retries instead of
-                        // silently thinking it was saved.
-                        const blobWrite = await storageSet("reservations", updated);
-                        if (!blobWrite || blobWrite.ok === false) {
-                          console.error("dashboard approve: blob write failed", blobWrite);
+                        // Optimistic local update — pulls from stale prop, good enough
+                        // until the blob sync returns the fresh list below.
+                        setReservations(reservations.map(r=>r.id===res.id?{...r,status:"מאושר"}:r));
+                        // Persist to the JSONB blob. Internally re-reads from server
+                        // first so a full-list write doesn't trip shrink_guard when
+                        // the dashboard's cache is behind by new student submissions.
+                        const sync = await syncReservationStatusToBlob(res.id, "מאושר");
+                        if (!sync.ok) {
+                          console.error("dashboard approve: blob sync failed", sync);
                           if(showToast) showToast("error", "האישור נשמר ב-DB אך כתיבה ל-blob נכשלה — רענן את הדף");
                         } else {
+                          setReservations(sync.list);
                           if(showToast) showToast("success",`הבקשה של ${res.student_name} אושרה ✅`);
                         }
                         // Only email when this click was the one that actually flipped the status.
