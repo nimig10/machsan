@@ -905,7 +905,7 @@ export function LecturerPortal({
         {myDeptHead && activeTab === "journal" && (
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 18, overflow: "hidden" }}>
             <DeptHeadCalendarPage
-              reservations={(reservations || []).filter(r => (myDeptHead.loanTypes || []).includes(r.loan_type))}
+              reservations={reservations || []}
               kits={kits}
               equipment={equipment}
               siteSettings={siteSettings}

@@ -562,7 +562,14 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
                   {dhLecturerInput&&<button type="button" onClick={()=>{setDhLecturerInput("");setDhForm(p=>({...p,name:"",email:"",lecturerId:""}));}} style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:16,color:"var(--text3)"}}>✕</button>}
                 </div>
                 {dhLecturerInput&&!dhForm.lecturerId&&<div style={{fontSize:11,color:"var(--red)",marginTop:4}}>יש לבחור מרצה מהרשימה</div>}
-                {dhForm.lecturerId&&<div style={{fontSize:11,color:"var(--green)",marginTop:4}}>✅ {dhForm.name} — {dhForm.email||"ללא מייל"}</div>}
+                {dhForm.lecturerId&&(isValidEmailAddress((dhForm.email||"").trim())
+                  ? <div style={{marginTop:6,padding:"8px 10px",background:"rgba(46,204,113,0.08)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:6,fontSize:13}}>
+                      <div style={{fontWeight:800,color:"var(--green)"}}>✅ {dhForm.name}</div>
+                      <div style={{fontSize:12,color:"var(--text2)",marginTop:2,direction:"ltr",textAlign:"right"}}>📧 {dhForm.email}</div>
+                    </div>
+                  : <div style={{marginTop:6,padding:"8px 10px",background:"rgba(231,76,60,0.08)",border:"1px solid rgba(231,76,60,0.35)",borderRadius:6,fontSize:12,color:"var(--red)",fontWeight:700}}>
+                      ⚠️ למרצה <b>{dhForm.name}</b> אין כתובת מייל תקינה בכרטיס המרצה. יש להוסיף מייל למרצה לפני שאפשר להגדיר אותו כראש מחלקה.
+                    </div>)}
               </div>
               <div className="form-group" style={{marginBottom:10}}>
                 <label className="form-label">שם התפקיד</label>
@@ -579,7 +586,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
                   );})}
                 </div>
               </div>
-              <button className="btn btn-primary" disabled={!dhForm.lecturerId||dhForm.loanTypes.length===0||dhSaving} onClick={saveDeptHead}>
+              <button className="btn btn-primary" disabled={!dhForm.lecturerId||!isValidEmailAddress((dhForm.email||"").trim())||dhForm.loanTypes.length===0||dhSaving} onClick={saveDeptHead}>
                 {dhSaving?"⏳ שומר...":"✅ הוסף ראש מחלקה"}
               </button>
             </div>
@@ -635,7 +642,14 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
                   {editDhLecturerInput&&<button type="button" onClick={()=>{setEditDhLecturerInput("");setEditDhForm(p=>({...p,name:"",email:"",lecturerId:""}));}} style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:16,color:"var(--text3)"}}>✕</button>}
                 </div>
                 {editDhLecturerInput&&!editDhForm.lecturerId&&<div style={{fontSize:11,color:"var(--red)",marginTop:4}}>יש לבחור מרצה מהרשימה</div>}
-                {editDhForm.lecturerId&&<div style={{fontSize:11,color:"var(--green)",marginTop:4}}>✅ {editDhForm.name} — {editDhForm.email||"ללא מייל"}</div>}
+                {editDhForm.lecturerId&&(isValidEmailAddress((editDhForm.email||"").trim())
+                  ? <div style={{marginTop:6,padding:"8px 10px",background:"rgba(46,204,113,0.08)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:6,fontSize:13}}>
+                      <div style={{fontWeight:800,color:"var(--green)"}}>✅ {editDhForm.name}</div>
+                      <div style={{fontSize:12,color:"var(--text2)",marginTop:2,direction:"ltr",textAlign:"right"}}>📧 {editDhForm.email}</div>
+                    </div>
+                  : <div style={{marginTop:6,padding:"8px 10px",background:"rgba(231,76,60,0.08)",border:"1px solid rgba(231,76,60,0.35)",borderRadius:6,fontSize:12,color:"var(--red)",fontWeight:700}}>
+                      ⚠️ למרצה <b>{editDhForm.name}</b> אין כתובת מייל תקינה בכרטיס המרצה. יש להוסיף מייל למרצה לפני שאפשר להגדיר אותו כראש מחלקה.
+                    </div>)}
               </div>
               <div className="form-group" style={{marginBottom:10}}>
                 <label className="form-label">שם התפקיד</label>
@@ -653,7 +667,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
                 </div>
               </div>
               <div style={{display:"flex",gap:8}}>
-                <button className="btn btn-primary" disabled={!editDhForm.lecturerId||editDhForm.loanTypes.length===0||dhSaving} onClick={saveEditDh}>
+                <button className="btn btn-primary" disabled={!editDhForm.lecturerId||!isValidEmailAddress((editDhForm.email||"").trim())||editDhForm.loanTypes.length===0||dhSaving} onClick={saveEditDh}>
                   {dhSaving?"⏳ שומר...":"💾 שמור"}
                 </button>
                 <button className="btn btn-secondary" onClick={()=>setEditDh(null)}>ביטול</button>
