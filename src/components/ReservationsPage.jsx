@@ -476,9 +476,10 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
         return status === "הוחזר" ? markReservationReturned(r) : { ...r, status };
       }));
       setReservations(updated);
-      // DB already updated by RPC. Skip storageSet — local state may be partial
-      // (e.g. 53/59 items) and would trigger shrink_guard. Next poll syncs the blob.
       showToast("success", `סטטוס עודכן ל-${status}`);
+      syncReservationStatusToBlob(id, status, { returnedAt }).catch(e =>
+        console.error("syncReservationStatusToBlob failed:", e)
+      );
       // Only email / log when this click was the one that actually flipped the status.
       if (rpcResult.changed) {
         if (status === "נדחה") await sendStatusEmail({ ...res, status: "נדחה" }, "נדחה");
