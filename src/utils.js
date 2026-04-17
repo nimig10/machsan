@@ -2,9 +2,42 @@
 import { supabase } from "./supabaseClient.js";
 
 // ─── AUTH TOKEN ───────────────────────────────────────────────────────────────
+// Coalesce concurrent getSession() calls. Each call to supabase.auth.getSession()
+// acquires a navigator lock on "lock:sb-*-auth-token". When many parallel callers
+// (e.g. Promise.all of storageGet) each hit getSession(), they contend on the
+// lock and one or more will time out after 5s with NavigatorLockAcquireTimeoutError
+// — which on the login page was leaving the user stuck with "storageGet error".
+// We share a single in-flight promise so only one getSession() runs at a time,
+// and cache the resulting token for 30s so burst reads don't re-acquire the lock.
+let _tokenCache = { token: null, expiresAt: 0 };
+let _tokenInflight = null;
+const TOKEN_CACHE_MS = 30_000;
+
 export async function getAuthToken() {
-  const { data: { session } } = await supabase.auth.getSession();
-  return session?.access_token || null;
+  const now = Date.now();
+  if (_tokenCache.expiresAt > now) return _tokenCache.token;
+  if (_tokenInflight) return _tokenInflight;
+  _tokenInflight = (async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || null;
+      _tokenCache = { token, expiresAt: Date.now() + TOKEN_CACHE_MS };
+      return token;
+    } catch {
+      _tokenCache = { token: null, expiresAt: Date.now() + 2_000 };
+      return null;
+    } finally {
+      _tokenInflight = null;
+    }
+  })();
+  return _tokenInflight;
+}
+
+// Invalidate cached token — call this on sign-in / sign-out so stale
+// tokens don't linger in the 30s window.
+export function invalidateAuthTokenCache() {
+  _tokenCache = { token: null, expiresAt: 0 };
+  _tokenInflight = null;
 }
 
 // ─── ACTIVITY LOGGING ────────────────────────────────────────────────────────
