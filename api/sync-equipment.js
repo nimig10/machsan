@@ -4,6 +4,8 @@
 // via the sync_equipment_from_json RPC. Never blocks the main write —
 // failures are logged, not surfaced to the user.
 
+import { requireStaff } from "./_auth-helper.js";
+
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -11,6 +13,9 @@ export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
+
+  const staff = await requireStaff(req, res);
+  if (!staff) return;
 
   const { equipment } = req.body || {};
   if (!Array.isArray(equipment)) {

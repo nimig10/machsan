@@ -3,6 +3,8 @@
 // Uploads to Cloudinary via REST API (no SDK — no extra npm packages).
 // Returns { ok: true, url: "https://res.cloudinary.com/..." }
 
+import { requireStaff } from "./_auth-helper.js";
+
 const CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
 const API_KEY    = process.env.CLOUDINARY_API_KEY;
 const API_SECRET = process.env.CLOUDINARY_API_SECRET;
@@ -10,9 +12,12 @@ const API_SECRET = process.env.CLOUDINARY_API_SECRET;
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin",  "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST")   return res.status(405).json({ error: "Method not allowed" });
+
+  const staff = await requireStaff(req, res);
+  if (!staff) return;
 
   if (!CLOUD_NAME || !API_KEY || !API_SECRET) {
     return res.status(500).json({ error: "Missing Cloudinary env vars" });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { storageSet, lsGet } from "../utils.js";
+import { storageSet, lsGet, getAuthToken } from "../utils.js";
 import { Modal } from "./ui.jsx";
 
 const DAY_HOURS = (() => { const h = []; for (let hr = 9; hr <= 21; hr++) for (let m = 0; m < 60; m += 15) { if (hr === 21 && m > 30) break; h.push(`${String(hr).padStart(2,"0")}:${String(m).padStart(2,"0")}`); } return h; })();
@@ -348,9 +348,10 @@ export default function StudioBookingPage(props) {
       const migrated = await Promise.all(studios.map(async (studio) => {
         if (!studio?.image?.startsWith("data:")) return studio;
         try {
+          const token = await getAuthToken();
           const response = await fetch("/api/upload-image", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
             body: JSON.stringify({ data: studio.image }),
           });
           const json = await response.json();
@@ -508,9 +509,10 @@ export default function StudioBookingPage(props) {
       img.src = blobUrl;
     });
 
+    const token = await getAuthToken();
     const response = await fetch("/api/upload-image", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ data: dataUrl }),
     });
     const json = await response.json();

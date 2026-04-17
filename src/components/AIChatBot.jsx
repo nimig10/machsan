@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { getAvailable, formatLocalDateInput, storageGet } from '../utils.js';
+import { getAvailable, formatLocalDateInput, storageGet, getAuthToken } from '../utils.js';
 
 const fetchWithRetry = async (url, options, maxRetries = 5) => {
   const delays = [1000, 2000, 5000, 10000, 20000];
@@ -342,9 +342,10 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
       if (history.length > 0 && history[0].role === 'model') history = history.slice(1);
       history.push({ role: 'user', parts: [{ text: userMessage }] });
 
+      const token = await getAuthToken();
       const response = await fetchWithRetry('/api/gemini', {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           contents: history,
           systemInstruction: { parts: [{ text: systemPrompt }] }

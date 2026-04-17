@@ -90,6 +90,21 @@ export async function requireStaff(req, res) {
   return null;
 }
 
+// Verify the request JWT and return the auth user object (any role).
+// Use this for endpoints that should be reachable by any authenticated
+// user — staff, lecturer, or student — but not by anonymous callers.
+// On failure sends 401 and returns null.
+export async function requireUser(req, res) {
+  const authHeader = req.headers.authorization || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const authUser = await verifyToken(token);
+  if (!authUser) {
+    res.status(401).json({ error: "Unauthorized" });
+    return null;
+  }
+  return { id: authUser.id, email: String(authUser.email || "").toLowerCase() };
+}
+
 // Like requireStaff but also enforces role === "admin".
 export async function requireAdmin(req, res) {
   const staff = await requireStaff(req, res);

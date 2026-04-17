@@ -30,6 +30,8 @@
 //     via storageSet("reservations", fresh) after a successful call so the
 //     JSON cache picks up the new state before the next mirror sync.
 
+import { requireStaff } from "./_auth-helper.js";
+
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -37,6 +39,9 @@ export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ ok: false, error: "Method not allowed" });
   }
+
+  const staff = await requireStaff(req, res);
+  if (!staff) return;
 
   const { kit_id, reservations, items } = req.body || {};
 

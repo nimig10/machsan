@@ -41,6 +41,19 @@ export const SB_HEADERS = {
   "Content-Type":  "application/json",
 };
 
+// Returns Supabase REST headers with the user's JWT (if logged in).
+// Falls back to the anon key when no session — needed during the login
+// flow and for the rare anonymous public surface. Once all direct reads
+// are behind authenticated RLS, the fallback becomes a no-op.
+export async function getSbAuthHeaders() {
+  const token = await getAuthToken();
+  return {
+    "apikey":        SB_KEY,
+    "Authorization": `Bearer ${token || SB_KEY}`,
+    "Content-Type":  "application/json",
+  };
+}
+
 export function lsGet(key) {
   try { const v = localStorage.getItem(`cache_${key}`); return v ? JSON.parse(v) : null; } catch { return null; }
 }
@@ -62,7 +75,8 @@ export async function storageGet(key) {
   try {
     const ctrl = new AbortController();
     const timeout = setTimeout(() => ctrl.abort(), 6000); // 6s timeout
-    const res  = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers: SB_HEADERS, signal: ctrl.signal });
+    const headers = await getSbAuthHeaders();
+    const res  = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers, signal: ctrl.signal });
     clearTimeout(timeout);
     const json = await res.json();
     if (Array.isArray(json) && json.length > 0) {
@@ -84,7 +98,8 @@ export async function keepAlive() {
     const now = Date.now();
     const FOUR_DAYS = 4 * 24 * 60 * 60 * 1000;
     if (lastPing && now - Number(lastPing) < FOUR_DAYS) return;
-    await fetch(`${SB_URL}/rest/v1/store?key=eq.equipment&select=key`, { headers: SB_HEADERS });
+    const headers = await getSbAuthHeaders();
+    await fetch(`${SB_URL}/rest/v1/store?key=eq.equipment&select=key`, { headers });
     localStorage.setItem("sb_last_ping", String(now));
     console.log("Supabase keep-alive ping sent");
   } catch(e) { /* silent */ }
@@ -295,9 +310,10 @@ export async function createLessonReservations(kitId, reservations, items, optio
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    const token = await getAuthToken();
     const res = await fetch("/api/create-lesson-reservations", {
       method:  "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body:    JSON.stringify({ kit_id: String(kitId), reservations, items }),
       signal:  ctrl.signal,
     });
@@ -461,11 +477,13 @@ function mirrorReservationsIfNeeded(key, value) {
 
 function mirrorEquipmentIfNeeded(key, value) {
   if (key !== "equipment" || !Array.isArray(value)) return;
-  fetch("/api/sync-equipment", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ equipment: value }),
-  }).catch(e => console.warn("mirror(equipment) failed:", e?.message || e));
+  getAuthToken().then(token => {
+    fetch("/api/sync-equipment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ equipment: value }),
+    }).catch(e => console.warn("mirror(equipment) failed:", e?.message || e));
+  });
 }
 
 // ─── INITIAL DATA ─────────────────────────────────────────────────────────────

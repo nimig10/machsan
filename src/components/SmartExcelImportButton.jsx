@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import * as XLSX from "xlsx";
+import { getAuthToken } from "../utils.js";
 
 const DEFAULT_GUIDANCE = `אני מעביר לך תוכן גולמי (CSV) שחולץ מקובץ אקסל של סטודנטים.
 המשימה שלך:
@@ -131,9 +132,10 @@ ${csvText}
       },
     };
 
+    const token = await getAuthToken();
     const response = await fetchWithRetry('/api/gemini', {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(requestBody),
     });
     if (!response.ok) {

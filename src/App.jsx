@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, createLessonReservations } from "./utils.js";
+import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, createLessonReservations, getAuthToken, getSbAuthHeaders } from "./utils.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
 import { CalendarGrid } from "./components/CalendarGrid.jsx";
@@ -75,7 +75,7 @@ function restoreCacheValue(key, value) {
 //   source: "cache" — network/fetch failed, fell back to localStorage
 async function storageGet(key, signal) {
   try {
-    const res  = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers: SB_HEADERS, signal });
+    const res  = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers: await getSbAuthHeaders(), signal });
     if (!res.ok) {
       console.warn("storageGet HTTP error", key, res.status);
       return { value: lsGet(key), source: "cache" };
@@ -104,7 +104,7 @@ async function keepAlive() {
     if (lastPing && now - Number(lastPing) < FOUR_DAYS) return;
     const ac = new AbortController();
     const tid = setTimeout(() => ac.abort(), 4000);
-    await fetch(`${SB_URL}/rest/v1/store?key=eq.equipment&select=key`, { headers: SB_HEADERS, signal: ac.signal });
+    await fetch(`${SB_URL}/rest/v1/store?key=eq.equipment&select=key`, { headers: await getSbAuthHeaders(), signal: ac.signal });
     clearTimeout(tid);
     localStorage.setItem("sb_last_ping", String(now));
     console.log("Supabase keep-alive ping sent");
@@ -121,7 +121,7 @@ async function autoBackup(key) {
   const last = Number(localStorage.getItem(lastKey) || 0);
   if (Date.now() - last < BACKUP_COOLDOWN) return;
   try {
-    const r = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers: SB_HEADERS });
+    const r = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers: await getSbAuthHeaders() });
     const json = await r.json();
     if (Array.isArray(json) && json.length > 0 && json[0].data) {
       const old = json[0].data;
@@ -177,11 +177,13 @@ function mirrorReservationsIfNeeded(key, value) {
 
 function mirrorEquipmentIfNeeded(key, value) {
   if (key !== "equipment" || !Array.isArray(value)) return;
-  fetch("/api/sync-equipment", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ equipment: value }),
-  }).catch(e => console.warn("mirror(equipment) failed:", e?.message || e));
+  getAuthToken().then(token => {
+    fetch("/api/sync-equipment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ equipment: value }),
+    }).catch(e => console.warn("mirror(equipment) failed:", e?.message || e));
+  });
 }
 
 // ─── DB DIAGNOSTICS (accessible from browser console) ────────────────────────
@@ -191,7 +193,7 @@ window.dbDiag = async () => {
   console.log("=".repeat(50));
   for (const key of keys) {
     try {
-      const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data,updated_at`, { headers: SB_HEADERS });
+      const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data,updated_at`, { headers: await getSbAuthHeaders() });
       const json = await res.json();
       if (json.length > 0) {
         const d = json[0].data;
@@ -209,7 +211,7 @@ window.dbExport = async () => {
   const data = {};
   for (const key of keys) {
     try {
-      const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers: SB_HEADERS });
+      const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers: await getSbAuthHeaders() });
       const json = await res.json();
       data[key] = json.length > 0 ? json[0].data : null;
     } catch(e) { data[key] = `ERROR: ${e.message}`; }
@@ -232,7 +234,7 @@ window.dbBackups = async () => {
   console.log("🔒 Backup Status:");
   for (const key of keys) {
     try {
-      const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.backup_${key}&select=data,updated_at`, { headers: SB_HEADERS });
+      const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.backup_${key}&select=data,updated_at`, { headers: await getSbAuthHeaders() });
       const json = await res.json();
       if (json.length > 0) {
         const d = json[0].data;
@@ -246,7 +248,7 @@ window.dbBackups = async () => {
 };
 window.dbRestoreFromBackup = async (key) => {
   if (!key) { console.error("Usage: dbRestoreFromBackup('equipment')"); return; }
-  const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.backup_${key}&select=data`, { headers: SB_HEADERS });
+  const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.backup_${key}&select=data`, { headers: await getSbAuthHeaders() });
   const json = await res.json();
   if (!json.length || !json[0].data) { console.error(`No backup found for ${key}`); return; }
   const r = await storageSet(key, json[0].data);
@@ -1123,9 +1125,10 @@ function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, savi
     }
     setLoading(true);
     try {
+      const token = await getAuthToken();
       const response = await fetch('/api/gemini', {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           contents: [{ parts: [{ text: itemName }] }],
           systemInstruction: { parts: [{ text: systemInstruction }] },
@@ -1206,9 +1209,10 @@ function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, savi
         img.src = blobUrl;
       });
       console.log("[IMG] Compressed, uploading to server...");
+      const token = await getAuthToken();
       const res  = await fetch("/api/upload-image", {
         method:  "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body:    JSON.stringify({ data: dataUrl }),
       });
       const json = await res.json();
@@ -1685,7 +1689,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                   <div style={{marginTop:8,fontSize:13,color:"var(--text)",background:"var(--surface2)",borderRadius:8,padding:"10px 12px",border:"1px solid var(--border)"}}>{rp.content}</div>
                 </div>
                 <button className="btn btn-secondary btn-sm" style={{flexShrink:0}} onClick={async()=>{
-                  try{await fetch("/api/equipment-report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"mark-handled",id:rp.id})});
+                  try{const token=await getAuthToken();await fetch("/api/equipment-report",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({action:"mark-handled",id:rp.id})});
                   fetchEqReports();showToast("success","סומן כטופל ✅");}catch{showToast("error","שגיאה");}
                 }}>✅ טופל</button>
               </div>
@@ -7427,7 +7431,7 @@ export default function App() {
   const setLecturers = createTrackedSetter(_setLecturers);
 
   const fetchEquipmentReports = async () => {
-    try { const r = await fetch("/api/equipment-report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"list"})}); const d = await r.json(); if(Array.isArray(d)) setEquipmentReports(d); } catch {}
+    try { const token=await getAuthToken(); const r = await fetch("/api/equipment-report",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({action:"list"})}); const d = await r.json(); if(Array.isArray(d)) setEquipmentReports(d); } catch {}
   };
 
   const showToast = (type, msg) => {

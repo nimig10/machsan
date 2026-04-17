@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { getAuthToken } from "../utils.js";
 
 const loadXLSX = () => (
   new Promise((resolve, reject) => {
@@ -82,9 +83,10 @@ export default function SmartEquipmentImportButton({
 ${csvText}
     `.trim();
 
+    const token = await getAuthToken();
     const response = await fetchWithRetry(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         systemInstruction: {

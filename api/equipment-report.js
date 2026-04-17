@@ -1,6 +1,10 @@
 // equipment-report.js — submit + manage equipment reports
+import { requireStaff } from "./_auth-helper.js";
+
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+const STAFF_ACTIONS = new Set(["list", "list-open-counts", "list-by-reservations", "mark-handled"]);
 
 const headers = {
   apikey: SB_KEY,
@@ -19,6 +23,11 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const { action } = req.body || {};
+
+  if (STAFF_ACTIONS.has(action)) {
+    const staff = await requireStaff(req, res);
+    if (!staff) return;
+  }
 
   // CREATE — student submits a report
   if (action === "create") {

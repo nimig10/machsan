@@ -455,10 +455,8 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       return status === "הוחזר" ? markReservationReturned(r) : { ...r, status };
     }));
     setReservations(updated);
-    // Cache refresh — best-effort, DB is already updated.
-    storageSet("reservations", updated).catch(err =>
-      console.warn("blob cache refresh failed (DB is already updated):", err)
-    );
+    // DB already updated by RPC. Skip storageSet — local state may be partial
+    // (e.g. 53/59 items) and would trigger shrink_guard. Next poll syncs the blob.
     showToast("success", `סטטוס עודכן ל-${status}`);
     if (status === "נדחה") await sendStatusEmail({ ...res, status: "נדחה" }, "נדחה");
     const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");

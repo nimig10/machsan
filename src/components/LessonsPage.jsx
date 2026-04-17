@@ -1,7 +1,7 @@
 // LessonsPage.jsx — course & lesson schedule management
 import { useRef, useState, useEffect } from "react";
 import * as XLSX from "xlsx";
-import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today } from "../utils.js";
+import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAuthToken } from "../utils.js";
 import { makeLecturer } from "./LecturersPage.jsx";
 
 let _skeyCounter = 0;
@@ -749,9 +749,10 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 120000);
           try {
+            const token = await getAuthToken();
             const resp = await fetchWithRetry('/api/gemini', {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
               body: JSON.stringify(requestBody),
               signal: controller.signal,
             }, 2);

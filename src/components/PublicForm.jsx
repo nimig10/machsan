@@ -1,6 +1,6 @@
 // PublicForm.jsx — public loan request form
 import { useEffect, useState, useRef, useMemo } from "react";
-import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus, cloudinaryThumb, createReservation } from "../utils.js";
+import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken } from "../utils.js";
 import { supabase } from "../supabaseClient.js";
 import { useNotifications } from "../hooks/useNotifications.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
@@ -2338,9 +2338,10 @@ ${inventory}
         },
       };
 
+      const token = await getAuthToken();
       const response = await fetchWithRetry('/api/gemini', {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(requestBody),
       });
 
@@ -4014,9 +4015,10 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
 
       let jsonResponse = null;
       {
+        const token = await getAuthToken();
         const response = await fetchWithRetry('/api/gemini', {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify(requestBody),
         });
 
