@@ -7983,7 +7983,10 @@ export default function App() {
 
     if (!dataEquals(nextReservations, currentReservations)) {
       _setReservations(nextReservations);
-      void storageSet("reservations", nextReservations);
+      // Local-only: lesson reservations are regenerated on every load from
+      // lessons+kits, so persisting the full blob here is unnecessary and
+      // triggered shrink_guard whenever concurrent submits made the client
+      // list stale.
     }
 
     const generatedLessonBookings = buildLessonStudioBookings(lessons);
@@ -8006,7 +8009,10 @@ export default function App() {
         if (normalizedReservations.length === currentReservations.length && dataEquals(normalizedReservations, currentReservations)) {
           return currentReservations;
         }
-        void storageSet("reservations", normalizedReservations);
+        // Local-only: the archive/status normalization is recomputed from
+        // clock time on every load, so we don't persist the full blob here.
+        // Persisting it triggered shrink_guard when the client's cached list
+        // lagged behind concurrent submits by other users.
         return normalizedReservations;
       });
     };
@@ -8056,11 +8062,25 @@ export default function App() {
           } catch (e) { console.error("overdue email error", e); }
         }
         clearTimeout(tid);
-        // Mark as sent
+        // Mark as sent — flip the flag one reservation at a time via the
+        // server-side RPC (migration 023). This avoids rewriting the full
+        // blob, which triggered shrink_guard whenever the client's cached
+        // list lagged behind concurrent submits.
         const sentIds = new Set(toSend.map(r => r.id));
         const updated = reservations.map(r => sentIds.has(r.id) ? { ...r, overdue_email_sent: true } : r);
         _setReservations(updated);
-        await storageSet("reservations", updated);
+        try {
+          const token = await getAuthToken();
+          await Promise.allSettled([...sentIds].map(id =>
+            fetch("/api/mark-overdue-sent", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ id }),
+            })
+          ));
+        } catch (e) {
+          console.warn("mark-overdue-sent failed (non-fatal):", e?.message || e);
+        }
       } finally {
         overdueInFlightRef.current = false;
       }
