@@ -613,7 +613,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                             const emailAc = new AbortController();
                             const emailTid = setTimeout(() => emailAc.abort(), 8000);
                             const tokAp = await getAuthToken();
-                            await fetch("/api/send-email",{method:"POST",headers:{"Content-Type":"application/json",...(tokAp?{Authorization:`Bearer ${tokAp}`}:{})},signal:emailAc.signal,body:JSON.stringify({to:res.email,type:"approved",student_name:res.student_name,items_list:itemsList,borrow_date:formatDate(res.borrow_date),return_date:formatDate(res.return_date),borrow_time:res.borrow_time||"",return_time:res.return_time||"",sound_logo_url:siteSettings.soundLogo||""})});
+                            await fetch("/api/send-email",{method:"POST",headers:{"Content-Type":"application/json",...(tokAp?{Authorization:`Bearer ${tokAp}`}:{})},signal:emailAc.signal,body:JSON.stringify({to:res.email,type:"approved",student_name:res.student_name,items_list:itemsList,borrow_date:formatDate(res.borrow_date),return_date:formatDate(res.return_date),borrow_time:res.borrow_time||"",return_time:res.return_time||"",logo_url:siteSettings.logo||"",sound_logo_url:siteSettings.soundLogo||""})});
                             clearTimeout(emailTid);
                             if(showToast) showToast("success",`📧 מייל אישור נשלח ל-${res.email}`);
                           } catch { if(showToast) showToast("error","שגיאה בשליחת המייל"); }

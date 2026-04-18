@@ -74,6 +74,11 @@ function buildEmail({
   const finalTeacherMessage =
     teacher_message || custom_message || lesson_message || report_note || "";
 
+  // Always show the app logo — fall back to the production asset if the
+  // caller did not supply one (e.g. older call-sites, empty siteSettings).
+  const effectiveLogoUrl =
+    logo_url || "https://app.camera.org.il/LOGON1.png";
+
   const color = isLessonConflict ? "#e74c3c"
     : isStudioApproved ? "#2ecc71"
     : isStudioDeleted ? "#e74c3c"
@@ -215,9 +220,7 @@ function buildEmail({
 <body style="margin:0;padding:20px;background:#f0f0f0;font-family:Arial,sans-serif;direction:rtl;text-align:right">
   <div style="max-width:580px;margin:0 auto;background:#0a0c10;color:#e8eaf0;border-radius:12px;overflow:hidden;direction:rtl;text-align:right">
     <div style="background:linear-gradient(135deg,#111318,#1e232e);padding:32px;text-align:center;border-bottom:1px solid #252b38">
-      ${logo_url
-        ? `<img src="${logo_url}" alt="לוגו" style="width:80px;height:80px;object-fit:contain;border-radius:10px;margin-bottom:${sound_logo_url ? "6px" : "12px"}"/>`
-        : `<div style="font-size:48px;margin-bottom:10px">${isLessonKitReady ? "📚" : "🎬"}</div>`}
+      <img src="${effectiveLogoUrl}" alt="לוגו" style="width:80px;height:80px;object-fit:contain;border-radius:10px;margin-bottom:${sound_logo_url ? "6px" : "12px"}"/>
       ${sound_logo_url ? `<img src="${sound_logo_url}" alt="לוגו סאונד" style="width:60px;height:60px;object-fit:contain;border-radius:8px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto"/>` : ""}
       <h1 style="color:#f5a623;font-size:22px;margin:0;text-align:center">מכללת קמרה אובסקורה וסאונד</h1>
     </div>
