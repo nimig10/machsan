@@ -229,6 +229,16 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
     categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], siteSettings={}, onLogCreated = () => {}, equipmentReports=[] }) {
   const [subView, setSubView] = useState("active"); // "active" | "rejected" | "archive"
   const [selected, setSelected] = useState(null);
+  // Keep the open modal's data in sync with background polling updates.
+  // Without this, `selected` holds a snapshot from the moment the card was
+  // clicked — if the `items` array was still empty then (FK rows hadn't
+  // landed yet via the nested select), the modal would display "0 פריטים"
+  // forever, even after `reservations` refreshed with the real items.
+  useEffect(() => {
+    if (!selected) return;
+    const fresh = reservations.find(r => String(r.id) === String(selected.id));
+    if (fresh && fresh !== selected) setSelected(fresh);
+  }, [reservations]);
   const [editing, setEditing]   = useState(null);
   const [approvalConflict, setApprovalConflict] = useState(null);
   const [consecutiveWarning, setConsecutiveWarning] = useState(null); // {reservation, warnings}
