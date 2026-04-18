@@ -1378,7 +1378,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
             const { data: data2, error: error2 } = await supabase.auth.signInWithPassword({ email, password });
             if (!error2 && data2?.user) {
               clearTimeout(safety);
-              // Directly route — don't rely solely on onAuthStateChange
+              routingRef.current = false; // force-unlock mutex (same fix as main success path)
               try { await routeByRoles(data2.session); } catch {}
               setLoginBusy(false);
               return;
@@ -1392,7 +1392,12 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       }
       // Success — directly route rather than depending on the auth listener,
       // which can be missed if the SW or a stale state interferes.
+      // Force-unlock the routing mutex: a background session check (300ms
+      // mount-time getSession) may have locked it before the user clicked
+      // login, causing routeByRoles to return early and leaving the page
+      // frozen until a refresh. Explicit login always takes priority.
       clearTimeout(safety);
+      routingRef.current = false;
       try { await routeByRoles(data.session); } catch {}
       setLoginBusy(false);
     } catch {
