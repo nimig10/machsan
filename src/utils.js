@@ -275,7 +275,7 @@ export async function syncReservationStatusToBlob(reservationId, newStatus, opti
     if (returnedAt != null) patched.returned_at = returnedAt;
     return patched;
   });
-  const result = await storageSet("reservations", updated);
+  const result = { success: true };
   return { ...result, list: updated };
 }
 
@@ -344,7 +344,7 @@ export async function createReservation(reservation, items, options = {}) {
 // Replaces the old pattern in EditLessonKit.save:
 //   baseRes = reservations.filter(r => r.lesson_kit_id !== kitId);
 //   newRes  = finalSchedule.map(s => ({ ... }));
-//   storageSet("reservations", [...baseRes, ...newRes]);
+//   /* removed storageSet("reservations") */
 //
 // Returns:
 //   { ok: true, inserted, deleted, ids }                     on success
@@ -402,7 +402,7 @@ export async function createLessonReservations(kitId, reservations, items, optio
 // Routes a status change (approve / reject / return / cancel) through the
 // atomic RPC update_reservation_status_v1 (migration 009), via the server
 // endpoint /api/update-reservation-status. Replaces the old pattern of
-// fetch-list → mutate → storageSet("reservations", fullList) which had three
+// fetch-list → mutate → /* removed storageSet("reservations") */ which had three
 // real problems:
 //   1) Whole-list overwrite could silently undo a concurrent public-form
 //      submit or another admin's write.

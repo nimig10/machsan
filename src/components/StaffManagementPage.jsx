@@ -135,7 +135,7 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
                 return r;
               });
               if (touched) {
-                await storageSet("reservations", renamed);
+                /* removed storageSet("reservations") */
                 if (typeof setReservations === "function") setReservations(renamed);
               }
             } catch (err) {
