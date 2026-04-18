@@ -7761,9 +7761,12 @@ export default function App() {
     };
     const handleFocus = () => triggerRefresh();
     const handleVisibility = () => { if (document.visibilityState === "visible") triggerRefresh(); };
-    // Poll with exponential backoff: 3 min base, doubles on failure, max 15 min
-    const BASE_POLL = 180000;
-    const MAX_POLL  = 900000;
+    // Poll with exponential backoff: 15s base, doubles on failure, max 5 min.
+    // Shortened from 3 min so newly-submitted student reservations appear in the
+    // admin list within seconds, not minutes. The DB query is cheap (single
+    // select with a FK join) and the network cost is small.
+    const BASE_POLL = 15000;
+    const MAX_POLL  = 300000;
     let pollDelay = BASE_POLL;
     let pollTimerId;
     const poll = async () => {
