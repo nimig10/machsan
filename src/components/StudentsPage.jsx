@@ -1,5 +1,6 @@
 // StudentsPage.jsx — student management page (CRUD + import)
 import { useEffect, useRef, useState } from "react";
+import { supabase } from '../supabaseClient.js';
 import { storageSet, logActivity } from "../utils.js";
 import { Modal } from "./ui.jsx";
 import SmartExcelImportButton from "./SmartExcelImportButton.jsx";
@@ -250,8 +251,10 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
           return !(matchName || matchEmail);
         });
         if (filteredRes.length !== reservations.length) {
+          // Stage 5 — delete from Supabase (previously only blob)
+          const idsToDelete = reservations.filter(r => r.status !== "הוחזר" && (r.student_name === stuName || (stuEmail && (r.email||"").toLowerCase().trim() === stuEmail))).map(r=>r.id);
+          if(idsToDelete.length) await supabase.from("reservations_new").delete().in("id", idsToDelete);
           setReservations(filteredRes);
-          await storageSet("reservations", filteredRes);
         }
       }
       showToast("success","הסטודנט הוסר");

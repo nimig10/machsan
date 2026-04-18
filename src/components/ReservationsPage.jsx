@@ -132,9 +132,7 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
     };
     const updated = [...freshRes, newRes];
     setReservations(updated);
-    storageSet("reservations", updated).catch(err =>
-      console.warn("blob cache refresh failed (DB is already updated):", err)
-    );
+    // blob write removed (Stage 5) — DB already written via createReservation RPC
     logActivity({ user_id: staffUser.id, user_name: staffName, action: "staff_loan_create", entity: "reservation", entity_id: String(serverId), details: { borrow_date: mf.borrow_date, return_date: mf.return_date, items_count: mItems.length } });
     setMSaving(false);
     showToast("success", `השאלת איש צוות נוצרה ואושרה · ${staffName}`);

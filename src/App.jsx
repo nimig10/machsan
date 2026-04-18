@@ -3246,7 +3246,7 @@ function PublicForm_REMOVED({ equipment, reservations, setReservations, showToas
     const newRes = { ...form, id:Date.now(), status:initStatus, created_at:today(), submitted_at:new Date().toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"}), items };
     const updated = [...freshReservations, newRes];
     setReservations(updated);
-    await storageSet("reservations", updated);
+    // blob write removed (Stage 5) — dead code path (PublicForm_REMOVED)
     await sendEmail(newRes);
     setSub(false);
     setDone(true);
@@ -3699,9 +3699,9 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
   const [viewRes, setViewRes] = useState(null);
 
   const deleteRes = async (id) => {
+    await deleteReservation(id); // Stage 5 — delete from Supabase (previously only blob)
     const updated = reservations.filter(r=>r.id!==id);
     setReservations(updated);
-    await storageSet("reservations", updated);
     showToast("success", "הבקשה נמחקה מהארכיון");
     if(viewRes?.id===id) setViewRes(null);
   };
@@ -4362,8 +4362,9 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       const updatedRes = reservations.filter(r=>r.lesson_kit_id!==id);
       if(updatedRes.length!==reservations.length) {
         removedReservations = reservations.length - updatedRes.length;
+        const kitResIds = reservations.filter(r=>r.lesson_kit_id===id).map(r=>r.id);
+        if(kitResIds.length) await supabase.from("reservations_new").delete().in("id", kitResIds);
         setReservations(updatedRes);
-        await storageSet("reservations", updatedRes);
       }
     }
     await storageSet("kits", updated);
@@ -5933,8 +5934,9 @@ function CertificationsPage_REMOVED({ certifications, setCertifications, showToa
         return !(matchName || matchEmail);
       });
       if (filteredRes.length !== reservations.length) {
+        const idsToDelete = reservations.filter(r => r.status !== "הוחזר" && (r.student_name === stuName || (stuEmail && (r.email||"").toLowerCase().trim() === stuEmail))).map(r=>r.id);
+        if(idsToDelete.length) await supabase.from("reservations_new").delete().in("id", idsToDelete);
         setReservations(filteredRes);
-        await storageSet("reservations", filteredRes);
       }
       showToast("success","הסטודנט הוסר");
     }

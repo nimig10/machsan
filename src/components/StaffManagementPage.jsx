@@ -135,7 +135,8 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
                 return r;
               });
               if (touched) {
-                await storageSet("reservations", renamed);
+                // Stage 5 — update student_name in Supabase (previously only blob)
+                await supabase.from("reservations_new").update({ student_name: newName }).ilike("email", emailLower);
                 if (typeof setReservations === "function") setReservations(renamed);
               }
             } catch (err) {
