@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { supabase } from '../supabaseClient.js';
 import { getAvailable, formatLocalDateInput, storageGet, getAuthToken } from '../utils.js';
 
 const fetchWithRetry = async (url, options, maxRetries = 5) => {
@@ -216,7 +217,7 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
           if (Array.isArray(refreshed?.reservations)) liveReservations = refreshed.reservations;
         } else {
           const [freshEquipment, freshReservations] = await Promise.all([
-            storageGet('equipment'),
+            (supabase.from("equipment").select("*").then(res => res.data || [])),
             storageGet('reservations'),
           ]);
           if (Array.isArray(freshEquipment)) liveEquipment = freshEquipment;

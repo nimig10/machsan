@@ -7303,7 +7303,7 @@ export default function App() {
   const refreshPublicInventory = async () => {
     try {
       const [eqR, resR, catsR, catLoanTypesR] = await Promise.all([
-        storageGet("equipment"),
+        (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
         storageGet("reservations"),
         storageGet("categories"),
         storageGet("categoryLoanTypes"),
@@ -7373,7 +7373,7 @@ export default function App() {
   const refreshLecturerData = async () => {
     try {
       const [eqR, resR, lessonsR, lecturersR, kitsR, studiosR] = await Promise.all([
-        storageGet("equipment"),
+        (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
         storageGet("reservations"),
         storageGet("lessons"),
         storageGet("lecturers"),
@@ -7602,7 +7602,7 @@ export default function App() {
         try {
           historySuspendedRef.current = true;
           const [eqR, resR, catsR, catTypesR, catLoanTypesR, tmR, ktsR, polR, certsR, dhsR, mgrR, mgrTokR, siteSetR, studiosR, studioBkR, lessonsR, lecturersR] = await Promise.all([
-            storageGet("equipment"),
+            (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
           storageGet("reservations"),
           storageGet("categories"),
           storageGet("categoryTypes"),
