@@ -1339,7 +1339,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   };
 
   const loadReservationsData = async () => {
-    const res = await storageGet("reservations");
+    const res = await (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] }))));
     if (Array.isArray(res)) setReservations(res);
   };
 
@@ -2433,7 +2433,7 @@ ${inventory}
 
       let liveReservations = reservations;
       try {
-        const freshReservations = await storageGet("reservations");
+        const freshReservations = await (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] }))));
         if (Array.isArray(freshReservations)) liveReservations = freshReservations;
       } catch (error) {
         console.warn("Could not refresh reservations before AI equipment validation", error);
@@ -2639,7 +2639,7 @@ ${inventory}
     // which takes a row-level lock on the equipment it touches.
     let freshReservations = reservations;
     try {
-      const fresh = await storageGet("reservations");
+      const fresh = await (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] }))));
       if (Array.isArray(fresh)) {
         freshReservations = fresh;
         setReservations(fresh); // update local state too

@@ -267,7 +267,7 @@ export async function storageSet(key, value) {
 // callers can feed it back into setReservations to pick up any new rows.
 export async function syncReservationStatusToBlob(reservationId, newStatus, options = {}) {
   const { returnedAt = null } = options;
-  const fresh = await storageGet("reservations");
+  const fresh = await (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] }))));
   const freshList = Array.isArray(fresh) ? fresh : [];
   const updated = freshList.map(r => {
     if (String(r.id) !== String(reservationId)) return r;

@@ -1,3 +1,4 @@
+import { supabase } from '../supabaseClient.js';
 import { useState, useEffect } from "react";
 import { Modal } from "./ui.jsx";
 import { storageSet, storageGet, isValidEmailAddress, logActivity, getAuthToken } from "../utils.js";
@@ -123,7 +124,7 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
           // that was taken at submission time. Matches by email (case-insensitive).
           if (prevName !== newName && emailLower) {
             try {
-              const freshRes = await storageGet("reservations");
+              const freshRes = await (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] }))));
               const src = Array.isArray(freshRes) ? freshRes : (Array.isArray(reservations) ? reservations : []);
               let touched = false;
               const renamed = src.map(r => {

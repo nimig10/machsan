@@ -3225,7 +3225,7 @@ function PublicForm_REMOVED({ equipment, reservations, setReservations, showToas
     // This prevents two students submitting simultaneously from both "seeing" free stock
     let freshReservations = reservations;
     try {
-      const fresh = (await storageGet("reservations")).value;
+      const fresh = (await (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" })))).value;
       if (Array.isArray(fresh)) {
         freshReservations = fresh;
         setReservations(fresh); // update local state too
@@ -4923,12 +4923,11 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
 
         // Remove old reservations for this kit from the local cache/state
         if(setReservations) setReservations(baseRes);
-        const [r1, r2] = await Promise.all([
-          storageSet("kits", updatedKits),
-          storageSet("reservations", baseRes),
+        const [r1] = await Promise.all([
+          storageSet("kits", updatedKits)
         ]);
         setSaving(false);
-        if(r1.ok&&r2.ok) {
+        if(r1.ok) {
           // Audit log — lesson kit without schedule (pure save/edit)
           try {
             const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
@@ -5075,12 +5074,11 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       const updatedRes = [...baseRes, ...newResForCache];
       if(setReservations) setReservations(updatedRes);
 
-      const [r1, r2] = await Promise.all([
-        storageSet("kits", updatedKits),
-        storageSet("reservations", updatedRes),
+      const [r1] = await Promise.all([
+        storageSet("kits", updatedKits)
       ]);
       setSaving(false);
-      if(r1.ok&&r2.ok) {
+      if(r1.ok) {
         // Audit log — lesson kit with schedule (reservations generated)
         try {
           const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
@@ -6337,7 +6335,7 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
         setChangingStatus(null);
         return;
       }
-      const allRes = await storageGet("reservations");
+      const allRes = await (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" })));
       const fresh = Array.isArray(allRes) ? allRes : ((allRes && allRes.value) || []);
       const updated = fresh.map(x => x.id===r.id ? {...x, status:newStatus} : x);
       setLocalRes(prev => prev.map(x => x.id===r.id ? {...x, status:newStatus} : x));
@@ -7303,8 +7301,8 @@ export default function App() {
   const refreshPublicInventory = async () => {
     try {
       const [eqR, resR, catsR, catLoanTypesR] = await Promise.all([
-        storageGet("equipment"),
-        storageGet("reservations"),
+        (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
+        (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
         storageGet("categories"),
         storageGet("categoryLoanTypes"),
       ]);
@@ -7373,8 +7371,8 @@ export default function App() {
   const refreshLecturerData = async () => {
     try {
       const [eqR, resR, lessonsR, lecturersR, kitsR, studiosR] = await Promise.all([
-        storageGet("equipment"),
-        storageGet("reservations"),
+        (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
+        (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
         storageGet("lessons"),
         storageGet("lecturers"),
         storageGet("kits"),
@@ -7602,8 +7600,8 @@ export default function App() {
         try {
           historySuspendedRef.current = true;
           const [eqR, resR, catsR, catTypesR, catLoanTypesR, tmR, ktsR, polR, certsR, dhsR, mgrR, mgrTokR, siteSetR, studiosR, studioBkR, lessonsR, lecturersR] = await Promise.all([
-            storageGet("equipment"),
-          storageGet("reservations"),
+            (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
+          (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
           storageGet("categories"),
           storageGet("categoryTypes"),
           storageGet("categoryLoanTypes"),
@@ -7744,7 +7742,7 @@ export default function App() {
     refreshAbortRef.current = ctrl;
     try {
       const [resR, bookingsR, lecturersR, certsR] = await Promise.all([
-        storageGet("reservations", ctrl.signal),
+        (supabase.from("reservations_new").select("*, reservation_items(*)").abortSignal(ctrl.signal).then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
         storageGet("studio_bookings", ctrl.signal),
         storageGet("lecturers", ctrl.signal),
         storageGet("certifications", ctrl.signal),

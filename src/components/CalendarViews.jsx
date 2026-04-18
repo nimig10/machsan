@@ -1,3 +1,4 @@
+import { supabase } from '../supabaseClient.js';
 // CalendarViews.jsx — DeptHeadCalendarPage and ManagerCalendarPage
 import { useState } from "react";
 import { CalendarGrid } from "./CalendarGrid.jsx";
@@ -243,7 +244,7 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
         return;
       }
       // Refresh local + blob cache. DB is already the source of truth.
-      const allRes = await storageGet("reservations");
+      const allRes = await (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] }))));
       const updated = (allRes||[]).map(x => x.id===r.id ? {...x, status:newStatus} : x);
       setLocalRes(prev => prev.map(x => x.id===r.id ? {...x, status:newStatus} : x));
       if(setReservations) setReservations(updated);
