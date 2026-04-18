@@ -7309,21 +7309,29 @@ export default function App() {
         storageGet("categoryLoanTypes"),
       ]);
 
-      applyPublicLiveSync("equipment", eqR);
-      applyPublicLiveSync("reservations", resR);
-      applyPublicLiveSync("categories", catsR);
-      applyPublicLiveSync("categoryLoanTypes", catLoanTypesR);
+      // eqR/resR are { value, source } objects (Supabase path); catsR/catLoanTypesR
+      // come from storageGet which also returns { value, source }. Extract .value
+      // before passing to applyPublicLiveSync (which expects a plain array/object).
+      const eqVal  = eqR?.value  ?? eqR;
+      const resVal = resR?.value ?? resR;
+      const catsVal = catsR?.value ?? catsR;
+      const catLoanTypesVal = catLoanTypesR?.value ?? catLoanTypesR;
+
+      applyPublicLiveSync("equipment", eqVal);
+      applyPublicLiveSync("reservations", resVal);
+      applyPublicLiveSync("categories", catsVal);
+      applyPublicLiveSync("categoryLoanTypes", catLoanTypesVal);
 
       return {
-        equipment: Array.isArray(eqR)
-          ? normalizeEquipmentTagFlags(eqR, categoryTypesRef.current).map(ensureUnits)
+        equipment: Array.isArray(eqVal)
+          ? normalizeEquipmentTagFlags(eqVal, categoryTypesRef.current).map(ensureUnits)
           : equipmentRef.current,
-        reservations: Array.isArray(resR)
-          ? normalizeReservationsForArchive(resR)
+        reservations: Array.isArray(resVal)
+          ? normalizeReservationsForArchive(resVal)
           : reservationsRef.current,
-        categories: Array.isArray(catsR) ? catsR : categoriesRef.current,
-        categoryLoanTypes: catLoanTypesR && typeof catLoanTypesR === "object" && !Array.isArray(catLoanTypesR)
-          ? catLoanTypesR
+        categories: Array.isArray(catsVal) ? catsVal : categoriesRef.current,
+        categoryLoanTypes: catLoanTypesVal && typeof catLoanTypesVal === "object" && !Array.isArray(catLoanTypesVal)
+          ? catLoanTypesVal
           : categoryLoanTypesRef.current,
       };
     } catch (error) {
