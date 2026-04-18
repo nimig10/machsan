@@ -275,8 +275,8 @@ export async function syncReservationStatusToBlob(reservationId, newStatus, opti
     if (returnedAt != null) patched.returned_at = returnedAt;
     return patched;
   });
-  const result = await storageSet("reservations", updated);
-  return { ...result, list: updated };
+  // blob write removed (Stage 5) — Supabase is source of truth; callers use .list for UI update
+  return { ok: true, list: updated };
 }
 
 // ─── ATOMIC RESERVATION CREATE ───────────────────────────────────────────────

@@ -2,7 +2,7 @@ import { supabase } from '../supabaseClient.js';
 // CalendarViews.jsx — DeptHeadCalendarPage and ManagerCalendarPage
 import { useState } from "react";
 import { CalendarGrid } from "./CalendarGrid.jsx";
-import { formatDate, today, storageGet, storageSet, cloudinaryThumb, getAuthToken } from "../utils.js";
+import { formatDate, today, storageGet, cloudinaryThumb, getAuthToken } from "../utils.js";
 
 export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equipment=[], siteSettings={} }) {
   const [localRes, setLocalRes]   = useState(initialReservations);
@@ -249,9 +249,6 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
       setLocalRes(prev => prev.map(x => x.id===r.id ? {...x, status:newStatus} : x));
       if(setReservations) setReservations(updated);
       setSelected(null);
-      storageSet("reservations", updated).catch(err =>
-        console.warn("blob cache refresh failed (DB is already updated):", err)
-      );
     } catch(e) { console.error("changeStatus error", e); }
     setChangingStatus(null);
   };

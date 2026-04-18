@@ -1,6 +1,6 @@
 // DashboardPage.jsx — admin dashboard page
 import { useState } from "react";
-import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, storageSet, syncReservationStatusToBlob } from "../utils.js";
+import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, syncReservationStatusToBlob } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 
@@ -702,9 +702,6 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                 }
                 const updated = reservations.map(r=>r.id===res.id?{...r,status:"מאושר"}:r);
                 setReservations(updated);
-                storageSet("reservations", updated).catch(err =>
-                  console.warn("blob cache refresh failed (DB is already updated):", err)
-                );
                 if(showToast) showToast("success",`הבקשה של ${res.student_name} אושרה ✅`);
                 setDashConsecutiveWarning(null);
               } finally {

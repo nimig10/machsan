@@ -6333,9 +6333,6 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
       setLocalRes(prev => prev.map(x => x.id===r.id ? {...x, status:newStatus} : x));
       if(setReservations) setReservations(updated);
       setSelected(null);
-      storageSet("reservations", updated).catch(err =>
-        console.warn("blob cache refresh failed (DB is already updated):", err)
-      );
     } catch(e) { console.error("changeStatus error", e); }
     setChangingStatus(null);
   };
@@ -7704,7 +7701,7 @@ export default function App() {
         // "supabase_empty" = DB responded OK but row missing → safe to initialize
         // "cache" = network failed, fell back to localStorage → NEVER overwrite DB
         // equipment blob write removed (Stage 5) — equipment lives in Supabase tables only
-        if(!res && resSrc === "supabase_empty")  await storageSet("reservations", []);
+        // reservations blob init removed (Stage 5) — Supabase is source of truth
         if(!cats && catsSrc === "supabase_empty") await storageSet("categories",   DEFAULT_CATEGORIES);
         if(!tm && tmSrc === "supabase_empty")   await storageSet("teamMembers",  []);
         if(!kts && ktsSrc === "supabase_empty")  await storageSet("kits",         []);
@@ -7717,8 +7714,7 @@ export default function App() {
           setManagerToken(tok);
         }
         if(!mgr && mgrSrc === "supabase_empty") await storageSet("collegeManager", { name:"", email:"" });
-        // Safe: only write back normalized reservations if changed (equipment blob retired in Stage 5)
-        if(reservationsChanged) await storageSet("reservations", normalizedReservations);
+        // reservations blob write removed (Stage 5) — normalization is in-memory only
         // Warn if network failed and no cache
         if(eqSrc === "cache" && !eq) showToast("error", "⚠️ לא ניתן לטעון ציוד — בדוק חיבור");
       } catch(e) {

@@ -154,14 +154,11 @@ export function LecturerPortal({
         showToast("error", "שגיאה בעדכון הסטטוס בשרת");
         return;
       }
-      // Local state + blob cache refresh (non-blocking for UI feedback).
+      // Local state refresh — re-read from Supabase for accurate post-update list
       const freshRes = await (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] }))));
       const all = Array.isArray(freshRes) ? freshRes : reservations;
       const updated = all.map(r => String(r.id) === String(res.id) ? { ...r, status: newStatus } : r);
       if (setReservations) setReservations(updated);
-      storageSet("reservations", updated).catch(err =>
-        console.warn("blob cache refresh failed (DB is already updated):", err)
-      );
       showToast("success", successMsg);
     } catch (err) {
       console.error("changeDhStatus error:", err);
