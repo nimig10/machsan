@@ -1,6 +1,6 @@
 // CertificationsPage.jsx — certifications management with equipment/studio modes
 import { useRef, useState } from "react";
-import { storageSet, cloudinaryThumb } from "../utils.js";
+import { storageSet, cloudinaryThumb, writeEquipmentToDB } from "../utils.js";
 import { Modal } from "./ui.jsx";
 
 const NIGHT_CERT_ID = "cert_night_studio";
@@ -121,7 +121,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
       if (setEquipment && !isStudioType(types.find(t=>t.id===typeId)||{})) {
         const updatedEquipment = equipment.map(eq => eq.certification_id === typeId ? { ...eq, certification_id: "" } : eq);
         setEquipment(updatedEquipment);
-        await storageSet("equipment", updatedEquipment);
+        await writeEquipmentToDB(updatedEquipment);
       }
       showToast("success","ההסמכה נמחקה");
     }
@@ -249,7 +249,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
         return eq;
       });
       setEquipment(updatedEquipment);
-      await storageSet("equipment", updatedEquipment);
+      await writeEquipmentToDB(updatedEquipment);
     }
     showToast("success", `הסמכת ציוד "${name}" עודכנה`);
     setEditEquipmentCert(null);

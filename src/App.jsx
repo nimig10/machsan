@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache } from "./utils.js";
+import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB } from "./utils.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
 import { CalendarGrid } from "./components/CalendarGrid.jsx";
@@ -196,17 +196,7 @@ function mirrorReservationsIfNeeded(key, value) {
   });
 }
 
-function mirrorEquipmentIfNeeded(key, value) {
-  if (key !== "equipment" || !Array.isArray(value)) return;
-  getAuthToken().then(token => {
-    if (!token) return; // no auth — skip mirror
-    fetch("/api/sync-equipment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ equipment: value }),
-    }).catch(e => console.warn("mirror(equipment) failed:", e?.message || e));
-  });
-}
+// writeEquipmentToDB is exported from utils.js (Stage 5)
 
 // ─── DB DIAGNOSTICS (accessible from browser console) ────────────────────────
 window.dbDiag = async () => {
@@ -1346,7 +1336,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   const persistEquipmentChange = async (nextEquipment, { successMessage, errorMessage = "שגיאה בשמירת הציוד. השינוי לא נשמר בשרת." } = {}) => {
     const previousEquipment = equipment;
     setEquipment(nextEquipment);
-    const result = await storageSet("equipment", nextEquipment);
+    const result = await writeEquipmentToDB(nextEquipment);
     if (!result?.ok) {
       setEquipment(previousEquipment);
       showToast("error", errorMessage);
@@ -1425,7 +1415,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       setCategories(newCategories);
     }
     const writeResults = await Promise.all([
-      storageSet("equipment", newEquipment),
+      writeEquipmentToDB(newEquipment),
       ...(setCategories && newCats.length ? [storageSet("categories", newCategories)] : []),
     ]);
     if (writeResults.some((result) => !result?.ok)) {
@@ -1459,7 +1449,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     setEquipment(updatedEquipment);
     const uniqueApprovedCategories = [...new Set((approvedCategories || []).map((item) => String(item || "").trim()).filter(Boolean))];
     const updatedCategories = [...new Set([...(categories || []), ...uniqueApprovedCategories])];
-    const writes = [storageSet("equipment", updatedEquipment)];
+    const writes = [writeEquipmentToDB(updatedEquipment)];
     if (typeof setCategories === "function" && updatedCategories.length !== (categories || []).length) {
       setCategories(updatedCategories);
       writes.push(storageSet("categories", updatedCategories));
@@ -1569,7 +1559,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     setCategories(updatedCats);
     setEquipment(updatedEq);
     setCategoryTypes(updatedTypes);
-    await Promise.all([storageSet("categories", updatedCats), storageSet("equipment", updatedEq), storageSet("categoryTypes", updatedTypes)]);
+    await Promise.all([storageSet("categories", updatedCats), writeEquipmentToDB(updatedEq), storageSet("categoryTypes", updatedTypes)]);
     showToast("success", `קטגוריה "${oldName}" עודכנה`);
   };
 
@@ -1587,7 +1577,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     const previousTypes = categoryTypes;
     setEquipment(updated);
     setCategoryTypes(updatedTypes);
-    const results = await Promise.all([storageSet("equipment", updated), storageSet("categoryTypes", updatedTypes)]);
+    const results = await Promise.all([writeEquipmentToDB(updated), storageSet("categoryTypes", updatedTypes)]);
     if (results.some((result) => !result?.ok)) {
       setEquipment(previousEquipment);
       setCategoryTypes(previousTypes);
@@ -1975,7 +1965,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
             setCategories(updatedCats);
             setEquipment(updatedEq);
             setCategoryTypes(updatedTypes);
-            await Promise.all([storageSet("categories", updatedCats), storageSet("equipment", updatedEq), storageSet("categoryTypes", updatedTypes)]);
+            await Promise.all([storageSet("categories", updatedCats), writeEquipmentToDB(updatedEq), storageSet("categoryTypes", updatedTypes)]);
             showToast("success", `קטגוריה עודכנה`);
             { const _c = JSON.parse(sessionStorage.getItem("staff_user")||"{}"); logActivity({ user_id: _c.id, user_name: _c.full_name, action: "category_rename", entity: "categories", entity_id: action.newName, details: { old_name: action.oldName, new_name: action.newName, type: action.type } }); }
           } else if(action.action==="delete") {
@@ -6703,7 +6693,7 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
     const updatedEquipment = equipment.map(e => e.id===eq.id ? updatedEq : e);
     const previousEquipment = equipment;
     setEquipment(updatedEquipment);
-    const r = await storageSet("equipment", updatedEquipment);
+    const r = await writeEquipmentToDB(updatedEquipment);
     setSaving(false);
     if(r.ok) { showToast("success", "היחידות עודכנו"); onClose(); }
     else {
@@ -6971,7 +6961,7 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
     const updatedEquipment = equipment.map(e => e.id===eq.id ? updatedEq : e);
     const previousEquipment = equipment;
     setEquipment(updatedEquipment);
-    const r = await storageSet("equipment", updatedEquipment);
+    const r = await writeEquipmentToDB(updatedEquipment);
     setSaving(false);
     if(r.ok) {
       if(editForm.status==="תקין") showToast("success", `✅ ${eq.name} #${unit.id.split("_")[1]} חזר לציוד פעיל`);
@@ -7713,7 +7703,7 @@ export default function App() {
         // ─── SAFE INIT: only write defaults when DB confirmed the key doesn't exist ───
         // "supabase_empty" = DB responded OK but row missing → safe to initialize
         // "cache" = network failed, fell back to localStorage → NEVER overwrite DB
-        if(!eq && eqSrc === "supabase_empty") await storageSet("equipment", normalizedEquipment);
+        // equipment blob write removed (Stage 5) — equipment lives in Supabase tables only
         if(!res && resSrc === "supabase_empty")  await storageSet("reservations", []);
         if(!cats && catsSrc === "supabase_empty") await storageSet("categories",   DEFAULT_CATEGORIES);
         if(!tm && tmSrc === "supabase_empty")   await storageSet("teamMembers",  []);
@@ -7727,8 +7717,7 @@ export default function App() {
           setManagerToken(tok);
         }
         if(!mgr && mgrSrc === "supabase_empty") await storageSet("collegeManager", { name:"", email:"" });
-        // Safe: only write back normalized data if we actually got data from DB
-        if(equipmentChanged) await storageSet("equipment", normalizedEquipment);
+        // Safe: only write back normalized reservations if changed (equipment blob retired in Stage 5)
         if(reservationsChanged) await storageSet("reservations", normalizedReservations);
         // Warn if network failed and no cache
         if(eqSrc === "cache" && !eq) showToast("error", "⚠️ לא ניתן לטעון ציוד — בדוק חיבור");

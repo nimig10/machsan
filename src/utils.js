@@ -246,7 +246,7 @@ export async function storageSet(key, value) {
       return { ok: false, error: err };
     }
     mirrorReservationsIfNeeded(key, value);
-    mirrorEquipmentIfNeeded(key, value);
+    // mirrorEquipmentIfNeeded removed — equipment no longer written to blob (Stage 5)
     return { ok: true };
   } catch(e) {
     console.error("storageSet network error", key, e);
@@ -535,17 +535,8 @@ function mirrorReservationsIfNeeded(key, value) {
   });
 }
 
-function mirrorEquipmentIfNeeded(key, value) {
-  if (key !== "equipment" || !Array.isArray(value)) return;
-  getAuthToken().then(token => {
-    if (!token) return; // no auth — skip mirror (anon write or expired session)
-    fetch("/api/sync-equipment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ equipment: value }),
-    }).catch(e => console.warn("mirror(equipment) failed:", e?.message || e));
-  });
-}
+// mirrorEquipmentIfNeeded removed — Stage 5: equipment writes go directly to
+// Supabase via writeEquipmentToDB() in App.jsx. No blob write, no mirror needed.
 
 // ─── INITIAL DATA ─────────────────────────────────────────────────────────────
 export const INITIAL_EQUIPMENT = [
@@ -903,6 +894,29 @@ export function getConsecutiveBookingWarnings(targetReservation, reservations, e
     }
   }
   return warnings;
+}
+
+// ─── EQUIPMENT DB WRITE (Stage 5) ────────────────────────────────────────────
+// Direct Supabase write via /api/sync-equipment — replaces storageSet("equipment")
+export async function writeEquipmentToDB(equipment) {
+  const token = await getAuthToken();
+  if (!token) return { ok: false, error: "not_authenticated" };
+  try {
+    const r = await fetch("/api/sync-equipment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ equipment }),
+    });
+    if (!r.ok) {
+      const text = await r.text();
+      console.error("writeEquipmentToDB failed:", r.status, text);
+      return { ok: false, error: text };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error("writeEquipmentToDB network error:", e);
+    return { ok: false, error: e.message };
+  }
 }
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
