@@ -187,6 +187,7 @@ async function storageSet(key, value) {
 function mirrorReservationsIfNeeded(key, value) {
   if (key !== "reservations" || !Array.isArray(value)) return;
   getAuthToken().then(token => {
+    if (!token) return; // no auth — skip mirror
     fetch("/api/sync-reservations", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -198,6 +199,7 @@ function mirrorReservationsIfNeeded(key, value) {
 function mirrorEquipmentIfNeeded(key, value) {
   if (key !== "equipment" || !Array.isArray(value)) return;
   getAuthToken().then(token => {
+    if (!token) return; // no auth — skip mirror
     fetch("/api/sync-equipment", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
