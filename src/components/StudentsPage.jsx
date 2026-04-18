@@ -251,7 +251,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
         });
         if (filteredRes.length !== reservations.length) {
           setReservations(filteredRes);
-          /* removed storageSet("reservations") */
+          await storageSet("reservations", filteredRes);
         }
       }
       showToast("success","הסטודנט הוסר");

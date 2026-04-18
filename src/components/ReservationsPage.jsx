@@ -132,7 +132,9 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
     };
     const updated = [...freshRes, newRes];
     setReservations(updated);
-    /* removed */
+    storageSet("reservations", updated).catch(err =>
+      console.warn("blob cache refresh failed (DB is already updated):", err)
+    );
     logActivity({ user_id: staffUser.id, user_name: staffName, action: "staff_loan_create", entity: "reservation", entity_id: String(serverId), details: { borrow_date: mf.borrow_date, return_date: mf.return_date, items_count: mItems.length } });
     setMSaving(false);
     showToast("success", `השאלת איש צוות נוצרה ואושרה · ${staffName}`);
@@ -406,7 +408,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       setReservations(normalizeReservationsForArchive(reservations.map((r) =>
         r.id === reservationToApprove.id ? { ...reservationToApprove, status: "מאושר" } : r
       )));
-      const sync = { ok: true };
+      const sync = await syncReservationStatusToBlob(reservationToApprove.id, "מאושר");
       if (!sync.ok) {
         console.error("doApprove: blob sync failed", sync);
         showToast("error", "האישור נשמר ב-DB אך כתיבה ל-blob נכשלה — רענן את הדף");
@@ -476,7 +478,9 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       }));
       setReservations(updated);
       showToast("success", `סטטוס עודכן ל-${status}`);
-      /* removed syncReservationStatusToBlob */
+      syncReservationStatusToBlob(id, status, { returnedAt }).catch(e =>
+        console.error("syncReservationStatusToBlob failed:", e)
+      );
       // Only email / log when this click was the one that actually flipped the status.
       if (rpcResult.changed) {
         if (status === "נדחה") await sendStatusEmail({ ...res, status: "נדחה" }, "נדחה");
@@ -665,7 +669,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
         </>
       }
       {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations} collegeManager={collegeManager} managerToken={managerToken}
-  onSave={async(updated)=>{ const all=normalizeReservationsForArchive(reservations.map(r=>r.id===updated.id?updated:r)); setReservations(all); /* removed storageSet("reservations",all) */ showToast("success","הבקשה עודכנה"); setEditing(null); }}
+  onSave={async(updated)=>{ const all=normalizeReservationsForArchive(reservations.map(r=>r.id===updated.id?updated:r)); setReservations(all); await storageSet("reservations",all); showToast("success","הבקשה עודכנה"); setEditing(null); }}
   onApprove={(editing.status==="נדחה" || editing.status==="ממתין") ? async(updated)=>{
     const approved = await approveReservation(updated);
     if (approved) setEditing(null);

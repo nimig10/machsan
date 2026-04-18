@@ -1344,7 +1344,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   const persistEquipmentChange = async (nextEquipment, { successMessage, errorMessage = "שגיאה בשמירת הציוד. השינוי לא נשמר בשרת." } = {}) => {
     const previousEquipment = equipment;
     setEquipment(nextEquipment);
-    const result = { ok: true };
+    const result = await storageSet("equipment", nextEquipment);
     if (!result?.ok) {
       setEquipment(previousEquipment);
       showToast("error", errorMessage);
@@ -1422,7 +1422,9 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     if (setCategories && newCats.length) {
       setCategories(newCategories);
     }
-    const writeResults = await Promise.all([...(setCategories && newCats.length ? [storageSet("categories", newCategories)] : []),
+    const writeResults = await Promise.all([
+      storageSet("equipment", newEquipment),
+      ...(setCategories && newCats.length ? [storageSet("categories", newCategories)] : []),
     ]);
     if (writeResults.some((result) => !result?.ok)) {
       setEquipment(previousEquipment);
@@ -1455,7 +1457,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     setEquipment(updatedEquipment);
     const uniqueApprovedCategories = [...new Set((approvedCategories || []).map((item) => String(item || "").trim()).filter(Boolean))];
     const updatedCategories = [...new Set([...(categories || []), ...uniqueApprovedCategories])];
-    const writes = [/* removed storageSet("equipment") */];
+    const writes = [storageSet("equipment", updatedEquipment)];
     if (typeof setCategories === "function" && updatedCategories.length !== (categories || []).length) {
       setCategories(updatedCategories);
       writes.push(storageSet("categories", updatedCategories));
@@ -1565,7 +1567,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     setCategories(updatedCats);
     setEquipment(updatedEq);
     setCategoryTypes(updatedTypes);
-    await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes)]);
+    await Promise.all([storageSet("categories", updatedCats), storageSet("equipment", updatedEq), storageSet("categoryTypes", updatedTypes)]);
     showToast("success", `קטגוריה "${oldName}" עודכנה`);
   };
 
@@ -1583,7 +1585,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     const previousTypes = categoryTypes;
     setEquipment(updated);
     setCategoryTypes(updatedTypes);
-    const results = await Promise.all([storageSet("categoryTypes", updatedTypes)]);
+    const results = await Promise.all([storageSet("equipment", updated), storageSet("categoryTypes", updatedTypes)]);
     if (results.some((result) => !result?.ok)) {
       setEquipment(previousEquipment);
       setCategoryTypes(previousTypes);
@@ -1931,7 +1933,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
           const updatedTypes={...categoryTypes,...(type!==undefined?{[name]:type}:{})};
           setCategories(updatedCats);
           setCategoryTypes(updatedTypes);
-          await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes)]);
+          await Promise.all([storageSet("categories",updatedCats),storageSet("categoryTypes",updatedTypes)]);
           showToast("success",`קטגוריה "${name}" נוספה`);
           { const _c = JSON.parse(sessionStorage.getItem("staff_user")||"{}"); logActivity({ user_id: _c.id, user_name: _c.full_name, action: "category_add", entity: "categories", entity_id: name, details: { name, type } }); }
           setModal(null);
@@ -1971,7 +1973,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
             setCategories(updatedCats);
             setEquipment(updatedEq);
             setCategoryTypes(updatedTypes);
-            await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes)]);
+            await Promise.all([storageSet("categories", updatedCats), storageSet("equipment", updatedEq), storageSet("categoryTypes", updatedTypes)]);
             showToast("success", `קטגוריה עודכנה`);
             { const _c = JSON.parse(sessionStorage.getItem("staff_user")||"{}"); logActivity({ user_id: _c.id, user_name: _c.full_name, action: "category_rename", entity: "categories", entity_id: action.newName, details: { old_name: action.oldName, new_name: action.newName, type: action.type } }); }
           } else if(action.action==="delete") {
@@ -3252,7 +3254,7 @@ function PublicForm_REMOVED({ equipment, reservations, setReservations, showToas
     const newRes = { ...form, id:Date.now(), status:initStatus, created_at:today(), submitted_at:new Date().toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"}), items };
     const updated = [...freshReservations, newRes];
     setReservations(updated);
-    /* removed storageSet("reservations") */
+    await storageSet("reservations", updated);
     await sendEmail(newRes);
     setSub(false);
     setDone(true);
@@ -3707,7 +3709,7 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
   const deleteRes = async (id) => {
     const updated = reservations.filter(r=>r.id!==id);
     setReservations(updated);
-    /* removed storageSet("reservations") */
+    await storageSet("reservations", updated);
     showToast("success", "הבקשה נמחקה מהארכיון");
     if(viewRes?.id===id) setViewRes(null);
   };
@@ -4369,7 +4371,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       if(updatedRes.length!==reservations.length) {
         removedReservations = reservations.length - updatedRes.length;
         setReservations(updatedRes);
-        /* removed storageSet("reservations") */
+        await storageSet("reservations", updatedRes);
       }
     }
     await storageSet("kits", updated);
@@ -4921,9 +4923,11 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
 
         // Remove old reservations for this kit from the local cache/state
         if(setReservations) setReservations(baseRes);
-        const [r1, r2] = await Promise.all([storageSet("kits", updatedKits), ]);
+        const [r1] = await Promise.all([
+          storageSet("kits", updatedKits)
+        ]);
         setSaving(false);
-        if(r1.ok&&r2.ok) {
+        if(r1.ok) {
           // Audit log — lesson kit without schedule (pure save/edit)
           try {
             const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
@@ -5070,9 +5074,11 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       const updatedRes = [...baseRes, ...newResForCache];
       if(setReservations) setReservations(updatedRes);
 
-      const [r1, r2] = await Promise.all([storageSet("kits", updatedKits), ]);
+      const [r1] = await Promise.all([
+        storageSet("kits", updatedKits)
+      ]);
       setSaving(false);
-      if(r1.ok&&r2.ok) {
+      if(r1.ok) {
         // Audit log — lesson kit with schedule (reservations generated)
         try {
           const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
@@ -5936,7 +5942,7 @@ function CertificationsPage_REMOVED({ certifications, setCertifications, showToa
       });
       if (filteredRes.length !== reservations.length) {
         setReservations(filteredRes);
-        /* removed storageSet("reservations") */
+        await storageSet("reservations", filteredRes);
       }
       showToast("success","הסטודנט הוסר");
     }
@@ -6335,7 +6341,9 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
       setLocalRes(prev => prev.map(x => x.id===r.id ? {...x, status:newStatus} : x));
       if(setReservations) setReservations(updated);
       setSelected(null);
-      /* removed */
+      storageSet("reservations", updated).catch(err =>
+        console.warn("blob cache refresh failed (DB is already updated):", err)
+      );
     } catch(e) { console.error("changeStatus error", e); }
     setChangingStatus(null);
   };
@@ -6693,7 +6701,7 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
     const updatedEquipment = equipment.map(e => e.id===eq.id ? updatedEq : e);
     const previousEquipment = equipment;
     setEquipment(updatedEquipment);
-    const r = { ok: true };
+    const r = await storageSet("equipment", updatedEquipment);
     setSaving(false);
     if(r.ok) { showToast("success", "היחידות עודכנו"); onClose(); }
     else {
@@ -6961,7 +6969,7 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
     const updatedEquipment = equipment.map(e => e.id===eq.id ? updatedEq : e);
     const previousEquipment = equipment;
     setEquipment(updatedEquipment);
-    const r = { ok: true };
+    const r = await storageSet("equipment", updatedEquipment);
     setSaving(false);
     if(r.ok) {
       if(editForm.status==="תקין") showToast("success", `✅ ${eq.name} #${unit.id.split("_")[1]} חזר לציוד פעיל`);
@@ -7292,7 +7300,9 @@ export default function App() {
 
   const refreshPublicInventory = async () => {
     try {
-      const [eqR, resR, catsR, catLoanTypesR] = await Promise.all([(supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))), (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
+      const [eqR, resR, catsR, catLoanTypesR] = await Promise.all([
+        (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
+        (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
         storageGet("categories"),
         storageGet("categoryLoanTypes"),
       ]);
@@ -7360,7 +7370,9 @@ export default function App() {
 
   const refreshLecturerData = async () => {
     try {
-      const [eqR, resR, lessonsR, lecturersR, kitsR, studiosR] = await Promise.all([(supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))), (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
+      const [eqR, resR, lessonsR, lecturersR, kitsR, studiosR] = await Promise.all([
+        (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
+        (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
         storageGet("lessons"),
         storageGet("lecturers"),
         storageGet("kits"),
@@ -7587,7 +7599,9 @@ export default function App() {
     (async()=>{
         try {
           historySuspendedRef.current = true;
-          const [eqR, resR, catsR, catTypesR, catLoanTypesR, tmR, ktsR, polR, certsR, dhsR, mgrR, mgrTokR, siteSetR, studiosR, studioBkR, lessonsR, lecturersR] = await Promise.all([(supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))), (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
+          const [eqR, resR, catsR, catTypesR, catLoanTypesR, tmR, ktsR, polR, certsR, dhsR, mgrR, mgrTokR, siteSetR, studiosR, studioBkR, lessonsR, lecturersR] = await Promise.all([
+            (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
+          (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
           storageGet("categories"),
           storageGet("categoryTypes"),
           storageGet("categoryLoanTypes"),
@@ -7689,8 +7703,8 @@ export default function App() {
         // ─── SAFE INIT: only write defaults when DB confirmed the key doesn't exist ───
         // "supabase_empty" = DB responded OK but row missing → safe to initialize
         // "cache" = network failed, fell back to localStorage → NEVER overwrite DB
-        if(!eq && eqSrc === "supabase_empty") /* removed storageSet("equipment") */
-        if(!res && resSrc === "supabase_empty")  /* removed storageSet("reservations") */
+        if(!eq && eqSrc === "supabase_empty") await storageSet("equipment", normalizedEquipment);
+        if(!res && resSrc === "supabase_empty")  await storageSet("reservations", []);
         if(!cats && catsSrc === "supabase_empty") await storageSet("categories",   DEFAULT_CATEGORIES);
         if(!tm && tmSrc === "supabase_empty")   await storageSet("teamMembers",  []);
         if(!kts && ktsSrc === "supabase_empty")  await storageSet("kits",         []);
@@ -7704,8 +7718,8 @@ export default function App() {
         }
         if(!mgr && mgrSrc === "supabase_empty") await storageSet("collegeManager", { name:"", email:"" });
         // Safe: only write back normalized data if we actually got data from DB
-        if(equipmentChanged) /* removed storageSet("equipment") */
-        if(reservationsChanged) /* removed storageSet("reservations") */
+        if(equipmentChanged) await storageSet("equipment", normalizedEquipment);
+        if(reservationsChanged) await storageSet("reservations", normalizedReservations);
         // Warn if network failed and no cache
         if(eqSrc === "cache" && !eq) showToast("error", "⚠️ לא ניתן לטעון ציוד — בדוק חיבור");
       } catch(e) {
@@ -7727,7 +7741,8 @@ export default function App() {
     const ctrl = new AbortController();
     refreshAbortRef.current = ctrl;
     try {
-      const [resR, bookingsR, lecturersR, certsR] = await Promise.all([(supabase.from("reservations_new").select("*, reservation_items(*)").abortSignal(ctrl.signal).then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
+      const [resR, bookingsR, lecturersR, certsR] = await Promise.all([
+        (supabase.from("reservations_new").select("*, reservation_items(*)").abortSignal(ctrl.signal).then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
         storageGet("studio_bookings", ctrl.signal),
         storageGet("lecturers", ctrl.signal),
         storageGet("certifications", ctrl.signal),

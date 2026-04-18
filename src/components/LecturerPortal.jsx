@@ -159,7 +159,9 @@ export function LecturerPortal({
       const all = Array.isArray(freshRes) ? freshRes : reservations;
       const updated = all.map(r => String(r.id) === String(res.id) ? { ...r, status: newStatus } : r);
       if (setReservations) setReservations(updated);
-      /* removed */
+      storageSet("reservations", updated).catch(err =>
+        console.warn("blob cache refresh failed (DB is already updated):", err)
+      );
       showToast("success", successMsg);
     } catch (err) {
       console.error("changeDhStatus error:", err);

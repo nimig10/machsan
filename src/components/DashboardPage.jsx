@@ -598,7 +598,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                         // Persist to the JSONB blob. Internally re-reads from server
                         // first so a full-list write doesn't trip shrink_guard when
                         // the dashboard's cache is behind by new student submissions.
-                        const sync = { ok: true };
+                        const sync = await syncReservationStatusToBlob(res.id, "מאושר");
                         if (!sync.ok) {
                           console.error("dashboard approve: blob sync failed", sync);
                           if(showToast) showToast("error", "האישור נשמר ב-DB אך כתיבה ל-blob נכשלה — רענן את הדף");
@@ -702,7 +702,9 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                 }
                 const updated = reservations.map(r=>r.id===res.id?{...r,status:"מאושר"}:r);
                 setReservations(updated);
-                /* removed */
+                storageSet("reservations", updated).catch(err =>
+                  console.warn("blob cache refresh failed (DB is already updated):", err)
+                );
                 if(showToast) showToast("success",`הבקשה של ${res.student_name} אושרה ✅`);
                 setDashConsecutiveWarning(null);
               } finally {

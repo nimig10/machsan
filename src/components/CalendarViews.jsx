@@ -249,7 +249,9 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
       setLocalRes(prev => prev.map(x => x.id===r.id ? {...x, status:newStatus} : x));
       if(setReservations) setReservations(updated);
       setSelected(null);
-      /* removed */
+      storageSet("reservations", updated).catch(err =>
+        console.warn("blob cache refresh failed (DB is already updated):", err)
+      );
     } catch(e) { console.error("changeStatus error", e); }
     setChangingStatus(null);
   };

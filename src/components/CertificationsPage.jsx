@@ -121,7 +121,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
       if (setEquipment && !isStudioType(types.find(t=>t.id===typeId)||{})) {
         const updatedEquipment = equipment.map(eq => eq.certification_id === typeId ? { ...eq, certification_id: "" } : eq);
         setEquipment(updatedEquipment);
-        /* removed storageSet("equipment") */
+        await storageSet("equipment", updatedEquipment);
       }
       showToast("success","ההסמכה נמחקה");
     }
@@ -249,7 +249,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
         return eq;
       });
       setEquipment(updatedEquipment);
-      /* removed storageSet("equipment") */
+      await storageSet("equipment", updatedEquipment);
     }
     showToast("success", `הסמכת ציוד "${name}" עודכנה`);
     setEditEquipmentCert(null);
