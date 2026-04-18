@@ -1,7 +1,7 @@
 import { supabase } from '../supabaseClient.js';
 // ReservationsPage.jsx — admin reservations management page (includes rejected + archive tabs)
 import { useEffect, useState } from "react";
-import { storageSet, storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, createReservation, deleteReservation as deleteReservationRpc, getAuthToken, syncReservationStatusToBlob } from "../utils.js";
+import { storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, createReservation, deleteReservation as deleteReservationRpc, getAuthToken, syncReservationStatusToBlob } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
@@ -476,9 +476,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       }));
       setReservations(updated);
       showToast("success", `סטטוס עודכן ל-${status}`);
-      syncReservationStatusToBlob(id, status, { returnedAt }).catch(e =>
-        console.error("syncReservationStatusToBlob failed:", e)
-      );
+      // blob sync removed (Stage 5) — RPC already updated DB, local state is set above
       // Only email / log when this click was the one that actually flipped the status.
       if (rpcResult.changed) {
         if (status === "נדחה") await sendStatusEmail({ ...res, status: "נדחה" }, "נדחה");
@@ -522,6 +520,42 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
     } finally {
       setOverdueEmailSending(false);
     }
+  };
+
+  // Stage 5 — persist EditReservationModal changes directly to Supabase
+  const saveEditedReservation = async (updated) => {
+    const { items: updatedItems, reservation_items: _ri, ...rowFields } = updated;
+    await supabase.from("reservations_new").update({
+      student_name:  rowFields.student_name,
+      email:         rowFields.email,
+      phone:         rowFields.phone,
+      course:        rowFields.course,
+      project_name:  rowFields.project_name || null,
+      loan_type:     rowFields.loan_type,
+      borrow_date:   rowFields.borrow_date,
+      return_date:   rowFields.return_date,
+      borrow_time:   rowFields.borrow_time,
+      return_time:   rowFields.return_time,
+      overdue_student_note: rowFields.overdue_student_note || null,
+    }).eq("id", updated.id);
+    if (updatedItems) {
+      await supabase.from("reservation_items").delete().eq("reservation_id", updated.id);
+      if (updatedItems.length) {
+        await supabase.from("reservation_items").insert(
+          updatedItems.map(i => ({
+            reservation_id: updated.id,
+            equipment_id:   i.equipment_id,
+            name:           i.name || "",
+            quantity:       Number(i.quantity) || 1,
+            unit_id:        i.unit_id || null,
+          }))
+        );
+      }
+    }
+    const all = normalizeReservationsForArchive(reservations.map(r => r.id === updated.id ? updated : r));
+    setReservations(all);
+    showToast("success", "הבקשה עודכנה");
+    setEditing(null);
   };
 
   const studentReqs = filtered.filter(r => r.loan_type !== "שיעור" && r.loan_type !== "צוות");
@@ -667,7 +701,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
         </>
       }
       {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations} collegeManager={collegeManager} managerToken={managerToken}
-  onSave={async(updated)=>{ const all=normalizeReservationsForArchive(reservations.map(r=>r.id===updated.id?updated:r)); setReservations(all); await storageSet("reservations",all); showToast("success","הבקשה עודכנה"); setEditing(null); }}
+  onSave={saveEditedReservation}
   onApprove={(editing.status==="נדחה" || editing.status==="ממתין") ? async(updated)=>{
     const approved = await approveReservation(updated);
     if (approved) setEditing(null);

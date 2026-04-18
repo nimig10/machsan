@@ -245,8 +245,8 @@ export async function storageSet(key, value) {
       }
       return { ok: false, error: err };
     }
-    mirrorReservationsIfNeeded(key, value);
-    // mirrorEquipmentIfNeeded removed — equipment no longer written to blob (Stage 5)
+    // mirrorEquipmentIfNeeded removed (Stage 5) — equipment lives in Supabase tables
+    // mirrorReservationsIfNeeded removed (Stage 5) — reservations write directly to Supabase
     return { ok: true };
   } catch(e) {
     console.error("storageSet network error", key, e);
@@ -520,23 +520,8 @@ export async function deleteReservation(id, options = {}) {
   }
 }
 
-// ─── DUAL-WRITE MIRRORS: reservations + equipment → new normalized tables ────
-// Fire-and-forget. Failures are logged but never block the primary write.
-// Removed when migration stage 5 retires the store blobs.
-function mirrorReservationsIfNeeded(key, value) {
-  if (key !== "reservations" || !Array.isArray(value)) return;
-  getAuthToken().then(token => {
-    if (!token) return; // no auth — skip mirror (anon write or expired session)
-    fetch("/api/sync-reservations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ reservations: value }),
-    }).catch(e => console.warn("mirror(reservations) failed:", e?.message || e));
-  });
-}
-
-// mirrorEquipmentIfNeeded removed — Stage 5: equipment writes go directly to
-// Supabase via writeEquipmentToDB() in App.jsx. No blob write, no mirror needed.
+// mirrorEquipmentIfNeeded + mirrorReservationsIfNeeded removed — Stage 5:
+// equipment and reservations write directly to Supabase. No blob, no mirror.
 
 // ─── INITIAL DATA ─────────────────────────────────────────────────────────────
 export const INITIAL_EQUIPMENT = [
