@@ -1,3 +1,4 @@
+import { supabase } from '../supabaseClient.js';
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, getAvailable, normalizeName, storageSet, storageGet, updateReservationStatus } from "../utils.js";
 import { statusBadge } from "./ui.jsx";
@@ -154,7 +155,7 @@ export function LecturerPortal({
         return;
       }
       // Local state + blob cache refresh (non-blocking for UI feedback).
-      const freshRes = await storageGet("reservations");
+      const freshRes = await (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] }))));
       const all = Array.isArray(freshRes) ? freshRes : reservations;
       const updated = all.map(r => String(r.id) === String(res.id) ? { ...r, status: newStatus } : r);
       if (setReservations) setReservations(updated);

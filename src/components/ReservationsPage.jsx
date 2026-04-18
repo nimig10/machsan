@@ -1,3 +1,4 @@
+import { supabase } from '../supabaseClient.js';
 // ReservationsPage.jsx — admin reservations management page (includes rejected + archive tabs)
 import { useEffect, useState } from "react";
 import { storageSet, storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, createReservation, deleteReservation as deleteReservationRpc, getAuthToken, syncReservationStatusToBlob } from "../utils.js";
@@ -64,7 +65,7 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
     if(!staffUser?.email){showToast("error","לא הצלחנו לזהות את המשתמש המחובר");return;}
     setMSaving(true);
     let freshRes=reservations;
-    try{const fr=await storageGet("reservations");if(Array.isArray(fr)){freshRes=fr;setReservations(fr);}}catch(e){}
+    try{const fr=await (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] }))));if(Array.isArray(fr)){freshRes=fr;setReservations(fr);}}catch(e){}
     // Route through the atomic RPC (create_reservation_v2, migration 008).
     // The RPC locks equipment rows with FOR UPDATE and does a date-range
     // overlap check. If any requested item overlaps an existing active

@@ -218,7 +218,7 @@ export default function AIChatBot({ equipment = [], reservations = [], policies 
         } else {
           const [freshEquipment, freshReservations] = await Promise.all([
             (supabase.from("equipment").select("*").then(res => res.data || [])),
-            storageGet('reservations'),
+            (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })))),
           ]);
           if (Array.isArray(freshEquipment)) liveEquipment = freshEquipment;
           if (Array.isArray(freshReservations)) liveReservations = freshReservations;
