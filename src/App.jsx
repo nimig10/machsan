@@ -172,28 +172,13 @@ async function storageSet(key, value) {
       restoreCacheValue(key, previousCachedValue);
       return { ok: false, error: err };
     }
-    mirrorReservationsIfNeeded(key, value);
-    mirrorEquipmentIfNeeded(key, value);
+    // mirror functions removed (Stage 5) — equipment + reservations write directly to Supabase
     return { ok: true };
   } catch(e) {
     console.error("storageSet network error", key, e);
     restoreCacheValue(key, previousCachedValue);
     return { ok: false, error: e.message };
   }
-}
-
-// Dual-write mirrors — fire-and-forget, failures are logged, never block the
-// primary write. See migrations 004 (reservations) and 005 (equipment).
-function mirrorReservationsIfNeeded(key, value) {
-  if (key !== "reservations" || !Array.isArray(value)) return;
-  getAuthToken().then(token => {
-    if (!token) return; // no auth — skip mirror
-    fetch("/api/sync-reservations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ reservations: value }),
-    }).catch(e => console.warn("mirror(reservations) failed:", e?.message || e));
-  });
 }
 
 // writeEquipmentToDB is exported from utils.js (Stage 5)
