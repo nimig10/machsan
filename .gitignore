@@ -29,3 +29,10 @@ dist-ssr
 .env.*.local
 
 .vercel
+
+# Claude Code
+.claude/worktrees/
+
+# Supabase CLI local state (config.toml only if present)
+supabase/.temp/
+supabase/.branches/
