@@ -6642,7 +6642,22 @@ export default function App() {
       if (ctrl.signal.aborted) return false;
       if (Array.isArray(resR?.value)) {
         const normalized = normalizeReservationsForArchive(resR.value);
-        if (!dataEquals(reservationsRef.current, normalized)) _setReservations(normalized);
+        // Lesson reservations are generated client-side from kit items.
+        // The DB rows exist but have empty reservation_items (items:[]).
+        // Re-inject the kit-based generated versions so every periodic /
+        // focus-triggered refresh doesn't silently wipe their items.
+        const { reservations: generatedLessonReservations, linkedKitIds } = buildLessonReservations(lessons, kits);
+        const merged = generatedLessonReservations.length > 0
+          ? [
+              ...normalized.filter(r => {
+                if (r.lesson_auto || hasLinkedValue(r.lesson_id)) return false;
+                if (hasLinkedValue(r.lesson_kit_id) && linkedKitIds.has(String(r.lesson_kit_id))) return false;
+                return true;
+              }),
+              ...generatedLessonReservations,
+            ]
+          : normalized;
+        if (!dataEquals(reservationsRef.current, merged)) _setReservations(merged);
       }
       if (Array.isArray(bookingsR?.value) && !dataEquals(studioBookingsRef.current, bookingsR.value)) {
         _setStudioBookings(bookingsR.value);
