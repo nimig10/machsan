@@ -481,9 +481,9 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                   ...(dashViewRes.project_name?[["🎥 פרויקט",dashViewRes.project_name]]:[]),
                   ["⏱️ משך",`${getLoanDurationDays(dashViewRes.borrow_date, dashViewRes.return_date)} ימים`],
                 ].map(([l,v])=>(
-                  <div key={l} style={{display:"flex",flexDirection:"column",gap:1}}>
-                    <span style={{fontSize:10,color:"var(--text3)",fontWeight:700}}>{l}</span>
-                    <strong style={{fontSize:13}}>{v}</strong>
+                  <div key={l} style={{display:"flex",flexDirection:"column",gap:3}}>
+                    <span style={{fontSize:11,color:"var(--accent)",fontWeight:800,letterSpacing:"0.02em"}}>{l}</span>
+                    <strong style={{fontSize:13,color:"var(--text)"}}>{v}</strong>
                   </div>
                 ))}
               </div>
