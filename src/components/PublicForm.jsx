@@ -1443,8 +1443,8 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   // ── Submit new password (after PASSWORD_RECOVERY) ──────────────────────────
   const handleUpdatePassword = async () => {
     setRecoveryError("");
-    if (!recoveryPassword || recoveryPassword.length < 8) {
-      setRecoveryError("הסיסמה חייבת להכיל לפחות 8 תווים");
+    if (!recoveryPassword || recoveryPassword.length < 6) {
+      setRecoveryError("הסיסמה חייבת להכיל לפחות 6 תווים");
       return;
     }
     if (recoveryPassword !== recoveryConfirm) {
@@ -2801,7 +2801,7 @@ ${inventory}
 
         <div style={{textAlign:"right",marginBottom:12}}>
           <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>סיסמה חדשה</label>
-          <input className="form-input" type="password" placeholder="לפחות 8 תווים, לא סיסמה נפוצה" value={recoveryPassword}
+          <input className="form-input" type="password" placeholder="לפחות 6 תווים" value={recoveryPassword}
             onChange={e=>{setRecoveryPassword(e.target.value);setRecoveryError("");}}
             disabled={recoveryBusy} autoFocus/>
         </div>
