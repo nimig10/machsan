@@ -11,7 +11,7 @@
 //   Recognises the SHRINK GUARD trigger error (migration 011) and surfaces
 //   it as HTTP 409 with a machine-readable code so the client can react.
 
-import { resolveUserRole } from "./_auth-helper.js";
+import { resolveUserRole, requireStaff } from "./_auth-helper.js";
 
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -96,9 +96,14 @@ async function handleGet(req, res) {
   }
 }
 
-// Keys writable by any authenticated user (student/lecturer forms).
-// Everything else is staff-only. Anon is blocked entirely.
-const PUBLIC_WRITE_KEYS = new Set(["studio_bookings", "studioBookings"]);
+// Keys that may only be written by staff (admin/warehouse).
+// All other keys are allowed for any authenticated user or even anon
+// (studio_bookings is written by public-facing forms without staff auth).
+const STAFF_ONLY_KEYS = new Set([
+  "certifications","students","kits","equipment","reservations",
+  "lessons","lecturers","teamMembers","categories","deptHeads",
+  "siteSettings","policies","studios","collegeManager","managerToken",
+]);
 
 async function handlePost(req, res) {
   const { key, data } = req.body || {};
@@ -106,14 +111,10 @@ async function handlePost(req, res) {
     return res.status(400).json({ error: "Missing key or data" });
   }
 
-  // ── Auth gate: block anon, enforce staff for sensitive keys ──
-  const role = await resolveUserRole(req);
-  if (role.role === "anon") {
-    return res.status(401).json({ error: "unauthorized" });
-  }
-  if (role.role !== "staff" && !PUBLIC_WRITE_KEYS.has(key)) {
-    console.warn(`[store.write BLOCKED] non-staff user ${role.email} tried to write key=${key}`);
-    return res.status(403).json({ error: "forbidden", key });
+  // ── Auth gate: staff-only keys require staff (checks public.users + staff_members fallback) ──
+  if (STAFF_ONLY_KEYS.has(key)) {
+    const staff = await requireStaff(req, res);
+    if (!staff) return; // requireStaff already sent 401/403
   }
 
   try {
