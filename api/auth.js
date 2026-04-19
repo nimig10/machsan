@@ -777,7 +777,7 @@ function buildResetEmail(name, resetUrl) {
         לחץ/י על הכפתור למטה כדי לקבוע סיסמה חדשה:
       </p>
       <div style="text-align:center;margin:0 0 24px">
-        <a href="${resetUrl}" style="display:inline-block;padding:16px 36px;background:#f5a623;color:#0a0c10;font-weight:900;font-size:15px;border-radius:10px;text-decoration:none;box-shadow:0 4px 18px rgba(245,166,35,0.35)">
+        <a href="${resetUrl}" style="display:inline-block;padding:16px 36px;background:#f5a623;color:#0a0c10;font-weight:900;font-size:15px;border-radius:10px;text-decoration:none;box-shadow:0 4px 18px rgba(245,166,35,0.35);font-family:Arial,'Helvetica Neue',Helvetica,sans-serif">
           קביעת סיסמה חדשה
         </a>
       </div>
