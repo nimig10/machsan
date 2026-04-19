@@ -222,9 +222,12 @@ export async function storageSet(key, value) {
   try {
     const ctrl = new AbortController();
     const timeout = setTimeout(() => ctrl.abort(), 8000); // 8s timeout
+    const token = await getAuthToken().catch(() => null);
+    const postHeaders = { "Content-Type": "application/json" };
+    if (token) postHeaders["Authorization"] = `Bearer ${token}`;
     const res = await fetch("/api/store", {
       method:  "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: postHeaders,
       body:    JSON.stringify({ key, data: value }),
       signal:  ctrl.signal,
     });

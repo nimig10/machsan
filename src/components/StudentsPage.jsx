@@ -103,14 +103,11 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
     // and gives a clearer error.
     const prevStudents = Array.isArray(certifications?.students) ? certifications.students.length : 0;
     const prevTypes    = Array.isArray(certifications?.types)    ? certifications.types.length    : 0;
-    const prevTs       = Array.isArray(certifications?.trackSettings) ? certifications.trackSettings.length : 0;
-    const shrinks = [
-      prevStudents > 5 && nextStudents.length < prevStudents * 0.9,
-      prevTypes    > 3 && nextTypes.length    < prevTypes    * 0.9,
-      prevTs       > 3 && nextTrackSettings.length < prevTs  * 0.9,
-    ].filter(Boolean).length;
-    if (shrinks > 0) {
-      console.error(`🛑 StudentsPage.save BLOCKED: would shrink certifications (students ${prevStudents}→${nextStudents.length}, types ${prevTypes}→${nextTypes.length}, trackSettings ${prevTs}→${nextTrackSettings.length}). Likely stale cache.`);
+    if (
+      (prevStudents > 5 && nextStudents.length < prevStudents * 0.9) ||
+      (prevTypes    > 3 && nextTypes.length    === 0)
+    ) {
+      console.error(`🛑 StudentsPage.save BLOCKED: would shrink certifications (students ${prevStudents}→${nextStudents.length}, types ${prevTypes}→${nextTypes.length}). Likely stale cache.`);
       showToast("error","❌ השמירה נחסמה: זוהה חשד לדריסה של נתונים. רענן את הדף ונסה שוב.");
       return false;
     }
