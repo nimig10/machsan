@@ -96,10 +96,24 @@ async function handleGet(req, res) {
   }
 }
 
+// Keys writable by any authenticated user (student/lecturer forms).
+// Everything else is staff-only. Anon is blocked entirely.
+const PUBLIC_WRITE_KEYS = new Set(["studio_bookings", "studioBookings"]);
+
 async function handlePost(req, res) {
   const { key, data } = req.body || {};
   if (!key || data === undefined) {
     return res.status(400).json({ error: "Missing key or data" });
+  }
+
+  // ── Auth gate: block anon, enforce staff for sensitive keys ──
+  const role = await resolveUserRole(req);
+  if (role.role === "anon") {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  if (role.role !== "staff" && !PUBLIC_WRITE_KEYS.has(key)) {
+    console.warn(`[store.write BLOCKED] non-staff user ${role.email} tried to write key=${key}`);
+    return res.status(403).json({ error: "forbidden", key });
   }
 
   try {

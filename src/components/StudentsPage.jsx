@@ -97,6 +97,23 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
       tracks: nextExplicitTracks,
       trackSettings: nextTrackSettings,
     };
+    // Client-side shrink guard: block a write that would silently wipe most
+    // of a sub-array (students/types/trackSettings) — almost always a stale-
+    // cache race. The server also has a guard; this one catches it earlier
+    // and gives a clearer error.
+    const prevStudents = Array.isArray(certifications?.students) ? certifications.students.length : 0;
+    const prevTypes    = Array.isArray(certifications?.types)    ? certifications.types.length    : 0;
+    const prevTs       = Array.isArray(certifications?.trackSettings) ? certifications.trackSettings.length : 0;
+    const shrinks = [
+      prevStudents > 5 && nextStudents.length < prevStudents * 0.9,
+      prevTypes    > 3 && nextTypes.length    < prevTypes    * 0.9,
+      prevTs       > 3 && nextTrackSettings.length < prevTs  * 0.9,
+    ].filter(Boolean).length;
+    if (shrinks > 0) {
+      console.error(`🛑 StudentsPage.save BLOCKED: would shrink certifications (students ${prevStudents}→${nextStudents.length}, types ${prevTypes}→${nextTypes.length}, trackSettings ${prevTs}→${nextTrackSettings.length}). Likely stale cache.`);
+      showToast("error","❌ השמירה נחסמה: זוהה חשד לדריסה של נתונים. רענן את הדף ונסה שוב.");
+      return false;
+    }
     setSaving(true);
     setCertifications(updated);
     const r = await storageSet("certifications", updated);
