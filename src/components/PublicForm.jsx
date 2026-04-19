@@ -1459,9 +1459,9 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
         const msg = (() => {
           const m = error.message || "";
           if (error.name === "AuthWeakPasswordError" || m.toLowerCase().includes("weak") || m.toLowerCase().includes("easy to guess"))
-            return "הסיסמה חלשה מדי — בחר/י סיסמה ייחודית (לפחות 8 תווים, לא מילה נפוצה)";
+            return "הסיסמה נפוצה מדי — נסה/י סיסמה אחרת (לא 123456 וכד׳)";
           if (m.toLowerCase().includes("at least"))
-            return "הסיסמה קצרה מדי — נדרשים לפחות 8 תווים";
+            return "הסיסמה קצרה מדי — נדרשים לפחות 6 תווים";
           return "עדכון הסיסמה נכשל — נסו שוב";
         })();
         setRecoveryError(msg);
