@@ -548,7 +548,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
                       </div>
                     : effectiveMax>0
                     ? <div className="qty-ctrl">
-                        <button className="qty-btn" onClick={()=>setQty(eq.id, Math.min(itm.quantity-1, effectiveMax))}><Minus size={16} strokeWidth={1.75} /></button>
+                        <button className="qty-btn" onClick={()=>setQty(eq.id, Math.min(itm.quantity-1, effectiveMax))}><Minus size={16} strokeWidth={1.75} color="var(--text)" /></button>
                         <span className="qty-num">{itm.quantity}</span>
                         <button className="qty-btn" disabled={atMax} style={{opacity:atMax?0.3:1}}
                           onClick={()=>{ if(!atMax) setQty(eq.id, Math.min(itm.quantity+1, effectiveMax)); }}>+</button>

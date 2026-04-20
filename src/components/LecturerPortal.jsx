@@ -1115,7 +1115,7 @@ export function LecturerPortal({
                               style={{ opacity: selectedQuantity <= 0 ? 0.35 : 1 }}
                               onClick={() => setItemQuantity(item.id, selectedQuantity - 1)}
                             >
-                              <Minus size={16} strokeWidth={1.75} />
+                              <Minus size={16} strokeWidth={1.75} color="var(--text)" />
                             </button>
                             <span className="qty-num">{selectedQuantity}</span>
                             <button
