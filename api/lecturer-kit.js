@@ -1,6 +1,9 @@
-// lecturer-kit.js — dedicated endpoint for lecturers to save a lesson kit + link it to a lesson.
+// lecturer-kit.js — dedicated endpoint for lecturers to save lesson loans.
+//
+// Session type: creates a kit in the kits store + links it to the session.
+// Course type:  creates individual reservation_items per session (no kit created).
+//
 // Requires authenticated user whose email matches a lecturer in the store.
-// Writes to kits and lessons using service_role (bypasses RLS + staff gate).
 
 import { requireUser } from "./_auth-helper.js";
 
@@ -14,6 +17,12 @@ const SERVICE_HEADERS = {
   Prefer: "resolution=merge-duplicates",
 };
 
+const RPC_HEADERS = {
+  apikey: SB_KEY,
+  Authorization: `Bearer ${SB_KEY}`,
+  "Content-Type": "application/json",
+};
+
 async function readStoreKey(key) {
   const r = await fetch(
     `${SB_URL}/rest/v1/store?key=eq.${encodeURIComponent(key)}&select=data&limit=1`,
@@ -25,12 +34,27 @@ async function readStoreKey(key) {
 }
 
 async function writeStoreKey(key, data) {
-  const r = await fetch(`${SB_URL}/rest/v1/store`, {
+  return fetch(`${SB_URL}/rest/v1/store`, {
     method: "POST",
     headers: SERVICE_HEADERS,
     body: JSON.stringify({ key, data, updated_at: new Date().toISOString() }),
   });
-  return r;
+}
+
+async function createReservation(reservation, items) {
+  return fetch(`${SB_URL}/rest/v1/rpc/create_reservation_v2`, {
+    method: "POST",
+    headers: RPC_HEADERS,
+    body: JSON.stringify({ p_reservation: reservation, p_items: items }),
+  });
+}
+
+// Must match LecturerPortal.jsx getSessionUid()
+function getSessionUid(session, index) {
+  return String(
+    session?._key ||
+    `${session?.date || ""}__${session?.startTime || ""}__${session?.endTime || ""}__${session?.topic || ""}__${index}`
+  );
 }
 
 export default async function handler(req, res) {
@@ -39,8 +63,8 @@ export default async function handler(req, res) {
   const user = await requireUser(req, res);
   if (!user) return;
 
-  const { kit, lessonId, sessionUid, kitType } = req.body || {};
-  if (!kit || !lessonId) return res.status(400).json({ error: "Missing kit or lessonId" });
+  const { kitType, lessonId } = req.body || {};
+  if (!lessonId) return res.status(400).json({ error: "Missing lessonId" });
 
   // Verify the caller is a known lecturer (email match in store)
   const lecturers = await readStoreKey("lecturers");
@@ -50,7 +74,57 @@ export default async function handler(req, res) {
   const isKnownLecturer = lecturers.some((l) => normalize(l.email) === normalize(user.email));
   if (!isKnownLecturer) return res.status(403).json({ error: "Forbidden: not a lecturer" });
 
-  // Load current kits + lessons
+  // ── Course type: create individual reservations per session ──
+  if (kitType === "course") {
+    const { allSessions, items, reservationName, description, lecturer } = req.body;
+    if (!Array.isArray(allSessions) || allSessions.length === 0)
+      return res.status(400).json({ error: "Missing allSessions" });
+    if (!Array.isArray(items) || items.length === 0)
+      return res.status(400).json({ error: "Missing items" });
+
+    const ids = [];
+    for (const session of allSessions) {
+      if (!session.date) continue;
+      const reservationId = String(Date.now()) + "_" + Math.random().toString(36).slice(2, 7);
+      const reservation = {
+        id: reservationId,
+        loan_type: "שיעור",
+        booking_kind: "lesson",
+        student_name: lecturer?.name || "",
+        email: lecturer?.email || "",
+        phone: lecturer?.phone || "",
+        course: lecturer?.course || "",
+        notes: description || "",
+        borrow_date: session.date,
+        borrow_time: session.startTime || "00:00",
+        return_date: session.date,
+        return_time: session.endTime || "23:59",
+        status: "ממתין",
+        lesson_id: String(lessonId),
+        lesson_auto: false,
+        overdue_notified: false,
+      };
+
+      const r = await createReservation(reservation, items);
+      if (!r.ok) {
+        const text = await r.text();
+        const isStock = /not enough units/i.test(text);
+        return res.status(isStock ? 409 : r.status).json({
+          error: isStock ? "not_enough_stock" : "rpc_error",
+          detail: text,
+          session: session.date,
+        });
+      }
+      const newId = await r.json();
+      ids.push(newId);
+    }
+    return res.status(200).json({ ok: true, created: ids.length, ids });
+  }
+
+  // ── Session type: create/update kit + link to lesson ──
+  const { kit, sessionUid } = req.body;
+  if (!kit) return res.status(400).json({ error: "Missing kit" });
+
   const [kits, lessons] = await Promise.all([readStoreKey("kits"), readStoreKey("lessons")]);
   if (!Array.isArray(kits)) return res.status(503).json({ error: "Could not load kits" });
   if (!Array.isArray(lessons)) return res.status(503).json({ error: "Could not load lessons" });
@@ -61,19 +135,8 @@ export default async function handler(req, res) {
     ? kits.map((k) => (String(k.id) === kitId ? kit : k))
     : [...kits, kit];
 
-  // Must match LecturerPortal.jsx getSessionUid()
-  function getSessionUid(session, index) {
-    return String(
-      session?._key ||
-      `${session?.date || ""}__${session?.startTime || ""}__${session?.endTime || ""}__${session?.topic || ""}__${index}`
-    );
-  }
-
   const nextLessons = lessons.map((lesson) => {
     if (String(lesson.id) !== String(lessonId)) return lesson;
-    if (kitType === "course") {
-      return { ...lesson, kitId };
-    }
     return {
       ...lesson,
       schedule: (lesson.schedule || []).map((session, index) =>
@@ -82,17 +145,14 @@ export default async function handler(req, res) {
     };
   });
 
-  // Write kits first
   const kitsRes = await writeStoreKey("kits", nextKits);
   if (!kitsRes.ok) {
     const text = await kitsRes.text();
     return res.status(kitsRes.status).json({ error: "Failed to save kit", detail: text });
   }
 
-  // Write lessons
   const lessonsRes = await writeStoreKey("lessons", nextLessons);
   if (!lessonsRes.ok) {
-    // Roll back kits
     await writeStoreKey("kits", kits);
     const text = await lessonsRes.text();
     return res.status(lessonsRes.status).json({ error: "Failed to link lesson, kit rolled back", detail: text });

@@ -233,6 +233,7 @@ export function LecturerPortal({
         return {
           lesson,
           sessions,
+          futureSessions,
           courseKit,
           fallbackSessions,
           futureFallbackSessions,
@@ -279,7 +280,8 @@ export function LecturerPortal({
         currentKit: entry.courseKit,
         templateKit: entry.courseKit,
         targetSessions: entry.fallbackSessions,
-        validationSessions: entry.futureFallbackSessions,
+        allSessions: entry.futureSessions,
+        validationSessions: entry.futureSessions,
         affectedReservationKeys: new Set((entry.courseKit ? entry.fallbackSessions : []).map((session) => session._timeKey)),
       };
     }
@@ -544,18 +546,62 @@ export function LecturerPortal({
     setSaving(true);
     setEditorError("");
 
+    const token = await getAuthToken().catch(() => null);
+    const authHeaders = { "Content-Type": "application/json" };
+    if (token) authHeaders["Authorization"] = `Bearer ${token}`;
+
+    if (editorContext.type === "course") {
+      try {
+        const result = await fetch("/api/lecturer-kit", {
+          method: "POST",
+          headers: authHeaders,
+          body: JSON.stringify({
+            kitType: "course",
+            lessonId: editorContext.lesson.id,
+            allSessions: editorContext.allSessions.map((s) => ({ date: s.date, startTime: s.startTime || "", endTime: s.endTime || "" })),
+            items: selectedItems.map((item) => ({
+              equipment_id: item.equipment_id,
+              quantity: Number(item.quantity) || 0,
+              name: equipment.find((e) => String(e.id) === String(item.equipment_id))?.name || item.name || "",
+            })),
+            reservationName: draftName.trim(),
+            description: draftDescription.trim(),
+            lecturer: {
+              name: currentLecturer.fullName || editorContext.lesson.instructorName || "",
+              email: String(currentLecturer.email || editorContext.lesson.instructorEmail || "").trim(),
+              phone: String(currentLecturer.phone || editorContext.lesson.instructorPhone || "").trim(),
+              course: editorContext.lesson.name || "",
+            },
+          }),
+        });
+        if (!result.ok) {
+          const err = await result.text();
+          console.error("lecturer-kit course error", err);
+          setSaving(false);
+          setEditorError("יצירת ההשאלות נכשלה. נסה שוב.");
+          return;
+        }
+      } catch (e) {
+        console.error("lecturer-kit course fetch error", e);
+        setSaving(false);
+        setEditorError("יצירת ההשאלות נכשלה. בדוק חיבור לאינטרנט.");
+        return;
+      }
+      setSaving(false);
+      setEditorState(null);
+      showToast("success", `ההשאלות נוצרו בהצלחה עבור ${editorContext.allSessions.length} מפגשי הקורס.`);
+      return;
+    }
+
     try {
-      const token = await getAuthToken().catch(() => null);
-      const headers = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
       const result = await fetch("/api/lecturer-kit", {
         method: "POST",
-        headers,
+        headers: authHeaders,
         body: JSON.stringify({
           kit: nextKit,
           lessonId: editorContext.lesson.id,
-          sessionUid: editorContext.type === "course" ? null : editorContext.session._lecturerUid,
-          kitType: editorContext.type,
+          sessionUid: editorContext.session._lecturerUid,
+          kitType: "session",
         }),
       });
       if (!result.ok) {
@@ -576,12 +622,7 @@ export function LecturerPortal({
     setLessons(nextLessons);
     setSaving(false);
     setEditorState(null);
-    showToast(
-      "success",
-      editorContext.type === "course"
-        ? "השאלת הקורס נשמרה ותתעדכן דרך מסלול השיעור הקיים."
-        : "השאלת המפגש נשמרה ותתעדכן דרך מסלול השיעור הקיים.",
-    );
+    showToast("success", "השאלת המפגש נשמרה.");
   };
 
   if (!loggedInLecturer || !currentLecturer) {
@@ -836,7 +877,7 @@ export function LecturerPortal({
               : "לא נמצאו קורסים שתואמים לחיפוש."}
           </div>
         ) : (
-          filteredCourseEntries.map(({ lesson, sessions, courseKit, futureFallbackSessions }) => (
+          filteredCourseEntries.map(({ lesson, sessions, futureSessions, courseKit, futureFallbackSessions }) => (
             <div key={lesson.id} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 18, overflow: "hidden" }}>
               <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
                 <div>
@@ -850,14 +891,14 @@ export function LecturerPortal({
                   <button
                     className="btn btn-primary"
                     onClick={() => setEditorState({ scope: "course", lessonId: lesson.id })}
-                    disabled={!futureFallbackSessions.length}
+                    disabled={!futureSessions.length}
                   >
-                    {courseKit ? "עדכון השאלת קורס" : "יצירת השאלת קורס"}
+                    יצירת השאלת קורס
                   </button>
                   <div style={{ fontSize: 11, color: "var(--text3)", maxWidth: 320, textAlign: "right" }}>
-                    {futureFallbackSessions.length
-                      ? `חל על ${futureFallbackSessions.length} מפגשים עתידיים בלי השאלה ספציפית.`
-                      : "אין כרגע מפגשים עתידיים פנויים להשאלת קורס."}
+                    {futureSessions.length
+                      ? `יוצר השאלת שיעור לכל ${futureSessions.length} המפגשים העתידיים של הקורס.`
+                      : "אין כרגע מפגשים עתידיים לקורס הזה."}
                   </div>
                 </div>
               </div>
@@ -896,7 +937,10 @@ export function LecturerPortal({
                             </div>
                           </div>
                           <button
-                            className="btn btn-secondary"
+                            className="btn"
+                            style={sessionKit
+                              ? { background: "#22c55e", color: "#fff", border: "none" }
+                              : { background: "var(--accent, #f5a623)", color: "#fff", border: "none" }}
                             onClick={() => setEditorState({ scope: "session", lessonId: lesson.id, sessionUid: session._lecturerUid })}
                             disabled={isPast}
                           >
@@ -951,12 +995,6 @@ export function LecturerPortal({
                 </div>
               </div>
               <button className="btn btn-secondary" onClick={closeEditor} disabled={saving}>סגירה</button>
-            </div>
-
-            <div style={{ background: "rgba(245,166,35,0.08)", border: "1px solid rgba(245,166,35,0.28)", borderRadius: 14, padding: "12px 14px", fontSize: 12, color: "var(--text2)", marginBottom: 18 }}>
-              {editorContext.type === "course"
-                ? "השאלת קורס מתחברת למסלול השיעור הקיים בדיוק כמו היום. היא תחול רק על מפגשים שאין להם השאלת מפגש ספציפית, ותמשיך לעבור דרך מנגנון lesson loan הקיים."
-                : "השאלת מפגש יוצרת השאלת שיעור רק למפגש הספציפי הזה, ומחליפה באותו מפגש בלבד כל השאלת קורס שיורשת אליו."}
             </div>
 
             {editorError && (
