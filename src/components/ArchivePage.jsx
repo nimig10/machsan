@@ -1,6 +1,7 @@
 // ArchivePage.jsx — archive of returned reservations
 import { useState } from "react";
 import { formatDate, deleteReservation as deleteReservationRpc } from "../utils.js";
+import { Calendar, Film, Mic, Package, X } from "lucide-react";
 
 export function ArchivePage({ reservations, setReservations, equipment, showToast }) {
   const archived = reservations.filter(r => r.status === "הוחזר");
@@ -30,13 +31,13 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
 
   const eqName = id => equipment.find(e=>e.id==id)?.name||"?";
   const EqImg = ({id,size=20}) => {
-    const img = equipment.find(e=>e.id==id)?.image||"📦";
+    const img = equipment.find(e=>e.id==id)?.image||null;
     return img.startsWith("data:")||img.startsWith("http")
       ? <img src={img} alt="" style={{width:size,height:size,objectFit:"cover",borderRadius:4,verticalAlign:"middle"}}/>
       : <span style={{fontSize:size*0.8}}>{img}</span>;
   };
 
-  const LOAN_ICONS = {"פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥","שיעור":"📽️"};
+  const LOAN_ICONS = {"פרטית":"👤","הפקה":<Film size={11} strokeWidth={1.75} color="var(--accent)" />,"סאונד":<Mic size={11} strokeWidth={1.75} color="var(--accent)" />,"קולנוע יומית":"🎥","שיעור":"📽️"};
   const sortByReturned = arr => [...arr].sort((a,b)=>(new Date(b.returned_at||b.return_date).getTime())-(new Date(a.returned_at||a.return_date).getTime()));
 
   const matchesSearch = r => !search || r.student_name?.includes(search) || r.email?.includes(search) || r.course?.includes(search);
@@ -68,14 +69,14 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
             {isLesson
               ? <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",border:"1px solid rgba(155,89,182,0.4)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>📽️ שיעור הסתיים</span>
               : <span style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",border:"1px solid rgba(52,152,219,0.4)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🔵 הוחזר</span>}
-            {r.loan_type&&!isLesson&&<span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>{LOAN_ICONS[r.loan_type]||"📦"} {r.loan_type}</span>}
+            {r.loan_type&&!isLesson&&<span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:4}}>{LOAN_ICONS[r.loan_type]||<Package size={11} strokeWidth={1.75} color="var(--accent)" />} {r.loan_type}</span>}
             <button className="btn btn-danger btn-sm" onClick={e=>{e.stopPropagation();deleteRes(r.id);}}>🗑️</button>
           </div>
         </div>
         <div style={{marginTop:10,display:"flex",gap:16,fontSize:12,color:"var(--text2)",flexWrap:"wrap"}}>
-          <span>📅 {formatDate(r.borrow_date)}{r.borrow_time&&<strong style={{color:"var(--accent)",marginRight:4}}> {r.borrow_time}</strong>}</span>
+          <span><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> {formatDate(r.borrow_date)}{r.borrow_time&&<strong style={{color:"var(--accent)",marginRight:4}}> {r.borrow_time}</strong>}</span>
           <span>↩ {formatDate(r.return_date)}{r.return_time&&<strong style={{color:"var(--accent)",marginRight:4}}> {r.return_time}</strong>}</span>
-          <span>📦 {r.items?.length||0} פריטים</span>
+          <span><Package size={14} strokeWidth={1.75} color="var(--accent)" /> {r.items?.length||0} פריטים</span>
           {r.returned_at&&<span style={{color:"var(--text3)"}}>🕐 הוחזר: {new Date(r.returned_at).toLocaleDateString("he-IL")}</span>}
         </div>
         <div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:4}}>
@@ -102,7 +103,7 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
 
       {/* Section chips */}
       <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
-        {[["הכל","📦 הכל","var(--text2)"],["השאלות","🎒 השאלות סטודנטים","var(--blue)"],["שיעורים","📽️ שיעורים","#9b59b6"]].map(([val,label,col])=>(
+        {[["הכל",<><Package size={13} strokeWidth={1.75} /> הכל</>,"var(--text2)"],["השאלות","🎒 השאלות סטודנטים","var(--blue)"],["שיעורים","📽️ שיעורים","#9b59b6"]].map(([val,label,col])=>(
           <button key={val} onClick={()=>{setSectionF(val);if(val!=="השאלות")setLoanTypeF("הכל");}}
             style={{padding:"6px 16px",borderRadius:20,border:`1.5px solid ${sectionF===val?col:"var(--border)"}`,background:sectionF===val?`${col}22`:"transparent",color:sectionF===val?col:"var(--text2)",fontWeight:sectionF===val?700:400,fontSize:13,cursor:"pointer",transition:"all .15s"}}>
             {label}
@@ -152,7 +153,7 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
                 <div style={{fontWeight:900,fontSize:17}}>{isLesson?"📽️ פרטי שיעור — ארכיון":"🗄️ פרטי השאלה — ארכיון"}</div>
                 <div style={{fontSize:12,color:"var(--text3)",marginTop:3}}>{viewRes.student_name}</div>
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setViewRes(null)}>✕ סגור</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setViewRes(null)}><X size={14} strokeWidth={1.75} color="var(--text3)" /> סגור</button>
             </div>
             <div style={{padding:"20px 22px",display:"flex",flexDirection:"column",gap:16}}>
               <div style={{display:"flex",justifyContent:"center"}}>
@@ -172,7 +173,7 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
               <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"14px 16px"}}>
                 <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>תאריכים</div>
                 <div className="responsive-split">
-                  {[["📅 השאלה",`${formatDate(viewRes.borrow_date)}${viewRes.borrow_time?" · "+viewRes.borrow_time:""}`],["↩ החזרה",`${formatDate(viewRes.return_date)}${viewRes.return_time?" · "+viewRes.return_time:""}`]].map(([l,v])=>(
+                  {[[<><Calendar size={13} strokeWidth={1.75} color="var(--accent)" /> השאלה</>,`${formatDate(viewRes.borrow_date)}${viewRes.borrow_time?" · "+viewRes.borrow_time:""}`],["↩ החזרה",`${formatDate(viewRes.return_date)}${viewRes.return_time?" · "+viewRes.return_time:""}`]].map(([l,v])=>(
                     <div key={l} style={{background:"var(--surface3)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
                       <div style={{fontSize:11,color:"var(--text3)",marginBottom:4}}>{l}</div>
                       <div style={{fontWeight:700,fontSize:13,color:"var(--accent)"}}>{v}</div>
@@ -180,7 +181,7 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
                   ))}
                 </div>
                 <div style={{marginTop:8,fontSize:12,color:"var(--text3)"}}>
-                  סוג השאלה: <strong style={{color:"var(--text)"}}>{LOAN_ICONS[viewRes.loan_type]||"📦"} {viewRes.loan_type}</strong>
+                  סוג השאלה: <strong style={{color:"var(--text)"}}>{LOAN_ICONS[viewRes.loan_type]||<Package size={13} strokeWidth={1.75} color="var(--accent)" />} {viewRes.loan_type}</strong>
                 </div>
               </div>
               <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"14px 16px"}}>

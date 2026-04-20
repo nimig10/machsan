@@ -2,6 +2,7 @@ import { supabase } from '../supabaseClient.js';
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, getAvailable, normalizeName, storageSet, storageGet, updateReservationStatus, getAuthToken } from "../utils.js";
 import { statusBadge } from "./ui.jsx";
+import { BookOpen, Calendar, CheckCircle, Film, GraduationCap, Mic, Minus, Package, X, XCircle } from "lucide-react";
 import { DeptHeadCalendarPage } from "./CalendarViews.jsx";
 
 function hasLinkedValue(value) {
@@ -641,7 +642,7 @@ export function LecturerPortal({
         <div style={{ width: "100%", maxWidth: 430, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 16, padding: "40px 32px", textAlign: "center", direction: "rtl" }}>
           {siteSettings.logo
             ? <img src={siteSettings.logo} alt="לוגו" style={{ width: 82, height: 82, objectFit: "contain", borderRadius: 12, marginBottom: 16, display: "block", marginInline: "auto" }} />
-            : <div style={{ fontSize: 48, marginBottom: 16 }}>🎓</div>}
+            : <div style={{ fontSize: 48, marginBottom: 16 }}><GraduationCap size={48} strokeWidth={1.75} color="var(--accent)" /></div>}
           <h2 style={{ fontSize: "clamp(15px,4vw,20px)", fontWeight: 900, color: "var(--accent)", marginBottom: 6 }}>מעביר למסך הכניסה</h2>
           <div style={{ fontSize: 13, color: "var(--text3)", marginBottom: 24 }}>
             כניסת מרצים מתבצעת עכשיו ממסך הכניסה הראשי של מערכת הפניות.
@@ -662,7 +663,7 @@ export function LecturerPortal({
         <div style={{ width: "100%", maxWidth: 430, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 16, padding: "40px 32px", textAlign: "center", direction: "rtl" }}>
           {siteSettings.logo
             ? <img src={siteSettings.logo} alt="לוגו" style={{ width: 82, height: 82, objectFit: "contain", borderRadius: 12, marginBottom: 16, display: "block", marginInline: "auto" }} />
-            : <div style={{ fontSize: 48, marginBottom: 16 }}>🎓</div>}
+            : <div style={{ fontSize: 48, marginBottom: 16 }}><GraduationCap size={48} strokeWidth={1.75} color="var(--accent)" /></div>}
           <h2 style={{ fontSize: "clamp(15px,4vw,20px)", fontWeight: 900, color: "var(--accent)", marginBottom: 6 }}>כניסת מרצים למערכת ההשאלות</h2>
           <div style={{ fontSize: 13, color: "var(--text3)", marginBottom: 24 }}>גישה מוגבלת לקורסים ולמפגשים של המרצה בלבד</div>
 
@@ -694,7 +695,7 @@ export function LecturerPortal({
             />
           </div>
 
-          {loginError && <div style={{ color: "var(--red)", fontSize: 13, fontWeight: 700, marginBottom: 12 }}>❌ {loginError}</div>}
+          {loginError && <div style={{ color: "var(--red)", fontSize: 13, fontWeight: 700, marginBottom: 12 }}><XCircle size={16} strokeWidth={1.75} /> {loginError}</div>}
 
           <button
             className="btn btn-primary"
@@ -730,7 +731,7 @@ export function LecturerPortal({
                 <span>שלום, {currentLecturer?.fullName || loggedInLecturer.fullName}</span>
                 {myDeptHead?.role && (
                   <span style={{ background: "rgba(155,89,182,0.12)", border: "1px solid rgba(155,89,182,0.35)", color: "#9b59b6", borderRadius: 999, padding: "2px 10px", fontSize: 12, fontWeight: 800 }}>
-                    🎓 {myDeptHead.role}
+                    <GraduationCap size={16} strokeWidth={1.75} color="var(--accent)" /> {myDeptHead.role}
                   </span>
                 )}
               </div>
@@ -774,8 +775,8 @@ export function LecturerPortal({
           {myDeptHead && (
             <div style={{ display: "flex", gap: 8, marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
               {[
-                { id: "courses", label: "📚 הקורסים שלי" },
-                { id: "journal", label: "🎓 יומן השאלות תלמידים" },
+                { id: "courses", label: <><BookOpen size={16} strokeWidth={1.75} color="var(--accent)" /> הקורסים שלי</> },
+                { id: "journal", label: <><GraduationCap size={16} strokeWidth={1.75} color="var(--accent)" /> יומן השאלות תלמידים</> },
               ].map(tab => {
                 const active = activeTab === tab.id;
                 return (
@@ -793,7 +794,7 @@ export function LecturerPortal({
           <div style={{ background: "var(--surface)", border: "2px solid rgba(155,89,182,0.3)", borderRadius: 18, overflow: "hidden" }}>
             <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", background: "rgba(155,89,182,0.06)" }}>
               <div>
-                <div style={{ fontSize: 18, fontWeight: 900, color: "#9b59b6" }}>🎓 אישור בקשות השאלה — ראש מחלקה</div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: "#9b59b6", display: "flex", alignItems: "center", gap: 6 }}><GraduationCap size={16} strokeWidth={1.75} color="#9b59b6" /> אישור בקשות השאלה — ראש מחלקה</div>
                 <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 4 }}>
                   {myDeptHead.role ? `${myDeptHead.role} · ` : ""}סוגי השאלה: {(myDeptHead.loanTypes || []).join(", ")}
                 </div>
@@ -807,12 +808,11 @@ export function LecturerPortal({
             <div style={{ padding: "16px 22px" }}>
               {pendingDhRequests.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "20px 0", color: "var(--text3)", fontSize: 14 }}>
-                  ✅ אין בקשות הממתינות לאישורך כרגע
+                  <CheckCircle size={16} strokeWidth={1.75} /> אין בקשות הממתינות לאישורך כרגע
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {pendingDhRequests.map(res => {
-                    const LOAN_ICONS = { "פרטית": "👤", "הפקה": "🎬", "סאונד": "🎙️", "קולנוע יומית": "🎥", "שיעור": "📚" };
                     return (
                       <div key={res.id} style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
@@ -822,13 +822,13 @@ export function LecturerPortal({
                               {statusBadge(res.status)}
                             </div>
                             <div style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.8 }}>
-                              <div>{LOAN_ICONS[res.loan_type] || "📦"} סוג: <strong>{res.loan_type}</strong></div>
-                              {res.project_name && <div>🎬 פרויקט: {res.project_name}</div>}
-                              <div>📅 {formatDate(res.borrow_date)}{res.borrow_time ? ` ${res.borrow_time}` : ""} — {formatDate(res.return_date)}{res.return_time ? ` ${res.return_time}` : ""}</div>
+                              <div><Package size={16} strokeWidth={1.75} color="var(--accent)" /> סוג: <strong>{res.loan_type}</strong></div>
+                              {res.project_name && <div><Film size={16} strokeWidth={1.75} color="var(--accent)" /> פרויקט: {res.project_name}</div>}
+                              <div><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> {formatDate(res.borrow_date)}{res.borrow_time ? ` ${res.borrow_time}` : ""} — {formatDate(res.return_date)}{res.return_time ? ` ${res.return_time}` : ""}</div>
                               {res.email && <div>📧 {res.email}</div>}
                               {res.phone && <div>📞 {res.phone}</div>}
                               {res.crew_photographer_name && <div>📸 צלם: {res.crew_photographer_name}</div>}
-                              {res.crew_sound_name && <div>🎙️ סאונד: {res.crew_sound_name}</div>}
+                              {res.crew_sound_name && <div><Mic size={16} strokeWidth={1.75} color="var(--accent)" /> סאונד: {res.crew_sound_name}</div>}
                             </div>
                             {res.production_reason && (
                               <div style={{ background: "rgba(245,166,35,0.07)", border: "1px solid rgba(245,166,35,0.25)", borderRadius: 10, padding: "10px 14px", marginTop: 8 }}>
@@ -859,7 +859,7 @@ export function LecturerPortal({
                               disabled={approvingId === res.id}
                               style={{ background: "#2ecc71", color: "#fff", border: "none", fontWeight: 800, fontSize: 13, padding: "10px 20px", borderRadius: 10, cursor: "pointer", opacity: approvingId === res.id ? 0.5 : 1 }}
                             >
-                              {approvingId === res.id ? "⏳ מאשר..." : "✅ אשר"}
+                              {approvingId === res.id ? "מאשר..." : <><CheckCircle size={16} strokeWidth={1.75} /> אשר</>}
                             </button>
                             <button
                               className="btn"
@@ -867,7 +867,7 @@ export function LecturerPortal({
                               disabled={approvingId === res.id}
                               style={{ background: "rgba(231,76,60,0.12)", color: "#e74c3c", border: "2px solid rgba(231,76,60,0.3)", fontWeight: 800, fontSize: 13, padding: "10px 20px", borderRadius: 10, cursor: "pointer", opacity: approvingId === res.id ? 0.5 : 1 }}
                             >
-                              ❌ דחה
+                              <XCircle size={16} strokeWidth={1.75} /> דחה
                             </button>
                           </div>
                         </div>
@@ -1029,7 +1029,7 @@ export function LecturerPortal({
             </div>
 
             <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-              {[{k:"all",l:"📦 הכל"},{k:"photo",l:"🎥 צילום"},{k:"sound",l:"🎙️ סאונד"}].map(({k,l}) => (
+              {[{k:"all",l:<><Package size={16} strokeWidth={1.75} color="var(--accent)" /> הכל</>},{k:"photo",l:"🎥 צילום"},{k:"sound",l:<><Mic size={16} strokeWidth={1.75} color="var(--accent)" /> סאונד</>}].map(({k,l}) => (
                 <button key={k} type="button" onClick={() => setEqTypeFilter(k)}
                   style={{ padding: "5px 14px", borderRadius: 20, border: `2px solid ${eqTypeFilter===k ? "var(--accent)" : "var(--border)"}`, background: eqTypeFilter===k ? "var(--accent-glow)" : "transparent", color: eqTypeFilter===k ? "var(--accent)" : "var(--text3)", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
                   {l}
@@ -1043,7 +1043,7 @@ export function LecturerPortal({
                 onClick={() => setShowSelectedOnly((current) => !current)}
                 style={{ padding: "5px 12px", borderRadius: 20, border: `2px solid ${showSelectedOnly ? "var(--green)" : "var(--border)"}`, background: showSelectedOnly ? "rgba(46,204,113,0.12)" : "transparent", color: showSelectedOnly ? "var(--green)" : "var(--text3)", fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}
               >
-                {showSelectedOnly ? "✅ נבחרו" : "⬜"} {showSelectedOnly ? "הצג הכל" : "הצג נבחרים בלבד"}
+                {showSelectedOnly ? <><CheckCircle size={16} strokeWidth={1.75} /> נבחרו</> : "⬜"} {showSelectedOnly ? "הצג הכל" : "הצג נבחרים בלבד"}
               </button>
               <div style={{ width: 1, height: 20, background: "var(--border)", flexShrink: 0 }} />
               {baseCategories.map((category) => {
@@ -1065,7 +1065,7 @@ export function LecturerPortal({
                   onClick={() => setSelectedCats([])}
                   style={{ padding: "4px 8px", borderRadius: 20, border: "1px solid var(--border)", background: "transparent", color: "var(--text3)", fontSize: 11, cursor: "pointer" }}
                 >
-                  ✕ נקה
+                  <X size={16} strokeWidth={1.75} color="var(--text3)" /> נקה
                 </button>
               )}
             </div>
@@ -1094,7 +1094,7 @@ export function LecturerPortal({
                       >
                         {isImage
                           ? <img src={item.image} alt={item.name} style={{ width: 42, height: 42, objectFit: "cover", borderRadius: 8, flexShrink: 0 }} />
-                          : <span style={{ fontSize: 28, lineHeight: 1, flexShrink: 0 }}>{item.image || "📦"}</span>}
+                          : <span style={{ fontSize: 28, lineHeight: 1, flexShrink: 0 }}>{item.image || <Package size={28} strokeWidth={1.75} color="var(--accent)" />}</span>}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text)" }}>{item.name}</div>
                           <div style={{ fontSize: 12, color: overLimit ? "#ef4444" : "var(--text3)", marginTop: 4 }}>
@@ -1115,7 +1115,7 @@ export function LecturerPortal({
                               style={{ opacity: selectedQuantity <= 0 ? 0.35 : 1 }}
                               onClick={() => setItemQuantity(item.id, selectedQuantity - 1)}
                             >
-                              −
+                              <Minus size={16} strokeWidth={1.75} color="var(--text3)" />
                             </button>
                             <span className="qty-num">{selectedQuantity}</span>
                             <button
@@ -1191,7 +1191,7 @@ export function LecturerPortal({
 
             {editorError && (
               <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 12, background: "rgba(231,76,60,0.1)", border: "1px solid rgba(231,76,60,0.28)", color: "#ef4444", fontSize: 13, fontWeight: 700 }}>
-                ❌ {editorError}
+                <XCircle size={16} strokeWidth={1.75} /> {editorError}
               </div>
             )}
 

@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import { storageSet } from "../utils.js";
+import { Check, Download, X } from "lucide-react";
 
 /* ── helpers ── */
 let _idCounter = 0;
@@ -528,7 +529,7 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
             onClick={e => e.stopPropagation()}>
             <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontWeight: 900, fontSize: 16 }}>➕ הוספת מרצה</span>
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowAddModal(false)}>✕</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowAddModal(false)}><X size={14} strokeWidth={1.75} color="var(--text3)" /></button>
             </div>
             <div style={{ padding: "16px 20px" }}>
               {addDup && (
@@ -584,7 +585,7 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
         <div style={{ display: "flex", gap: 8 }}>
           <input ref={importRef} type="file" accept=".csv,.tsv,.xlsx,.xls" style={{ display: "none" }} onChange={importXL} disabled={xlImporting} />
           <button className="btn btn-secondary" onClick={() => importRef.current?.click()} disabled={xlImporting}>
-            {xlImporting ? "⏳ מייבא..." : "📥 ייבוא XL"}
+            {xlImporting ? "מייבא..." : <><Download size={14} strokeWidth={1.75} /> ייבוא XL</>}
           </button>
           <button className="btn btn-primary" onClick={openAddModal}>➕ הוסף מרצה</button>
         </div>
@@ -653,8 +654,8 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                     <input className="form-input" type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)}
                       placeholder="מייל" style={{ ...inpStyle, fontWeight: 700 }} />
                     <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                      <button className="btn btn-primary btn-sm" style={{ flex: 1, fontSize: 13 }} onClick={() => saveInlineEdit(lec, { closeOnSuccess: true })}>✓ שמור</button>
-                      <button className="btn btn-secondary btn-sm" style={{ flex: 1, fontSize: 13 }} onClick={() => setEditingId(null)}>✕ בטל</button>
+                      <button className="btn btn-primary btn-sm" style={{ flex: 1, fontSize: 13 }} onClick={() => saveInlineEdit(lec, { closeOnSuccess: true })}><Check size={13} strokeWidth={1.75} /> שמור</button>
+                      <button className="btn btn-secondary btn-sm" style={{ flex: 1, fontSize: 13 }} onClick={() => setEditingId(null)}><X size={13} strokeWidth={1.75} color="var(--text3)" /> בטל</button>
                     </div>
                   </div>
                 </div>
@@ -751,8 +752,8 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
                               void closeInlineEdit(lec);
                             }
                           }}>
-                          <button className="btn btn-primary btn-sm" style={{ fontSize: 11, padding: "2px 8px" }} onClick={() => saveInlineEdit(lec)}>✓</button>
-                          <button className="btn btn-secondary btn-sm" style={{ fontSize: 11, padding: "2px 8px" }} onClick={() => setEditingId(null)}>✕</button>
+                          <button className="btn btn-primary btn-sm" style={{ fontSize: 11, padding: "2px 8px" }} onClick={() => saveInlineEdit(lec)}><Check size={11} strokeWidth={1.75} /></button>
+                          <button className="btn btn-secondary btn-sm" style={{ fontSize: 11, padding: "2px 8px" }} onClick={() => setEditingId(null)}><X size={11} strokeWidth={1.75} color="var(--text3)" /></button>
                         </div>
                       </td>
                     </tr>

@@ -1,24 +1,25 @@
 // ActivityLogsPage.jsx — admin activity log viewer
 import { useState, useEffect } from "react";
 import { getAuthToken } from "../utils.js";
+import { LayoutDashboard } from "lucide-react";
 
 const ACTION_LABELS = {
-  login:                "🔑 כניסה למערכת",
-  equipment_add:        "📦 הוספת ציוד",
-  equipment_edit:       "✏️ עריכת ציוד",
-  equipment_delete:     "🗑️ מחיקת ציוד",
-  equipment_qty_update: "🔢 עדכון כמות ציוד",
-  staff_create:         "👤 יצירת איש צוות",
-  staff_update:         "✏️ עדכון איש צוות",
-  staff_delete:         "🗑️ מחיקת איש צוות",
-  student_add:          "🎓 הוספת סטודנט",
-  student_edit:         "✏️ עריכת סטודנט",
-  student_delete:       "🗑️ מחיקת סטודנט",
-  reservation_approve:  "✅ אישור השאלה",
-  reservation_reject:   "❌ דחיית השאלה",
-  reservation_return:   "🔄 החזרת ציוד",
-  reservation_delete:   "🗑️ מחיקת בקשה",
-  settings_save:        "⚙️ שמירת הגדרות",
+  login:                "כניסה למערכת",
+  equipment_add:        "הוספת ציוד",
+  equipment_edit:       "עריכת ציוד",
+  equipment_delete:     "מחיקת ציוד",
+  equipment_qty_update: "עדכון כמות ציוד",
+  staff_create:         "יצירת איש צוות",
+  staff_update:         "עדכון איש צוות",
+  staff_delete:         "מחיקת איש צוות",
+  student_add:          "הוספת סטודנט",
+  student_edit:         "עריכת סטודנט",
+  student_delete:       "מחיקת סטודנט",
+  reservation_approve:  "אישור השאלה",
+  reservation_reject:   "דחיית השאלה",
+  reservation_return:   "החזרת ציוד",
+  reservation_delete:   "מחיקת בקשה",
+  settings_save:        "שמירת הגדרות",
 };
 
 function formatDate(iso) {
@@ -112,7 +113,7 @@ export function ActivityLogsPage({ showToast, teamMembers = [] }) {
         <div style={{ textAlign: "center", padding: 40, color: "var(--text3)" }}>טוען...</div>
       ) : logs.length === 0 ? (
         <div style={{ textAlign: "center", padding: 60, color: "var(--text3)", background: "var(--surface2)", borderRadius: "var(--r)", border: "1px solid var(--border)" }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>📊</div>
+          <div style={{ fontSize: 36, marginBottom: 12 }}><LayoutDashboard size={36} strokeWidth={1.75} color="var(--text3)" /></div>
           אין רשומות ביומן הפעילות
         </div>
       ) : (
@@ -164,7 +165,7 @@ export function ActivityLogsPage({ showToast, teamMembers = [] }) {
       {hasMore && logs.length > 0 && !loading && (
         <div style={{ textAlign: "center", marginTop: 16 }}>
           <button className="btn btn-secondary" disabled={loadingMore} onClick={() => fetchLogs(logs.length, true)}>
-            {loadingMore ? "⏳ טוען..." : "טען עוד"}
+            {loadingMore ? "טוען..." : "טען עוד"}
           </button>
         </div>
       )}

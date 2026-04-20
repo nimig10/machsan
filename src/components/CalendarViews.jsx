@@ -1,6 +1,7 @@
 import { supabase } from '../supabaseClient.js';
 // CalendarViews.jsx — DeptHeadCalendarPage and ManagerCalendarPage
 import { useState } from "react";
+import { BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Film, Mic, Package, Phone, User, Video, X } from "lucide-react";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import { formatDate, today, storageGet, cloudinaryThumb, getAuthToken } from "../utils.js";
 
@@ -55,7 +56,7 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
 
   const STATUS_OPTIONS = ["ממתין","אישור ראש מחלקה","מאושר","נדחה"];
   const STATUS_COLORS  = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","אישור ראש מחלקה":"#9b59b6" };
-  const LOAN_ICONS     = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥","צוות":"💼","הכל":"📦" };
+  const LOAN_ICONS     = { "פרטית":<User size={16} strokeWidth={1.75}/>,"הפקה":<Film size={16} strokeWidth={1.75} />,"סאונד":<Mic size={16} strokeWidth={1.75} />,"קולנוע יומית":<Camera size={16} strokeWidth={1.75}/>,"צוות":<Briefcase size={16} strokeWidth={1.75}/>,"הכל":<Package size={16} strokeWidth={1.75} /> };
 
   const activeRes = reservations.filter(r =>
     r.status !== "הוחזר" && r.borrow_date && r.return_date &&
@@ -77,7 +78,7 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
       <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:24,flexWrap:"wrap"}}>
         {siteSettings.logo
           ? <img src={siteSettings.logo} alt="לוגו" style={{width:56,height:56,objectFit:"contain",borderRadius:8}}/>
-          : <div style={{fontSize:32}}>🎬</div>}
+          : <div style={{fontSize:32}}><Film size={32} strokeWidth={1.75} color="var(--accent)" /></div>}
         {siteSettings.soundLogo && (
           <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:44,height:44,objectFit:"contain",borderRadius:6}}/>
         )}
@@ -107,13 +108,13 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
           const label = lt==="צוות" ? "איש צוות" : lt;
           return <button key={lt} type="button" onClick={()=>setLoanTypeF(lt)}
             style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-            {LOAN_ICONS[lt]||"📦"} {label}
+            {LOAN_ICONS[lt]||<Package size={16} strokeWidth={1.75} />} {label}
           </button>;
         })}
         {(statusF.length>0||loanTypeF!=="הכל")&&(
           <button type="button" onClick={()=>{setStatusF([]);setLoanTypeF("הכל");}}
             style={{marginRight:"auto",padding:"4px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>
-            ✕ נקה סינון
+            <X size={16} strokeWidth={1.75} color="var(--text3)" /> נקה סינון
           </button>
         )}
       </div>
@@ -135,7 +136,7 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
       </div>
 
       {/* Reservations list */}
-      <div style={{fontWeight:800,fontSize:15,marginBottom:10}}>📋 בקשות {HE_M[mo]} {yr}</div>
+      <div style={{fontWeight:800,fontSize:15,marginBottom:10}}><ClipboardList size={16} strokeWidth={1.75} /> בקשות {HE_M[mo]} {yr}</div>
       {monthRes.length===0
         ? <div style={{textAlign:"center",color:"var(--text3)",padding:"24px",fontSize:14}}>אין בקשות בחודש זה</div>
         : <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -147,8 +148,8 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
             >
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                 <span style={{fontWeight:800,fontSize:14}}>{r.student_name}</span>
-                <span style={{fontSize:12,color:"var(--text3)"}}>{LOAN_ICONS[r.loan_type]||"📦"} {r.loan_type}</span>
-                <span style={{fontSize:11,color:"var(--text3)"}}>📅 {formatDate(r.borrow_date)} → {formatDate(r.return_date)}</span>
+                <span style={{fontSize:12,color:"var(--text3)"}}>{LOAN_ICONS[r.loan_type]||<Package size={16} strokeWidth={1.75} />} {r.loan_type}</span>
+                <span style={{fontSize:11,color:"var(--text3)"}}><Calendar size={16} strokeWidth={1.75} /> {formatDate(r.borrow_date)} → {formatDate(r.return_date)}</span>
                 <span className={`badge badge-${r.status==="מאושר"?"green":r.status==="ממתין"?"yellow":r.status==="נדחה"?"red":r.status==="באיחור"?"orange":"purple"}`} style={{marginRight:"auto"}}>
                   {r.status}
                 </span>
@@ -157,12 +158,12 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
                 <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid var(--border)"}}>
                   {/* פרטי סטודנט */}
                   <div style={{display:"flex",flexWrap:"wrap",gap:14,marginBottom:14}}>
-                    {r.email&&<div style={{fontSize:13,color:"var(--text2)"}}>📧 {r.email}</div>}
-                    {r.phone&&<div style={{fontSize:13,color:"var(--text2)"}}>📞 {r.phone}</div>}
-                    {r.course&&<div style={{fontSize:13,color:"var(--text2)"}}>📚 {r.course}</div>}
-                    {r.project_name&&<div style={{fontSize:13,color:"var(--text2)"}}>📽️ {r.project_name}</div>}
-                    {r.crew_photographer_name&&<div style={{fontSize:13,color:"var(--text2)"}}>🎥 צלם: {r.crew_photographer_name}</div>}
-                    {r.crew_sound_name&&<div style={{fontSize:13,color:"var(--text2)"}}>🎙️ סאונד: {r.crew_sound_name}</div>}
+                    {r.email&&<div style={{fontSize:13,color:"var(--text2)"}}>{r.email}</div>}
+                    {r.phone&&<div style={{fontSize:13,color:"var(--text2)",display:"flex",alignItems:"center",gap:4}}><Phone size={12} strokeWidth={1.75}/> {r.phone}</div>}
+                    {r.course&&<div style={{fontSize:13,color:"var(--text2)"}}><BookOpen size={16} strokeWidth={1.75} /> {r.course}</div>}
+                    {r.project_name&&<div style={{fontSize:13,color:"var(--text2)",display:"flex",alignItems:"center",gap:4}}><Video size={12} strokeWidth={1.75}/> {r.project_name}</div>}
+                    {r.crew_photographer_name&&<div style={{fontSize:13,color:"var(--text2)",display:"flex",alignItems:"center",gap:4}}><Camera size={12} strokeWidth={1.75}/> צלם: {r.crew_photographer_name}</div>}
+                    {r.crew_sound_name&&<div style={{fontSize:13,color:"var(--text2)"}}><Mic size={16} strokeWidth={1.75} /> סאונד: {r.crew_sound_name}</div>}
                   </div>
                   {/* ציוד מבוקש */}
                   {r.items?.length>0&&(
@@ -176,7 +177,7 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
                               <div style={{width:56,height:56,borderRadius:8,overflow:"hidden",background:"var(--surface)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid var(--border)"}}>
                                 {eq?.image
                                   ? <img src={cloudinaryThumb(eq.image)} alt={item.name} style={{width:"100%",height:"100%",objectFit:"contain"}}/>
-                                  : <span style={{fontSize:24}}>📦</span>}
+                                  : <Package size={24} strokeWidth={1.75} />}
                               </div>
                               <div style={{flex:1,minWidth:0}}>
                                 <div style={{fontWeight:800,fontSize:14}}>{item.name}</div>
@@ -195,7 +196,7 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
                         onClick={e=>{e.stopPropagation();approveReservation(r);}}
                         disabled={approving===r.id}
                         style={{padding:"10px 24px",borderRadius:"var(--r-sm)",border:"none",background:"#9b59b6",color:"#fff",fontWeight:900,fontSize:14,cursor:"pointer",opacity:approving===r.id?0.6:1,display:"flex",alignItems:"center",gap:8}}>
-                        {approving===r.id ? "⏳ מאשר..." : "✅ אשר הפקה — העבר לממתין"}
+                        {approving===r.id ? <><Clock size={16} strokeWidth={1.75} /> מאשר...</> : <><CheckCircle size={16} strokeWidth={1.75} /> אשר הפקה — העבר לממתין</>}
                       </button>
                     </div>
                   )}
@@ -221,7 +222,7 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
   const ALL_STATUSES  = ["ממתין","אישור ראש מחלקה","מאושר","נדחה"];
   const STATUS_COLORS = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","אישור ראש מחלקה":"#9b59b6" };
   const STATUS_BADGE  = { "מאושר":"green","ממתין":"yellow","נדחה":"red","באיחור":"orange","אישור ראש מחלקה":"purple" };
-  const LOAN_ICONS    = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥","צוות":"💼","הכל":"📦" };
+  const LOAN_ICONS    = { "פרטית":<User size={16} strokeWidth={1.75}/>,"הפקה":<Film size={16} strokeWidth={1.75} />,"סאונד":<Mic size={16} strokeWidth={1.75} />,"קולנוע יומית":<Camera size={16} strokeWidth={1.75}/>,"צוות":<Briefcase size={16} strokeWidth={1.75}/>,"הכל":<Package size={16} strokeWidth={1.75} /> };
   const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
   const HE_D = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
   const SPAN_COLORS = [
@@ -280,11 +281,11 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
   const getEquipmentRecord = (item) => equipment.find(eq => String(eq.id)===String(item.equipment_id)) || equipment.find(eq => eq.name===item.name) || null;
   const renderEquipmentThumb = (item) => {
     const eq = getEquipmentRecord(item);
-    const img = eq?.image || "📦";
+    const img = eq?.image || "";
     const isImg = typeof img === "string" && (img.startsWith("data:") || img.startsWith("http"));
     return isImg
       ? <img src={img} alt={item.name || ""} style={{width:56,height:56,objectFit:"contain",borderRadius:10,border:"1px solid var(--border)",background:"var(--surface2)",padding:4}}/>
-      : <div style={{width:56,height:56,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,borderRadius:10,border:"1px solid var(--border)",background:"var(--surface2)"}}>{img}</div>;
+      : <div style={{width:56,height:56,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,borderRadius:10,border:"1px solid var(--border)",background:"var(--surface2)"}}>{img || <Package size={30} strokeWidth={1.75} />}</div>;
   };
 
   return (
@@ -321,13 +322,13 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
           const label = lt==="צוות" ? "איש צוות" : lt;
           return <button key={lt} type="button" onClick={()=>setLoanTypeF(lt)}
             style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-            {LOAN_ICONS[lt]||"📦"} {label}
+            {LOAN_ICONS[lt]||<Package size={16} strokeWidth={1.75} />} {label}
           </button>;
         })}
         {(statusF.length>0||loanTypeF!=="הכל")&&(
           <button type="button" onClick={()=>{setStatusF([]);setLoanTypeF("הכל");}}
             style={{marginRight:"auto",padding:"4px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>
-            ✕ נקה סינון
+            <X size={16} strokeWidth={1.75} color="var(--text3)" /> נקה סינון
           </button>
         )}
       </div>
@@ -349,7 +350,7 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
       </div>
 
       {/* Reservations list */}
-      <div style={{fontWeight:800,fontSize:15,marginBottom:10}}>📋 בקשות {HE_M[mo]} {yr}</div>
+      <div style={{fontWeight:800,fontSize:15,marginBottom:10}}><ClipboardList size={16} strokeWidth={1.75} /> בקשות {HE_M[mo]} {yr}</div>
       {monthRes.length===0
         ? <div style={{textAlign:"center",color:"var(--text3)",padding:"24px",fontSize:14}}>אין בקשות בחודש זה</div>
         : <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -358,8 +359,8 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
               style={{background:"var(--surface)",border:`1px solid ${selected===r?"var(--accent)":"var(--border)"}`,borderRadius:"var(--r)",padding:"12px 16px",cursor:"pointer",transition:"border-color 0.15s"}}>
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                 <span style={{fontWeight:800,fontSize:14}}>{r.student_name}</span>
-                <span style={{fontSize:12,color:"var(--text3)"}}>{LOAN_ICONS[r.loan_type]||"📦"} {r.loan_type}</span>
-                <span style={{fontSize:11,color:"var(--text3)"}}>📅 {formatDate(r.borrow_date)} → {formatDate(r.return_date)}</span>
+                <span style={{fontSize:12,color:"var(--text3)"}}>{LOAN_ICONS[r.loan_type]||<Package size={16} strokeWidth={1.75} />} {r.loan_type}</span>
+                <span style={{fontSize:11,color:"var(--text3)"}}><Calendar size={16} strokeWidth={1.75} /> {formatDate(r.borrow_date)} → {formatDate(r.return_date)}</span>
                 <span className={`badge badge-${STATUS_BADGE[r.status]||"yellow"}`} style={{marginRight:"auto"}}>{r.status}</span>
               </div>
               {selected===r&&(
@@ -468,12 +469,12 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
                             disabled={isCurrent||changingStatus===r.id}
                             onClick={()=>changeStatus(r,s)}
                             style={{padding:"8px 16px",borderRadius:"var(--r-sm)",border:`2px solid ${isCurrent?col:"var(--border)"}`,background:isCurrent?`${col}22`:"var(--surface)",color:isCurrent?col:"var(--text2)",fontWeight:isCurrent?900:700,fontSize:13,cursor:isCurrent?"default":"pointer",opacity:changingStatus===r.id&&!isCurrent?0.5:1,transition:"all 0.15s"}}>
-                            {changingStatus===r.id&&!isCurrent?"⏳ ":isCurrent?"✓ ":""}{s}
+                            {changingStatus===r.id&&!isCurrent?<><Clock size={16} strokeWidth={1.75} />{" "}</>:isCurrent?<><Check size={16} strokeWidth={1.75} />{" "}</>:""}{s}
                           </button>
                         );
                       })}
                     </div>
-                    {changingStatus===r.id&&<div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>⏳ מעדכן סטטוס...</div>}
+                    {changingStatus===r.id&&<div style={{fontSize:11,color:"var(--text3)",marginTop:6}}><Clock size={16} strokeWidth={1.75} /> מעדכן סטטוס...</div>}
                   </div>
                 </div>
               )}
@@ -500,22 +501,22 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
         if(!upcoming.length) return null;
         return (
           <div style={{marginTop:28}}>
-            <div style={{fontWeight:800,fontSize:15,marginBottom:10}}>🎬 ערכות שיעור — שיעורים קרובים</div>
+            <div style={{fontWeight:800,fontSize:15,marginBottom:10}}><Film size={16} strokeWidth={1.75} /> ערכות שיעור — שיעורים קרובים</div>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {upcoming.map((s,i)=>(
                 <div key={i} onClick={()=>setSelectedKit(s)} style={{background:"var(--surface)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:"var(--r)",padding:"14px 18px",cursor:"pointer",transition:"border-color .15s"}}
                   onMouseEnter={e=>e.currentTarget.style.borderColor="rgba(155,89,182,0.7)"}
                   onMouseLeave={e=>e.currentTarget.style.borderColor="rgba(155,89,182,0.3)"}>
                   <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-                    <span style={{fontSize:22}}>🎬</span>
+                    <span style={{fontSize:22}}><Film size={22} strokeWidth={1.75} color="#9b59b6" /></span>
                     <div style={{flex:1}}>
                       <div style={{fontWeight:800,fontSize:15}}>{s.kitName}</div>
-                      {s.instructorName&&<div style={{fontSize:12,color:"var(--text2)"}}>👨‍🏫 {s.instructorName}{s.instructorPhone?` · 📞 ${s.instructorPhone}`:""}</div>}
+                      {s.instructorName&&<div style={{fontSize:12,color:"var(--text2)",display:"flex",alignItems:"center",gap:4}}>{s.instructorName}{s.instructorPhone?<><span> · </span><Phone size={11} strokeWidth={1.75}/> {s.instructorPhone}</>:""}</div>}
                     </div>
-                    <div style={{textAlign:"left",fontSize:13,color:"var(--text3)",fontWeight:700}}>
-                      📅 {formatDate(s.date)}&nbsp;&nbsp;🕐 {s.startTime} – {s.endTime}
+                    <div style={{textAlign:"left",fontSize:13,color:"var(--text3)",fontWeight:700,display:"flex",alignItems:"center",gap:4}}>
+                      <Calendar size={16} strokeWidth={1.75} /> {formatDate(s.date)}&nbsp;&nbsp;<Clock size={16} strokeWidth={1.75}/> {s.startTime} – {s.endTime}
                     </div>
-                    <span style={{fontSize:11,color:"#9b59b6",border:"1px solid rgba(155,89,182,0.4)",borderRadius:20,padding:"2px 8px"}}>📦 {s.items.length} פריטים</span>
+                    <span style={{fontSize:11,color:"#9b59b6",border:"1px solid rgba(155,89,182,0.4)",borderRadius:20,padding:"2px 8px"}}><Package size={16} strokeWidth={1.75} /> {s.items.length} פריטים</span>
                   </div>
                 </div>
               ))}
@@ -530,16 +531,16 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
           <div style={{width:"100%",maxWidth:540,background:"var(--surface)",borderRadius:16,border:"1px solid rgba(155,89,182,0.4)",direction:"rtl",maxHeight:"90vh",overflowY:"auto"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0",position:"sticky",top:0,zIndex:1}}>
               <div>
-                <div style={{fontWeight:900,fontSize:16,color:"#9b59b6"}}>🎬 {selectedKit.kitName}</div>
-                <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>📅 {formatDate(selectedKit.date)} · 🕐 {selectedKit.startTime} – {selectedKit.endTime}</div>
+                <div style={{fontWeight:900,fontSize:16,color:"#9b59b6"}}><Film size={16} strokeWidth={1.75} /> {selectedKit.kitName}</div>
+                <div style={{fontSize:12,color:"var(--text3)",marginTop:2,display:"flex",alignItems:"center",gap:4}}><Calendar size={16} strokeWidth={1.75} /> {formatDate(selectedKit.date)} · <Clock size={14} strokeWidth={1.75}/> {selectedKit.startTime} – {selectedKit.endTime}</div>
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setSelectedKit(null)}>✕ סגור</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setSelectedKit(null)}><X size={16} strokeWidth={1.75} color="var(--text3)" /> סגור</button>
             </div>
             <div style={{padding:"20px"}}>
               {selectedKit.instructorName&&(
                 <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"12px 14px",marginBottom:14,fontSize:13}}>
-                  👨‍🏫 <strong>{selectedKit.instructorName}</strong>
-                  {selectedKit.instructorPhone&&<span style={{color:"var(--text3)",marginRight:8}}> · 📞 {selectedKit.instructorPhone}</span>}
+                  <strong>{selectedKit.instructorName}</strong>
+                  {selectedKit.instructorPhone&&<span style={{color:"var(--text3)",marginRight:8,display:"inline-flex",alignItems:"center",gap:4}}> · <Phone size={11} strokeWidth={1.75}/> {selectedKit.instructorPhone}</span>}
                 </div>
               )}
               <div style={{fontSize:12,fontWeight:800,color:"var(--text3)",marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>ציוד השיעור — {selectedKit.items.length} פריטים</div>
@@ -553,7 +554,7 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
                       <div key={j} style={{display:"flex",alignItems:"center",gap:12,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"10px 14px",border:"1px solid var(--border)"}}>
                         {img.startsWith("data:")||img.startsWith("http")
                           ? <img src={img} alt="" style={{width:36,height:36,objectFit:"cover",borderRadius:6,flexShrink:0}}/>
-                          : <div style={{width:36,height:36,borderRadius:6,background:"rgba(155,89,182,0.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📦</div>}
+                          : <div style={{width:36,height:36,borderRadius:6,background:"rgba(155,89,182,0.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}><Package size={20} strokeWidth={1.75} /></div>}
                         <span style={{flex:1,fontWeight:700,fontSize:14}}>{item.name||("פריט "+(j+1))}</span>
                         <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",border:"1px solid rgba(155,89,182,0.35)",borderRadius:8,padding:"3px 12px",fontWeight:900,fontSize:14}}>×{item.quantity}</span>
                       </div>

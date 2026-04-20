@@ -1,6 +1,7 @@
 // LessonsPage.jsx — course & lesson schedule management
 import { useRef, useState, useEffect } from "react";
 import * as XLSX from "xlsx";
+import { BookOpen, Calendar, Camera, Check, CheckCircle, Clock, FileText, Film, GraduationCap, Lightbulb, Link, Mail, Mic, Package, Pencil, Phone, Plus, Search, User, Video, X, XCircle } from "lucide-react";
 import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAuthToken } from "../utils.js";
 import { makeLecturer } from "./LecturersPage.jsx";
 
@@ -952,19 +953,19 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
               {conflicts.map(({ booking, studioName }, i) => (
                 <div key={i} style={{background:"var(--surface2)",borderRadius:10,padding:"12px 14px",border:"1px solid rgba(231,76,60,0.2)"}}>
                   <div style={{fontWeight:800,fontSize:14,marginBottom:6}}>{booking.studentName}</div>
-                  <div style={{fontSize:12,color:"var(--text2)"}}>🎙️ {studioName}</div>
-                  <div style={{fontSize:12,color:"var(--text2)"}}>📅 {booking.date}</div>
-                  <div style={{fontSize:12,color:"var(--text2)"}}>🕐 {booking.startTime} – {booking.endTime}</div>
+                  <div style={{fontSize:12,color:"var(--text2)"}}><Mic size={16} strokeWidth={1.75} /> {studioName}</div>
+                  <div style={{fontSize:12,color:"var(--text2)"}}><Calendar size={16} strokeWidth={1.75} /> {booking.date}</div>
+                  <div style={{fontSize:12,color:"var(--text2)",display:"flex",alignItems:"center",gap:4}}><Clock size={12} strokeWidth={1.75}/> {booking.startTime} – {booking.endTime}</div>
                 </div>
               ))}
             </div>
             <div style={{padding:"14px 20px",borderTop:"1px solid var(--border)",display:"flex",gap:10,justifyContent:"flex-end",flexWrap:"wrap"}}>
               <button className="btn btn-secondary" disabled={conflictSending}
                 onClick={()=>{ setConflicts([]); setPendingLesson(null); }}>
-                ✕ בטל שיוך
+                <X size={16} strokeWidth={1.75} color="var(--text3)" /> בטל שיוך
               </button>
               <button className="btn btn-danger" disabled={conflictSending} onClick={confirmConflictAndSend}>
-                {conflictSending ? "⏳ שולח..." : "✅ אשר ושלח מייל"}
+                {conflictSending ? <><Clock size={16} strokeWidth={1.75} /> שולח...</> : <><CheckCircle size={16} strokeWidth={1.75} /> אשר ושלח מייל</>}
               </button>
             </div>
           </div>
@@ -989,11 +990,11 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       ) : (
         <>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-            <div className="search-bar" style={{flex:1,minWidth:180}}><span>🔍</span>
+            <div className="search-bar" style={{flex:1,minWidth:180}}><span><Search size={16} strokeWidth={1.75} color="var(--text3)" /></span>
               <input placeholder="חיפוש קורס או מרצה..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
             <div style={{display:"flex",gap:6,alignItems:"center"}}>
               <span style={{fontSize:12,color:"var(--text3)",fontWeight:700}}>מיון:</span>
-              {[{val:"recent",label:"🕐 קבלה"},{val:"urgency",label:"⚡ דחיפות"}].map(opt=>(
+              {[{val:"recent",label:<><Clock size={11} strokeWidth={1.75}/> קבלה</>},{val:"urgency",label:"⚡ דחיפות"}].map(opt=>(
                 <button key={opt.val} type="button" onClick={()=>setSortMode(opt.val)}
                   style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${sortMode===opt.val?"#f5a623":"var(--border)"}`,background:sortMode===opt.val?"rgba(245,166,35,0.14)":"transparent",color:sortMode===opt.val?"#f5a623":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
                   {opt.label}
@@ -1004,7 +1005,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
               {/* פילטר זמן — השבוע / החודש */}
               {[
                 { val: "all",   label: "הכל" },
-                { val: "week",  label: "📅 השבוע" },
+                { val: "week",  label: <><Calendar size={16} strokeWidth={1.75} /> השבוע</> },
                 { val: "month", label: "🗓️ החודש" },
               ].map(opt => (
                 <button
@@ -1032,7 +1033,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                   display: "inline-flex", alignItems: "center", gap: 6,
                 }}
               >
-                📦 ארכיון
+                <Package size={16} strokeWidth={1.75} /> ארכיון
                 {archivedCount > 0 && (
                   <span style={{ background: archiveView ? "#e67e22" : "rgba(230,126,34,0.25)", color: archiveView ? "#fff" : "#e67e22", borderRadius: 20, padding: "1px 7px", fontSize: 11, fontWeight: 800 }}>
                     {archivedCount}
@@ -1079,7 +1080,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           )}
           {allTrackFilters.length > 1 && (
             <div style={{fontSize:11,color:"var(--text3)",marginTop:-8,marginBottom:16}}>
-              💡 אפשר לבחור כמה מסלולי לימוד יחד כדי להציג אותם במקביל.
+              <Lightbulb size={16} strokeWidth={1.75} /> אפשר לבחור כמה מסלולי לימוד יחד כדי להציג אותם במקביל.
             </div>
           )}
 
@@ -1088,33 +1089,33 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setDetailTarget(null)}>
               <div style={{background:"var(--surface)",borderRadius:14,maxWidth:560,width:"100%",maxHeight:"88vh",display:"flex",flexDirection:"column",border:"1px solid var(--border)",boxShadow:"0 8px 32px rgba(0,0,0,0.5)"}} onClick={e=>e.stopPropagation()}>
                 <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span style={{fontWeight:900,fontSize:16,color:"#9b59b6"}}>📚 {detailTarget.name}</span>
+                  <span style={{fontWeight:900,fontSize:16,color:"#9b59b6"}}><BookOpen size={16} strokeWidth={1.75} /> {detailTarget.name}</span>
                   <div style={{display:"flex",gap:6}}>
-                    <button className="btn btn-secondary btn-sm" onClick={()=>{setDetailTarget(null);setEditTarget(detailTarget);setMode("edit");}}>✏️ עריכה</button>
-                    <button className="btn btn-secondary btn-sm" onClick={()=>setDetailTarget(null)}>✕</button>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>{setDetailTarget(null);setEditTarget(detailTarget);setMode("edit");}} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> עריכה</button>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>setDetailTarget(null)}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>
                   </div>
                 </div>
                 <div style={{overflowY:"auto",flex:1,padding:"16px 20px",display:"flex",flexDirection:"column",gap:14}}>
                   {/* Instructor */}
                   {(detailTarget.instructorName||detailTarget.instructorEmail||detailTarget.instructorPhone) && (
                     <div style={{background:"rgba(155,89,182,0.07)",border:"1px solid rgba(155,89,182,0.2)",borderRadius:10,padding:"12px 14px"}}>
-                      <div style={{fontWeight:800,fontSize:12,color:"#9b59b6",marginBottom:8}}>👨‍🏫 פרטי מרצה</div>
+                      <div style={{fontWeight:800,fontSize:12,color:"#9b59b6",marginBottom:8}}>פרטי מרצה</div>
                       {detailTarget.instructorName && <div style={{fontSize:13,fontWeight:700}}>{detailTarget.instructorName}</div>}
-                      {detailTarget.instructorPhone && <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>📞 {detailTarget.instructorPhone}</div>}
-                      {detailTarget.instructorEmail && <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>✉️ {detailTarget.instructorEmail}</div>}
+                      {detailTarget.instructorPhone && <div style={{fontSize:12,color:"var(--text3)",marginTop:2,display:"flex",alignItems:"center",gap:4}}><Phone size={11} strokeWidth={1.75}/> {detailTarget.instructorPhone}</div>}
+                      {detailTarget.instructorEmail && <div style={{fontSize:12,color:"var(--text3)",marginTop:2,display:"flex",alignItems:"center",gap:4}}><Mail size={11} strokeWidth={1.75}/> {detailTarget.instructorEmail}</div>}
                     </div>
                   )}
                   {/* Studio/Kit */}
                   {(studios.find(s=>String(s.id)===String(detailTarget.studioId)) || getLinkedKit(detailTarget)) && (
                     <div style={{background:"rgba(52,152,219,0.07)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:10,padding:"12px 14px"}}>
-                      <div style={{fontWeight:800,fontSize:12,color:"#3498db",marginBottom:8}}>🔗 שיוכים</div>
-                      {studios.find(s=>String(s.id)===String(detailTarget.studioId)) && <div style={{fontSize:13}}>🎙️ {studios.find(s=>String(s.id)===String(detailTarget.studioId)).name}</div>}
-                      {getLinkedKit(detailTarget) && <div style={{fontSize:13,marginTop:4}}>🎒 {getLinkedKit(detailTarget).name}</div>}
+                      <div style={{fontWeight:800,fontSize:12,color:"#3498db",marginBottom:8,display:"flex",alignItems:"center",gap:4}}><Link size={12} strokeWidth={1.75}/> שיוכים</div>
+                      {studios.find(s=>String(s.id)===String(detailTarget.studioId)) && <div style={{fontSize:13}}><Mic size={16} strokeWidth={1.75} /> {studios.find(s=>String(s.id)===String(detailTarget.studioId)).name}</div>}
+                      {getLinkedKit(detailTarget) && <div style={{fontSize:13,marginTop:4,display:"flex",alignItems:"center",gap:4}}><Package size={13} strokeWidth={1.75}/> {getLinkedKit(detailTarget).name}</div>}
                     </div>
                   )}
                   {/* Sessions */}
                   <div style={{background:"rgba(46,204,113,0.06)",border:"1px solid rgba(46,204,113,0.2)",borderRadius:10,padding:"12px 14px"}}>
-                    <div style={{fontWeight:800,fontSize:12,color:"var(--green)",marginBottom:8}}>📅 מפגשים ({(detailTarget.schedule||[]).length})</div>
+                    <div style={{fontWeight:800,fontSize:12,color:"var(--green)",marginBottom:8}}><Calendar size={16} strokeWidth={1.75} /> מפגשים ({(detailTarget.schedule||[]).length})</div>
                     {(detailTarget.schedule||[]).length === 0
                       ? <div style={{fontSize:12,color:"var(--text3)"}}>אין מפגשים רשומים</div>
                       : <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:300,overflowY:"auto"}}>
@@ -1132,7 +1133,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                         </div>
                     }
                   </div>
-                  {detailTarget.description && <div style={{fontSize:13,color:"var(--text3)"}}>📝 {detailTarget.description}</div>}
+                  {detailTarget.description && <div style={{fontSize:13,color:"var(--text3)",display:"flex",alignItems:"center",gap:4}}><FileText size={12} strokeWidth={1.75}/> {detailTarget.description}</div>}
                 </div>
               </div>
             </div>
@@ -1141,21 +1142,21 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
           {archiveView && (
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"10px 16px",background:"rgba(230,126,34,0.08)",border:"1px solid rgba(230,126,34,0.25)",borderRadius:10}}>
-              <span style={{fontSize:18}}>📦</span>
+              <span style={{fontSize:18}}><Package size={18} strokeWidth={1.75} /></span>
               <span style={{fontSize:13,color:"#e67e22",fontWeight:700}}>תצוגת ארכיון — קורסים שכל מפגשיהם הסתיימו</span>
               <button type="button" onClick={()=>setArchiveView(false)} style={{marginRight:"auto",padding:"2px 10px",borderRadius:20,border:"1px solid rgba(230,126,34,0.5)",background:"transparent",color:"#e67e22",fontSize:12,cursor:"pointer",fontWeight:700}}>חזור לפעילים</button>
             </div>
           )}
 
           {sortedFiltered.length===0
-            ? <div className="empty-state"><div className="emoji">📦</div><div>{archiveView ? "אין קורסים בארכיון" : lessons.length===0 ? "אין קורסים עדיין" : "לא נמצאו קורסים למסלולים שנבחרו"}</div><div style={{fontSize:13,color:"var(--text3)"}}>{archiveView ? "קורסים עוברים לארכיון אוטומטית כשמפגשם האחרון מסתיים" : lessons.length===0 ? 'לחץ "➕ קורס חדש" כדי להתחיל' : "נסה לשנות חיפוש או מסלולי לימוד"}</div></div>
+            ? <div className="empty-state"><div className="emoji"><Package size={32} strokeWidth={1.75} /></div><div>{archiveView ? "אין קורסים בארכיון" : lessons.length===0 ? "אין קורסים עדיין" : "לא נמצאו קורסים למסלולים שנבחרו"}</div><div style={{fontSize:13,color:"var(--text3)"}}>{archiveView ? "קורסים עוברים לארכיון אוטומטית כשמפגשם האחרון מסתיים" : lessons.length===0 ? 'לחץ "➕ קורס חדש" כדי להתחיל' : "נסה לשנות חיפוש או מסלולי לימוד"}</div></div>
             : <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {Object.entries(groupedLessons)
                   .sort(([left], [right]) => left.localeCompare(right, "he"))
                   .map(([trackName, trackLessons]) => (
                     <div key={trackName} style={{display:"flex",flexDirection:"column",gap:10,background:trackName===UNASSIGNED_TRACK?"rgba(239,68,68,0.04)":"rgba(245,166,35,0.04)",border:`1px solid ${trackName===UNASSIGNED_TRACK?"rgba(239,68,68,0.18)":"rgba(245,166,35,0.18)"}`,borderRadius:14,padding:"14px 16px"}}>
                       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                        <span style={{fontWeight:900,fontSize:15,color:trackName===UNASSIGNED_TRACK?"#ef4444":"#f5a623"}}>{trackName===UNASSIGNED_TRACK?"⚠️":"🎓"} {trackName}</span>
+                        <span style={{fontWeight:900,fontSize:15,color:trackName===UNASSIGNED_TRACK?"#ef4444":"#f5a623"}}>{trackName===UNASSIGNED_TRACK?"⚠️":<GraduationCap size={16} strokeWidth={1.75} />} {trackName}</span>
                         <span style={{background:trackName===UNASSIGNED_TRACK?"rgba(239,68,68,0.16)":"rgba(245,166,35,0.16)",color:trackName===UNASSIGNED_TRACK?"#ef4444":"#f5a623",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:800}}>{trackLessons.length} קורסים</span>
                       </div>
                       {trackLessons.map(l=>{
@@ -1170,17 +1171,17 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,flexWrap:"wrap"}}>
                               <div style={{flex:1,minWidth:200}}>
                                 <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{l.name}</div>
-                                {l.instructorName && <div style={{fontSize:13,color:"var(--text2)"}}>👨‍🏫 {l.instructorName}</div>}
-                                {nextSession && <div style={{fontSize:12,color:"var(--green)",marginTop:2}}>📅 מפגש קרוב: {nextSession.date}{nextSession.startTime?` · ${nextSession.startTime}`:""}</div>}
+                                {l.instructorName && <div style={{fontSize:13,color:"var(--text2)"}}>{l.instructorName}</div>}
+                                {nextSession && <div style={{fontSize:12,color:"var(--green)",marginTop:2}}><Calendar size={16} strokeWidth={1.75} /> מפגש קרוב: {nextSession.date}{nextSession.startTime?` · ${nextSession.startTime}`:""}</div>}
                                 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
-                                  <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>📅 {(l.schedule||[]).length} שיעורים</span>
-                                  {upcoming>0 && <span style={{background:"rgba(46,204,113,0.12)",color:"var(--green)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🟢 {upcoming} קרובים</span>}
-                                  {studio && <span style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🎙️ {studio.name}</span>}
-                                  {kit && <span style={{background:"rgba(245,166,35,0.12)",color:"var(--accent)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🎒 {kit.name}</span>}
+                                  <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}><Calendar size={16} strokeWidth={1.75} /> {(l.schedule||[]).length} שיעורים</span>
+                                  {upcoming>0 && <span style={{background:"rgba(46,204,113,0.12)",color:"var(--green)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><CheckCircle size={10} strokeWidth={1.75}/> {upcoming} קרובים</span>}
+                                  {studio && <span style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}><Mic size={16} strokeWidth={1.75} /> {studio.name}</span>}
+                                  {kit && <span style={{background:"rgba(245,166,35,0.12)",color:"var(--accent)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><Package size={11} strokeWidth={1.75}/> {kit.name}</span>}
                                 </div>
                               </div>
                               <div style={{display:"flex",gap:6}} onClick={e=>e.stopPropagation()}>
-                                <button className="btn btn-secondary btn-sm" onClick={()=>{setEditTarget(l);setMode("edit");}}>✏️ עריכה</button>
+                                <button className="btn btn-secondary btn-sm" onClick={()=>{setEditTarget(l);setMode("edit");}} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> עריכה</button>
                                 <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>del(l.id)}>🗑️ מחק</button>
                               </div>
                             </div>
@@ -1373,8 +1374,8 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
   return (
     <div className="card" style={{marginBottom:20}}>
       <div className="card-header">
-        <div className="card-title">📽️ {initial?"עריכת קורס":"קורס חדש"}</div>
-        <button className="btn btn-secondary btn-sm" onClick={onCancel}>✕ ביטול</button>
+        <div className="card-title" style={{display:"flex",alignItems:"center",gap:6}}><Video size={15} strokeWidth={1.75}/> {initial?"עריכת קורס":"קורס חדש"}</div>
+        <button className="btn btn-secondary btn-sm" onClick={onCancel}><X size={16} strokeWidth={1.75} color="var(--text3)" /> ביטול</button>
       </div>
 
       {localMsg && (
@@ -1383,14 +1384,14 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
           border:`1px solid ${localMsg.type==="error"?"rgba(231,76,60,0.3)":"rgba(46,204,113,0.3)"}`,
           color:localMsg.type==="error"?"#e74c3c":"#2ecc71",
           display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span>{localMsg.type==="error"?"❌":"✅"} {localMsg.text}</span>
+          <span>{localMsg.type==="error"?<XCircle size={16} strokeWidth={1.75} />:<CheckCircle size={16} strokeWidth={1.75} />} {localMsg.text}</span>
           <button onClick={()=>setLocalMsg(null)} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:16,padding:"0 4px"}}>×</button>
         </div>
       )}
 
       {/* Schedule builder — FIRST */}
       <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
-        <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:12}}>📅 לוח שיעורים</div>
+        <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:12}}><Calendar size={16} strokeWidth={1.75} /> לוח שיעורים</div>
         <div style={{fontSize:12,color:"var(--text3)",marginBottom:10}}>הוספת מפגשים ידנית נשארת כאן. ייבוא XL עבר לראש דף "שיעורים" כדי לאפשר העלאה מהירה של כמה קורסים במקביל.</div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end",marginBottom:12}}>
           <div className="form-group" style={{flex:"1 1 130px",minWidth:120}}>
@@ -1418,7 +1419,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
 
         {schedule.length>0 && (
           <div style={{marginBottom:16}}>
-            <div style={{fontWeight:700,fontSize:12,color:"#9b59b6",marginBottom:4}}>📅 {schedule.length} שיעורים בלוח:</div>
+            <div style={{fontWeight:700,fontSize:12,color:"#9b59b6",marginBottom:4}}><Calendar size={16} strokeWidth={1.75} /> {schedule.length} שיעורים בלוח:</div>
 
             {isMobile ? (
               /* ── מובייל: כרטיס לכל מפגש ── */
@@ -1461,7 +1462,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
                         </select>
                       </div>
                       <div style={{flex:1}}>
-                        <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>🎒 ערכה</div>
+                        <div style={{fontSize:11,color:"var(--text3)",marginBottom:2,display:"flex",alignItems:"center",gap:3}}><Package size={11} strokeWidth={1.75}/> ערכה</div>
                         <select className="form-select" value={s.kitId||""} style={{fontSize:12,padding:"4px 6px",height:32,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"kitId",e.target.value||null)}>
                           <option value="">ללא</option>
                           {lessonKits.map(k=><option key={k.id} value={k.id}>{k.name}</option>)}
@@ -1475,7 +1476,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
               /* ── דסקטופ: grid עם עמודות גמישות ── */
               <>
                 <div style={{display:"grid",gridTemplateColumns:gridTemplate,gap:0,fontSize:11,color:"var(--text-muted)",marginBottom:2,userSelect:"none",background:"var(--surface2)",borderRadius:"6px 6px 0 0",border:"1px solid rgba(155,89,182,0.2)"}}>
-                  {["","תאריך","התחלה","סיום","נושא","🏫 כיתה","🎒 ערכה","🗑️"].map((label,ci)=>(
+                  {["","תאריך","התחלה","סיום","נושא","כיתה","ערכה",""].map((label,ci)=>(
                     <div key={ci} style={{position:"relative",padding:"4px 8px",overflow:"hidden",whiteSpace:"nowrap",
                       borderRight: ci < 7 ? "1px solid rgba(155,89,182,0.25)" : "none",
                       fontWeight:700, textAlign: ci===0||ci===7 ? "center" : "right"}}>
@@ -1527,7 +1528,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
 
       {/* Course & Instructor details */}
       <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
-        <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:12}}>👨‍🏫 פרטי הקורס והמרצה</div>
+        <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:12}}>פרטי הקורס והמרצה</div>
         <div className="form-group" style={{marginBottom:10}}>
           <label className="form-label">שם הקורס *</label>
           <input className="form-input" placeholder='לדוגמה: "חדר טלוויזיה א"' value={name} onChange={e=>setName(e.target.value)}/>
@@ -1553,7 +1554,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
             />
             {lecturerInput && (
               <button type="button" onClick={()=>{setLecturerInput("");setLecturerId("");}}
-                style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"var(--text3)",cursor:"pointer",fontSize:16,lineHeight:1,padding:0}}>✕</button>
+                style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"var(--text3)",cursor:"pointer",fontSize:16,lineHeight:1,padding:0}}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>
             )}
           </div>
           <div style={{fontSize:11,color:"var(--text3)",marginTop:3}}>
@@ -1564,7 +1565,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
               השם שהוקלד לא קיים ברובריקת "מרצים", ולכן אי אפשר לשמור כך את הקורס.
             </div>
           )}
-          {lecturerId && <div style={{fontSize:11,color:"#22c55e",marginTop:3}}>✓ מקושר למרצה קיים</div>}
+          {lecturerId && <div style={{fontSize:11,color:"#22c55e",marginTop:3}}><Check size={16} strokeWidth={1.75} /> מקושר למרצה קיים</div>}
           {!lecturers.length && <div style={{fontSize:11,color:"var(--text3)",marginTop:3}}>ניתן להוסיף מרצים דרך רובריקת "מרצים"</div>}
         </div>
         <div className="form-group" style={{marginBottom:10}}>
@@ -1582,10 +1583,10 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
 
       {/* Link to studio (optional) */}
       <div style={{background:"rgba(52,152,219,0.06)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
-        <div style={{fontWeight:800,fontSize:13,color:"#3498db",marginBottom:10}}>🔗 שיוך (אופציונלי)</div>
+        <div style={{fontWeight:800,fontSize:13,color:"#3498db",marginBottom:10,display:"flex",alignItems:"center",gap:6}}><Link size={13} strokeWidth={1.75}/> שיוך (אופציונלי)</div>
         <div className="grid-2">
           <div className="form-group">
-            <label className="form-label">🏫 שיוך לכיתת לימוד</label>
+            <label className="form-label">שיוך לכיתת לימוד</label>
             <select className="form-select" value={studioId} onChange={e=>{
               setStudioId(e.target.value);
               setSchedule(prev=>prev.map(s=>({...s, studioId: e.target.value||null})));
@@ -1596,11 +1597,11 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
               ))}
             </select>
             {studios.filter(s=>s.isClassroom||s.classroomOnly).length === 0 && (
-              <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>💡 סמן חדר כ"כיתת לימוד" ברובריקת חדרים כדי שיופיע כאן.</div>
+              <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}><Lightbulb size={16} strokeWidth={1.75} /> סמן חדר כ"כיתת לימוד" ברובריקת חדרים כדי שיופיע כאן.</div>
             )}
           </div>
           <div className="form-group">
-            <label className="form-label">🎒 שיוך לערכת שיעור</label>
+            <label className="form-label" style={{display:"flex",alignItems:"center",gap:4}}><Package size={13} strokeWidth={1.75}/> שיוך לערכת שיעור</label>
             <select className="form-select" value={kitId} onChange={e=>{
               setKitId(e.target.value);
               setSchedule(prev=>prev.map(s=>({...s, kitId: e.target.value||null})));
@@ -1615,10 +1616,10 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
       {/* Email to teacher */}
       {selectedLecturerObj?.email && (
         <div style={{background:"rgba(52,152,219,0.06)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
-          <div style={{fontWeight:800,fontSize:13,color:"#3498db",marginBottom:10}}>✉️ שליחת מייל למרצה</div>
+          <div style={{fontWeight:800,fontSize:13,color:"#3498db",marginBottom:10,display:"flex",alignItems:"center",gap:6}}><Mail size={13} strokeWidth={1.75}/> שליחת מייל למרצה</div>
           <textarea className="form-textarea" rows={3} placeholder="נוסח ההודעה למרצה..." value={teacherMessage} onChange={e=>setTeacherMessage(e.target.value)}/>
-          <button className="btn btn-secondary" style={{marginTop:8}} onClick={sendTeacherEmail} disabled={teacherEmailSending}>
-            {teacherEmailSending?"⏳ שולח...":"📧 שלח מייל למרצה"}
+          <button className="btn btn-secondary" style={{marginTop:8,display:"inline-flex",alignItems:"center",gap:6}} onClick={sendTeacherEmail} disabled={teacherEmailSending}>
+            {teacherEmailSending?<><Clock size={16} strokeWidth={1.75} /> שולח...</>:<><Mail size={14} strokeWidth={1.75}/> שלח מייל למרצה</>}
           </button>
         </div>
       )}
@@ -1627,7 +1628,7 @@ function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment,
       <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
         <button className="btn btn-secondary" onClick={onCancel}>ביטול</button>
         <button className="btn btn-primary" style={{background:"#9b59b6",borderColor:"#9b59b6"}} onClick={handleSave} disabled={saving}>
-          {saving?"⏳ שומר...":`💾 ${initial?"עדכן":"צור"} קורס`}
+          {saving?<><Clock size={16} strokeWidth={1.75} /> שומר...</>:`💾 ${initial?"עדכן":"צור"} קורס`}
         </button>
       </div>
     </div>

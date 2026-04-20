@@ -2,30 +2,31 @@ import { supabase } from '../supabaseClient.js';
 import { useState, useEffect } from "react";
 import { Modal } from "./ui.jsx";
 import { storageSet, storageGet, isValidEmailAddress, logActivity, getAuthToken } from "../utils.js";
+import { BookOpen, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Mic, Package, Settings, Shield, X } from "lucide-react";
 
 const WAREHOUSE_SECTIONS = [
-  { id: "reservations", label: "📋 בקשות" },
-  { id: "equipment",    label: "📦 ציוד" },
-  { id: "certifications", label: "🎓 הסמכת ציוד" },
+  { id: "reservations", label: <><ClipboardList size={14} strokeWidth={1.75} color="var(--accent)" /> בקשות</> },
+  { id: "equipment",    label: <><Package size={14} strokeWidth={1.75} color="var(--accent)" /> ציוד</> },
+  { id: "certifications", label: <><GraduationCap size={14} strokeWidth={1.75} color="var(--accent)" /> הסמכת ציוד</> },
   { id: "kits",         label: "🎒 ערכות" },
-  { id: "policies",     label: "📋 נהלים" },
-  { id: "settings",     label: "⚙️ הגדרות" },
+  { id: "policies",     label: <><ClipboardList size={14} strokeWidth={1.75} color="var(--accent)" /> נהלים</> },
+  { id: "settings",     label: <><Settings size={14} strokeWidth={1.75} color="var(--accent)" /> הגדרות</> },
 ];
 
 const ADMINISTRATION_SECTIONS = [
-  { id: "studios",                label: "🎙️ ניהול חדרים" },
-  { id: "studio-certifications",  label: "🎓 הסמכת אולפן" },
+  { id: "studios",                label: <><Mic size={14} strokeWidth={1.75} color="var(--accent)" /> ניהול חדרים</> },
+  { id: "studio-certifications",  label: <><GraduationCap size={14} strokeWidth={1.75} color="var(--accent)" /> הסמכת אולפן</> },
   { id: "lessons",                label: "📽️ שיעורים" },
   { id: "lecturers",              label: "👩‍🏫 מרצים" },
   { id: "students",               label: "👨‍🎓 סטודנטים" },
-  { id: "policies",               label: "📋 נהלים" },
-  { id: "settings",               label: "⚙️ הגדרות" },
+  { id: "policies",               label: <><ClipboardList size={14} strokeWidth={1.75} color="var(--accent)" /> נהלים</> },
+  { id: "settings",               label: <><Settings size={14} strokeWidth={1.75} color="var(--accent)" /> הגדרות</> },
 ];
 
 const LOAN_TYPES     = ["פרטית", "הפקה", "סאונד", "קולנוע יומית", "שיעור"];
 const DH_LOAN_TYPES  = ["הפקה", "סאונד", "קולנוע יומית"];
-const LOAN_ICONS     = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️", "קולנוע יומית":"🎥", "שיעור":"📚" };
-const DH_LOAN_ICONS  = { "הפקה":"🎬", "סאונד":"🎙️", "קולנוע יומית":"🎥" };
+const LOAN_ICONS     = { "פרטית":"👤", "הפקה":<Film size={14} strokeWidth={1.75} color="var(--accent)" />, "סאונד":<Mic size={14} strokeWidth={1.75} color="var(--accent)" />, "קולנוע יומית":"🎥", "שיעור":<BookOpen size={14} strokeWidth={1.75} color="var(--accent)" /> };
+const DH_LOAN_ICONS  = { "הפקה":<Film size={14} strokeWidth={1.75} color="var(--accent)" />, "סאונד":<Mic size={14} strokeWidth={1.75} color="var(--accent)" />, "קולנוע יומית":"🎥" };
 
 const DEFAULT_PERMISSIONS = {
   views: [],
@@ -294,11 +295,11 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
 
             {editUser.role !== "admin" && (
               <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 12, padding: 16 }}>
-                <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 12 }}>🔒 הגבלת גישה</div>
+                <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 12 }}><Shield size={16} strokeWidth={1.75} color="var(--accent)" /> הגבלת גישה</div>
                 <div style={{ marginBottom: 12 }}>
                   <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 6 }}>גישה לאזורים (ריק = גישה לכל)</div>
                   <div style={{ display: "flex", gap: 8 }}>
-                    {[{ id: "warehouse", label: "📦 תפעול מחסן" }, { id: "administration", label: "📋 אדמיניסטרציה" }].map(v => (
+                    {[{ id: "warehouse", label: <><Package size={14} strokeWidth={1.75} color="var(--accent)" /> תפעול מחסן</> }, { id: "administration", label: <><ClipboardList size={14} strokeWidth={1.75} color="var(--accent)" /> אדמיניסטרציה</> }].map(v => (
                       <label key={v.id} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", padding: "7px 14px", borderRadius: 8, border: `1px solid ${perms.views.includes(v.id) ? "var(--accent)" : "var(--border)"}`, background: perms.views.includes(v.id) ? "rgba(245,166,35,0.1)" : "transparent", fontSize: 13, fontWeight: 600 }}>
                         <input type="checkbox" style={{ accentColor: "var(--accent)" }} checked={perms.views.includes(v.id)} onChange={() => setPerms({ views: toggleArr(perms.views, v.id) })} />
                         {v.label}
@@ -349,9 +350,9 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
 
             {editUser?.role !== "admin" && (
               <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 12, padding: 16 }}>
-                <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 10 }}>📋 הרשאות נוספות</div>
+                <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 10 }}><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> הרשאות נוספות</div>
                 <CheckRow
-                  label='📚 עריכת לו"ז יומי — שיעורים בלו"ז עובדים'
+                  label={<><BookOpen size={14} strokeWidth={1.75} color="var(--accent)" /> עריכת לו&quot;ז יומי — שיעורים בלו&quot;ז עובדים</>}
                   checked={!!perms.canEditDailyLessons}
                   onChange={checked => setPerms({ canEditDailyLessons: checked })}
                 />
@@ -404,7 +405,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
     const r = await storageSet("collegeManager", updated);
     setMgrSaving(false);
     if (r.ok) showToast("success", "פרטי מנהל המכללה נשמרו");
-    else showToast("error", "❌ שגיאה בשמירה");
+    else showToast("error", "שגיאה בשמירה");
   };
 
   const toggleDhLT = (form, setForm, lt) =>
@@ -423,7 +424,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
     const r = await storageSet("deptHeads", updated);
     setDhSaving(false);
     if (r.ok) { showToast("success", `${name} נוסף/ה כראש מחלקה`); setDhForm(emptyDhForm); setDhLecturerInput(""); setAddingDh(false); }
-    else showToast("error","❌ שגיאה בשמירה");
+    else showToast("error","שגיאה בשמירה");
   };
 
   const saveEditDh = async () => {
@@ -438,7 +439,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
     const r = await storageSet("deptHeads", updated);
     setDhSaving(false);
     if (r.ok) { showToast("success","פרטי ראש המחלקה עודכנו"); setEditDh(null); }
-    else showToast("error","❌ שגיאה בשמירה");
+    else showToast("error","שגיאה בשמירה");
   };
 
   const delDh = async (id) => {
@@ -462,7 +463,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
     const updated = (teamMembers||[]).map(m => m.id===editMember.id ? {...m,...editForm,name,email,phone:editForm.phone?.trim()||""} : m);
     setTeamMembers(updated);
     const r = await storageSet("teamMembers", updated);
-    if (!r.ok) showToast("error","❌ שגיאה בשמירה");
+    if (!r.ok) showToast("error","שגיאה בשמירה");
     else showToast("success","איש צוות עודכן");
     setEditMember(null);
   };
@@ -471,7 +472,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
     const updated = (teamMembers||[]).filter(m => m.id!==id);
     setTeamMembers(updated);
     const r = await storageSet("teamMembers", updated);
-    if (!r.ok) showToast("error","❌ שגיאה בשמירה");
+    if (!r.ok) showToast("error","שגיאה בשמירה");
     else showToast("success","איש צוות הוסר");
   };
 
@@ -502,25 +503,25 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
               <input className="form-input" type="email" placeholder="manager@college.ac.il" value={mgrForm.email} onChange={e=>setMgrForm(p=>({...p,email:e.target.value}))}/></div>
           </div>
           {collegeManager?.email && (
-            <div style={{fontSize:12,color:"var(--green)",marginBottom:10}}>✅ מוגדר: <strong>{collegeManager.name}</strong> ({collegeManager.email})</div>
+            <div style={{fontSize:12,color:"var(--green)",marginBottom:10}}><CheckCircle size={14} strokeWidth={1.75} color="var(--green)" /> מוגדר: <strong>{collegeManager.name}</strong> ({collegeManager.email})</div>
           )}
           <button className="btn btn-primary" disabled={!mgrForm.name.trim()||!mgrForm.email.trim()||mgrSaving} onClick={saveMgr}>
-            {mgrSaving?"⏳ שומר...":"💾 שמור פרטי מנהל"}
+            {mgrSaving?<><Clock size={16} strokeWidth={1.75} /> שומר...</>:"💾 שמור פרטי מנהל"}
           </button>
           {/* Daily display link */}
           <div style={{marginTop:14,background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",fontSize:12}}>
             <div style={{fontWeight:700,marginBottom:6,color:"#f5a623"}}>📺 לינק לוח לוז יומי ציבורי</div>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
               <code style={{fontSize:11,background:"var(--surface3)",padding:"3px 8px",borderRadius:4,flex:1,wordBreak:"break-all",color:"var(--text2)"}}>{typeof window!=="undefined"?window.location.origin:""}/daily</code>
-              <button className="btn btn-secondary btn-sm" onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/daily`);showToast("success","הקישור הועתק!");}}>📋 העתק</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/daily`);showToast("success","הקישור הועתק!");}}>העתק</button>
               <a href="/daily" target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm" style={{textDecoration:"none"}}>🔗 פתח</a>
             </div>
           </div>
           <div style={{marginTop:10,background:"rgba(46,204,113,0.08)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",fontSize:12}}>
-            <div style={{fontWeight:700,marginBottom:6,color:"#2ecc71"}}>📋 לינק לוח לוז יומי בפורמט טבלה</div>
+            <div style={{fontWeight:700,marginBottom:6,color:"#2ecc71"}}><ClipboardList size={14} strokeWidth={1.75} color="var(--accent)" /> לינק לוח לוז יומי בפורמט טבלה</div>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
               <code style={{fontSize:11,background:"var(--surface3)",padding:"3px 8px",borderRadius:4,flex:1,wordBreak:"break-all",color:"var(--text2)"}}>{typeof window!=="undefined"?window.location.origin:""}/daily-table</code>
-              <button className="btn btn-secondary btn-sm" onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/daily-table`);showToast("success","הקישור הועתק!");}}>📋 העתק</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/daily-table`);showToast("success","הקישור הועתק!");}}>העתק</button>
               <a href="/daily-table" target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm" style={{textDecoration:"none"}}>🔗 פתח</a>
             </div>
           </div>
@@ -529,7 +530,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
               <div style={{fontWeight:700,marginBottom:6,color:"#3498db"}}>🔗 קישור לוח שנה למנהל המכללה</div>
               <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                 <code style={{fontSize:11,background:"var(--surface3)",padding:"3px 8px",borderRadius:4,flex:1,wordBreak:"break-all",color:"var(--text2)"}}>{window.location.origin}/manager-calendar?token={managerToken}</code>
-                <button className="btn btn-secondary btn-sm" onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/manager-calendar?token=${managerToken}`);showToast("success","הקישור הועתק!");}}>📋 העתק</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/manager-calendar?token=${managerToken}`);showToast("success","הקישור הועתק!");}}>העתק</button>
               </div>
             </div>
           )}
@@ -539,8 +540,8 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
       {/* ── Dept heads ── */}
       <div className="card" style={{marginBottom:24,border:"2px solid rgba(155,89,182,0.3)",background:"rgba(155,89,182,0.04)"}}>
         <div className="card-header">
-          <div className="card-title">🎓 ראשי מחלקות</div>
-          <button className="btn btn-primary btn-sm" onClick={()=>setAddingDh(p=>!p)}>{addingDh?"✕ ביטול":"➕ הוסף ראש מחלקה"}</button>
+          <div className="card-title"><GraduationCap size={16} strokeWidth={1.75} color="var(--accent)" /> ראשי מחלקות</div>
+          <button className="btn btn-primary btn-sm" onClick={()=>setAddingDh(p=>!p)}>{addingDh?<><X size={16} strokeWidth={1.75} color="var(--text3)" /> ביטול</>:"➕ הוסף ראש מחלקה"}</button>
         </div>
         <div style={{fontSize:12,color:"var(--text3)",marginBottom:10,padding:"0 20px"}}>
           ראש מחלקה מקבל מייל על השאלות מהסוגים שסומנו ויכול לאשר אותן לפני שהצוות רואה אותן.
@@ -561,12 +562,12 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
                       else{setDhForm(p=>({...p,name:"",email:"",lecturerId:""}));}
                     }}/>
                   <datalist id="dh-lecturer-list">{activeLecturers.sort((a,b)=>a.fullName.localeCompare(b.fullName,"he")).map(l=>(<option key={l.id} value={l.fullName}/>))}</datalist>
-                  {dhLecturerInput&&<button type="button" onClick={()=>{setDhLecturerInput("");setDhForm(p=>({...p,name:"",email:"",lecturerId:""}));}} style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:16,color:"var(--text3)"}}>✕</button>}
+                  {dhLecturerInput&&<button type="button" onClick={()=>{setDhLecturerInput("");setDhForm(p=>({...p,name:"",email:"",lecturerId:""}));}} style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"var(--text3)"}}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>}
                 </div>
                 {dhLecturerInput&&!dhForm.lecturerId&&<div style={{fontSize:11,color:"var(--red)",marginTop:4}}>יש לבחור מרצה מהרשימה</div>}
                 {dhForm.lecturerId&&(isValidEmailAddress((dhForm.email||"").trim())
                   ? <div style={{marginTop:6,padding:"8px 10px",background:"rgba(46,204,113,0.08)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:6,fontSize:13}}>
-                      <div style={{fontWeight:800,color:"var(--green)"}}>✅ {dhForm.name}</div>
+                      <div style={{fontWeight:800,color:"var(--green)"}}><CheckCircle size={14} strokeWidth={1.75} color="var(--green)" /> {dhForm.name}</div>
                       <div style={{fontSize:12,color:"var(--text2)",marginTop:2,direction:"ltr",textAlign:"right"}}>📧 {dhForm.email}</div>
                     </div>
                   : <div style={{marginTop:6,padding:"8px 10px",background:"rgba(231,76,60,0.08)",border:"1px solid rgba(231,76,60,0.35)",borderRadius:6,fontSize:12,color:"var(--red)",fontWeight:700}}>
@@ -589,7 +590,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
                 </div>
               </div>
               <button className="btn btn-primary" disabled={!dhForm.lecturerId||!isValidEmailAddress((dhForm.email||"").trim())||dhForm.loanTypes.length===0||dhSaving} onClick={saveDeptHead}>
-                {dhSaving?"⏳ שומר...":"✅ הוסף ראש מחלקה"}
+                {dhSaving?<><Clock size={16} strokeWidth={1.75} /> שומר...</>:<><CheckCircle size={16} strokeWidth={1.75} /> הוסף ראש מחלקה</>}
               </button>
             </div>
           )}
@@ -598,14 +599,14 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
             : <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {(deptHeads||[]).map(dh=>(
                 <div key={dh.id} style={{background:"var(--surface)",border:"1px solid rgba(155,89,182,0.2)",borderRadius:"var(--r-sm)",padding:"12px 16px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-                  <div style={{width:36,height:36,borderRadius:"50%",background:"rgba(155,89,182,0.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>🎓</div>
+                  <div style={{width:36,height:36,borderRadius:"50%",background:"rgba(155,89,182,0.15)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><GraduationCap size={16} strokeWidth={1.75} color="var(--accent)" /></div>
                   <div style={{flex:1,minWidth:150}}>
                     <div style={{fontWeight:800,fontSize:14}}>{dh.name}</div>
                     {dh.role&&<div style={{fontSize:11,color:"#9b59b6",fontWeight:700,marginTop:1}}>{dh.role}</div>}
                     <div style={{fontSize:11,color:"var(--text3)"}}>{dh.email}</div>
                     <div style={{display:"flex",gap:4,marginTop:5,flexWrap:"wrap"}}>
                       {(dh.loanTypes||[]).map(lt=>(
-                        <span key={lt} style={{background:"rgba(155,89,182,0.12)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"#9b59b6",fontWeight:700}}>{DH_LOAN_ICONS[lt]||"📦"} {lt}</span>
+                        <span key={lt} style={{background:"rgba(155,89,182,0.12)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"#9b59b6",fontWeight:700}}>{DH_LOAN_ICONS[lt]||<Package size={14} strokeWidth={1.75} />} {lt}</span>
                       ))}
                     </div>
                   </div>
@@ -626,7 +627,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
           <div style={{width:"100%",maxWidth:480,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0"}}>
               <div style={{fontWeight:900,fontSize:16}}>✏️ עריכת ראש מחלקה</div>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setEditDh(null)}>✕</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setEditDh(null)}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>
             </div>
             <div style={{padding:"20px"}}>
               <div className="form-group" style={{marginBottom:10}}>
@@ -641,12 +642,12 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
                       else{setEditDhForm(p=>({...p,name:"",email:"",lecturerId:""}));}
                     }}/>
                   <datalist id="dh-edit-lecturer-list">{activeLecturers.sort((a,b)=>a.fullName.localeCompare(b.fullName,"he")).map(l=>(<option key={l.id} value={l.fullName}/>))}</datalist>
-                  {editDhLecturerInput&&<button type="button" onClick={()=>{setEditDhLecturerInput("");setEditDhForm(p=>({...p,name:"",email:"",lecturerId:""}));}} style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:16,color:"var(--text3)"}}>✕</button>}
+                  {editDhLecturerInput&&<button type="button" onClick={()=>{setEditDhLecturerInput("");setEditDhForm(p=>({...p,name:"",email:"",lecturerId:""}));}} style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"var(--text3)"}}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>}
                 </div>
                 {editDhLecturerInput&&!editDhForm.lecturerId&&<div style={{fontSize:11,color:"var(--red)",marginTop:4}}>יש לבחור מרצה מהרשימה</div>}
                 {editDhForm.lecturerId&&(isValidEmailAddress((editDhForm.email||"").trim())
                   ? <div style={{marginTop:6,padding:"8px 10px",background:"rgba(46,204,113,0.08)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:6,fontSize:13}}>
-                      <div style={{fontWeight:800,color:"var(--green)"}}>✅ {editDhForm.name}</div>
+                      <div style={{fontWeight:800,color:"var(--green)"}}><CheckCircle size={14} strokeWidth={1.75} color="var(--green)" /> {editDhForm.name}</div>
                       <div style={{fontSize:12,color:"var(--text2)",marginTop:2,direction:"ltr",textAlign:"right"}}>📧 {editDhForm.email}</div>
                     </div>
                   : <div style={{marginTop:6,padding:"8px 10px",background:"rgba(231,76,60,0.08)",border:"1px solid rgba(231,76,60,0.35)",borderRadius:6,fontSize:12,color:"var(--red)",fontWeight:700}}>
@@ -670,7 +671,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
               </div>
               <div style={{display:"flex",gap:8}}>
                 <button className="btn btn-primary" disabled={!editDhForm.lecturerId||!isValidEmailAddress((editDhForm.email||"").trim())||editDhForm.loanTypes.length===0||dhSaving} onClick={saveEditDh}>
-                  {dhSaving?"⏳ שומר...":"💾 שמור"}
+                  {dhSaving?<><Clock size={16} strokeWidth={1.75} /> שומר...</>:"💾 שמור"}
                 </button>
                 <button className="btn btn-secondary" onClick={()=>setEditDh(null)}>ביטול</button>
               </div>
@@ -714,7 +715,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
           <div style={{width:"100%",maxWidth:500,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0"}}>
               <div style={{fontWeight:900,fontSize:16}}>✏️ עריכת איש צוות</div>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setEditMember(null)}>✕</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setEditMember(null)}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>
             </div>
             <div style={{padding:"20px",display:"flex",flexDirection:"column",gap:14}}>
               <div className="grid-2">

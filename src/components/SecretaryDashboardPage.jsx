@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+import { Calendar, ClipboardList, GraduationCap, Mic } from "lucide-react";
 
 const NIGHT_COLOR   = "#2196f3";
 const STUDENT_COLOR = "#2ecc71";
@@ -253,8 +254,8 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
         {[
           { icon:"👨‍🎓", value: students.length,    label:"סטודנטים" },
-          { icon:"🎓",   value: tracks.length,       label:"מסלולים" },
-          { icon:"🎙️",  value:(studios||[]).length, label:"חדרים" },
+          { icon:<GraduationCap size={26} strokeWidth={1.75} color="var(--accent)" />,   value: tracks.length,       label:"מסלולים" },
+          { icon:<Mic size={26} strokeWidth={1.75} color="var(--accent)" />,  value:(studios||[]).length, label:"חדרים" },
           { icon:"📽️",  value: todayLessons.length, label:"שיעורים היום" },
         ].map(s => (
           <div key={s.label} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 16px",textAlign:"center"}}>
@@ -270,7 +271,7 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
 
         {/* Tracks */}
         <div className="card">
-          <div className="card-header"><div className="card-title">🎓 מסלולי לימוד</div></div>
+          <div className="card-header"><div className="card-title" style={{display:"flex",alignItems:"center",gap:6}}><GraduationCap size={16} strokeWidth={1.75} color="var(--accent)" /> מסלולי לימוד</div></div>
           <div style={{padding:"0 16px 12px"}}>
             {tracks.length === 0
               ? <div style={{color:"var(--text3)",fontSize:13,padding:"12px 0"}}>אין נתונים</div>
@@ -311,7 +312,7 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
       {/* ── Weekly studio grid ── */}
       <div className="card" style={{marginBottom:20}}>
         <div className="card-header" style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
-          <div className="card-title">🎙️ לוח חדרים שבועי — {weekLabel}</div>
+          <div className="card-title" style={{display:"flex",alignItems:"center",gap:6}}><Mic size={16} strokeWidth={1.75} color="var(--accent)" /> לוח חדרים שבועי — {weekLabel}</div>
           {!isMobile && (
             <div style={{display:"flex",gap:6}}>
               <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(w => w - 1)}>›</button>
@@ -406,7 +407,7 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
       {/* ── Combined daily schedule table ── */}
       <div className="card" style={{marginBottom:20}}>
         <div className="card-header" style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
-          <div className="card-title">📋 לו״ז יומי משולב — {dayViewLabel}</div>
+          <div className="card-title" style={{display:"flex",alignItems:"center",gap:6}}><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> לו״ז יומי משולב — {dayViewLabel}</div>
           <div style={{display:"flex",gap:6,alignItems:"center"}}>
             <button className="btn btn-secondary btn-sm" onClick={() => shiftDayView(1)}>›</button>
             <button className="btn btn-secondary btn-sm" style={{fontSize:11}} onClick={() => setDayViewDate(today)}>היום</button>
@@ -470,7 +471,7 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
       {/* ── Upcoming lessons ── */}
       {upcoming.length > 0 && (
         <div className="card">
-          <div className="card-header"><div className="card-title">📅 שיעורים קרובים (7 ימים)</div></div>
+          <div className="card-header"><div className="card-title" style={{display:"flex",alignItems:"center",gap:6}}><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> שיעורים קרובים (7 ימים)</div></div>
           <div style={{padding:"0 16px 12px"}}>
             {upcoming.map((s, i) => (
               <div key={i} style={{display:"flex",gap:isMobile ? 8 : 12,alignItems:"center",padding:"9px 0",borderBottom:"1px solid var(--border)",flexWrap: isMobile ? "wrap" : "nowrap"}}>

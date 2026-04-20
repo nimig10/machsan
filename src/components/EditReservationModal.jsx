@@ -1,6 +1,7 @@
 // EditReservationModal.jsx — modal for editing an existing reservation
 import { useState } from "react";
 import { Modal } from "./ui.jsx";
+import { Calendar, CheckCircle, Mic, Minus, Package, X } from "lucide-react";
 import {
   formatDate,
   toDateTime,
@@ -50,7 +51,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
         }),
       });
       setReportNote("");
-      alert("✅ הדיווח נשלח למנהל המכללה");
+      alert("הדיווח נשלח למנהל המכללה");
     } catch(e) { console.error(e); }
     setReportSending(false);
   };
@@ -63,7 +64,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
         id: item.equipment_id,
         name: item.name || eq.name || "?",
         category: eq.category || "",
-        image: eq.image || "📦",
+        image: eq.image || null,
         soundOnly: !!eq.soundOnly,
         photoOnly: !!eq.photoOnly,
       };
@@ -102,7 +103,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
         }),
       });
       setOverdueEditMailText("");
-      alert(`✅ המייל נשלח אל ${reservation.email}`);
+      alert(`המייל נשלח אל ${reservation.email}`);
     } catch (e) {
       console.error(e);
       alert("שגיאה בשליחת המייל לסטודנט המאחר");
@@ -214,17 +215,17 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
       <div style={{width:"100%",maxWidth:760,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"20px 24px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0"}}>
           <div>
-            <div style={{fontWeight:900,fontSize:18}}>✏️ עריכת בקשה</div>
+            <div style={{fontWeight:900,fontSize:18}}>עריכת בקשה</div>
             <div style={{fontSize:14,color:"var(--text2)",marginTop:4,fontWeight:700}}>{reservation.student_name}</div>
             <div style={{fontSize:13,color:"var(--text)",marginTop:6,fontWeight:800}}>סטטוס: {reservation.status}</div>
             <div style={{display:"flex",gap:8,marginTop:4,alignItems:"center",flexWrap:"wrap"}}>
-              <span style={{fontSize:12,color:"var(--accent)",fontWeight:700,background:"var(--surface3)",borderRadius:20,padding:"2px 10px"}}>
-                {reservation.loan_type==="פרטית"?"👤":reservation.loan_type==="הפקה"?"🎬":reservation.loan_type==="קולנוע יומית"?"🎥":"🎙️"} {reservation.loan_type==="סאונד"?"השאלת סאונד":reservation.loan_type==="קולנוע יומית"?"קולנוע יומית":`השאלה ${reservation.loan_type}`}
+              <span style={{fontSize:12,color:"var(--accent)",fontWeight:700,background:"var(--surface3)",borderRadius:20,padding:"2px 10px",display:"inline-flex",alignItems:"center",gap:4}}>
+                {reservation.loan_type==="סאונד" ? <Mic size={12} strokeWidth={1.75} /> : <Package size={12} strokeWidth={1.75} />} {reservation.loan_type==="סאונד"?"השאלת סאונד":reservation.loan_type==="קולנוע יומית"?"קולנוע יומית":`השאלה ${reservation.loan_type}`}
               </span>
               <span style={{fontSize:11,color:"var(--text3)"}}>· {formatDate(reservation.borrow_date)}</span>
             </div>
           </div>
-          <button className="btn btn-secondary btn-sm" onClick={onClose}>✕ סגור</button>
+          <button className="btn btn-secondary btn-sm" onClick={onClose}><X size={16} strokeWidth={1.75} color="var(--text3)" /> סגור</button>
         </div>
 
         <div style={{padding:24,display:"flex",flexDirection:"column",gap:24}}>
@@ -292,7 +293,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                 onChange={e=>setEditSearch(e.target.value)}
               />
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                {[{k:"all",l:"📦 הכל"},{k:"sound",l:"🎙️ ציוד סאונד"},{k:"photo",l:"🎥 ציוד צילום"}].map(({k,l})=>(
+                {[{k:"all",l:<><Package size={14} strokeWidth={1.75} /> הכל</>},{k:"sound",l:<><Mic size={14} strokeWidth={1.75} /> ציוד סאונד</>},{k:"photo",l:"🎥 ציוד צילום"}].map(({k,l})=>(
                   <button
                     key={k}
                     type="button"
@@ -360,13 +361,13 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                         >
                           {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
                             ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:32,height:32,objectFit:"cover",borderRadius:6}}/>
-                            : <span style={{fontSize:22}}>{eq.image||"📦"}</span>}
+                            : <span style={{fontSize:22}}>{eq.image || <Package size={22} strokeWidth={1.75} color="var(--accent)" />}</span>}
                           <div style={{flex:1}}>
                             <div style={{fontWeight:700,fontSize:13,color:!isOverdueReservation && hasApprovalConflict?"var(--yellow)":"var(--text)"}}>{eq.name}</div>
                             <div style={{fontSize:11,color:"var(--text3)",display:"flex",gap:10,flexWrap:"wrap",marginTop:2}}>
                               <span>כמות: <strong style={{color:"var(--accent)"}}>{qty}</strong></span>
                               {eq.category && <span>{eq.category}</span>}
-                              {eq.soundOnly && <span style={{color:"var(--accent)"}}>🎙️ ציוד סאונד</span>}
+                              {eq.soundOnly && <span style={{color:"var(--accent)",display:"inline-flex",alignItems:"center",gap:2}}><Mic size={12} strokeWidth={1.75} /> ציוד סאונד</span>}
                               {eq.photoOnly && <span style={{color:"var(--green)"}}>🎥 ציוד צילום</span>}
                               {!isOverdueReservation && <span>זמין: <span style={{color:remaining===0?"var(--red)":remaining<=2?"var(--yellow)":"var(--green)",fontWeight:700}}>{remaining}</span></span>}
                               {!isOverdueReservation && details.usedByOthers>0 && <span>חסום ע"י אחרים: <strong style={{color:"var(--red)"}}>{details.usedByOthers}</strong></span>}
@@ -381,7 +382,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                           </div>
                           {!isOverdueReservation && (
                             <div className="qty-ctrl">
-                              <button className="qty-btn" onClick={()=>setQty(eq.id,qty-1)}>−</button>
+                              <button className="qty-btn" onClick={()=>setQty(eq.id,qty-1)}><Minus size={14} strokeWidth={1.75} color="var(--text3)" /></button>
                               <span className="qty-num">{qty}</span>
                               <button className="qty-btn" disabled={remaining<=0} onClick={()=>setQty(eq.id,qty+1)}>+</button>
                             </div>
@@ -429,7 +430,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
               <div style={{fontWeight:700,fontSize:12,marginBottom:6,color:"var(--text2)"}}>📧 דיווח למנהל המכללה</div>
               <textarea className="form-textarea" rows={2} style={{marginBottom:6}} placeholder="פרט את הבעיה בבקשה..." value={reportNote} onChange={e=>setReportNote(e.target.value)}/>
               <button className="btn btn-secondary btn-sm" disabled={!reportNote.trim()||reportSending} onClick={sendManagerReport}>
-                {reportSending?"⏳ שולח...":"📧 שלח דיווח למנהל"}
+                {reportSending?"שולח...":"שלח דיווח למנהל"}
               </button>
             </div>
           )}
@@ -450,7 +451,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                 disabled={!overdueEditMailText.trim()||overdueEditMailSending||!reservation.email}
                 onClick={sendOverdueMailFromEdit}
               >
-                {overdueEditMailSending?"⏳ שולח...":"📧 שלח מייל לסטודנט המאחר"}
+                {overdueEditMailSending?"שולח...":"שלח מייל לסטודנט המאחר"}
               </button>
               <span style={{fontSize:12,color:"var(--text3)",marginRight:10}}>
                 {reservation.email ? `יישלח אל ${reservation.email}` : "אין כתובת מייל"}
@@ -478,7 +479,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                   setSaving(false);
                 }}
               >
-                ✅ אשר והעבר למאושר
+                <CheckCircle size={16} strokeWidth={1.75} /> אשר והעבר למאושר
               </button>
             )}
             {!isOverdueReservation && reservation.status==="נדחה"&&onApprove&&(
@@ -486,9 +487,9 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                 setSaving(true);
                 await onApprove({...form, items, status:"מאושר"});
                 setSaving(false);
-              }}>✅ שמור ואשר</button>
+              }}><CheckCircle size={16} strokeWidth={1.75} /> שמור ואשר</button>
             )}
-            {!isOverdueReservation && <button className="btn btn-primary" disabled={saving} onClick={save}>{saving?"⏳ שומר...":"💾 שמור שינויים"}</button>}
+            {!isOverdueReservation && <button className="btn btn-primary" disabled={saving} onClick={save}>{saving?"שומר...":"שמור שינויים"}</button>}
           </div>
         </div>
       </div>
@@ -520,7 +521,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                         <span style={{fontWeight:900,fontSize:15,color:"var(--red)"}}>כמות חסומה: {blocker.quantity}</span>
                       </div>
                       <div style={{fontSize:12,color:"var(--text2)",display:"flex",flexWrap:"wrap",gap:10}}>
-                        <span>📅 {formatDate(blocker.borrow_date)} {blocker.borrow_time || ""}</span>
+                        <span><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> {formatDate(blocker.borrow_date)} {blocker.borrow_time || ""}</span>
                         <span>↩ {formatDate(blocker.return_date)} {blocker.return_time || ""}</span>
                       </div>
                     </div>

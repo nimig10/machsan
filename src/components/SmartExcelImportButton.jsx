@@ -268,7 +268,7 @@ ${csvText}
         onClick={() => fileInputRef.current?.click()}
         disabled={isProcessing}
       >
-        {isProcessing ? "⏳ מנתח עם AI..." : "✨ ייבוא קובץ XL"}
+        {isProcessing ? "מנתח עם AI..." : "ייבוא קובץ XL"}
       </button>
 
       {showRetryModal && (

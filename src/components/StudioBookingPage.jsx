@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { BookOpen, Calendar, ClipboardList, Film, GraduationCap, Mic, Pencil, Shield, User, Video, X } from "lucide-react";
 import { storageSet, lsGet, getAuthToken } from "../utils.js";
 import { Modal } from "./ui.jsx";
 
@@ -398,7 +399,7 @@ export default function StudioBookingPage(props) {
     if (studio.image?.startsWith("http") || studio.image?.startsWith("data:")) {
       return <img src={studio.image} alt={studio.name} style={{ width:size, height:size, borderRadius:6, objectFit:"cover" }} />;
     }
-    return <span style={{ fontSize:size * 0.65 }}>{studio.image || "🎙️"}</span>;
+    return <span style={{ fontSize:size * 0.65 }}>{studio.image || <Mic size={Math.round(size * 0.65)} strokeWidth={1.75} />}</span>;
   };
 
   const openAddBookingModal = (studioId, studioName, date, dayName) => {
@@ -793,8 +794,8 @@ export default function StudioBookingPage(props) {
           </div>
           <div style={{ fontSize:14, fontWeight:700, color:"var(--text)" }}>{getBookingTitle(booking)}</div>
           {subtitle && <div style={{ fontSize:12, color:"var(--text2)", marginTop:2 }}>{subtitle}</div>}
-          <div style={{ fontSize:12, color:"var(--text3)", marginTop:2 }}>📅 {booking.date} · ⏰ {getBookingTimeLabel(booking)}</div>
-          {booking.notes && <div style={{ fontSize:11, color:"var(--text3)", marginTop:2 }}>📝 {booking.notes}</div>}
+          <div style={{ fontSize:12, color:"var(--text3)", marginTop:2 }}><Calendar size={16} strokeWidth={1.75} /> {booking.date} · ⏰ {getBookingTimeLabel(booking)}</div>
+          {booking.notes && <div style={{ fontSize:11, color:"var(--text3)", marginTop:2 }}>{booking.notes}</div>}
         </div>
         {canDeleteBooking(booking) && (
           <button
@@ -818,9 +819,9 @@ export default function StudioBookingPage(props) {
       {!isEmbedded && (
         <div className="flex-between mb-4" style={{ flexWrap:"wrap", gap:8 }}>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-            <button className={`btn ${activeView==="calendar" ? "btn-primary" : "btn-secondary"}`} onClick={() => setActiveView("calendar")}>📅 לוח שנה</button>
+            <button className={`btn ${activeView==="calendar" ? "btn-primary" : "btn-secondary"}`} onClick={() => setActiveView("calendar")}><Calendar size={16} strokeWidth={1.75} /> לוח שנה</button>
             <button className={`btn ${activeView==="list" ? "btn-primary" : "btn-secondary"}`} onClick={() => setActiveView("list")}>
-              📋 כל ההזמנות {activeBookings.length > 0 && <span style={{ background:"var(--accent)", color:"#000", borderRadius:"50%", padding:"1px 6px", fontSize:11, marginRight:4 }}>{activeBookings.length}</span>}
+              <ClipboardList size={16} strokeWidth={1.75} /> כל ההזמנות {activeBookings.length > 0 && <span style={{ background:"var(--accent)", color:"#000", borderRadius:"50%", padding:"1px 6px", fontSize:11, marginRight:4 }}>{activeBookings.length}</span>}
             </button>
             {role === "admin" && <button className={`btn ${activeView==="manage" ? "btn-primary" : "btn-secondary"}`} onClick={() => setActiveView("manage")}>🏛️ ניהול חדרים</button>}
           </div>
@@ -844,13 +845,13 @@ export default function StudioBookingPage(props) {
                   <div key={index} onClick={() => day && jumpToDate(day)} style={{ fontSize:12, fontWeight:isInCurrentWeek(day) ? 800 : 500, padding:"5px 0", cursor:day ? "pointer" : "default", borderRadius:"50%", background:isTodayMini(day) ? "var(--accent)" : isInCurrentWeek(day) ? "rgba(245,166,35,0.15)" : "transparent", color:isTodayMini(day) ? "#000" : isInCurrentWeek(day) ? "var(--accent)" : day ? "var(--text)" : "transparent" }}>{day || ""}</div>
                 ))}
               </div>
-              <button onClick={() => { setWeekOffset(0); const now = new Date(); setMiniMonth({ year:now.getFullYear(), month:now.getMonth() }); }} style={{ width:"100%", marginTop:8, padding:"6px 0", borderRadius:6, border:"1px solid var(--accent)", background:"transparent", color:"var(--accent)", fontWeight:700, fontSize:12, cursor:"pointer" }}>📅 היום</button>
+              <button onClick={() => { setWeekOffset(0); const now = new Date(); setMiniMonth({ year:now.getFullYear(), month:now.getMonth() }); }} style={{ width:"100%", marginTop:8, padding:"6px 0", borderRadius:6, border:"1px solid var(--accent)", background:"transparent", color:"var(--accent)", fontWeight:700, fontSize:12, cursor:"pointer" }}><Calendar size={16} strokeWidth={1.75} /> היום</button>
             </div>
           )}
 
           {studios.length === 0 ? (
             <div style={{ textAlign:"center", padding:48, color:"var(--text3)" }}>
-              <div style={{ fontSize:48, marginBottom:12 }}>🎙️</div>
+              <div style={{ fontSize:48, marginBottom:12 }}><Mic size={48} strokeWidth={1.75} color="var(--accent)" /></div>
               <div style={{ fontWeight:700, fontSize:16, marginBottom:8 }}>אין אולפנים עדיין</div>
             </div>
           ) : visibleStudios.length === 0 ? (
@@ -870,7 +871,7 @@ export default function StudioBookingPage(props) {
                   </span>
                   <button className="btn btn-secondary btn-sm" onClick={() => { if (mobileDayStart + MOBILE_DAYS < 7) setMobileDayStart(s => s + MOBILE_DAYS); else setWeekOffset(w => w + 1); }}>←</button>
                   <button className="btn btn-secondary btn-sm" onClick={() => { setWeekOffset(0); }} style={{ fontSize:11 }}>היום</button>
-                  <button className={`btn btn-sm ${lessonsFilter ? "btn-primary" : "btn-secondary"}`} onClick={() => setLessonsFilter(f => !f)} style={{ fontSize:11, background: lessonsFilter ? "rgba(245,166,35,0.25)" : undefined, borderColor: lessonsFilter ? "#f5a623" : undefined, color: lessonsFilter ? "#f5a623" : undefined }}>📚 שיעורים</button>
+                  <button className={`btn btn-sm ${lessonsFilter ? "btn-primary" : "btn-secondary"}`} onClick={() => setLessonsFilter(f => !f)} style={{ fontSize:11, background: lessonsFilter ? "rgba(245,166,35,0.25)" : undefined, borderColor: lessonsFilter ? "#f5a623" : undefined, color: lessonsFilter ? "#f5a623" : undefined }}><BookOpen size={16} strokeWidth={1.75} /> שיעורים</button>
                   <button className="btn btn-secondary btn-sm" onClick={() => setCalendarFullscreen(true)} style={{ fontSize:11 }}>⛶</button>
                 </>
               ) : (
@@ -878,13 +879,13 @@ export default function StudioBookingPage(props) {
                   <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current - 1)}>→</button>
                   <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset(0)}>היום</button>
                   <button className="btn btn-secondary btn-sm" onClick={() => setWeekOffset((current) => current + 1)}>←</button>
-                  <button className={`btn btn-sm ${lessonsFilter ? "btn-primary" : "btn-secondary"}`} onClick={() => setLessonsFilter(f => !f)} style={{ fontSize:12, background: lessonsFilter ? "rgba(245,166,35,0.25)" : undefined, borderColor: lessonsFilter ? "#f5a623" : undefined, color: lessonsFilter ? "#f5a623" : undefined }}>📚 שיעורים</button>
+                  <button className={`btn btn-sm ${lessonsFilter ? "btn-primary" : "btn-secondary"}`} onClick={() => setLessonsFilter(f => !f)} style={{ fontSize:12, background: lessonsFilter ? "rgba(245,166,35,0.25)" : undefined, borderColor: lessonsFilter ? "#f5a623" : undefined, color: lessonsFilter ? "#f5a623" : undefined }}><BookOpen size={16} strokeWidth={1.75} /> שיעורים</button>
                   {!calendarFullscreen && <span style={{ fontSize:12, color:"var(--text3)", whiteSpace:"nowrap" }}>
                     {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth() + 1).padStart(2, "0")} – {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth() + 1).padStart(2, "0")}
                   </span>}
                   {!calendarFullscreen && <span style={{ fontSize:15, fontWeight:900, color:"var(--accent)", marginRight:4 }}>{weekMonthLabel}</span>}
                   <div style={{ flex:1 }} />
-                  <button className="btn btn-secondary btn-sm" onClick={() => setCalendarFullscreen(f => !f)} title={calendarFullscreen ? "סגור מסך מלא" : "פתח מסך מלא"} style={{ whiteSpace:"nowrap" }}>{calendarFullscreen ? "✕ סגור" : "⛶ מסך מלא"}</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setCalendarFullscreen(f => !f)} title={calendarFullscreen ? "סגור מסך מלא" : "פתח מסך מלא"} style={{ whiteSpace:"nowrap" }}>{calendarFullscreen ? <><X size={16} strokeWidth={1.75} color="var(--text3)" /> סגור</> : "⛶ מסך מלא"}</button>
                 </>
               )}
             </div>
@@ -924,10 +925,10 @@ export default function StudioBookingPage(props) {
                             <span style={{ fontSize: isMobile ? 9 : 11, fontWeight:800, lineHeight:1.2, wordBreak:"break-word", textAlign:"center" }}>{studio.name}</span>
                             {!isMobile && (() => {
                               const certNames = getStudioCertNames(studio);
-                              return certNames.length ? <span style={{ fontSize:9, color:"var(--accent)", lineHeight:1.2, wordBreak:"break-word", textAlign:"center" }}>🎓 {certNames.join(", ")}</span> : null;
+                              return certNames.length ? <span style={{ fontSize:9, color:"var(--accent)", lineHeight:1.2, wordBreak:"break-word", textAlign:"center" }}><GraduationCap size={9} strokeWidth={1.75} /> {certNames.join(", ")}</span> : null;
                             })()}
                             {studio.isClassroom && <div style={{ fontSize:9, color:"#3498db", fontWeight:800 }}>🏫 כיתה</div>}
-                            {studio.classroomOnly && <div style={{ fontSize:9, color:"#fff", fontWeight:800, background:"#3498db", borderRadius:4, padding:"1px 5px" }}>🔒</div>}
+                            {studio.classroomOnly && <div style={{ fontSize:9, color:"#fff", fontWeight:800, background:"#3498db", borderRadius:4, padding:"1px 5px" }}><Shield size={9} strokeWidth={1.75} /></div>}
                             {isStudioDisabled(studio) && <div style={{ fontSize:9, color:"var(--red)", fontWeight:800 }}>🔧</div>}
                           </div>
                         )}
@@ -946,7 +947,7 @@ export default function StudioBookingPage(props) {
                                 <div key={booking.id} style={{ background:`${color}20`, border:`1.5px solid ${color}`, borderRadius:6, padding: isMobile && !calendarFullscreen ? "3px 4px" : "5px 7px", marginBottom:4, fontSize: isMobile && !calendarFullscreen ? 10 : 12, cursor:"pointer", wordBreak:"break-word", whiteSpace:"normal", textAlign:"right" }} onClick={(event) => { event.stopPropagation(); openViewBookingModal(booking, studio.name); }}>
                                   <div style={{ fontWeight:900, color, fontSize: isMobile && !calendarFullscreen ? 10 : 12 }}>{getBookingTimeLabel(booking)}</div>
                                   <div style={{ color:"var(--text)", fontWeight:800, fontSize: isMobile && !calendarFullscreen ? 10 : 12, lineHeight:1.35 }}>{getBookingTitle(booking)}</div>
-                                  {!isMobile && booking.instructorName && <div style={{ color:"var(--text2)", fontSize:11, fontWeight:600, lineHeight:1.3, marginTop:2 }}>👨‍🏫 {booking.instructorName}</div>}
+                                  {!isMobile && booking.instructorName && <div style={{ color:"var(--text2)", fontSize:11, fontWeight:600, lineHeight:1.3, marginTop:2 }}>{booking.instructorName}</div>}
                                 </div>
                               );
                             })}
@@ -990,9 +991,9 @@ export default function StudioBookingPage(props) {
             <div style={{ textAlign:"center", padding:48, color:"var(--text3)" }}>אין הזמנות להצגה בטווח שנבחר</div>
           ) : (
             <>
-              <SectionHeader label="קביעות שיעורים" color={LESSON_COLOR} count={lessonBookings.length} icon="📚" />
+              <SectionHeader label="קביעות שיעורים" color={LESSON_COLOR} count={lessonBookings.length} icon={<BookOpen size={16} strokeWidth={1.75} />} />
               {lessonBookings.map(BookingRow)}
-              <SectionHeader label="קביעות סטודנטים" color={STUDENT_COLOR} count={studentBookings.length} icon="🎓" />
+              <SectionHeader label="קביעות סטודנטים" color={STUDENT_COLOR} count={studentBookings.length} icon={<GraduationCap size={16} strokeWidth={1.75} />} />
               {studentBookings.map(BookingRow)}
               <SectionHeader label="קביעות לילה" color={NIGHT_COLOR} count={nightBookings.length} icon="🌙" />
               {nightBookings.map(BookingRow)}
@@ -1025,18 +1026,18 @@ export default function StudioBookingPage(props) {
                   <div style={{ fontSize:12, color:"var(--text3)" }}>
                     {(() => {
                       const certNames = getStudioCertNames(studio);
-                      return certNames.length ? <span style={{ color:"var(--accent)" }}>🎓 {certNames.join(", ")}</span> : "ללא הסמכה";
+                      return certNames.length ? <span style={{ color:"var(--accent)" }}><GraduationCap size={16} strokeWidth={1.75} /> {certNames.join(", ")}</span> : "ללא הסמכה";
                     })()}
                     {" · "}
                     {activeBookings.filter((booking) => sameStudioId(booking.studioId, studio.id)).length} קביעות
                     {studio.isClassroom && <span style={{ color:"#3498db", fontWeight:800 }}> · 🏫 כיתת לימוד</span>}
-                    {studio.classroomOnly && <span style={{ color:"#fff", fontWeight:800, background:"#3498db", borderRadius:4, padding:"1px 6px", marginRight:4, fontSize:11 }}>🔒 כיתה בלבד</span>}
+                    {studio.classroomOnly && <span style={{ color:"#fff", fontWeight:800, background:"#3498db", borderRadius:4, padding:"1px 6px", marginRight:4, fontSize:11 }}><Shield size={16} strokeWidth={1.75} /> כיתה בלבד</span>}
                     {isStudioDisabled(studio) && <span style={{ color:"var(--red)", fontWeight:800 }}> · מושבת לתחזוקה</span>}
                   </div>
                 </div>
               </div>
               <div style={{ display:"flex", gap:6 }}>
-                <button className="btn btn-secondary btn-sm" onClick={() => { setEditImage(""); setModal({ type:"editStudio", studio }); }}>✏️ עריכה</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => { setEditImage(""); setModal({ type:"editStudio", studio }); }} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> עריכה</button>
                 <button className="btn btn-secondary btn-sm" style={{ color:"var(--red)", borderColor:"var(--red)" }} onClick={() => deleteStudio(studio.id)}>🗑️ מחק</button>
               </div>
             </div>
@@ -1067,7 +1068,7 @@ export default function StudioBookingPage(props) {
             <div style={{ fontSize:12, color:"var(--text3)", marginTop:-4 }}>כאשר מסומן, החדר יופיע לשיוך קורסים ברובריקת "שיעורים".</div>
             <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, fontWeight:700, color:"var(--text2)", background:"rgba(52,152,219,0.10)", border:"1px solid rgba(52,152,219,0.28)", borderRadius:8, padding:"10px 12px" }}>
               <input type="checkbox" name="classroomOnly" defaultChecked={false} onChange={e=>{ if(e.target.checked) e.target.form.elements.isClassroom.checked=false; }} style={{ width:18, height:18, accentColor:"#3498db" }} />
-              🔒 כיתה בלבד
+              <Shield size={16} strokeWidth={1.75} /> כיתה בלבד
             </label>
             <div style={{ fontSize:12, color:"var(--text3)", marginTop:-4 }}>כאשר מסומן, החדר לא יופיע בטופס ההשאלה לסטודנטים — לקביעות שיעורים בלבד.</div>
           </form>
@@ -1075,7 +1076,7 @@ export default function StudioBookingPage(props) {
       )}
 
       {modal?.type === "editStudio" && (
-        <Modal title="✏️ עריכת חדר" onClose={closeModal} footer={<><button className="btn btn-secondary" onClick={closeModal}>ביטול</button><button form="editStudioForm" type="submit" className="btn btn-primary" disabled={imgUploading}>{imgUploading ? "מעלה תמונה..." : "שמור"}</button></>}>
+        <Modal title="עריכת חדר" onClose={closeModal} footer={<><button className="btn btn-secondary" onClick={closeModal}>ביטול</button><button form="editStudioForm" type="submit" className="btn btn-primary" disabled={imgUploading}>{imgUploading ? "מעלה תמונה..." : "שמור"}</button></>}>
           <form id="editStudioForm" onSubmit={handleEditStudio} style={{ display:"flex", flexDirection:"column", gap:12 }}>
             <label style={labelStyle}>שם החדר *<input name="name" className="form-input" defaultValue={modal.studio.name} required /></label>
             <label style={labelStyle}>הסמכת חדר<select name="studioCertId" className="form-input" defaultValue={modal.studio.studioCertId || modal.studio.studioCertIds?.[0] || ""}><option value="">ללא הסמכה</option>{studioCertTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select></label>
@@ -1089,7 +1090,7 @@ export default function StudioBookingPage(props) {
             </label>
             <div style={{ fontSize:11, color:"var(--text3)", marginTop:-6 }}>בחירת סיווג תגביל את החדר לסטודנטים ממסלול מאותו סוג בטופס ההשאלה.</div>
             <label style={labelStyle}>תיאור החדר<textarea name="description" className="form-input" placeholder="תיאור קצר שיוצג לסטודנטים בטופס ההשאלה..." rows={3} style={{ resize:"vertical" }} defaultValue={modal.studio.description || ""} /></label>
-            <div style={{ fontSize:13, fontWeight:600, color:"var(--text2)" }}>תמונה נוכחית:<div style={{ marginTop:4 }}>{(editImage || modal.studio.image)?.startsWith("http") ? <img src={editImage || modal.studio.image} alt="תמונה" style={{ width:80, height:80, objectFit:"cover", borderRadius:8 }} /> : <span style={{ fontSize:32 }}>{modal.studio.image || "🎙️"}</span>}</div></div>
+            <div style={{ fontSize:13, fontWeight:600, color:"var(--text2)" }}>תמונה נוכחית:<div style={{ marginTop:4 }}>{(editImage || modal.studio.image)?.startsWith("http") ? <img src={editImage || modal.studio.image} alt="תמונה" style={{ width:80, height:80, objectFit:"cover", borderRadius:8 }} /> : <span style={{ fontSize:32 }}>{modal.studio.image || <Mic size={32} strokeWidth={1.75} />}</span>}</div></div>
             <label style={labelStyle}>החלף תמונה<input type="file" accept="image/*" onChange={(event) => void handleImageUpload(event, setEditImage)} style={{ fontSize:13 }} disabled={imgUploading} />{imgUploading && <div style={{ fontSize:12, color:"var(--accent)", marginTop:4 }}>מעלה תמונה...</div>}</label>
             <label style={labelStyle}>או אימוג'י<input name="emoji" className="form-input" placeholder="🎙️" maxLength={4} /></label>
             <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, fontWeight:700, color:"var(--text2)", background:"rgba(52,152,219,0.06)", border:"1px solid rgba(52,152,219,0.18)", borderRadius:8, padding:"10px 12px" }}>
@@ -1099,7 +1100,7 @@ export default function StudioBookingPage(props) {
             <div style={{ fontSize:12, color:"var(--text3)", marginTop:-4 }}>כאשר מסומן, החדר יופיע לשיוך קורסים ברובריקת "שיעורים".</div>
             <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, fontWeight:700, color:"var(--text2)", background:"rgba(52,152,219,0.10)", border:"1px solid rgba(52,152,219,0.28)", borderRadius:8, padding:"10px 12px" }}>
               <input type="checkbox" name="classroomOnly" defaultChecked={Boolean(modal.studio.classroomOnly)} onChange={e=>{ if(e.target.checked) e.target.form.elements.isClassroom.checked=false; }} style={{ width:18, height:18, accentColor:"#3498db" }} />
-              🔒 כיתה בלבד
+              <Shield size={16} strokeWidth={1.75} /> כיתה בלבד
             </label>
             <div style={{ fontSize:12, color:"var(--text3)", marginTop:-4 }}>כאשר מסומן, החדר לא יופיע בטופס ההשאלה לסטודנטים — לקביעות שיעורים בלבד.</div>
             <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, fontWeight:700, color:"var(--text2)", background:"rgba(231,76,60,0.06)", border:"1px solid rgba(231,76,60,0.14)", borderRadius:8, padding:"10px 12px" }}>
@@ -1112,18 +1113,18 @@ export default function StudioBookingPage(props) {
       )}
 
       {modal?.type === "addBooking" && (
-        <Modal title={`📅 קביעת חדר לצוות — ${modal.studioName} · ${modal.dayName} ${modal.date}`} onClose={closeModal} footer={<><button className="btn btn-secondary" onClick={closeModal}>ביטול</button><button form="addBookingForm" type="submit" className="btn btn-primary" disabled={saving}>{saving ? "שומר..." : "שמור קביעה"}</button></>}>
+        <Modal title={<><Calendar size={16} strokeWidth={1.75} /> {`קביעת חדר לצוות — ${modal.studioName} · ${modal.dayName} ${modal.date}`}</>} onClose={closeModal} footer={<><button className="btn btn-secondary" onClick={closeModal}>ביטול</button><button form="addBookingForm" type="submit" className="btn btn-primary" disabled={saving}>{saving ? "שומר..." : "שמור קביעה"}</button></>}>
           <form id="addBookingForm" onSubmit={submitBooking} style={{ display:"flex", flexDirection:"column", gap:12 }}>
             {/* Current user auto-assigned */}
             <div style={{ background:"rgba(155,89,182,0.08)", border:"1px solid rgba(155,89,182,0.2)", borderRadius:8, padding:"10px 12px", fontSize:13, fontWeight:600, color:"var(--text)" }}>
-              👤 קביעה על שם: <strong>{currentUser?.full_name || currentUser?.name || "—"}</strong>
+              <User size={14} strokeWidth={1.75} style={{display:"inline",verticalAlign:"middle",marginLeft:4}}/> קביעה על שם: <strong>{currentUser?.full_name || currentUser?.name || "—"}</strong>
             </div>
             <label style={labelStyle}>
               מופעים חוזרים שבועיים
               <input name="repeatCount" type="number" min="0" max="24" defaultValue="0" className="form-input" />
               <span style={{ fontSize:11, color:"var(--text3)", fontWeight:500 }}>0 = בלי שכפול. כל ערך אחר ייצור מופעים נוספים שבוע אחרי שבוע באותו יום ובאותן שעות.</span>
             </label>
-            {bookingRequiredCert.length > 0 && <div style={{ background:"rgba(52,152,219,0.08)", border:"1px solid rgba(52,152,219,0.2)", borderRadius:8, padding:"8px 12px", fontSize:12, color:"var(--blue)", fontWeight:600 }}>🎓 החדר הזה דורש לסטודנטים הסמכה: {bookingRequiredCert.map((type) => type.name).join(" / ")}. קביעת צוות ממשיכה לעבוד גם בלי הסמכה.</div>}
+            {bookingRequiredCert.length > 0 && <div style={{ background:"rgba(52,152,219,0.08)", border:"1px solid rgba(52,152,219,0.2)", borderRadius:8, padding:"8px 12px", fontSize:12, color:"var(--blue)", fontWeight:600 }}><GraduationCap size={16} strokeWidth={1.75} /> החדר הזה דורש לסטודנטים הסמכה: {bookingRequiredCert.map((type) => type.name).join(" / ")}. קביעת צוות ממשיכה לעבוד גם בלי הסמכה.</div>}
             <div style={{ display:"flex", gap:8 }}>
               <label style={{ ...labelStyle, flex:1 }}>
                 שעת התחלה *
@@ -1179,7 +1180,7 @@ export default function StudioBookingPage(props) {
       )}
 
       {modal?.type === "viewBooking" && (
-        <Modal title={`📋 הזמנה — ${modal.studioName}`} onClose={closeModal} footer={(() => {
+        <Modal title={<><ClipboardList size={16} strokeWidth={1.75} /> {`הזמנה — ${modal.studioName}`}</>} onClose={closeModal} footer={(() => {
           const booking = modal.booking;
           const kind = getBookingKind(booking);
           const isEditingLesson = modal.lessonEditing;
@@ -1188,13 +1189,13 @@ export default function StudioBookingPage(props) {
               <div style={{ display:"flex", gap:8 }}>
                 {canDeleteBooking(booking) && <button className="btn btn-secondary btn-sm" style={{ color:"var(--red)", borderColor:"var(--red)" }} onClick={() => void deleteBooking(booking.id)}>{kind === "student" ? "מחק ושלח" : "מחק"}</button>}
                 {kind === "lesson" && !isEditingLesson && role === "admin" && setLessons && (
-                  <button className="btn btn-secondary btn-sm" onClick={() => setModal(prev => ({ ...prev, lessonEditing: true, lessonStartTime: booking.startTime, lessonEndTime: booking.endTime, lessonStudioId: String(booking.studioId || "") }))}>✏️ ערוך שעות / חדר</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setModal(prev => ({ ...prev, lessonEditing: true, lessonStartTime: booking.startTime, lessonEndTime: booking.endTime, lessonStudioId: String(booking.studioId || "") }))} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> ערוך שעות / חדר</button>
                 )}
                 {kind === "lesson" && isEditingLesson && (
                   <button className="btn btn-primary btn-sm" disabled={saving} onClick={() => saveLessonBookingEdit()}>{saving ? "שומר..." : "💾 שמור שינויים"}</button>
                 )}
                 {kind === "lesson" && onNavigateToLesson && booking.lesson_id && (
-                  <button className="btn btn-secondary btn-sm" style={{ color:LESSON_COLOR, borderColor:LESSON_COLOR }} onClick={() => { closeModal(); onNavigateToLesson(booking.lesson_id); }}>📽️ עריכת קורס</button>
+                  <button className="btn btn-secondary btn-sm" style={{ color:LESSON_COLOR, borderColor:LESSON_COLOR, display:"inline-flex", alignItems:"center", gap:4 }} onClick={() => { closeModal(); onNavigateToLesson(booking.lesson_id); }}><Video size={12} strokeWidth={1.75}/> עריכת קורס</button>
                 )}
               </div>
               <button className="btn btn-secondary btn-sm" onClick={closeModal}>{isEditingLesson ? "בטל" : "סגור"}</button>
@@ -1225,7 +1226,7 @@ export default function StudioBookingPage(props) {
                 {/* ── Lesson booking editor ── */}
                 {kind === "lesson" && isEditingLesson && (
                   <div style={{ background:"rgba(245,166,35,0.08)", border:"1px solid rgba(245,166,35,0.25)", borderRadius:8, padding:"12px 14px", display:"flex", flexDirection:"column", gap:10 }}>
-                    <div style={{ fontWeight:700, fontSize:13, color:LESSON_COLOR }}>✏️ עריכת שעות וחדר לשיעור זה</div>
+                    <div style={{ fontWeight:700, fontSize:13, color:LESSON_COLOR, display:"flex", alignItems:"center", gap:4 }}><Pencil size={12} strokeWidth={1.75}/> עריכת שעות וחדר לשיעור זה</div>
                     <div style={{ display:"flex", gap:8 }}>
                       <label style={{ ...labelStyle, flex:1 }}>
                         שעת התחלה
@@ -1280,7 +1281,7 @@ export default function StudioBookingPage(props) {
                 <div key={i} onClick={() => day && jumpToDate(day)} style={{ fontSize:11, fontWeight:isInCurrentWeek(day) ? 800 : 500, padding:"4px 0", cursor:day ? "pointer" : "default", borderRadius:"50%", background:isTodayMini(day) ? "var(--accent)" : isInCurrentWeek(day) ? "rgba(245,166,35,0.15)" : "transparent", color:isTodayMini(day) ? "#000" : isInCurrentWeek(day) ? "var(--accent)" : day ? "var(--text)" : "transparent" }}>{day || ""}</div>
               ))}
             </div>
-            <button onClick={() => { setWeekOffset(0); const now = new Date(); setMiniMonth({ year:now.getFullYear(), month:now.getMonth() }); }} style={{ width:"100%", marginTop:8, padding:"5px 0", borderRadius:6, border:"1px solid var(--accent)", background:"transparent", color:"var(--accent)", fontWeight:700, fontSize:11, cursor:"pointer" }}>📅 היום</button>
+            <button onClick={() => { setWeekOffset(0); const now = new Date(); setMiniMonth({ year:now.getFullYear(), month:now.getMonth() }); }} style={{ width:"100%", marginTop:8, padding:"5px 0", borderRadius:6, border:"1px solid var(--accent)", background:"transparent", color:"var(--accent)", fontWeight:700, fontSize:11, cursor:"pointer" }}><Calendar size={16} strokeWidth={1.75} /> היום</button>
           </div>,
           target
         );

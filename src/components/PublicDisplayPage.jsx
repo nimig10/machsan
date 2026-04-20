@@ -1,6 +1,7 @@
 // PublicDisplayPage.jsx — public display screen for daily schedule & room bookings
 import { useState, useEffect, useMemo, useRef } from "react";
 import { storageGet } from "../utils.js";
+import { BookOpen, GraduationCap, Mic } from "lucide-react";
 
 const HE_DAYS   = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
@@ -175,8 +176,8 @@ export function PublicDisplayPage() {
         <div style={{display:"flex",gap:"0.4vw",alignItems:"center",flexWrap:"wrap",position:"absolute",right:"1vw"}}>
           {views.map((view, i) => {
             const label = view.type === "lessons"
-              ? (view.total > 1 ? `📚 שיעורים ${view.page}/${view.total}` : "📚 שיעורים")
-              : (view.total > 1 ? `🎙️ קביעות חדרים ${view.page}/${view.total}` : "🎙️ קביעות חדרים");
+              ? (view.total > 1 ? <><BookOpen size={14} strokeWidth={1.75} /> {`שיעורים ${view.page}/${view.total}`}</> : <><BookOpen size={14} strokeWidth={1.75} /> שיעורים</>)
+              : (view.total > 1 ? <><Mic size={14} strokeWidth={1.75} /> {`קביעות חדרים ${view.page}/${view.total}`}</> : <><Mic size={14} strokeWidth={1.75} /> קביעות חדרים</>);
             return (
               <div key={i} style={{
                 padding: "0.4vh 1vw",
@@ -228,7 +229,7 @@ export function PublicDisplayPage() {
           {currentView?.type === "lessons" && (
             <div style={{width:"100%"}}>
               <div style={{fontSize:"1.9vh",fontWeight:900,color:"var(--text)",marginBottom:"1.1vh",textAlign:"center"}}>
-                📚 שיעורים מתוכננים להיום
+                <BookOpen size={16} strokeWidth={1.75} color="var(--accent)" /> שיעורים מתוכננים להיום
                 {todayLessons.length > 0 && (
                   <span style={{marginRight:"0.5vw",color:accent,fontWeight:900}}>{todayLessons.length} שיעורים</span>
                 )}
@@ -290,7 +291,7 @@ export function PublicDisplayPage() {
                           <div style={{display:"flex",gap:"0.3vw",flexWrap:"wrap",marginTop:"0.1vh"}}>
                             {s.track && (
                               <span style={{fontSize:"1.1vh",fontWeight:700,color:accent,background:`${accent}1a`,borderRadius:20,padding:"0.2vh 0.8vw",border:`1px solid ${accent}55`}}>
-                                🎓 {s.track}
+                                <GraduationCap size={11} strokeWidth={1.75} /> {s.track}
                               </span>
                             )}
                           </div>
@@ -325,7 +326,7 @@ export function PublicDisplayPage() {
           {currentView?.type === "rooms" && (
             <div style={{width:"100%"}}>
               <div style={{fontSize:"1.9vh",fontWeight:900,color:"var(--text)",marginBottom:"1.1vh",textAlign:"center"}}>
-                🎙️ קביעות חדרים להיום
+                <Mic size={16} strokeWidth={1.75} color="var(--accent)" /> קביעות חדרים להיום
                 {todayRoomBookings.length > 0 && (
                   <span style={{marginRight:"0.5vw",color:accent,fontWeight:900}}>{todayRoomBookings.length} קביעות</span>
                 )}

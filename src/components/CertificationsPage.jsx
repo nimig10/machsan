@@ -1,5 +1,6 @@
 // CertificationsPage.jsx — certifications management with equipment/studio modes
 import { useRef, useState } from "react";
+import { Camera, CheckCircle, ClipboardList, GraduationCap, Lightbulb, Mic, Package, Pencil, Search, X } from "lucide-react";
 import { storageSet, cloudinaryThumb, writeEquipmentToDB } from "../utils.js";
 import { Modal } from "./ui.jsx";
 
@@ -54,7 +55,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
     setCertifications(updated);
     const r = await storageSet("certifications", updated);
     setSaving(false);
-    if(!r.ok) showToast("error","❌ שגיאה בשמירה");
+    if(!r.ok) showToast("error","שגיאה בשמירה");
     return r.ok;
   };
 
@@ -311,11 +312,11 @@ export function CertificationsPage({ certifications, setCertifications, showToas
         <div style={{display:"flex",gap:0,marginBottom:16,borderRadius:10,overflow:"hidden",border:"1px solid var(--border)",width:"fit-content"}}>
           <button onClick={()=>setCertMode("equipment")}
             style={{padding:"10px 24px",border:"none",background:certMode==="equipment"?"var(--accent)":"var(--surface2)",color:certMode==="equipment"?"#000":"var(--text3)",fontWeight:800,fontSize:14,cursor:"pointer",transition:"all 0.15s"}}>
-            📦 הסמכת ציוד
+            <Package size={16} strokeWidth={1.75} /> הסמכת ציוד
           </button>
           <button onClick={()=>setCertMode("studio")}
             style={{padding:"10px 24px",border:"none",borderRight:"1px solid var(--border)",background:certMode==="studio"?"var(--accent)":"var(--surface2)",color:certMode==="studio"?"#000":"var(--text3)",fontWeight:800,fontSize:14,cursor:"pointer",transition:"all 0.15s"}}>
-            🎙️ הסמכת אולפן
+            <Mic size={16} strokeWidth={1.75} /> הסמכת אולפן
           </button>
         </div>
       )}
@@ -323,7 +324,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
       {/* Certification types panel */}
       <div className="card" style={{marginBottom:20}}>
         <div className="card-header">
-          <div className="card-title">{certMode==="equipment" ? "🎓 סוגי הסמכות ציוד" : "🎙️ סוגי הסמכות אולפן"}</div>
+          <div className="card-title">{certMode==="equipment" ? <><GraduationCap size={16} strokeWidth={1.75} /> סוגי הסמכות ציוד</> : <><Mic size={16} strokeWidth={1.75} /> סוגי הסמכות אולפן</>}</div>
         </div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
           {activeTypes.map(t=>{
@@ -334,7 +335,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                   if (certMode==="studio" && !isNight) openEditCert(t);
                   if (certMode==="equipment") openEditEquipmentCert(t);
                 }}>
-                {isNight?"🌙":certMode==="studio"?"🎙️":"🎓"} {t.name}
+                {isNight?"🌙":certMode==="studio"?<Mic size={16} strokeWidth={1.75} />:<GraduationCap size={16} strokeWidth={1.75} />} {t.name}
                 <button onClick={e=>{e.stopPropagation();deleteType(t.id);}} style={{background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
               </span>
             );
@@ -360,7 +361,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
         </div>
         {certMode==="studio" && newTypeName.trim() && studios.length>0 && (
           <div style={{marginTop:12,padding:12,background:"var(--surface2)",borderRadius:8,border:"1px solid var(--border)"}}>
-            <div style={{fontSize:12,fontWeight:700,color:"var(--text2)",marginBottom:8}}>🎙️ סווג אולפנים להסמכה זו:</div>
+            <div style={{fontSize:12,fontWeight:700,color:"var(--text2)",marginBottom:8}}><Mic size={16} strokeWidth={1.75} /> סווג אולפנים להסמכה זו:</div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
               {studios.map(s=>{
                 const existingCerts = studioTypes.filter(t=>getStudioCertIds(s).includes(t.id));
@@ -379,7 +380,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
 
       {activeTypes.length===0 ? (
         <div className="info" style={{padding:"12px 16px",background:"rgba(52,152,219,0.08)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",fontSize:13,color:"var(--text2)"}}>
-          💡 {certMode==="equipment"
+          <Lightbulb size={16} strokeWidth={1.75} /> {certMode==="equipment"
             ?"הוסף סוגי הסמכות ציוד למעלה, ואז סמן מי עבר כל הסמכה בטבלה למטה."
             :"הוסף סוגי הסמכות אולפן למעלה, ואז סמן מי עבר כל הסמכה בטבלה למטה."}
         </div>
@@ -387,7 +388,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
         <>
           {/* Filter bar */}
           <div style={{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap",alignItems:"center"}}>
-            <div className="search-bar" style={{flex:1,minWidth:180}}><span>🔍</span>
+            <div className="search-bar" style={{flex:1,minWidth:180}}><span><Search size={16} strokeWidth={1.75} color="var(--text3)" /></span>
               <input placeholder="חיפוש סטודנט..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
             <span style={{fontSize:13,color:"var(--text3)"}}>סה״כ: <strong style={{color:"var(--text)"}}>{filteredStudents.length}</strong></span>
           </div>
@@ -396,21 +397,21 @@ export function CertificationsPage({ certifications, setCertifications, showToas
               {allTracks.map(t=>(
                 <button key={t} type="button" onClick={()=>handleTrackChipClick(t)} onDoubleClick={()=>handleTrackChipDoubleClick(t)}
                   style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${isTrackSelected(t)?"var(--accent)":"var(--border)"}`,background:isTrackSelected(t)?"var(--accent-glow)":"transparent",color:isTrackSelected(t)?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-                  {t==="הכל"?"📦 כל המסלולים":"🎓 "+t}
+                  {t==="הכל"?<><Package size={16} strokeWidth={1.75} /> כל המסלולים</>:<><GraduationCap size={16} strokeWidth={1.75} /> {t}</>}
                 </button>
               ))}
             </div>
           )}
           {trackSettings.length > 0 && (
             <div style={{fontSize:11,color:"var(--text3)",marginTop:-4,marginBottom:12}}>
-              💡 אפשר לבחור כמה מסלולים יחד. דאבל קליק על מסלול לימודים פותח את הגדרת סוגי ההשאלה שלו.
+              <Lightbulb size={16} strokeWidth={1.75} /> אפשר לבחור כמה מסלולים יחד. דאבל קליק על מסלול לימודים פותח את הגדרת סוגי ההשאלה שלו.
             </div>
           )}
 
           {students.length===0 ? (
             <div className="empty-state"><div className="emoji">👨‍🎓</div><p>אין סטודנטים במערכת — הוסף אותם דרך "ניהול סטודנטים"</p></div>
           ) : filteredStudents.length===0 ? (
-            <div className="empty-state"><div className="emoji">🔍</div><p>לא נמצאו סטודנטים</p></div>
+            <div className="empty-state"><div className="emoji"><Search size={32} strokeWidth={1.75} /></div><p>לא נמצאו סטודנטים</p></div>
           ) : (
             <>
               {/* Desktop table */}
@@ -424,7 +425,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                         const isNight = t.id === NIGHT_CERT_ID;
                         return (
                           <th key={t.id} style={{padding:"10px 12px",textAlign:"center",fontWeight:800,fontSize:12,color:isNight?NIGHT_COLOR:"var(--accent)",whiteSpace:"nowrap",minWidth:110,background:isNight?NIGHT_COLOR+"08":undefined}}>
-                            {isNight?"🌙":certMode==="studio"?"🎙️":"🎓"} {t.name}
+                            {isNight?"🌙":certMode==="studio"?<Mic size={16} strokeWidth={1.75} />:<GraduationCap size={16} strokeWidth={1.75} />} {t.name}
                           </th>
                         );
                       })}
@@ -439,7 +440,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                           rows.push(
                             <tr key={`grp_${i}`} style={{background:"rgba(245,166,35,0.06)",borderBottom:"1px solid var(--border)"}}>
                               <td colSpan={2} style={{padding:"7px 14px",fontWeight:800,fontSize:11,color:"var(--accent)"}}>
-                                {t?"🎓 "+t:"📋 ללא מסלול"}
+                                {t?<><GraduationCap size={16} strokeWidth={1.75} /> {t}</>:<><ClipboardList size={16} strokeWidth={1.75} /> ללא מסלול</>}
                               </td>
                               {activeTypes.map(type=>{
                                 const isNight = type.id === NIGHT_CERT_ID;
@@ -490,7 +491,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                               <td key={t.id} style={{padding:"8px 12px",textAlign:"center",background:isNight?NIGHT_COLOR+"05":undefined}}>
                                 <button onClick={()=>toggleCert(s.id,t.id)} disabled={saving}
                                   style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${passed?passedColor:"var(--border)"}`,background:passed?passedBg:"transparent",color:passed?passedColor:"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap",minWidth:100}}>
-                                  {passed?(isNight?"🌙 עבר/ה":"✅ עבר/ה"):"⬜ לא עבר/ה"}
+                                  {passed?(isNight?"🌙 עבר/ה":<><CheckCircle size={16} strokeWidth={1.75} /> עבר/ה</>):"⬜ לא עבר/ה"}
                                 </button>
                               </td>
                             );
@@ -509,7 +510,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                   <div key={s.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 16px"}}>
                     <div style={{marginBottom:10}}>
                       <div style={{fontWeight:800,fontSize:15}}>{s.name}</div>
-                      {s.track&&<div style={{fontSize:11,color:"var(--accent)",fontWeight:700}}>🎓 {s.track}</div>}
+                      {s.track&&<div style={{fontSize:11,color:"var(--accent)",fontWeight:700}}><GraduationCap size={16} strokeWidth={1.75} /> {s.track}</div>}
                     </div>
                     {activeTypes.length>0&&(
                       <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -520,10 +521,10 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                           const passedBg = isNight ? NIGHT_COLOR+"20" : "rgba(46,204,113,0.15)";
                           return (
                             <div key={t.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:isNight?NIGHT_COLOR+"08":undefined,borderRadius:8,padding:isNight?"6px 8px":undefined}}>
-                              <span style={{fontSize:13,fontWeight:600,color:isNight?NIGHT_COLOR:undefined}}>{isNight?"🌙":certMode==="studio"?"🎙️":"🎓"} {t.name}</span>
+                              <span style={{fontSize:13,fontWeight:600,color:isNight?NIGHT_COLOR:undefined}}>{isNight?"🌙":certMode==="studio"?<Mic size={16} strokeWidth={1.75} />:<GraduationCap size={16} strokeWidth={1.75} />} {t.name}</span>
                               <button onClick={()=>toggleCert(s.id,t.id)} disabled={saving}
                                 style={{padding:"5px 14px",borderRadius:20,border:`2px solid ${passed?passedColor:"var(--border)"}`,background:passed?passedBg:"transparent",color:passed?passedColor:"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",minWidth:110,textAlign:"center"}}>
-                                {passed?(isNight?"🌙 עבר/ה":"✅ עבר/ה"):"⬜ לא עבר/ה"}
+                                {passed?(isNight?"🌙 עבר/ה":<><CheckCircle size={16} strokeWidth={1.75} /> עבר/ה</>):"⬜ לא עבר/ה"}
                               </button>
                             </div>
                           );
@@ -539,18 +540,18 @@ export function CertificationsPage({ certifications, setCertifications, showToas
       )}
       {/* Edit equipment cert modal */}
       {editEquipmentCert && (
-        <Modal title="✏️ עריכת הסמכת ציוד" onClose={()=>setEditEquipmentCert(null)}
-          footer={<><button className="btn btn-secondary" onClick={()=>setEditEquipmentCert(null)}>ביטול</button><button className="btn btn-primary" onClick={saveEditEquipmentCert} disabled={!editEquipmentCert.name.trim()||saving}>{saving?"שומר...":"💾 שמור"}</button></>}>
+        <Modal title="עריכת הסמכת ציוד" onClose={()=>setEditEquipmentCert(null)}
+          footer={<><button className="btn btn-secondary" onClick={()=>setEditEquipmentCert(null)}>ביטול</button><button className="btn btn-primary" onClick={saveEditEquipmentCert} disabled={!editEquipmentCert.name.trim()||saving}>{saving?"שומר...":"שמור"}</button></>}>
           <div style={{display:"flex",flexDirection:"column",gap:14,direction:"rtl"}}>
             <label style={{display:"flex",flexDirection:"column",gap:4,fontSize:13,fontWeight:600,color:"var(--text2)"}}>שם ההסמכה
               <input className="form-input" value={editEquipmentCert.name} onChange={e=>setEditEquipmentCert(ec=>({...ec,name:e.target.value}))}/>
             </label>
 
-            <div style={{fontSize:13,fontWeight:700,color:"var(--text2)"}}>📦 פריטי ציוד משויכים</div>
+            <div style={{fontSize:13,fontWeight:700,color:"var(--text2)"}}><Package size={16} strokeWidth={1.75} /> פריטי ציוד משויכים</div>
             <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"12px 14px"}}>
               <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
                 <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סינון:</span>
-                {[{k:"all",l:"📦 הכל"},{k:"sound",l:"🎙️ ציוד סאונד"},{k:"photo",l:"🎥 ציוד צילום"}].map(({k,l})=>{
+                {[{k:"all",l:<><Package size={16} strokeWidth={1.75} /> הכל</>},{k:"sound",l:<><Mic size={16} strokeWidth={1.75} /> ציוד סאונד</>},{k:"photo",l:<><Camera size={16} strokeWidth={1.75}/> ציוד צילום</>}].map(({k,l})=>{
                   const active = eqTypeF===k;
                   return (
                     <button key={k} type="button" onClick={()=>setEqTypeF(k)}
@@ -569,16 +570,16 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                     </button>
                   );
                 })}
-                {eqCatF.length>0&&<button type="button" onClick={()=>setEqCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>✕ נקה</button>}
+                {eqCatF.length>0&&<button type="button" onClick={()=>setEqCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}><X size={16} strokeWidth={1.75} color="var(--text3)" /> נקה</button>}
               </div>
               <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
                 <div className="search-bar" style={{flex:1,minWidth:170}}>
-                  <span>🔍</span>
+                  <span><Search size={16} strokeWidth={1.75} color="var(--text3)" /></span>
                   <input placeholder="חיפוש ציוד..." value={eqSearch} onChange={e=>setEqSearch(e.target.value)}/>
                 </div>
                 <button type="button" onClick={()=>setEqShowSelected(prev=>!prev)}
                   style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${eqShowSelected?"var(--green)":"var(--border)"}`,background:eqShowSelected?"rgba(46,204,113,0.12)":"transparent",color:eqShowSelected?"var(--green)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>
-                  {eqShowSelected ? "✅ נבחרים" : "⬜ פריטים נבחרים בלבד"}
+                  {eqShowSelected ? <><CheckCircle size={16} strokeWidth={1.75} /> נבחרים</> : "⬜ פריטים נבחרים בלבד"}
                 </button>
               </div>
             </div>
@@ -612,20 +613,20 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                     <div key={cat} style={{marginBottom:12}}>
                       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
                         <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",textTransform:"uppercase",letterSpacing:1}}>{cat}</div>
-                        {catEq.some(eq=>eq.soundOnly)&&<span style={{fontSize:10,color:"var(--accent)",fontWeight:700}}>🎙️ סאונד</span>}
-                        {catEq.some(eq=>eq.photoOnly)&&<span style={{fontSize:10,color:"var(--green)",fontWeight:700}}>🎥 צילום</span>}
+                        {catEq.some(eq=>eq.soundOnly)&&<span style={{fontSize:10,color:"var(--accent)",fontWeight:700}}><Mic size={16} strokeWidth={1.75} /> סאונד</span>}
+                        {catEq.some(eq=>eq.photoOnly)&&<span style={{fontSize:10,color:"var(--green)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}><Camera size={10} strokeWidth={1.75}/> צילום</span>}
                       </div>
                       {catEq.map(eq=>{
                         const checked = editEquipmentCert.equipmentIds.includes(eq.id);
                         return (
                           <label key={eq.id} style={{display:"flex",alignItems:"center",gap:10,fontSize:13,cursor:"pointer",padding:"8px 12px",borderRadius:10,border:`1px solid ${checked?"var(--accent)":"var(--border)"}`,background:checked?"var(--accent-glow)":"var(--surface2)",marginBottom:6}}>
                             <input type="checkbox" checked={checked} onChange={()=>toggleEditEquipmentId(eq.id)} style={{accentColor:"var(--accent)"}}/>
-                            <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||"📦"}</span>
+                            <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||<Package size={16} strokeWidth={1.75} />}</span>
                             <div style={{flex:1}}>
                               <div style={{fontWeight:700,color:"var(--text)"}}>{eq.name}</div>
                               <div style={{fontSize:11,color:"var(--text3)"}}>
-                                {eq.soundOnly&&<span style={{marginLeft:6}}>🎙️ סאונד</span>}
-                                {eq.photoOnly&&<span style={{marginLeft:6}}>🎥 צילום</span>}
+                                {eq.soundOnly&&<span style={{marginLeft:6}}><Mic size={16} strokeWidth={1.75} /> סאונד</span>}
+                                {eq.photoOnly&&<span style={{marginLeft:6,display:"inline-flex",alignItems:"center",gap:2}}><Camera size={11} strokeWidth={1.75}/> צילום</span>}
                                 {eq.certification_id && eq.certification_id !== editEquipmentCert.id && <span style={{color:"var(--red)"}}>כבר משויך להסמכה אחרת</span>}
                               </div>
                             </div>
@@ -639,22 +640,22 @@ export function CertificationsPage({ certifications, setCertifications, showToas
             </div>
 
             {editEquipmentCert.equipmentIds.length>0 && (
-              <div className="highlight-box">🎓 {editEquipmentCert.equipmentIds.length} פריטי ציוד ישויכו להסמכה זו</div>
+              <div className="highlight-box"><GraduationCap size={16} strokeWidth={1.75} /> {editEquipmentCert.equipmentIds.length} פריטי ציוד ישויכו להסמכה זו</div>
             )}
           </div>
         </Modal>
       )}
       {/* Edit studio cert modal */}
       {editCert && (
-        <Modal title="✏️ עריכת הסמכת אולפן" onClose={()=>setEditCert(null)}
-          footer={<><button className="btn btn-secondary" onClick={()=>setEditCert(null)}>ביטול</button><button className="btn btn-primary" onClick={saveEditCert} disabled={!editCert.name.trim()||saving}>{saving?"שומר...":"💾 שמור"}</button></>}>
+        <Modal title="עריכת הסמכת אולפן" onClose={()=>setEditCert(null)}
+          footer={<><button className="btn btn-secondary" onClick={()=>setEditCert(null)}>ביטול</button><button className="btn btn-primary" onClick={saveEditCert} disabled={!editCert.name.trim()||saving}>{saving?"שומר...":"שמור"}</button></>}>
           <div style={{display:"flex",flexDirection:"column",gap:14,direction:"rtl"}}>
             <label style={{display:"flex",flexDirection:"column",gap:4,fontSize:13,fontWeight:600,color:"var(--text2)"}}>שם ההסמכה
               <input className="form-input" value={editCert.name} onChange={e=>setEditCert(ec=>({...ec,name:e.target.value}))}/>
             </label>
             {studios.length>0 && (
               <div>
-                <div style={{fontSize:13,fontWeight:700,color:"var(--text2)",marginBottom:8}}>🎙️ אולפנים משויכים:</div>
+                <div style={{fontSize:13,fontWeight:700,color:"var(--text2)",marginBottom:8}}><Mic size={16} strokeWidth={1.75} /> אולפנים משויכים:</div>
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                   {studios.map(s=>{
                     const checked = editCert.studioIds.includes(s.id);
@@ -675,7 +676,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
       )}
       {editTrackLoanTypes && (
         <Modal
-          title={`🎓 סיווג סוגי השאלה למסלול ${editTrackLoanTypes.name}`}
+          title={<><GraduationCap size={16} strokeWidth={1.75} /> {`סיווג סוגי השאלה למסלול ${editTrackLoanTypes.name}`}</>}
           onClose={()=>setEditTrackLoanTypes(null)}
           footer={(
             <>
@@ -700,7 +701,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                     onClick={()=>toggleTrackLoanType(loanType)}
                     style={{padding:"8px 16px",borderRadius:24,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"var(--surface2)",color:active?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer"}}
                   >
-                    {active ? "✅ " : ""}{loanType === "סאונד" ? "השאלת סאונד" : loanType === "הפקה" ? "השאלת הפקה" : loanType === "קולנוע יומית" ? "השאלת קולנוע יומית" : "השאלה פרטית"}
+                    {active ? <><CheckCircle size={16} strokeWidth={1.75} />{" "}</> : ""}{loanType === "סאונד" ? "השאלת סאונד" : loanType === "הפקה" ? "השאלת הפקה" : loanType === "קולנוע יומית" ? "השאלת קולנוע יומית" : "השאלה פרטית"}
                   </button>
                 );
               })}

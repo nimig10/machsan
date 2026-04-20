@@ -3,6 +3,7 @@ import { useState } from "react";
 import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, syncReservationStatusToBlob } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
+import { Calendar, CheckCircle, ClipboardList, Clock, Film, Mic, Package, X, XCircle } from "lucide-react";
 
 const HE_DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 function getDayName(dateStr) {
@@ -79,15 +80,15 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
   ];
   const DASHBOARD_CAL_STATUSES = ["ממתין","מאושר","פעילה","נדחה","באיחור","אישור ראש מחלקה"];
   const CAL_LOAN_TYPES = [
-    { key:"הכל", label:"הכל", icon:"📦" },
+    { key:"הכל", label:"הכל", icon:<Package size={16} strokeWidth={1.75} color="var(--accent)" /> },
     { key:"פרטית", label:"פרטית", icon:"👤" },
-    { key:"הפקה", label:"הפקה", icon:"🎬" },
-    { key:"סאונד", label:"סאונד", icon:"🎙️" },
+    { key:"הפקה", label:"הפקה", icon:<Film size={16} strokeWidth={1.75} color="var(--accent)" /> },
+    { key:"סאונד", label:"סאונד", icon:<Mic size={16} strokeWidth={1.75} color="var(--accent)" /> },
     { key:"קולנוע יומית", label:"קולנוע יומית", icon:"🎥" },
     { key:"שיעור", label:"שיעור", icon:"📽️" },
     { key:"צוות", label:"איש צוות", icon:"💼" },
   ];
-  const LOAN_TYPE_ICON = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","שיעור":"📽️","קולנוע יומית":"🎥","צוות":"💼" };
+  const LOAN_TYPE_ICON = { "פרטית":"👤","הפקה":<Film size={16} strokeWidth={1.75} color="var(--accent)" />,"סאונד":<Mic size={16} strokeWidth={1.75} color="var(--accent)" />,"שיעור":"📽️","קולנוע יומית":"🎥","צוות":"💼" };
 
   const activeRes = reservations.filter(r =>
     r.status !== "הוחזר" && r.borrow_date && r.return_date &&
@@ -132,10 +133,10 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
 
       <div className="dash-stats-section">
       {/* ── Group 1: מלאי ── */}
-      <div style={groupLabel()}>📦 מלאי</div>
+      <div style={groupLabel()}><Package size={16} strokeWidth={1.75} color="var(--accent)" /> מלאי</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginBottom:4}}>
         {[
-          { l:"פריטי ציוד",  v:totalItems,   i:"📦", c:"var(--accent)" },
+          { l:"פריטי ציוד",  v:totalItems,   i:<Package size={16} strokeWidth={1.75} color="var(--accent)" />, c:"var(--accent)" },
           { l:"סך יחידות",  v:totalUnits,   i:"🗃️", c:"var(--blue)"   },
           { l:"יחידות בדיקה",v:totalDamaged, i:"🔧", c:"var(--red)"    },
         ].map(s=>(
@@ -165,14 +166,14 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
       </div>
 
       {/* ── Group 2: בקשות ── */}
-      <div style={{...groupLabel(),marginTop:20}}>📋 בקשות</div>
+      <div style={{...groupLabel(),marginTop:20}}><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> בקשות</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginBottom:4}}>
         {[
-          { l:"השאלות פעילות", v:allApproved.length,  i:"✅", c:"var(--green)"  },
-          { l:"ממתין לאישור",  v:pending,              i:"⏳", c:"var(--yellow)" },
+          { l:"השאלות פעילות", v:allApproved.length,  i:<CheckCircle size={16} strokeWidth={1.75} color="var(--green)" />, c:"var(--green)"  },
+          { l:"ממתין לאישור",  v:pending,              i:<Clock size={16} strokeWidth={1.75} color="var(--yellow)" />, c:"var(--yellow)" },
           { l:"אישור ראש מחלקה",v:deptHeadPending,    i:"🟣", c:"var(--purple)" },
           { l:"באיחור",        v:reservations.filter(r=>r.status==="באיחור").length, i:"⚠️", c:"#e67e22" },
-          { l:"בקשות דחויות",  v:rejected,             i:"❌", c:"var(--red)"    },
+          { l:"בקשות דחויות",  v:rejected,             i:<XCircle size={16} strokeWidth={1.75} color="var(--red)" />, c:"var(--red)"    },
         ].map(s=>(
           <div key={s.l} className="stat-card" style={{"--ac":s.c}}>
             <div className="stat-label">{s.l}</div>
@@ -183,10 +184,10 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
       </div>
 
       {/* ── Group 3: היום ── */}
-      <div style={{...groupLabel(),marginTop:20}}>📅 היום</div>
+      <div style={{...groupLabel(),marginTop:20}}><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> היום</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginBottom:24}}>
         {[
-          { l:"השאלות פעילות היום", v:todayLoans, i:"📋", c:"var(--purple)" },
+          { l:"השאלות פעילות היום", v:todayLoans, i:<ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" />, c:"var(--purple)" },
           { l:"החזרות היום",        v:rtToday,    i:"🔄", c:"var(--blue)"   },
         ].map(s=>(
           <div key={s.l} className="stat-card" style={{"--ac":s.c}}>
@@ -214,7 +215,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                     : `${onLoanItems} סוגי פריטים בהשאלות פעילות`}
                 </div>
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setOnLoanModal(null)}>✕</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setOnLoanModal(null)}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>
             </div>
             <div style={{flex:1,overflowY:"auto",padding:"16px 20px",display:"flex",flexDirection:"column",gap:10}}>
               {activeNow.length===0
@@ -232,9 +233,9 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                       <div style={{display:"flex",flexDirection:"column",gap:4}}>
                         {d.reservations.map((rv,j)=>(
                           <div key={j} style={{display:"flex",gap:8,alignItems:"center",fontSize:12,color:"var(--text3)",flexWrap:"wrap"}}>
-                            <span style={{background:"var(--surface3)",borderRadius:6,padding:"1px 8px",fontWeight:700,color:"var(--text2)"}}>{LOAN_TYPE_ICON[rv.loan_type]||"📦"} {rv.loan_type||"?"}</span>
+                            <span style={{background:"var(--surface3)",borderRadius:6,padding:"1px 8px",fontWeight:700,color:"var(--text2)"}}>{LOAN_TYPE_ICON[rv.loan_type]||<Package size={16} strokeWidth={1.75} />} {rv.loan_type||"?"}</span>
                             <span style={{fontWeight:600,color:"var(--text)"}}>{rv.student}</span>
-                            <span>📅 {formatDate(rv.borrow_date)}{rv.borrow_time&&` ${rv.borrow_time}`} → {formatDate(rv.return_date)}{rv.return_time&&` ${rv.return_time}`}</span>
+                            <span><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> {formatDate(rv.borrow_date)}{rv.borrow_time&&` ${rv.borrow_time}`} → {formatDate(rv.return_date)}{rv.return_time&&` ${rv.return_time}`}</span>
                             <span style={{color:"#e67e22",fontWeight:700}}>×{rv.qty}</span>
                           </div>
                         ))}
@@ -248,8 +249,8 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                         <div>
                           <div style={{fontWeight:800,fontSize:14}}>{r.student_name}{equipmentReports.some(rp=>rp.reservation_id===String(r.id)&&rp.status==="open")&&<span title="דיווח תקלה פתוח" style={{color:"#e74c3c",fontSize:14,marginRight:4}}>⚠️</span>}</div>
                           <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>
-                            <span style={{background:"var(--surface3)",borderRadius:6,padding:"1px 8px",fontWeight:700,color:"var(--text2)",marginLeft:6}}>{LOAN_TYPE_ICON[r.loan_type]||"📦"} {r.loan_type}</span>
-                            📅 {formatDate(r.borrow_date)}{r.borrow_time&&` ${r.borrow_time}`} → {formatDate(r.return_date)}{r.return_time&&` ${r.return_time}`}
+                            <span style={{background:"var(--surface3)",borderRadius:6,padding:"1px 8px",fontWeight:700,color:"var(--text2)",marginLeft:6}}>{LOAN_TYPE_ICON[r.loan_type]||<Package size={16} strokeWidth={1.75} />} {r.loan_type}</span>
+                            <Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> {formatDate(r.borrow_date)}{r.borrow_time&&` ${r.borrow_time}`} → {formatDate(r.return_date)}{r.return_time&&` ${r.return_time}`}
                           </div>
                         </div>
                         <span style={{background:"rgba(230,126,34,0.15)",border:"1px solid rgba(230,126,34,0.3)",borderRadius:20,padding:"2px 10px",fontSize:12,fontWeight:900,color:"#e67e22",flexShrink:0}}>
@@ -299,7 +300,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
               .filter(r=>r.status!=="הוחזר"&&r.loan_type!=="שיעור"&&(dashStatusF.length===0||dashStatusF.includes(getEffectiveStatus(r))))
               .sort((a,b)=>dashSortBy==="urgency"?new Date(a.borrow_date)-new Date(b.borrow_date):Number(b.id)-Number(a.id))
               .slice(0,8);
-            if(!dashFiltered.length) return <div className="empty-state" style={{padding:20}}><div className="emoji">📋</div><p>אין בקשות תואמות</p></div>;
+            if(!dashFiltered.length) return <div className="empty-state" style={{padding:20}}><div className="emoji"><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /></div><p>אין בקשות תואמות</p></div>;
             return dashFiltered.map(r=>(
             <div key={r.id} className="recent-request-row" style={{borderBottom:"1px solid var(--border)"}} onClick={()=>setDashViewRes(r)}>
               <div style={{width:34,height:34,borderRadius:"50%",background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>{r.student_name?.[0]||"?"}</div>
@@ -307,7 +308,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                 <div style={{fontWeight:700,fontSize:13}}>{r.student_name}</div>
                 <div style={{fontSize:11,color:"var(--text3)"}}>
                   <span style={{display:"inline-block",marginLeft:8,fontWeight:800,color:"var(--text)"}}>משך: {getLoanDurationDays(r.borrow_date, r.return_date)} ימים</span>
-                  📅 {formatDate(r.borrow_date)}{r.borrow_time&&<strong style={{color:"var(--accent)",marginRight:3}}> {r.borrow_time}</strong>}
+                  <Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> {formatDate(r.borrow_date)}{r.borrow_time&&<strong style={{color:"var(--accent)",marginRight:3}}> {r.borrow_time}</strong>}
                   <span style={{margin:"0 3px"}}>–</span>
                   ↩ {formatDate(r.return_date)}{r.return_time&&<strong style={{color:"var(--accent)",marginRight:3}}> {r.return_time}</strong>}
                   {(()=>{const diff=Math.ceil((new Date(r.borrow_date)-new Date())/(1000*60*60*24));return diff>0?<span style={{marginRight:5,color:"var(--yellow)",fontWeight:700}}>({diff}י)</span>:diff===0?<span style={{marginRight:5,color:"var(--green)",fontWeight:700}}>(היום)</span>:null;})()}
@@ -341,7 +342,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
           return (
             <div className="card" style={{border:"1px solid rgba(155,89,182,0.3)",background:"rgba(155,89,182,0.03)"}}>
               <div className="card-header">
-                <span className="card-title">🎬 שיעורים להכנה</span>
+                <span className="card-title"><Film size={16} strokeWidth={1.75} color="var(--accent)" /> שיעורים להכנה</span>
                 <span style={{fontSize:11,color:"var(--text3)"}}>הבאים בתור</span>
               </div>
               {upcomingLessons.map(r=>{
@@ -357,7 +358,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                     onMouseEnter={e=>{e.currentTarget.style.background="rgba(155,89,182,0.08)";e.currentTarget.style.borderColor="rgba(155,89,182,0.45)";}}
                     onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor="var(--border)";}}
                   >
-                    <div style={{width:34,height:34,borderRadius:8,background:"rgba(155,89,182,0.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>🎬</div>
+                    <div style={{width:34,height:34,borderRadius:8,background:"rgba(155,89,182,0.15)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Film size={16} strokeWidth={1.75} color="var(--accent)" /></div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontWeight:700,fontSize:13,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
                         {tag}{r.course||r.student_name}
@@ -368,7 +369,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                         </div>
                       )}
                       <div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>
-                        📅 {formatDate(r.borrow_date)} · 🕐 {r.borrow_time||"?"} – {r.return_time||"?"}
+                        <Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> {formatDate(r.borrow_date)} · <Clock size={16} strokeWidth={1.75} color="var(--accent)" /> {r.borrow_time||"?"} – {r.return_time||"?"}
                       </div>
                       {r.items?.length>0&&(
                         <div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:4}}>
@@ -390,7 +391,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
 
         <div className="card calendar-card">
           <div className="card-header">
-            <span className="card-title">📅 לוח השאלות ציוד</span>
+            <span className="card-title"><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> לוח השאלות ציוד</span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <button className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo-1,1))}>‹</button>
               <span style={{fontWeight:800,minWidth:110,textAlign:"center"}}>{HE_M[mo]} {yr}</span>
@@ -406,11 +407,11 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                 return (
                   <button key={s} type="button" onClick={()=>setCalStatusF(p=>active?p.filter(x=>x!==s):[...p,s])}
                     style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${active?clr:"var(--border)"}`,background:active?`color-mix(in srgb,${clr} 15%,transparent)`:"transparent",color:active?clr:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>
-                    {s==="מאושר" ? "✅" : s==="ממתין" ? "⏳" : s==="פעילה" ? "👍" : s==="באיחור" ? "⚠️" : s==="אישור ראש מחלקה" ? "🟣" : "❌"} {s}
+                    {s==="מאושר" ? <CheckCircle size={16} strokeWidth={1.75} /> : s==="ממתין" ? <Clock size={16} strokeWidth={1.75} /> : s==="פעילה" ? "👍" : s==="באיחור" ? "⚠️" : s==="אישור ראש מחלקה" ? "🟣" : <XCircle size={16} strokeWidth={1.75} />} {s}
                   </button>
                 );
               })}
-            {calStatusF.length>0&&<button type="button" onClick={()=>setCalStatusF([])} style={{padding:"3px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>✕ הכל</button>}
+            {calStatusF.length>0&&<button type="button" onClick={()=>setCalStatusF([])} style={{padding:"3px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}><X size={16} strokeWidth={1.75} color="var(--text3)" /> הכל</button>}
           </div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
             {CAL_LOAN_TYPES.map((filterOption) => {
@@ -441,7 +442,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
             <button className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo-1,1))}>‹</button>
             <span style={{fontWeight:800,fontSize:20,minWidth:140,textAlign:"center"}}>{HE_M[mo]} {yr}</span>
             <button className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo+1,1))}>›</button>
-            <button className="btn btn-secondary" style={{marginRight:"auto"}} onClick={()=>setCalFS(false)}>✕ סגור</button>
+            <button className="btn btn-secondary" style={{marginRight:"auto"}} onClick={()=>setCalFS(false)}><X size={16} strokeWidth={1.75} color="var(--text3)" /> סגור</button>
           </div>
           <div style={{flex:1,overflow:"auto",padding:"16px 20px"}}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4,direction:"rtl"}}>
@@ -460,7 +461,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 22px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"18px 18px 0 0",position:"sticky",top:0,zIndex:1}}>
               <div>
                 <div style={{fontWeight:900,fontSize:17,display:"flex",alignItems:"center",gap:8}}>
-                  {dashViewRes.loan_type==="שיעור"?"🎬":"📋"} {dashViewRes.student_name}
+                  {dashViewRes.loan_type==="שיעור"?<Film size={16} strokeWidth={1.75} color="var(--accent)" />:<ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" />} {dashViewRes.student_name}
                   {statusBadge(getEffectiveStatus(dashViewRes))}
                 </div>
                 <div style={{fontSize:12,color:"var(--text3)",marginTop:3,display:"flex",gap:12,flexWrap:"wrap"}}>
@@ -468,18 +469,18 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                   {dashViewRes.phone&&<span>📞 {dashViewRes.phone}</span>}
                 </div>
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setDashViewRes(null)}>✕</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setDashViewRes(null)}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>
             </div>
             <div style={{padding:"20px 22px",display:"flex",flexDirection:"column",gap:16}}>
               {/* Dates & info */}
               <div style={{background:"var(--accent-glow)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:12,padding:"14px 16px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 16px"}}>
                 {[
-                  ["📅 השאלה",`${getDayName(dashViewRes.borrow_date)} · ${formatDate(dashViewRes.borrow_date)}${dashViewRes.borrow_time?" · "+dashViewRes.borrow_time:""}`],
+                  ["השאלה",`${getDayName(dashViewRes.borrow_date)} · ${formatDate(dashViewRes.borrow_date)}${dashViewRes.borrow_time?" · "+dashViewRes.borrow_time:""}`],
                   ["↩ החזרה",`${getDayName(dashViewRes.return_date)} · ${formatDate(dashViewRes.return_date)}${dashViewRes.return_time?" · "+dashViewRes.return_time:""}`],
-                  ["📚 קורס",dashViewRes.course||"—"],
-                  ["🎬 סוג",dashViewRes.loan_type||"—"],
-                  ...(dashViewRes.project_name?[["🎥 פרויקט",dashViewRes.project_name]]:[]),
-                  ["⏱️ משך",`${getLoanDurationDays(dashViewRes.borrow_date, dashViewRes.return_date)} ימים`],
+                  ["קורס",dashViewRes.course||"—"],
+                  ["סוג",dashViewRes.loan_type||"—"],
+                  ...(dashViewRes.project_name?[["פרויקט",dashViewRes.project_name]]:[]),
+                  ["משך",`${getLoanDurationDays(dashViewRes.borrow_date, dashViewRes.return_date)} ימים`],
                 ].map(([l,v])=>(
                   <div key={l} style={{display:"flex",flexDirection:"column",gap:3}}>
                     <span style={{fontSize:11,color:"var(--accent)",fontWeight:800,letterSpacing:"0.02em"}}>{l}</span>
@@ -491,7 +492,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
               {(dashViewRes.crew_photographer_name||dashViewRes.crew_sound_name)&&(
                 <div style={{background:"var(--surface2)",borderRadius:10,padding:"10px 14px",fontSize:12,display:"flex",gap:16,flexWrap:"wrap"}}>
                   {dashViewRes.crew_photographer_name&&<span>📸 צלם: <strong>{dashViewRes.crew_photographer_name}</strong>{dashViewRes.crew_photographer_phone&&` · ${dashViewRes.crew_photographer_phone}`}</span>}
-                  {dashViewRes.crew_sound_name&&<span>🎙️ סאונד: <strong>{dashViewRes.crew_sound_name}</strong>{dashViewRes.crew_sound_phone&&` · ${dashViewRes.crew_sound_phone}`}</span>}
+                  {dashViewRes.crew_sound_name&&<span><Mic size={16} strokeWidth={1.75} color="var(--accent)" /> סאונד: <strong>{dashViewRes.crew_sound_name}</strong>{dashViewRes.crew_sound_phone&&` · ${dashViewRes.crew_sound_phone}`}</span>}
                 </div>
               )}
               {/* Production reason */}
@@ -516,7 +517,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                         <div style={{width:52,height:52,borderRadius:10,background:"var(--surface3)",flexShrink:0,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>
                           {showImg
                             ? <img src={img} alt={eq?.name||""} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                            : "📦"}
+                            : <Package size={16} strokeWidth={1.75} />}
                         </div>
                         {/* Name + category */}
                         <div style={{flex:1,minWidth:0}}>
@@ -553,7 +554,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                         r.id === res.id ? markReservationReturned(r) : r
                       ));
                       setReservations(updated);
-                      if(showToast) showToast("success", `הציוד של ${res.student_name} הוחזר ✅`);
+                      if(showToast) showToast("success", `הציוד של ${res.student_name} הוחזר`);
                       setDashViewRes(null);
                     }}>
                     🔄 הוחזר
@@ -604,7 +605,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                           if(showToast) showToast("error", "האישור נשמר ב-DB אך כתיבה ל-blob נכשלה — רענן את הדף");
                         } else {
                           setReservations(sync.list);
-                          if(showToast) showToast("success",`הבקשה של ${res.student_name} אושרה ✅`);
+                          if(showToast) showToast("success",`הבקשה של ${res.student_name} אושרה`);
                         }
                         // Only email when this click was the one that actually flipped the status.
                         if (rpcResult.changed && res.email) {
@@ -623,7 +624,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                         setApprovingId(null);
                       }
                     }}>
-                    {approvingId===dashViewRes.id ? "⏳ מאשר..." : "✅ אשר בקשה"}
+                    {approvingId===dashViewRes.id ? <><Clock size={16} strokeWidth={1.75} /> מאשר...</> : <><CheckCircle size={16} strokeWidth={1.75} /> אשר בקשה</>}
                   </button>
                 </div>
               )}
@@ -668,7 +669,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                       <span style={{fontWeight:900,fontSize:15,color:"var(--red)"}}>כמות חסומה: {b.quantity}</span>
                     </div>
                     <div style={{fontSize:12,color:"var(--text2)",display:"flex",flexWrap:"wrap",gap:10}}>
-                      <span>📅 {formatDate(b.borrow_date)} {b.borrow_time||""}</span>
+                      <span><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> {formatDate(b.borrow_date)} {b.borrow_time||""}</span>
                       {isOD
                         ? <span style={{color:"var(--red)",fontWeight:700}}>↩ היה אמור לחזור {formatDate(b.return_date)} — עדיין לא הוחזר</span>
                         : <span>↩ {formatDate(b.return_date)} {b.return_time||""}</span>}
@@ -702,12 +703,12 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                 }
                 const updated = reservations.map(r=>r.id===res.id?{...r,status:"מאושר"}:r);
                 setReservations(updated);
-                if(showToast) showToast("success",`הבקשה של ${res.student_name} אושרה ✅`);
+                if(showToast) showToast("success",`הבקשה של ${res.student_name} אושרה`);
                 setDashConsecutiveWarning(null);
               } finally {
                 setApprovingId(null);
               }
-            }}>{approvingId===dashConsecutiveWarning.reservation.id?"⏳ מאשר...":"✅ אשר בכל זאת"}</button>
+            }}>{approvingId===dashConsecutiveWarning.reservation.id?<><Clock size={16} strokeWidth={1.75} /> מאשר...</>:<><CheckCircle size={16} strokeWidth={1.75} /> אשר בכל זאת</>}</button>
           </div>}>
           <div style={{background:"rgba(241,196,15,0.1)",border:"2px solid rgba(241,196,15,0.45)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16,display:"flex",gap:12,alignItems:"flex-start"}}>
             <span style={{fontSize:22,lineHeight:1}}>⚠️</span>

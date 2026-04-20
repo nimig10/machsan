@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
 import { Modal } from "./ui.jsx";
 import { storageSet, getAuthToken } from "../utils.js";
+import { BookOpen, Calendar, Check, ClipboardList, Package, Shield, X } from "lucide-react";
 
 /* ── Half-hour time slots 09:00–22:00 ── */
 const TIME_SLOTS = (() => {
@@ -341,7 +342,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
       delete weekCache.current[startDate];
       return false;
     }
-    showToast("success", "✅ המשימה נשמרה");
+    showToast("success", "המשימה נשמרה");
     // Swap optimistic placeholder with real DB row
     if (r.data) {
       setDailyTasks(prev => prev.map(t => t.id === optimistic.id ? r.data : t));
@@ -557,7 +558,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                     border: "none", borderBottom: "1px solid var(--border)",
                     color: viewMode === "week" ? "#3b82f6" : "var(--text)",
                     fontWeight: viewMode === "week" ? 800 : 600, fontSize: 13, cursor: "pointer" }}>
-                  📅 שבוע מלא
+                  <Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> שבוע מלא
                 </button>
                 {/* Individual days */}
                 {workDays.map((date, i) => {
@@ -782,7 +783,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                                 onMouseEnter={e => { if (chipClickable) e.currentTarget.style.background = "rgba(255,255,255,0.14)"; }}
                                 onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
                               >
-                                {showLock && <span style={{ fontSize: 9 }}>🔒</span>}
+                                {showLock && <Shield size={9} strokeWidth={1.75} />}
                                 <span style={{ fontSize: 10, fontWeight: 700, color: "#fff", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                   {block.memberName}
                                 </span>
@@ -869,8 +870,8 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
             {/* ══ Section divider: Lessons ══ */}
             <SectionDivider
               title={viewMode === "day"
-                ? `📚 לו"ז יומי — שיעורים`
-                : `📚 לו"ז יומי — שיעורים`}
+                ? <><BookOpen size={16} strokeWidth={1.75} color="var(--accent)" /> {`לו"ז יומי — שיעורים`}</>
+                : <><BookOpen size={16} strokeWidth={1.75} color="var(--accent)" /> {`לו"ז יומי — שיעורים`}</>}
               subtitle={viewMode === "day" ? `${HE_DAYS[new Date(displayDays[0] + "T00:00:00").getDay()]} ${formatDateHe(displayDays[0])}` : null}
               open={showLessons}
               onToggle={() => setShowLessons(v => !v)}
@@ -899,7 +900,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
             {showStudentBookings && <StudentBookingsRow workDays={displayDays} studioBookings={studioBookings} studios={studios} today={today} holidays={holidays} />}
 
             {/* ══ Section divider: Loans ══ */}
-            <SectionDivider title="📦 בקשות השאלה" open={showLoans} onToggle={() => setShowLoans(v => !v)} />
+            <SectionDivider title={<><Package size={16} strokeWidth={1.75} color="var(--accent)" /> בקשות השאלה</>} open={showLoans} onToggle={() => setShowLoans(v => !v)} />
 
             {/* ══ Loans body row ══ */}
             {showLoans && <LoansRow workDays={displayDays} reservations={reservations} today={today} />}
@@ -1004,7 +1005,7 @@ function LessonsRow({ workDays, studioBookings, studios, today, holidays }) {
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
         padding: "6px 2px", gap: 2, background: "rgba(245,166,35,0.08)",
       }}>
-        <span style={{ fontSize: 14 }}>📚</span>
+        <BookOpen size={14} strokeWidth={1.75} color="#f5a623" />
         <span style={{ fontSize: 8, color: "#f5a623", fontWeight: 700, textAlign: "center" }}>שיעורים</span>
       </div>
       {/* Day cells */}
@@ -1212,13 +1213,13 @@ function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEd
                       <div style={{ ...tdBase, borderLeft: "none", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center" }}>
                         {isEditing ? (
                           <div style={{ display: "flex", gap: 4 }} onClick={e => e.stopPropagation()}>
-                            <button onClick={() => saveEdit(b)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15, color: "#22c55e", padding: 2 }} title="שמור">✓</button>
-                            <button onClick={cancelEdit} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15, color: "#ef4444", padding: 2 }} title="בטל">✕</button>
+                            <button onClick={() => saveEdit(b)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15, color: "#22c55e", padding: 2 }} title="שמור"><Check size={15} strokeWidth={1.75} color="#22c55e" /></button>
+                            <button onClick={cancelEdit} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15, color: "#ef4444", padding: 2 }} title="בטל"><X size={15} strokeWidth={1.75} color="var(--text3)" /></button>
                           </div>
                         ) : confirmDelete === b.id ? (
                           <div style={{ display: "flex", gap: 3, alignItems: "center" }} onClick={e => e.stopPropagation()}>
-                            <button onClick={async () => { await onDeleteSession(b.lesson_id, b.date); setConfirmDelete(null); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#ef4444", padding: 2 }}>✓</button>
-                            <button onClick={() => setConfirmDelete(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--text3)", padding: 2 }}>✕</button>
+                            <button onClick={async () => { await onDeleteSession(b.lesson_id, b.date); setConfirmDelete(null); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#ef4444", padding: 2 }}><Check size={13} strokeWidth={1.75} color="#ef4444" /></button>
+                            <button onClick={() => setConfirmDelete(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--text3)", padding: 2 }}><X size={13} strokeWidth={1.75} color="var(--text3)" /></button>
                           </div>
                         ) : (
                           <button onClick={e => { e.stopPropagation(); setConfirmDelete(b.id); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: 2 }} title="מחק">🗑️</button>
@@ -1306,7 +1307,7 @@ function LoansRow({ workDays, reservations, today }) {
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
         padding: "6px 2px", gap: 2, background: "rgba(245,158,11,0.08)",
       }}>
-        <span style={{ fontSize: 14 }}>📦</span>
+        <Package size={14} strokeWidth={1.75} color="#f59e0b" />
         <span style={{ fontSize: 8, color: "#f59e0b", fontWeight: 700, textAlign: "center" }}>השאלות</span>
       </div>
       {/* Day cells */}
@@ -1374,7 +1375,7 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
     <Modal onClose={onClose}>
       <div style={{ padding: 24, minWidth: 300, maxWidth: 420, direction: "rtl" }}>
         <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 4 }}>
-          {mode === "preference" ? "✏️ העדפה" : "📋 שיבוץ"}
+          {mode === "preference" ? "העדפה" : <><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> שיבוץ</>}
         </div>
         <div style={{ fontSize: 13, color: "var(--text3)", marginBottom: 16 }}>
           {memberName} · {HE_DAYS[new Date(date + "T00:00:00").getDay()]} {formatDateHe(date)}
@@ -1500,7 +1501,7 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
                   <input type="radio" name="noteVis" checked={notePublic} onChange={() => setNotePublic(true)} /> ציבורית
                 </label>
                 <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, cursor: "pointer" }}>
-                  <input type="radio" name="noteVis" checked={!notePublic} onChange={() => setNotePublic(false)} /> פרטית למנהל 🔒
+                  <input type="radio" name="noteVis" checked={!notePublic} onChange={() => setNotePublic(false)} /> פרטית למנהל <Shield size={12} strokeWidth={1.75} />
                 </label>
               </div>
             ) : <div />}
@@ -1513,7 +1514,7 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
           <div style={{ marginBottom: 14 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
               <input type="checkbox" checked={locked} onChange={e => setLocked(e.target.checked)} />
-              🔒 נעילת שיבוץ (מונע עריכה על ידי העובד)
+              <Shield size={16} strokeWidth={1.75} /> נעילת שיבוץ (מונע עריכה על ידי העובד)
             </label>
           </div>
         )}
@@ -1521,7 +1522,7 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
         {/* ── Daily Tasks checkboxes ── */}
         {shiftType !== "absent" && selectedStaffIds.length <= 1 && (
           <div style={{ marginBottom: 14, padding: "10px 12px", background: "var(--surface2)", borderRadius: 8 }}>
-            <label style={{ ...labelStyle, marginBottom: 8, fontSize: 13, color: "var(--text)" }}>📋 משימות יומיות</label>
+            <label style={{ ...labelStyle, marginBottom: 8, fontSize: 13, color: "var(--text)", display: "flex", alignItems: "center", gap: 6 }}><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> משימות יומיות</label>
             {DAILY_TASKS.map(t => {
               const task = dailyTasks.find(dt => dt.date === date && dt.task_key === t.key);
               const isClaimedByMe = task && String(task.staff_id) === String(staffId);
@@ -1551,7 +1552,7 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
                       (תפוס — {otherName})
                     </span>
                   )}
-                  {isClaimedByMe && <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 600 }}>✓</span>}
+                  {isClaimedByMe && <Check size={11} strokeWidth={1.75} color="#22c55e" />}
                 </label>
               );
             })}

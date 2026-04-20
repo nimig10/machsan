@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { AlertTriangle, AudioLines, BookOpen, Calendar, Camera, Check, CheckCircle, Clock, ClipboardList, Download, Film, GraduationCap, Info, Lightbulb, LogOut, Mic, Minus, Package, Pencil, Plus, Search, Settings, Shield, SlidersHorizontal, Triangle, X, XCircle } from "lucide-react";
+import { AlertTriangle, AudioLines, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, Clock, ClipboardList, Download, FileText, Film, GraduationCap, Info, Link, Lightbulb, LogOut, Mail, Mic, Minus, Package, Pencil, Phone, Plus, Search, Settings, Shield, ShoppingCart, SlidersHorizontal, Triangle, User, Video, X, XCircle } from "lucide-react";
 import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB } from "./utils.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
@@ -187,7 +187,7 @@ async function storageSet(key, value) {
 // ─── DB DIAGNOSTICS (accessible from browser console) ────────────────────────
 window.dbDiag = async () => {
   const keys = ["equipment","reservations","categories","categoryTypes","categoryLoanTypes","teamMembers","kits","policies","certifications","deptHeads","collegeManager","managerToken","siteSettings"];
-  console.log("🔍 Supabase DB Diagnostic Report");
+  console.log("Supabase DB Diagnostic Report");
   console.log("=".repeat(50));
   for (const key of keys) {
     try {
@@ -1291,7 +1291,7 @@ function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, savi
         <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>רק סטודנטים שעברו הסמכה זו יוכלו להשאיל פריט זה</div>
       </div>
       <div className="flex gap-2" style={{paddingTop:8}}>
-        <button className="btn btn-primary" disabled={!f.name||saving||imgUploading} onClick={()=>onSave(f)}>{saving?"⏳ שומר...":initial?"💾 שמור":"➕ הוסף"}</button>
+        <button className="btn btn-primary" disabled={!f.name||saving||imgUploading} onClick={()=>onSave(f)}>{saving?<><Clock size={14} strokeWidth={1.75}/> שומר...</>:initial?"שמור":"הוסף"}</button>
         <button className="btn btn-secondary" onClick={onCancel}>ביטול</button>
       </div>
     </div>
@@ -1678,7 +1678,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
                 <div style={{flex:1}}>
                   <div style={{fontWeight:800,fontSize:14}}>{eq?.name||rp.equipment_id}</div>
-                  <div style={{fontSize:12,color:"var(--text3)",marginTop:2,display:"flex",alignItems:"center",gap:4}}>👤 {rp.student_name} · <Calendar size={12} strokeWidth={1.75}/> {new Date(rp.created_at).toLocaleDateString("he-IL")}</div>
+                  <div style={{fontSize:12,color:"var(--text3)",marginTop:2,display:"flex",alignItems:"center",gap:4}}>{rp.student_name} · <Calendar size={12} strokeWidth={1.75}/> {new Date(rp.created_at).toLocaleDateString("he-IL")}</div>
                   <div style={{marginTop:8,fontSize:13,color:"var(--text)",background:"var(--surface2)",borderRadius:8,padding:"10px 12px",border:"1px solid var(--border)"}}>{rp.content}</div>
                 </div>
                 <button className="btn btn-secondary btn-sm" style={{flexShrink:0}} onClick={async()=>{
@@ -1704,7 +1704,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       {/* Active equipment sub-view */}
       {eqSubView==="active" && <>
       <div className="flex-between mb-4">
-        <div className="search-bar"><span>🔍</span><input placeholder="חיפוש ציוד..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
+        <div className="search-bar"><span><Search size={14} strokeWidth={1.75} color="var(--text3)"/></span><input placeholder="חיפוש ציוד..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
         <div className="flex gap-2" style={{flexWrap:"wrap",justifyContent:"flex-end"}}>
           <button className="btn btn-secondary" onClick={downloadTemplate} title="הורד תבנית Excel">📥 תבנית</button>
           <button className="btn btn-secondary" onClick={()=>csvInputRef.current?.click()}>📤 ייבוא Excel</button>
@@ -1721,7 +1721,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
 
       {/* ── Type filter (sound / photo) ── */}
       <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
-        {[{k:"הכל",label:<><Package size={12} strokeWidth={1.75}/> הכל</>},{k:"סאונד",label:<><Mic size={12} strokeWidth={1.75}/> סאונד</>},{k:"צילום",label:"🎥 צילום"},{k:"כללי",label:"🧩 כללי"}].map(({k,label})=>{
+        {[{k:"הכל",label:<><Package size={12} strokeWidth={1.75}/> הכל</>},{k:"סאונד",label:<><Mic size={12} strokeWidth={1.75}/> סאונד</>},{k:"צילום",label:<><Camera size={12} strokeWidth={1.75}/> צילום</>},{k:"כללי",label:"כללי"}].map(({k,label})=>{
           const active=typeFilter===k;
           return <button key={k} type="button" onClick={()=>setTypeFilter(k)}
             style={{padding:"5px 14px",borderRadius:8,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
@@ -1776,7 +1776,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                   <button type="button" className="btn btn-sm" title="ערוך שם"
                     style={{borderRadius:0,border:"none",borderRight:"1px solid var(--border)",background:"transparent",color:"var(--text3)",padding:"5px 7px",fontSize:11}}
                     onClick={e=>{e.stopPropagation();setEditingCatPill(c);setEditCatPillVal(c);setEditCatPillType(getCatType(c)||"");}}>
-                    ✏️
+                    <Pencil size={12} strokeWidth={1.75} color="var(--text3)"/>
                   </button>
                   {isEmptyCategory && (
                     <button type="button" className="btn btn-sm"
@@ -1857,7 +1857,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                     <div style={{fontSize:11,color:"var(--text3)",marginBottom:8}}>{eq.category}</div>
                     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
                       {eq.soundOnly && <div className="chip" style={{color:"var(--accent)",borderColor:"var(--accent)",display:"flex",alignItems:"center",gap:4}}><Mic size={12} strokeWidth={1.75}/> ציוד סאונד</div>}
-                      {eq.photoOnly && <div className="chip" style={{color:"var(--green)",borderColor:"rgba(39,174,96,0.45)"}}>🎥 ציוד צילום</div>}
+                      {eq.photoOnly && <div className="chip" style={{color:"var(--green)",borderColor:"rgba(39,174,96,0.45)",display:"inline-flex",alignItems:"center",gap:4}}><Camera size={11} strokeWidth={1.75}/> ציוד צילום</div>}
                     </div>
                     <div style={{fontSize:13,display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
                       <div>
@@ -1870,7 +1870,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                     {eq.notes && <div className="chip" style={{marginTop:6}}>💬 {eq.notes}</div>}
                     <div style={{marginTop:8}}>{statusBadge(eq.status)}</div>
                     <div className="flex gap-2" style={{marginTop:12,flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
-                      <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"edit",item:eq})}>✏️ עריכה</button>
+                      <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"edit",item:eq})} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> עריכה</button>
                       <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"units",item:eq})}>🔧 יחידות</button>
                       <button className="btn btn-danger btn-sm" onClick={(e)=>{e.stopPropagation();del(eq)}}>🗑️</button>
                     </div>
@@ -1881,7 +1881,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
           ))}
         </>
       )}
-      {(modal?.type==="add"||modal?.type==="edit") && <Modal title={modal.type==="add"?"➕ הוספת ציוד":"✏️ עריכת ציוד"} onClose={()=>setModal(null)}><EqForm
+      {(modal?.type==="add"||modal?.type==="edit") && <Modal title={modal.type==="add"?"הוספת ציוד":"עריכת ציוד"} onClose={()=>setModal(null)}><EqForm
               initial={modal.type==="edit"?modal.item:modal.defaultCategory?{category:modal.defaultCategory}:null}
               categories={categories}
               equipmentCertTypes={equipmentCertTypes}
@@ -1891,7 +1891,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
               onImageUploaded={(url) => {
                 if (modal.type==="edit" && modal.item?.id) {
                   const updated = equipment.map(e => e.id===modal.item.id ? {...e, image: url} : e);
-                  persistEquipmentChange(updated, { successMessage: "תמונה עודכנה ✅" });
+                  persistEquipmentChange(updated, { successMessage: "תמונה עודכנה" });
                 }
                 setModal(prev => ({...prev, item: {...(prev.item||{}), image: url}}));
               }}/></Modal>}
@@ -2008,7 +2008,7 @@ function AddCategoryModal({ categories, onClose, onAdd }) {
       <div className="form-group">
         <label className="form-label">סוג ציוד</label>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          {[{v:"",l:"🧩 כללי"},{v:"סאונד",l:<><Mic size={13} strokeWidth={1.75}/> סאונד</>},{v:"צילום",l:"🎥 צילום"}].map(({v,l})=>(
+          {[{v:"",l:"כללי"},{v:"סאונד",l:<><Mic size={13} strokeWidth={1.75}/> סאונד</>},{v:"צילום",l:<><Camera size={13} strokeWidth={1.75}/> צילום</>}].map(({v,l})=>(
             <button key={v} type="button" onClick={()=>setType(v)}
               style={{padding:"6px 16px",borderRadius:8,border:`2px solid ${type===v?"var(--accent)":"var(--border)"}`,background:type===v?"var(--accent-glow)":"transparent",color:type===v?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
               {l}
@@ -2075,7 +2075,7 @@ function ManageCategoriesModal({ categories, categoryTypes, onSave, onClose, equ
     <Modal title="📂 ניהול קטגוריות" onClose={onClose}>
       {/* Type filter chips */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
-        {[{k:"סאונד",l:<><Mic size={12} strokeWidth={1.75}/> סאונד</>},{k:"צילום",l:"🎥 צילום"},{k:"",l:"כללי"}].map(({k,l})=>{
+        {[{k:"סאונד",l:<><Mic size={12} strokeWidth={1.75}/> סאונד</>},{k:"צילום",l:<><Camera size={12} strokeWidth={1.75}/> צילום</>},{k:"",l:"כללי"}].map(({k,l})=>{
           const active=typeFilters.includes(k);
           return <button key={k} type="button" onClick={()=>toggleTypeFilter(k)}
             style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
@@ -2120,7 +2120,7 @@ function ManageCategoriesModal({ categories, categoryTypes, onSave, onClose, equ
                 <>
                   <span style={{flex: 1, fontSize: 13, fontWeight: 700}}>{c}</span>
                   <div style={{display:"flex",gap:4,flexShrink:0}}>
-                    {[{v:"סאונד",l:"🎙️"},{v:"צילום",l:"🎥"},{v:"",l:"כללי"}].map(({v,l})=>{
+                    {[{v:"סאונד",l:<Mic size={13} strokeWidth={1.75}/>},{v:"צילום",l:<Camera size={13} strokeWidth={1.75}/>},{v:"",l:"כללי"}].map(({v,l})=>{
                       const active = getEffectiveType(c)===v;
                       return <button key={v} type="button"
                         onClick={()=>onSave({action:"rename",oldName:c,newName:c,type:v})}
@@ -2132,7 +2132,7 @@ function ManageCategoriesModal({ categories, categoryTypes, onSave, onClose, equ
                   <button
                     className="btn btn-secondary btn-sm"
                     onClick={() => { setEditingCat(c); setEditVal(c); setEditType(getEffectiveType(c) || ""); }}
-                    title="ערוך שם">✏️</button>
+                    title="ערוך שם"><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/></button>
                   <button
                     className="btn btn-danger btn-sm"
                     onClick={() => onSave({action:"delete", name: c})}
@@ -2200,7 +2200,7 @@ function PublicMiniCalendar({ reservations, initialLoanType="הכל", previewSta
     ["rgba(26,188,156,0.75)","#fff"],["rgba(236,72,153,0.75)","#fff"],
     ["rgba(200,160,0,0.75)","#fff"], ["rgba(231,76,60,0.75)","#fff"],
   ];
-  const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:<Package size={11} strokeWidth={1.75}/>},{key:"פרטית",label:"פרטית",icon:"👤"},{key:"הפקה",label:"הפקה",icon:<Film size={11} strokeWidth={1.75}/>},{key:"סאונד",label:"סאונד",icon:<Mic size={11} strokeWidth={1.75}/>},{key:"קולנוע יומית",label:"קולנוע יומית",icon:"🎥"},{key:"שיעור",label:"שיעור",icon:"📽️"},{key:"צוות",label:"איש צוות",icon:"💼"}];
+  const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:<Package size={11} strokeWidth={1.75}/>},{key:"פרטית",label:"פרטית",icon:<User size={11} strokeWidth={1.75}/>},{key:"הפקה",label:"הפקה",icon:<Film size={11} strokeWidth={1.75}/>},{key:"סאונד",label:"סאונד",icon:<Mic size={11} strokeWidth={1.75}/>},{key:"קולנוע יומית",label:"קולנוע יומית",icon:<Camera size={11} strokeWidth={1.75}/>},{key:"שיעור",label:"שיעור",icon:<Video size={11} strokeWidth={1.75}/>},{key:"צוות",label:"איש צוות",icon:<Briefcase size={11} strokeWidth={1.75}/>}];
   const activeRes = reservations.filter(r=>
     (r.status==="מאושר"||r.status==="באיחור") && r.borrow_date && r.return_date &&
     (loanTypeF==="הכל" || r.loan_type===loanTypeF)
@@ -2269,10 +2269,10 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
 
   return (
     <>
-      {items.length>0&&<div className="highlight-box">🛒 נבחרו {items.length} סוגים ({totalQty} יחידות)</div>}
+      {items.length>0&&<div className="highlight-box" style={{display:"flex",alignItems:"center",gap:6}}><ShoppingCart size={14} strokeWidth={1.75}/> נבחרו {items.length} סוגים ({totalQty} יחידות)</div>}
       {privateLoanLimitExceeded && (
         <div className="toast toast-error" style={{marginBottom:12,position:"static",minWidth:0,width:"100%"}}>
-          <span>❌</span>
+          <span><XCircle size={14} strokeWidth={1.75}/></span>
           <span>שים לב אין לחרוג מ-4 פריטים בהשאלה פרטית</span>
         </div>
       )}
@@ -2332,7 +2332,7 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
                       </div>
                       {(eq.soundOnly || eq.photoOnly)&&<div style={{marginTop:8,display:"flex",gap:6,flexWrap:"wrap"}}>
                         {eq.soundOnly&&<span style={{background:"rgba(245,166,35,0.12)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><Mic size={10} strokeWidth={1.75}/> ציוד סאונד</span>}
-                        {eq.photoOnly&&<span style={{background:"rgba(39,174,96,0.12)",border:"1px solid rgba(39,174,96,0.35)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--green)",fontWeight:700}}>🎥 ציוד צילום</span>}
+                        {eq.photoOnly&&<span style={{background:"rgba(39,174,96,0.12)",border:"1px solid rgba(39,174,96,0.35)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--green)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><Camera size={10} strokeWidth={1.75}/> ציוד צילום</span>}
                       </div>}
                       <div style={{marginTop:"auto",paddingTop:8,fontSize:11,color:"var(--text3)",fontWeight:700}}>{"\u05DC\u05D7\u05E5 \u05DC\u05E4\u05EA\u05D9\u05D7\u05EA \u05D4\u05E4\u05E8\u05D9\u05D8 \u05D1\u05DE\u05E1\u05DA \u05DE\u05DC\u05D0"}</div>
                     </div>
@@ -2451,7 +2451,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
             {[
               { key:"all", label:"כל הציוד", icon:<Package size={14} strokeWidth={1.75}/> },
               { key:"sound", label:"ציוד סאונד", icon:<Mic size={14} strokeWidth={1.75}/> },
-              { key:"photo", label:"ציוד צילום", icon:"🎥" },
+              { key:"photo", label:"ציוד צילום", icon:<Camera size={11} strokeWidth={1.75}/> },
             ].map((filterOption) => {
               const isActive = privateFilter === filterOption.key;
               return (
@@ -2497,7 +2497,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
       {/* ── Kit selector ── */}
       {relevantKits.length>0 && (
         <div style={{marginBottom:20,padding:"14px 16px",background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
-          <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",marginBottom:10,letterSpacing:0.5}}>🎒 ערכות מוכנות לסוג השאלה זה</div>
+          <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",marginBottom:10,letterSpacing:0.5,display:"flex",alignItems:"center",gap:4}}><Package size={12} strokeWidth={1.75}/> ערכות מוכנות לסוג השאלה זה</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:activeKit?10:0}}>
             {/* "All equipment" pill */}
             <button type="button"
@@ -2511,7 +2511,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
                 <button key={kit.id} type="button"
                   onClick={()=>selectKit(kit)}
                   style={{padding:"7px 16px",borderRadius:20,border:`2px solid ${isActive?"var(--accent)":"var(--border)"}`,background:isActive?"var(--accent)":"var(--surface3)",color:isActive?"#000":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer",transition:"all 0.15s",display:"flex",alignItems:"center",gap:6}}>
-                  🎒 {kit.name}
+                  <Package size={13} strokeWidth={1.75}/> {kit.name}
                   {isActive&&<span style={{fontSize:10,opacity:0.7,display:"inline-flex",alignItems:"center",gap:2}}><Check size={9} strokeWidth={2}/> פעיל</span>}
                 </button>
               );
@@ -2677,10 +2677,10 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
   const tabs = [
     { id:"equipment", label:<><Package size={14} strokeWidth={1.75}/> ציוד</> },
     { id:"policies",  label:<><ClipboardList size={14} strokeWidth={1.75}/> נהלים</> },
-    { id:"kits",      label:"🎒 ערכות" },
-    { id:"contact",   label:"📞 צוות" },
+    { id:"kits",      label:<><Package size={14} strokeWidth={1.75}/> ערכות</> },
+    { id:"contact",   label:<><Phone size={14} strokeWidth={1.75}/> צוות</> },
   ];
-  const LOAN_ICONS = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥" };
+  const LOAN_ICONS = { "פרטית":<User size={11} strokeWidth={1.75}/>,"הפקה":<Film size={11} strokeWidth={1.75}/>,"סאונד":<Mic size={11} strokeWidth={1.75}/>,"קולנוע יומית":<Camera size={11} strokeWidth={1.75}/> };
   const allCats = [...new Set((equipment||[]).map(e=>e.category).filter(Boolean))];
   const visibleEq = infoCatFilter.length===0
     ? (equipment||[])
@@ -2724,7 +2724,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                       {c}
                     </button>;
                   })}
-                  {infoCatFilter.length>0&&<button type="button" onClick={()=>setInfoCatFilter([])} style={{padding:"5px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>✕ הכל</button>}
+                  {infoCatFilter.length>0&&<button type="button" onClick={()=>setInfoCatFilter([])} style={{padding:"5px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><X size={10} strokeWidth={1.75} color="var(--text3)"/> הכל</button>}
                 </div>
               )}
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:14}}>
@@ -2740,7 +2740,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                           <div style={{display:"flex",justifyContent:"center",marginBottom:12}}>
                             {isImg
                               ? <img src={cloudinaryThumb(eq.image)} alt={eq.name} style={{width:80,height:80,objectFit:"contain",borderRadius:8}}/>
-                              : <span style={{fontSize:48}}>{eq.image||"📦"}</span>}
+                              : <span style={{display:"flex",alignItems:"center",justifyContent:"center"}}>{eq.image?<span style={{fontSize:48}}>{eq.image}</span>:<Package size={48} strokeWidth={1.5}/>}</span>}
                           </div>
                           <div style={{fontWeight:800,fontSize:14,textAlign:"center",marginBottom:4}}>{eq.name}</div>
                           <div style={{fontSize:11,color:"var(--accent)",fontWeight:700,textAlign:"center"}}>{eq.category}</div>
@@ -2768,7 +2768,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                   {selectedEq.image?.startsWith("data:")||selectedEq.image?.startsWith("http")
                     ? <img src={selectedEq.image} alt={selectedEq.name}
                         style={{width:"100%",maxWidth:320,borderRadius:12,border:"1px solid var(--border)",objectFit:"contain",background:"var(--surface2)"}}/>
-                    : <div style={{width:200,height:200,display:"flex",alignItems:"center",justifyContent:"center",fontSize:100}}>{selectedEq.image||"📦"}</div>
+                    : <div style={{width:200,height:200,display:"flex",alignItems:"center",justifyContent:"center"}}>{selectedEq.image?<span style={{fontSize:100}}>{selectedEq.image}</span>:<Package size={80} strokeWidth={1.5}/>}</div>
                   }
                 </div>
                 {/* Text */}
@@ -2780,12 +2780,12 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                   )}
                   {selectedEq.notes&&(
                     <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 14px",fontSize:13,color:"var(--text3)",lineHeight:1.6}}>
-                      📝 <strong>הערות:</strong> {selectedEq.notes}
+                      <FileText size={13} strokeWidth={1.75} style={{flexShrink:0}}/> <strong>הערות:</strong> {selectedEq.notes}
                     </div>
                   )}
                   <div style={{marginTop:16,display:"flex",gap:8,flexWrap:"wrap"}}>
-                    {selectedEq.soundOnly&&<span style={{background:"rgba(245,166,35,0.12)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:20,padding:"4px 12px",fontSize:12,color:"var(--accent)",fontWeight:700}}>🎙️ ציוד סאונד</span>}
-                    {selectedEq.photoOnly&&<span style={{background:"rgba(39,174,96,0.12)",border:"1px solid rgba(39,174,96,0.35)",borderRadius:20,padding:"4px 12px",fontSize:12,color:"var(--green)",fontWeight:700}}>🎥 ציוד צילום</span>}
+                    {selectedEq.soundOnly&&<span style={{background:"rgba(245,166,35,0.12)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:20,padding:"4px 12px",fontSize:12,color:"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:4}}><Mic size={12} strokeWidth={1.75}/> ציוד סאונד</span>}
+                    {selectedEq.photoOnly&&<span style={{background:"rgba(39,174,96,0.12)",border:"1px solid rgba(39,174,96,0.35)",borderRadius:20,padding:"4px 12px",fontSize:12,color:"var(--green)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:4}}><Camera size={12} strokeWidth={1.75}/> ציוד צילום</span>}
                   </div>
                 </div>
               </div>
@@ -2819,8 +2819,8 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                 : (kits||[]).filter(k=>k.kitType!=="lesson").map(kit=>(
                   <div key={kit.id} style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"20px"}}>
                     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:kit.description?8:14}}>
-                      <span style={{fontWeight:900,fontSize:17}}>🎒 {kit.name}</span>
-                      {kit.loanType&&<span style={{fontSize:12,background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"2px 10px",color:"var(--accent)",fontWeight:700}}>{LOAN_ICONS[kit.loanType]||"📦"} {kit.loanType}</span>}
+                      <span style={{fontWeight:900,fontSize:17,display:"flex",alignItems:"center",gap:6}}><Package size={16} strokeWidth={1.75}/> {kit.name}</span>
+                      {kit.loanType&&<span style={{fontSize:12,background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"2px 10px",color:"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:4}}>{LOAN_ICONS[kit.loanType]||<Package size={11} strokeWidth={1.75}/>} {kit.loanType}</span>}
                     </div>
                     {kit.description&&(
                       <div style={{fontSize:14,color:"var(--text2)",marginBottom:14,lineHeight:1.7,background:"var(--surface)",borderRadius:"var(--r-sm)",padding:"10px 14px",border:"1px solid var(--border)"}}>{kit.description}</div>
@@ -2833,7 +2833,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                         return (
                           <div key={j} style={{display:"flex",alignItems:"center",gap:12,background:"var(--surface)",borderRadius:"var(--r-sm)",padding:"10px 14px",border:"1px solid var(--border)"}}>
                             <div style={{width:40,height:40,flexShrink:0,borderRadius:6,overflow:"hidden",background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                              {isImg ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{fontSize:22}}>{eq?.image||"📦"}</span>}
+                              {isImg ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : (eq?.image?<span style={{fontSize:22}}>{eq.image}</span>:<Package size={22} strokeWidth={1.5}/>)}
                             </div>
                             <div style={{flex:1}}>
                               <div style={{fontWeight:700,fontSize:14}}>{item.name}</div>
@@ -2861,8 +2861,8 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                     <div style={{width:48,height:48,borderRadius:"50%",background:"linear-gradient(135deg,var(--accent),rgba(245,166,35,0.5))",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:900,flexShrink:0,color:"#000"}}>{m.name?.[0]||"?"}</div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontWeight:800,fontSize:15,marginBottom:4}}>{m.name}</div>
-                      {m.phone&&<div style={{fontSize:13,color:"var(--text2)",marginBottom:2}}>📞 {m.phone}</div>}
-                      <div style={{fontSize:12,color:"var(--text3)",wordBreak:"break-all"}}>✉️ {m.email}</div>
+                      {m.phone&&<div style={{fontSize:13,color:"var(--text2)",marginBottom:2,display:"flex",alignItems:"center",gap:4}}><Phone size={12} strokeWidth={1.75}/> {m.phone}</div>}
+                      <div style={{fontSize:12,color:"var(--text3)",wordBreak:"break-all"}}>{m.email}</div>
                     </div>
                   </div>
                 ))
@@ -2887,11 +2887,11 @@ function uint8ToBase64_policies(bytes) {
 
 function PoliciesPage({ policies, setPolicies, showToast }) {
   const LOAN_TYPES = [
-    { key:"פרטית", icon:"👤", label:"השאלה פרטית" },
+    { key:"פרטית", icon:<User size={15} strokeWidth={1.75}/>, label:"השאלה פרטית" },
     { key:"הפקה",  icon:<Film size={15} strokeWidth={1.75}/>, label:"השאלה להפקה" },
     { key:"סאונד", icon:<Mic size={15} strokeWidth={1.75}/>, label:"השאלת סאונד" },
-    { key:"קולנוע יומית", icon:"🎥", label:"השאלת קולנוע יומית" },
-    { key:"לילה", icon:"🌙", label:"נהלי קביעת חדר לילה" },
+    { key:"קולנוע יומית", icon:<Camera size={15} strokeWidth={1.75}/>, label:"השאלת קולנוע יומית" },
+    { key:"לילה", icon:"🌙", label:"נהלי קביעת חדר לילה" }, // 🌙 intentional: moon icon, no Lucide equivalent
   ];
   const [draft, setDraft] = useState({ ...policies });
   const [saving, setSaving] = useState(false);
@@ -2924,7 +2924,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
         finalData = uint8ToBase64_policies(new Uint8Array(arrayBuffer));
       }
       setDraft(p => ({ ...p, commitmentPdf: finalData, commitmentPdfCompressed: compressed, commitmentPdfName: file.name }));
-      showToast("success", "המסמך הועלה בהצלחה ✅");
+      showToast("success", "המסמך הועלה בהצלחה");
     } catch {
       showToast("error", "שגיאה בעיבוד הקובץ");
     }
@@ -2936,8 +2936,8 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
     setPolicies(draft);
     const r = await storageSet("policies", draft);
     setSaving(false);
-    if(r.ok) showToast("success", "הנהלים נשמרו בהצלחה ✅");
-    else showToast("error", "❌ שגיאה בשמירת הנהלים");
+    if(r.ok) showToast("success", "הנהלים נשמרו בהצלחה");
+    else showToast("error", "שגיאה בשמירת הנהלים");
   };
 
   const lt_active = LOAN_TYPES.find(l=>l.key===fsEdit);
@@ -2951,7 +2951,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
         <div key={lt.key} className="card" style={{marginBottom:20}}>
           <div className="card-header">
             <div className="card-title">{lt.icon} נהלי {lt.label}</div>
-            <button className="btn btn-secondary btn-sm" onClick={()=>setFsEdit(lt.key)}>✏️ עריכה מורחבת</button>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setFsEdit(lt.key)} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> עריכה מורחבת</button>
           </div>
           <textarea
             className="form-input"
@@ -2965,7 +2965,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
       ))}
       {/* Commitment PDF */}
       <div className="card" style={{marginBottom:20}}>
-        <div className="card-header"><div className="card-title">📄 מסמך התחייבות — נהלי השאלת ציוד</div></div>
+        <div className="card-header"><div className="card-title" style={{display:"flex",alignItems:"center",gap:6}}><FileText size={15} strokeWidth={1.75}/> מסמך התחייבות — נהלי השאלת ציוד</div></div>
         <div style={{padding:"16px 20px"}}>
           <div style={{fontSize:12,color:"var(--text3)",marginBottom:14,lineHeight:1.7}}>
             המסמך יוצג לסטודנטים בפאנל "נהלים" עם אפשרות הורדה. הסטודנט נדרש להדפיסו ולחתום עליו לפני השאלה ראשונה.
@@ -3004,7 +3004,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
             <div style={{fontWeight:900,fontSize:17}}>{lt_active.icon} עריכת נהלי {lt_active.label}</div>
             <div style={{display:"flex",gap:8}}>
               <button className="btn btn-primary btn-sm" onClick={async()=>{ await save(); setFsEdit(null); }}>💾 שמור וסגור</button>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setFsEdit(null)}>✕ סגור</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setFsEdit(null)} style={{display:"flex",alignItems:"center",gap:4}}><X size={14} strokeWidth={1.75} color="var(--text3)"/> סגור</button>
             </div>
           </div>
           <textarea
@@ -3037,13 +3037,13 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
 
   const eqName = id => equipment.find(e=>e.id==id)?.name||"?";
   const EqImg = ({id,size=20}) => {
-    const img = equipment.find(e=>e.id==id)?.image||"📦";
+    const img = equipment.find(e=>e.id==id)?.image||"";
     return img.startsWith("data:")||img.startsWith("http")
       ? <img src={img} alt="" style={{width:size,height:size,objectFit:"cover",borderRadius:4,verticalAlign:"middle"}}/>
-      : <span style={{fontSize:size*0.8}}>{img}</span>;
+      : <span style={{fontSize:size*0.8}}>{img||<Package size={size*0.8} strokeWidth={1.75} color="var(--text3)"/>}</span>;
   };
 
-  const LOAN_ICONS = {"פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥","שיעור":"📽️"};
+  const LOAN_ICONS = {"פרטית":<User size={11} strokeWidth={1.75}/>,"הפקה":<Film size={11} strokeWidth={1.75}/>,"סאונד":<Mic size={11} strokeWidth={1.75}/>,"קולנוע יומית":<Camera size={11} strokeWidth={1.75}/>,"שיעור":<Video size={11} strokeWidth={1.75}/>};
   const sortByReturned = arr => [...arr].sort((a,b)=>(new Date(b.returned_at||b.return_date).getTime())-(new Date(a.returned_at||a.return_date).getTime()));
 
   const matchesSearch = r => !search || r.student_name?.includes(search) || r.email?.includes(search) || r.course?.includes(search);
@@ -3065,7 +3065,7 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
         onMouseLeave={e=>{e.currentTarget.style.borderColor=isLesson?"rgba(155,89,182,0.3)":"var(--border)";}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <div style={{width:34,height:34,borderRadius:"50%",background:isLesson?"rgba(155,89,182,0.2)":"rgba(52,152,219,0.15)",border:`2px solid ${isLesson?"#9b59b6":"var(--blue)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:900,flexShrink:0,color:isLesson?"#9b59b6":"var(--blue)"}}>{isLesson?"📽️":r.student_name?.[0]||"?"}</div>
+            <div style={{width:34,height:34,borderRadius:"50%",background:isLesson?"rgba(155,89,182,0.2)":"rgba(52,152,219,0.15)",border:`2px solid ${isLesson?"#9b59b6":"var(--blue)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,flexShrink:0,color:isLesson?"#9b59b6":"var(--blue)"}}>{isLesson?<Video size={16} strokeWidth={1.75}/>:r.student_name?.[0]||"?"}</div>
             <div>
               <div style={{fontWeight:700,fontSize:14}}>{r.student_name}{isLesson&&r.course&&<span style={{fontSize:11,color:"#9b59b6",fontWeight:700,marginRight:6}}>· {r.course}</span>}</div>
               <div style={{fontSize:11,color:"var(--text3)"}}>{r.email}</div>
@@ -3073,17 +3073,17 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
           </div>
           <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
             {isLesson
-              ? <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",border:"1px solid rgba(155,89,182,0.4)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>📽️ שיעור הסתיים</span>
-              : <span style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",border:"1px solid rgba(52,152,219,0.4)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🔵 הוחזר</span>}
-            {r.loan_type&&!isLesson&&<span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>{LOAN_ICONS[r.loan_type]||"📦"} {r.loan_type}</span>}
+              ? <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",border:"1px solid rgba(155,89,182,0.4)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",gap:4}}><Video size={11} strokeWidth={1.75}/> שיעור הסתיים</span>
+              : <span style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",border:"1px solid rgba(52,152,219,0.4)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>הוחזר</span>}
+            {r.loan_type&&!isLesson&&<span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}>{LOAN_ICONS[r.loan_type]||<Package size={11} strokeWidth={1.75}/>} {r.loan_type}</span>}
             <button className="btn btn-danger btn-sm" onClick={e=>{e.stopPropagation();deleteRes(r.id);}}>🗑️</button>
           </div>
         </div>
         <div style={{marginTop:10,display:"flex",gap:16,fontSize:12,color:"var(--text2)",flexWrap:"wrap"}}>
-          <span>📅 {formatDate(r.borrow_date)}{r.borrow_time&&<strong style={{color:"var(--accent)",marginRight:4}}> {r.borrow_time}</strong>}</span>
+          <span style={{display:"inline-flex",alignItems:"center",gap:3}}><Calendar size={12} strokeWidth={1.75}/> {formatDate(r.borrow_date)}{r.borrow_time&&<strong style={{color:"var(--accent)",marginRight:4}}> {r.borrow_time}</strong>}</span>
           <span>↩ {formatDate(r.return_date)}{r.return_time&&<strong style={{color:"var(--accent)",marginRight:4}}> {r.return_time}</strong>}</span>
-          <span>📦 {r.items?.length||0} פריטים</span>
-          {r.returned_at&&<span style={{color:"var(--text3)"}}>🕐 הוחזר: {new Date(r.returned_at).toLocaleDateString("he-IL")}</span>}
+          <span style={{display:"inline-flex",alignItems:"center",gap:3}}><Package size={12} strokeWidth={1.75}/> {r.items?.length||0} פריטים</span>
+          {r.returned_at&&<span style={{color:"var(--text3)",display:"inline-flex",alignItems:"center",gap:4}}><Clock size={11} strokeWidth={1.75}/> הוחזר: {new Date(r.returned_at).toLocaleDateString("he-IL")}</span>}
         </div>
         <div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:4}}>
           {r.items?.map((i,j)=><span key={j} className="chip"><EqImg id={i.equipment_id}/> {eqName(i.equipment_id)} ×{i.quantity}</span>)}
@@ -3103,13 +3103,13 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
     <div className="page">
       {/* ── Filters bar ── */}
       <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
-        <div className="search-bar" style={{flex:1,minWidth:160}}><span>🔍</span><input placeholder="חיפוש לפי שם, מייל או קורס..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
+        <div className="search-bar" style={{flex:1,minWidth:160}}><span><Search size={14} strokeWidth={1.75} color="var(--text3)"/></span><input placeholder="חיפוש לפי שם, מייל או קורס..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
         <span style={{fontSize:13,color:"var(--text3)"}}>סה״כ: <strong style={{color:"var(--text)"}}>{totalShown}</strong> בקשות</span>
       </div>
 
       {/* Section chips */}
       <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
-        {[["הכל","📦 הכל","var(--text2)"],["השאלות","🎒 השאלות סטודנטים","var(--blue)"],["שיעורים","📽️ שיעורים","#9b59b6"]].map(([val,label,col])=>(
+        {[["הכל",<><Package size={13} strokeWidth={1.75}/> הכל</>,"var(--text2)"],["השאלות",<><Package size={13} strokeWidth={1.75}/> השאלות סטודנטים</>,"var(--blue)"],["שיעורים",<><Film size={13} strokeWidth={1.75}/> שיעורים</>,"#9b59b6"]].map(([val,label,col])=>(
           <button key={val} onClick={()=>{setSectionF(val);if(val!=="השאלות")setLoanTypeF("הכל");}}
             style={{padding:"6px 16px",borderRadius:20,border:`1.5px solid ${sectionF===val?col:"var(--border)"}`,background:sectionF===val?`${col}22`:"transparent",color:sectionF===val?col:"var(--text2)",fontWeight:sectionF===val?700:400,fontSize:13,cursor:"pointer",transition:"all .15s"}}>
             {label}
@@ -3130,7 +3130,7 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
           {/* ── Student loans section ── */}
           {showStudents&&studentArchive.length>0&&(
             <>
-              <SectionHeader label="🎒 השאלות סטודנטים שהוחזרו" color="var(--blue)" count={studentArchive.length}/>
+              <SectionHeader label={<><Package size={13} strokeWidth={1.75}/> השאלות סטודנטים שהוחזרו</>} color="var(--blue)" count={studentArchive.length}/>
               <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:8}}>
                 {studentArchive.map(r=><ResCard key={r.id} r={r}/>)}
               </div>
@@ -3139,7 +3139,7 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
           {/* ── Lesson section ── */}
           {showLessons&&lessonArchive.length>0&&(
             <>
-              <SectionHeader label="📽️ שיעורים שהסתיימו" color="#9b59b6" count={lessonArchive.length}/>
+              <SectionHeader label={<><Video size={13} strokeWidth={1.75}/> שיעורים שהסתיימו</>} color="#9b59b6" count={lessonArchive.length}/>
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {lessonArchive.map(r=><ResCard key={r.id} r={r}/>)}
               </div>
@@ -3156,16 +3156,16 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
           <div style={{width:"100%",maxWidth:560,background:"var(--surface)",borderRadius:16,border:`1px solid ${isLesson?"rgba(155,89,182,0.4)":"rgba(52,152,219,0.4)"}`,direction:"rtl",maxHeight:"90vh",overflowY:"auto"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 22px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0",position:"sticky",top:0,zIndex:1}}>
               <div>
-                <div style={{fontWeight:900,fontSize:17}}>{isLesson?"📽️ פרטי שיעור — ארכיון":"🗄️ פרטי השאלה — ארכיון"}</div>
+                <div style={{fontWeight:900,fontSize:17,display:"flex",alignItems:"center",gap:6}}>{isLesson?<><Video size={16} strokeWidth={1.75}/> פרטי שיעור — ארכיון</>:"פרטי השאלה — ארכיון"}</div>
                 <div style={{fontSize:12,color:"var(--text3)",marginTop:3}}>{viewRes.student_name}</div>
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setViewRes(null)}>✕ סגור</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setViewRes(null)} style={{display:"flex",alignItems:"center",gap:4}}><X size={14} strokeWidth={1.75} color="var(--text3)"/> סגור</button>
             </div>
             <div style={{padding:"20px 22px",display:"flex",flexDirection:"column",gap:16}}>
               <div style={{display:"flex",justifyContent:"center"}}>
                 {isLesson
-                  ? <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",border:"1px solid rgba(155,89,182,0.4)",borderRadius:20,padding:"4px 18px",fontSize:13,fontWeight:700}}>📽️ שיעור הסתיים</span>
-                  : <span style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",border:"1px solid rgba(52,152,219,0.4)",borderRadius:20,padding:"4px 18px",fontSize:13,fontWeight:700}}>🔵 הוחזר</span>}
+                  ? <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",border:"1px solid rgba(155,89,182,0.4)",borderRadius:20,padding:"4px 18px",fontSize:13,fontWeight:700,display:"inline-flex",alignItems:"center",gap:6}}><Video size={13} strokeWidth={1.75}/> שיעור הסתיים</span>
+                  : <span style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",border:"1px solid rgba(52,152,219,0.4)",borderRadius:20,padding:"4px 18px",fontSize:13,fontWeight:700}}>הוחזר</span>}
               </div>
               <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"14px 16px"}}>
                 <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>{isLesson?"פרטי שיעור":"פרטי סטודנט"}</div>
@@ -3179,7 +3179,7 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
               <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"14px 16px"}}>
                 <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>תאריכים</div>
                 <div className="responsive-split">
-                  {[["📅 השאלה",`${formatDate(viewRes.borrow_date)}${viewRes.borrow_time?" · "+viewRes.borrow_time:""}`],["↩ החזרה",`${formatDate(viewRes.return_date)}${viewRes.return_time?" · "+viewRes.return_time:""}`]].map(([l,v])=>(
+                  {[[<><Calendar size={11} strokeWidth={1.75}/> השאלה</>,`${formatDate(viewRes.borrow_date)}${viewRes.borrow_time?" · "+viewRes.borrow_time:""}`],["↩ החזרה",`${formatDate(viewRes.return_date)}${viewRes.return_time?" · "+viewRes.return_time:""}`]].map(([l,v])=>(
                     <div key={l} style={{background:"var(--surface3)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
                       <div style={{fontSize:11,color:"var(--text3)",marginBottom:4}}>{l}</div>
                       <div style={{fontWeight:700,fontSize:13,color:"var(--accent)"}}>{v}</div>
@@ -3187,7 +3187,7 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
                   ))}
                 </div>
                 <div style={{marginTop:8,fontSize:12,color:"var(--text3)"}}>
-                  סוג השאלה: <strong style={{color:"var(--text)"}}>{LOAN_ICONS[viewRes.loan_type]||"📦"} {viewRes.loan_type}</strong>
+                  סוג השאלה: <strong style={{color:"var(--text)",display:"inline-flex",alignItems:"center",gap:3}}>{LOAN_ICONS[viewRes.loan_type]||<Package size={11} strokeWidth={1.75}/>} {viewRes.loan_type}</strong>
                 </div>
               </div>
               <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"14px 16px"}}>
@@ -3220,10 +3220,10 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
 // ─── TEAM PAGE ────────────────────────────────────────────────────────────────
 function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, collegeManager={}, setCollegeManager, showToast, managerToken="" }) {
   const LOAN_TYPES = ["פרטית","הפקה","סאונד","קולנוע יומית"];
-  const LOAN_ICONS = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️", "קולנוע יומית":"🎥" };
+  const LOAN_ICONS = { "פרטית":<User size={11} strokeWidth={1.75}/>, "הפקה":<Film size={11} strokeWidth={1.75}/>, "סאונד":<Mic size={11} strokeWidth={1.75}/>, "קולנוע יומית":<Camera size={11} strokeWidth={1.75}/> };
   const emptyForm = { name:"", email:"", phone:"", loanTypes:[...LOAN_TYPES] };
   const DH_LOAN_TYPES = ["הפקה","סאונד","קולנוע יומית"];
-  const DH_LOAN_ICONS = { "הפקה":"🎬", "סאונד":"🎙️", "קולנוע יומית":"🎥" };
+  const DH_LOAN_ICONS = { "הפקה":<Film size={11} strokeWidth={1.75}/>, "סאונד":<Mic size={11} strokeWidth={1.75}/>, "קולנוע יומית":<Camera size={11} strokeWidth={1.75}/> };
   const emptyDhForm = { name:"", email:"", role:"", loanTypes:[] };
   const [dhForm, setDhForm]     = useState(emptyDhForm);
   const [addingDh, setAddingDh] = useState(false);
@@ -3240,7 +3240,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
     const r = await storageSet("collegeManager", updated);
     setMgrSaving(false);
     if(r.ok) showToast("success","פרטי מנהל המכללה נשמרו");
-    else showToast("error","❌ שגיאה בשמירה");
+    else showToast("error","שגיאה בשמירה");
   };
 
   const toggleDhLT = (form, setForm, lt) =>
@@ -3262,7 +3262,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
       logActivity({ user_id: caller.id, user_name: caller.full_name, action: "dept_head_add", entity: "deptHeads", entity_id: String(updated[updated.length-1].id), details: { name, email, role: dhForm.role } });
       setDhForm(emptyDhForm); setAddingDh(false);
     }
-    else showToast("error","❌ שגיאה בשמירה");
+    else showToast("error","שגיאה בשמירה");
   };
 
   const saveEditDh = async () => {
@@ -3280,7 +3280,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
       logActivity({ user_id: caller.id, user_name: caller.full_name, action: "dept_head_edit", entity: "deptHeads", entity_id: String(editDh.id), details: { name, email } });
       setEditDh(null);
     }
-    else showToast("error","❌ שגיאה בשמירה");
+    else showToast("error","שגיאה בשמירה");
   };
 
   const delDh = async (id) => {
@@ -3328,7 +3328,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
     const updated = [...teamMembers, { ...addForm, id: Date.now(), name, email, phone: addForm.phone?.trim()||"" }];
     setTeamMembers(updated);
     const _tmNew = await storageSet("teamMembers", updated);
-    if(!_tmNew.ok) showToast("error", "❌ שגיאה בשמירה — נסה שוב");
+    if(!_tmNew.ok) showToast("error", "שגיאה בשמירה — נסה שוב");
     else {
       showToast("success", `${name} נוסף לצוות`);
       const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
@@ -3352,7 +3352,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
     const updated = teamMembers.map(m => m.id===editMember.id ? {...m,...editForm,name,email,phone:editForm.phone?.trim()||""} : m);
     setTeamMembers(updated);
     const _tmEditRes = await storageSet("teamMembers", updated);
-    if(!_tmEditRes.ok) showToast("error", "❌ שגיאה בשמירה — נסה שוב");
+    if(!_tmEditRes.ok) showToast("error", "שגיאה בשמירה — נסה שוב");
     else {
       showToast("success", "איש צוות עודכן");
       const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
@@ -3366,7 +3366,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
     const updated = teamMembers.filter(m => m.id!==id);
     setTeamMembers(updated);
     const _tmDelRes = await storageSet("teamMembers", updated);
-    if(!_tmDelRes.ok) showToast("error", "❌ שגיאה בשמירה");
+    if(!_tmDelRes.ok) showToast("error", "שגיאה בשמירה");
     else {
       showToast("success", "איש צוות הוסר");
       const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
@@ -3402,10 +3402,10 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
             <input className="form-input" type="email" placeholder="manager@college.ac.il" value={mgrForm.email} onChange={e=>setMgrForm(p=>({...p,email:e.target.value}))}/></div>
         </div>
         {collegeManager.email&&(
-          <div style={{fontSize:12,color:"var(--green)",marginBottom:10}}>✅ מוגדר: <strong>{collegeManager.name}</strong> ({collegeManager.email})</div>
+          <div style={{fontSize:12,color:"var(--green)",marginBottom:10,display:"flex",alignItems:"center",gap:4}}><CheckCircle size={12} strokeWidth={1.75}/> מוגדר: <strong>{collegeManager.name}</strong> ({collegeManager.email})</div>
         )}
         <button className="btn btn-primary" disabled={!mgrForm.name.trim()||!mgrForm.email.trim()||mgrSaving} onClick={saveMgr}>
-          {mgrSaving?"⏳ שומר...":"💾 שמור פרטי מנהל"}
+          {mgrSaving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:"💾 שמור פרטי מנהל"}
         </button>
         {/* Public daily display link */}
         <div style={{marginTop:14,background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",fontSize:12}}>
@@ -3415,10 +3415,10 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
               {window.location.origin}/daily
             </code>
             <button className="btn btn-secondary btn-sm" onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/daily`);showToast("success","הקישור הועתק!");}}>
-              📋 העתק
+              <ClipboardList size={13} strokeWidth={1.75}/> העתק
             </button>
             <a href="/daily" target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm" style={{textDecoration:"none"}}>
-              🔗 פתח
+              <Link size={13} strokeWidth={1.75}/> פתח
             </a>
           </div>
           <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>הצג על מסך/טלוויזיה בלובי — מתחלף אוטומטית בין לוז שיעורים לקביעות חדרים</div>
@@ -3426,16 +3426,16 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
 
         {/* Daily table link */}
         <div style={{marginTop:10,background:"rgba(46,204,113,0.08)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",fontSize:12}}>
-          <div style={{fontWeight:700,marginBottom:6,color:"#2ecc71"}}>📋 לינק לוח לוז יומי בפורמט טבלה</div>
+          <div style={{fontWeight:700,marginBottom:6,color:"#2ecc71",display:"flex",alignItems:"center",gap:4}}><ClipboardList size={13} strokeWidth={1.75}/> לינק לוח לוז יומי בפורמט טבלה</div>
           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             <code style={{fontSize:11,background:"var(--surface3)",padding:"3px 8px",borderRadius:4,flex:1,wordBreak:"break-all",color:"var(--text2)"}}>
               {window.location.origin}/daily-table
             </code>
             <button className="btn btn-secondary btn-sm" onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/daily-table`);showToast("success","הקישור הועתק!");}}>
-              📋 העתק
+              <ClipboardList size={13} strokeWidth={1.75}/> העתק
             </button>
             <a href="/daily-table" target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm" style={{textDecoration:"none"}}>
-              🔗 פתח
+              <Link size={13} strokeWidth={1.75}/> פתח
             </a>
           </div>
           <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>תצוגת טבלה פשוטה של כל קביעות היום</div>
@@ -3443,13 +3443,13 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
 
         {managerToken&&(
           <div style={{marginTop:14,background:"rgba(52,152,219,0.08)",border:"1px solid rgba(52,152,219,0.25)",borderRadius:"var(--r-sm)",padding:"10px 14px",fontSize:12}}>
-            <div style={{fontWeight:700,marginBottom:6,color:"#3498db"}}>🔗 קישור לוח שנה למנהל המכללה</div>
+            <div style={{fontWeight:700,marginBottom:6,color:"#3498db",display:"flex",alignItems:"center",gap:6}}><Link size={13} strokeWidth={1.75}/> קישור לוח שנה למנהל המכללה</div>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
               <code style={{fontSize:11,background:"var(--surface3)",padding:"3px 8px",borderRadius:4,flex:1,wordBreak:"break-all",color:"var(--text2)"}}>
                 {window.location.origin}/manager-calendar?token={managerToken}
               </code>
               <button className="btn btn-secondary btn-sm" onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/manager-calendar?token=${managerToken}`);showToast("success","הקישור הועתק!");}}>
-                📋 העתק
+                <ClipboardList size={13} strokeWidth={1.75}/> העתק
               </button>
             </div>
             <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>שלח קישור זה למנהל — הוא יוכל לצפות ולשנות סטטוסים של כל הבקשות</div>
@@ -3460,9 +3460,9 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
       {/* ── Dept heads section ── */}
       <div className="card" style={{marginBottom:24,border:"2px solid rgba(155,89,182,0.3)",background:"rgba(155,89,182,0.04)"}}>
         <div className="card-header">
-          <div className="card-title">🎓 ראשי מחלקות</div>
+          <div className="card-title" style={{display:"flex",alignItems:"center",gap:6}}><GraduationCap size={16} strokeWidth={1.75}/> ראשי מחלקות</div>
           <button className="btn btn-primary btn-sm" onClick={()=>setAddingDh(p=>!p)}>
-            {addingDh?"✕ ביטול":"➕ הוסף ראש מחלקה"}
+            {addingDh?<><X size={13} strokeWidth={1.75} color="var(--text3)"/> ביטול</>:"➕ הוסף ראש מחלקה"}
           </button>
         </div>
         <div style={{fontSize:12,color:"var(--text3)",marginBottom:10}}>
@@ -3496,7 +3496,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
               </div>
             </div>
             <button className="btn btn-primary" disabled={!dhForm.name.trim()||!dhForm.email.trim()||dhForm.loanTypes.length===0||dhSaving} onClick={saveDeptHead}>
-              {dhSaving?"⏳ שומר...":"✅ הוסף ראש מחלקה"}
+              {dhSaving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:<><CheckCircle size={13} strokeWidth={1.75}/> הוסף ראש מחלקה</>}
             </button>
           </div>
         )}
@@ -3507,7 +3507,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
           : <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {deptHeads.map(dh=>(
               <div key={dh.id} style={{background:"var(--surface)",border:"1px solid rgba(155,89,182,0.2)",borderRadius:"var(--r-sm)",padding:"12px 16px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-                <div style={{width:36,height:36,borderRadius:"50%",background:"rgba(155,89,182,0.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>🎓</div>
+                <div style={{width:36,height:36,borderRadius:"50%",background:"rgba(155,89,182,0.15)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><GraduationCap size={18} strokeWidth={1.75} color="#9b59b6"/></div>
                 <div style={{flex:1,minWidth:150}}>
                   <div style={{fontWeight:800,fontSize:14}}>{dh.name}</div>
                   {dh.role&&<div style={{fontSize:11,color:"#9b59b6",fontWeight:700,marginTop:1}}>{dh.role}</div>}
@@ -3515,13 +3515,13 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
                   <div style={{display:"flex",gap:4,marginTop:5,flexWrap:"wrap"}}>
                     {(dh.loanTypes||[]).map(lt=>(
                       <span key={lt} style={{background:"rgba(155,89,182,0.12)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"#9b59b6",fontWeight:700}}>
-                        {DH_LOAN_ICONS[lt]||"📦"} {lt}
+                        {DH_LOAN_ICONS[lt]||<Package size={11} strokeWidth={1.75}/>} {lt}
                       </span>
                     ))}
                   </div>
                 </div>
                 <div style={{display:"flex",gap:6}}>
-                  <button className="btn btn-secondary btn-sm" onClick={()=>{setEditDh(dh);setEditDhForm({name:dh.name,email:dh.email,role:dh.role||"",loanTypes:dh.loanTypes||[]});}}>✏️</button>
+                  <button className="btn btn-secondary btn-sm" onClick={()=>{setEditDh(dh);setEditDhForm({name:dh.name,email:dh.email,role:dh.role||"",loanTypes:dh.loanTypes||[]});}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/></button>
                   <button className="btn btn-danger btn-sm" onClick={()=>delDh(dh.id)}>🗑️</button>
                 </div>
               </div>
@@ -3535,8 +3535,8 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}} onClick={e=>e.target===e.currentTarget&&setEditDh(null)}>
           <div style={{width:"100%",maxWidth:480,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0"}}>
-              <div style={{fontWeight:900,fontSize:16}}>✏️ עריכת ראש מחלקה</div>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setEditDh(null)}>✕</button>
+              <div style={{fontWeight:900,fontSize:16,display:"flex",alignItems:"center",gap:6}}><Pencil size={14} strokeWidth={1.75}/> עריכת ראש מחלקה</div>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setEditDh(null)}><X size={14} strokeWidth={1.75} color="var(--text3)"/></button>
             </div>
             <div style={{padding:"20px"}}>
               <div className="grid-2" style={{marginBottom:10}}>
@@ -3563,7 +3563,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
               </div>
               <div style={{display:"flex",gap:8}}>
                 <button className="btn btn-primary" disabled={!editDhForm.name.trim()||!editDhForm.email.trim()||editDhForm.loanTypes.length===0||dhSaving} onClick={saveEditDh}>
-                  {dhSaving?"⏳ שומר...":"💾 שמור"}
+                  {dhSaving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:"💾 שמור"}
                 </button>
                 <button className="btn btn-secondary" onClick={()=>setEditDh(null)}>ביטול</button>
               </div>
@@ -3606,7 +3606,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
               <div style={{width:38,height:38,borderRadius:"50%",background:"var(--surface3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,flexShrink:0}}>{m.name?.[0]||"?"}</div>
               <div style={{flex:1,minWidth:180}}>
                 <div style={{fontWeight:700,fontSize:14}}>{m.name}</div>
-                {m.phone&&<div style={{fontSize:12,color:"var(--text2)",marginBottom:2}}>📞 {m.phone}</div>}
+                {m.phone&&<div style={{fontSize:12,color:"var(--text2)",marginBottom:2,display:"flex",alignItems:"center",gap:4}}><Phone size={11} strokeWidth={1.75}/> {m.phone}</div>}
                 <div style={{fontSize:12,color:"var(--text3)"}}>{m.email}</div>
                 <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap"}}>
                   {(Array.isArray(m.loanTypes) && m.loanTypes.length ? m.loanTypes : (!Array.isArray(m.loanTypes) ? LOAN_TYPES : [])).map(lt=>(
@@ -3618,7 +3618,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
                 </div>
               </div>
               <div style={{display:"flex",gap:6}}>
-                <button className="btn btn-secondary btn-sm" onClick={()=>{setEditMember(m);setEditForm({name:m.name,email:m.email,phone:m.phone||"",loanTypes:m.loanTypes||[...LOAN_TYPES]});}}>✏️ ערוך</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>{setEditMember(m);setEditForm({name:m.name,email:m.email,phone:m.phone||"",loanTypes:m.loanTypes||[...LOAN_TYPES]});}} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> ערוך</button>
                 <button className="btn btn-danger btn-sm" onClick={()=>del(m.id)}>🗑️</button>
               </div>
             </div>
@@ -3632,10 +3632,10 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
           <div style={{width:"100%",maxWidth:480,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 22px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0"}}>
               <div>
-                <div style={{fontWeight:900,fontSize:17}}>✏️ עריכת איש צוות</div>
+                <div style={{fontWeight:900,fontSize:17,display:"flex",alignItems:"center",gap:6}}><Pencil size={14} strokeWidth={1.75}/> עריכת איש צוות</div>
                 <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{editMember.name}</div>
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setEditMember(null)}>✕ סגור</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setEditMember(null)} style={{display:"flex",alignItems:"center",gap:4}}><X size={14} strokeWidth={1.75} color="var(--text3)"/> סגור</button>
             </div>
             <div style={{padding:"22px"}}>
               <div className="responsive-split" style={{marginBottom:14}}>
@@ -3672,7 +3672,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
   const [mode, setMode] = useState(null); // null | "create" | "editStudent" | "editLesson"
   const [editTarget, setEditTarget] = useState(null);
   const LOAN_TYPES = ["פרטית","הפקה","סאונד","קולנוע יומית","הכל"];
-  const LOAN_ICONS = { "פרטית":"👤", "הפקה":"🎬", "סאונד":"🎙️", "קולנוע יומית":"🎥", "הכל":"📦" };
+  const LOAN_ICONS = { "פרטית":<User size={12} strokeWidth={1.75}/>, "הפקה":<Film size={12} strokeWidth={1.75}/>, "סאונד":<Mic size={12} strokeWidth={1.75}/>, "קולנוע יומית":<Camera size={12} strokeWidth={1.75}/>, "הכל":<Package size={12} strokeWidth={1.75}/> };
 
   const studentKits = kits.filter(k=>k.kitType!=="lesson");
   const lessonKits  = kits.filter(k=>k.kitType==="lesson");
@@ -3765,7 +3765,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       const updated = initial ? kits.map(k=>k.id===initial.id?kit:k) : [...kits, kit];
       setKits(updated);
       const r = await storageSet("kits", updated);
-      showToast(r.ok?"success":"error", r.ok ? (initial?"הערכה עודכנה":`ערכה "${trimmedName}" נוצרה`) : "❌ שגיאה בשמירה");
+      showToast(r.ok?"success":"error", r.ok ? (initial?"הערכה עודכנה":`ערכה "${trimmedName}" נוצרה`) : "שגיאה בשמירה");
       if(r.ok) {
         // Audit log for kit create/edit — critical context for silent-delete
         // investigations (e.g. 2026-04-16 incident where a stale cache wiped
@@ -3795,8 +3795,8 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     return (
       <div className="card" style={{marginBottom:20}}>
         <div className="card-header">
-          <div className="card-title">{kitTypeLocal==="lesson"?"🎬":"🎒"} {initial?"עריכת ערכה":"ערכה חדשה"}</div>
-          <button className="btn btn-secondary btn-sm" onClick={onDone}>✕ ביטול</button>
+          <div className="card-title" style={{display:"flex",alignItems:"center",gap:6}}>{kitTypeLocal==="lesson"?<Film size={16} strokeWidth={1.75}/>:<Package size={16} strokeWidth={1.75}/>} {initial?"עריכת ערכה":"ערכה חדשה"}</div>
+          <button className="btn btn-secondary btn-sm" onClick={onDone} style={{display:"flex",alignItems:"center",gap:4}}><X size={14} strokeWidth={1.75} color="var(--text3)"/> ביטול</button>
         </div>
 
         {/* Kit type selector */}
@@ -3804,9 +3804,9 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
           <div className="form-group" style={{marginBottom:14}}>
             <label className="form-label">סוג ערכה</label>
             <div style={{display:"flex",gap:8,marginTop:6}}>
-              {[{k:"student",l:"🎒 ערכה לסטודנט"},{k:"lesson",l:"🎬 ערכת שיעור"}].map(({k,l})=>(
+              {[{k:"student",l:<><Package size={13} strokeWidth={1.75}/> ערכה לסטודנט</>},{k:"lesson",l:<><Film size={13} strokeWidth={1.75}/> ערכת שיעור</>}].map(({k,l})=>(
                 <button key={k} type="button" onClick={()=>setKitTypeLocal(k)}
-                  style={{padding:"7px 16px",borderRadius:20,border:`2px solid ${kitTypeLocal===k?"var(--accent)":"var(--border)"}`,background:kitTypeLocal===k?"var(--accent-glow)":"var(--surface2)",color:kitTypeLocal===k?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+                  style={{padding:"7px 16px",borderRadius:20,border:`2px solid ${kitTypeLocal===k?"var(--accent)":"var(--border)"}`,background:kitTypeLocal===k?"var(--accent-glow)":"var(--surface2)",color:kitTypeLocal===k?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
                   {l}
                 </button>
               ))}
@@ -3817,7 +3817,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         {/* Lesson link panel */}
         {kitTypeLocal==="lesson" && (
           <div style={{background:"rgba(155,89,182,0.07)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:"var(--r)",padding:14,marginBottom:14}}>
-            <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:8}}>📽️ שיוך לשיעור</div>
+            <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:8,display:"flex",alignItems:"center",gap:6}}><Video size={13} strokeWidth={1.75}/> שיוך לשיעור</div>
             {lessons.length===0
               ? <div style={{fontSize:12,color:"var(--text3)"}}>אין שיעורים ברובריקת "שיעורים" — ניתן לשייך לאחר מכן.</div>
               : <div className="form-group" style={{marginBottom:0}}>
@@ -3860,14 +3860,14 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"12px 14px",marginBottom:12}}>
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
             <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סינון:</span>
-            {[{k:"all",l:"📦 הכל"},{k:"sound",l:"🎙️ ציוד סאונד"},{k:"photo",l:"🎥 ציוד צילום"}].map(({k,l})=>{
+            {[{k:"all",l:<><Package size={12} strokeWidth={1.75}/> הכל</>},{k:"sound",l:<><Mic size={12} strokeWidth={1.75}/> ציוד סאונד</>},{k:"photo",l:<><Camera size={12} strokeWidth={1.75}/> ציוד צילום</>}].map(({k,l})=>{
               const active=eqTypeF===k;
               return (
                 <button
                   key={k}
                   type="button"
                   onClick={()=>setEqTypeF(k)}
-                  style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}
+                  style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}
                 >
                   {l}
                 </button>
@@ -3888,14 +3888,14 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
               );
             })}
             {eqCatF.length>0&&(
-              <button type="button" onClick={()=>setEqCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>
-                ✕ נקה
+              <button type="button" onClick={()=>setEqCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
+                <X size={10} strokeWidth={1.75} color="var(--text3)"/> נקה
               </button>
             )}
           </div>
           <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
             <div className="search-bar" style={{flex:1,minWidth:150}}>
-              <span>🔍</span>
+              <span><Search size={14} strokeWidth={1.75} color="var(--text3)"/></span>
               <input placeholder="חיפוש ציוד..." value={eqSearch} onChange={e=>setEqSearch(e.target.value)}/>
             </div>
             <button
@@ -3903,7 +3903,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
               onClick={()=>setShowSelected(prev=>!prev)}
               style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${showSelected?"var(--green)":"var(--border)"}`,background:showSelected?"rgba(46,204,113,0.12)":"transparent",color:showSelected?"var(--green)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}
             >
-              {showSelected ? "✅ נבחרים" : "⬜ נבחרים בלבד"}
+              {showSelected ? <><CheckCircle size={12} strokeWidth={1.75}/> נבחרים</> : "⬜ נבחרים בלבד"}
             </button>
           </div>
         </div>
@@ -3935,24 +3935,24 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
               <div key={cat} style={{marginBottom:12}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
                   <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",textTransform:"uppercase",letterSpacing:1}}>{cat}</div>
-                  {catEq.some(eq=>eq.soundOnly)&&<span style={{fontSize:10,color:"var(--accent)",fontWeight:700}}>🎙️ סאונד</span>}
-                  {catEq.some(eq=>eq.photoOnly)&&<span style={{fontSize:10,color:"var(--green)",fontWeight:700}}>🎥 צילום</span>}
+                  {catEq.some(eq=>eq.soundOnly)&&<span style={{fontSize:10,color:"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}><Mic size={10} strokeWidth={1.75}/> סאונד</span>}
+                  {catEq.some(eq=>eq.photoOnly)&&<span style={{fontSize:10,color:"var(--green)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}><Camera size={9} strokeWidth={1.75}/> צילום</span>}
                 </div>
                 {catEq.map(eq=>{
                   const max = maxQty(eq.id);
                   const qty = getQty(eq.id);
                   return (
                     <div key={eq.id} className="item-row" style={{marginBottom:4,opacity:max===0?0.4:1,background:qty>0?"rgba(245,166,35,0.05)":"",border:qty>0?"1px solid rgba(245,166,35,0.2)":""}}>
-                      <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||"📦"}</span>
+                      <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||<Package size={20} strokeWidth={1.75} color="var(--text3)"/>}</span>
                       <div style={{flex:1,fontSize:13,fontWeight:600}}>
                         {eq.name}
                         <span style={{fontSize:11,color:"var(--text3)",marginRight:6,fontWeight:400}}>מלאי: {max}</span>
-                        {eq.soundOnly&&<span style={{fontSize:10,color:"var(--accent)",fontWeight:700,marginRight:4}}>🎙️</span>}
-                        {eq.photoOnly&&<span style={{fontSize:10,color:"var(--green)",fontWeight:700,marginRight:4}}>🎥</span>}
+                        {eq.soundOnly&&<span style={{fontSize:10,color:"var(--accent)",fontWeight:700,marginRight:4}}><Mic size={10} strokeWidth={1.75}/></span>}
+                        {eq.photoOnly&&<span style={{color:"var(--green)",fontWeight:700,marginRight:4,display:"inline-flex",alignItems:"center"}}><Camera size={9} strokeWidth={1.75}/></span>}
                       </div>
                       {max>0
                         ? <div className="qty-ctrl">
-                            <button className="qty-btn" onClick={()=>setItemQty(eq.id,qty-1)}>−</button>
+                            <button className="qty-btn" onClick={()=>setItemQty(eq.id,qty-1)}><Minus size={12} strokeWidth={1.75} color="var(--text3)"/></button>
                             <span className="qty-num" style={{color:qty>0?"var(--accent)":"inherit"}}>{qty}</span>
                             <button className="qty-btn" disabled={qty>=max} onClick={()=>setItemQty(eq.id,qty+1)} style={{opacity:qty>=max?0.3:1}}>+</button>
                           </div>
@@ -3964,9 +3964,9 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
             );
           });
         })()}
-        {kitItems.length>0&&<div className="highlight-box" style={{marginTop:8}}>🎒 {kitItems.length} סוגי ציוד · {kitItems.reduce((s,i)=>s+i.quantity,0)} יחידות</div>}
+        {kitItems.length>0&&<div className="highlight-box" style={{marginTop:8,display:"flex",alignItems:"center",gap:6}}><Package size={13} strokeWidth={1.75}/> {kitItems.length} סוגי ציוד · {kitItems.reduce((s,i)=>s+i.quantity,0)} יחידות</div>}
         <div style={{marginTop:12,display:"flex",gap:8}}>
-          <button className="btn btn-primary" disabled={!trimmedName||duplicateName||saving} onClick={save}>{saving?"⏳ שומר...":initial?"💾 שמור":"➕ צור ערכה"}</button>
+          <button className="btn btn-primary" disabled={!trimmedName||duplicateName||saving} onClick={save}>{saving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:initial?"💾 שמור":"➕ צור ערכה"}</button>
         </div>
       </div>
     );
@@ -4239,7 +4239,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         const rpcRes = await createLessonReservations(kitId, [], kitItems);
         if (!rpcRes.ok) {
           setSaving(false);
-          setLocalMsg({ type:"error", text:`❌ שגיאה בשמירה — ${rpcRes.detail || rpcRes.error || ""}` });
+          setLocalMsg({ type:"error", text:`שגיאה בשמירה — ${rpcRes.detail || rpcRes.error || ""}` });
           return;
         }
 
@@ -4269,7 +4269,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
           } catch (e) { console.error("lesson_kit save log setup failed:", e); }
           onDone();
           showToast("success", `ערכת שיעור "${effectiveName || name.trim()}" נשמרה`);
-        } else setLocalMsg({type:"error",text:"❌ שגיאה בשמירה"});
+        } else setLocalMsg({type:"error",text:"שגיאה בשמירה"});
         return;
       }
 
@@ -4377,9 +4377,9 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
           // The pre-check above should normally catch this, but the RPC is
           // the backstop — if a concurrent write made stock insufficient
           // between our check and the RPC, surface it as a conflict message.
-          setLocalMsg({ type:"error", text:"❌ לא ניתן לשמור — חוסר ציוד זמין (ייתכן שהשאלה מתחרה נרשמה בדיוק עכשיו). נא לרענן ולנסות שוב." });
+          setLocalMsg({ type:"error", text:"לא ניתן לשמור — חוסר ציוד זמין (ייתכן שהשאלה מתחרה נרשמה בדיוק עכשיו). נא לרענן ולנסות שוב." });
         } else {
-          setLocalMsg({ type:"error", text:`❌ שגיאה בשמירת שיעורים — ${rpcRes.detail || rpcRes.error || "שגיאה לא ידועה"}` });
+          setLocalMsg({ type:"error", text:`שגיאה בשמירת שיעורים — ${rpcRes.detail || rpcRes.error || "שגיאה לא ידועה"}` });
         }
         return;
       }
@@ -4421,14 +4421,14 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         } catch (e) { console.error("lesson_kit save log setup failed:", e); }
         onDone();
         showToast("success", `ערכת שיעור "${effectiveName || name.trim()}" נשמרה · ${finalSchedule.length} שיעורים שוריינו`);
-      } else setLocalMsg({type:"error",text:"❌ שגיאה בשמירה"});
+      } else setLocalMsg({type:"error",text:"שגיאה בשמירה"});
     };
 
     return (
       <div className="card" style={{marginBottom:20}}>
         <div className="card-header">
-          <div className="card-title">🎬 {initial?"עריכת ערכת שיעור":"ערכת שיעור חדשה"}</div>
-          <button className="btn btn-secondary btn-sm" onClick={onDone}>✕ ביטול</button>
+          <div className="card-title" style={{display:"flex",alignItems:"center",gap:6}}><Film size={16} strokeWidth={1.75}/> {initial?"עריכת ערכת שיעור":"ערכת שיעור חדשה"}</div>
+          <button className="btn btn-secondary btn-sm" onClick={onDone} style={{display:"flex",alignItems:"center",gap:4}}><X size={14} strokeWidth={1.75} color="var(--text3)"/> ביטול</button>
         </div>
 
         {localMsg && (
@@ -4437,7 +4437,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
             border:`1px solid ${localMsg.type==="error"?"rgba(231,76,60,0.3)":"rgba(46,204,113,0.3)"}`,
             color:localMsg.type==="error"?"#e74c3c":"#2ecc71",
             display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span>{localMsg.type==="error"?"❌":"✅"} {localMsg.text}</span>
+            <span style={{display:"inline-flex",alignItems:"center",gap:4}}>{localMsg.type==="error"?<XCircle size={14} strokeWidth={1.75}/>:<CheckCircle size={14} strokeWidth={1.75}/>} {localMsg.text}</span>
             <button onClick={()=>setLocalMsg(null)} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:16,padding:"0 4px"}}>×</button>
           </div>
         )}
@@ -4452,7 +4452,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
             <div style={{fontSize:12,color:"var(--text2)",marginBottom:10}}>הציוד הנדרש לערכת השיעור אינו זמין בתאריכים הבאים בגלל השאלות קיימות או ציוד באיחור:</div>
             {kitConflicts.map((sc,si)=>(
               <div key={si} style={{marginBottom:12,padding:10,borderRadius:8,background:"rgba(231,76,60,0.04)",border:"1px solid rgba(231,76,60,0.15)"}}>
-                <div style={{fontWeight:600,fontSize:13,color:"var(--text1)",marginBottom:6}}>📅 {sc.label}</div>
+                <div style={{fontWeight:600,fontSize:13,color:"var(--text1)",marginBottom:6,display:"flex",alignItems:"center",gap:4}}><Calendar size={13} strokeWidth={1.75}/> {sc.label}</div>
                 {sc.conflicts.map((c,ci)=>(
                   <div key={ci} style={{marginBottom:8,paddingRight:12}}>
                     <div style={{fontSize:13,fontWeight:600,color:"#e74c3c"}}>
@@ -4468,7 +4468,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                 ))}
               </div>
             ))}
-            <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>💡 יש להחזיר את הציוד באיחור או להקטין כמויות בערכה לפני השמירה</div>
+            <div style={{fontSize:11,color:"var(--text3)",marginTop:6,display:"flex",alignItems:"center",gap:4}}><Lightbulb size={11} strokeWidth={1.75}/> יש להחזיר את הציוד באיחור או להקטין כמויות בערכה לפני השמירה</div>
           </div>
         )}
 
@@ -4480,17 +4480,17 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
 
         {/* Equipment picker */}
         <div style={{marginBottom:16}}>
-          <div className="form-section-title">🎒 ציוד נדרש לשיעור <span style={{fontWeight:400,fontSize:11,color:"var(--text3)"}}>· כמות מלאי המחסן המלא</span></div>
+          <div className="form-section-title" style={{display:"flex",alignItems:"center",gap:6}}><Package size={14} strokeWidth={1.75}/> ציוד נדרש לשיעור <span style={{fontWeight:400,fontSize:11,color:"var(--text3)"}}>· כמות מלאי המחסן המלא</span></div>
 
           {/* Filters */}
           <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"12px 14px",marginBottom:12}}>
             {/* Type filter */}
             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
               <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סינון:</span>
-              {[{k:"all",l:"📦 הכל"},{k:"sound",l:"🎙️ סאונד"},{k:"photo",l:"🎥 צילום"}].map(({k,l})=>{
+              {[{k:"all",l:<><Package size={12} strokeWidth={1.75}/> הכל</>},{k:"sound",l:<><Mic size={12} strokeWidth={1.75}/> סאונד</>},{k:"photo",l:<><Camera size={12} strokeWidth={1.75}/> צילום</>}].map(({k,l})=>{
                 const active=lessonEqTypeF===k;
                 return <button key={k} type="button" onClick={()=>setLessonEqTypeF(k)}
-                  style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                  style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
                   {l}
                 </button>;
               })}
@@ -4503,15 +4503,15 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                   {cat}
                 </button>;
               })}
-              {lessonCatF.length>0&&<button type="button" onClick={()=>setLessonCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>✕ נקה</button>}
+              {lessonCatF.length>0&&<button type="button" onClick={()=>setLessonCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}><X size={10} strokeWidth={1.75} color="var(--text3)"/> נקה</button>}
             </div>
             {/* Search + selected toggle */}
             <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-              <div className="search-bar" style={{flex:1,minWidth:150}}><span>🔍</span>
+              <div className="search-bar" style={{flex:1,minWidth:150}}><span><Search size={14} strokeWidth={1.75} color="var(--text3)"/></span>
                 <input placeholder="חיפוש ציוד..." value={lessonEqSearch} onChange={e=>setLessonEqSearch(e.target.value)}/></div>
               <button type="button" onClick={()=>setLessonShowSelected(p=>!p)}
                 style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${lessonShowSelected?"var(--green)":"var(--border)"}`,background:lessonShowSelected?"rgba(46,204,113,0.12)":"transparent",color:lessonShowSelected?"var(--green)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>
-                {lessonShowSelected?"✅ נבחרים":"⬜ נבחרים בלבד"}
+                {lessonShowSelected?<><CheckCircle size={12} strokeWidth={1.75}/> נבחרים</>:"⬜ נבחרים בלבד"}
               </button>
             </div>
           </div>
@@ -4540,16 +4540,16 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                     const max=maxQty(eq.id); const qty=getQty(eq.id);
                     return (
                       <div key={eq.id} className="item-row" style={{marginBottom:4,opacity:max===0?0.4:1,background:qty>0?"rgba(245,166,35,0.05)":"",border:qty>0?"1px solid rgba(245,166,35,0.2)":""}}>
-                        <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||"📦"}</span>
+                        <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||<Package size={20} strokeWidth={1.75} color="var(--text3)"/>}</span>
                         <div style={{flex:1,fontSize:13,fontWeight:600}}>
                           {eq.name}
                           <span style={{fontSize:11,color:"var(--text3)",marginRight:6,fontWeight:400}}>מלאי: {max}</span>
-                          {eq.soundOnly&&<span style={{fontSize:10,color:"var(--accent)",fontWeight:700,marginRight:4}}>🎙️</span>}
-                          {eq.photoOnly&&<span style={{fontSize:10,color:"var(--green)",fontWeight:700,marginRight:4}}>🎥</span>}
+                          {eq.soundOnly&&<span style={{fontSize:10,color:"var(--accent)",fontWeight:700,marginRight:4}}><Mic size={10} strokeWidth={1.75}/></span>}
+                          {eq.photoOnly&&<span style={{color:"var(--green)",fontWeight:700,marginRight:4,display:"inline-flex",alignItems:"center"}}><Camera size={9} strokeWidth={1.75}/></span>}
                         </div>
                         {max>0
                           ? <div className="qty-ctrl">
-                              <button className="qty-btn" onClick={()=>setItemQty(eq.id,qty-1)}>−</button>
+                              <button className="qty-btn" onClick={()=>setItemQty(eq.id,qty-1)}><Minus size={12} strokeWidth={1.75} color="var(--text3)"/></button>
                               <span className="qty-num" style={{color:qty>0?"var(--accent)":"inherit"}}>{qty}</span>
                               <button className="qty-btn" disabled={qty>=max} onClick={()=>setItemQty(eq.id,qty+1)} style={{opacity:qty>=max?0.3:1}}>+</button>
                             </div>
@@ -4561,18 +4561,18 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
               );
             });
           })()}
-          {kitItems.length>0&&<div className="highlight-box" style={{marginTop:8}}>🎒 {kitItems.length} סוגי ציוד · {kitItems.reduce((s,i)=>s+i.quantity,0)} יחידות</div>}
+          {kitItems.length>0&&<div className="highlight-box" style={{marginTop:8,display:"flex",alignItems:"center",gap:6}}><Package size={13} strokeWidth={1.75}/> {kitItems.length} סוגי ציוד · {kitItems.reduce((s,i)=>s+i.quantity,0)} יחידות</div>}
         </div>
 
         {/* Schedule builder — hidden; scheduling is managed through the Lessons section */}
         {false && !lessonManagedKit && (
         <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:"var(--r)",padding:16,marginBottom:18}}>
-          <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:12}}>📅 לוח שיעורים</div>
+          <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:12,display:"flex",alignItems:"center",gap:4}}><Calendar size={13} strokeWidth={1.75}/> לוח שיעורים</div>
 
           {!isEditMode && (
             <>
               <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
-                {[{k:"manual",l:"📅 פריסה ידנית"},{k:"xl",l:"📊 ייבוא מ-XL"}].map(({k,l})=>(
+                {[{k:"manual",l:<><Calendar size={13} strokeWidth={1.75}/> פריסה ידנית</>},{k:"xl",l:<><SlidersHorizontal size={13} strokeWidth={1.75}/> ייבוא מ-XL</>}].map(({k,l})=>(
                   <button key={k} type="button" onClick={()=>setScheduleMode(k)}
                     style={{padding:"7px 16px",borderRadius:20,border:`2px solid ${scheduleMode===k?"#9b59b6":"var(--border)"}`,background:scheduleMode===k?"rgba(155,89,182,0.15)":"transparent",color:scheduleMode===k?"#9b59b6":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer"}}>
                     {l}
@@ -4582,8 +4582,8 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
 
               {scheduleMode==="manual"&&(
                 <div className="responsive-split" style={{marginBottom:12,alignItems:"end"}}>
-                  <div style={{gridColumn:"1 / -1",fontSize:12,color:"var(--text3)",marginBottom:2}}>
-                    📅 הגדר פריסת שיעורים — ייווצרו אוטומטית בשמירה
+                  <div style={{gridColumn:"1 / -1",fontSize:12,color:"var(--text3)",marginBottom:2,display:"flex",alignItems:"center",gap:4}}>
+                    <Calendar size={12} strokeWidth={1.75}/> הגדר פריסת שיעורים — ייווצרו אוטומטית בשמירה
                   </div>
                   <div className="form-group"><label className="form-label">תאריך שיעור ראשון *</label>
                     <input type="date" className="form-input" value={manStartDate} onChange={e=>setManStartDate(e.target.value)}/></div>
@@ -4625,7 +4625,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                     {schedule.length>0&&<span style={{color:"#9b59b6"}}> · השיעורים יתווספו לקיימים</span>}
                   </div>
                   <label className="btn btn-secondary" style={{cursor:xlImporting?"not-allowed":"pointer",opacity:xlImporting?0.6:1}}>
-                    {xlImporting?"⏳ מייבא...":"📊 ייבוא לוח שיעורים מקובץ"}
+                    {xlImporting?<><Clock size={13} strokeWidth={1.75}/> מייבא...</>:<><SlidersHorizontal size={13} strokeWidth={1.75}/> ייבוא לוח שיעורים מקובץ</>}
                     <input type="file" accept=".csv,.tsv,.xls,.xlsx" style={{display:"none"}} onChange={importScheduleXL} disabled={xlImporting}/>
                   </label>
                 </div>
@@ -4643,7 +4643,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
           {schedule.length>0&&(
             <div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                <div style={{fontWeight:700,fontSize:12,color:"#9b59b6"}}>📅 {schedule.length} שיעורים בלוח:</div>
+                <div style={{fontWeight:700,fontSize:12,color:"#9b59b6",display:"flex",alignItems:"center",gap:4}}><Calendar size={12} strokeWidth={1.75}/> {schedule.length} שיעורים בלוח:</div>
                 {!isEditMode && <button type="button" onClick={()=>setSchedule([])} style={{fontSize:11,color:"var(--red)",background:"none",border:"none",cursor:"pointer"}}>🗑️ נקה הכל</button>}
               </div>
               <div style={{maxHeight:280,overflowY:"auto",display:"flex",flexDirection:"column",gap:4}}>
@@ -4694,11 +4694,11 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         {/* Show linked lessons info when kit is managed by lessons */}
         {lessonManagedKit && (
           <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:"var(--r)",padding:16,marginBottom:18}}>
-            <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:10}}>📚 קורסים ומפגשים משויכים</div>
+            <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:10,display:"flex",alignItems:"center",gap:6}}><BookOpen size={14} strokeWidth={1.75}/> קורסים ומפגשים משויכים</div>
             {linkedLessons.map(lesson => (
               <div key={lesson.id||lesson.name} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:8}}>
-                <div style={{fontWeight:700,fontSize:13,color:"var(--text1)",marginBottom:4}}>📖 {lesson.name}</div>
-                {(lesson.instructorName) && <div style={{fontSize:12,color:"var(--text2)"}}>👨‍🏫 {lesson.instructorName}{lesson.instructorPhone?` · 📞 ${lesson.instructorPhone}`:""}{lesson.instructorEmail?` · ✉️ ${lesson.instructorEmail}`:""}</div>}
+                <div style={{fontWeight:700,fontSize:13,color:"var(--text1)",marginBottom:4,display:"flex",alignItems:"center",gap:4}}><BookOpen size={12} strokeWidth={1.75}/> {lesson.name}</div>
+                {(lesson.instructorName) && <div style={{fontSize:12,color:"var(--text2)"}}>{lesson.instructorName}{lesson.instructorPhone?<><span> · </span><Phone size={11} strokeWidth={1.75} style={{display:"inline",verticalAlign:"middle"}}/> {lesson.instructorPhone}</>:""}{lesson.instructorEmail?` · ${lesson.instructorEmail}`:""}</div>}
                 {linkedSchedule.length > 0 && (
                   <div style={{marginTop:6,display:"flex",flexWrap:"wrap",gap:4}}>
                     {linkedSchedule.slice(0,6).map((s,i) => (
@@ -4747,7 +4747,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                       <input type="radio" name="teacherRecipient" value={r.email} checked={activeRecipient===r.email}
                         onChange={()=>setSelectedRecipient(r.email)}
                         style={{accentColor:"var(--green)"}}/>
-                      <span style={{fontSize:13,fontWeight:600}}>{r.name?`👨‍🏫 ${r.name} · `:""}<span style={{fontWeight:400,color:"var(--text2)"}}>{r.email}</span></span>
+                      <span style={{fontSize:13,fontWeight:600}}>{r.name?<>{r.name} · </>:""}<span style={{fontWeight:400,color:"var(--text2)"}}>{r.email}</span></span>
                     </label>
                   ))}
                 </div>
@@ -4770,7 +4770,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                 onClick={sendTeacherKitEmail}
                 disabled={teacherEmailSending || !activeRecipient}
               >
-                {teacherEmailSending ? "⏳ שולח למורה..." : "📤 שליחת ערכה למורה"}
+                {teacherEmailSending ? <><Clock size={13} strokeWidth={1.75}/> שולח למורה...</> : "📤 שליחת ערכה למורה"}
               </button>
               <span style={{fontSize:12,color:"var(--text3)"}}>
                 {activeRecipient ? `המייל יישלח אל ${activeRecipient}` : "יש להזין קודם כתובת מייל למורה"}
@@ -4786,10 +4786,10 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
             disabled={saving || !(effectiveName || name.trim())}
             onClick={save}
             style={{fontSize:15,padding:"12px 28px"}}>
-            {saving ? "⏳ שומר..." : initial ? "💾 שמור שינויים" : "🎬 צור ערכת שיעור"}
+            {saving ? <><Clock size={13} strokeWidth={1.75}/> שומר...</> : initial ? "💾 שמור שינויים" : <><Film size={14} strokeWidth={1.75}/> צור ערכת שיעור</>}
           </button>
           {effectiveSchedule.length>0 && (
-            <span style={{fontSize:12,color:"#9b59b6",fontWeight:700}}>📅 {effectiveSchedule.length} שיעורים בלוח</span>
+            <span style={{fontSize:12,color:"#9b59b6",fontWeight:700,display:"inline-flex",alignItems:"center",gap:4}}><Calendar size={12} strokeWidth={1.75}/> {effectiveSchedule.length} שיעורים בלוח</span>
           )}
         </div>
       </div>
@@ -4857,24 +4857,24 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
           <div onClick={()=>{setMode(null);setEditTarget(null);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
             <div onClick={e=>e.stopPropagation()} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"20px 24px",maxWidth:520,width:"100%",maxHeight:"85vh",overflowY:"auto",boxShadow:"0 12px 40px rgba(0,0,0,0.5)"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-                <div style={{fontWeight:900,fontSize:17}}>{isLessonKit?"🎬":"🎒"} {vKit.name}</div>
+                <div style={{fontWeight:900,fontSize:17,display:"flex",alignItems:"center",gap:6}}>{isLessonKit?<Film size={17} strokeWidth={1.75}/>:<Package size={17} strokeWidth={1.75}/>} {vKit.name}</div>
                 <div style={{display:"flex",gap:6}}>
-                  <button className="btn btn-primary btn-sm" onClick={()=>{setMode(isLessonKit?"editLesson":"editStudent");}}>✏️ עריכה</button>
-                  <button className="btn btn-secondary btn-sm" onClick={()=>{setMode(null);setEditTarget(null);}}>✕</button>
+                  <button className="btn btn-primary btn-sm" onClick={()=>{setMode(isLessonKit?"editLesson":"editStudent");}} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75}/> עריכה</button>
+                  <button className="btn btn-secondary btn-sm" onClick={()=>{setMode(null);setEditTarget(null);}}><X size={14} strokeWidth={1.75} color="var(--text3)"/></button>
                 </div>
               </div>
 
               {/* Loan type for student kits */}
               {!isLessonKit && vKit.loanType && (
                 <div style={{marginBottom:12}}>
-                  <span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"3px 10px",color:"var(--accent)",fontWeight:700,fontSize:12}}>{LOAN_ICONS[vKit.loanType]||"📦"} {vKit.loanType}</span>
+                  <span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"3px 10px",color:"var(--accent)",fontWeight:700,fontSize:12,display:"inline-flex",alignItems:"center",gap:3}}>{LOAN_ICONS[vKit.loanType]||<Package size={12} strokeWidth={1.75}/>} {vKit.loanType}</span>
                 </div>
               )}
 
               {/* Linked lessons */}
               {vLinkedLessons.length > 0 && (
                 <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:"var(--r)",padding:12,marginBottom:12}}>
-                  <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:6}}>📚 קורסים משויכים</div>
+                  <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:6,display:"flex",alignItems:"center",gap:4}}><BookOpen size={13} strokeWidth={1.75}/> קורסים משויכים</div>
                   {vLinkedLessons.map(lesson => {
                     // Prefer the canonical lecturer record; fall back to whatever
                     // name is stored on the lesson row.
@@ -4884,8 +4884,8 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                     const lessonInstructorName = lessonLec?.fullName || lesson.instructorName || "";
                     return (
                       <div key={lesson.id||lesson.name} style={{marginBottom:4}}>
-                        <span style={{fontWeight:700,fontSize:13}}>📖 {lesson.name}</span>
-                        {lessonInstructorName && <span style={{fontSize:12,color:"var(--text2)",marginRight:8}}>· 👨‍🏫 {lessonInstructorName}</span>}
+                        <span style={{fontWeight:700,fontSize:13,display:"inline-flex",alignItems:"center",gap:4}}><BookOpen size={12} strokeWidth={1.75}/> {lesson.name}</span>
+                        {lessonInstructorName && <span style={{fontSize:12,color:"var(--text2)",marginRight:8}}>· {lessonInstructorName}</span>}
                       </div>
                     );
                   })}
@@ -4895,7 +4895,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
               {/* Instructor info */}
               {vInstructorName && (
                 <div style={{background:"rgba(52,152,219,0.06)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",padding:"8px 12px",marginBottom:12}}>
-                  <div style={{fontSize:13}}><span style={{fontWeight:700,color:"#3498db"}}>👨‍🏫</span> {vInstructorName}{vInstructorPhone?` · 📞 ${vInstructorPhone}`:""}{vInstructorEmail?` · ✉️ ${vInstructorEmail}`:""}</div>
+                  <div style={{fontSize:13,display:"flex",alignItems:"center",gap:4}}>{vInstructorName}{vInstructorPhone?<><span> · </span><Phone size={11} strokeWidth={1.75}/> {vInstructorPhone}</>:""}{vInstructorEmail?` · ${vInstructorEmail}`:""}</div>
                 </div>
               )}
 
@@ -4906,13 +4906,13 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
 
               {/* Equipment list */}
               <div style={{marginBottom:12}}>
-                <div style={{fontWeight:800,fontSize:13,color:"var(--accent)",marginBottom:8}}>🎒 ציוד · {(vKit.items||[]).length} סוגים · {(vKit.items||[]).reduce((s,i)=>s+i.quantity,0)} יחידות</div>
+                <div style={{fontWeight:800,fontSize:13,color:"var(--accent)",marginBottom:8,display:"flex",alignItems:"center",gap:6}}><Package size={13} strokeWidth={1.75}/> ציוד · {(vKit.items||[]).length} סוגים · {(vKit.items||[]).reduce((s,i)=>s+i.quantity,0)} יחידות</div>
                 <div style={{display:"flex",flexDirection:"column",gap:4}}>
                   {(vKit.items||[]).map((item,j)=>{
                     const eq=equipment.find(e=>e.id==item.equipment_id);
                     return (
                       <div key={j} style={{display:"flex",alignItems:"center",gap:8,background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"5px 10px"}}>
-                        <span style={{fontSize:16}}>{eq?.image&&(eq.image.startsWith("data:")||eq.image.startsWith("http"))?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:20,height:20,objectFit:"cover",borderRadius:4}}/>:(eq?.image||"📦")}</span>
+                        <span style={{fontSize:16,display:"inline-flex",alignItems:"center"}}>{eq?.image&&(eq.image.startsWith("data:")||eq.image.startsWith("http"))?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:20,height:20,objectFit:"cover",borderRadius:4}}/>:(eq?.image?eq.image:<Package size={16} strokeWidth={1.5}/>)}</span>
                         <span style={{flex:1,fontSize:13,fontWeight:600}}>{eq?.name||item.name||"פריט"}</span>
                         <span style={{fontSize:13,fontWeight:700,color:"var(--accent)"}}>×{item.quantity}</span>
                       </div>
@@ -4924,7 +4924,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
               {/* Schedule */}
               {vDisplaySchedule.length > 0 && (
                 <div>
-                  <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:8}}>📅 {vDisplaySchedule.length} מפגשים</div>
+                  <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:8,display:"flex",alignItems:"center",gap:4}}><Calendar size={13} strokeWidth={1.75}/> {vDisplaySchedule.length} מפגשים</div>
                   <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
                     {vDisplaySchedule.map((s,i)=>(
                       <span key={i} style={{background:"rgba(155,89,182,0.1)",border:"1px solid rgba(155,89,182,0.25)",borderRadius:12,padding:"3px 10px",fontSize:12,color:"#9b59b6",fontWeight:600}}>
@@ -4943,11 +4943,11 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       {mode===null&&(
         <>
         <div style={{fontWeight:900,fontSize:14,margin:"0 0 10px",color:"var(--accent)",display:"flex",alignItems:"center",gap:8}}>
-          🎒 ערכות סטודנטים
+          <Package size={14} strokeWidth={1.75}/> ערכות סטודנטים
           {studentKits.length>0&&<span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"1px 10px",fontSize:12,fontWeight:700,color:"var(--accent)"}}>{studentKits.length}</span>}
         </div>
         {studentKits.length===0
-          ? <div className="empty-state"><div className="emoji">🎒</div><p>אין ערכות לסטודנטים</p><p style={{fontSize:13,color:"var(--text3)"}}>ערכות מוצגות בטופס ההשאלה</p></div>
+          ? <div className="empty-state"><div className="emoji"><Package size={48} strokeWidth={1.5}/></div><p>אין ערכות לסטודנטים</p><p style={{fontSize:13,color:"var(--text3)"}}>ערכות מוצגות בטופס ההשאלה</p></div>
           : <div style={{display:"flex",flexDirection:"column",gap:10}}>
             {studentKits.map(kit=>(
               <div key={kit.id} onClick={()=>{setEditTarget(kit);setMode("viewStudent");}} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 18px",cursor:"pointer",transition:"border-color 0.15s"}}
@@ -4955,18 +4955,18 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                 onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
                   <div style={{display:"flex",alignItems:"center",gap:10}}>
-                    <span style={{fontSize:28}}>🎒</span>
+                    <span style={{display:"flex",alignItems:"center"}}><Package size={28} strokeWidth={1.5}/></span>
                     <div>
                       <div style={{fontWeight:800,fontSize:15}}>{kit.name}</div>
                       <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>
                         {kit.loanType
-                          ? <span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"2px 8px",color:"var(--accent)",fontWeight:700}}>{LOAN_ICONS[kit.loanType]||"📦"} {kit.loanType}</span>
-                          : <span>📦 כל סוגי ההשאלה</span>}
+                          ? <span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"2px 8px",color:"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}>{LOAN_ICONS[kit.loanType]||<Package size={12} strokeWidth={1.75}/>} {kit.loanType}</span>
+                          : <span style={{display:"inline-flex",alignItems:"center",gap:3}}><Package size={12} strokeWidth={1.75}/> כל סוגי ההשאלה</span>}
                       </div>
                     </div>
                   </div>
                   <div style={{display:"flex",gap:6}} onClick={e=>e.stopPropagation()}>
-                    <button className="btn btn-secondary btn-sm" onClick={()=>{setEditTarget(kit);setMode("editStudent");}}>✏️ ערוך</button>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>{setEditTarget(kit);setMode("editStudent");}} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> ערוך</button>
                     <button className="btn btn-danger btn-sm" onClick={()=>del(kit.id,kit.name)}>🗑️</button>
                   </div>
                 </div>
@@ -4974,7 +4974,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                   {(kit.items||[]).map((i,j)=>{
                     const eq=equipment.find(e=>e.id==i.equipment_id);
                     return <span key={j} className="chip">
-                      {eq?.image&&(eq.image.startsWith("data:")||eq.image.startsWith("http"))?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:14,height:14,objectFit:"cover",borderRadius:2,verticalAlign:"middle"}}/>:<span>{eq?.image||"📦"}</span>}
+                      {eq?.image&&(eq.image.startsWith("data:")||eq.image.startsWith("http"))?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:14,height:14,objectFit:"cover",borderRadius:2,verticalAlign:"middle"}}/>:<span>{eq?.image||<Package size={14} strokeWidth={1.75} color="var(--text3)"/>}</span>}
                       {' '}{eq?.name||i.name} ×{i.quantity}
                     </span>;
                   })}
@@ -4988,7 +4988,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       {/* Lesson kits list */}
       {mode===null&&lessonKits.length>0&&(
           <><div style={{fontWeight:900,fontSize:14,margin:"24px 0 10px",color:"#9b59b6",display:"flex",alignItems:"center",gap:8,borderTop:"1px solid var(--border)",paddingTop:20}}>
-            🎬 ערכות שיעור
+            <Film size={14} strokeWidth={1.75}/> ערכות שיעור
             <span style={{background:"rgba(155,89,182,0.12)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:20,padding:"1px 10px",fontSize:12,fontWeight:700,color:"#9b59b6"}}>{lessonKits.length}</span>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -5023,15 +5023,15 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                   onMouseLeave={e=>e.currentTarget.style.borderColor="rgba(155,89,182,0.3)"}>
                   <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
                     <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
-                      <span style={{fontSize:28}}>🎬</span>
+                      <Film size={28} strokeWidth={1.75} color="#9b59b6"/>
                       <div>
                         <div style={{fontWeight:800,fontSize:15}}>{kit.name}</div>
-                        {linkedKitLessons.length>0&&<div style={{fontSize:11,color:"#9b59b6",marginTop:2}}>📚 משויך ל: {linkedKitLessons.map(l=>l.name).join(", ")}</div>}
-                      {displayInstructorName&&<div style={{fontSize:12,color:"var(--text2)",marginTop:2}}>👨‍🏫 {displayInstructorName}{displayInstructorPhone?` · 📞 ${displayInstructorPhone}`:""}</div>}
-                        {displayInstructorEmail&&<div style={{fontSize:11,color:"var(--text3)"}}>✉️ {displayInstructorEmail}</div>}
+                        {linkedKitLessons.length>0&&<div style={{fontSize:11,color:"#9b59b6",marginTop:2,display:"flex",alignItems:"center",gap:3}}><BookOpen size={11} strokeWidth={1.75}/> משויך ל: {linkedKitLessons.map(l=>l.name).join(", ")}</div>}
+                      {displayInstructorName&&<div style={{fontSize:12,color:"var(--text2)",marginTop:2,display:"flex",alignItems:"center",gap:4}}>{displayInstructorName}{displayInstructorPhone?<><span> · </span><Phone size={11} strokeWidth={1.75}/> {displayInstructorPhone}</>:""}</div>}
+                        {displayInstructorEmail&&<div style={{fontSize:11,color:"var(--text3)"}}>{displayInstructorEmail}</div>}
                         <div style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap"}}>
-                          {displaySchedule.length>0&&<span style={{background:"rgba(155,89,182,0.15)",border:"1px solid rgba(155,89,182,0.35)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"#9b59b6",fontWeight:700}}>
-                            📅 {displaySchedule.length} שיעורים
+                          {displaySchedule.length>0&&<span style={{background:"rgba(155,89,182,0.15)",border:"1px solid rgba(155,89,182,0.35)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"#9b59b6",fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}>
+                            <Calendar size={11} strokeWidth={1.75}/> {displaySchedule.length} שיעורים
                           </span>}
                           {nextSession&&<span style={{background:"rgba(46,204,113,0.1)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"var(--green)",fontWeight:700}}>
                             הבא: {formatDate(nextSession.date)} {nextSession.startTime}
@@ -5040,7 +5040,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                       </div>
                     </div>
                     <div style={{display:"flex",gap:6}} onClick={e=>e.stopPropagation()}>
-                      <button className="btn btn-secondary btn-sm" onClick={()=>{setEditTarget(kit);setMode("editLesson");}}>✏️ ערוך</button>
+                      <button className="btn btn-secondary btn-sm" onClick={()=>{setEditTarget(kit);setMode("editLesson");}} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> ערוך</button>
                       <button className="btn btn-danger btn-sm" onClick={()=>del(kit.id,kit.name)}>🗑️</button>
                     </div>
                   </div>
@@ -5048,7 +5048,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                     {(kit.items||[]).map((i,j)=>{
                       const eq=equipment.find(e=>e.id==i.equipment_id);
                       return <span key={j} className="chip">
-                        {eq?.image&&(eq.image.startsWith("data:")||eq.image.startsWith("http"))?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:14,height:14,objectFit:"cover",borderRadius:2,verticalAlign:"middle"}}/>:<span>{eq?.image||"📦"}</span>}
+                        {eq?.image&&(eq.image.startsWith("data:")||eq.image.startsWith("http"))?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:14,height:14,objectFit:"cover",borderRadius:2,verticalAlign:"middle"}}/>:<span>{eq?.image||<Package size={14} strokeWidth={1.75} color="var(--text3)"/>}</span>}
                         {' '}{eq?.name||i.name} ×{i.quantity}
                       </span>;
                     })}
@@ -5100,7 +5100,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       const updated = initial ? kits.map(k=>k.id===initial.id?kit:k) : [...kits, kit];
       setKits(updated);
       const _kitRes = await storageSet("kits", updated);
-      if(!_kitRes.ok) showToast("error", "❌ שגיאה בשמירה — נסה שוב");
+      if(!_kitRes.ok) showToast("error", "שגיאה בשמירה — נסה שוב");
       else {
         showToast("success", initial ? "הערכה עודכנה" : `ערכה "${trimmedName}" נוצרה`);
         // Audit log — legacy kit form
@@ -5127,8 +5127,8 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     return (
       <div className="card" style={{marginBottom:20}}>
         <div className="card-header">
-          <div className="card-title">{initial?"✏️ עריכת ערכה":"➕ ערכה חדשה"}</div>
-          <button className="btn btn-secondary btn-sm" onClick={onDone}>✕ ביטול</button>
+          <div className="card-title" style={{display:"flex",alignItems:"center",gap:6}}>{initial?<><Pencil size={14} strokeWidth={1.75}/> עריכת ערכה</>:<><Plus size={14} strokeWidth={1.75}/> ערכה חדשה</>}</div>
+          <button className="btn btn-secondary btn-sm" onClick={onDone} style={{display:"flex",alignItems:"center",gap:4}}><X size={12} strokeWidth={1.75} color="var(--text3)"/> ביטול</button>
         </div>
         <div className="responsive-split" style={{marginBottom:12}}>
           <div className="form-group"><label className="form-label">שם הערכה *</label><input className="form-input" placeholder='לדוגמה: "ערכת דוקומנטרי"' value={name} onChange={e=>setName(e.target.value)}/></div>
@@ -5160,14 +5160,14 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
               const qty = getQty(eq.id);
               return (
               <div key={eq.id} className="item-row" style={{marginBottom:4,opacity:max===0?0.4:1}}>
-                <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http") ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/> : eq.image||"📦"}</span>
+                <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http") ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/> : eq.image||<Package size={20} strokeWidth={1.75} color="var(--text3)"/>}</span>
                 <div style={{flex:1,fontSize:13,fontWeight:600}}>
                   {eq.name}
                   <span style={{fontSize:11,color:"var(--text3)",marginRight:6,fontWeight:400}}>מלאי: {max}</span>
                 </div>
                 {max>0
                   ? <div className="qty-ctrl">
-                      <button className="qty-btn" onClick={()=>setItemQty(eq.id,qty-1)}>−</button>
+                      <button className="qty-btn" onClick={()=>setItemQty(eq.id,qty-1)}><Minus size={12} strokeWidth={1.75} color="var(--text3)"/></button>
                       <span className="qty-num" style={{color:qty>0?"var(--accent)":"inherit"}}>{qty}</span>
                       <button className="qty-btn" disabled={qty>=max} onClick={()=>setItemQty(eq.id,qty+1)} style={{opacity:qty>=max?0.3:1}}>+</button>
                     </div>
@@ -5178,9 +5178,9 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
             })}
           </div>;
         })}
-        {kitItems.length>0&&<div className="highlight-box" style={{marginTop:8}}>🎒 {kitItems.length} סוגי ציוד בערכה · {kitItems.reduce((s,i)=>s+i.quantity,0)} יחידות סה״כ</div>}
+        {kitItems.length>0&&<div className="highlight-box" style={{marginTop:8,display:"flex",alignItems:"center",gap:6}}><Package size={13} strokeWidth={1.75}/> {kitItems.length} סוגי ציוד בערכה · {kitItems.reduce((s,i)=>s+i.quantity,0)} יחידות סה״כ</div>}
         <div style={{marginTop:12,display:"flex",gap:8}}>
-          <button className="btn btn-primary" disabled={!trimmedName||duplicateName||saving} onClick={save}>{saving?"⏳ שומר...":initial?"💾 שמור":"➕ צור ערכה"}</button>
+          <button className="btn btn-primary" disabled={!trimmedName||duplicateName||saving} onClick={save}>{saving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:initial?"💾 שמור":"➕ צור ערכה"}</button>
         </div>
       </div>
     );
@@ -5199,7 +5199,7 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
   const ALL_STATUSES  = ["ממתין","אישור ראש מחלקה","מאושר","נדחה"];
   const STATUS_COLORS = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","אישור ראש מחלקה":"#9b59b6" };
   const STATUS_BADGE  = { "מאושר":"green","ממתין":"yellow","נדחה":"red","באיחור":"orange","אישור ראש מחלקה":"purple" };
-  const LOAN_ICONS    = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥" };
+  const LOAN_ICONS    = { "פרטית":<User size={11} strokeWidth={1.75}/>,"הפקה":<Film size={11} strokeWidth={1.75}/>,"סאונד":<Mic size={11} strokeWidth={1.75}/>,"קולנוע יומית":<Camera size={11} strokeWidth={1.75}/> };
   const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
   const HE_D = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
   const SPAN_COLORS = [
@@ -5257,11 +5257,11 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
   const getEquipmentRecord = (item) => equipment.find(eq => String(eq.id)===String(item.equipment_id)) || equipment.find(eq => eq.name===item.name) || null;
   const renderEquipmentThumb = (item) => {
     const eq = getEquipmentRecord(item);
-    const img = eq?.image || "📦";
+    const img = eq?.image || "";
     const isImg = typeof img === "string" && (img.startsWith("data:") || img.startsWith("http"));
     return isImg
       ? <img src={img} alt={item.name || ""} style={{width:56,height:56,objectFit:"contain",borderRadius:10,border:"1px solid var(--border)",background:"var(--surface2)",padding:4}}/>
-      : <div style={{width:56,height:56,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,borderRadius:10,border:"1px solid var(--border)",background:"var(--surface2)"}}>{img}</div>;
+      : <div style={{width:56,height:56,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,borderRadius:10,border:"1px solid var(--border)",background:"var(--surface2)"}}>{img||<Package size={30} strokeWidth={1.75} color="var(--text3)"/>}</div>;
   };
 
   return (
@@ -5297,13 +5297,13 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
           const active=loanTypeF===lt;
           return <button key={lt} type="button" onClick={()=>setLoanTypeF(lt)}
             style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-            {LOAN_ICONS[lt]||"📦"} {lt}
+            <span style={{display:"inline-flex",alignItems:"center",gap:3}}>{LOAN_ICONS[lt]||<Package size={11} strokeWidth={1.75}/>} {lt}</span>
           </button>;
         })}
         {(statusF.length>0||loanTypeF!=="הכל")&&(
           <button type="button" onClick={()=>{setStatusF([]);setLoanTypeF("הכל");}}
-            style={{marginRight:"auto",padding:"4px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>
-            ✕ נקה סינון
+            style={{marginRight:"auto",padding:"4px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
+            <X size={10} strokeWidth={1.75} color="var(--text3)"/> נקה סינון
           </button>
         )}
       </div>
@@ -5325,7 +5325,7 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
       </div>
 
       {/* Reservations list */}
-      <div style={{fontWeight:800,fontSize:15,marginBottom:10}}>📋 בקשות {HE_M[mo]} {yr}</div>
+      <div style={{fontWeight:800,fontSize:15,marginBottom:10,display:"flex",alignItems:"center",gap:6}}><ClipboardList size={15} strokeWidth={1.75}/> בקשות {HE_M[mo]} {yr}</div>
       {monthRes.length===0
         ? <div style={{textAlign:"center",color:"var(--text3)",padding:"24px",fontSize:14}}>אין בקשות בחודש זה</div>
         : <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -5334,8 +5334,8 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
               style={{background:"var(--surface)",border:`1px solid ${selected===r?"var(--accent)":"var(--border)"}`,borderRadius:"var(--r)",padding:"12px 16px",cursor:"pointer",transition:"border-color 0.15s"}}>
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                 <span style={{fontWeight:800,fontSize:14}}>{r.student_name}</span>
-                <span style={{fontSize:12,color:"var(--text3)"}}>{LOAN_ICONS[r.loan_type]||"📦"} {r.loan_type}</span>
-                <span style={{fontSize:11,color:"var(--text3)"}}>📅 {formatDate(r.borrow_date)} → {formatDate(r.return_date)}</span>
+                <span style={{fontSize:12,color:"var(--text3)",display:"inline-flex",alignItems:"center",gap:3}}>{LOAN_ICONS[r.loan_type]||<Package size={11} strokeWidth={1.75}/>} {r.loan_type}</span>
+                <span style={{fontSize:11,color:"var(--text3)",display:"inline-flex",alignItems:"center",gap:3}}><Calendar size={11} strokeWidth={1.75}/> {formatDate(r.borrow_date)} → {formatDate(r.return_date)}</span>
                 <span className={`badge badge-${STATUS_BADGE[r.status]||"yellow"}`} style={{marginRight:"auto"}}>{r.status}</span>
               </div>
               {selected===r&&(
@@ -5444,12 +5444,12 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
                             disabled={isCurrent||changingStatus===r.id}
                             onClick={()=>changeStatus(r,s)}
                             style={{padding:"8px 16px",borderRadius:"var(--r-sm)",border:`2px solid ${isCurrent?col:"var(--border)"}`,background:isCurrent?`${col}22`:"var(--surface)",color:isCurrent?col:"var(--text2)",fontWeight:isCurrent?900:700,fontSize:13,cursor:isCurrent?"default":"pointer",opacity:changingStatus===r.id&&!isCurrent?0.5:1,transition:"all 0.15s"}}>
-                            {changingStatus===r.id&&!isCurrent?"⏳ ":isCurrent?"✓ ":""}{s}
+                            {changingStatus===r.id&&!isCurrent?<><Clock size={11} strokeWidth={1.75}/> </>:isCurrent?<><Check size={11} strokeWidth={2}/> </>:""}{s}
                           </button>
                         );
                       })}
                     </div>
-                    {changingStatus===r.id&&<div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>⏳ מעדכן סטטוס...</div>}
+                    {changingStatus===r.id&&<div style={{fontSize:11,color:"var(--text3)",marginTop:6,display:"flex",alignItems:"center",gap:3}}><Clock size={11} strokeWidth={1.75}/> מעדכן סטטוס...</div>}
                   </div>
                 </div>
               )}
@@ -5476,22 +5476,22 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
         if(!upcoming.length) return null;
         return (
           <div style={{marginTop:28}}>
-            <div style={{fontWeight:800,fontSize:15,marginBottom:10}}>🎬 ערכות שיעור — שיעורים קרובים</div>
+            <div style={{fontWeight:800,fontSize:15,marginBottom:10,display:"flex",alignItems:"center",gap:6}}><Film size={15} strokeWidth={1.75}/> ערכות שיעור — שיעורים קרובים</div>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {upcoming.map((s,i)=>(
                 <div key={i} onClick={()=>setSelectedKit(s)} style={{background:"var(--surface)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:"var(--r)",padding:"14px 18px",cursor:"pointer",transition:"border-color .15s"}}
                   onMouseEnter={e=>e.currentTarget.style.borderColor="rgba(155,89,182,0.7)"}
                   onMouseLeave={e=>e.currentTarget.style.borderColor="rgba(155,89,182,0.3)"}>
                   <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-                    <span style={{fontSize:22}}>🎬</span>
+                    <Film size={22} strokeWidth={1.75} color="#9b59b6"/>
                     <div style={{flex:1}}>
                       <div style={{fontWeight:800,fontSize:15}}>{s.kitName}</div>
-                      {s.instructorName&&<div style={{fontSize:12,color:"var(--text2)"}}>👨‍🏫 {s.instructorName}{s.instructorPhone?` · 📞 ${s.instructorPhone}`:""}</div>}
+                      {s.instructorName&&<div style={{fontSize:12,color:"var(--text2)",display:"flex",alignItems:"center",gap:4}}>{s.instructorName}{s.instructorPhone?<><span> · </span><Phone size={11} strokeWidth={1.75}/> {s.instructorPhone}</>:""}</div>}
                     </div>
-                    <div style={{textAlign:"left",fontSize:13,color:"var(--text3)",fontWeight:700}}>
-                      📅 {formatDate(s.date)}&nbsp;&nbsp;🕐 {s.startTime} – {s.endTime}
+                    <div style={{textAlign:"left",fontSize:13,color:"var(--text3)",fontWeight:700,display:"flex",alignItems:"center",gap:4}}>
+                      <Calendar size={13} strokeWidth={1.75}/> {formatDate(s.date)}&nbsp;&nbsp;<Clock size={13} strokeWidth={1.75}/> {s.startTime} – {s.endTime}
                     </div>
-                    <span style={{fontSize:11,color:"#9b59b6",border:"1px solid rgba(155,89,182,0.4)",borderRadius:20,padding:"2px 8px"}}>📦 {s.items.length} פריטים</span>
+                    <span style={{fontSize:11,color:"#9b59b6",border:"1px solid rgba(155,89,182,0.4)",borderRadius:20,padding:"2px 8px",display:"inline-flex",alignItems:"center",gap:3}}><Package size={11} strokeWidth={1.75}/> {s.items.length} פריטים</span>
                   </div>
                 </div>
               ))}
@@ -5506,16 +5506,16 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
           <div style={{width:"100%",maxWidth:540,background:"var(--surface)",borderRadius:16,border:"1px solid rgba(155,89,182,0.4)",direction:"rtl",maxHeight:"90vh",overflowY:"auto"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0",position:"sticky",top:0,zIndex:1}}>
               <div>
-                <div style={{fontWeight:900,fontSize:16,color:"#9b59b6"}}>🎬 {selectedKit.kitName}</div>
-                <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>📅 {formatDate(selectedKit.date)} · 🕐 {selectedKit.startTime} – {selectedKit.endTime}</div>
+                <div style={{fontWeight:900,fontSize:16,color:"#9b59b6",display:"flex",alignItems:"center",gap:6}}><Film size={16} strokeWidth={1.75}/> {selectedKit.kitName}</div>
+                <div style={{fontSize:12,color:"var(--text3)",marginTop:2,display:"flex",alignItems:"center",gap:4}}><Calendar size={12} strokeWidth={1.75}/> {formatDate(selectedKit.date)} · <Clock size={12} strokeWidth={1.75}/> {selectedKit.startTime} – {selectedKit.endTime}</div>
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setSelectedKit(null)}>✕ סגור</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setSelectedKit(null)} style={{display:"flex",alignItems:"center",gap:4}}><X size={14} strokeWidth={1.75} color="var(--text3)"/> סגור</button>
             </div>
             <div style={{padding:"20px"}}>
               {selectedKit.instructorName&&(
                 <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"12px 14px",marginBottom:14,fontSize:13}}>
-                  👨‍🏫 <strong>{selectedKit.instructorName}</strong>
-                  {selectedKit.instructorPhone&&<span style={{color:"var(--text3)",marginRight:8}}> · 📞 {selectedKit.instructorPhone}</span>}
+                  <strong>{selectedKit.instructorName}</strong>
+                  {selectedKit.instructorPhone&&<span style={{color:"var(--text3)",marginRight:8,display:"inline-flex",alignItems:"center",gap:4}}> · <Phone size={11} strokeWidth={1.75}/> {selectedKit.instructorPhone}</span>}
                 </div>
               )}
               <div style={{fontSize:12,fontWeight:800,color:"var(--text3)",marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>ציוד השיעור — {selectedKit.items.length} פריטים</div>
@@ -5529,7 +5529,7 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
                       <div key={j} style={{display:"flex",alignItems:"center",gap:12,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"10px 14px",border:"1px solid var(--border)"}}>
                         {img.startsWith("data:")||img.startsWith("http")
                           ? <img src={img} alt="" style={{width:36,height:36,objectFit:"cover",borderRadius:6,flexShrink:0}}/>
-                          : <div style={{width:36,height:36,borderRadius:6,background:"rgba(155,89,182,0.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📦</div>}
+                          : <div style={{width:36,height:36,borderRadius:6,background:"rgba(155,89,182,0.12)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Package size={20} strokeWidth={1.75} color="var(--text3)"/></div>}
                         <span style={{flex:1,fontWeight:700,fontSize:14}}>{item.name||("פריט "+(j+1))}</span>
                         <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",border:"1px solid rgba(155,89,182,0.35)",borderRadius:8,padding:"3px 12px",fontWeight:900,fontSize:14}}>×{item.quantity}</span>
                       </div>
@@ -5588,7 +5588,7 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
     if(r.ok) { showToast("success", "היחידות עודכנו"); onClose(); }
     else {
       setEquipment(previousEquipment);
-      showToast("error","❌ שגיאה בשמירה");
+      showToast("error","שגיאה בשמירה");
     }
   };
 
@@ -5607,7 +5607,7 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
               <span style={{color:"var(--text3)",marginRight:8}}> · סה"כ {units.length} יחידות</span>
             </div>
           </div>
-          <button className="btn btn-secondary btn-sm" onClick={onClose}>✕</button>
+          <button className="btn btn-secondary btn-sm" onClick={onClose}><X size={14} strokeWidth={1.75} color="var(--text3)"/></button>
         </div>
 
         {/* ── Add units row ── */}
@@ -5651,7 +5651,7 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
           })}
         </div>
         <div style={{padding:"14px 20px",borderTop:"1px solid var(--border)",flexShrink:0,display:"flex",gap:8}}>
-          <button className="btn btn-primary" disabled={saving} onClick={saveAll}>{saving?"⏳ שומר...":"💾 שמור שינויים"}</button>
+          <button className="btn btn-primary" disabled={saving} onClick={saveAll}>{saving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:"💾 שמור שינויים"}</button>
           <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
         </div>
       </div>
@@ -5678,7 +5678,7 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, settingsRole =
     try { const tc=document.getElementById("theme-color-meta"); if(tc&&draft.accentColor) tc.setAttribute("content",draft.accentColor); } catch {}
     await storageSet("siteSettings", draft);
     setSaving(false);
-    showToast("success", "ההגדרות נשמרו ✅");
+    showToast("success", "ההגדרות נשמרו");
   };
 
   return (
@@ -5693,7 +5693,7 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, settingsRole =
                 style={{ flex: 1, minWidth: 140, padding: "20px 16px", borderRadius: "var(--r)", border: `2px solid ${draft.theme === k ? "var(--accent)" : "var(--border)"}`, background: draft.theme === k ? "var(--accent-glow)" : "var(--surface2)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 32 }}>{icon}</span>
                 <span style={{ fontWeight: 800, fontSize: 14, color: draft.theme === k ? "var(--accent)" : "var(--text)" }}>{label}</span>
-                {draft.theme === k && <span style={{ fontSize: 14, color: "var(--green)", fontWeight: 900 }}>✓ פעיל</span>}
+                {draft.theme === k && <span style={{ fontSize: 14, color: "var(--green)", fontWeight: 900, display:"inline-flex",alignItems:"center",gap:3 }}><Check size={13} strokeWidth={2}/> פעיל</span>}
               </button>
             ))}
           </div>
@@ -5771,7 +5771,7 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, settingsRole =
       )}
 
       <button className="btn btn-primary" disabled={saving} onClick={save} style={{ fontSize: 15, padding: "12px 32px" }}>
-        {saving ? "⏳ שומר..." : "💾 שמור הגדרות"}
+        {saving ? <><Clock size={13} strokeWidth={1.75}/> שומר...</> : "💾 שמור הגדרות"}
       </button>
     </div>
   );
@@ -5821,7 +5821,7 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
           calendar_url: managerToken ? `${window.location.origin}/manager-calendar?token=${managerToken}` : "",
         }),
       });
-      alert("✅ הדיווח נשלח למנהל המכללה");
+      alert("הדיווח נשלח למנהל המכללה");
     } catch(e) { console.error(e); }
     setReportSending(false);
   };
@@ -5854,12 +5854,12 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
     const r = await writeEquipmentToDB(updatedEquipment);
     setSaving(false);
     if(r.ok) {
-      if(editForm.status==="תקין") showToast("success", `✅ ${eq.name} #${unit.id.split("_")[1]} חזר לציוד פעיל`);
+      if(editForm.status==="תקין") showToast("success", `${eq.name} #${unit.id.split("_")[1]} חזר לציוד פעיל`);
       else showToast("success","הסטטוס עודכן");
       setEditUnit(null);
     } else {
       setEquipment(previousEquipment);
-      showToast("error","❌ שגיאה בשמירה");
+      showToast("error","שגיאה בשמירה");
     }
   };
 
@@ -5870,7 +5870,7 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
     <div className="page">
       {/* Filters */}
       <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
-        <div className="search-bar" style={{flex:1,minWidth:180}}><span>🔍</span>
+        <div className="search-bar" style={{flex:1,minWidth:180}}><span><Search size={14} strokeWidth={1.75} color="var(--text3)"/></span>
           <input placeholder="חיפוש ציוד..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
         <span style={{fontSize:13,color:"var(--text3)"}}>סה״כ: <strong style={{color:"var(--red)"}}>{damagedItems.length}</strong> יחידות</span>
       </div>
@@ -5879,13 +5879,13 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
         {["הכל",...categories].map(c=>(
           <button key={c} type="button" onClick={()=>setCatFilter(c)}
             style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${catFilter===c?"var(--accent)":"var(--border)"}`,background:catFilter===c?"var(--accent-glow)":"transparent",color:catFilter===c?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-            {c==="הכל"?"📦 הכל":c}
+            {c==="הכל"?<><Package size={12} strokeWidth={1.75}/> הכל</>:c}
           </button>
         ))}
       </div>
 
       {filtered.length===0
-        ? <div className="empty-state"><div className="emoji">✅</div><p>{search||catFilter!=="הכל"?"לא נמצאו פריטים":"אין ציוד בדיקה — כל הציוד תקין!"}</p></div>
+        ? <div className="empty-state"><div className="emoji"><CheckCircle size={48} strokeWidth={1.75} color="var(--green)"/></div><p>{search||catFilter!=="הכל"?"לא נמצאו פריטים":"אין ציוד בדיקה — כל הציוד תקין!"}</p></div>
         : <div style={{display:"flex",flexDirection:"column",gap:10}}>
           {filtered.map(({eq, unit},i)=>{
             const isImg = eq.image?.startsWith("data:")||eq.image?.startsWith("http");
@@ -5893,7 +5893,7 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
             return (
               <div key={unit.id} style={{background:"var(--surface)",border:`2px solid ${STATUS_COLORS[unit.status]||"var(--border)"}22`,borderRight:`4px solid ${STATUS_COLORS[unit.status]||"var(--border)"}`,borderRadius:"var(--r)",padding:"14px 16px",display:"flex",gap:12,alignItems:"flex-start"}}>
                 <div style={{width:48,height:48,flexShrink:0,borderRadius:8,overflow:"hidden",background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  {isImg ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{fontSize:28}}>{eq.image||"📦"}</span>}
+                  {isImg ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{fontSize:28}}>{eq.image||<Package size={28} strokeWidth={1.75} color="var(--text3)"/>}</span>}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:4}}>
@@ -5907,7 +5907,7 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
                   {unit.fault&&<div style={{fontSize:12,color:"var(--text2)",marginBottom:2}}>⚠️ <strong>תקלה:</strong> {unit.fault}</div>}
                   {unit.repair&&<div style={{fontSize:12,color:"var(--green)"}}>🔧 <strong>תיקון:</strong> {unit.repair}</div>}
                 </div>
-                <button className="btn btn-secondary btn-sm" onClick={()=>{setEditUnit({eq,unit});setEditForm({status:unit.status,fault:unit.fault||"",repair:unit.repair||""});}}>✏️ עריכה</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>{setEditUnit({eq,unit});setEditForm({status:unit.status,fault:unit.fault||"",repair:unit.repair||""}); }} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> עריכה</button>
               </div>
             );
           })}
@@ -5920,10 +5920,10 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
           <div style={{width:"100%",maxWidth:500,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl"}}>
             <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
-                <div style={{fontWeight:900,fontSize:16}}>✏️ עריכת יחידה — {editUnit.eq.name}</div>
+                <div style={{fontWeight:900,fontSize:16,display:"flex",alignItems:"center",gap:6}}><Pencil size={14} strokeWidth={1.75}/> עריכת יחידה — {editUnit.eq.name}</div>
                 <div style={{fontSize:12,color:"var(--text3)"}}>יחידה #{editUnit.unit.id?.split("_")[1]}</div>
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setEditUnit(null)}>✕</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setEditUnit(null)}><X size={14} strokeWidth={1.75} color="var(--text3)"/></button>
             </div>
             <div style={{padding:"20px",display:"flex",flexDirection:"column",gap:14}}>
               <div className="form-group">
@@ -5938,7 +5938,7 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
                     </button>;
                   })}
                 </div>
-                {editForm.status==="תקין"&&<div style={{fontSize:12,color:"var(--green)",marginTop:6,fontWeight:700}}>✅ היחידה תחזור אוטומטית לציוד פעיל!</div>}
+                {editForm.status==="תקין"&&<div style={{fontSize:12,color:"var(--green)",marginTop:6,fontWeight:700,display:"flex",alignItems:"center",gap:3}}><CheckCircle size={12} strokeWidth={1.75}/> היחידה תחזור אוטומטית לציוד פעיל!</div>}
               </div>
               <div className="form-group">
                 <label className="form-label">תיאור התקלה</label>
@@ -5953,12 +5953,12 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
                   <div style={{fontSize:12,fontWeight:700,color:"var(--text2)",marginBottom:6}}>📧 דיווח למנהל המכללה</div>
                   <div style={{fontSize:11,color:"var(--text3)",marginBottom:6}}>פרטי התקלה והתיקון ישלחו אוטומטית</div>
                   <button className="btn btn-secondary btn-sm" disabled={reportSending} onClick={sendDamageReport}>
-                    {reportSending?"⏳ שולח...":"📧 שלח דיווח למנהל"}
+                    {reportSending?<><Clock size={13} strokeWidth={1.75}/> שולח...</>:"📧 שלח דיווח למנהל"}
                   </button>
                 </div>
               )}
               <div style={{display:"flex",gap:8}}>
-                <button className="btn btn-primary" disabled={saving} onClick={saveUnit}>{saving?"⏳ שומר...":"💾 שמור"}</button>
+                <button className="btn btn-primary" disabled={saving} onClick={saveUnit}>{saving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:"💾 שמור"}</button>
                 <button className="btn btn-secondary" onClick={()=>setEditUnit(null)}>ביטול</button>
               </div>
             </div>
@@ -6611,7 +6611,7 @@ export default function App() {
         // Warn if network failed and no cache
         if(eqSrc === "cache" && !eq) showToast("error", "⚠️ לא ניתן לטעון ציוד — בדוק חיבור");
       } catch(e) {
-        showToast("error", "❌ שגיאת רשת — לא ניתן לטעון נתונים");
+        showToast("error", "שגיאת רשת — לא ניתן לטעון נתונים");
         console.error("load error", e);
       } finally {
         historySuspendedRef.current = false;
@@ -7072,7 +7072,7 @@ export default function App() {
             managerToken && urlToken === managerToken
               ? <ManagerCalendarPage reservations={reservations} setReservations={setReservations} collegeManager={collegeManager} equipment={equipment} kits={kits} siteSettings={siteSettings}/>
               : <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",flexDirection:"column",gap:16,color:"var(--text2)"}}>
-                  <div style={{fontSize:48}}>🔒</div>
+                  <div style={{fontSize:48}}><Shield size={48} strokeWidth={1.75} color="var(--text3)"/></div>
                   <div style={{fontSize:18,fontWeight:700}}>קישור לא תקין</div>
                   <div style={{fontSize:13}}>הקישור שבידך אינו תקין או פג תוקפו</div>
                 </div>
@@ -7080,10 +7080,10 @@ export default function App() {
         </div>
       ) : isCalendarView ? (
         <div style={{minHeight:"100vh",background:"var(--bg)",direction:"rtl",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16,color:"var(--text2)"}}>
-          <div style={{fontSize:48}}>🎓</div>
+          <GraduationCap size={48} strokeWidth={1.75} color="var(--text3)"/>
           <div style={{fontSize:18,fontWeight:700}}>הקישור הזה בוטל</div>
           <div style={{fontSize:13}}>הגישה לצפייה בבקשות עברה לפורטל המרצה — ראש מחלקה, אנא התחבר דרך הפורטל</div>
-          <a href="/" style={{marginTop:8,padding:"10px 22px",background:"var(--accent)",color:"#000",fontWeight:800,borderRadius:10,textDecoration:"none"}}>🎓 כניסה לפורטל</a>
+          <a href="/" style={{marginTop:8,padding:"10px 22px",background:"var(--accent)",color:"#000",fontWeight:800,borderRadius:10,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:6}}><GraduationCap size={16} strokeWidth={1.75}/> כניסה לפורטל</a>
         </div>
       ) : isLecturerPortalView ? (
         <div className="public-page-shell">

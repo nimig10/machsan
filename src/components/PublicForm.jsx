@@ -1,4 +1,5 @@
 // PublicForm.jsx — public loan request form
+import { AlertTriangle, Calendar, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mic, Minus, Package, Pencil, Settings, Shield, X, XCircle } from "lucide-react";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken } from "../utils.js";
 import { supabase } from "../supabaseClient.js";
@@ -175,7 +176,7 @@ function PublicMiniCalendar({ reservations, initialLoanType="הכל", previewSta
     ["rgba(26,188,156,0.75)","#fff"],["rgba(236,72,153,0.75)","#fff"],
     ["rgba(200,160,0,0.75)","#fff"], ["rgba(231,76,60,0.75)","#fff"],
   ];
-  const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:"📦"},{key:"פרטית",label:"פרטית",icon:"👤"},{key:"הפקה",label:"הפקה",icon:"🎬"},{key:"סאונד",label:"סאונד",icon:"🎙️"},{key:"קולנוע יומית",label:"קולנוע יומית",icon:"🎥"},{key:"שיעור",label:"שיעור",icon:"📽️"},{key:"צוות",label:"איש צוות",icon:"💼"}];
+  const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:<Package size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"פרטית",label:"פרטית",icon:"👤"},{key:"הפקה",label:"הפקה",icon:<Film size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"סאונד",label:"סאונד",icon:<Mic size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"קולנוע יומית",label:"קולנוע יומית",icon:"🎥"},{key:"שיעור",label:"שיעור",icon:"📽️"},{key:"צוות",label:"איש צוות",icon:"💼"}];
   const activeRes = reservations.filter(r=>
     (r.status==="מאושר"||r.status==="באיחור") && r.borrow_date && r.return_date &&
     (loanTypeF==="הכל" || r.loan_type===loanTypeF)
@@ -200,7 +201,7 @@ function PublicMiniCalendar({ reservations, initialLoanType="הכל", previewSta
   return (
     <div style={{marginBottom:16,marginTop:8}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,flexWrap:"wrap",gap:6}}>
-        <div style={{fontWeight:800,fontSize:13,color:"var(--text2)"}}>📅 השאלות הפעילות</div>
+        <div style={{fontWeight:800,fontSize:13,color:"var(--text2)",display:"flex",alignItems:"center",gap:4}}><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> השאלות הפעילות</div>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo-1,1))}>‹</button>
           <span style={{fontWeight:700,fontSize:12,minWidth:90,textAlign:"center"}}>{HE_M[mo]} {yr}</span>
@@ -247,7 +248,7 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
       {items.length>0&&<div className="highlight-box">🛒 נבחרו {items.length} סוגים ({totalQty} יחידות)</div>}
       {privateLoanLimitExceeded && (
         <div className="toast toast-error" style={{marginBottom:12,position:"static",minWidth:0,width:"100%"}}>
-          <span>❌</span>
+          <XCircle size={16} strokeWidth={1.75} />
           <span>שים לב אין לחרוג מ-4 פריטים בהשאלה פרטית</span>
         </div>
       )}
@@ -265,15 +266,15 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
             {/* Header */}
             <div style={{padding:"14px 18px",background:"var(--surface)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:10,flexShrink:0,flexWrap:"wrap"}}>
               <div style={{fontWeight:900,fontSize:16,flex:1}}>
-                {showAll ? `📦 כל הציוד במחסן (${equipment.length} פריטים)` : `📋 פרטי הציוד שנבחר (${items.length} פריטים)`}
+                {showAll ? <><Package size={16} strokeWidth={1.75} color="var(--accent)" /> כל הציוד במחסן ({equipment.length} פריטים)</> : <><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> פרטי הציוד שנבחר ({items.length} פריטים)</>}
               </div>
               <div style={{display:"flex",gap:8}}>
                 <button className="btn btn-secondary btn-sm"
                   style={{background:showAll?"var(--accent-glow)":"transparent",border:`1px solid ${showAll?"var(--accent)":"var(--border)"}`,color:showAll?"var(--accent)":"var(--text2)",fontWeight:700}}
                   onClick={()=>setShowAll(p=>!p)}>
-                  📦 {showAll?"רק הנבחרים":"כל הציוד"}
+                  <Package size={16} strokeWidth={1.75} color="var(--accent)" /> {showAll?"רק הנבחרים":"כל הציוד"}
                 </button>
-                <button className="btn btn-secondary btn-sm" onClick={()=>setShowInfo(false)}>✕ סגור</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setShowInfo(false)}><X size={16} strokeWidth={1.75} color="var(--text3)" /> סגור</button>
               </div>
             </div>
 
@@ -302,11 +303,11 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
                       <div style={{fontWeight:900,fontSize:"clamp(13px,4vw,21px)",lineHeight:1.25,whiteSpace:"normal",overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",wordBreak:"break-word"}}>{eq.name}</div>
                       <div style={{fontSize:13,color:"var(--text2)",lineHeight:1.8,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:4,WebkitBoxOrient:"vertical",wordBreak:"break-word",textAlign:"right"}}>{eq.description||"\u05D0\u05D9\u05DF \u05EA\u05D9\u05D0\u05D5\u05E8 \u05D6\u05DE\u05D9\u05DF"}</div>
                       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
-                        {isSelected&&<span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>✓ ×{items.find(i=>i.equipment_id==itm.equipment_id)?.quantity}</span>}
+                        {isSelected&&<span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><Check size={12} strokeWidth={1.75} /> ×{items.find(i=>i.equipment_id==itm.equipment_id)?.quantity}</span>}
                         {eq.notes&&<span style={{fontSize:11,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:220}}>{"\uD83D\uDCDD"} {eq.notes}</span>}
                       </div>
                       {(eq.soundOnly || eq.photoOnly)&&<div style={{marginTop:8,display:"flex",gap:6,flexWrap:"wrap"}}>
-                        {eq.soundOnly&&<span style={{background:"rgba(245,166,35,0.12)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>🎙️ ציוד סאונד</span>}
+                        {eq.soundOnly&&<span style={{background:"rgba(245,166,35,0.12)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><Mic size={12} strokeWidth={1.75} color="var(--accent)" /> ציוד סאונד</span>}
                         {eq.photoOnly&&<span style={{background:"rgba(39,174,96,0.12)",border:"1px solid rgba(39,174,96,0.35)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--green)",fontWeight:700}}>🎥 ציוד צילום</span>}
                       </div>}
                       <div style={{marginTop:"auto",paddingTop:8,fontSize:11,color:"var(--text3)",fontWeight:700}}>{"\u05DC\u05D7\u05E5 \u05DC\u05E4\u05EA\u05D9\u05D7\u05EA \u05D4\u05E4\u05E8\u05D9\u05D8 \u05D1\u05DE\u05E1\u05DA \u05DE\u05DC\u05D0"}</div>
@@ -315,7 +316,7 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
                     <div style={{width:"clamp(100px,28vw,240px)",flexShrink:0,background:"var(--surface2)",overflow:"hidden",borderLeft:"1px solid var(--border)"}}>
                       {isImg
                         ? <img src={cloudinaryThumb(eq.image)} alt={eq.name} style={{width:"100%",height:"100%",objectFit:"contain",display:"block",background:"var(--surface2)"}}/>
-                        : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:64}}>{eq.image||"📦"}</div>
+                        : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:64}}>{eq.image||<Package size={64} strokeWidth={1.75} color="var(--accent)" />}</div>
                       }
                     </div>
                   </button>
@@ -437,8 +438,8 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
           <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",marginBottom:10,letterSpacing:0.5}}>סינון ציוד לפי מסלול לימודים</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
             {[
-              { key:"all", label:"כל הציוד", icon:"📦" },
-              { key:"sound", label:"ציוד סאונד", icon:"🎙️" },
+              { key:"all", label:"כל הציוד", icon:<Package size={16} strokeWidth={1.75} color="var(--accent)" /> },
+              { key:"sound", label:"ציוד סאונד", icon:<Mic size={16} strokeWidth={1.75} color="var(--accent)" /> },
               { key:"photo", label:"ציוד צילום", icon:"🎥" },
             ].map((filterOption) => {
               const isActive = privateFilter === filterOption.key;
@@ -462,7 +463,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12,alignItems:"center"}}>
         <button type="button" onClick={()=>setShowSelectedOnly(p=>!p)}
           style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${showSelectedOnly?"var(--green)":"var(--border)"}`,background:showSelectedOnly?"rgba(46,204,113,0.12)":"transparent",color:showSelectedOnly?"var(--green)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>
-          {showSelectedOnly?"✅ נבחרו":"⬜"} {showSelectedOnly?"הצג הכל":"הצג נבחרים בלבד"}
+          {showSelectedOnly?<><CheckCircle size={16} strokeWidth={1.75} /> נבחרו</>:"⬜"} {showSelectedOnly?"הצג הכל":"הצג נבחרים בלבד"}
         </button>
         <div style={{width:1,height:20,background:"var(--border)",flexShrink:0}}/>
         {baseCategories.map(cat=>{
@@ -477,7 +478,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
         {selectedCats.length>0&&(
           <button type="button" onClick={()=>setSelectedCats([])}
             style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>
-            ✕ נקה
+            <X size={16} strokeWidth={1.75} color="var(--text3)" /> נקה
           </button>
         )}
       </div>
@@ -491,7 +492,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
             <button type="button"
               onClick={()=>setActiveKit(null)}
               style={{padding:"7px 14px",borderRadius:20,border:`2px solid ${!activeKit?"var(--text2)":"var(--border)"}`,background:!activeKit?"var(--surface3)":"transparent",color:!activeKit?"var(--text)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",transition:"all 0.15s"}}>
-              📦 כל הציוד
+              <Package size={16} strokeWidth={1.75} color="var(--accent)" /> כל הציוד
             </button>
             {relevantKits.map(kit=>{
               const isActive = activeKit?.id===kit.id;
@@ -500,7 +501,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
                   onClick={()=>selectKit(kit)}
                   style={{padding:"7px 16px",borderRadius:20,border:`2px solid ${isActive?"var(--accent)":"var(--border)"}`,background:isActive?"var(--accent)":"var(--surface3)",color:isActive?"#000":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer",transition:"all 0.15s",display:"flex",alignItems:"center",gap:6}}>
                   🎒 {kit.name}
-                  {isActive&&<span style={{fontSize:10,opacity:0.7}}>✓ פעיל</span>}
+                  {isActive&&<span style={{fontSize:10,opacity:0.7,display:"inline-flex",alignItems:"center",gap:2}}><Check size={10} strokeWidth={1.75} /> פעיל</span>}
                 </button>
               );
             })}
@@ -533,7 +534,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
                 <div key={eq.id} className="item-row" style={{opacity:effectiveMax===0?0.4:1}}>
                   {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
                     ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:36,height:36,objectFit:"cover",borderRadius:6}}/>
-                    : <span style={{fontSize:26}}>{eq.image||"📦"}</span>}
+                    : <span style={{fontSize:26}}>{eq.image||<Package size={26} strokeWidth={1.75} color="var(--accent)" />}</span>}
                   <div style={{flex:1}}>
                     <div style={{fontWeight:600,fontSize:14}}>{eq.name}</div>
                     <div style={{fontSize:12,color:"var(--text3)"}}>
@@ -543,18 +544,18 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
                   </div>
                   {!canBorrowEq(eq)
                     ? <div style={{fontSize:11,color:"var(--yellow)",fontWeight:700,textAlign:"center",maxWidth:120,lineHeight:1.3,padding:"4px 6px",background:"rgba(241,196,15,0.12)",borderRadius:6,border:"1px solid rgba(241,196,15,0.3)"}}>
-                        🔒 טרם עבר/ה הסמכה
+                        <Shield size={12} strokeWidth={1.75} /> טרם עבר/ה הסמכה
                       </div>
                     : effectiveMax>0
                     ? <div className="qty-ctrl">
-                        <button className="qty-btn" onClick={()=>setQty(eq.id, Math.min(itm.quantity-1, effectiveMax))}>−</button>
+                        <button className="qty-btn" onClick={()=>setQty(eq.id, Math.min(itm.quantity-1, effectiveMax))}><Minus size={16} strokeWidth={1.75} color="var(--text3)" /></button>
                         <span className="qty-num">{itm.quantity}</span>
                         <button className="qty-btn" disabled={atMax} style={{opacity:atMax?0.3:1}}
                           onClick={()=>{ if(!atMax) setQty(eq.id, Math.min(itm.quantity+1, effectiveMax)); }}>+</button>
                       </div>
                     : eq.overdueBlocked
                     ? <div style={{fontSize:11,color:"#e67e22",fontWeight:700,textAlign:"center",maxWidth:130,lineHeight:1.3,padding:"5px 8px",background:"rgba(230,126,34,0.1)",borderRadius:6,border:"1px solid rgba(230,126,34,0.35)"}}>
-                        ⚠️ חסום ע״י השאלה באיחור
+                        <AlertTriangle size={12} strokeWidth={1.75} /> חסום ע״י השאלה באיחור
                       </div>
                     : <span className="badge badge-red">לא זמין</span>
                   }
@@ -590,10 +591,10 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
         <div>{[["שם",form.student_name],["אימייל",form.email],["קורס",form.course],["סוג השאלה",form.loan_type],["מ",`${formatDate(form.borrow_date)}${form.borrow_time?" · "+form.borrow_time:""}`],["עד",`${formatDate(form.return_date)}${form.return_time?" · "+form.return_time:""}`]].map(([l,v])=><div key={l} className="req-detail-row"><span className="req-detail-label">{l}:</span><strong>{v}</strong></div>)}</div>
         <div>{items.map(i=>{
           const eq = equipment.find(e=>e.id==i.equipment_id);
-          const img = eq?.image||"📦";
-          const isFile = img.startsWith("data:")||img.startsWith("http");
+          const img = eq?.image||null;
+          const isFile = img && (img.startsWith("data:")||img.startsWith("http"));
           return <div key={i.equipment_id} className="req-detail-row">
-            {isFile ? <img src={img} alt="" style={{width:20,height:20,objectFit:"cover",borderRadius:4,verticalAlign:"middle"}}/> : <span>{img}</span>}
+            {isFile ? <img src={img} alt="" style={{width:20,height:20,objectFit:"cover",borderRadius:4,verticalAlign:"middle"}}/> : img ? <span>{img}</span> : <Package size={20} strokeWidth={1.75} color="var(--accent)" />}
             <span style={{marginRight:6}}>{i.name} × {i.quantity}</span>
           </div>;
         })}</div>
@@ -605,7 +606,7 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
         <button type="button"
           onClick={()=>{ setShowPolicies(true); setScrolledToBottom(false); }}
           style={{width:"100%",padding:"12px",marginBottom:16,borderRadius:"var(--r-sm)",border:"2px solid var(--accent)",background:"var(--accent-glow)",color:"var(--accent)",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-          📋 נהלי ההשאלה — חובה לקרוא לפני שליחה
+          <ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> נהלי ההשאלה — חובה לקרוא לפני שליחה
         </button>
       )}
 
@@ -618,7 +619,7 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
 
       <div className="flex gap-2">
         <button className="btn btn-secondary" onClick={onBack}>← חזור</button>
-        <button className="btn btn-primary" disabled={!canSubmit||submitting} onClick={submit}>{submitting?"⏳ שולח...":"🚀 שלח בקשה"}</button>
+        <button className="btn btn-primary" disabled={!canSubmit||submitting} onClick={submit}>{submitting?<><Clock size={16} strokeWidth={1.75} /> שולח...</>:"🚀 שלח בקשה"}</button>
       </div>
 
       {/* ── Fullscreen policies modal ── */}
@@ -626,8 +627,8 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:4000,display:"flex",flexDirection:"column",direction:"rtl"}}>
           {/* Header */}
           <div style={{padding:"16px 20px",background:"var(--surface)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-            <div style={{fontWeight:900,fontSize:17}}>📋 נהלי השאלה — {loanType}</div>
-            <button className="btn btn-secondary btn-sm" onClick={()=>setShowPolicies(false)}>✕ סגור</button>
+            <div style={{fontWeight:900,fontSize:17,display:"flex",alignItems:"center",gap:6}}><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> נהלי השאלה — {loanType}</div>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setShowPolicies(false)}><X size={16} strokeWidth={1.75} color="var(--text3)" /> סגור</button>
           </div>
           {/* Scrollable body */}
           <div
@@ -637,7 +638,7 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
             {/* bottom anchor */}
             <div style={{height:60,display:"flex",alignItems:"center",justifyContent:"center",marginTop:24}}>
               {scrolledToBottom
-                ? <span style={{color:"var(--green)",fontWeight:700,fontSize:14}}>✅ קראת את כל הנהלים</span>
+                ? <span style={{color:"var(--green)",fontWeight:700,fontSize:14,display:"inline-flex",alignItems:"center",gap:4}}><CheckCircle size={16} strokeWidth={1.75} /> קראת את כל הנהלים</span>
                 : <span style={{color:"var(--text3)",fontSize:13}}>↓ גלול עד הסוף</span>}
             </div>
           </div>
@@ -648,7 +649,7 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
               style={{width:"100%",fontSize:15,padding:14}}
               disabled={!scrolledToBottom}
               onClick={()=>{ setAgreed(true); setShowPolicies(false); }}>
-              {scrolledToBottom ? "✅ אני מאשר/ת שקראתי את הנהלים — סגור" : "↓ גלול עד הסוף כדי לאשר"}
+              {scrolledToBottom ? <><CheckCircle size={16} strokeWidth={1.75} /> אני מאשר/ת שקראתי את הנהלים — סגור</> : "↓ גלול עד הסוף כדי לאשר"}
             </button>
           </div>
         </div>
@@ -688,12 +689,12 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
   const [selectedEq, setSelectedEq] = useState(null);  // equipment detail view
   const [infoCatFilter, setInfoCatFilter] = useState([]); // multi-select
   const tabs = [
-    { id:"equipment", label:"📦 ציוד" },
-    { id:"policies",  label:"📋 נהלים" },
+    { id:"equipment", label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><Package size={16} strokeWidth={1.75} color="var(--accent)" /> ציוד</span> },
+    { id:"policies",  label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> נהלים</span> },
     { id:"kits",      label:"🎒 ערכות" },
     { id:"contact",   label:"📞 צוות" },
   ];
-  const LOAN_ICONS = { "פרטית":"👤","הפקה":"🎬","סאונד":"🎙️","קולנוע יומית":"🎥","לילה":"🌙" };
+  const LOAN_ICONS = { "פרטית":"👤","הפקה":<Film size={12} strokeWidth={1.75} color="var(--accent)" />,"סאונד":<Mic size={12} strokeWidth={1.75} color="var(--accent)" />,"קולנוע יומית":"🎥","לילה":"🌙" };
   const allCats = [...new Set((equipment||[]).map(e=>e.category).filter(Boolean))];
   const visibleEq = infoCatFilter.length===0
     ? (equipment||[])
@@ -706,9 +707,9 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
         {/* Header */}
         <div style={{padding:"18px 28px",background:"var(--surface2)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
           <div style={{flex:1}}>
-            <div style={{fontWeight:900,fontSize:20,color:"var(--accent)"}}>ℹ️ מידע כללי — מחסן ציוד קמרה אובסקורה וסאונד</div>
+            <div style={{fontWeight:900,fontSize:20,color:"var(--accent)",display:"flex",alignItems:"center",gap:6}}><Info size={20} strokeWidth={1.75} color="var(--accent)" /> מידע כללי — מחסן ציוד קמרה אובסקורה וסאונד</div>
           </div>
-          <button className="btn btn-secondary btn-sm" onClick={onClose} style={{fontSize:14,padding:"8px 18px"}}>✕ סגור</button>
+          <button className="btn btn-secondary btn-sm" onClick={onClose} style={{fontSize:14,padding:"8px 18px",display:"inline-flex",alignItems:"center",gap:4}}><X size={16} strokeWidth={1.75} color="var(--text3)" /> סגור</button>
         </div>
 
         {/* Tabs */}
@@ -737,7 +738,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                       {c}
                     </button>;
                   })}
-                  {infoCatFilter.length>0&&<button type="button" onClick={()=>setInfoCatFilter([])} style={{padding:"5px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>✕ הכל</button>}
+                  {infoCatFilter.length>0&&<button type="button" onClick={()=>setInfoCatFilter([])} style={{padding:"5px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}><X size={12} strokeWidth={1.75} color="var(--text3)" /> הכל</button>}
                 </div>
               )}
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:14}}>
@@ -753,7 +754,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                           <div style={{display:"flex",justifyContent:"center",marginBottom:12}}>
                             {isImg
                               ? <img src={cloudinaryThumb(eq.image)} alt={eq.name} style={{width:80,height:80,objectFit:"contain",borderRadius:8}}/>
-                              : <span style={{fontSize:48}}>{eq.image||"📦"}</span>}
+                              : <span style={{fontSize:48}}>{eq.image||<Package size={48} strokeWidth={1.75} color="var(--accent)" />}</span>}
                           </div>
                           <div style={{fontWeight:800,fontSize:14,textAlign:"center",marginBottom:4}}>{eq.name}</div>
                           <div style={{fontSize:11,color:"var(--accent)",fontWeight:700,textAlign:"center"}}>{eq.category}</div>
@@ -782,7 +783,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                   {selectedEq.image?.startsWith("data:")||selectedEq.image?.startsWith("http")
                     ? <img src={selectedEq.image} alt={selectedEq.name}
                         style={{width:"100%",maxWidth:320,borderRadius:12,border:"1px solid var(--border)",objectFit:"contain",background:"var(--surface2)"}}/>
-                    : <div style={{width:200,height:200,display:"flex",alignItems:"center",justifyContent:"center",fontSize:100}}>{selectedEq.image||"📦"}</div>
+                    : <div style={{width:200,height:200,display:"flex",alignItems:"center",justifyContent:"center",fontSize:100}}>{selectedEq.image||<Package size={100} strokeWidth={1.75} color="var(--accent)" />}</div>
                   }
                 </div>
                 {/* Text */}
@@ -804,7 +805,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                     </div>
                   )}
                   <div style={{marginTop:16,display:"flex",gap:8,flexWrap:"wrap"}}>
-                    {selectedEq.soundOnly&&<span style={{background:"rgba(245,166,35,0.12)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:20,padding:"4px 12px",fontSize:12,color:"var(--accent)",fontWeight:700}}>🎙️ ציוד סאונד</span>}
+                    {selectedEq.soundOnly&&<span style={{background:"rgba(245,166,35,0.12)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:20,padding:"4px 12px",fontSize:12,color:"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:4}}><Mic size={14} strokeWidth={1.75} color="var(--accent)" /> ציוד סאונד</span>}
                     {selectedEq.photoOnly&&<span style={{background:"rgba(39,174,96,0.12)",border:"1px solid rgba(39,174,96,0.35)",borderRadius:20,padding:"4px 12px",fontSize:12,color:"var(--green)",fontWeight:700}}>🎥 ציוד צילום</span>}
                     {(()=>{const ct=(certifications?.types||[]).find(t=>t.id===selectedEq.certification_id);return ct?<span style={{background:"rgba(155,89,182,0.12)",border:"1px solid rgba(155,89,182,0.4)",borderRadius:20,padding:"4px 12px",fontSize:12,color:"#9b59b6",fontWeight:700}}>🏅 הסמכה: {ct.name}</span>:null;})()}
                   </div>
@@ -854,7 +855,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                   <div key={kit.id} style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"20px"}}>
                     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:kit.description?8:14}}>
                       <span style={{fontWeight:900,fontSize:17}}>🎒 {kit.name}</span>
-                      {kit.loanType&&<span style={{fontSize:12,background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"2px 10px",color:"var(--accent)",fontWeight:700}}>{LOAN_ICONS[kit.loanType]||"📦"} {kit.loanType}</span>}
+                      {kit.loanType&&<span style={{fontSize:12,background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"2px 10px",color:"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}>{LOAN_ICONS[kit.loanType]||<Package size={12} strokeWidth={1.75} color="var(--accent)" />} {kit.loanType}</span>}
                     </div>
                     {kit.description&&(
                       <div style={{fontSize:14,color:"var(--text2)",marginBottom:14,lineHeight:1.7,background:"var(--surface)",borderRadius:"var(--r-sm)",padding:"10px 14px",border:"1px solid var(--border)"}}>{kit.description}</div>
@@ -867,7 +868,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                         return (
                           <div key={j} style={{display:"flex",alignItems:"center",gap:12,background:"var(--surface)",borderRadius:"var(--r-sm)",padding:"10px 14px",border:"1px solid var(--border)"}}>
                             <div style={{width:40,height:40,flexShrink:0,borderRadius:6,overflow:"hidden",background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                              {isImg ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{fontSize:22}}>{eq?.image||"📦"}</span>}
+                              {isImg ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{fontSize:22}}>{eq?.image||<Package size={22} strokeWidth={1.75} color="var(--accent)" />}</span>}
                             </div>
                             <div style={{flex:1}}>
                               <div style={{fontWeight:700,fontSize:14}}>{item.name}</div>
@@ -1040,10 +1041,10 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
       <div style={{width:"100%",maxWidth:460,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",boxShadow:"0 30px 80px rgba(0,0,0,0.4)",overflow:"hidden"}}>
         <div style={{padding:"18px 22px",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,background:"var(--surface2)"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <span style={{fontSize:22}}>⚙️</span>
+            <Settings size={22} strokeWidth={1.75} color="var(--accent)" />
             <div style={{fontWeight:900,fontSize:17,color:"var(--accent)"}}>הגדרות חשבון</div>
           </div>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={onClose} disabled={busy}>✕</button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={onClose} disabled={busy}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>
         </div>
 
         <div style={{padding:22,display:"flex",flexDirection:"column",gap:14}}>
@@ -1226,8 +1227,8 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     : [...SMART_LOAN_TYPES];
   const visibleLoanTypeOptions = [
     {val:"פרטית",icon:"👤",desc:"שימוש אישי / לימודי"},
-    {val:"הפקה",icon:"🎬",desc:"פרויקט הפקה מאורגן"},
-    {val:"סאונד",icon:"🎙️",desc:"לתרגול הקלטות באולפני המכללה (עבור הנדסאי סאונד בלבד)"},
+    {val:"הפקה",icon:<Film size={30} strokeWidth={1.75} color="var(--accent)" />,desc:"פרויקט הפקה מאורגן"},
+    {val:"סאונד",icon:<Mic size={30} strokeWidth={1.75} color="var(--accent)" />,desc:"לתרגול הקלטות באולפני המכללה (עבור הנדסאי סאונד בלבד)"},
     {val:"קולנוע יומית",icon:"🎥",desc:"תרגול חופשי עם ציוד קולנוע למספר שעות — יש להזמין 24 שעות מראש"},
   ].filter((option) => allowedLoanTypes.includes(option.val));
 
@@ -2777,7 +2778,7 @@ ${inventory}
   if(emailError) return (
     <div className="form-page">
       <div style={{width:"100%",maxWidth:500,background:"var(--surface)",border:"1px solid rgba(231,76,60,0.4)",borderRadius:16,padding:40,textAlign:"center",direction:"rtl"}}>
-        <div style={{fontSize:64,marginBottom:16}}>❌</div>
+        <div style={{fontSize:64,marginBottom:16}}><XCircle size={64} strokeWidth={1.75} color="#e74c3c" /></div>
         <h2 style={{fontSize:22,fontWeight:900,color:"#e74c3c",marginBottom:12}}>כתובת המייל שגויה</h2>
         <p style={{fontSize:14,color:"var(--text2)",marginBottom:28,lineHeight:1.7}}>
           הכתובת <strong style={{color:"var(--text)"}}>{form.email}</strong> אינה תקינה.<br/>
@@ -2828,7 +2829,7 @@ ${inventory}
       <div style={{width:"100%",maxWidth:420,background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:"40px 32px",textAlign:"center",direction:"rtl"}}>
         {siteSettings.logo
           ? <img src={siteSettings.logo} alt="לוגו" style={{width:82,height:82,objectFit:"contain",borderRadius:12,marginBottom:16,display:"block",marginInline:"auto"}}/>
-          : <div style={{fontSize:48,marginBottom:16}}>🎬</div>}
+          : <div style={{fontSize:48,marginBottom:16}}><Film size={48} strokeWidth={1.75} color="var(--accent)" /></div>}
         <h2 style={{fontSize:"clamp(14px,4vw,20px)",fontWeight:900,color:"var(--accent)",marginBottom:4}}>מערכת הפניות</h2>
         <div style={{fontSize:14,color:"var(--text2)",marginBottom:24,fontWeight:500}}>מכללת קמרה אובסקורה וסאונד</div>
 
@@ -2947,8 +2948,8 @@ ${inventory}
           return (
             <div style={{marginTop:20,textAlign:"center",fontSize:12,color:"var(--text3)",lineHeight:1.6}}>
               {isIOS
-                ? <>📲 להתקנת האפליקציה: לחץ/י על כפתור <strong>השיתוף</strong> ובחר/י <strong>"הוסף למסך הבית"</strong></>
-                : <button type="button" onClick={()=>void onInstall()} style={{background:"var(--accent)",border:"none",color:"#0a0c10",fontSize:13,fontWeight:800,cursor:"pointer",padding:"10px 20px",borderRadius:8,width:"100%"}}>📲 התקן את האפליקציה</button>
+                ? <><Download size={16} strokeWidth={1.75} /> להתקנת האפליקציה: לחץ/י על כפתור <strong>השיתוף</strong> ובחר/י <strong>"הוסף למסך הבית"</strong></>
+                : <button type="button" onClick={()=>void onInstall()} style={{background:"var(--accent)",border:"none",color:"#0a0c10",fontSize:13,fontWeight:800,cursor:"pointer",padding:"10px 20px",borderRadius:8,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Download size={16} strokeWidth={1.75} /> התקן את האפליקציה</button>
               }
             </div>
           );
@@ -2960,7 +2961,7 @@ ${inventory}
   if(done) return (
     <div className="form-page">
       <div style={{width:"100%",maxWidth:500,background:"var(--surface)",border:"1px solid var(--border)",borderRadius:16,padding:40,textAlign:"center",direction:"rtl"}}>
-        <div style={{fontSize:64,marginBottom:16}}>✅</div>
+        <div style={{fontSize:64,marginBottom:16}}><CheckCircle size={64} strokeWidth={1.75} color="var(--accent)" /></div>
         <h2 style={{fontSize:24,fontWeight:900,color:"var(--accent)",marginBottom:8}}>הבקשה נשלחה!</h2>
         <p style={{fontSize:14,color:"var(--text2)",marginBottom:28}}>בקשתך התקבלה בהצלחה.<br/>צוות המכללה יעבור עליה לאישורה הסופי.</p>
         <button className="btn btn-secondary" onClick={reset}>🔄 שלח בקשה נוספת</button>
@@ -3005,25 +3006,25 @@ ${inventory}
           <div style={{display:"flex",gap:4,marginTop:16,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4}}>
             <button type="button" onClick={()=>setPublicView("equipment")}
               style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:publicView==="equipment"?"var(--accent)":"transparent",color:publicView==="equipment"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-              📦 השאלת ציוד
+              <Package size={16} strokeWidth={1.75} /> השאלת ציוד
             </button>
             <button type="button" onClick={()=>{setPublicView("studios");loadStudiosData();}}
               style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:publicView==="studios"?"var(--accent)":"transparent",color:publicView==="studios"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-              🎙️ קביעת חדרים
+              <Mic size={16} strokeWidth={1.75} /> קביעת חדרים
             </button>
             <button type="button" onClick={()=>{setPublicView("daily");setDailyDayOffset(0);loadDailySchedule();}}
               style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:publicView==="daily"?"var(--accent)":"transparent",color:publicView==="daily"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-              📅 לוז יומי
+              <Calendar size={16} strokeWidth={1.75} /> לוז יומי
             </button>
             <button type="button" onClick={()=>{setPublicView("my-bookings");loadStudiosData();loadReservationsData();}}
               style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:publicView==="my-bookings"?"var(--accent)":"transparent",color:publicView==="my-bookings"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-              📋 ההזמנות שלי
+              <ClipboardList size={16} strokeWidth={1.75} /> ההזמנות שלי
             </button>
           </div>
           {publicView==="equipment" && <>
           {/* Clickable tab navigation — always free to navigate, validation only on submit */}
             <div style={{display:"flex",gap:4,marginTop:20,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4}}>
-              {[{n:1,l:"פרטים",icon:"👤"},{n:2,l:"תאריכים",icon:"📅"},{n:3,l:"ציוד",icon:"📦"},{n:4,l:"אישור",icon:"✅"}].map(s=>{
+              {[{n:1,l:"פרטים",icon:"👤"},{n:2,l:"תאריכים",icon:<Calendar size={14} strokeWidth={1.75} />},{n:3,l:"ציוד",icon:<Package size={14} strokeWidth={1.75} />},{n:4,l:"אישור",icon:<CheckCircle size={14} strokeWidth={1.75} />}].map(s=>{
               const done = (s.n===1 && ok1) || (s.n===2 && ok2) || (s.n===3 && ok3) || (s.n===4 && canSubmit);
               const locked = s.n===4 && !canAccessStep(s.n);
               return (
@@ -3079,14 +3080,14 @@ ${inventory}
                     <div style={{fontWeight:800,fontSize:15,color:form.loan_type===opt.val?"var(--accent)":"var(--text)"}}>{opt.val==="סאונד"?"השאלת סאונד":opt.val==="הפקה"?"השאלת הפקה":opt.val==="קולנוע יומית"?"השאלת קולנוע יומית":`השאלה ${opt.val}`}</div>
                     <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{opt.desc}</div>
                   </div>
-                  {form.loan_type===opt.val&&<div style={{fontSize:16,color:"var(--accent)",fontWeight:900,flexShrink:0}}>✓</div>}
+                  {form.loan_type===opt.val&&<div style={{fontSize:16,color:"var(--accent)",fontWeight:900,flexShrink:0}}><Check size={16} strokeWidth={1.75} /></div>}
                 </div>
               ))}
             </div>
             <div className="form-section-title">{isProductionLoan ? "פרטי ההפקה" : "פרטי הסטודנט"}</div>
             {isProductionLoan && (
               <div style={{background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.25)",borderRadius:"var(--r-sm)",padding:"10px 14px",fontSize:12,color:"var(--text2)",marginBottom:14}}>
-                💡 <strong>במאי ההפקה</strong> הוא האחראי הראשי על קבלתו והחזרתו התקינה של הציוד
+                <Lightbulb size={16} strokeWidth={1.75} /> <strong>במאי ההפקה</strong> הוא האחראי הראשי על קבלתו והחזרתו התקינה של הציוד
               </div>
             )}
             <div className="grid-2">
@@ -3117,7 +3118,7 @@ ${inventory}
                 </div>
               </div>
               <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"16px",marginBottom:16}}>
-                <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>🎙️ איש הסאונד <span style={{color:"var(--text3)",fontSize:11}}>רשות</span></div>
+                <div style={{fontWeight:700,fontSize:13,marginBottom:10,display:"flex",alignItems:"center",gap:4}}><Mic size={14} strokeWidth={1.75} color="var(--accent)" /> איש הסאונד <span style={{color:"var(--text3)",fontSize:11}}>רשות</span></div>
                 <div className="grid-2">
                   <div className="form-group"><label className="form-label">שם פרטי</label><input className="form-input" placeholder="שם פרטי" name="crew_sound_first_name" autoComplete="given-name" value={form.crew_sound_first_name} onChange={e=>setCrewSoundFirst(e.target.value)}/></div>
                   <div className="form-group"><label className="form-label">שם משפחה</label><input className="form-input" placeholder="שם משפחה" name="crew_sound_last_name" autoComplete="family-name" value={form.crew_sound_last_name} onChange={e=>setCrewSoundLast(e.target.value)}/></div>
@@ -3157,7 +3158,7 @@ ${inventory}
             </div>
             {isSoundLoan && (
               <div style={{marginBottom:16,background:"rgba(245,166,35,0.08)",border:"2px solid rgba(245,166,35,0.5)",borderRadius:"var(--r-sm)",padding:"14px 16px"}}>
-                <label style={{display:"block",fontWeight:800,fontSize:13,color:"#f5a623",marginBottom:8}}>🎙️ שיוך לקביעת חדר *
+                <label style={{display:"block",fontWeight:800,fontSize:13,color:"#f5a623",marginBottom:8,display:"flex",alignItems:"center",gap:4}}><Mic size={14} strokeWidth={1.75} color="#f5a623" /> שיוך לקביעת חדר *
                   {!form.studio_booking_id && <span style={{fontWeight:400,fontSize:11,color:"var(--red)",marginRight:8}}>— חובה לשייך קביעת חדר</span>}
                 </label>
                 <select className="form-select" value={form.studio_booking_id} onChange={e=>{
@@ -3197,7 +3198,7 @@ ${inventory}
             {isCinemaLoan ? (
               <>
                 <div className="grid-2">
-                  <div className="form-group"><label className="form-label">📅 תאריך *</label>
+                  <div className="form-group"><label className="form-label" style={{display:"flex",alignItems:"center",gap:4}}><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> תאריך *</label>
                     <input type="date" className="form-input" min={minDate} value={form.borrow_date} onChange={e=>{
                       setForm(prev=>({...prev, borrow_date:e.target.value, return_date:e.target.value, borrow_time:"", return_time:""}));
                     }}/>
@@ -3222,7 +3223,7 @@ ${inventory}
             ) : isSoundLoan ? (
               form.studio_booking_id && form.borrow_date ? (
                 <div style={{background:"rgba(76,217,100,0.08)",border:"1px solid rgba(76,217,100,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>
-                  ✅ <strong>מועד ההשאלה נקבע לפי קביעת החדר:</strong>{" "}
+                  <CheckCircle size={16} strokeWidth={1.75} /> <strong>מועד ההשאלה נקבע לפי קביעת החדר:</strong>{" "}
                   {form.borrow_date === form.return_date
                     ? `${formatDate(form.borrow_date)} · ${form.borrow_time}–${form.return_time}`
                     : `${formatDate(form.borrow_date)} ${form.borrow_time} עד ${formatDate(form.return_date)} ${form.return_time}`}
@@ -3231,7 +3232,7 @@ ${inventory}
             ) : (
               <>
                 <div className="grid-2">
-                  <div className="form-group"><label className="form-label">📅 תאריך השאלה *</label><input type="date" className="form-input" min={minDate} value={form.borrow_date} onChange={e=>set("borrow_date",e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label" style={{display:"flex",alignItems:"center",gap:4}}><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> תאריך השאלה *</label><input type="date" className="form-input" min={minDate} value={form.borrow_date} onChange={e=>set("borrow_date",e.target.value)}/></div>
                   <div className="form-group"><label className="form-label">שעת איסוף *</label>
                     <select className="form-select" value={form.borrow_time} onChange={e=>setForm(prev=>({...prev,borrow_time:e.target.value}))}>
                       <option value="">-- בחר שעה --</option>
@@ -3240,7 +3241,7 @@ ${inventory}
                   </div>
                 </div>
                 <div className="grid-2">
-                  <div className="form-group"><label className="form-label">📅 תאריך החזרה *</label><input type="date" className="form-input" min={form.borrow_date||today()} value={form.return_date} onChange={e=>set("return_date",e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label" style={{display:"flex",alignItems:"center",gap:4}}><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> תאריך החזרה *</label><input type="date" className="form-input" min={form.borrow_date||today()} value={form.return_date} onChange={e=>set("return_date",e.target.value)}/></div>
                   <div className="form-group"><label className="form-label">שעת החזרה *</label>
                     <select className="form-select" value={form.return_time} onChange={e=>set("return_time",e.target.value)}>
                       <option value="">-- בחר שעה --</option>
@@ -3257,7 +3258,7 @@ ${inventory}
             {!isSoundLoan && returnBeforeBorrow && !isCinemaLoan && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 זמנים לא נכונים — תאריך החזרה חייב להיות אחרי תאריך ההשאלה.</div>}
             {!isSoundLoan && timeOrderError && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 זמנים לא נכונים — שעת החזרה חייבת להיות אחרי שעת האיסוף באותו יום.</div>}
             {!isSoundLoan && pastLoanTimeError && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 {pastLoanTimeError}</div>}
-            {ok2 && !isSoundLoan && <div className="highlight-box">{isCinemaLoan ? `🎥 השאלת קולנוע יומית · ${formatDate(form.borrow_date)} · ${form.borrow_time}–${form.return_time}` : `📅 השאלה ל-${loanDays} ימים · איסוף ${form.borrow_time} · החזרה ${form.return_time}`}</div>}
+            {ok2 && !isSoundLoan && <div className="highlight-box" style={{display:"flex",alignItems:"center",gap:6}}>{isCinemaLoan ? <>🎥 השאלת קולנוע יומית · {formatDate(form.borrow_date)} · {form.borrow_time}–{form.return_time}</> : <><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> השאלה ל-{loanDays} ימים · איסוף {form.borrow_time} · החזרה {form.return_time}</>}</div>}
 
             {/* Mini calendar — approved reservations */}
             <PublicMiniCalendar key={form.loan_type || "הכל"} reservations={reservations} initialLoanType={form.loan_type || "הכל"} previewStart={form.borrow_date} previewEnd={form.return_date} previewName={form.student_name||"הבקשה שלך"}/>
@@ -3383,7 +3384,7 @@ ${inventory}
                         {/* מסלול */}
                         {s.track && (
                           <div style={{display:"inline-block",fontSize:12,fontWeight:700,color:"var(--accent)",background:"var(--accent-glow)",borderRadius:20,padding:"2px 10px",marginBottom:s.topic?4:0}}>
-                            🎓 {s.track}
+                            <GraduationCap size={14} strokeWidth={1.75} color="var(--accent)" /> {s.track}
                           </div>
                         )}
                         {/* נושא */}
@@ -3397,7 +3398,7 @@ ${inventory}
         </div>}
         {publicView==="my-bookings" && <div className="form-card-body" style={{direction:"rtl"}}>
           {/* ─── קביעות אולפן ─── */}
-          <div style={{fontWeight:900,fontSize:15,marginBottom:12,paddingBottom:10,borderBottom:"1px solid var(--border)"}}>🎙️ קביעות אולפן</div>
+          <div style={{fontWeight:900,fontSize:15,marginBottom:12,paddingBottom:10,borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:6}}><Mic size={16} strokeWidth={1.75} color="var(--accent)" /> קביעות אולפן</div>
           {(()=>{
             const myBookings = studioBookings.filter(b=>{
               if (!b||!loggedInStudent) return false;
@@ -3410,13 +3411,13 @@ ${inventory}
             const NBST="21:30",NBET="08:00";
             const isFuture=b=>{const e=b.isNight?(()=>{const d=new Date(b.date);d.setDate(d.getDate()+1);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;})():b.date;return new Date(`${e}T${b.endTime||"23:59"}:00`).getTime()>Date.now();};
             const futureOnes=myBookings.filter(isFuture);
-            const handleCancel=async id=>{const updated=studioBookings.filter(b=>b.id!==id);setStudioBookings(updated);await storageSet("studio_bookings",updated);showToast("success","❌ ההזמנה בוטלה");};
+            const handleCancel=async id=>{const updated=studioBookings.filter(b=>b.id!==id);setStudioBookings(updated);await storageSet("studio_bookings",updated);showToast("success","ההזמנה בוטלה");};
             const handleSaveEdit=async()=>{
               if(!editingBooking) return;
               const{id,studioId,date,startTime,endTime}=editingBooking;
               if(!startTime||!endTime||startTime>=endTime){showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה");return;}
               const overlap=studioBookings.some(b=>String(b.studioId)===String(studioId)&&b.date===date&&b.id!==id&&b.status!=="נדחה"&&!(endTime<=b.startTime||startTime>=b.endTime));
-              if(overlap){showToast("error","⚠️ קיימת הזמנה חופפת לשעות אלו");return;}
+              if(overlap){showToast("error","קיימת הזמנה חופפת לשעות אלו");return;}
               const hoursLimit=getStudioFutureHoursLimit(siteSettings);
               const now=new Date();
               const otherFutureHours=studioBookings.reduce((sum,b)=>{
@@ -3435,7 +3436,7 @@ ${inventory}
               await storageSet("studio_bookings",updated);
               setEditingBooking(null);
               setEditBookingSaving(false);
-              showToast("success","✅ ההזמנה עודכנה");
+              showToast("success","ההזמנה עודכנה");
             };
             const renderRow=(b)=>{
               const studioObj=studios.find(s=>String(s.id)===String(b.studioId));
@@ -3446,16 +3447,16 @@ ${inventory}
                 <div style={{padding:"12px 14px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,flexWrap:"wrap"}}>
                   <div>
                     <div style={{fontWeight:700,fontSize:13}}>{studioObj?.name||"אולפן"}{b.isNight&&<span style={{color:"#2196f3",marginRight:4}}> 🌙</span>}</div>
-                    <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>📅 {fmtDate(b.date)} · ⏰ {timeLabel}</div>
+                    <div style={{fontSize:12,color:"var(--text3)",marginTop:2,display:"flex",alignItems:"center",gap:4}}><Calendar size={12} strokeWidth={1.75} color="var(--accent)" /> {fmtDate(b.date)} · <Clock size={12} strokeWidth={1.75} color="var(--accent)" /> {timeLabel}</div>
                     {b.notes&&<div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>💬 {b.notes}</div>}
                   </div>
                   <div style={{display:"flex",gap:6,flexShrink:0}}>
-                    {!b.isNight&&<button onClick={()=>setEditingBooking(isEditing?null:{id:b.id,studioId:b.studioId,date:b.date,startTime:b.startTime||"",endTime:b.endTime||""})} style={{background:isEditing?"var(--surface3)":"var(--accent)",color:isEditing?"var(--text)":"#000",border:"none",borderRadius:4,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>{isEditing?"✕ סגור":"✏️ ערוך"}</button>}
-                    <button onClick={()=>handleCancel(b.id)} style={{background:"var(--red)",color:"#fff",border:"none",borderRadius:4,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>❌ בטל</button>
+                    {!b.isNight&&<button onClick={()=>setEditingBooking(isEditing?null:{id:b.id,studioId:b.studioId,date:b.date,startTime:b.startTime||"",endTime:b.endTime||""})} style={{background:isEditing?"var(--surface3)":"var(--accent)",color:isEditing?"var(--text)":"#000",border:"none",borderRadius:4,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}>{isEditing?<><X size={12} strokeWidth={1.75} color="var(--text3)" /> סגור</>:<><Pencil size={12} strokeWidth={1.75} color="var(--text3)" /> ערוך</>}</button>}
+                    <button onClick={()=>handleCancel(b.id)} style={{background:"var(--red)",color:"#fff",border:"none",borderRadius:4,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}><XCircle size={12} strokeWidth={1.75} /> בטל</button>
                   </div>
                 </div>
                 {isEditing&&<div style={{padding:"12px 14px",borderTop:`1px solid ${color}33`,background:"var(--surface3)"}}>
-                  <div style={{fontSize:12,fontWeight:700,marginBottom:10,color:"var(--text2)"}}>✏️ עריכת שעות — {fmtDate(b.date)}</div>
+                  <div style={{fontSize:12,fontWeight:700,marginBottom:10,color:"var(--text2)",display:"flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)" /> עריכת שעות — {fmtDate(b.date)}</div>
                   <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap",marginBottom:12}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}>
                       <label style={{fontSize:11,color:"var(--text3)",fontWeight:700}}>שעת התחלה</label>
@@ -3478,7 +3479,7 @@ ${inventory}
           })()}
 
           {/* ─── רשימת ציוד ─── */}
-          <div style={{fontWeight:900,fontSize:15,marginTop:28,marginBottom:12,paddingBottom:10,borderBottom:"1px solid var(--border)"}}>📦 רשימת ציוד</div>
+          <div style={{fontWeight:900,fontSize:15,marginTop:28,marginBottom:12,paddingBottom:10,borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:6}}><Package size={16} strokeWidth={1.75} color="var(--accent)" /> רשימת ציוד</div>
           {(()=>{
             const sColor=s=>s==="מאושר"?"#1a7a4a":s==="פעילה"?"#64b5f6":s==="ממתין"||s==="אישור ראש מחלקה"?"#b8860b":s==="נדחה"?"#c0392b":s==="באיחור"?"#e67e22":s==="הוחזר"?"#2471a3":"var(--text3)";
             const sBg=s=>s==="מאושר"?"rgba(46,204,113,0.15)":s==="פעילה"?"rgba(100,181,246,0.15)":s==="ממתין"||s==="אישור ראש מחלקה"?"rgba(241,196,15,0.15)":s==="נדחה"?"rgba(231,76,60,0.15)":s==="באיחור"?"rgba(230,126,34,0.18)":s==="הוחזר"?"rgba(52,152,219,0.15)":"var(--surface2)";
@@ -3499,7 +3500,7 @@ ${inventory}
                 <div style={{background:cardBg,padding:"12px 14px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}} onClick={()=>setExpandedResId(isExp?null:r.id)}>
                   <div>
                     <div style={{fontWeight:700,fontSize:13}}>
-                      📅 {fmtDate(r.borrow_date)}{r.borrow_time&&<span style={{color:"var(--accent)",marginRight:4}}> {r.borrow_time}</span>} ← {fmtDate(r.return_date)}{r.return_time&&<span style={{color:"var(--accent)",marginRight:4}}> {r.return_time}</span>}
+                      <Calendar size={14} strokeWidth={1.75} color="var(--accent)" style={{flexShrink:0}} /> {fmtDate(r.borrow_date)}{r.borrow_time&&<span style={{color:"var(--accent)",marginRight:4}}> {r.borrow_time}</span>} ← {fmtDate(r.return_date)}{r.return_time&&<span style={{color:"var(--accent)",marginRight:4}}> {r.return_time}</span>}
                     </div>
                     <div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>{r.loan_type&&<span style={{marginLeft:8}}>{r.loan_type}</span>}{r.items?.length||0} פריטים</div>
                   </div>
@@ -3518,12 +3519,12 @@ ${inventory}
                       <div style={{display:"flex",alignItems:"center",gap:10}}>
                         {img?.startsWith("data:")||img?.startsWith("http")
                           ?<img src={img} alt="" style={{width:38,height:38,objectFit:"cover",borderRadius:6,flexShrink:0}}/>
-                          :<span style={{fontSize:30,flexShrink:0}}>{img||"📦"}</span>}
+                          :<span style={{fontSize:30,flexShrink:0}}>{img||<Package size={30} strokeWidth={1.75} color="var(--accent)" />}</span>}
                         <div style={{flex:1}}><div style={{fontWeight:700,fontSize:13}}>{eq?.name||item.name||"פריט"}</div><div style={{fontSize:11,color:"var(--text3)"}}>כמות: {item.quantity}</div></div>
                         {st==="פעילה"&&<div style={{flexShrink:0}}>
                           {alreadyReported
-                            ?<span style={{fontSize:10,color:"var(--text3)",fontWeight:700}}>✅ דווח</span>
-                            :<button onClick={async(e)=>{e.stopPropagation();try{const res=await fetch("/api/equipment-report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"check-duplicate",equipment_id:String(item.equipment_id),reservation_id:String(r.id)})});const d=await res.json();if(d.exists){setReportedItems(p=>new Set([...p,rKey]));showToast("info","כבר נשלח דיווח על פריט זה");return;}}catch{}setReportModal({equipmentId:String(item.equipment_id),equipmentName:eq?.name||item.name||"פריט",reservationId:String(r.id)});setReportContent("");}} style={{background:"rgba(231,76,60,0.12)",color:"#e74c3c",border:"1px solid rgba(231,76,60,0.3)",borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>⚠️ דווח תקלה</button>}
+                            ?<span style={{fontSize:10,color:"var(--text3)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}><CheckCircle size={10} strokeWidth={1.75} /> דווח</span>
+                            :<button onClick={async(e)=>{e.stopPropagation();try{const res=await fetch("/api/equipment-report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"check-duplicate",equipment_id:String(item.equipment_id),reservation_id:String(r.id)})});const d=await res.json();if(d.exists){setReportedItems(p=>new Set([...p,rKey]));showToast("info","כבר נשלח דיווח על פריט זה");return;}}catch{}setReportModal({equipmentId:String(item.equipment_id),equipmentName:eq?.name||item.name||"פריט",reservationId:String(r.id)});setReportContent("");}} style={{background:"rgba(231,76,60,0.12)",color:"#e74c3c",border:"1px solid rgba(231,76,60,0.3)",borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:3}}><AlertTriangle size={10} strokeWidth={1.75} /> דווח תקלה</button>}
                         </div>}
                       </div>
                     </div>);
@@ -3559,7 +3560,7 @@ ${inventory}
     </div>
     {reportModal&&<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setReportModal(null)}>
       <div className="modal" style={{maxWidth:420}}>
-        <div className="modal-header"><span className="modal-title">⚠️ דיווח על תקלה</span><button className="btn btn-secondary btn-sm btn-icon" onClick={()=>setReportModal(null)}>✕</button></div>
+        <div className="modal-header"><span className="modal-title" style={{display:"inline-flex",alignItems:"center",gap:4}}><AlertTriangle size={16} strokeWidth={1.75} /> דיווח על תקלה</span><button className="btn btn-secondary btn-sm btn-icon" onClick={()=>setReportModal(null)}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button></div>
         <div className="modal-body" style={{direction:"rtl"}}>
           <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>פריט: {reportModal.equipmentName}</div>
           <div style={{marginBottom:6,fontWeight:700,fontSize:12,color:"var(--text2)"}}>תאר את התקלה:</div>
@@ -3574,7 +3575,7 @@ ${inventory}
               const res=await fetch("/api/equipment-report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"create",equipment_id:reportModal.equipmentId,student_name:loggedInStudent?.name||"",reservation_id:reportModal.reservationId,content:reportContent.trim()})});
               const d=await res.json();
               if(d.error==="duplicate"){showToast("info","כבר נשלח דיווח על פריט זה");setReportedItems(p=>new Set([...p,`${reportModal.equipmentId}:${reportModal.reservationId}`]));}
-              else if(d.ok){showToast("success","הדיווח נשלח בהצלחה ✅");setReportedItems(p=>new Set([...p,`${reportModal.equipmentId}:${reportModal.reservationId}`]));}
+              else if(d.ok){showToast("success","הדיווח נשלח בהצלחה");setReportedItems(p=>new Set([...p,`${reportModal.equipmentId}:${reportModal.reservationId}`]));}
               else{showToast("error","שגיאה בשליחת הדיווח");}
             }catch{showToast("error","שגיאה בשליחת הדיווח");}
             setReportSending(false);setReportModal(null);
@@ -3901,7 +3902,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     if (!studioId || !date || !normalizedStartTime || !normalizedEndTime) return "יש להשלים חדר, תאריך ושעות לפני השליחה";
     if (date < todayStr) return "לא ניתן להזמין תאריך שעבר";
     if (isStudioDisabled(studioId)) return blockedMessage || STUDIO_MAINTENANCE_MESSAGE;
-    if (!hasStudioCert(studioId) || (isNight && !hasNightCert)) return blockedMessage || "🔒 טרם עבר הסמכה — לא ניתן לקבוע חדר זה";
+    if (!hasStudioCert(studioId) || (isNight && !hasNightCert)) return blockedMessage || "טרם עבר הסמכה — לא ניתן לקבוע חדר זה";
     if (!isNight && normalizedStartTime >= normalizedEndTime) return "שעת סיום חייבת להיות אחרי שעת ההתחלה";
     const currentFutureHours = (bookings || []).reduce((sum, booking) => {
       if (!isActiveStudioBooking(booking) || !isBookingOwnedByStudent(booking)) return sum;
@@ -3920,7 +3921,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       && (excludeBookingId === null || String(booking.id) !== String(excludeBookingId))
       && !(normalizedEndTime <= booking.startTime || normalizedStartTime >= booking.endTime)
     ));
-    if (!isNight && overlap) return "⚠️ קיימת הזמנה חופפת";
+    if (!isNight && overlap) return "קיימת הזמנה חופפת";
     return "";
   };
   const checkStudentParallelBooking = (date, startTime, endTime, excludeBookingId = null) => {
@@ -3936,7 +3937,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     }) || null;
   };
 
-  const persistStudentBooking = async ({ studioId, date, startTime, endTime, notes="", isNight=false, blockedMessage="", successMessage="✅ החדר הוזמן בהצלחה!" }) => {
+  const persistStudentBooking = async ({ studioId, date, startTime, endTime, notes="", isNight=false, blockedMessage="", successMessage="החדר הוזמן בהצלחה!" }) => {
     // Night booking always requires consent — close booking modal + day view, then show policy modal
     if (isNight) {
       setModal(null);    // close booking form
@@ -4098,12 +4099,12 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={e=>e.target===e.currentTarget&&closeBookingModal()}>
         <div style={{width:"100%",maxWidth:400,background:"var(--surface)",borderRadius:16,border:`1px solid ${modal.isNight ? NIGHT_COLOR : "var(--border)"}`,direction:"rtl"}}>
           <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",fontWeight:900,fontSize:16,color:modal.isNight?NIGHT_COLOR:undefined}}>
-            {modal.isNight ? "🌙 הזמנת לילה" : "📅 הזמנת חדר"}
+            {modal.isNight ? "🌙 הזמנת לילה" : <span style={{display:"inline-flex",alignItems:"center",gap:6}}><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> הזמנת חדר</span>}
           </div>
           <form onSubmit={submitBooking} style={{padding:20,display:"flex",flexDirection:"column",gap:12}}>
             <div style={{fontSize:13,color:"var(--text3)"}}>👤 {student.name} · {(modal.selectedDate || modal.date) ? `${getHebrewDayName(modal.selectedDate || modal.date)} ` : ""}{modal.selectedDate || modal.date}</div>
             <div style={{fontSize:12,color:"var(--text3)"}}>
-              🎙️ {(studios.find((studio) => sameStudioId(studio.id, modal.selectedStudioId || modal.studioId))?.name) || "בחר חדר"}
+              <Mic size={14} strokeWidth={1.75} color="var(--accent)" /> {(studios.find((studio) => sameStudioId(studio.id, modal.selectedStudioId || modal.studioId))?.name) || "בחר חדר"}
             </div>
             <div style={{display:"flex",gap:8}}>
               <label style={{flex:1,fontSize:13,fontWeight:600}}>חדר
@@ -4178,9 +4179,9 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
             </label>
             <div style={{display:"flex",gap:8}}>
               <button type="button" className="btn btn-secondary" onClick={closeBookingModal}>ביטול</button>
-              <button type="submit" className="btn btn-primary" disabled={saving || isAiLoading} style={modal.isNight?{background:NIGHT_COLOR,borderColor:NIGHT_COLOR}:{}}>{saving?"שומר...":"✅ שלח בקשה"}</button>
+              <button type="submit" className="btn btn-primary" disabled={saving || isAiLoading} style={modal.isNight?{background:NIGHT_COLOR,borderColor:NIGHT_COLOR}:{}}>{saving?"שומר...":<><CheckCircle size={16} strokeWidth={1.75} /> שלח בקשה</>}</button>
             </div>
-            <div style={{fontSize:11,color:"var(--green)"}}>✅ {modal.isNight ? "הזמנת הלילה נשמרת אוטומטית בלוח" : "החדר נשמר אוטומטית בלוח"}</div>
+            <div style={{fontSize:11,color:"var(--green)",display:"flex",alignItems:"center",gap:4}}><CheckCircle size={12} strokeWidth={1.75} /> {modal.isNight ? "הזמנת הלילה נשמרת אוטומטית בלוח" : "החדר נשמר אוטומטית בלוח"}</div>
           </form>
         </div>
       </div>
@@ -4221,11 +4222,11 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     if (isStudioDisabled(studioId)) { showToast("error", STUDIO_MAINTENANCE_MESSAGE); setSaving(false); return; }
     if(!isNight && startTime >= endTime) { showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה"); setSaving(false); return; }
     const overlap = bookings.some(b => sameStudioId(b.studioId, studioId) && b.date===date && b.id!==bookingId && isActiveStudioBooking(b) && !(endTime<=b.startTime || startTime>=b.endTime));
-    if(!isNight && overlap) { showToast("error","⚠️ קיימת הזמנה חופפת"); setSaving(false); return; }
+    if(!isNight && overlap) { showToast("error","קיימת הזמנה חופפת"); setSaving(false); return; }
     const updated = bookings.map(b => b.id===bookingId ? {...b, startTime, endTime, notes: notes || b.notes} : b);
     setBookings(updated);
     await storageSet("studio_bookings", updated);
-    showToast("success","✅ ההזמנה עודכנה בהצלחה");
+    showToast("success","ההזמנה עודכנה בהצלחה");
     setModal(null); setSaving(false);
   };
 
@@ -4234,7 +4235,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     const updated = bookings.filter(b=>b.id!==bookingId);
     setBookings(updated);
     await storageSet("studio_bookings", updated);
-    showToast("success","❌ ההזמנה בוטלה");
+    showToast("success","ההזמנה בוטלה");
   };
 
   // ── Mini calendar helper (must be before early return to respect Rules of Hooks) ──
@@ -4308,7 +4309,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
         <div style={{fontWeight:900,fontSize:18,marginBottom:4,display:"flex",alignItems:"center",gap:8}}>
           {studio?.image?.startsWith("http")
             ? <img src={studio.image} alt={studio.name} style={{width:32,height:32,borderRadius:6,objectFit:"cover"}}/>
-            : <span>{studio?.image||"🎙️"}</span>
+            : <span>{studio?.image||<Mic size={32} strokeWidth={1.75} color="var(--accent)" />}</span>
           }
           {studio?.name}
         </div>
@@ -4343,18 +4344,18 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                       </div>
                       {getBookingKind(booking)==="student" && isBookingOwnedByStudent(booking) && !isHourPast && (
                         <div style={{display:"flex",gap:4,flexShrink:0}}>
-                          <button onClick={()=>setModal({type:"editBooking",bookingId:booking.id,studioId:dayView.studioId,date:dayView.date,dayName:dayView.dayName,isNight:false,defaultStart:booking.startTime,defaultEnd:booking.endTime,notes:booking.notes})} style={{background:"var(--accent)",color:"#000",border:"none",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                            ✏️ ערוך
+                          <button onClick={()=>setModal({type:"editBooking",bookingId:booking.id,studioId:dayView.studioId,date:dayView.date,dayName:dayView.dayName,isNight:false,defaultStart:booking.startTime,defaultEnd:booking.endTime,notes:booking.notes})} style={{background:"var(--accent)",color:"#000",border:"none",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}>
+                            <Pencil size={12} strokeWidth={1.75} color="var(--text3)" /> ערוך
                           </button>
-                          <button onClick={()=>cancelBooking(booking.id)} style={{background:"var(--red)",color:"#fff",border:"none",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                            ❌ בטל
+                          <button onClick={()=>cancelBooking(booking.id)} style={{background:"var(--red)",color:"#fff",border:"none",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}>
+                            <XCircle size={12} strokeWidth={1.75} /> בטל
                           </button>
                         </div>
                       )}
                     </div>
                   : <div style={{flex:1,padding:"6px 10px",cursor:(isHourPast||dayBlocked)?"default":"pointer",display:"flex",alignItems:"center",color:dayBlocked?"var(--red)":"var(--text3)",fontSize:12}}
                         onClick={()=>{ if(!isHourPast && !dayBlocked) openAddBookingModal({studioId:dayView.studioId,date:dayView.date,dayName:dayView.dayName,defaultStart:hour,defaultEnd:nextH}); }}>
-                      {dayBlocked ? "🔒" : isHourPast ? "" : "+ לחץ להזמנה"}
+                      {dayBlocked ? <Shield size={12} strokeWidth={1.75} /> : isHourPast ? "" : "+ לחץ להזמנה"}
                     </div>
                 }
               </div>
@@ -4386,11 +4387,11 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                     </div>
                     {getBookingKind(b)==="student" && isBookingOwnedByStudent(b) && !isDayPast && (
                       <div style={{display:"flex",gap:4,flexShrink:0}}>
-                        <button onClick={()=>setModal({type:"editBooking",bookingId:b.id,studioId:dayView.studioId,date:dayView.date,dayName:dayView.dayName,isNight:true,defaultStart:b.startTime,defaultEnd:b.endTime,notes:b.notes})} style={{background:NIGHT_COLOR,color:"#fff",border:"none",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                          ✏️ ערוך
+                        <button onClick={()=>setModal({type:"editBooking",bookingId:b.id,studioId:dayView.studioId,date:dayView.date,dayName:dayView.dayName,isNight:true,defaultStart:b.startTime,defaultEnd:b.endTime,notes:b.notes})} style={{background:NIGHT_COLOR,color:"#fff",border:"none",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}>
+                          <Pencil size={12} strokeWidth={1.75} color="var(--text3)" /> ערוך
                         </button>
-                        <button onClick={()=>cancelBooking(b.id)} style={{background:"var(--red)",color:"#fff",border:"none",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                          ❌ בטל
+                        <button onClick={()=>cancelBooking(b.id)} style={{background:"var(--red)",color:"#fff",border:"none",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}>
+                          <XCircle size={12} strokeWidth={1.75} /> בטל
                         </button>
                       </div>
                     )}
@@ -4408,7 +4409,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
           </div>
         ) : (
           <div style={{border:`1px solid ${NIGHT_COLOR}33`,borderRadius:6,padding:"12px 16px",textAlign:"center",color:"var(--text3)",fontSize:12,background:NIGHT_COLOR+"08"}}>
-            🔒 טרם עבר/ה הסמכת לילה לאולפנים — יש לפנות לאיש צוות
+            <Shield size={14} strokeWidth={1.75} /> טרם עבר/ה הסמכת לילה לאולפנים — יש לפנות לאיש צוות
           </div>
         )}
 
@@ -4419,7 +4420,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={e=>e.target===e.currentTarget&&setModal(null)}>
             <div style={{width:"100%",maxWidth:400,background:"var(--surface)",borderRadius:16,border:`1px solid ${modal.isNight ? NIGHT_COLOR : "var(--accent)"}`,direction:"rtl"}}>
               <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",fontWeight:900,fontSize:16,color:modal.isNight?NIGHT_COLOR:"var(--accent)"}}>
-                ✏️ עריכת הזמנה
+                <span style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={16} strokeWidth={1.75} color="var(--text3)" /> עריכת הזמנה</span>
               </div>
               <form onSubmit={submitEditBooking} style={{padding:20,display:"flex",flexDirection:"column",gap:12}}>
                 <div style={{fontSize:13,color:"var(--text3)"}}>👤 {student.name} · {modal.date}</div>
@@ -4504,7 +4505,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
           </div>
           <button onClick={()=>{ setWeekOffset(0); const d=new Date(); setMiniMonth({year:d.getFullYear(),month:d.getMonth()}); }}
             style={{width:"100%",marginTop:8,padding:"6px 0",borderRadius:6,border:"1px solid var(--accent)",background:"transparent",color:"var(--accent)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-            📅 היום
+            <Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> היום
           </button>
         </div>
 
@@ -4581,7 +4582,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
 
       {studios.length===0 ? (
         <div style={{textAlign:"center",padding:48,color:"var(--text3)"}}>
-          <div style={{fontSize:48,marginBottom:12}}>🎙️</div>
+          <div style={{fontSize:48,marginBottom:12}}><Mic size={48} strokeWidth={1.75} color="var(--accent)" /></div>
           <div style={{fontWeight:700}}>אין אולפנים זמינים כרגע</div>
         </div>
       ) : (
@@ -4596,7 +4597,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                 {weekDays[0].date}/{String(new Date(weekDays[0].fullDate).getMonth()+1).padStart(2,"0")} — {weekDays[6].date}/{String(new Date(weekDays[6].fullDate).getMonth()+1).padStart(2,"0")}
               </span>
               <button className="btn btn-secondary btn-sm" onClick={()=>setCalendarFullscreen(f=>!f)} title={calendarFullscreen?"סגור מסך מלא":"פתח מסך מלא"} style={{marginInlineStart:"auto"}}>
-                {calendarFullscreen ? "✕ סגור" : "⛶ מסך מלא"}
+                {calendarFullscreen ? <><X size={16} strokeWidth={1.75} color="var(--text3)" /> סגור</> : "⛶ מסך מלא"}
               </button>
           </div>
           <div data-no-swipe="true" style={{overflowX:"auto",overflowY:calendarFullscreen?"auto":undefined,WebkitOverflowScrolling:"touch",flex:calendarFullscreen?1:undefined,maxHeight:calendarFullscreen?"calc(100vh - 120px)":undefined}}>
@@ -4623,13 +4624,13 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                     <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
                       {studio.image?.startsWith("data:") || studio.image?.startsWith("http")
                         ? <img src={studio.image} alt={studio.name} style={{width:32,height:32,borderRadius:6,objectFit:"cover"}}/>
-                        : <span style={{fontSize:18,lineHeight:1}}>{studio.image||"🎙️"}</span>
+                        : <span style={{fontSize:18,lineHeight:1}}>{studio.image||<Mic size={18} strokeWidth={1.75} color="var(--accent)" />}</span>
                       }
                       <span style={{fontSize:10,fontWeight:800,lineHeight:1.2,wordBreak:"break-word",textAlign:"center"}}>{studio.name}</span>
                       {studio.isClassroom && <div style={{fontSize:9,color:"#3498db",fontWeight:800}}>🏫 כיתה</div>}
                       {maintenanceBlocked && <div style={{fontSize:9,color:"var(--red)",fontWeight:800}}>🔧 בתחזוקה</div>}
                       {!maintenanceBlocked && blocked && <div style={{fontSize:9,color:"var(--red)",fontWeight:800}}>⛔ חסר הסמכה</div>}
-                      <div style={{fontSize:9,color:"var(--accent)",fontWeight:700,marginTop:1}}>ℹ️</div>
+                      <div style={{fontSize:9,color:"var(--accent)",fontWeight:700,marginTop:1}}><Info size={9} strokeWidth={1.75} color="var(--accent)" /></div>
                     </div>
                   </td>
                   {weekDays.map(day=>{
@@ -4645,7 +4646,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                         }}
                         onClick={()=>{ if(!blocked && !isPast){ setModal(null); setDayView({studioId:studio.id,date:day.fullDate,dayName:day.name}); } }}>
                         {maintenanceBlocked && !isPast && <div style={{color:"var(--red)",fontSize:9,textAlign:"center",paddingTop:8,fontWeight:700,lineHeight:1.5}}>{STUDIO_MAINTENANCE_MESSAGE}</div>}
-                        {!maintenanceBlocked && blocked && !isPast && <div style={{color:"var(--red)",fontSize:9,textAlign:"center",paddingTop:8,fontWeight:700}}>🔒</div>}
+                        {!maintenanceBlocked && blocked && !isPast && <div style={{color:"var(--red)",fontSize:9,textAlign:"center",paddingTop:8,fontWeight:700}}><Shield size={9} strokeWidth={1.75} /></div>}
                         {!blocked && cells.map(b=>{
                           const color = getBookingColor(b);
                           return (
@@ -4676,12 +4677,12 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
           <div style={{width:"100%",maxWidth:400,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl",overflow:"hidden"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",borderBottom:"1px solid var(--border)",background:"var(--surface2)"}}>
               <div style={{fontWeight:900,fontSize:16}}>{studioInfoPanel.name}</div>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setStudioInfoPanel(null)}>✕</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setStudioInfoPanel(null)}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>
             </div>
             <div style={{padding:"20px",display:"flex",flexDirection:"column",alignItems:"center",gap:16}}>
               {studioInfoPanel.image?.startsWith("http") || studioInfoPanel.image?.startsWith("data:")
                 ? <img src={studioInfoPanel.image} alt={studioInfoPanel.name} style={{width:"100%",maxHeight:220,objectFit:"cover",borderRadius:10}}/>
-                : <div style={{fontSize:72,lineHeight:1}}>{studioInfoPanel.image||"🎙️"}</div>
+                : <div style={{fontSize:72,lineHeight:1}}>{studioInfoPanel.image||<Mic size={72} strokeWidth={1.75} color="var(--accent)" />}</div>
               }
               {studioInfoPanel.description
                 ? <p style={{fontSize:14,color:"var(--text)",lineHeight:1.7,textAlign:"right",margin:0,whiteSpace:"pre-wrap"}}>{studioInfoPanel.description}</p>
@@ -4738,7 +4739,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                       const next = [...bookings, newBooking];
                       setBookings(next);
                       await storageSet("studio_bookings", next);
-                      showToast("success", args.successMessage || "✅ החדר הוזמן בהצלחה!");
+                      showToast("success", args.successMessage || "החדר הוזמן בהצלחה!");
                       closeBookingModal();
                     } catch(err) {
                       console.error("night booking confirm error", err);
@@ -4746,7 +4747,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                     }
                   }}
                 >
-                  אני מאשר/ת ✅
+                  <span style={{display:"inline-flex",alignItems:"center",gap:4}}>אני מאשר/ת <CheckCircle size={16} strokeWidth={1.75} /></span>
                 </button>
               </div>
             </div>

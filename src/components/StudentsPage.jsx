@@ -1,12 +1,13 @@
 // StudentsPage.jsx — student management page (CRUD + import)
 import { useEffect, useRef, useState } from "react";
 import { supabase } from '../supabaseClient.js';
+import { CheckCircle, ClipboardList, Clock, Film, GraduationCap, Headphones, LayoutDashboard, Lightbulb, Package, Pencil, Plus, Search, X } from "lucide-react";
 import { storageSet, logActivity } from "../utils.js";
 import { Modal } from "./ui.jsx";
 import SmartExcelImportButton from "./SmartExcelImportButton.jsx";
 
 const TRACK_LOAN_TYPES = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
-const TRACK_TYPE_LABELS = { sound: "🎧 הנדסאי סאונד", cinema: "🎬 הנדסאי קולנוע", "": "ללא סיווג" };
+const TRACK_TYPE_LABELS = { sound: <><Headphones size={13} strokeWidth={1.75}/> הנדסאי סאונד</>, cinema: <><Film size={13} strokeWidth={1.75}/> הנדסאי קולנוע</>, "": "ללא סיווג" };
 const normalizeTrackName = (value = "") => String(value || "").trim();
 
 // Name helpers — support both new {firstName,lastName} shape and legacy {name} records.
@@ -108,14 +109,14 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
       (prevTypes    > 3 && nextTypes.length    === 0)
     ) {
       console.error(`🛑 StudentsPage.save BLOCKED: would shrink certifications (students ${prevStudents}→${nextStudents.length}, types ${prevTypes}→${nextTypes.length}). Likely stale cache.`);
-      showToast("error","❌ השמירה נחסמה: זוהה חשד לדריסה של נתונים. רענן את הדף ונסה שוב.");
+      showToast("error","השמירה נחסמה: זוהה חשד לדריסה של נתונים. רענן את הדף ונסה שוב.");
       return false;
     }
     setSaving(true);
     setCertifications(updated);
     const r = await storageSet("certifications", updated);
     setSaving(false);
-    if(!r.ok) showToast("error","❌ שגיאה בשמירה");
+    if(!r.ok) showToast("error","שגיאה בשמירה");
     return r.ok;
   };
 
@@ -212,7 +213,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
 
     if (await save({ types, students: [...currentStudents, ...normalizedStudents] })) {
       const skippedMsg = skippedCount > 0 ? ` · ${skippedCount} דולגו (כבר קיימים)` : "";
-      showToast("success", `✅ יובאו ${normalizedStudents.length} סטודנטים${skippedMsg}`);
+      showToast("success", `יובאו ${normalizedStudents.length} סטודנטים${skippedMsg}`);
       return true;
     }
     return false;
@@ -551,7 +552,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
           added++;
         }
         const updated = { types, students: newStudents };
-        if(await save(updated)) showToast("success", `✅ יובאו ${added} סטודנטים${skipped>0?` · ${skipped} דולגו`:""}`);
+        if(await save(updated)) showToast("success", `יובאו ${added} סטודנטים${skipped>0?` · ${skipped} דולגו`:""}`);
         setXlImporting(false);
       };
 
@@ -721,7 +722,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
       } else {
         const updated = { types, students: newStudents };
         if (await save(updated)) {
-          showToast("success", `✅ יובאו ${totalAdded} סטודנטים${totalSkipped > 0 ? ` · ${totalSkipped} דולגו` : ""}`);
+          showToast("success", `יובאו ${totalAdded} סטודנטים${totalSkipped > 0 ? ` · ${totalSkipped} דולגו` : ""}`);
         }
       }
     } catch (err) {
@@ -792,7 +793,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
           <div style={{width:"100%",maxWidth:480,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl",boxShadow:"0 8px 32px rgba(0,0,0,0.5)"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0"}}>
               <div style={{fontWeight:900,fontSize:16}}>➕ הוספת סטודנט</div>
-              <button className="btn btn-secondary btn-sm" onClick={closeAddModal}>✕</button>
+              <button className="btn btn-secondary btn-sm" onClick={closeAddModal}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>
             </div>
             <div style={{padding:"20px"}}>
               <div className="grid-2" style={{marginBottom:12}}>
@@ -819,7 +820,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
               <div style={{display:"flex",gap:8,marginTop:16,justifyContent:"flex-end"}}>
                 <button className="btn btn-secondary" onClick={closeAddModal}>ביטול</button>
                 <button className="btn btn-primary" disabled={!studentForm.firstName.trim()||!studentForm.email.trim()||saving} onClick={addStudent}>
-                  {saving?"⏳ שומר...":"✅ הוסף סטודנט"}
+                  {saving?<><Clock size={16} strokeWidth={1.75} /> שומר...</>:<><CheckCircle size={16} strokeWidth={1.75} /> הוסף סטודנט</>}
                 </button>
               </div>
             </div>
@@ -829,13 +830,13 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
 
       <div style={{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap",alignItems:"center"}}>
         <button className="btn btn-primary" onClick={()=>setAddingStudent(true)}>➕ הוספת סטודנט</button>
-          <button className="btn btn-secondary" onClick={()=>setAddingTrack(true)}>🎓 הוסף מסלול</button>
+          <button className="btn btn-secondary" onClick={()=>setAddingTrack(true)}><GraduationCap size={16} strokeWidth={1.75} /> הוסף מסלול</button>
           <label className="btn btn-secondary" style={{cursor:xlBasicImporting?"not-allowed":"pointer",opacity:xlBasicImporting?0.6:1,marginBottom:0}}>
-            {xlBasicImporting ? "⏳ מייבא..." : "📊 ייבוא XL"}
+            {xlBasicImporting ? <><Clock size={16} strokeWidth={1.75} /> מייבא...</> : <><LayoutDashboard size={16} strokeWidth={1.75} /> ייבוא XL</>}
             <input type="file" accept=".csv,.tsv,.xls,.xlsx" style={{display:"none"}} onChange={importXLBasic} disabled={xlBasicImporting}/>
           </label>
           <SmartExcelImportButton showToast={showToast} onImportSuccess={handleAiImport} />
-          <div className="search-bar" style={{flex:1,minWidth:180}}><span>🔍</span>
+          <div className="search-bar" style={{flex:1,minWidth:180}}><span><Search size={16} strokeWidth={1.75} color="var(--text3)" /></span>
             <input placeholder="חיפוש לפי שם, מייל או טלפון..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
           <span style={{fontSize:13,color:"var(--text3)"}}>סה״כ: <strong style={{color:"var(--text)"}}>{filteredStudents.length}</strong> / {students.length}</span>
         </div>
@@ -844,14 +845,14 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
             {allTracks.map(t=>(
               <button key={t} type="button" onClick={()=>toggleTrackFilter(t)}
                 style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${isTrackSelected(t)?"var(--accent)":"var(--border)"}`,background:isTrackSelected(t)?"var(--accent-glow)":"transparent",color:isTrackSelected(t)?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-                {t==="הכל"?"📦 כל המסלולים":"🎓 "+t}
+                {t==="הכל"?<><Package size={16} strokeWidth={1.75} /> כל המסלולים</>:<><GraduationCap size={16} strokeWidth={1.75} /> {t}</>}
               </button>
             ))}
           </div>
         )}
         {allTracks.length>1 && (
           <div style={{fontSize:11,color:"var(--text3)",marginTop:-4,marginBottom:12}}>
-            💡 אפשר לבחור כמה מסלולי לימוד יחד כדי להציג אותם במקביל.
+            <Lightbulb size={16} strokeWidth={1.75} /> אפשר לבחור כמה מסלולי לימוד יחד כדי להציג אותם במקביל.
           </div>
         )}
         {trackSettings.length>0 && (
@@ -861,15 +862,15 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
               {trackSettings.map((setting) => {
                 const tObj = (certifications?.tracks||[]).find(t=>normalizeTrackName(t.name)===setting.name);
                 const tType = tObj?.trackType||"";
-                const tLabel = tType==="sound"?"🎧 סאונד":tType==="cinema"?"🎬 קולנוע":null;
+                const tLabel = tType==="sound"?"🎧 סאונד":tType==="cinema"?<><Film size={16} strokeWidth={1.75} /> קולנוע</>:null;
                 return (
                   <div key={setting.name} onClick={()=>openTrackEditor(setting.name)}
                     style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:20,border:"1px solid var(--border)",background:"var(--surface3)",cursor:"pointer",transition:"border-color 0.15s"}}
                     onMouseEnter={e=>e.currentTarget.style.borderColor="var(--accent)"}
                     onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
-                    <span style={{fontSize:12,fontWeight:700,color:"var(--text2)"}}>🎓 {setting.name}</span>
+                    <span style={{fontSize:12,fontWeight:700,color:"var(--text2)"}}><GraduationCap size={16} strokeWidth={1.75} /> {setting.name}</span>
                     {tLabel && <span style={{fontSize:11,fontWeight:700,color:"var(--accent)",background:"rgba(99,102,241,0.12)",borderRadius:10,padding:"1px 7px"}}>{tLabel}</span>}
-                    <span style={{fontSize:11,color:"var(--text3)"}}>✏️</span>
+                    <span style={{color:"var(--text3)"}}><Pencil size={11} strokeWidth={1.75}/></span>
                   </div>
                 );
               })}
@@ -925,7 +926,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                       rows.push(
                         <tr key={`grp_${t}_${i}`}>
                           <td colSpan={6} style={{background:"rgba(245,166,35,0.06)",padding:"5px 14px",fontWeight:800,fontSize:11,color:"var(--accent)",borderBottom:"1px solid var(--border)",letterSpacing:0.5}}>
-                            {t?"🎓 "+t:"📋 ללא מסלול"}
+                            {t?<><GraduationCap size={16} strokeWidth={1.75} /> {t}</>:<><ClipboardList size={16} strokeWidth={1.75} /> ללא מסלול</>}
                           </td>
                         </tr>
                       );
@@ -979,7 +980,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                           <td style={{...tdS,fontSize:12,color:"var(--text3)"}}>{s.phone||"—"}</td>
                           <td style={tdS}>
                             {s.track
-                              ? <span style={{background:"rgba(245,166,35,0.1)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:20,padding:"3px 10px",fontSize:11,color:"var(--accent)",fontWeight:700}}>🎓 {s.track}</span>
+                              ? <span style={{background:"rgba(245,166,35,0.1)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:20,padding:"3px 10px",fontSize:11,color:"var(--accent)",fontWeight:700}}><GraduationCap size={16} strokeWidth={1.75} /> {s.track}</span>
                               : <span style={{fontSize:11,color:"var(--text3)"}}>—</span>}
                           </td>
                           <td style={{...tdS,width:80,textAlign:"center"}} onClick={e=>e.stopPropagation()}>
@@ -1017,8 +1018,8 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                     </select>
                   </div>
                   <div style={{display:"flex",gap:8,marginTop:10,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
-                    {inlineSaving && <span style={{fontSize:12,color:"var(--text3)"}}>⏳ שומר...</span>}
-                    <button className="btn btn-secondary btn-sm" onClick={()=>void closeInlineEdit(s)}>✕ סגור</button>
+                    {inlineSaving && <span style={{fontSize:12,color:"var(--text3)"}}><Clock size={16} strokeWidth={1.75} /> שומר...</span>}
+                    <button className="btn btn-secondary btn-sm" onClick={()=>void closeInlineEdit(s)}><X size={16} strokeWidth={1.75} color="var(--text3)" /> סגור</button>
                     <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)",marginRight:"auto"}}
                       onClick={()=>{deleteStudent(s.id);setEditingId(null);}}>🗑️</button>
                   </div>
@@ -1030,14 +1031,14 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                   onMouseLeave={e=>e.currentTarget.style.background="var(--surface)"}>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontWeight:800,fontSize:15}}>{getDisplayName(s)}</div>
-                    {s.track&&<div style={{fontSize:11,color:"var(--accent)",fontWeight:700}}>🎓 {s.track}</div>}
+                    {s.track&&<div style={{fontSize:11,color:"var(--accent)",fontWeight:700}}><GraduationCap size={16} strokeWidth={1.75} /> {s.track}</div>}
                     <div style={{fontSize:15,fontWeight:800,marginTop:2,wordBreak:"break-all"}}>{s.email}</div>
                     {s.phone&&<div style={{fontSize:11,color:"var(--text3)"}}>{s.phone}</div>}
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
                     <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)",padding:"4px 8px",fontSize:15}}
                       onClick={e=>{e.stopPropagation();deleteStudent(s.id);}}>🗑️</button>
-                    <span style={{fontSize:18,color:"var(--text3)"}}>✏️</span>
+                    <span style={{color:"var(--text3)"}}><Pencil size={16} strokeWidth={1.75}/></span>
                   </div>
                 </div>
               );
@@ -1047,13 +1048,13 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
       )}
       {editTrack && (
         <Modal
-          title="✏️ עריכת מסלול לימודים"
+          title="עריכת מסלול לימודים"
           onClose={()=>{ setEditTrack(null); setEditTrackName(""); setEditTrackType(""); }}
           footer={(
             <div style={{display:"flex",justifyContent:"space-between",width:"100%",flexWrap:"wrap",gap:8}}>
               <div style={{display:"flex",gap:8}}>
                 <button className="btn btn-primary" onClick={saveTrackEdit} disabled={!editTrackName.trim() || saving}>
-                  {saving ? "⏳ שומר..." : "💾 שמור"}
+                  {saving ? <><Clock size={16} strokeWidth={1.75} /> שומר...</> : "💾 שמור"}
                 </button>
                 <button className="btn btn-secondary" onClick={()=>{ setEditTrack(null); setEditTrackName(""); setEditTrackType(""); }}>
                   ביטול
@@ -1082,12 +1083,12 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
       )}
       {addingTrack && (
         <Modal
-          title="🎓 הוספת מסלול לימודים"
+          title={<><GraduationCap size={16} strokeWidth={1.75} /> הוספת מסלול לימודים</>}
           onClose={()=>{ setAddingTrack(false); setTrackForm({ name:"", trackType:"" }); }}
           footer={(
             <>
               <button className="btn btn-primary" onClick={addTrack} disabled={!trackForm.name.trim() || saving}>
-                {saving ? "⏳ שומר..." : "✅ הוסף מסלול"}
+                {saving ? <><Clock size={16} strokeWidth={1.75} /> שומר...</> : <><CheckCircle size={16} strokeWidth={1.75} /> הוסף מסלול</>}
               </button>
               <button className="btn btn-secondary" onClick={()=>{ setAddingTrack(false); setTrackForm({ name:"", trackType:"" }); }}>
                 ביטול

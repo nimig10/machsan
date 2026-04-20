@@ -1,6 +1,7 @@
 // PublicDailyTablePage.jsx — public display of today's combined schedule as a table
 import { useState, useEffect, useMemo } from "react";
 import { storageGet } from "../utils.js";
+import { ClipboardList, GraduationCap, Mic } from "lucide-react";
 
 const HE_DAYS   = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
@@ -129,7 +130,7 @@ export function PublicDailyTablePage() {
           <div style={{display:"flex",alignItems:"center",gap:"1vw"}}>
             {settings.logo && <img src={settings.logo} alt="logo" style={{height:"3.3vh"}}/>}
             <div>
-              <div style={{fontSize:"1.3vh",fontWeight:700,color:accent,letterSpacing:0.3}}>📋 לוח לו״ז יומי</div>
+              <div style={{fontSize:"1.3vh",fontWeight:700,color:accent,letterSpacing:0.3,display:"flex",alignItems:"center",gap:4}}><ClipboardList size={13} strokeWidth={1.75} color={accent} /> לוח לו״ז יומי</div>
               <div style={{fontSize:"2.2vh",color:"#fff",fontWeight:800,letterSpacing:0.3}}>{dateLabel()}</div>
             </div>
           </div>
@@ -139,7 +140,7 @@ export function PublicDailyTablePage() {
         {/* ─── Lessons section ─── */}
         <div style={{marginBottom:"1.8vh"}}>
           <div style={{fontSize:"1.7vh",fontWeight:800,color:"#fff",marginBottom:"0.7vh",display:"flex",alignItems:"center",gap:"0.5vw"}}>
-            <span style={{fontSize:"1.9vh"}}>🎓</span> שיעורים היום
+            <GraduationCap size={16} strokeWidth={1.75} color={accent} /> שיעורים היום
           </div>
           {lessonRows.length === 0 ? (
             <div style={{padding:"2.8vh 1.5vw",textAlign:"center",color:"#666",fontSize:"1.5vh",background:"#111",borderRadius:"0.8vh"}}>אין שיעורים היום</div>
@@ -202,7 +203,7 @@ export function PublicDailyTablePage() {
         {/* ─── Student bookings section ─── */}
         <div>
           <div style={{fontSize:"1.7vh",fontWeight:800,color:"#fff",marginBottom:"0.7vh",display:"flex",alignItems:"center",gap:"0.5vw"}}>
-            <span style={{fontSize:"1.9vh"}}>🎙️</span> קביעות סטודנטים היום
+            <Mic size={16} strokeWidth={1.75} color={accent} /> קביעות סטודנטים היום
           </div>
           {studentRows.length === 0 ? (
             <div style={{padding:"1.8vh",textAlign:"center",color:"#666",fontSize:"1.4vh",background:"#111",borderRadius:"0.8vh"}}>אין קביעות סטודנטים היום</div>

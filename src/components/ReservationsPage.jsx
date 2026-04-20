@@ -5,6 +5,7 @@ import { storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, toda
 import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
+import { BookOpen, Calendar, CheckCircle, ClipboardList, Clock, Film, Mic, Package, X, XCircle } from "lucide-react";
 
 // ── Staff Loan Form (module-scope component) ──
 // איש צוות יוצר לעצמו בקשת השאלה. הטופס מזהה אוטומטית את המשתמש המחובר
@@ -152,18 +153,18 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
         </div>
       </div>
       <div style={{display:"flex",gap:4,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4,marginBottom:16}}>
-        {[{n:1,l:"תאריכים",i:"📅"},{n:2,l:"ציוד",i:"📦"},{n:3,l:"סיכום",i:"✅"}].map(s=>(
+        {[{n:1,l:"תאריכים",i:<Calendar size={14} strokeWidth={1.75} color="var(--accent)" />},{n:2,l:"ציוד",i:<Package size={14} strokeWidth={1.75} color="var(--accent)" />},{n:3,l:"סיכום",i:<CheckCircle size={14} strokeWidth={1.75} color="var(--accent)" />}].map(s=>(
           <button key={s.n} type="button" onClick={()=>setMStep(s.n)} style={{flex:1,padding:"8px 4px",borderRadius:6,border:"none",background:mStep===s.n?"var(--accent)":"transparent",color:mStep===s.n?"#000":"var(--text2)",fontWeight:mStep===s.n?800:500,fontSize:12,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
             <span style={{fontSize:14}}>{s.i}</span><span>{s.l}</span></button>))}
       </div>
       {mStep===1&&<>
         <div className="form-section-title">תאריכים ושעות <span style={{fontSize:11,color:"var(--text3)",fontWeight:400}}>· ללא מגבלות</span></div>
         <div className="grid-2">
-          <div className="form-group"><label className="form-label">📅 תאריך השאלה *</label><input type="date" className="form-input" min={todayStr} value={mf.borrow_date} onChange={e=>mSet("borrow_date",e.target.value)}/></div>
+          <div className="form-group"><label className="form-label"><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> תאריך השאלה *</label><input type="date" className="form-input" min={todayStr} value={mf.borrow_date} onChange={e=>mSet("borrow_date",e.target.value)}/></div>
           <div className="form-group"><label className="form-label">שעת איסוף *</label><select className="form-select" value={mf.borrow_time} onChange={e=>mSet("borrow_time",e.target.value)}><option value="">-- בחר --</option>{borrowTimeOptions.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
         </div>
         <div className="grid-2">
-          <div className="form-group"><label className="form-label">📅 תאריך החזרה *</label><input type="date" className="form-input" min={mf.borrow_date || todayStr} value={mf.return_date} onChange={e=>mSet("return_date",e.target.value)}/></div>
+          <div className="form-group"><label className="form-label"><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> תאריך החזרה *</label><input type="date" className="form-input" min={mf.borrow_date || todayStr} value={mf.return_date} onChange={e=>mSet("return_date",e.target.value)}/></div>
           <div className="form-group"><label className="form-label">שעת החזרה *</label><select className="form-select" value={mf.return_time} onChange={e=>mSet("return_time",e.target.value)}><option value="">-- בחר --</option>{returnTimeOptions.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
         </div>
         {mTimeOrderError&&<div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:12,fontSize:12}}>🚫 שעת החזרה חייבת להיות אחרי שעת האיסוף.</div>}
@@ -177,13 +178,13 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
             <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סינון:</span>
             <button type="button" onClick={()=>setMShowSelectedOnly(p=>!p)}
               style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${mShowSelectedOnly?"var(--green)":"var(--border)"}`,background:mShowSelectedOnly?"rgba(46,204,113,0.12)":"transparent",color:mShowSelectedOnly?"var(--green)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>
-              {mShowSelectedOnly?"✅ נבחרו":"⬜"} {mShowSelectedOnly?"הצג הכל":`הצג נבחרים בלבד${mSelectedCount>0?` (${mSelectedCount})`:""}`}
+              {mShowSelectedOnly?<><CheckCircle size={14} strokeWidth={1.75} /> נבחרו</>:"⬜"} {mShowSelectedOnly?"הצג הכל":`הצג נבחרים בלבד${mSelectedCount>0?` (${mSelectedCount})`:""}`}
             </button>
             <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
-            {[{k:"all",l:"📦 הכל"},{k:"sound",l:"🎙️ סאונד"},{k:"photo",l:"🎥 צילום"}].map(({k,l})=>(<button key={k} type="button" onClick={()=>setMeqTypeF(k)} style={{padding:"4px 10px",borderRadius:20,border:`2px solid ${meqTypeF===k?"var(--accent)":"var(--border)"}`,background:meqTypeF===k?"var(--accent-glow)":"transparent",color:meqTypeF===k?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>{l}</button>))}
+            {[{k:"all",l:<><Package size={12} strokeWidth={1.75} color="var(--accent)" /> הכל</>},{k:"sound",l:<><Mic size={12} strokeWidth={1.75} color="var(--accent)" /> סאונד</>},{k:"photo",l:"🎥 צילום"}].map(({k,l})=>(<button key={k} type="button" onClick={()=>setMeqTypeF(k)} style={{padding:"4px 10px",borderRadius:20,border:`2px solid ${meqTypeF===k?"var(--accent)":"var(--border)"}`,background:meqTypeF===k?"var(--accent-glow)":"transparent",color:meqTypeF===k?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>{l}</button>))}
             <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
             {(categories||[]).map(cat=>(<button key={cat} type="button" onClick={()=>setMeqCatF(p=>p.includes(cat)?p.filter(c=>c!==cat):[...p,cat])} style={{padding:"4px 8px",borderRadius:20,border:`2px solid ${meqCatF.includes(cat)?"var(--accent)":"var(--border)"}`,background:meqCatF.includes(cat)?"var(--accent-glow)":"transparent",color:meqCatF.includes(cat)?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>{cat}</button>))}
-            {meqCatF.length>0&&<button type="button" onClick={()=>setMeqCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>✕ נקה</button>}
+            {meqCatF.length>0&&<button type="button" onClick={()=>setMeqCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}><X size={12} strokeWidth={1.75} color="var(--text3)" /> נקה</button>}
           </div>
           <div className="search-bar" style={{minWidth:150}}><span>🔍</span><input placeholder="חיפוש ציוד..." value={meqSearch} onChange={e=>setMeqSearch(e.target.value)}/></div>
         </div>
@@ -199,7 +200,7 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
               <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:5,textTransform:"uppercase",letterSpacing:1}}>{cat}</div>
               {catEq.map(eq=>{const av=eq.avail,qty=mGetItem(eq.id)?.quantity||0;
                 return (<div key={eq.id} className="item-row" style={{marginBottom:4,opacity:av===0?0.4:1,background:qty>0?"rgba(245,166,35,0.05)":"",border:qty>0?"1px solid rgba(245,166,35,0.2)":""}}>
-                  <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||"📦"}</span>
+                  <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||<Package size={16} strokeWidth={1.75} />}</span>
                   <div style={{flex:1,fontSize:13,fontWeight:600}}>{eq.name}<span style={{fontSize:11,color:"var(--text3)",marginRight:6,fontWeight:400}}>זמין: {av}</span></div>
                   {av>0?<div className="qty-ctrl"><button className="qty-btn" onClick={()=>mSetQty(eq.id,qty-1)}>−</button><span className="qty-num" style={{color:qty>0?"var(--accent)":"inherit"}}>{qty}</span><button className="qty-btn" disabled={qty>=av} onClick={()=>mSetQty(eq.id,qty+1)} style={{opacity:qty>=av?0.3:1}}>+</button></div>
                   :<span style={{fontSize:11,color:"var(--red)",fontWeight:700}}>אין מלאי</span>}
@@ -212,13 +213,13 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
       {mStep===3&&<>
         <div className="form-section-title">סיכום ההשאלה</div>
         <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
-          {[["שם",staffUser.full_name || staffTeamRow.name || ""],["אימייל",staffUser.email || ""],["סוג","💼 השאלת איש צוות"],["תאריך השאלה",mf.borrow_date?formatDate(mf.borrow_date)+" · "+mf.borrow_time:""],["תאריך החזרה",mf.return_date?formatDate(mf.return_date)+" · "+mf.return_time:""],["סטטוס","✅ מאושר (אוטומטי)"]].filter(([,v])=>v).map(([l,v])=>(
+          {[["שם",staffUser.full_name || staffTeamRow.name || ""],["אימייל",staffUser.email || ""],["סוג","💼 השאלת איש צוות"],["תאריך השאלה",mf.borrow_date?formatDate(mf.borrow_date)+" · "+mf.borrow_time:""],["תאריך החזרה",mf.return_date?formatDate(mf.return_date)+" · "+mf.return_time:""],["סטטוס",<><CheckCircle size={14} strokeWidth={1.75} color="var(--green)" /> מאושר (אוטומטי)</>]].filter(([,v])=>v).map(([l,v])=>(
             <div key={l} style={{display:"flex",gap:8,marginBottom:6,fontSize:13}}><span style={{color:"var(--text3)",minWidth:100}}>{l}:</span><strong>{v}</strong></div>))}
           <div style={{marginTop:10,fontWeight:700,fontSize:13}}>ציוד ({mItems.reduce((s,i)=>s+i.quantity,0)} יחידות):</div>
           {mItems.map(i=><div key={i.equipment_id} style={{fontSize:12,color:"var(--text2)",marginTop:4}}>• {i.name} ×{i.quantity}</div>)}
         </div>
         <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setMStep(2)}>← חזור</button>
-          <button className="btn btn-primary" disabled={mSaving||!mOk1||!mOk2} onClick={mSave} style={{fontSize:15,padding:"12px 28px"}}>{mSaving?"⏳ שומר...":"💾 צור השאלה"}</button></div>
+          <button className="btn btn-primary" disabled={mSaving||!mOk1||!mOk2} onClick={mSave} style={{fontSize:15,padding:"12px 28px"}}>{mSaving?<><Clock size={16} strokeWidth={1.75} /> שומר...</>:"💾 צור השאלה"}</button></div>
       </>}
     </Modal>
   );
@@ -281,9 +282,10 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       return 0;
     });
   const eqName = id => equipment.find(e=>e.id==id)?.name||"?";
-  const eqIcon = id => equipment.find(e=>e.id==id)?.image||"📦";
+  const eqIcon = id => equipment.find(e=>e.id==id)?.image||null;
   const EqImg = ({id, size=22}) => {
-    const img = equipment.find(e=>e.id==id)?.image||"📦";
+    const img = equipment.find(e=>e.id==id)?.image||null;
+    if (!img) return <Package size={size} strokeWidth={1.75} />;
     return img.startsWith("data:")||img.startsWith("http")
       ? <img src={img} alt="" style={{width:size,height:size,objectFit:"cover",borderRadius:4,verticalAlign:"middle"}}/>
       : <span style={{fontSize:size}}>{img}</span>;
@@ -310,7 +312,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       .footer{margin-top:40px;padding-top:16px;border-top:1px solid #eee;font-size:11px;color:#999;text-align:center}
       @media print{body{padding:20px}}
     </style></head><body>
-    <h1>📋 אישור בקשת השאלה</h1>
+    <h1>אישור בקשת השאלה</h1>
     <div class="sub">מכללת קמרה אובסקורה וסאונד — הופק ב-${new Date().toLocaleDateString("he-IL")}</div>
     <div class="section">
       <div class="section-title">פרטי סטודנט</div>
@@ -593,7 +595,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
             const isOverdue = r.status==="באיחור";
             const loanColor = isOverdue?"rgba(230,126,34,0.08)":isStaff?"rgba(100,120,150,0.10)":isLesson?"rgba(155,89,182,0.12)":isCinema?"rgba(52,152,219,0.08)":r.loan_type==="הפקה"?"rgba(52,152,219,0.06)":r.loan_type==="סאונד"?"rgba(245,166,35,0.06)":"var(--surface)";
             const loanBorder = isOverdue?"1px solid rgba(230,126,34,0.5)":isStaff?"1px solid rgba(100,120,150,0.35)":isLesson?"1px solid rgba(155,89,182,0.35)":isCinema?"1px solid rgba(52,152,219,0.3)":r.loan_type==="הפקה"?"1px solid rgba(52,152,219,0.2)":"1px solid var(--border)";
-            const loanIcon = isStaff?"💼":isLesson?"📽️":isCinema?"🎥":r.loan_type==="פרטית"?"👤":r.loan_type==="הפקה"?"🎬":"🎙️";
+            const loanIcon = isStaff?"💼":isLesson?"📽️":isCinema?"🎥":r.loan_type==="פרטית"?"👤":r.loan_type==="הפקה"?<Film size={12} strokeWidth={1.75} color="var(--accent)" />:<Mic size={12} strokeWidth={1.75} color="var(--accent)" />;
             const loanLabel = isStaff?"השאלת איש צוות":isLesson?"השאלת שיעור":isCinema?"קולנוע יומית":r.loan_type==="סאונד"?"השאלת סאונד":`השאלה ${r.loan_type}`;
             return (
             <div key={r.id} className="res-card"
@@ -604,7 +606,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
               <div className="res-card-top">
                 <div style={{display:"flex",alignItems:"center",gap:10}}>
                   <div style={{width:38,height:38,borderRadius:"50%",background:isOverdue?"rgba(230,126,34,0.2)":isStaff?"rgba(100,120,150,0.22)":isLesson?"rgba(155,89,182,0.2)":"var(--surface3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,flexShrink:0,color:isOverdue?"#e67e22":isStaff?"#6a7d95":isLesson?"#9b59b6":"inherit"}}>
-                    {isOverdue?"⚠️":isStaff?"💼":isLesson?"🎬":r.student_name?.[0]||"?"}
+                    {isOverdue?"⚠️":isStaff?"💼":isLesson?<Film size={16} strokeWidth={1.75} color="var(--accent)" />:r.student_name?.[0]||"?"}
                   </div>
                   <div>
                     <div style={{fontWeight:700,fontSize:15}}>{r.student_name}</div>
@@ -620,9 +622,9 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
               <div className="res-card-mid">
                 <div style={{display:"flex",gap:16,fontSize:12,color:"var(--text2)",flexWrap:"wrap"}}>
                   <span>⏱️ {getLoanDurationDays(r.borrow_date, r.return_date)} ימים</span>
-                  <span>📚 {r.course}</span>
-                  <span>📅 {formatDate(r.borrow_date)}{r.borrow_time&&<span style={{color:"var(--accent)",marginRight:4,fontWeight:700}}> {r.borrow_time}</span>} ← {formatDate(r.return_date)}{r.return_time&&<span style={{color:"var(--accent)",marginRight:4,fontWeight:700}}> {r.return_time}</span>}{(()=>{const diff=Math.ceil((new Date(r.borrow_date)-new Date())/(1000*60*60*24));return diff>0?<span style={{marginRight:6,color:"var(--yellow)",fontWeight:700}}>({diff} ימים)</span>:diff===0?<span style={{marginRight:6,color:"var(--green)",fontWeight:700}}>(היום!)</span>:null;})()}</span>
-                  <span>📦 {r.items?.length||0} פריטים</span>
+                  <span><BookOpen size={12} strokeWidth={1.75} color="var(--accent)" /> {r.course}</span>
+                  <span><Calendar size={12} strokeWidth={1.75} color="var(--accent)" /> {formatDate(r.borrow_date)}{r.borrow_time&&<span style={{color:"var(--accent)",marginRight:4,fontWeight:700}}> {r.borrow_time}</span>} ← {formatDate(r.return_date)}{r.return_time&&<span style={{color:"var(--accent)",marginRight:4,fontWeight:700}}> {r.return_time}</span>}{(()=>{const diff=Math.ceil((new Date(r.borrow_date)-new Date())/(1000*60*60*24));return diff>0?<span style={{marginRight:6,color:"var(--yellow)",fontWeight:700}}>({diff} ימים)</span>:diff===0?<span style={{marginRight:6,color:"var(--green)",fontWeight:700}}>(היום!)</span>:null;})()}</span>
+                  <span><Package size={12} strokeWidth={1.75} color="var(--accent)" /> {r.items?.length||0} פריטים</span>
                   {r.loan_type&&<span style={{background:isStaff?"rgba(100,120,150,0.2)":isLesson?"rgba(155,89,182,0.2)":"var(--surface3)",border:isStaff?"1px solid rgba(100,120,150,0.4)":isLesson?"1px solid rgba(155,89,182,0.4)":"1px solid var(--border)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,color:isStaff?"#8a9bb3":isLesson?"#9b59b6":"var(--accent)"}}>
                     {loanIcon} {loanLabel}
                   </span>}
@@ -635,7 +637,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
               <div className="res-card-actions" onClick={e=>e.stopPropagation()}>
                 <button className="btn btn-secondary btn-sm" onClick={()=>exportPDF(r)}>📄 PDF</button>
                 {(r.status==="ממתין"||r.status==="מאושר"||r.status==="נדחה"||r.status==="באיחור")&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}>✏️ עריכת בקשה</button>}
-                {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"מאושר")}>{busyIds.has(r.id)?"⏳":"✅ אשר"}</button><button className="btn btn-danger btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"נדחה")}>❌ דחה</button></>}
+                {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"מאושר")}>{busyIds.has(r.id)?<Clock size={14} strokeWidth={1.75} />:<><CheckCircle size={14} strokeWidth={1.75} /> אשר</>}</button><button className="btn btn-danger btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"נדחה")}><XCircle size={14} strokeWidth={1.75} /> דחה</button></>}
                 {(getEffectiveStatus(r)==="פעילה"||getEffectiveStatus(r)==="באיחור")&&<button className="btn btn-secondary btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"הוחזר")}>🔄 הוחזר</button>}
                 <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${r.student_name}?`)) deleteReservation(r.id); }}>🗑️</button>
               </div>
@@ -648,8 +650,8 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       {/* Sub-view tabs */}
       <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
         {[
-          {id:"active",label:"📋 בקשות",badge:null},
-          {id:"rejected",label:"❌ דחויות/מאחרות",badge:rejectedCount||null},
+          {id:"active",label:<><ClipboardList size={14} strokeWidth={1.75} color="var(--accent)" /> בקשות</>,badge:null},
+          {id:"rejected",label:<><XCircle size={14} strokeWidth={1.75} color="var(--accent)" /> דחויות/מאחרות</>,badge:rejectedCount||null},
           {id:"archive",label:"🗄️ ארכיון",badge:archivedCount||null},
         ].map(t=>(
           <button key={t.id} onClick={()=>setSubView(t.id)}
@@ -689,7 +691,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       )}
 
       {filtered.length===0
-        ? <div className="empty-state"><div className="emoji">{isRejectedPage ? "❌" : "📭"}</div><div>{isRejectedPage ? "אין בקשות דחויות או מאחרות" : "אין בקשות"}</div></div>
+        ? <div className="empty-state"><div className="emoji">{isRejectedPage ? <XCircle size={16} strokeWidth={1.75} color="var(--accent)" /> : "📭"}</div><div>{isRejectedPage ? "אין בקשות דחויות או מאחרות" : "אין בקשות"}</div></div>
         : <>
           {/* בקשות סטודנטים */}
           {studentReqs.length > 0 && <>
@@ -777,7 +779,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                         <span style={{fontWeight:900,fontSize:15,color:"var(--red)"}}>כמות חסומה: {blocker.quantity}</span>
                       </div>
                       <div style={{fontSize:12,color:"var(--text2)",display:"flex",flexWrap:"wrap",gap:10}}>
-                        <span>📅 {formatDate(blocker.borrow_date)} {blocker.borrow_time || ""}</span>
+                        <span><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> {formatDate(blocker.borrow_date)} {blocker.borrow_time || ""}</span>
                         {isOverdue
                           ? <span style={{color:"var(--red)",fontWeight:700}}>↩ היה אמור לחזור {formatDate(blocker.return_date)} — עדיין לא הוחזר</span>
                           : <span>↩ {formatDate(blocker.return_date)} {blocker.return_time || ""}</span>
@@ -801,7 +803,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
           size="modal-lg"
           footer={<div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
             <button className="btn btn-secondary" onClick={()=>setConsecutiveWarning(null)}>ביטול</button>
-            <button className="btn btn-success" onClick={()=>doApprove(consecutiveWarning.reservation)}>✅ אשר בכל זאת</button>
+            <button className="btn btn-success" onClick={()=>doApprove(consecutiveWarning.reservation)}><CheckCircle size={16} strokeWidth={1.75} /> אשר בכל זאת</button>
           </div>}
         >
           <div style={{background:"rgba(241,196,15,0.1)",border:"2px solid rgba(241,196,15,0.45)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16,display:"flex",gap:12,alignItems:"flex-start"}}>
@@ -831,11 +833,11 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       )}
 
       {selected && (
-        <Modal title={`📋 בקשה — ${selected.student_name}`} onClose={()=>{setSelected(null);setOverdueEmailText("");}} size="modal-lg"
+        <Modal title={<><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> בקשה — {selected.student_name}</>} onClose={()=>{setSelected(null);setOverdueEmailText("");}} size="modal-lg"
           footer={<>
             {(selected.status==="ממתין"||selected.status==="מאושר"||selected.status==="נדחה"||selected.status==="באיחור")&&<button className="btn btn-secondary" onClick={()=>{setEditing(selected);setSelected(null);setOverdueEmailText("");}}>✏️ עריכת בקשה</button>}
-            {selected.status==="ממתין"&&<><button className="btn btn-success" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"מאושר")}>{busyIds.has(selected.id)?"⏳ מאשר...":"✅ אשר"}</button><button className="btn btn-danger" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"נדחה")}>❌ דחה</button></>}
-            {selected.status==="נדחה"&&<button className="btn btn-success" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"מאושר")}>{busyIds.has(selected.id)?"⏳ מאשר...":"✅ אשר בקשה"}</button>}
+            {selected.status==="ממתין"&&<><button className="btn btn-success" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"מאושר")}>{busyIds.has(selected.id)?<><Clock size={14} strokeWidth={1.75} /> מאשר...</>:<><CheckCircle size={14} strokeWidth={1.75} /> אשר</>}</button><button className="btn btn-danger" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"נדחה")}><XCircle size={14} strokeWidth={1.75} /> דחה</button></>}
+            {selected.status==="נדחה"&&<button className="btn btn-success" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"מאושר")}>{busyIds.has(selected.id)?<><Clock size={14} strokeWidth={1.75} /> מאשר...</>:<><CheckCircle size={14} strokeWidth={1.75} /> אשר בקשה</>}</button>}
             {(getEffectiveStatus(selected)==="פעילה"||getEffectiveStatus(selected)==="באיחור")&&<button className="btn btn-secondary" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"הוחזר")}>🔄 סמן כהוחזר</button>}
             <button className="btn btn-secondary" onClick={()=>exportPDF(selected)}>📄 ייצא PDF</button>
             <button className="btn btn-danger" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${selected.student_name}?`)) deleteReservation(selected.id); }}>🗑️ מחק</button>
@@ -853,7 +855,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
               </div>
               <div style={{marginTop:16,background:"var(--accent-glow)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:"var(--r-sm)",padding:14}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,fontSize:13}}>
-                  <span style={{color:"var(--text3)"}}>📅 תאריך השאלה</span>
+                  <span style={{color:"var(--text3)"}}><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> תאריך השאלה</span>
                   <span style={{display:"flex",alignItems:"center",gap:6}}>
                     <strong>{formatDate(selected.borrow_date)}</strong>
                     {selected.borrow_time&&<span style={{background:"var(--surface)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:6,padding:"1px 8px",fontSize:12,fontWeight:800,color:"var(--accent)"}}>{selected.borrow_time}</span>}
@@ -920,7 +922,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                 disabled={overdueEmailSending || !overdueEmailText.trim() || !selected.email}
                 onClick={()=>sendOverdueManualEmail(selected, overdueEmailText)}
               >
-                {overdueEmailSending ? "⏳ שולח..." : "📤 שלח מייל לסטודנט"}
+                {overdueEmailSending ? <><Clock size={16} strokeWidth={1.75} /> שולח...</> : "📤 שלח מייל לסטודנט"}
               </button>
               <span style={{fontSize:12,color:"var(--text3)",marginRight:10}}>
                 {selected.email ? `יישלח אל ${selected.email}` : "אין כתובת מייל"}

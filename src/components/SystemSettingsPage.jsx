@@ -1,5 +1,6 @@
 // SystemSettingsPage.jsx — global system settings (admin only)
 import { useState } from "react";
+import { Camera, Film, Mic } from "lucide-react";
 
 export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast, storageSet }) {
   const [draft, setDraft] = useState({ aiMaxRequests: 5, publicDisplayInterval: 18, ...siteSettings });
@@ -36,7 +37,7 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast, s
     setSiteSettings(draft);
     await storageSet("siteSettings", draft);
     setSaving(false);
-    showToast("success", "ההגדרות נשמרו ✅");
+    showToast("success", "ההגדרות נשמרו");
   };
 
   return (
@@ -54,11 +55,11 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast, s
             <div style={{ width: 80, height: 80, borderRadius: 12, border: "2px dashed var(--border)", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface2)", overflow: "hidden", flexShrink: 0 }}>
               {draft.logo
                 ? <img src={draft.logo} alt="לוגו" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                : <span style={{ fontSize: 32, color: "var(--text3)" }}>🎬</span>}
+                : <Film size={32} strokeWidth={1.75} color="var(--text3)" />}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <label className="btn btn-secondary" style={{ cursor: logoUploading ? "not-allowed" : "pointer", opacity: logoUploading ? 0.6 : 1 }}>
-                {logoUploading ? "⏳ מעלה..." : "📷 העלה לוגו"}
+                {logoUploading ? "מעלה..." : <><Camera size={14} strokeWidth={1.75} /> העלה לוגו</>}
                 <input type="file" accept="image/*" style={{ display: "none" }} onChange={handleLogoUpload} disabled={logoUploading} />
               </label>
               {draft.logo && (
@@ -69,7 +70,7 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast, s
             </div>
           </div>
           <div style={{ borderTop: "1px solid var(--border)", marginBottom: 16 }} />
-          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 8 }}>🎙️ לוגו סאונד (לוגו נוסף)</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}><Mic size={12} strokeWidth={1.75} color="var(--accent)" /> לוגו סאונד (לוגו נוסף)</div>
           <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}>
             לוגו נוסף שיוצג מתחת ללוגו הראשי בסרגל לוח הבקרה ובטופס ההשאלה. מומלץ עד 500KB.
           </div>
@@ -77,11 +78,11 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast, s
             <div style={{ width: 80, height: 80, borderRadius: 12, border: "2px dashed var(--border)", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface2)", overflow: "hidden", flexShrink: 0 }}>
               {draft.soundLogo
                 ? <img src={draft.soundLogo} alt="לוגו סאונד" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                : <span style={{ fontSize: 32, color: "var(--text3)" }}>🎙️</span>}
+                : <Mic size={32} strokeWidth={1.75} color="var(--text3)" />}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <label className="btn btn-secondary" style={{ cursor: soundLogoUploading ? "not-allowed" : "pointer", opacity: soundLogoUploading ? 0.6 : 1 }}>
-                {soundLogoUploading ? "⏳ מעלה..." : "📷 העלה לוגו סאונד"}
+                {soundLogoUploading ? "מעלה..." : <><Camera size={14} strokeWidth={1.75} /> העלה לוגו סאונד</>}
                 <input type="file" accept="image/*" style={{ display: "none" }} onChange={handleSoundLogoUpload} disabled={soundLogoUploading} />
               </label>
               {draft.soundLogo && (
@@ -162,7 +163,7 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast, s
       </div>
 
 <button className="btn btn-primary" disabled={saving} onClick={save} style={{ fontSize: 15, padding: "12px 32px" }}>
-        {saving ? "⏳ שומר..." : "💾 שמור הגדרות"}
+        {saving ? "שומר..." : "שמור הגדרות"}
       </button>
     </div>
   );

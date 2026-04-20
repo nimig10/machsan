@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { Package } from "lucide-react";
 import { getAuthToken } from "../utils.js";
 
 const loadXLSX = () => (
@@ -131,7 +132,7 @@ ${csvText}
         name: String(item?.name || "").trim(),
         category: String(item?.category || "").trim(),
         total_quantity: Math.max(1, Number(item?.total) || 1),
-        image: "📦",
+        image: "",
         description: String(item?.desc || "").trim(),
         technical_details: String(item?.techSpecs || "").trim(),
         notes: "",
@@ -213,7 +214,7 @@ ${csvText}
         className="btn btn-secondary"
         style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
       >
-        <span aria-hidden="true">{isProcessing ? "⏳" : "⚡"}</span>
+        {!isProcessing && <Package size={14} strokeWidth={1.75} />}
         {isProcessing ? "יוצר ציוד עם AI..." : "ייבוא ציוד חכם (AI)"}
       </button>
 

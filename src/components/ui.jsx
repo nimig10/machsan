@@ -1,5 +1,6 @@
 // ui.jsx — shared UI primitives: Toast, Modal, Loading, statusBadge
 import { useState, useRef, useEffect } from "react";
+import { CheckCircle, Info, X, XCircle } from "lucide-react";
 import lottie from "lottie-web";
 import loadingData from "../assets/loading-logo2.json";
 import { normalizeReservationStatus } from "../utils.js";
@@ -9,13 +10,13 @@ export function statusBadge(s) {
   return <span className={`badge ${m[normalizedStatus]||"badge-gray"}`}>{normalizedStatus}</span>;
 }
 export function Toast({ toasts }) {
-  return <div className="toast-container">{toasts.map(t=><div key={t.id} className={`toast toast-${t.type}`}><span>{t.type==="success"?"✅":t.type==="error"?"❌":"ℹ️"}</span>{t.msg}</div>)}</div>;
+  return <div className="toast-container">{toasts.map(t=><div key={t.id} className={`toast toast-${t.type}`}><span>{t.type==="success"?<CheckCircle size={16} strokeWidth={1.75} />:t.type==="error"?<XCircle size={16} strokeWidth={1.75} />:<Info size={16} strokeWidth={1.75} />}</span>{t.msg}</div>)}</div>;
 }
 export function Modal({ title, onClose, children, footer, size="" }) {
   return (
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className={`modal ${size}`}>
-        <div className="modal-header"><span className="modal-title">{title}</span><button className="btn btn-secondary btn-sm btn-icon" onClick={onClose}>✕</button></div>
+        <div className="modal-header"><span className="modal-title">{title}</span><button className="btn btn-secondary btn-sm btn-icon" onClick={onClose}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button></div>
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-footer">{footer}</div>}
       </div>
