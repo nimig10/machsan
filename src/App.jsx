@@ -2555,7 +2555,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
                       </div>
                     : effectiveMax>0
                     ? <div className="qty-ctrl">
-                        <button className="qty-btn" onClick={()=>setQty(eq.id, Math.min(itm.quantity-1, effectiveMax))}><Minus size={12} strokeWidth={1.75} color="var(--text)"/></button>
+                        <button className="qty-btn" onClick={()=>setQty(eq.id, Math.min(itm.quantity-1, effectiveMax))}><Minus size={12} strokeWidth={1.75}/></button>
                         <span className="qty-num">{itm.quantity}</span>
                         <button className="qty-btn" disabled={atMax} style={{opacity:atMax?0.3:1}}
                           onClick={()=>{ if(!atMax) setQty(eq.id, Math.min(itm.quantity+1, effectiveMax)); }}>+</button>
@@ -3907,7 +3907,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                       </div>
                       {max>0
                         ? <div className="qty-ctrl">
-                            <button className="qty-btn" onClick={()=>setItemQty(eq.id,qty-1)}><Minus size={12} strokeWidth={1.75} color="var(--text)"/></button>
+                            <button className="qty-btn" onClick={()=>setItemQty(eq.id,qty-1)}><Minus size={12} strokeWidth={1.75}/></button>
                             <span className="qty-num" style={{color:qty>0?"var(--accent)":"inherit"}}>{qty}</span>
                             <button className="qty-btn" disabled={qty>=max} onClick={()=>setItemQty(eq.id,qty+1)} style={{opacity:qty>=max?0.3:1}}>+</button>
                           </div>

@@ -382,7 +382,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                           </div>
                           {!isOverdueReservation && (
                             <div className="qty-ctrl">
-                              <button className="qty-btn" onClick={()=>setQty(eq.id,qty-1)}><Minus size={14} strokeWidth={1.75} color="var(--text)" /></button>
+                              <button className="qty-btn" onClick={()=>setQty(eq.id,qty-1)}><Minus size={14} strokeWidth={1.75} /></button>
                               <span className="qty-num">{qty}</span>
                               <button className="qty-btn" disabled={remaining<=0} onClick={()=>setQty(eq.id,qty+1)}>+</button>
                             </div>
