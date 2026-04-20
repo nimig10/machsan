@@ -1,5 +1,5 @@
 // PublicForm.jsx — public loan request form
-import { AlertTriangle, Calendar, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mic, Minus, Package, Pencil, Settings, Shield, X, XCircle } from "lucide-react";
+import { AlertTriangle, Backpack, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mic, Minus, Moon, Package, Pencil, Phone, Save, Search, Settings, Shield, User, X, XCircle } from "lucide-react";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken } from "../utils.js";
 import { supabase } from "../supabaseClient.js";
@@ -176,7 +176,7 @@ function PublicMiniCalendar({ reservations, initialLoanType="הכל", previewSta
     ["rgba(26,188,156,0.75)","#fff"],["rgba(236,72,153,0.75)","#fff"],
     ["rgba(200,160,0,0.75)","#fff"], ["rgba(231,76,60,0.75)","#fff"],
   ];
-  const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:<Package size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"פרטית",label:"פרטית",icon:"👤"},{key:"הפקה",label:"הפקה",icon:<Film size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"סאונד",label:"סאונד",icon:<Mic size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"קולנוע יומית",label:"קולנוע יומית",icon:"🎥"},{key:"שיעור",label:"שיעור",icon:"📽️"},{key:"צוות",label:"איש צוות",icon:"💼"}];
+  const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:<Package size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"פרטית",label:"פרטית",icon:<User size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"הפקה",label:"הפקה",icon:<Film size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"סאונד",label:"סאונד",icon:<Mic size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"קולנוע יומית",label:"קולנוע יומית",icon:<Camera size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"שיעור",label:"שיעור",icon:<Film size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"צוות",label:"איש צוות",icon:<Briefcase size={12} strokeWidth={1.75} color="var(--accent)" />}];
   const activeRes = reservations.filter(r=>
     (r.status==="מאושר"||r.status==="באיחור") && r.borrow_date && r.return_date &&
     (loanTypeF==="הכל" || r.loan_type===loanTypeF)
@@ -691,10 +691,10 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
   const tabs = [
     { id:"equipment", label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><Package size={16} strokeWidth={1.75} color="var(--accent)" /> ציוד</span> },
     { id:"policies",  label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> נהלים</span> },
-    { id:"kits",      label:"🎒 ערכות" },
-    { id:"contact",   label:"📞 צוות" },
+    { id:"kits",      label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><Backpack size={16} strokeWidth={1.75} color="var(--accent)" /> ערכות</span> },
+    { id:"contact",   label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><Phone size={16} strokeWidth={1.75} color="var(--accent)" /> צוות</span> },
   ];
-  const LOAN_ICONS = { "פרטית":"👤","הפקה":<Film size={12} strokeWidth={1.75} color="var(--accent)" />,"סאונד":<Mic size={12} strokeWidth={1.75} color="var(--accent)" />,"קולנוע יומית":"🎥","לילה":"🌙" };
+  const LOAN_ICONS = { "פרטית":<User size={12} strokeWidth={1.75} color="var(--accent)" />,"הפקה":<Film size={12} strokeWidth={1.75} color="var(--accent)" />,"סאונד":<Mic size={12} strokeWidth={1.75} color="var(--accent)" />,"קולנוע יומית":<Camera size={12} strokeWidth={1.75} color="var(--accent)" />,"לילה":<Moon size={12} strokeWidth={1.75} color="var(--accent)" /> };
   const allCats = [...new Set((equipment||[]).map(e=>e.category).filter(Boolean))];
   const visibleEq = infoCatFilter.length===0
     ? (equipment||[])
@@ -1226,10 +1226,10 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     ? (normalizedTrackSettings.find((setting) => setting.name === activeStudentTrack)?.loanTypes || [...SMART_LOAN_TYPES])
     : [...SMART_LOAN_TYPES];
   const visibleLoanTypeOptions = [
-    {val:"פרטית",icon:"👤",desc:"שימוש אישי / לימודי"},
+    {val:"פרטית",icon:<User size={30} strokeWidth={1.75} color="var(--accent)" />,desc:"שימוש אישי / לימודי"},
     {val:"הפקה",icon:<Film size={30} strokeWidth={1.75} color="var(--accent)" />,desc:"פרויקט הפקה מאורגן"},
     {val:"סאונד",icon:<Mic size={30} strokeWidth={1.75} color="var(--accent)" />,desc:"לתרגול הקלטות באולפני המכללה (עבור הנדסאי סאונד בלבד)"},
-    {val:"קולנוע יומית",icon:"🎥",desc:"תרגול חופשי עם ציוד קולנוע למספר שעות — יש להזמין 24 שעות מראש"},
+    {val:"קולנוע יומית",icon:<Camera size={30} strokeWidth={1.75} color="var(--accent)" />,desc:"תרגול חופשי עם ציוד קולנוע למספר שעות — יש להזמין 24 שעות מראש"},
   ].filter((option) => allowedLoanTypes.includes(option.val));
 
   const syncInventory = async () => {

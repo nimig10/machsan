@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, Calendar, ClipboardList, Download, GraduationCap, LayoutDashboard, LogOut, Package, Settings, Users } from "lucide-react";
+import { BookOpen, Calendar, ClipboardList, Download, GraduationCap, Home, LayoutDashboard, LogOut, Package, Settings, Users } from "lucide-react";
 
 export function StaffHub({ user, logo, onNavigate, onLogout, canInstall = false, onInstall = () => {} }) {
   const [hovered, setHovered] = useState(null);
@@ -57,7 +57,7 @@ export function StaffHub({ user, logo, onNavigate, onLogout, canInstall = false,
             <div style={{ marginBottom: 12 }}>
               {logo
                 ? <img src={logo} alt="לוגו" style={{ height: 80, maxWidth: 200, objectFit: "contain" }} />
-                : <span style={{ fontSize: 42 }}>🏠</span>
+                : <Home size={48} strokeWidth={1.5} color="var(--text3)" />
               }
             </div>
             <h1 style={{ fontSize: 28, fontWeight: 900, color: "var(--text)", margin: 0 }}>Staff Hub</h1>

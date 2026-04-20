@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { AlertTriangle, AudioLines, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, Clock, ClipboardList, Download, FileText, Film, GraduationCap, Info, Link, Lightbulb, LogOut, Mail, Mic, Minus, Package, Pencil, Phone, Plus, Search, Settings, Shield, ShoppingCart, SlidersHorizontal, Triangle, User, Video, X, XCircle } from "lucide-react";
+import { AlertTriangle, AudioLines, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, Clock, ClipboardList, Download, FileText, Film, GraduationCap, HelpCircle, Info, Link, Lightbulb, LogOut, Mail, Mic, Minus, Package, Pencil, Phone, Plus, Save, Search, Settings, Shield, ShoppingCart, SlidersHorizontal, Trash2, Triangle, User, Video, Wrench, X, XCircle } from "lucide-react";
 import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB } from "./utils.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
@@ -1648,7 +1648,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
         {[
           {id:"active",label:<><Package size={14} strokeWidth={1.75}/> ציוד פעיל</>,badge:null},
-          {id:"damaged",label:"🔧 ציוד בדיקה",badge:damagedCount||null},
+          {id:"damaged",label:<><Wrench size={14} strokeWidth={1.75}/> ציוד בדיקה</>,badge:damagedCount||null},
           {id:"reports",label:<><ClipboardList size={14} strokeWidth={1.75}/> דיווחי סטודנטים</>,badge:eqReports.filter(r=>r.status==="open").length||null},
         ].map(t=>(
           <button key={t.id} onClick={()=>setEqSubView(t.id)}
@@ -1863,7 +1863,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                       <div>
                         <strong style={{color:isEmpty?"var(--red)":"var(--accent)",fontSize:20}}>{avail}</strong>
                         <span style={{color:"var(--text3)"}}> / {workingUnits(eq)} זמין</span>
-                        {workingUnits(eq)<eq.total_quantity&&<span style={{color:"var(--red)",fontSize:11,fontWeight:700,marginRight:6}}> · {eq.total_quantity-workingUnits(eq)} בדיקה 🔧</span>}
+                        {workingUnits(eq)<eq.total_quantity&&<span style={{color:"var(--red)",fontSize:11,fontWeight:700,marginRight:6,display:"inline-flex",alignItems:"center",gap:3}}> · {eq.total_quantity-workingUnits(eq)} בדיקה <Wrench size={11} strokeWidth={1.75} /></span>}
                       </div>
                       {isEmpty&&<span style={{fontSize:10,fontWeight:900,color:"var(--red)",background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.4)",borderRadius:6,padding:"2px 7px",whiteSpace:"nowrap"}}>אזל במלאי</span>}
                     </div>
@@ -1871,8 +1871,8 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                     <div style={{marginTop:8}}>{statusBadge(eq.status)}</div>
                     <div className="flex gap-2" style={{marginTop:12,flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
                       <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"edit",item:eq})} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> עריכה</button>
-                      <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"units",item:eq})}>🔧 יחידות</button>
-                      <button className="btn btn-danger btn-sm" onClick={(e)=>{e.stopPropagation();del(eq)}}>🗑️</button>
+                      <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"units",item:eq})} style={{display:"inline-flex",alignItems:"center",gap:4}}><Wrench size={12} strokeWidth={1.75} /> יחידות</button>
+                      <button className="btn btn-danger btn-sm" onClick={(e)=>{e.stopPropagation();del(eq)}}><Trash2 size={14} strokeWidth={1.75} /></button>
                     </div>
                   </div>
                 );})}
@@ -2057,7 +2057,7 @@ function ManageCategoriesModal({ categories, categoryTypes, onSave, onClose, equ
     return a.localeCompare(b, "he");
   });
 
-  const typeLabel = (t) => t === "סאונד" ? "🎙️ סאונד" : t === "צילום" ? "🎥 צילום" : "כללי";
+  const typeLabel = (t) => t === "סאונד" ? <><Mic size={14} strokeWidth={1.75} /> סאונד</> : t === "צילום" ? <><Camera size={14} strokeWidth={1.75} /> צילום</> : "כללי";
   const typeBadgeStyle = (t) => ({
     display: "inline-flex", alignItems: "center", gap: 3,
     padding: "2px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700,
@@ -2136,7 +2136,7 @@ function ManageCategoriesModal({ categories, categoryTypes, onSave, onClose, equ
                   <button
                     className="btn btn-danger btn-sm"
                     onClick={() => onSave({action:"delete", name: c})}
-                    title="מחק">🗑️</button>
+                    title="מחק"><Trash2 size={14} strokeWidth={1.75} /></button>
                 </>
               )}
             </div>
@@ -2566,7 +2566,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
                       </div>
                     : eq.overdueBlocked
                     ? <div style={{fontSize:11,color:"#e67e22",fontWeight:700,textAlign:"center",maxWidth:130,lineHeight:1.3,padding:"5px 8px",background:"rgba(230,126,34,0.1)",borderRadius:6,border:"1px solid rgba(230,126,34,0.35)"}}>
-                        ⚠️ חסום ע״י השאלה באיחור
+                        <span style={{display:"inline-flex",alignItems:"center",gap:4}}><AlertTriangle size={12} strokeWidth={1.75} /> חסום ע״י השאלה באיחור</span>
                       </div>
                     : <span className="badge badge-red">לא זמין</span>
                   }
@@ -2977,7 +2977,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
             </label>
             {draft.commitmentPdf && (
               <button type="button" className="btn btn-secondary" onClick={()=>setDraft(p=>({...p,commitmentPdf:"",commitmentPdfCompressed:false,commitmentPdfName:""}))} style={{fontSize:12}}>
-                🗑️ הסר מסמך
+                <Trash2 size={14} strokeWidth={1.75} /> הסר מסמך
               </button>
             )}
           </div>
@@ -2994,7 +2994,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
       </div>
 
       <button className="btn btn-primary" disabled={saving} onClick={save}>
-        {saving ? <><Clock size={13} strokeWidth={1.75}/> שומר...</> : "💾 שמור נהלים"}
+        {saving ? <><Clock size={13} strokeWidth={1.75}/> שומר...</> : <><Save size={14} strokeWidth={1.75}/> שמור נהלים</>}
       </button>
 
       {/* Fullscreen editor */}
@@ -3003,7 +3003,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
           <div style={{padding:"16px 20px",background:"var(--surface)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
             <div style={{fontWeight:900,fontSize:17}}>{lt_active.icon} עריכת נהלי {lt_active.label}</div>
             <div style={{display:"flex",gap:8}}>
-              <button className="btn btn-primary btn-sm" onClick={async()=>{ await save(); setFsEdit(null); }}>💾 שמור וסגור</button>
+              <button className="btn btn-primary btn-sm" onClick={async()=>{ await save(); setFsEdit(null); }} style={{display:"inline-flex",alignItems:"center",gap:4}}><Save size={14} strokeWidth={1.75}/> שמור וסגור</button>
               <button className="btn btn-secondary btn-sm" onClick={()=>setFsEdit(null)} style={{display:"flex",alignItems:"center",gap:4}}><X size={14} strokeWidth={1.75} color="var(--text3)"/> סגור</button>
             </div>
           </div>
@@ -3076,7 +3076,7 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
               ? <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",border:"1px solid rgba(155,89,182,0.4)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",gap:4}}><Video size={11} strokeWidth={1.75}/> שיעור הסתיים</span>
               : <span style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",border:"1px solid rgba(52,152,219,0.4)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>הוחזר</span>}
             {r.loan_type&&!isLesson&&<span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}>{LOAN_ICONS[r.loan_type]||<Package size={11} strokeWidth={1.75}/>} {r.loan_type}</span>}
-            <button className="btn btn-danger btn-sm" onClick={e=>{e.stopPropagation();deleteRes(r.id);}}>🗑️</button>
+            <button className="btn btn-danger btn-sm" onClick={e=>{e.stopPropagation();deleteRes(r.id);}}><Trash2 size={14} strokeWidth={1.75} /></button>
           </div>
         </div>
         <div style={{marginTop:10,display:"flex",gap:16,fontSize:12,color:"var(--text2)",flexWrap:"wrap"}}>
@@ -3405,7 +3405,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
           <div style={{fontSize:12,color:"var(--green)",marginBottom:10,display:"flex",alignItems:"center",gap:4}}><CheckCircle size={12} strokeWidth={1.75}/> מוגדר: <strong>{collegeManager.name}</strong> ({collegeManager.email})</div>
         )}
         <button className="btn btn-primary" disabled={!mgrForm.name.trim()||!mgrForm.email.trim()||mgrSaving} onClick={saveMgr}>
-          {mgrSaving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:"💾 שמור פרטי מנהל"}
+          {mgrSaving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:<><Save size={14} strokeWidth={1.75}/> שמור פרטי מנהל</>}
         </button>
         {/* Public daily display link */}
         <div style={{marginTop:14,background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",fontSize:12}}>
@@ -3522,7 +3522,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
                 </div>
                 <div style={{display:"flex",gap:6}}>
                   <button className="btn btn-secondary btn-sm" onClick={()=>{setEditDh(dh);setEditDhForm({name:dh.name,email:dh.email,role:dh.role||"",loanTypes:dh.loanTypes||[]});}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/></button>
-                  <button className="btn btn-danger btn-sm" onClick={()=>delDh(dh.id)}>🗑️</button>
+                  <button className="btn btn-danger btn-sm" onClick={()=>delDh(dh.id)}><Trash2 size={14} strokeWidth={1.75} /></button>
                 </div>
               </div>
             ))}
@@ -3563,7 +3563,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
               </div>
               <div style={{display:"flex",gap:8}}>
                 <button className="btn btn-primary" disabled={!editDhForm.name.trim()||!editDhForm.email.trim()||editDhForm.loanTypes.length===0||dhSaving} onClick={saveEditDh}>
-                  {dhSaving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:"💾 שמור"}
+                  {dhSaving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:<><Save size={14} strokeWidth={1.75}/> שמור</>}
                 </button>
                 <button className="btn btn-secondary" onClick={()=>setEditDh(null)}>ביטול</button>
               </div>
@@ -3619,7 +3619,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
               </div>
               <div style={{display:"flex",gap:6}}>
                 <button className="btn btn-secondary btn-sm" onClick={()=>{setEditMember(m);setEditForm({name:m.name,email:m.email,phone:m.phone||"",loanTypes:m.loanTypes||[...LOAN_TYPES]});}} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> ערוך</button>
-                <button className="btn btn-danger btn-sm" onClick={()=>del(m.id)}>🗑️</button>
+                <button className="btn btn-danger btn-sm" onClick={()=>del(m.id)}><Trash2 size={14} strokeWidth={1.75} /></button>
               </div>
             </div>
           ))}
@@ -3656,7 +3656,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
                 {editDuplicateEmail && <div style={{fontSize:12,color:"var(--red)",marginTop:6}}>כתובת המייל כבר קיימת בצוות.</div>}
               </div>
               <div style={{display:"flex",gap:8,marginTop:16}}>
-                <button className="btn btn-primary" disabled={!editForm.name.trim()||!editEmail||editInvalidEmail||editDuplicateEmail} onClick={saveEdit}>💾 שמור שינויים</button>
+                <button className="btn btn-primary" disabled={!editForm.name.trim()||!editEmail||editInvalidEmail||editDuplicateEmail} onClick={saveEdit} style={{display:"inline-flex",alignItems:"center",gap:4}}><Save size={14} strokeWidth={1.75}/> שמור שינויים</button>
                 <button className="btn btn-secondary" onClick={()=>setEditMember(null)}>ביטול</button>
               </div>
             </div>
@@ -3966,7 +3966,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         })()}
         {kitItems.length>0&&<div className="highlight-box" style={{marginTop:8,display:"flex",alignItems:"center",gap:6}}><Package size={13} strokeWidth={1.75}/> {kitItems.length} סוגי ציוד · {kitItems.reduce((s,i)=>s+i.quantity,0)} יחידות</div>}
         <div style={{marginTop:12,display:"flex",gap:8}}>
-          <button className="btn btn-primary" disabled={!trimmedName||duplicateName||saving} onClick={save}>{saving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:initial?"💾 שמור":"➕ צור ערכה"}</button>
+          <button className="btn btn-primary" disabled={!trimmedName||duplicateName||saving} onClick={save}>{saving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:initial?<><Save size={14} strokeWidth={1.75}/> שמור</>:"➕ צור ערכה"}</button>
         </div>
       </div>
     );
@@ -4446,7 +4446,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         {kitConflicts && (
           <div style={{padding:16,marginBottom:16,borderRadius:"var(--r-sm)",background:"rgba(231,76,60,0.08)",border:"1px solid rgba(231,76,60,0.35)"}}>
             <div style={{fontWeight:700,fontSize:15,color:"#e74c3c",marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
-              <span>⚠️</span><span>לא ניתן לשמור — חוסר ציוד זמין</span>
+              <AlertTriangle size={16} strokeWidth={1.75} /><span>לא ניתן לשמור — חוסר ציוד זמין</span>
               <button onClick={()=>setKitConflicts(null)} style={{marginRight:"auto",background:"none",border:"none",color:"#e74c3c",cursor:"pointer",fontSize:18,padding:"0 4px"}}>×</button>
             </div>
             <div style={{fontSize:12,color:"var(--text2)",marginBottom:10}}>הציוד הנדרש לערכת השיעור אינו זמין בתאריכים הבאים בגלל השאלות קיימות או ציוד באיחור:</div>
@@ -4644,7 +4644,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
             <div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                 <div style={{fontWeight:700,fontSize:12,color:"#9b59b6",display:"flex",alignItems:"center",gap:4}}><Calendar size={12} strokeWidth={1.75}/> {schedule.length} שיעורים בלוח:</div>
-                {!isEditMode && <button type="button" onClick={()=>setSchedule([])} style={{fontSize:11,color:"var(--red)",background:"none",border:"none",cursor:"pointer"}}>🗑️ נקה הכל</button>}
+                {!isEditMode && <button type="button" onClick={()=>setSchedule([])} style={{fontSize:11,color:"var(--red)",background:"none",border:"none",cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}><Trash2 size={12} strokeWidth={1.75} /> נקה הכל</button>}
               </div>
               <div style={{maxHeight:280,overflowY:"auto",display:"flex",flexDirection:"column",gap:4}}>
                 {schedule.map((s,i)=>(
@@ -4786,7 +4786,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
             disabled={saving || !(effectiveName || name.trim())}
             onClick={save}
             style={{fontSize:15,padding:"12px 28px"}}>
-            {saving ? <><Clock size={13} strokeWidth={1.75}/> שומר...</> : initial ? "💾 שמור שינויים" : <><Film size={14} strokeWidth={1.75}/> צור ערכת שיעור</>}
+            {saving ? <><Clock size={13} strokeWidth={1.75}/> שומר...</> : initial ? <><Save size={14} strokeWidth={1.75}/> שמור שינויים</> : <><Film size={14} strokeWidth={1.75}/> צור ערכת שיעור</>}
           </button>
           {effectiveSchedule.length>0 && (
             <span style={{fontSize:12,color:"#9b59b6",fontWeight:700,display:"inline-flex",alignItems:"center",gap:4}}><Calendar size={12} strokeWidth={1.75}/> {effectiveSchedule.length} שיעורים בלוח</span>
@@ -4967,7 +4967,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                   </div>
                   <div style={{display:"flex",gap:6}} onClick={e=>e.stopPropagation()}>
                     <button className="btn btn-secondary btn-sm" onClick={()=>{setEditTarget(kit);setMode("editStudent");}} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> ערוך</button>
-                    <button className="btn btn-danger btn-sm" onClick={()=>del(kit.id,kit.name)}>🗑️</button>
+                    <button className="btn btn-danger btn-sm" onClick={()=>del(kit.id,kit.name)}><Trash2 size={14} strokeWidth={1.75} /></button>
                   </div>
                 </div>
                 <div style={{marginTop:10,display:"flex",flexWrap:"wrap",gap:4}}>
@@ -5041,7 +5041,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                     </div>
                     <div style={{display:"flex",gap:6}} onClick={e=>e.stopPropagation()}>
                       <button className="btn btn-secondary btn-sm" onClick={()=>{setEditTarget(kit);setMode("editLesson");}} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> ערוך</button>
-                      <button className="btn btn-danger btn-sm" onClick={()=>del(kit.id,kit.name)}>🗑️</button>
+                      <button className="btn btn-danger btn-sm" onClick={()=>del(kit.id,kit.name)}><Trash2 size={14} strokeWidth={1.75} /></button>
                     </div>
                   </div>
                   <div style={{marginTop:10,display:"flex",flexWrap:"wrap",gap:4}}>
@@ -5180,7 +5180,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         })}
         {kitItems.length>0&&<div className="highlight-box" style={{marginTop:8,display:"flex",alignItems:"center",gap:6}}><Package size={13} strokeWidth={1.75}/> {kitItems.length} סוגי ציוד בערכה · {kitItems.reduce((s,i)=>s+i.quantity,0)} יחידות סה״כ</div>}
         <div style={{marginTop:12,display:"flex",gap:8}}>
-          <button className="btn btn-primary" disabled={!trimmedName||duplicateName||saving} onClick={save}>{saving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:initial?"💾 שמור":"➕ צור ערכה"}</button>
+          <button className="btn btn-primary" disabled={!trimmedName||duplicateName||saving} onClick={save}>{saving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:initial?<><Save size={14} strokeWidth={1.75}/> שמור</>:"➕ צור ערכה"}</button>
         </div>
       </div>
     );
@@ -5600,7 +5600,7 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
       <div style={{width:"100%",maxWidth:520,maxHeight:"90vh",background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl",display:"flex",flexDirection:"column"}}>
         <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
           <div>
-            <div style={{fontWeight:900,fontSize:16}}>🔧 ניהול יחידות — {eq.name}</div>
+            <div style={{fontWeight:900,fontSize:16,display:"flex",alignItems:"center",gap:6}}><Wrench size={16} strokeWidth={1.75} /> ניהול יחידות — {eq.name}</div>
             <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>
               <span style={{color:"var(--green)",fontWeight:700}}>{working} תקין</span>
               {damaged>0&&<span style={{color:"var(--red)",fontWeight:700,marginRight:8}}> · {damaged} בדיקה</span>}
@@ -5643,7 +5643,7 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
                   <button type="button" onClick={()=>removeUnit(u.id)}
                     title="הסר יחידה"
                     style={{padding:"3px 7px",borderRadius:"var(--r-sm)",border:"1px solid rgba(231,76,60,0.3)",background:"rgba(231,76,60,0.08)",color:"var(--red)",fontSize:12,cursor:"pointer",flexShrink:0}}>
-                    🗑️
+                    <Trash2 size={14} strokeWidth={1.75} />
                   </button>
                 </div>
               </div>
@@ -5651,7 +5651,7 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
           })}
         </div>
         <div style={{padding:"14px 20px",borderTop:"1px solid var(--border)",flexShrink:0,display:"flex",gap:8}}>
-          <button className="btn btn-primary" disabled={saving} onClick={saveAll}>{saving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:"💾 שמור שינויים"}</button>
+          <button className="btn btn-primary" disabled={saving} onClick={saveAll}>{saving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:<><Save size={14} strokeWidth={1.75}/> שמור שינויים</>}</button>
           <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
         </div>
       </div>
@@ -5771,7 +5771,7 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, settingsRole =
       )}
 
       <button className="btn btn-primary" disabled={saving} onClick={save} style={{ fontSize: 15, padding: "12px 32px" }}>
-        {saving ? <><Clock size={13} strokeWidth={1.75}/> שומר...</> : "💾 שמור הגדרות"}
+        {saving ? <><Clock size={13} strokeWidth={1.75}/> שומר...</> : <><Save size={14} strokeWidth={1.75}/> שמור הגדרות</>}
       </button>
     </div>
   );
@@ -5864,7 +5864,7 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
   };
 
   const STATUS_COLORS = { "פגום":"var(--red)","בתיקון":"var(--yellow)","נעלם":"#9b59b6" };
-  const STATUS_ICONS  = { "פגום":"⚠️","בתיקון":"🔧","נעלם":"❓" };
+  const STATUS_ICONS  = { "פגום":<AlertTriangle size={12} strokeWidth={1.75} />,"בתיקון":<Wrench size={12} strokeWidth={1.75} />,"נעלם":<HelpCircle size={12} strokeWidth={1.75} /> };
 
   return (
     <div className="page">
@@ -5904,8 +5904,8 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
                     </span>
                     <span style={{fontSize:11,color:"var(--text3)",marginRight:"auto"}}>{eq.category}</span>
                   </div>
-                  {unit.fault&&<div style={{fontSize:12,color:"var(--text2)",marginBottom:2}}>⚠️ <strong>תקלה:</strong> {unit.fault}</div>}
-                  {unit.repair&&<div style={{fontSize:12,color:"var(--green)"}}>🔧 <strong>תיקון:</strong> {unit.repair}</div>}
+                  {unit.fault&&<div style={{fontSize:12,color:"var(--text2)",marginBottom:2,display:"flex",alignItems:"center",gap:4}}><AlertTriangle size={12} strokeWidth={1.75} /> <strong>תקלה:</strong> {unit.fault}</div>}
+                  {unit.repair&&<div style={{fontSize:12,color:"var(--green)",display:"flex",alignItems:"center",gap:4}}><Wrench size={12} strokeWidth={1.75} /> <strong>תיקון:</strong> {unit.repair}</div>}
                 </div>
                 <button className="btn btn-secondary btn-sm" onClick={()=>{setEditUnit({eq,unit});setEditForm({status:unit.status,fault:unit.fault||"",repair:unit.repair||""}); }} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> עריכה</button>
               </div>
@@ -5958,7 +5958,7 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
                 </div>
               )}
               <div style={{display:"flex",gap:8}}>
-                <button className="btn btn-primary" disabled={saving} onClick={saveUnit}>{saving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:"💾 שמור"}</button>
+                <button className="btn btn-primary" disabled={saving} onClick={saveUnit}>{saving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:<><Save size={14} strokeWidth={1.75}/> שמור</>}</button>
                 <button className="btn btn-secondary" onClick={()=>setEditUnit(null)}>ביטול</button>
               </div>
             </div>

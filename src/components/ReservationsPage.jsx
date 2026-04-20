@@ -5,7 +5,7 @@ import { storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, toda
 import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
-import { BookOpen, Calendar, CheckCircle, ClipboardList, Clock, Film, Mic, Package, X, XCircle } from "lucide-react";
+import { AlertTriangle, BookOpen, Briefcase, Camera, Calendar, CheckCircle, ClipboardList, Clock, FileText, Film, Mic, Package, Pencil, RotateCcw, Save, Trash2, User, X, XCircle } from "lucide-react";
 
 // ── Staff Loan Form (module-scope component) ──
 // איש צוות יוצר לעצמו בקשת השאלה. הטופס מזהה אוטומטית את המשתמש המחובר
@@ -143,7 +143,7 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
     <Modal title="💼 השאלת איש צוות" onClose={onClose} size="modal-lg">
       {/* Identification badge */}
       <div style={{background:"rgba(100,120,150,0.12)",border:"1px solid rgba(100,120,150,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:10,fontSize:13}}>
-        <span style={{fontSize:22}}>💼</span>
+        <Briefcase size={22} strokeWidth={1.5} color="var(--text2)" />
         <div>
           <div style={{fontWeight:800}}>{staffUser.full_name || staffTeamRow.name || "—"}</div>
           <div style={{fontSize:11,color:"var(--text3)"}}>{staffUser.email || ""}</div>
@@ -167,8 +167,8 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
           <div className="form-group"><label className="form-label"><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> תאריך החזרה *</label><input type="date" className="form-input" min={mf.borrow_date || todayStr} value={mf.return_date} onChange={e=>mSet("return_date",e.target.value)}/></div>
           <div className="form-group"><label className="form-label">שעת החזרה *</label><select className="form-select" value={mf.return_time} onChange={e=>mSet("return_time",e.target.value)}><option value="">-- בחר --</option>{returnTimeOptions.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
         </div>
-        {mTimeOrderError&&<div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:12,fontSize:12}}>🚫 שעת החזרה חייבת להיות אחרי שעת האיסוף.</div>}
-        {mReturnBeforeBorrow&&<div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:12,fontSize:12}}>🚫 תאריך החזרה חייב להיות אחרי תאריך ההשאלה.</div>}
+        {mTimeOrderError&&<div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:12,fontSize:12}}><XCircle size={14} strokeWidth={1.75} color="var(--red)" /> שעת החזרה חייבת להיות אחרי שעת האיסוף.</div>}
+        {mReturnBeforeBorrow&&<div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:12,fontSize:12}}><XCircle size={14} strokeWidth={1.75} color="var(--red)" /> תאריך החזרה חייב להיות אחרי תאריך ההשאלה.</div>}
         <button className="btn btn-primary" disabled={!mOk1} onClick={()=>setMStep(2)}>המשך ← ציוד</button>
       </>}
       {mStep===2&&<>
@@ -181,7 +181,7 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
               {mShowSelectedOnly?<><CheckCircle size={14} strokeWidth={1.75} /> נבחרו</>:"⬜"} {mShowSelectedOnly?"הצג הכל":`הצג נבחרים בלבד${mSelectedCount>0?` (${mSelectedCount})`:""}`}
             </button>
             <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
-            {[{k:"all",l:<><Package size={12} strokeWidth={1.75} color="var(--accent)" /> הכל</>},{k:"sound",l:<><Mic size={12} strokeWidth={1.75} color="var(--accent)" /> סאונד</>},{k:"photo",l:"🎥 צילום"}].map(({k,l})=>(<button key={k} type="button" onClick={()=>setMeqTypeF(k)} style={{padding:"4px 10px",borderRadius:20,border:`2px solid ${meqTypeF===k?"var(--accent)":"var(--border)"}`,background:meqTypeF===k?"var(--accent-glow)":"transparent",color:meqTypeF===k?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>{l}</button>))}
+            {[{k:"all",l:<><Package size={12} strokeWidth={1.75} color="var(--accent)" /> הכל</>},{k:"sound",l:<><Mic size={12} strokeWidth={1.75} color="var(--accent)" /> סאונד</>},{k:"photo",l:<><Camera size={12} strokeWidth={1.75} color="var(--accent)" /> צילום</>}].map(({k,l})=>(<button key={k} type="button" onClick={()=>setMeqTypeF(k)} style={{padding:"4px 10px",borderRadius:20,border:`2px solid ${meqTypeF===k?"var(--accent)":"var(--border)"}`,background:meqTypeF===k?"var(--accent-glow)":"transparent",color:meqTypeF===k?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>{l}</button>))}
             <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
             {(categories||[]).map(cat=>(<button key={cat} type="button" onClick={()=>setMeqCatF(p=>p.includes(cat)?p.filter(c=>c!==cat):[...p,cat])} style={{padding:"4px 8px",borderRadius:20,border:`2px solid ${meqCatF.includes(cat)?"var(--accent)":"var(--border)"}`,background:meqCatF.includes(cat)?"var(--accent-glow)":"transparent",color:meqCatF.includes(cat)?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>{cat}</button>))}
             {meqCatF.length>0&&<button type="button" onClick={()=>setMeqCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}><X size={12} strokeWidth={1.75} color="var(--text3)" /> נקה</button>}
@@ -207,7 +207,7 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
                 </div>);})}
             </div>);});
         })()}
-        {mItems.length>0&&<div className="highlight-box" style={{marginTop:8}}>🎒 {mItems.length} סוגי ציוד · {mItems.reduce((s,i)=>s+i.quantity,0)} יחידות</div>}
+        {mItems.length>0&&<div className="highlight-box" style={{marginTop:8}}><Package size={14} strokeWidth={1.75} color="var(--accent)" /> {mItems.length} סוגי ציוד · {mItems.reduce((s,i)=>s+i.quantity,0)} יחידות</div>}
         <div className="flex gap-2" style={{marginTop:16}}><button className="btn btn-secondary" onClick={()=>setMStep(1)}>← חזור</button><button className="btn btn-primary" disabled={!mOk2} onClick={()=>setMStep(3)}>המשך ← סיכום</button></div>
       </>}
       {mStep===3&&<>
@@ -219,7 +219,7 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
           {mItems.map(i=><div key={i.equipment_id} style={{fontSize:12,color:"var(--text2)",marginTop:4}}>• {i.name} ×{i.quantity}</div>)}
         </div>
         <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setMStep(2)}>← חזור</button>
-          <button className="btn btn-primary" disabled={mSaving||!mOk1||!mOk2} onClick={mSave} style={{fontSize:15,padding:"12px 28px"}}>{mSaving?<><Clock size={16} strokeWidth={1.75} /> שומר...</>:"💾 צור השאלה"}</button></div>
+          <button className="btn btn-primary" disabled={mSaving||!mOk1||!mOk2} onClick={mSave} style={{fontSize:15,padding:"12px 28px"}}>{mSaving?<><Clock size={16} strokeWidth={1.75} /> שומר...</>:<><Save size={16} strokeWidth={1.75} /> צור השאלה</>}</button></div>
       </>}
     </Modal>
   );
@@ -595,7 +595,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
             const isOverdue = r.status==="באיחור";
             const loanColor = isOverdue?"rgba(230,126,34,0.08)":isStaff?"rgba(100,120,150,0.10)":isLesson?"rgba(155,89,182,0.12)":isCinema?"rgba(52,152,219,0.08)":r.loan_type==="הפקה"?"rgba(52,152,219,0.06)":r.loan_type==="סאונד"?"rgba(245,166,35,0.06)":"var(--surface)";
             const loanBorder = isOverdue?"1px solid rgba(230,126,34,0.5)":isStaff?"1px solid rgba(100,120,150,0.35)":isLesson?"1px solid rgba(155,89,182,0.35)":isCinema?"1px solid rgba(52,152,219,0.3)":r.loan_type==="הפקה"?"1px solid rgba(52,152,219,0.2)":"1px solid var(--border)";
-            const loanIcon = isStaff?"💼":isLesson?"📽️":isCinema?"🎥":r.loan_type==="פרטית"?"👤":r.loan_type==="הפקה"?<Film size={12} strokeWidth={1.75} color="var(--accent)" />:<Mic size={12} strokeWidth={1.75} color="var(--accent)" />;
+            const loanIcon = isStaff?<Briefcase size={12} strokeWidth={1.75} color="var(--text3)" />:isLesson?<Film size={12} strokeWidth={1.75} color="var(--accent)" />:isCinema?<Camera size={12} strokeWidth={1.75} color="var(--accent)" />:r.loan_type==="פרטית"?<User size={12} strokeWidth={1.75} color="var(--text2)" />:r.loan_type==="הפקה"?<Film size={12} strokeWidth={1.75} color="var(--accent)" />:<Mic size={12} strokeWidth={1.75} color="var(--accent)" />;
             const loanLabel = isStaff?"השאלת איש צוות":isLesson?"השאלת שיעור":isCinema?"קולנוע יומית":r.loan_type==="סאונד"?"השאלת סאונד":`השאלה ${r.loan_type}`;
             return (
             <div key={r.id} className="res-card"
@@ -606,7 +606,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
               <div className="res-card-top">
                 <div style={{display:"flex",alignItems:"center",gap:10}}>
                   <div style={{width:38,height:38,borderRadius:"50%",background:isOverdue?"rgba(230,126,34,0.2)":isStaff?"rgba(100,120,150,0.22)":isLesson?"rgba(155,89,182,0.2)":"var(--surface3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,flexShrink:0,color:isOverdue?"#e67e22":isStaff?"#6a7d95":isLesson?"#9b59b6":"inherit"}}>
-                    {isOverdue?"⚠️":isStaff?"💼":isLesson?<Film size={16} strokeWidth={1.75} color="var(--accent)" />:r.student_name?.[0]||"?"}
+                    {isOverdue?<AlertTriangle size={16} strokeWidth={1.75} color="#e67e22" />:isStaff?<Briefcase size={16} strokeWidth={1.75} color="#6a7d95" />:isLesson?<Film size={16} strokeWidth={1.75} color="var(--accent)" />:r.student_name?.[0]||"?"}
                   </div>
                   <div>
                     <div style={{fontWeight:700,fontSize:15}}>{r.student_name}</div>
@@ -614,14 +614,14 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                   </div>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  {equipmentReports.some(rp=>rp.reservation_id===String(r.id)&&rp.status==="open")&&<span title="דיווח תקלה פתוח" style={{color:"#e74c3c",fontSize:14}}>⚠️</span>}
+                  {equipmentReports.some(rp=>rp.reservation_id===String(r.id)&&rp.status==="open")&&<AlertTriangle size={14} strokeWidth={1.75} color="#e74c3c" title="דיווח תקלה פתוח" />}
                   {statusBadge(getEffectiveStatus(r))}
                   <span style={{fontSize:11,color:"var(--text3)"}}>{formatDate(r.created_at)}</span>
                 </div>
               </div>
               <div className="res-card-mid">
                 <div style={{display:"flex",gap:16,fontSize:12,color:"var(--text2)",flexWrap:"wrap"}}>
-                  <span>⏱️ {getLoanDurationDays(r.borrow_date, r.return_date)} ימים</span>
+                  <span><Clock size={12} strokeWidth={1.75} color="var(--accent)" /> {getLoanDurationDays(r.borrow_date, r.return_date)} ימים</span>
                   <span><BookOpen size={12} strokeWidth={1.75} color="var(--accent)" /> {r.course}</span>
                   <span><Calendar size={12} strokeWidth={1.75} color="var(--accent)" /> {formatDate(r.borrow_date)}{r.borrow_time&&<span style={{color:"var(--accent)",marginRight:4,fontWeight:700}}> {r.borrow_time}</span>} ← {formatDate(r.return_date)}{r.return_time&&<span style={{color:"var(--accent)",marginRight:4,fontWeight:700}}> {r.return_time}</span>}{(()=>{const diff=Math.ceil((new Date(r.borrow_date)-new Date())/(1000*60*60*24));return diff>0?<span style={{marginRight:6,color:"var(--yellow)",fontWeight:700}}>({diff} ימים)</span>:diff===0?<span style={{marginRight:6,color:"var(--green)",fontWeight:700}}>(היום!)</span>:null;})()}</span>
                   <span><Package size={12} strokeWidth={1.75} color="var(--accent)" /> {r.items?.length||0} פריטים</span>
@@ -635,11 +635,11 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                 </div>
               </div>
               <div className="res-card-actions" onClick={e=>e.stopPropagation()}>
-                <button className="btn btn-secondary btn-sm" onClick={()=>exportPDF(r)}>📄 PDF</button>
-                {(r.status==="ממתין"||r.status==="מאושר"||r.status==="נדחה"||r.status==="באיחור")&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}>✏️ עריכת בקשה</button>}
+                <button className="btn btn-secondary btn-sm" onClick={()=>exportPDF(r)}><><FileText size={14} strokeWidth={1.75} /> PDF</></button>
+                {(r.status==="ממתין"||r.status==="מאושר"||r.status==="נדחה"||r.status==="באיחור")&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}><><Pencil size={14} strokeWidth={1.75} /> עריכת בקשה</></button>}
                 {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"מאושר")}>{busyIds.has(r.id)?<Clock size={14} strokeWidth={1.75} />:<><CheckCircle size={14} strokeWidth={1.75} /> אשר</>}</button><button className="btn btn-danger btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"נדחה")}><XCircle size={14} strokeWidth={1.75} /> דחה</button></>}
-                {(getEffectiveStatus(r)==="פעילה"||getEffectiveStatus(r)==="באיחור")&&<button className="btn btn-secondary btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"הוחזר")}>🔄 הוחזר</button>}
-                <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${r.student_name}?`)) deleteReservation(r.id); }}>🗑️</button>
+                {(getEffectiveStatus(r)==="פעילה"||getEffectiveStatus(r)==="באיחור")&&<button className="btn btn-secondary btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"הוחזר")}><><RotateCcw size={14} strokeWidth={1.75} /> הוחזר</></button>}
+                <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${r.student_name}?`)) deleteReservation(r.id); }}><Trash2 size={14} strokeWidth={1.75} /></button>
               </div>
             </div>
             );
@@ -697,7 +697,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
           {studentReqs.length > 0 && <>
             {(lessonReqs.length > 0 || staffReqs.length > 0) && (
               <div style={{fontWeight:900,fontSize:14,marginBottom:10,color:"var(--text2)",display:"flex",alignItems:"center",gap:8}}>
-                👤 בקשות סטודנטים
+                <><User size={14} strokeWidth={1.75} /> בקשות סטודנטים</>
                 <span style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:20,padding:"1px 10px",fontSize:12,fontWeight:700,color:"var(--text3)"}}>{studentReqs.length}</span>
               </div>
             )}
@@ -708,7 +708,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
           {/* השאלות שיעור */}
           {lessonReqs.length > 0 && <>
             <div style={{fontWeight:900,fontSize:14,margin:`${studentReqs.length>0?"24px":"0px"} 0 10px`,color:"#9b59b6",display:"flex",alignItems:"center",gap:8,borderTop:studentReqs.length>0?"1px solid var(--border)":"none",paddingTop:studentReqs.length>0?20:0}}>
-              📽️ השאלות שיעור
+              <><Film size={14} strokeWidth={1.75} /> השאלות שיעור</>
               <span style={{background:"rgba(155,89,182,0.12)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:20,padding:"1px 10px",fontSize:12,fontWeight:700,color:"#9b59b6"}}>{lessonReqs.length}</span>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -718,7 +718,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
           {/* השאלות צוות */}
           {staffReqs.length > 0 && <>
             <div style={{fontWeight:900,fontSize:14,margin:`${(studentReqs.length>0||lessonReqs.length>0)?"24px":"0px"} 0 10px`,color:"#8a9bb3",display:"flex",alignItems:"center",gap:8,borderTop:(studentReqs.length>0||lessonReqs.length>0)?"1px solid var(--border)":"none",paddingTop:(studentReqs.length>0||lessonReqs.length>0)?20:0}}>
-              💼 השאלות צוות
+              <><Briefcase size={14} strokeWidth={1.75} /> השאלות צוות</>
               <span style={{background:"rgba(100,120,150,0.14)",border:"1px solid rgba(100,120,150,0.3)",borderRadius:20,padding:"1px 10px",fontSize:12,fontWeight:700,color:"#8a9bb3"}}>{staffReqs.length}</span>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -774,7 +774,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                       <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",alignItems:"center",marginBottom:6}}>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
                           <strong style={{fontSize:14}}>{blocker.student_name}</strong>
-                          {isOverdue && <span className="badge badge-orange" style={{fontSize:11}}>⚠️ באיחור</span>}
+                          {isOverdue && <span className="badge badge-orange" style={{fontSize:11}}><><AlertTriangle size={11} strokeWidth={1.75} /> באיחור</></span>}
                         </div>
                         <span style={{fontWeight:900,fontSize:15,color:"var(--red)"}}>כמות חסומה: {blocker.quantity}</span>
                       </div>
