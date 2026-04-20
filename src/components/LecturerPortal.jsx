@@ -37,7 +37,7 @@ function getCourseLinkedKit(lesson, lessonKits = []) {
   if (hasLinkedValue(lesson.kitId)) {
     return lessonKits.find((kit) => String(kit.id) === String(lesson.kitId)) || null;
   }
-  return lessonKits.find((kit) => kit.kitType === "lesson" && hasLinkedValue(kit.lessonId) && String(kit.lessonId) === String(lesson.id)) || null;
+  return null;
 }
 
 function sessionHasEnded(session) {
@@ -104,7 +104,7 @@ export function LecturerPortal({
     [lecturers],
   );
   const lessonKits = useMemo(
-    () => kits.filter((kit) => kit?.kitType === "lesson"),
+    () => kits.filter((kit) => (kit?.loanTypes || []).includes("שיעור")),
     [kits],
   );
   const studioNameById = useMemo(() => {
@@ -516,23 +516,14 @@ export function LecturerPortal({
     const nextKit = {
       ...(currentKit || {}),
       id: nextKitId,
-      kitType: "lesson",
+      loanTypes: ["שיעור"],
       name: draftName.trim(),
-      instructorName: currentLecturer.fullName || editorContext.lesson.instructorName || "",
-      instructorPhone: String(currentLecturer.phone || editorContext.lesson.instructorPhone || "").trim(),
-      instructorEmail: String(currentLecturer.email || editorContext.lesson.instructorEmail || "").trim(),
       description: draftDescription.trim(),
       items: selectedItems.map((item) => ({
         equipment_id: item.equipment_id,
         quantity: Number(item.quantity) || 0,
         name: equipment.find((candidate) => String(candidate.id) === String(item.equipment_id))?.name || item.name || "",
       })),
-      schedule: editorContext.targetSessions.map((session) => ({
-        date: session.date,
-        startTime: session.startTime || "",
-        endTime: session.endTime || "",
-      })),
-      ...(editorContext.type === "course" ? { lessonId: currentKit?.lessonId ?? editorContext.lesson.id } : {}),
     };
 
     const nextKits = currentKit

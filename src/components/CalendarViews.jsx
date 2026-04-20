@@ -485,19 +485,11 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
 
       {/* ── ערכות שיעור ── */}
       {(()=>{
-        const lessonKits = kits.filter(k=>k.kitType==="lesson");
+        const lessonKits = kits.filter(k=>(k.loanTypes||[]).includes("שיעור"));
         if(!lessonKits.length) return null;
         const todayStr2 = today();
         const nowHHMM2 = (()=>{const n=new Date();return String(n.getHours()).padStart(2,"0")+":"+String(n.getMinutes()).padStart(2,"0");})();
-        const upcoming = lessonKits.flatMap(kit=>
-          (kit.schedule||[])
-            .filter(s=>{
-              if(s.date > todayStr2) return true;
-              if(s.date === todayStr2) return (s.endTime||"23:59") > nowHHMM2;
-              return false;
-            })
-            .map(s=>({...s, kitName:kit.name, instructorName:kit.instructorName||"", instructorPhone:kit.instructorPhone||"", items:kit.items||[]}))
-        ).sort((a,b)=>a.date<b.date?-1:a.startTime<b.startTime?-1:1).slice(0,10);
+        const upcoming = []; // schedule data now lives on lessons, not kits
         if(!upcoming.length) return null;
         return (
           <div style={{marginTop:28}}>

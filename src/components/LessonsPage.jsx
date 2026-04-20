@@ -258,13 +258,13 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     return updated;
   };
 
-  const lessonKits = kits.filter(k=>k.kitType==="lesson");
+  const lessonKits = kits.filter(k=>(k.loanTypes||[]).includes("שיעור"));
   const getLinkedKit = (lesson) => {
     if(!lesson) return null;
     if(lesson.kitId !== null && lesson.kitId !== undefined && String(lesson.kitId).trim() !== "") {
       return lessonKits.find(k=>String(k.id)===String(lesson.kitId)) || null;
     }
-    return lessonKits.find(k=>k.lessonId !== null && k.lessonId !== undefined && String(k.lessonId).trim() !== "" && String(k.lessonId)===String(lesson.id)) || null;
+    return null;
   };
 
   const doSaveLesson = async (lesson) => {
@@ -1201,7 +1201,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 // ── Lesson/Course Form ────────────────────────────────────────────────────────
 function LessonForm({ initial, onSave, onCancel, studios, lessonKits, equipment, reservations, setReservations, kits, showToast, trackOptions=[], lecturers=[], setLecturers }) {
   const lecturerOptions = lecturers.filter((lecturer) => lecturer?.isActive !== false);
-  const initialLinkedKitId = initial?.kitId || lessonKits.find(k=>k.lessonId !== null && k.lessonId !== undefined && String(k.lessonId).trim() !== "" && String(k.lessonId)===String(initial?.id||""))?.id || "";
+  const initialLinkedKitId = initial?.kitId || "";
   const [name, setName]                       = useState(initial?.name||"");
   const [track, setTrack]                     = useState(initial?.track||"");
   const initLecturerId = initial?.lecturerId || (initial?.instructorName ? (lecturers.find(l => l.fullName.trim().toLowerCase() === String(initial.instructorName||"").trim().toLowerCase())?.id || "") : "");
