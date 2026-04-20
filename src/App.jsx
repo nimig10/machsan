@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { AlertTriangle, AudioLines, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, Clock, ClipboardList, Download, FileText, Film, GraduationCap, HelpCircle, Info, Link, Lightbulb, LogOut, Mail, Mic, Minus, Package, Pencil, Phone, Plus, Save, Search, Settings, Shield, ShoppingCart, SlidersHorizontal, Trash2, Triangle, User, Video, Wrench, X, XCircle } from "lucide-react";
+import { AlertTriangle, AudioLines, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, Clock, ClipboardList, Download, FileText, Film, GraduationCap, HelpCircle, Info, Link, Lightbulb, LogOut, Mail, Mic, Minus, Package, Pencil, Phone, Plus, Save, Search, Settings, Shield, ShoppingCart, SlidersHorizontal, Trash2, Triangle, User, Video, Wrench, X, XCircle } from "lucide-react";
 import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB } from "./utils.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
@@ -7216,7 +7216,7 @@ export default function App() {
                 {id:"reservations",icon:<ClipboardList size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"בקשות",badge:(pending||0)+(rejected||0)||null},
                 {id:"equipment",icon:<Package size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"ציוד",badge:damagedCount||null},
                 {id:"certifications",icon:<GraduationCap size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"הסמכת ציוד"},
-                {id:"kits",icon:<Package size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"ערכות"},
+                {id:"kits",icon:<Backpack size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"ערכות"},
                 {id:"policies",icon:<ClipboardList size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"נהלים"},
                 {id:"settings",icon:<Settings size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"הגדרות"},
               ].filter(n => {
