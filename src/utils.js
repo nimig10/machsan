@@ -1083,7 +1083,9 @@ export const css = `
   .item-row { display:flex; align-items:center; gap:12px; padding:12px; background:var(--surface2); border-radius:var(--r-sm); border:1px solid var(--border); margin-bottom:8px; }
   .qty-ctrl { display:flex; align-items:center; gap:8px; }
   .qty-btn { width:28px; height:28px; border-radius:50%; background:var(--surface); border:1px solid var(--border); color:var(--text); font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.1s; }
+  .qty-btn svg { stroke:var(--text); }
   .qty-btn:hover { background:var(--accent); color:var(--bg); border-color:var(--accent); }
+  .qty-btn:hover svg { stroke:var(--bg); }
   .qty-num { font-size:16px; font-weight:700; min-width:24px; text-align:center; }
   .terms-box { background:var(--surface2); border:1px solid var(--border); border-radius:var(--r-sm); padding:16px; font-size:13px; color:var(--text2); white-space:pre-wrap; line-height:1.7; margin-bottom:16px; max-height:150px; overflow-y:auto; }
   .checkbox-row { display:flex; align-items:flex-start; gap:10px; cursor:pointer; }
