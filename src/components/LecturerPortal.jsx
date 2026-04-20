@@ -939,8 +939,8 @@ export function LecturerPortal({
                           <button
                             className="btn"
                             style={sessionKit
-                              ? { background: "#22c55e", color: "#fff", border: "none" }
-                              : { background: "var(--accent, #f5a623)", color: "#fff", border: "none" }}
+                              ? { background: "#15803d", color: "#000", border: "none", fontWeight: 800 }
+                              : { background: "#d97706", color: "#000", border: "none", fontWeight: 800 }}
                             onClick={() => setEditorState({ scope: "session", lessonId: lesson.id, sessionUid: session._lecturerUid })}
                             disabled={isPast}
                           >
