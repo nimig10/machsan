@@ -94,6 +94,7 @@ export function LecturerPortal({
   const [draftSearch, setDraftSearch] = useState("");
   const [selectedCats, setSelectedCats] = useState([]);
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
+  const [eqTypeFilter, setEqTypeFilter] = useState("all");
   const [editorError, setEditorError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -374,12 +375,20 @@ export function LecturerPortal({
       if (categoryCompare !== 0) return categoryCompare;
       return String(a?.name || "").localeCompare(String(b?.name || ""), "he");
     });
-    if (!term) return sorted;
-    return sorted.filter((item) => {
+    const typeMatch = (item) => {
+      if (eqTypeFilter === "all") return true;
+      const isGeneral = !item.soundOnly && !item.photoOnly;
+      if (eqTypeFilter === "sound") return item.soundOnly || isGeneral;
+      if (eqTypeFilter === "photo") return item.photoOnly || isGeneral;
+      return true;
+    };
+    const byType = sorted.filter(typeMatch);
+    if (!term) return byType;
+    return byType.filter((item) => {
       const haystack = `${item?.name || ""} ${item?.category || ""} ${item?.description || ""}`.toLowerCase();
       return haystack.includes(term);
     });
-  }, [draftSearch, equipment]);
+  }, [draftSearch, equipment, eqTypeFilter]);
 
   const filteredEquipmentGroups = useMemo(() => {
     const groups = new Map();
@@ -412,6 +421,7 @@ export function LecturerPortal({
     if (saving) return;
     setEditorState(null);
     setEditorError("");
+    setEqTypeFilter("all");
   };
 
   const setItemQuantity = (equipmentId, quantity) => {
@@ -997,12 +1007,6 @@ export function LecturerPortal({
               <button className="btn btn-secondary" onClick={closeEditor} disabled={saving}>סגירה</button>
             </div>
 
-            {editorError && (
-              <div style={{ marginBottom: 16, padding: "12px 14px", borderRadius: 12, background: "rgba(231,76,60,0.1)", border: "1px solid rgba(231,76,60,0.28)", color: "#ef4444", fontSize: 13, fontWeight: 700 }}>
-                ❌ {editorError}
-              </div>
-            )}
-
             <div className="form-group" style={{ marginBottom: 12 }}>
               <label className="form-label">שם ההשאלה</label>
               <input className="form-input" value={draftName} onChange={(event) => setDraftName(event.target.value)} />
@@ -1022,6 +1026,15 @@ export function LecturerPortal({
                 value={draftSearch}
                 onChange={(event) => setDraftSearch(event.target.value)}
               />
+            </div>
+
+            <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+              {[{k:"all",l:"📦 הכל"},{k:"photo",l:"🎥 צילום"},{k:"sound",l:"🎙️ סאונד"}].map(({k,l}) => (
+                <button key={k} type="button" onClick={() => setEqTypeFilter(k)}
+                  style={{ padding: "5px 14px", borderRadius: 20, border: `2px solid ${eqTypeFilter===k ? "var(--accent)" : "var(--border)"}`, background: eqTypeFilter===k ? "var(--accent-glow)" : "transparent", color: eqTypeFilter===k ? "var(--accent)" : "var(--text3)", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+                  {l}
+                </button>
+              ))}
             </div>
 
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12, alignItems: "center" }}>
@@ -1176,7 +1189,13 @@ export function LecturerPortal({
               </div>
             )}
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>
+            {editorError && (
+              <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 12, background: "rgba(231,76,60,0.1)", border: "1px solid rgba(231,76,60,0.28)", color: "#ef4444", fontSize: 13, fontWeight: 700 }}>
+                ❌ {editorError}
+              </div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 14 }}>
               <button className="btn btn-secondary" onClick={closeEditor} disabled={saving}>ביטול</button>
               <button className="btn btn-primary" onClick={handleSaveLoan} disabled={saving}>
                 {saving ? "שומר..." : (editorContext.currentKit ? "עדכון השאלת שיעור" : "יצירת השאלת שיעור")}
