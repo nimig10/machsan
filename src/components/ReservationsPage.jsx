@@ -535,7 +535,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
   // Stage 5 — persist EditReservationModal changes directly to Supabase
   const saveEditedReservation = async (updated) => {
     const { items: updatedItems, reservation_items: _ri, ...rowFields } = updated;
-    await supabase.from("reservations_new").update({
+    const { error: updErr } = await supabase.from("reservations_new").update({
       student_name:  rowFields.student_name,
       email:         rowFields.email,
       phone:         rowFields.phone,
@@ -548,10 +548,20 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       return_time:   rowFields.return_time,
       overdue_student_note: rowFields.overdue_student_note || null,
     }).eq("id", updated.id);
+    if (updErr) {
+      console.error("saveEditedReservation update error:", updErr);
+      showToast("error", "שגיאה בעדכון הבקשה: " + (updErr.message || "לא ידוע"));
+      return;
+    }
     if (updatedItems) {
-      await supabase.from("reservation_items").delete().eq("reservation_id", updated.id);
+      const { error: delErr } = await supabase.from("reservation_items").delete().eq("reservation_id", updated.id);
+      if (delErr) {
+        console.error("saveEditedReservation delete items error:", delErr);
+        showToast("error", "שגיאה במחיקת הפריטים הישנים: " + (delErr.message || "לא ידוע"));
+        return;
+      }
       if (updatedItems.length) {
-        await supabase.from("reservation_items").insert(
+        const { error: insErr } = await supabase.from("reservation_items").insert(
           updatedItems.map(i => ({
             reservation_id: updated.id,
             equipment_id:   i.equipment_id,
@@ -560,6 +570,11 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
             unit_id:        i.unit_id || null,
           }))
         );
+        if (insErr) {
+          console.error("saveEditedReservation insert items error:", insErr);
+          showToast("error", "שגיאה בהוספת הפריטים החדשים: " + (insErr.message || "לא ידוע"));
+          return;
+        }
       }
     }
     const all = normalizeReservationsForArchive(reservations.map(r => r.id === updated.id ? updated : r));
