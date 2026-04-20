@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { AlertTriangle, AudioLines, BookOpen, Calendar, Camera, Check, CheckCircle, Clock, ClipboardList, Download, Film, GraduationCap, Info, Lightbulb, LogOut, Mic, Minus, Package, Pencil, Plus, Search, Settings, Shield, SlidersHorizontal, Triangle, X, XCircle } from "lucide-react";
 import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB } from "./utils.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
@@ -138,7 +139,7 @@ async function autoBackup(key) {
           body: JSON.stringify({ key: `backup_${key}`, data: old }),
         });
         localStorage.setItem(lastKey, String(Date.now()));
-        console.log(`🔒 Backup saved: backup_${key} (${old.length} items)`);
+        console.log(`Backup saved: backup_${key} (${old.length} items)`);
       }
     }
   } catch(e) { /* silent — don't block the actual write */ }
@@ -196,11 +197,11 @@ window.dbDiag = async () => {
         const d = json[0].data;
         const count = Array.isArray(d) ? d.length : (typeof d === "object" ? Object.keys(d).length : 1);
         const units = key === "equipment" && Array.isArray(d) ? d.reduce((s,e) => s + (Array.isArray(e.units) ? e.units.length : (e.quantity||0)), 0) : "";
-        console.log(`✅ ${key}: ${count} items${units ? ` (${units} units)` : ""} — updated: ${json[0].updated_at}`);
+        console.log(`[OK] ${key}: ${count} items${units ? ` (${units} units)` : ""} — updated: ${json[0].updated_at}`);
       } else {
-        console.log(`⚠️ ${key}: EMPTY (not in DB)`);
+        console.log(`[WARN] ${key}: EMPTY (not in DB)`);
       }
-    } catch(e) { console.log(`❌ ${key}: ERROR — ${e.message}`); }
+    } catch(e) { console.log(`[ERR] ${key}: ERROR — ${e.message}`); }
   }
 };
 window.dbExport = async () => {
@@ -213,7 +214,7 @@ window.dbExport = async () => {
       data[key] = json.length > 0 ? json[0].data : null;
     } catch(e) { data[key] = `ERROR: ${e.message}`; }
   }
-  console.log("📦 Full DB Export (copy this JSON):");
+  console.log("Full DB Export (copy this JSON):");
   console.log(JSON.stringify(data, null, 2));
   return data;
 };
@@ -222,13 +223,13 @@ window.dbImport = async (data) => {
   for (const [key, value] of Object.entries(data)) {
     if (value == null) continue;
     const r = await storageSet(key, value);
-    console.log(r.ok ? `✅ ${key} restored` : `❌ ${key} failed: ${r.error}`);
+    console.log(r.ok ? `[OK] ${key} restored` : `[ERR] ${key} failed: ${r.error}`);
   }
-  console.log("🔄 Reload the page to see changes");
+  console.log("Reload the page to see changes");
 };
 window.dbBackups = async () => {
   const keys = ["equipment","reservations","teamMembers","kits","certifications"];
-  console.log("🔒 Backup Status:");
+  console.log("Backup Status:");
   for (const key of keys) {
     try {
       const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.backup_${key}&select=data,updated_at`, { headers: await getSbAuthHeaders() });
@@ -236,11 +237,11 @@ window.dbBackups = async () => {
       if (json.length > 0) {
         const d = json[0].data;
         const count = Array.isArray(d) ? d.length : 0;
-        console.log(`✅ backup_${key}: ${count} items — saved: ${json[0].updated_at}`);
+        console.log(`[OK] backup_${key}: ${count} items — saved: ${json[0].updated_at}`);
       } else {
-        console.log(`⚠️ backup_${key}: no backup yet`);
+        console.log(`[WARN] backup_${key}: no backup yet`);
       }
-    } catch(e) { console.log(`❌ backup_${key}: ERROR`); }
+    } catch(e) { console.log(`[ERR] backup_${key}: ERROR`); }
   }
 };
 window.dbRestoreFromBackup = async (key) => {
@@ -249,8 +250,8 @@ window.dbRestoreFromBackup = async (key) => {
   const json = await res.json();
   if (!json.length || !json[0].data) { console.error(`No backup found for ${key}`); return; }
   const r = await storageSet(key, json[0].data);
-  console.log(r.ok ? `✅ ${key} restored from backup (${json[0].data.length} items)` : `❌ Failed: ${r.error}`);
-  console.log("🔄 Reload the page to see changes");
+  console.log(r.ok ? `[OK] ${key} restored from backup (${json[0].data.length} items)` : `[ERR] Failed: ${r.error}`);
+  console.log("Reload the page to see changes");
 };
 
 // ─── INITIAL DATA ─────────────────────────────────────────────────────────────
@@ -450,14 +451,9 @@ function normalizeReservationsForArchive(reservations, now = new Date()) {
     }
     const returnAt = getReservationReturnTimestamp(normalizedReservation);
     if (normalizedReservation.status === "מאושר" && returnAt !== null && nowMs >= returnAt) {
-      // Lessons auto-archive, regular loans go to "באיחור".
-      // Staff loans (loan_type="צוות") stay "מאושר" (effective "פעילה") until
-      // a staff member manually clicks "הוחזר" — they never auto-escalate.
+      // Lessons auto-archive; all other types (including staff "צוות") go to "באיחור".
       if (normalizedReservation.loan_type === "שיעור") {
         return markReservationReturned(normalizedReservation, now);
-      }
-      if (normalizedReservation.loan_type === "צוות") {
-        return normalizedReservation;
       }
       return { ...normalizedReservation, status: "באיחור" };
     }
@@ -1260,7 +1256,7 @@ function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, savi
           <label className="form-label">תמונה / אימוג׳י</label>
           <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
             {imgUploading
-              ? <div style={{width:48,height:48,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:8,border:"1px solid var(--border)",background:"var(--surface2)",fontSize:20}}>⏳</div>
+              ? <div style={{width:48,height:48,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:8,border:"1px solid var(--border)",background:"var(--surface2)"}}><Clock size={20} strokeWidth={1.75} color="var(--text3)"/></div>
               : isImage
                 ? <img src={f.image} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:8,border:"1px solid var(--border)"}}/>
                 : <span style={{fontSize:36}}>{f.image}</span>
@@ -1270,7 +1266,7 @@ function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, savi
               <input ref={imgInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleImageUpload}/>
               <button type="button" onClick={()=>imgInputRef.current?.click()} disabled={imgUploading}
                 style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",cursor:imgUploading?"not-allowed":"pointer",fontSize:12,color:"var(--text2)",opacity:imgUploading?0.6:1,width:"100%"}}>
-                {imgUploading ? "⏳ מעלה תמונה..." : "🖼️ העלה תמונה מהמחשב"}
+                {imgUploading ? <><Clock size={13} strokeWidth={1.75}/> מעלה תמונה...</> : "🖼️ העלה תמונה מהמחשב"}
               </button>
               {f.name && <button type="button" onClick={()=>window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(f.name)}`, "_blank")} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",cursor:"pointer",fontSize:12,color:"var(--text2)",marginTop:4,width:"100%"}}>
                 🔍 חפש תמונה ב-Google Images
@@ -1285,7 +1281,7 @@ function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, savi
         <div className="form-group"><label className="form-label">הערות</label><input className="form-input" value={f.notes} onChange={e=>s("notes",e.target.value)}/></div>
       </div>
       <div className="form-group">
-        <label className="form-label">🎓 הסמכה נדרשת</label>
+        <label className="form-label" style={{display:"flex",alignItems:"center",gap:4}}><GraduationCap size={14} strokeWidth={1.75}/> הסמכה נדרשת</label>
         <select className="form-select" value={f.certification_id||""} onChange={e=>s("certification_id",e.target.value)}>
           <option value="">ללא הסמכה (כולם רשאים)</option>
           {equipmentCertTypes.map(ct=>(
@@ -1651,9 +1647,9 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       {/* Sub-view tabs */}
       <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
         {[
-          {id:"active",label:"📦 ציוד פעיל",badge:null},
+          {id:"active",label:<><Package size={14} strokeWidth={1.75}/> ציוד פעיל</>,badge:null},
           {id:"damaged",label:"🔧 ציוד בדיקה",badge:damagedCount||null},
-          {id:"reports",label:"📋 דיווחי סטודנטים",badge:eqReports.filter(r=>r.status==="open").length||null},
+          {id:"reports",label:<><ClipboardList size={14} strokeWidth={1.75}/> דיווחי סטודנטים</>,badge:eqReports.filter(r=>r.status==="open").length||null},
         ].map(t=>(
           <button key={t.id} onClick={()=>setEqSubView(t.id)}
             style={{padding:"8px 18px",borderRadius:8,border:`2px solid ${eqSubView===t.id?"var(--accent)":"var(--border)"}`,
@@ -1671,24 +1667,24 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       {/* Reports sub-view */}
       {eqSubView==="reports" && <div>
         <div className="flex-between mb-4">
-          <div style={{fontWeight:900,fontSize:16}}>📋 דיווחי סטודנטים על ציוד</div>
+          <div style={{fontWeight:900,fontSize:16,display:"flex",alignItems:"center",gap:6}}><ClipboardList size={16} strokeWidth={1.75}/> דיווחי סטודנטים על ציוד</div>
           <button className="btn btn-secondary btn-sm" onClick={fetchEqReports} disabled={eqReportsLoading}>{eqReportsLoading?"טוען...":"🔄 רענן"}</button>
         </div>
         {eqReports.filter(r=>r.status==="open").length===0
-          ?<div className="empty-state" style={{padding:40}}><div className="emoji">✅</div><p>אין דיווחים פתוחים</p></div>
+          ?<div className="empty-state" style={{padding:40}}><div className="emoji"><CheckCircle size={48} strokeWidth={1.75} color="var(--green)"/></div><p>אין דיווחים פתוחים</p></div>
           :eqReports.filter(r=>r.status==="open").map(rp=>{
             const eq=equipment.find(e=>String(e.id)===String(rp.equipment_id));
             return <div key={rp.id} className="card" style={{padding:16,marginBottom:10}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
                 <div style={{flex:1}}>
                   <div style={{fontWeight:800,fontSize:14}}>{eq?.name||rp.equipment_id}</div>
-                  <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>👤 {rp.student_name} · 📅 {new Date(rp.created_at).toLocaleDateString("he-IL")}</div>
+                  <div style={{fontSize:12,color:"var(--text3)",marginTop:2,display:"flex",alignItems:"center",gap:4}}>👤 {rp.student_name} · <Calendar size={12} strokeWidth={1.75}/> {new Date(rp.created_at).toLocaleDateString("he-IL")}</div>
                   <div style={{marginTop:8,fontSize:13,color:"var(--text)",background:"var(--surface2)",borderRadius:8,padding:"10px 12px",border:"1px solid var(--border)"}}>{rp.content}</div>
                 </div>
                 <button className="btn btn-secondary btn-sm" style={{flexShrink:0}} onClick={async()=>{
                   try{const token=await getAuthToken();await fetch("/api/equipment-report",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({action:"mark-handled",id:rp.id})});
-                  fetchEqReports();showToast("success","סומן כטופל ✅");}catch{showToast("error","שגיאה");}
-                }}>✅ טופל</button>
+                  fetchEqReports();showToast("success","סומן כטופל");}catch{showToast("error","שגיאה");}
+                }}><CheckCircle size={14} strokeWidth={1.75}/> טופל</button>
               </div>
             </div>;
           })
@@ -1725,10 +1721,10 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
 
       {/* ── Type filter (sound / photo) ── */}
       <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
-        {[{k:"הכל",label:"📦 הכל"},{k:"סאונד",label:"🎙️ סאונד"},{k:"צילום",label:"🎥 צילום"},{k:"כללי",label:"🧩 כללי"}].map(({k,label})=>{
+        {[{k:"הכל",label:<><Package size={12} strokeWidth={1.75}/> הכל</>},{k:"סאונד",label:<><Mic size={12} strokeWidth={1.75}/> סאונד</>},{k:"צילום",label:"🎥 צילום"},{k:"כללי",label:"🧩 כללי"}].map(({k,label})=>{
           const active=typeFilter===k;
           return <button key={k} type="button" onClick={()=>setTypeFilter(k)}
-            style={{padding:"5px 14px",borderRadius:8,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+            style={{padding:"5px 14px",borderRadius:8,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
             {label}
           </button>;
         })}
@@ -1767,9 +1763,9 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                     <option value="צילום">🎥 צילום</option>
                   </select>
                   <button type="button" className="btn btn-sm" style={{borderRadius:0,border:"none",background:"transparent",color:"var(--accent)",fontWeight:800,padding:"4px 7px",fontSize:12}} title="שמור"
-                    onClick={async()=>{if(editCatPillVal.trim()){await handleCatPillRename(c,editCatPillVal.trim());setEditingCatPill(null);}}}>✓</button>
+                    onClick={async()=>{if(editCatPillVal.trim()){await handleCatPillRename(c,editCatPillVal.trim());setEditingCatPill(null);}}}><Check size={12} strokeWidth={2} color="var(--accent)"/></button>
                   <button type="button" className="btn btn-sm" style={{borderRadius:0,border:"none",background:"transparent",color:"var(--text3)",fontWeight:800,padding:"4px 7px",fontSize:12}} title="ביטול"
-                    onClick={()=>setEditingCatPill(null)}>✕</button>
+                    onClick={()=>setEditingCatPill(null)}><X size={12} strokeWidth={1.75} color="var(--text3)"/></button>
                 </>
               ) : (
                 <>
@@ -1800,7 +1796,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
         </button>
       </div>
 
-      {filtered.length===0 ? <div className="empty-state"><div className="emoji">📦</div><p>לא נמצא ציוד</p></div> : (
+      {filtered.length===0 ? <div className="empty-state"><div className="emoji"><Package size={48} strokeWidth={1.75} color="var(--text3)"/></div><p>לא נמצא ציוד</p></div> : (
         <>
           {groupedCategories.map(c=>(
             <div key={c} style={{marginBottom:32}}>
@@ -1847,20 +1843,20 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                     {eq.certification_id&&(
                       <div title={`דורש הסמכה: ${certifications?.types?.find(t=>t.id===eq.certification_id)?.name||"הסמכה"}`}
                         style={{position:"absolute",top:8,left:8,background:"rgba(245,166,35,0.18)",border:"2px solid var(--accent)",borderRadius:8,padding:"3px 7px",display:"flex",alignItems:"center",gap:3,zIndex:2}}>
-                        <span style={{fontSize:14}}>🎓</span>
+                        <GraduationCap size={14} strokeWidth={1.75} color="var(--accent)"/>
                         <span style={{fontSize:10,fontWeight:900,color:"var(--accent)"}}>הסמכה</span>
                       </div>
                     )}
                     <div style={{marginBottom:10,display:"flex",justifyContent:"center"}}>
                       {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
                         ? <img src={cloudinaryThumb(eq.image)} alt={eq.name} style={{width:72,height:72,objectFit:"cover",borderRadius:10,border:"1px solid var(--border)"}}/>
-                        : <span style={{fontSize:36}}>{eq.image||"📦"}</span>
+                        : <span style={{fontSize:36}}>{eq.image||<Package size={36} strokeWidth={1.75} color="var(--text3)"/>}</span>
                       }
                     </div>
                     <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>{eq.name}</div>
                     <div style={{fontSize:11,color:"var(--text3)",marginBottom:8}}>{eq.category}</div>
                     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
-                      {eq.soundOnly && <div className="chip" style={{color:"var(--accent)",borderColor:"var(--accent)"}}>🎙️ ציוד סאונד</div>}
+                      {eq.soundOnly && <div className="chip" style={{color:"var(--accent)",borderColor:"var(--accent)",display:"flex",alignItems:"center",gap:4}}><Mic size={12} strokeWidth={1.75}/> ציוד סאונד</div>}
                       {eq.photoOnly && <div className="chip" style={{color:"var(--green)",borderColor:"rgba(39,174,96,0.45)"}}>🎥 ציוד צילום</div>}
                     </div>
                     <div style={{fontSize:13,display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
@@ -2012,9 +2008,9 @@ function AddCategoryModal({ categories, onClose, onAdd }) {
       <div className="form-group">
         <label className="form-label">סוג ציוד</label>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          {[{v:"",l:"🧩 כללי"},{v:"סאונד",l:"🎙️ סאונד"},{v:"צילום",l:"🎥 צילום"}].map(({v,l})=>(
+          {[{v:"",l:"🧩 כללי"},{v:"סאונד",l:<><Mic size={13} strokeWidth={1.75}/> סאונד</>},{v:"צילום",l:"🎥 צילום"}].map(({v,l})=>(
             <button key={v} type="button" onClick={()=>setType(v)}
-              style={{padding:"6px 16px",borderRadius:8,border:`2px solid ${type===v?"var(--accent)":"var(--border)"}`,background:type===v?"var(--accent-glow)":"transparent",color:type===v?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+              style={{padding:"6px 16px",borderRadius:8,border:`2px solid ${type===v?"var(--accent)":"var(--border)"}`,background:type===v?"var(--accent-glow)":"transparent",color:type===v?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
               {l}
             </button>
           ))}
@@ -2079,14 +2075,14 @@ function ManageCategoriesModal({ categories, categoryTypes, onSave, onClose, equ
     <Modal title="📂 ניהול קטגוריות" onClose={onClose}>
       {/* Type filter chips */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
-        {[{k:"סאונד",l:"🎙️ סאונד"},{k:"צילום",l:"🎥 צילום"},{k:"",l:"כללי"}].map(({k,l})=>{
+        {[{k:"סאונד",l:<><Mic size={12} strokeWidth={1.75}/> סאונד</>},{k:"צילום",l:"🎥 צילום"},{k:"",l:"כללי"}].map(({k,l})=>{
           const active=typeFilters.includes(k);
           return <button key={k} type="button" onClick={()=>toggleTypeFilter(k)}
-            style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+            style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
             {l}
           </button>;
         })}
-        {typeFilters.length>0&&<button type="button" onClick={()=>setTypeFilters([])} style={{padding:"4px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>✕ הכל</button>}
+        {typeFilters.length>0&&<button type="button" onClick={()=>setTypeFilters([])} style={{padding:"4px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}><X size={10} strokeWidth={1.75} color="var(--text3)"/> הכל</button>}
       </div>
       {/* Existing categories */}
       <div style={{marginBottom: 20}}>
@@ -2204,7 +2200,7 @@ function PublicMiniCalendar({ reservations, initialLoanType="הכל", previewSta
     ["rgba(26,188,156,0.75)","#fff"],["rgba(236,72,153,0.75)","#fff"],
     ["rgba(200,160,0,0.75)","#fff"], ["rgba(231,76,60,0.75)","#fff"],
   ];
-  const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:"📦"},{key:"פרטית",label:"פרטית",icon:"👤"},{key:"הפקה",label:"הפקה",icon:"🎬"},{key:"סאונד",label:"סאונד",icon:"🎙️"},{key:"קולנוע יומית",label:"קולנוע יומית",icon:"🎥"},{key:"שיעור",label:"שיעור",icon:"📽️"},{key:"צוות",label:"איש צוות",icon:"💼"}];
+  const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:<Package size={11} strokeWidth={1.75}/>},{key:"פרטית",label:"פרטית",icon:"👤"},{key:"הפקה",label:"הפקה",icon:<Film size={11} strokeWidth={1.75}/>},{key:"סאונד",label:"סאונד",icon:<Mic size={11} strokeWidth={1.75}/>},{key:"קולנוע יומית",label:"קולנוע יומית",icon:"🎥"},{key:"שיעור",label:"שיעור",icon:"📽️"},{key:"צוות",label:"איש צוות",icon:"💼"}];
   const activeRes = reservations.filter(r=>
     (r.status==="מאושר"||r.status==="באיחור") && r.borrow_date && r.return_date &&
     (loanTypeF==="הכל" || r.loan_type===loanTypeF)
@@ -2229,7 +2225,7 @@ function PublicMiniCalendar({ reservations, initialLoanType="הכל", previewSta
   return (
     <div style={{marginBottom:16,marginTop:8}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,flexWrap:"wrap",gap:6}}>
-        <div style={{fontWeight:800,fontSize:13,color:"var(--text2)"}}>📅 השאלות הפעילות</div>
+        <div style={{fontWeight:800,fontSize:13,color:"var(--text2)",display:"flex",alignItems:"center",gap:4}}><Calendar size={13} strokeWidth={1.75}/> השאלות הפעילות</div>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo-1,1))}>‹</button>
           <span style={{fontWeight:700,fontSize:12,minWidth:90,textAlign:"center"}}>{HE_M[mo]} {yr}</span>
@@ -2294,15 +2290,15 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
             {/* Header */}
             <div style={{padding:"14px 18px",background:"var(--surface)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:10,flexShrink:0,flexWrap:"wrap"}}>
               <div style={{fontWeight:900,fontSize:16,flex:1}}>
-                {showAll ? `📦 כל הציוד במחסן (${equipment.length} פריטים)` : `📋 פרטי הציוד שנבחר (${items.length} פריטים)`}
+                {showAll ? <><Package size={16} strokeWidth={1.75}/> {`כל הציוד במחסן (${equipment.length} פריטים)`}</> : <><ClipboardList size={16} strokeWidth={1.75}/> {`פרטי הציוד שנבחר (${items.length} פריטים)`}</>}
               </div>
               <div style={{display:"flex",gap:8}}>
                 <button className="btn btn-secondary btn-sm"
                   style={{background:showAll?"var(--accent-glow)":"transparent",border:`1px solid ${showAll?"var(--accent)":"var(--border)"}`,color:showAll?"var(--accent)":"var(--text2)",fontWeight:700}}
                   onClick={()=>setShowAll(p=>!p)}>
-                  📦 {showAll?"רק הנבחרים":"כל הציוד"}
+                  <Package size={14} strokeWidth={1.75}/> {showAll?"רק הנבחרים":"כל הציוד"}
                 </button>
-                <button className="btn btn-secondary btn-sm" onClick={()=>setShowInfo(false)}>✕ סגור</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setShowInfo(false)} style={{display:"flex",alignItems:"center",gap:4}}><X size={14} strokeWidth={1.75} color="var(--text3)"/> סגור</button>
               </div>
             </div>
 
@@ -2331,11 +2327,11 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
                       <div style={{fontWeight:900,fontSize:"clamp(13px,4vw,21px)",lineHeight:1.25,whiteSpace:"normal",overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",wordBreak:"break-word"}}>{eq.name}</div>
                       <div style={{fontSize:13,color:"var(--text2)",lineHeight:1.8,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:4,WebkitBoxOrient:"vertical",wordBreak:"break-word",textAlign:"right"}}>{eq.description||"\u05D0\u05D9\u05DF \u05EA\u05D9\u05D0\u05D5\u05E8 \u05D6\u05DE\u05D9\u05DF"}</div>
                       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
-                        {isSelected&&<span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>✓ ×{items.find(i=>i.equipment_id==itm.equipment_id)?.quantity}</span>}
+                        {isSelected&&<span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}><Check size={10} strokeWidth={2}/> ×{items.find(i=>i.equipment_id==itm.equipment_id)?.quantity}</span>}
                         {eq.notes&&<span style={{fontSize:11,color:"var(--text3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:220}}>{"\uD83D\uDCDD"} {eq.notes}</span>}
                       </div>
                       {(eq.soundOnly || eq.photoOnly)&&<div style={{marginTop:8,display:"flex",gap:6,flexWrap:"wrap"}}>
-                        {eq.soundOnly&&<span style={{background:"rgba(245,166,35,0.12)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--accent)",fontWeight:700}}>🎙️ ציוד סאונד</span>}
+                        {eq.soundOnly&&<span style={{background:"rgba(245,166,35,0.12)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><Mic size={10} strokeWidth={1.75}/> ציוד סאונד</span>}
                         {eq.photoOnly&&<span style={{background:"rgba(39,174,96,0.12)",border:"1px solid rgba(39,174,96,0.35)",borderRadius:20,padding:"1px 8px",fontSize:11,color:"var(--green)",fontWeight:700}}>🎥 ציוד צילום</span>}
                       </div>}
                       <div style={{marginTop:"auto",paddingTop:8,fontSize:11,color:"var(--text3)",fontWeight:700}}>{"\u05DC\u05D7\u05E5 \u05DC\u05E4\u05EA\u05D9\u05D7\u05EA \u05D4\u05E4\u05E8\u05D9\u05D8 \u05D1\u05DE\u05E1\u05DA \u05DE\u05DC\u05D0"}</div>
@@ -2344,7 +2340,7 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
                     <div style={{width:"clamp(100px,28vw,240px)",flexShrink:0,background:"var(--surface2)",overflow:"hidden",borderLeft:"1px solid var(--border)"}}>
                       {isImg
                         ? <img src={cloudinaryThumb(eq.image)} alt={eq.name} style={{width:"100%",height:"100%",objectFit:"contain",display:"block",background:"var(--surface2)"}}/>
-                        : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:64}}>{eq.image||"📦"}</div>
+                        : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:64}}>{eq.image||<Package size={64} strokeWidth={1.75} color="var(--text3)"/>}</div>
                       }
                     </div>
                   </button>
@@ -2453,8 +2449,8 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
           <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",marginBottom:10,letterSpacing:0.5}}>סינון ציוד לפי מסלול לימודים</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
             {[
-              { key:"all", label:"כל הציוד", icon:"📦" },
-              { key:"sound", label:"ציוד סאונד", icon:"🎙️" },
+              { key:"all", label:"כל הציוד", icon:<Package size={14} strokeWidth={1.75}/> },
+              { key:"sound", label:"ציוד סאונד", icon:<Mic size={14} strokeWidth={1.75}/> },
               { key:"photo", label:"ציוד צילום", icon:"🎥" },
             ].map((filterOption) => {
               const isActive = privateFilter === filterOption.key;
@@ -2478,7 +2474,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12,alignItems:"center"}}>
         <button type="button" onClick={()=>setShowSelectedOnly(p=>!p)}
           style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${showSelectedOnly?"var(--green)":"var(--border)"}`,background:showSelectedOnly?"rgba(46,204,113,0.12)":"transparent",color:showSelectedOnly?"var(--green)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>
-          {showSelectedOnly?"✅ נבחרו":"⬜"} {showSelectedOnly?"הצג הכל":"הצג נבחרים בלבד"}
+          {showSelectedOnly?<><CheckCircle size={12} strokeWidth={1.75}/> נבחרו</>:"⬜"} {showSelectedOnly?"הצג הכל":"הצג נבחרים בלבד"}
         </button>
         <div style={{width:1,height:20,background:"var(--border)",flexShrink:0}}/>
         {baseCategories.map(cat=>{
@@ -2492,8 +2488,8 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
         })}
         {selectedCats.length>0&&(
           <button type="button" onClick={()=>setSelectedCats([])}
-            style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}>
-            ✕ נקה
+            style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
+            <X size={10} strokeWidth={1.75} color="var(--text3)"/> נקה
           </button>
         )}
       </div>
@@ -2507,7 +2503,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
             <button type="button"
               onClick={()=>setActiveKit(null)}
               style={{padding:"7px 14px",borderRadius:20,border:`2px solid ${!activeKit?"var(--text2)":"var(--border)"}`,background:!activeKit?"var(--surface3)":"transparent",color:!activeKit?"var(--text)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",transition:"all 0.15s"}}>
-              📦 כל הציוד
+              <Package size={13} strokeWidth={1.75}/> כל הציוד
             </button>
             {relevantKits.map(kit=>{
               const isActive = activeKit?.id===kit.id;
@@ -2516,7 +2512,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
                   onClick={()=>selectKit(kit)}
                   style={{padding:"7px 16px",borderRadius:20,border:`2px solid ${isActive?"var(--accent)":"var(--border)"}`,background:isActive?"var(--accent)":"var(--surface3)",color:isActive?"#000":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer",transition:"all 0.15s",display:"flex",alignItems:"center",gap:6}}>
                   🎒 {kit.name}
-                  {isActive&&<span style={{fontSize:10,opacity:0.7}}>✓ פעיל</span>}
+                  {isActive&&<span style={{fontSize:10,opacity:0.7,display:"inline-flex",alignItems:"center",gap:2}}><Check size={9} strokeWidth={2}/> פעיל</span>}
                 </button>
               );
             })}
@@ -2549,7 +2545,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
                 <div key={eq.id} className="item-row" style={{opacity:effectiveMax===0?0.4:1}}>
                   {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
                     ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:36,height:36,objectFit:"cover",borderRadius:6}}/>
-                    : <span style={{fontSize:26}}>{eq.image||"📦"}</span>}
+                    : <span style={{fontSize:26}}>{eq.image||<Package size={26} strokeWidth={1.75} color="var(--text3)"/>}</span>}
                   <div style={{flex:1}}>
                     <div style={{fontWeight:600,fontSize:14}}>{eq.name}</div>
                     <div style={{fontSize:12,color:"var(--text3)"}}>
@@ -2558,12 +2554,12 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
                     </div>
                   </div>
                   {!canBorrowEq(eq)
-                    ? <div style={{fontSize:11,color:"var(--yellow)",fontWeight:700,textAlign:"center",maxWidth:120,lineHeight:1.3,padding:"4px 6px",background:"rgba(241,196,15,0.12)",borderRadius:6,border:"1px solid rgba(241,196,15,0.3)"}}>
-                        🔒 טרם עבר/ה הסמכה
+                    ? <div style={{fontSize:11,color:"var(--yellow)",fontWeight:700,textAlign:"center",maxWidth:120,lineHeight:1.3,padding:"4px 6px",background:"rgba(241,196,15,0.12)",borderRadius:6,border:"1px solid rgba(241,196,15,0.3)",display:"flex",alignItems:"center",gap:3,justifyContent:"center"}}>
+                        <Shield size={11} strokeWidth={1.75}/> טרם עבר/ה הסמכה
                       </div>
                     : effectiveMax>0
                     ? <div className="qty-ctrl">
-                        <button className="qty-btn" onClick={()=>setQty(eq.id, Math.min(itm.quantity-1, effectiveMax))}>−</button>
+                        <button className="qty-btn" onClick={()=>setQty(eq.id, Math.min(itm.quantity-1, effectiveMax))}><Minus size={12} strokeWidth={1.75} color="var(--text3)"/></button>
                         <span className="qty-num">{itm.quantity}</span>
                         <button className="qty-btn" disabled={atMax} style={{opacity:atMax?0.3:1}}
                           onClick={()=>{ if(!atMax) setQty(eq.id, Math.min(itm.quantity+1, effectiveMax)); }}>+</button>
@@ -2606,10 +2602,10 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
         <div>{[["שם",form.student_name],["אימייל",form.email],["קורס",form.course],["סוג השאלה",form.loan_type],["מ",`${formatDate(form.borrow_date)}${form.borrow_time?" · "+form.borrow_time:""}`],["עד",`${formatDate(form.return_date)}${form.return_time?" · "+form.return_time:""}`]].map(([l,v])=><div key={l} className="req-detail-row"><span className="req-detail-label">{l}:</span><strong>{v}</strong></div>)}</div>
         <div>{items.map(i=>{
           const eq = equipment.find(e=>e.id==i.equipment_id);
-          const img = eq?.image||"📦";
+          const img = eq?.image||"";
           const isFile = img.startsWith("data:")||img.startsWith("http");
           return <div key={i.equipment_id} className="req-detail-row">
-            {isFile ? <img src={img} alt="" style={{width:20,height:20,objectFit:"cover",borderRadius:4,verticalAlign:"middle"}}/> : <span>{img}</span>}
+            {isFile ? <img src={img} alt="" style={{width:20,height:20,objectFit:"cover",borderRadius:4,verticalAlign:"middle"}}/> : <span>{img||<Package size={16} strokeWidth={1.75} color="var(--text3)"/>}</span>}
             <span style={{marginRight:6}}>{i.name} × {i.quantity}</span>
           </div>;
         })}</div>
@@ -2621,7 +2617,7 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
         <button type="button"
           onClick={()=>{ setShowPolicies(true); setScrolledToBottom(false); }}
           style={{width:"100%",padding:"12px",marginBottom:16,borderRadius:"var(--r-sm)",border:"2px solid var(--accent)",background:"var(--accent-glow)",color:"var(--accent)",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-          📋 נהלי ההשאלה — חובה לקרוא לפני שליחה
+          <ClipboardList size={16} strokeWidth={1.75}/> נהלי ההשאלה — חובה לקרוא לפני שליחה
         </button>
       )}
 
@@ -2634,7 +2630,7 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
 
       <div className="flex gap-2">
         <button className="btn btn-secondary" onClick={onBack}>← חזור</button>
-        <button className="btn btn-primary" disabled={!canSubmit||submitting} onClick={submit}>{submitting?"⏳ שולח...":"🚀 שלח בקשה"}</button>
+        <button className="btn btn-primary" disabled={!canSubmit||submitting} onClick={submit}>{submitting?<><Clock size={13} strokeWidth={1.75}/> שולח...</>:"🚀 שלח בקשה"}</button>
       </div>
 
       {/* ── Fullscreen policies modal ── */}
@@ -2642,8 +2638,8 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:4000,display:"flex",flexDirection:"column",direction:"rtl"}}>
           {/* Header */}
           <div style={{padding:"16px 20px",background:"var(--surface)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-            <div style={{fontWeight:900,fontSize:17}}>📋 נהלי השאלה — {loanType}</div>
-            <button className="btn btn-secondary btn-sm" onClick={()=>setShowPolicies(false)}>✕ סגור</button>
+            <div style={{fontWeight:900,fontSize:17,display:"flex",alignItems:"center",gap:6}}><ClipboardList size={17} strokeWidth={1.75}/> נהלי השאלה — {loanType}</div>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setShowPolicies(false)} style={{display:"flex",alignItems:"center",gap:4}}><X size={14} strokeWidth={1.75} color="var(--text3)"/> סגור</button>
           </div>
           {/* Scrollable body */}
           <div
@@ -2653,7 +2649,7 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
             {/* bottom anchor */}
             <div style={{height:60,display:"flex",alignItems:"center",justifyContent:"center",marginTop:24}}>
               {scrolledToBottom
-                ? <span style={{color:"var(--green)",fontWeight:700,fontSize:14}}>✅ קראת את כל הנהלים</span>
+                ? <span style={{color:"var(--green)",fontWeight:700,fontSize:14,display:"inline-flex",alignItems:"center",gap:4}}><CheckCircle size={14} strokeWidth={1.75}/> קראת את כל הנהלים</span>
                 : <span style={{color:"var(--text3)",fontSize:13}}>↓ גלול עד הסוף</span>}
             </div>
           </div>
@@ -2664,7 +2660,7 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
               style={{width:"100%",fontSize:15,padding:14}}
               disabled={!scrolledToBottom}
               onClick={()=>{ setAgreed(true); setShowPolicies(false); }}>
-              {scrolledToBottom ? "✅ אני מאשר/ת שקראתי את הנהלים — סגור" : "↓ גלול עד הסוף כדי לאשר"}
+              {scrolledToBottom ? <><CheckCircle size={14} strokeWidth={1.75}/> אני מאשר/ת שקראתי את הנהלים — סגור</> : "↓ גלול עד הסוף כדי לאשר"}
             </button>
           </div>
         </div>
@@ -2679,8 +2675,8 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
   const [selectedEq, setSelectedEq] = useState(null);  // equipment detail view
   const [infoCatFilter, setInfoCatFilter] = useState([]); // multi-select
   const tabs = [
-    { id:"equipment", label:"📦 ציוד" },
-    { id:"policies",  label:"📋 נהלים" },
+    { id:"equipment", label:<><Package size={14} strokeWidth={1.75}/> ציוד</> },
+    { id:"policies",  label:<><ClipboardList size={14} strokeWidth={1.75}/> נהלים</> },
     { id:"kits",      label:"🎒 ערכות" },
     { id:"contact",   label:"📞 צוות" },
   ];
@@ -2697,9 +2693,9 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
         {/* Header */}
         <div style={{padding:"18px 28px",background:"var(--surface2)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
           <div style={{flex:1}}>
-            <div style={{fontWeight:900,fontSize:20,color:"var(--accent)"}}>ℹ️ מידע כללי — מחסן ציוד קמרה אובסקורה וסאונד</div>
+            <div style={{fontWeight:900,fontSize:20,color:"var(--accent)",display:"flex",alignItems:"center",gap:6}}><Info size={20} strokeWidth={1.75}/> מידע כללי — מחסן ציוד קמרה אובסקורה וסאונד</div>
           </div>
-          <button className="btn btn-secondary btn-sm" onClick={onClose} style={{fontSize:14,padding:"8px 18px"}}>✕ סגור</button>
+          <button className="btn btn-secondary btn-sm" onClick={onClose} style={{fontSize:14,padding:"8px 18px",display:"flex",alignItems:"center",gap:4}}><X size={14} strokeWidth={1.75} color="var(--text3)"/> סגור</button>
         </div>
 
         {/* Tabs */}
@@ -2892,8 +2888,8 @@ function uint8ToBase64_policies(bytes) {
 function PoliciesPage({ policies, setPolicies, showToast }) {
   const LOAN_TYPES = [
     { key:"פרטית", icon:"👤", label:"השאלה פרטית" },
-    { key:"הפקה",  icon:"🎬", label:"השאלה להפקה" },
-    { key:"סאונד", icon:"🎙️", label:"השאלת סאונד" },
+    { key:"הפקה",  icon:<Film size={15} strokeWidth={1.75}/>, label:"השאלה להפקה" },
+    { key:"סאונד", icon:<Mic size={15} strokeWidth={1.75}/>, label:"השאלת סאונד" },
     { key:"קולנוע יומית", icon:"🎥", label:"השאלת קולנוע יומית" },
     { key:"לילה", icon:"🌙", label:"נהלי קביעת חדר לילה" },
   ];
@@ -2976,7 +2972,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
           </div>
           <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
             <label className="btn btn-secondary" style={{cursor:pdfUploading?"not-allowed":"pointer",opacity:pdfUploading?0.6:1}}>
-              {pdfUploading ? "⏳ מעלה..." : "📤 העלה מסמך PDF"}
+              {pdfUploading ? <><Clock size={13} strokeWidth={1.75}/> מעלה...</> : "📤 העלה מסמך PDF"}
               <input type="file" accept="application/pdf" style={{display:"none"}} onChange={handleCommitmentPdfUpload} disabled={pdfUploading}/>
             </label>
             {draft.commitmentPdf && (
@@ -2987,7 +2983,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
           </div>
           {draft.commitmentPdf && (
             <div style={{marginTop:12,padding:"10px 14px",background:"rgba(39,174,96,0.08)",border:"1px solid rgba(39,174,96,0.3)",borderRadius:8,display:"flex",alignItems:"center",gap:10}}>
-              <span style={{fontSize:18}}>✅</span>
+              <CheckCircle size={18} strokeWidth={1.75} color="var(--green)"/>
               <div>
                 <div style={{fontSize:13,fontWeight:800,color:"var(--green)"}}>מסמך טעון</div>
                 {draft.commitmentPdfName&&<div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>{draft.commitmentPdfName}</div>}
@@ -2998,7 +2994,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
       </div>
 
       <button className="btn btn-primary" disabled={saving} onClick={save}>
-        {saving ? "⏳ שומר..." : "💾 שמור נהלים"}
+        {saving ? <><Clock size={13} strokeWidth={1.75}/> שומר...</> : "💾 שמור נהלים"}
       </button>
 
       {/* Fullscreen editor */}
@@ -7207,7 +7203,7 @@ export default function App() {
             <div className="sidebar-logo">
               {siteSettings.logo
                 ? <img src={siteSettings.logo} alt="לוגו" style={{width:90,height:90,objectFit:"contain",borderRadius:8}}/>
-                : <span className="logo-icon">🎬</span>}
+                : <span className="logo-icon"><Film size={40} strokeWidth={1.75} color="var(--accent)"/></span>}
               {siteSettings.soundLogo && (
                 <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:90,height:90,objectFit:"contain",borderRadius:8,marginTop:2,display:"block"}}/>
               )}
@@ -7217,12 +7213,12 @@ export default function App() {
             <div className="nav">
               <div className="nav-section">ניהול</div>
               {[
-                {id:"reservations",icon:"📋",label:"בקשות",badge:(pending||0)+(rejected||0)||null},
-                {id:"equipment",icon:"📦",label:"ציוד",badge:damagedCount||null},
-                {id:"certifications",icon:"🎓",label:"הסמכת ציוד"},
-                {id:"kits",icon:"🎒",label:"ערכות"},
-                {id:"policies",icon:"📋",label:"נהלים"},
-                {id:"settings",icon:"⚙️",label:"הגדרות"},
+                {id:"reservations",icon:<ClipboardList size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"בקשות",badge:(pending||0)+(rejected||0)||null},
+                {id:"equipment",icon:<Package size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"ציוד",badge:damagedCount||null},
+                {id:"certifications",icon:<GraduationCap size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"הסמכת ציוד"},
+                {id:"kits",icon:<Package size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"ערכות"},
+                {id:"policies",icon:<ClipboardList size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"נהלים"},
+                {id:"settings",icon:<Settings size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"הגדרות"},
               ].filter(n => {
                 const allowed = staffUser?.role === "admin" ? [] : (staffUser?.permissions?.warehouseSections || []);
                 return !allowed.length || allowed.includes(n.id);
@@ -7246,10 +7242,10 @@ export default function App() {
             <div className="topbar" style={{flexWrap:"wrap",gap:8}}>
               <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
                 <span className="topbar-title" style={{flex:1}}>{pageTitle[page]}</span>
-                {pending>0&&<div style={{background:"rgba(241,196,15,0.12)",border:"1px solid rgba(241,196,15,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--yellow)",flexShrink:0}}>⏳ {pending}</div>}
-                {deptHeadPending>0&&<div style={{background:"rgba(155,89,182,0.12)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--purple)",flexShrink:0}}>🟣 {deptHeadPending}</div>}
-                {overdueCount>0&&<div style={{background:"rgba(230,126,34,0.15)",border:"1px solid rgba(230,126,34,0.4)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"#e67e22",flexShrink:0,cursor:"pointer"}} onClick={()=>{setReservationsInitialSubView("rejected");setPage("reservations");}}>⚠️ {overdueCount} באיחור</div>}
-                {rejectedCount>0&&<div style={{background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--red)",flexShrink:0}}>❌ {rejectedCount}</div>}
+                {pending>0&&<div style={{background:"rgba(241,196,15,0.12)",border:"1px solid rgba(241,196,15,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--yellow)",flexShrink:0,display:"flex",alignItems:"center",gap:4}}><Clock size={12} strokeWidth={1.75}/> {pending}</div>}
+                {deptHeadPending>0&&<div style={{background:"rgba(155,89,182,0.12)",border:"1px solid rgba(155,89,182,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--purple)",flexShrink:0}}>{deptHeadPending}</div>}
+                {overdueCount>0&&<div style={{background:"rgba(230,126,34,0.15)",border:"1px solid rgba(230,126,34,0.4)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"#e67e22",flexShrink:0,cursor:"pointer",display:"flex",alignItems:"center",gap:4}} onClick={()=>{setReservationsInitialSubView("rejected");setPage("reservations");}}><AlertTriangle size={12} strokeWidth={1.75}/> {overdueCount} באיחור</div>}
+                {rejectedCount>0&&<div style={{background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:8,padding:"5px 10px",fontSize:12,color:"var(--red)",flexShrink:0,display:"flex",alignItems:"center",gap:4}}><XCircle size={12} strokeWidth={1.75}/> {rejectedCount}</div>}
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={handleUndo}
@@ -7268,7 +7264,7 @@ export default function App() {
               </div>
               {page==="reservations" && (
                 <div style={{display:"flex",gap:6,width:"100%",flexWrap:"wrap",alignItems:"center"}}>
-                  <div className="search-bar" style={{flex:"1 1 130px",minWidth:120}}><span>🔍</span><input placeholder="חיפוש..." value={resSearch} onChange={e=>setResSearch(e.target.value)}/></div>
+                  <div className="search-bar" style={{flex:"1 1 130px",minWidth:120}}><span><Search size={14} strokeWidth={1.75} color="var(--text3)"/></span><input placeholder="חיפוש..." value={resSearch} onChange={e=>setResSearch(e.target.value)}/></div>
                   <select
                     className="form-select"
                     style={{flex:"1 1 100px",minWidth:95,fontSize:12,padding:"6px 8px"}}
@@ -7316,7 +7312,7 @@ export default function App() {
             <div className="sidebar-logo">
               {siteSettings.logo
                 ? <img src={siteSettings.logo} alt="לוגו" style={{width:90,height:90,objectFit:"contain",borderRadius:8}}/>
-                : <span className="logo-icon">🎬</span>}
+                : <span className="logo-icon"><Film size={40} strokeWidth={1.75} color="var(--accent)"/></span>}
               {siteSettings.soundLogo && (
                 <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:90,height:90,objectFit:"contain",borderRadius:8,marginTop:2,display:"block"}}/>
               )}
@@ -7326,13 +7322,13 @@ export default function App() {
             <div className="nav">
               <div className="nav-section">ניהול</div>
               {[
-                {id:"studios",icon:"🎙️",label:"ניהול חדרים"},
-                {id:"studio-certifications",icon:"🎓",label:"הסמכת אולפן"},
-                {id:"lessons",icon:"📽️",label:"שיעורים",badge:lessons.length||null},
-                {id:"lecturers",icon:"👩‍🏫",label:"מרצים",badge:lecturers.filter(l=>l.isActive!==false).length||null},
-                {id:"students",icon:"👨‍🎓",label:"סטודנטים"},
-                {id:"policies",icon:"📋",label:"נהלים"},
-                {id:"settings",icon:"⚙️",label:"הגדרות"},
+                {id:"studios",icon:<Mic size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"ניהול חדרים"},
+                {id:"studio-certifications",icon:<GraduationCap size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"הסמכת אולפן"},
+                {id:"lessons",icon:<Film size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"שיעורים",badge:lessons.length||null},
+                {id:"lecturers",icon:<GraduationCap size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"מרצים",badge:lecturers.filter(l=>l.isActive!==false).length||null},
+                {id:"students",icon:<GraduationCap size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"סטודנטים"},
+                {id:"policies",icon:<ClipboardList size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"נהלים"},
+                {id:"settings",icon:<Settings size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"הגדרות"},
               ].filter(n => {
                 const allowed = staffUser?.role === "admin" ? [] : (staffUser?.permissions?.administrationSections || []);
                 return !allowed.length || allowed.includes(n.id);
