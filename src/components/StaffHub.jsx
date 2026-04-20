@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, Calendar, ClipboardList, Download, GraduationCap, LayoutDashboard, LogOut, Package } from "lucide-react";
+import { BookOpen, Calendar, ClipboardList, Download, GraduationCap, LayoutDashboard, LogOut, Package, Settings, Users } from "lucide-react";
 
 export function StaffHub({ user, logo, onNavigate, onLogout, canInstall = false, onInstall = () => {} }) {
   const [hovered, setHovered] = useState(null);
@@ -7,9 +7,9 @@ export function StaffHub({ user, logo, onNavigate, onLogout, canInstall = false,
   const allowedViews = user?.role === "admin" ? [] : (user?.permissions?.views || []);
 
   const allOptions = [
-    { key: "warehouse",       icon: <Package size={16} strokeWidth={1.75} />, title: "תפעול מחסן",     desc: "ניהול ציוד, הזמנות, קיטים והסמכות",              color: "#3b82f6" },
-    { key: "administration",  icon: <ClipboardList size={16} strokeWidth={1.75} />, title: "אדמיניסטרציה",   desc: "ניהול סטודנטים, אולפנים, שיעורים ודוחות",        color: "#8b5cf6" },
-    { key: "staff-schedule",  icon: <Calendar size={16} strokeWidth={1.75} />, title: 'לו"ז עובדים',   desc: "הגשת העדפות, צפייה בשיבוצים ומשמרות",            color: "#0ea5e9" },
+    { key: "warehouse",       icon: <Package size={40} strokeWidth={1.5} />, title: "תפעול מחסן",     desc: "ניהול ציוד, הזמנות, קיטים והסמכות",              color: "#3b82f6" },
+    { key: "administration",  icon: <ClipboardList size={40} strokeWidth={1.5} />, title: "אדמיניסטרציה",   desc: "ניהול סטודנטים, אולפנים, שיעורים ודוחות",        color: "#8b5cf6" },
+    { key: "staff-schedule",  icon: <Calendar size={40} strokeWidth={1.5} />, title: 'לו"ז עובדים',   desc: "הגשת העדפות, צפייה בשיבוצים ומשמרות",            color: "#0ea5e9" },
   ];
 
   const options = allOptions.filter(o => o.key === "staff-schedule" || !allowedViews.length || allowedViews.includes(o.key));
@@ -103,9 +103,9 @@ export function StaffHub({ user, logo, onNavigate, onLogout, canInstall = false,
           {user?.role === "admin" && (
             <div style={{ marginTop: 24, display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
               {[
-                { key: "staff-management", icon: "👥", label: "ניהול צוות",     color: "#22c55e" },
-                { key: "system-settings",  icon: <></>, label: "הגדרות מערכת",  color: "#f5a623" },
-                { key: "activity-logs",    icon: <LayoutDashboard size={16} strokeWidth={1.75} />, label: "יומן פעילות",    color: "#3b82f6" },
+                { key: "staff-management", icon: <Users size={20} strokeWidth={1.75} />, label: "ניהול צוות",     color: "#22c55e" },
+                { key: "system-settings",  icon: <Settings size={20} strokeWidth={1.75} />, label: "הגדרות מערכת",  color: "#f5a623" },
+                { key: "activity-logs",    icon: <LayoutDashboard size={20} strokeWidth={1.75} />, label: "יומן פעילות",    color: "#3b82f6" },
               ].map(btn => (
                 <button
                   key={btn.key}
