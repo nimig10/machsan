@@ -1,6 +1,6 @@
 import { supabase } from '../supabaseClient.js';
 import { useEffect, useMemo, useState } from "react";
-import { formatDate, getAvailable, normalizeName, storageSet, storageGet, updateReservationStatus } from "../utils.js";
+import { formatDate, getAvailable, normalizeName, storageSet, storageGet, updateReservationStatus, getAuthToken } from "../utils.js";
 import { statusBadge } from "./ui.jsx";
 import { DeptHeadCalendarPage } from "./CalendarViews.jsx";
 
@@ -544,18 +544,31 @@ export function LecturerPortal({
     setSaving(true);
     setEditorError("");
 
-    const kitsResult = await storageSet("kits", nextKits);
-    if (!kitsResult?.ok) {
+    try {
+      const token = await getAuthToken().catch(() => null);
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const result = await fetch("/api/lecturer-kit", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          kit: nextKit,
+          lessonId: editorContext.lesson.id,
+          sessionUid: editorContext.type === "course" ? null : editorContext.session._lecturerUid,
+          kitType: editorContext.type,
+        }),
+      });
+      if (!result.ok) {
+        const err = await result.text();
+        console.error("lecturer-kit error", err);
+        setSaving(false);
+        setEditorError("שמירת ההשאלה נכשלה. נסה שוב.");
+        return;
+      }
+    } catch (e) {
+      console.error("lecturer-kit fetch error", e);
       setSaving(false);
-      setEditorError("שמירת ערכת השיעור נכשלה. הנתונים לא נשמרו.");
-      return;
-    }
-
-    const lessonsResult = await storageSet("lessons", nextLessons);
-    if (!lessonsResult?.ok) {
-      await storageSet("kits", kits);
-      setSaving(false);
-      setEditorError("שמירת הקישור לקורס/מפגש נכשלה. בוצע ביטול לשינוי בערכה.");
+      setEditorError("שמירת ההשאלה נכשלה. בדוק חיבור לאינטרנט.");
       return;
     }
 
