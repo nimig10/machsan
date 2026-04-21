@@ -310,13 +310,25 @@ export function LecturerPortal({
   useEffect(() => {
     if (!editorContext) return;
     const sourceKit = editorContext.currentKit || editorContext.templateKit;
+
+    // Prefer items from an actual (non-auto) reservation — reflects staff edits
+    // that updated reservation_items without touching store.kits.
+    const lessonId = String(editorContext.lesson.id);
+    const realReservation = reservations.find(r =>
+      r.lesson_auto === false &&
+      String(r.lesson_id || "") === lessonId &&
+      Array.isArray(r.items) && r.items.length > 0 &&
+      editorContext.targetSessions.some(s => s.date === r.borrow_date)
+    );
+    const itemSource = realReservation || sourceKit;
+
     setDraftName(
       String(sourceKit?.name || "").trim()
       || buildDefaultKitName(editorContext.lesson, editorContext.type, editorContext.session),
     );
     setDraftDescription(String(sourceKit?.description || "").trim());
     setDraftItems(
-      (sourceKit?.items || [])
+      (itemSource?.items || [])
         .filter((item) => Number(item?.quantity) > 0)
         .map((item) => ({
           equipment_id: item.equipment_id,
@@ -328,7 +340,7 @@ export function LecturerPortal({
     setSelectedCats([]);
     setShowSelectedOnly(false);
     setEditorError("");
-  }, [editorContext]);
+  }, [editorContext, reservations]);
 
   const baseReservations = useMemo(() => {
     if (!editorContext) return reservations;
@@ -592,6 +604,10 @@ export function LecturerPortal({
       setSaving(false);
       setEditorState(null);
       showToast("success", `ההשאלות נוצרו בהצלחה עבור ${editorContext.allSessions.length} מפגשי הקורס.`);
+      // Refresh so staff edits and new reservations are immediately visible
+      supabase.from("reservations_new").select("*, reservation_items(*)").then(({ data }) => {
+        if (data && setReservations) setReservations(data.map(r => ({ ...r, items: r.reservation_items || [] })));
+      });
       return;
     }
 
@@ -625,6 +641,9 @@ export function LecturerPortal({
     setSaving(false);
     setEditorState(null);
     showToast("success", "השאלת המפגש נשמרה.");
+    supabase.from("reservations_new").select("*, reservation_items(*)").then(({ data }) => {
+      if (data && setReservations) setReservations(data.map(r => ({ ...r, items: r.reservation_items || [] })));
+    });
   };
 
   if (!loggedInLecturer || !currentLecturer) {

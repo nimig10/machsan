@@ -1,7 +1,7 @@
 import { supabase } from '../supabaseClient.js';
 // ReservationsPage.jsx — admin reservations management page (includes rejected + archive tabs)
 import { useEffect, useState } from "react";
-import { storageGet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, createReservation, deleteReservation as deleteReservationRpc, getAuthToken, syncReservationStatusToBlob } from "../utils.js";
+import { storageGet, storageSet, formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, createReservation, deleteReservation as deleteReservationRpc, getAuthToken, syncReservationStatusToBlob } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
@@ -537,6 +537,31 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
   // Stage 5 — persist EditReservationModal changes directly to Supabase
   const saveEditedReservation = async (updated) => {
     const { items: updatedItems, reservation_items: _ri, ...rowFields } = updated;
+
+    // Virtual lesson reservations (lesson_auto: true) have no row in reservations_new.
+    // Their source of truth is store.kits — sync items there instead.
+    const isVirtual = updated.lesson_auto === true || String(updated.id || "").startsWith("lesson_res_");
+    const linkedKitId = updated.lesson_kit_id ? String(updated.lesson_kit_id) : null;
+
+    if (isVirtual) {
+      // Update kit items in store.kits so the LecturerPortal sees the change
+      if (linkedKitId && updatedItems) {
+        const freshKits = await storageGet("kits");
+        if (Array.isArray(freshKits)) {
+          const normalized = updatedItems.map(i => ({ equipment_id: i.equipment_id, quantity: Number(i.quantity) || 1, name: i.name || "" }));
+          const newKits = freshKits.map(k => String(k.id) === linkedKitId ? { ...k, items: normalized } : k);
+          const r = await storageSet("kits", newKits);
+          if (!r.ok) { showToast("error", "שגיאה בעדכון ערכת השיעור"); return; }
+        }
+      }
+      const all = normalizeReservationsForArchive(reservations.map(r => r.id === updated.id ? updated : r));
+      setReservations(all);
+      showToast("success", "הבקשה עודכנה");
+      setEditing(null);
+      return;
+    }
+
+    // Real reservation — update reservations_new + reservation_items
     const { error: updErr } = await supabase.from("reservations_new").update({
       student_name:  rowFields.student_name,
       email:         rowFields.email,
