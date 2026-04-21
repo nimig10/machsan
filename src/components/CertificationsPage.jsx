@@ -41,6 +41,9 @@ export function CertificationsPage({ certifications, setCertifications, showToas
   const trackClickTimeoutRef = useRef(null);
   const certToggleTimer = useRef(null);
   const pendingCertRef = useRef(null);
+  // Local student state for instant visual updates — avoids App.jsx re-render on every click
+  const [studentsLocal, setStudentsLocal] = useState(null);
+  const effectiveStudents = studentsLocal ?? students;
 
   const save = async (updatedPatch) => {
     const nextStudents = updatedPatch?.students ?? students;
@@ -130,41 +133,43 @@ export function CertificationsPage({ certifications, setCertifications, showToas
     }
   };
 
-  // Immediate optimistic update + debounced network save — no blocking UI
-  const queueCertSave = (fullUpdated) => {
-    pendingCertRef.current = fullUpdated;
-    setCertifications(fullUpdated);
+  // Update local students instantly (no App.jsx re-render), sync to parent once per debounce burst
+  const queueCertSave = (nextStudents) => {
+    pendingCertRef.current = nextStudents;
+    setStudentsLocal(nextStudents);
     clearTimeout(certToggleTimer.current);
     certToggleTimer.current = setTimeout(() => {
-      const toSave = pendingCertRef.current;
+      const finalStudents = pendingCertRef.current;
       pendingCertRef.current = null;
-      storageSet("certifications", toSave).then(r => {
+      if (!finalStudents) return;
+      const nextTS = buildTrackSettings(finalStudents, certifications?.trackSettings);
+      const fullUpdated = { ...certifications, types, students: finalStudents, trackSettings: nextTS };
+      setCertifications(fullUpdated);
+      setStudentsLocal(null);
+      storageSet("certifications", fullUpdated).then(r => {
         if (!r.ok) showToast("error", "שגיאה בשמירה");
       });
     }, 400);
   };
 
   const toggleCert = (stuId, typeId) => {
-    const base = pendingCertRef.current || certifications;
-    const nextStudents = (base.students || []).map(s => {
+    const base = pendingCertRef.current ?? effectiveStudents;
+    const nextStudents = base.map(s => {
       if (s.id !== stuId) return s;
       const current = (s.certs || {})[typeId];
       const next = current === "עבר" ? "לא עבר" : "עבר";
       return { ...s, certs: { ...s.certs, [typeId]: next } };
     });
-    const nextTS = buildTrackSettings(nextStudents, base.trackSettings ?? certifications?.trackSettings);
-    queueCertSave({ ...base, types: base.types ?? types, students: nextStudents, trackSettings: nextTS });
+    queueCertSave(nextStudents);
   };
 
   const setTrackCertStatus = (trackName, typeId, nextValue) => {
-    const base = pendingCertRef.current || certifications;
-    const baseStudents = base.students || [];
-    if (!baseStudents.some(s => (s.track || "") === trackName)) return;
-    const nextStudents = baseStudents.map(s =>
+    const base = pendingCertRef.current ?? effectiveStudents;
+    if (!base.some(s => (s.track || "") === trackName)) return;
+    const nextStudents = base.map(s =>
       (s.track || "") !== trackName ? s : { ...s, certs: { ...s.certs, [typeId]: nextValue } }
     );
-    const nextTS = buildTrackSettings(nextStudents, base.trackSettings ?? certifications?.trackSettings);
-    queueCertSave({ ...base, types: base.types ?? types, students: nextStudents, trackSettings: nextTS });
+    queueCertSave(nextStudents);
     showToast("success", `עודכנה הסמכה לכל תלמידי ${trackName || "ללא מסלול"}`);
   };
 
@@ -301,7 +306,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
     }
     if (trackName !== "הכל") openTrackLoanTypeEditor(trackName);
   };
-  const filteredStudents = students
+  const filteredStudents = effectiveStudents
     .filter(s=>
       (allTracksSelected || trackFilter.includes(s.track||"")) &&
       (!search || s.name?.includes(search) || s.email?.includes(search))
