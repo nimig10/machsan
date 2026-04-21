@@ -2,7 +2,7 @@ import { supabase } from '../supabaseClient.js';
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, getAvailable, normalizeName, storageSet, storageGet, updateReservationStatus, getAuthToken } from "../utils.js";
 import { statusBadge } from "./ui.jsx";
-import { BookOpen, Calendar, CheckCircle, Film, GraduationCap, Mic, Minus, Package, X, XCircle } from "lucide-react";
+import { Backpack, BookOpen, Calendar, CheckCircle, Film, GraduationCap, Mic, Minus, Package, X, XCircle } from "lucide-react";
 import { DeptHeadCalendarPage } from "./CalendarViews.jsx";
 
 function hasLinkedValue(value) {
@@ -30,6 +30,19 @@ function getSessionTimeKey(session = {}) {
 
 function getReservationSessionKey(reservation = {}) {
   return `${reservation?.borrow_date || ""}__${reservation?.borrow_time || ""}__${reservation?.return_time || ""}`;
+}
+
+function computeMaxKitCopies(kit, availabilityMap) {
+  const items = kit?.items || [];
+  if (!items.length) return 0;
+  let min = Infinity;
+  for (const it of items) {
+    const avail = Number(availabilityMap[it.equipment_id] ?? 0);
+    const perCopy = Number(it.quantity) || 0;
+    if (perCopy <= 0) continue;
+    min = Math.min(min, Math.floor(avail / perCopy));
+  }
+  return Number.isFinite(min) ? min : 0;
 }
 
 function getCourseLinkedKit(lesson, lessonKits = []) {
@@ -460,6 +473,28 @@ export function LecturerPortal({
   const getSelectedQuantity = (equipmentId) => (
     draftItems.find((item) => String(item.equipment_id) === String(equipmentId))?.quantity || 0
   );
+
+  const applyKitToDraft = (kit, copies = 1) => {
+    if (!kit || !Array.isArray(kit.items) || !kit.items.length) return;
+    const mult = Math.max(1, Number(copies) || 1);
+    setDraftItems((current) => {
+      const next = [...current];
+      kit.items.forEach((item) => {
+        const eqId = item.equipment_id;
+        const eqRec = equipment.find((e) => String(e.id) === String(eqId));
+        if (!eqRec) return;
+        const perCopy = Number(item.quantity) || 0;
+        const want = perCopy * mult;
+        if (want <= 0) return;
+        const avail = Number(availabilityByEquipmentId[eqId] ?? 0);
+        const bounded = Math.min(want, avail);
+        const idx = next.findIndex((x) => String(x.equipment_id) === String(eqId));
+        if (idx >= 0) next[idx] = { ...next[idx], quantity: bounded, name: eqRec.name || next[idx].name || "" };
+        else next.push({ equipment_id: eqId, quantity: bounded, name: eqRec.name || item.name || "" });
+      });
+      return next;
+    });
+  };
 
   const handleSaveLoan = async () => {
     if (!editorContext || !currentLecturer) return;
@@ -1026,6 +1061,50 @@ export function LecturerPortal({
               <label className="form-label">הערות</label>
               <textarea className="form-textarea" rows={2} value={draftDescription} onChange={(event) => setDraftDescription(event.target.value)} placeholder="הערות אופציונליות למרצה/לצוות" />
             </div>
+
+            {lessonKits.length > 0 && (
+              <div style={{ marginBottom: 14, padding: "12px 14px", border: "1px solid var(--border)", borderRadius: 14, background: "var(--surface2)" }}>
+                <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                  <Backpack size={14} strokeWidth={1.75} /> ערכות שיעור
+                  <span style={{ fontSize: 11, color: "var(--text3)", fontWeight: 400 }}>· לחצו על ערכה להוספת הציוד לרשימה</span>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {lessonKits.map((kit) => {
+                    const maxCopies = computeMaxKitCopies(kit, availabilityByEquipmentId);
+                    const disabled = maxCopies < 1;
+                    return (
+                      <button
+                        key={kit.id}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => applyKitToDraft(kit, 1)}
+                        title={disabled ? "אין מלאי מספיק לעותק שלם של הערכה" : `זמינים עד ${maxCopies} עותקים`}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: 20,
+                          border: `2px solid ${disabled ? "var(--border)" : "var(--accent)"}`,
+                          background: disabled ? "transparent" : "var(--accent-glow)",
+                          color: disabled ? "var(--text3)" : "var(--accent)",
+                          fontWeight: 700,
+                          fontSize: 12,
+                          cursor: disabled ? "not-allowed" : "pointer",
+                          opacity: disabled ? 0.5 : 1,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                      >
+                        <Backpack size={12} strokeWidth={1.75} /> {kit.name}
+                        {!disabled && maxCopies >= 2 && (
+                          <span style={{ fontSize: 10, color: "var(--text3)", fontWeight: 400 }}>· עד {maxCopies}</span>
+                        )}
+                        {disabled && <span style={{ fontSize: 10, color: "var(--red)", fontWeight: 700 }}>· אין מלאי</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div style={{ marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <div style={{ fontWeight: 800, fontSize: 14 }}>בחירת ציוד</div>

@@ -4077,24 +4077,23 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
               const linkedLessons = getLessonsLinkedToKit(kit, lessons);
               const linkedSchedule = linkedLessons.flatMap(getLessonScheduleEntries).sort(compareDateTimeParts);
               const nextSession = linkedSchedule.find(s=>s.date>=today());
-              const isLessonKit = (kit.loanTypes||[]).includes("שיעור");
               return (
-                <div key={kit.id} onClick={()=>{setEditTarget(kit);setMode("view");}} style={{background:"var(--surface)",border:`1px solid ${isLessonKit?"rgba(155,89,182,0.3)":"var(--border)"}`,borderRadius:"var(--r)",padding:"14px 18px",cursor:"pointer",transition:"border-color 0.15s"}}
-                  onMouseEnter={e=>e.currentTarget.style.borderColor=isLessonKit?"rgba(155,89,182,0.6)":"var(--accent)"}
-                  onMouseLeave={e=>e.currentTarget.style.borderColor=isLessonKit?"rgba(155,89,182,0.3)":"var(--border)"}>
+                <div key={kit.id} onClick={()=>{setEditTarget(kit);setMode("view");}} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 18px",cursor:"pointer",transition:"border-color 0.15s"}}
+                  onMouseEnter={e=>e.currentTarget.style.borderColor="var(--accent)"}
+                  onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
                     <div style={{display:"flex",alignItems:"center",gap:10}}>
-                      <span style={{display:"flex",alignItems:"center"}}>{isLessonKit?<Backpack size={26} strokeWidth={1.5} color="#9b59b6"/>:<Backpack size={26} strokeWidth={1.5}/>}</span>
+                      <span style={{display:"flex",alignItems:"center"}}><Backpack size={26} strokeWidth={1.5}/></span>
                       <div>
                         <div style={{fontWeight:800,fontSize:15}}>{kit.name}</div>
                         <div style={{fontSize:12,color:"var(--text3)",marginTop:4,display:"flex",flexWrap:"wrap",gap:4}}>
                           {(kit.loanTypes||[]).length>0
                             ? (kit.loanTypes||[]).map(lt=>(
-                                <span key={lt} style={{background:lt==="שיעור"?"rgba(155,89,182,0.12)":"var(--accent-glow)",border:`1px solid ${lt==="שיעור"?"rgba(155,89,182,0.4)":"var(--accent)"}`,borderRadius:20,padding:"2px 8px",color:lt==="שיעור"?"#9b59b6":"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}>{LOAN_ICONS[lt]||<Package size={12} strokeWidth={1.75}/>} {lt}</span>
+                                <span key={lt} style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"2px 8px",color:"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}>{LOAN_ICONS[lt]||<Package size={12} strokeWidth={1.75}/>} {lt}</span>
                               ))
                             : <span style={{display:"inline-flex",alignItems:"center",gap:3}}><Package size={12} strokeWidth={1.75}/> כל סוגי ההשאלה</span>}
                         </div>
-                        {linkedLessons.length>0&&<div style={{fontSize:11,color:"#9b59b6",marginTop:4,display:"flex",alignItems:"center",gap:3}}><BookOpen size={11} strokeWidth={1.75}/> {linkedLessons.map(l=>l.name).join(", ")}</div>}
+                        {linkedLessons.length>0&&<div style={{fontSize:11,color:"var(--text3)",marginTop:4,display:"flex",alignItems:"center",gap:3}}><BookOpen size={11} strokeWidth={1.75}/> {linkedLessons.map(l=>l.name).join(", ")}</div>}
                         {nextSession&&<div style={{fontSize:11,color:"var(--green)",marginTop:2}}>הבא: {formatDate(nextSession.date)} {nextSession.startTime}</div>}
                       </div>
                     </div>
