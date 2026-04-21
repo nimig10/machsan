@@ -850,9 +850,8 @@ export function getAvailable(eqId, borrowDate, returnDate, reservations, equipme
   let used = 0;
   for (const res of reservations) {
     if (res.id === excludeId) continue;
-    // Only count items physically out of the warehouse (פעילה / באיחור)
     const effStatus = getEffectiveStatus(res);
-    if (effStatus !== "פעילה" && effStatus !== "באיחור") continue;
+    if (!["ממתין","אישור ראש מחלקה","מאושר","פעילה","באיחור"].includes(effStatus)) continue;
     const resStart = toDateTime(res.borrow_date, res.borrow_time || "00:00");
     // Overdue items are physically out of the warehouse — block every future request regardless of return_date
     const resEnd = effStatus === "באיחור" ? FAR_FUTURE : toDateTime(res.return_date, res.return_time || "23:59");
