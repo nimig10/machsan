@@ -3784,7 +3784,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     return (
       <div className="card" style={{marginBottom:20}}>
         <div className="card-header">
-          <div className="card-title" style={{display:"flex",alignItems:"center",gap:6}}><Package size={16} strokeWidth={1.75}/> {initial?"עריכת ערכה":"ערכה חדשה"}</div>
+          <div className="card-title" style={{display:"flex",alignItems:"center",gap:6}}><Backpack size={16} strokeWidth={1.75}/> {initial?"עריכת ערכה":"ערכה חדשה"}</div>
           <button className="btn btn-secondary btn-sm" onClick={onDone} style={{display:"flex",alignItems:"center",gap:4}}><X size={14} strokeWidth={1.75} color="var(--text3)"/> ביטול</button>
         </div>
 
@@ -4067,11 +4067,11 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       {mode===null&&(
         <>
         <div style={{fontWeight:900,fontSize:14,margin:"0 0 10px",color:"var(--accent)",display:"flex",alignItems:"center",gap:8}}>
-          <Package size={14} strokeWidth={1.75}/> ערכות
+          <Backpack size={14} strokeWidth={1.75}/> ערכות
           {kits.length>0&&<span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"1px 10px",fontSize:12,fontWeight:700,color:"var(--accent)"}}>{kits.length}</span>}
         </div>
         {kits.length===0
-          ? <div className="empty-state"><div className="emoji"><Package size={48} strokeWidth={1.5}/></div><p>אין ערכות</p><p style={{fontSize:13,color:"var(--text3)"}}>ערכות מוצגות בטופס ההשאלה ובפורטל המרצה</p></div>
+          ? <div className="empty-state"><div className="emoji"><Backpack size={48} strokeWidth={1.5}/></div><p>אין ערכות</p><p style={{fontSize:13,color:"var(--text3)"}}>ערכות מוצגות בטופס ההשאלה ובפורטל המרצה</p></div>
           : <div style={{display:"flex",flexDirection:"column",gap:10}}>
             {kits.map(kit=>{
               const linkedLessons = getLessonsLinkedToKit(kit, lessons);
@@ -4084,7 +4084,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
                   onMouseLeave={e=>e.currentTarget.style.borderColor=isLessonKit?"rgba(155,89,182,0.3)":"var(--border)"}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
                     <div style={{display:"flex",alignItems:"center",gap:10}}>
-                      <span style={{display:"flex",alignItems:"center"}}>{isLessonKit?<GraduationCap size={26} strokeWidth={1.5} color="#9b59b6"/>:<Package size={26} strokeWidth={1.5}/>}</span>
+                      <span style={{display:"flex",alignItems:"center"}}>{isLessonKit?<Backpack size={26} strokeWidth={1.5} color="#9b59b6"/>:<Backpack size={26} strokeWidth={1.5}/>}</span>
                       <div>
                         <div style={{fontWeight:800,fontSize:15}}>{kit.name}</div>
                         <div style={{fontSize:12,color:"var(--text3)",marginTop:4,display:"flex",flexWrap:"wrap",gap:4}}>
