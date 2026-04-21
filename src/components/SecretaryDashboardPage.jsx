@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Calendar, ClipboardList, GraduationCap, Mic } from "lucide-react";
+import { Calendar, ClipboardList, Film, GraduationCap, Mic, Users } from "lucide-react";
 
 const NIGHT_COLOR   = "#2196f3";
 const STUDENT_COLOR = "#2ecc71";
@@ -253,10 +253,10 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
       {/* ── Stats ── */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
         {[
-          { icon:"👨‍🎓", value: students.length,    label:"סטודנטים" },
+          { icon:<Users size={26} strokeWidth={1.75} color="var(--accent)" />, value: students.length, label:"סטודנטים" },
           { icon:<GraduationCap size={26} strokeWidth={1.75} color="var(--accent)" />,   value: tracks.length,       label:"מסלולים" },
           { icon:<Mic size={26} strokeWidth={1.75} color="var(--accent)" />,  value:(studios||[]).length, label:"חדרים" },
-          { icon:"📽️",  value: todayLessons.length, label:"שיעורים היום" },
+          { icon:<Film size={26} strokeWidth={1.75} color="var(--accent)" />, value: todayLessons.length, label:"שיעורים היום" },
         ].map(s => (
           <div key={s.label} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 16px",textAlign:"center"}}>
             <div style={{fontSize:26,marginBottom:4}}>{s.icon}</div>
@@ -286,7 +286,7 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
 
         {/* Today's lessons */}
         <div className="card">
-          <div className="card-header"><div className="card-title">📽️ לוז היום</div></div>
+          <div className="card-header"><div className="card-title"><Film size={16} strokeWidth={1.75} color="var(--accent)" /> לוז היום</div></div>
           <div style={{padding:"0 16px 12px"}}>
             {todayLessons.length === 0
               ? <div style={{color:"var(--text3)",fontSize:13,padding:"12px 0"}}>אין שיעורים היום</div>
