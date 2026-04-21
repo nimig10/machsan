@@ -605,11 +605,11 @@ export function LecturerPortal({
       }
       return {
         ...lesson,
-        schedule: (lesson.schedule || []).map((session, index) => (
-          getSessionUid(session, index) === editorContext.session._lecturerUid
-            ? { ...session, kitId: nextKitId }
-            : session
-        )),
+        schedule: (lesson.schedule || []).map((session, index) => {
+          if (getSessionUid(session, index) !== editorContext.session._lecturerUid) return session;
+          const { cancelledRequest, ...rest } = session || {};
+          return { ...rest, kitId: nextKitId };
+        }),
       };
     });
 

@@ -549,6 +549,9 @@ function buildLessonReservations(lessons = [], kits = []) {
     if (lessonKit) linkedKitIds.add(String(lessonKit.id));
 
     schedule.forEach((session, index) => {
+      // Staff cancelled this session's loan request — skip without touching the lesson itself.
+      // Lecturer can re-create it from the portal (which clears the flag).
+      if (session?.cancelledRequest) return;
       // ערכה ברמת המפגש עוקפת את ערכת הקורס
       let kit = lessonKit;
       if (hasLinkedValue(session.kitId)) {
@@ -6261,7 +6264,7 @@ export default function App() {
               <div style={{display:page==="reservations"?"block":"none"}}><ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}
-                initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} siteSettings={siteSettings} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports}/></div>
+                initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} siteSettings={siteSettings} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports} lessons={lessons} setLessons={setLessons}/></div>
               <div style={{display:page==="team"?"block":"none"}}><TeamPage teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/></div>
               <div style={{display:page==="kits"?"block":"none"}}><KitsPage kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons} lecturers={lecturers}/></div>
               <div style={{display:page==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} lecturers={lecturers} setLecturers={setLecturers} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length

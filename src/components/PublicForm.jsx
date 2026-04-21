@@ -155,7 +155,8 @@ function getFutureStudioBookingHours(booking, now = new Date(), nightStartTime =
   return Math.max(0, (interval.end.getTime() - futureStart.getTime()) / 3600000);
 }
 
-function PublicMiniCalendar({ reservations, initialLoanType="הכל", previewStart="", previewEnd="", previewName="" }) {
+function PublicMiniCalendar({ reservations, lessons=[], initialLoanType="הכל", previewStart="", previewEnd="", previewName="" }) {
+  const lessonIdSet = useMemo(() => new Set((lessons||[]).map(l => String(l.id))), [lessons]);
   const [calDate, setCalDate] = useState(new Date());
   const [loanTypeF, setLoanTypeF] = useState(["פרטית","הפקה","סאונד","קולנוע יומית"].includes(initialLoanType) ? initialLoanType : "הכל");
   const yr = calDate.getFullYear();
@@ -178,8 +179,10 @@ function PublicMiniCalendar({ reservations, initialLoanType="הכל", previewSta
   ];
   const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:<Package size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"פרטית",label:"פרטית",icon:<User size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"הפקה",label:"הפקה",icon:<Film size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"סאונד",label:"סאונד",icon:<Mic size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"קולנוע יומית",label:"קולנוע יומית",icon:<Camera size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"שיעור",label:"שיעור",icon:<Film size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"צוות",label:"איש צוות",icon:<Briefcase size={12} strokeWidth={1.75} color="var(--accent)" />}];
   const activeRes = reservations.filter(r=>
-    (r.status==="מאושר"||r.status==="באיחור") && r.borrow_date && r.return_date &&
-    (loanTypeF==="הכל" || r.loan_type===loanTypeF)
+    (r.status==="מאושר"||r.status==="פעילה"||r.status==="באיחור") && r.borrow_date && r.return_date &&
+    (loanTypeF==="הכל" || r.loan_type===loanTypeF) &&
+    // Exclude reservations linked to a deleted lesson (orphaned lesson_id)
+    (!r.lesson_id || lessonIdSet.has(String(r.lesson_id)))
   );
   // For "באיחור" reservations whose return_date is in the past, extend to today so they appear on the calendar
   const activeResForCalendar = activeRes.map(r => {
@@ -1136,7 +1139,7 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
 }
 
 // ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
-export function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], siteSettings={}, categoryLoanTypes={}, refreshInventory=async()=>({}), lecturers=[], canInstall=false, onInstall=()=>{} }) {
+export function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], siteSettings={}, categoryLoanTypes={}, refreshInventory=async()=>({}), lecturers=[], lessons=[], canInstall=false, onInstall=()=>{} }) {
   const initialParams = new URLSearchParams(window.location.search);
   const initialLoanTypeParam = initialParams.get("loan_type");
   const initialStepParam = Number(initialParams.get("step"));
@@ -3261,7 +3264,7 @@ ${inventory}
             {ok2 && !isSoundLoan && <div className="highlight-box" style={{display:"flex",alignItems:"center",gap:6}}>{isCinemaLoan ? <>🎥 השאלת קולנוע יומית · {formatDate(form.borrow_date)} · {form.borrow_time}–{form.return_time}</> : <><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> השאלה ל-{loanDays} ימים · איסוף {form.borrow_time} · החזרה {form.return_time}</>}</div>}
 
             {/* Mini calendar — approved reservations */}
-            <PublicMiniCalendar key={form.loan_type || "הכל"} reservations={reservations} initialLoanType={form.loan_type || "הכל"} previewStart={form.borrow_date} previewEnd={form.return_date} previewName={form.student_name||"הבקשה שלך"}/>
+            <PublicMiniCalendar key={form.loan_type || "הכל"} reservations={reservations} lessons={lessons} initialLoanType={form.loan_type || "הכל"} previewStart={form.borrow_date} previewEnd={form.return_date} previewName={form.student_name||"הבקשה שלך"}/>
 
             <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setStep(1)}>← חזור</button><button className="btn btn-primary" disabled={!ok2} onClick={()=>setStep(3)}>המשך ← ציוד</button></div>
           </>}
