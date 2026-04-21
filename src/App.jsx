@@ -5612,16 +5612,17 @@ export default function App() {
         // Re-inject the kit-based generated versions so every periodic /
         // focus-triggered refresh doesn't silently wipe their items.
         const { reservations: generatedLessonReservations, linkedKitIds } = buildLessonReservations(lessons, kits);
-        const merged = generatedLessonReservations.length > 0
-          ? [
-              ...normalized.filter(r => {
-                if (r.lesson_auto || hasLinkedValue(r.lesson_id)) return false;
-                if (hasLinkedValue(r.lesson_kit_id) && linkedKitIds.has(String(r.lesson_kit_id))) return false;
-                return true;
-              }),
-              ...generatedLessonReservations,
-            ]
-          : normalized;
+        // Lesson_auto rows are authoritative from buildLessonReservations, never from DB.
+        // Always strip them from fetched data — even when no virtuals are generated this cycle
+        // (otherwise stale DB rows for deleted kits/lessons leak through).
+        const merged = [
+          ...normalized.filter(r => {
+            if (r.lesson_auto || hasLinkedValue(r.lesson_id)) return false;
+            if (hasLinkedValue(r.lesson_kit_id) && linkedKitIds.has(String(r.lesson_kit_id))) return false;
+            return true;
+          }),
+          ...generatedLessonReservations,
+        ];
         if (!dataEquals(reservationsRef.current, merged)) _setReservations(merged);
       }
       if (Array.isArray(bookingsR?.value) && !dataEquals(studioBookingsRef.current, bookingsR.value)) {
@@ -6081,7 +6082,7 @@ export default function App() {
         </div>
       ) : isPublicFormView && (
         <div className="public-page-shell">
-          {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes} refreshInventory={refreshPublicInventory} lecturers={lecturers} canInstall={canInstallPwa} onInstall={installPwa}/>}
+          {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes} refreshInventory={refreshPublicInventory} lecturers={lecturers} lessons={lessons} canInstall={canInstallPwa} onInstall={installPwa}/>}
         </div>
       )}
 
