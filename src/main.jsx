@@ -48,14 +48,23 @@ if (isMobile && 'serviceWorker' in navigator) {
   // Desktop: suppress browser install prompt entirely
   window.addEventListener('beforeinstallprompt', e => e.preventDefault());
 
-  // Unregister any existing SW so stale cache is cleared
+  // Unregister any existing SW so stale cache is cleared.
+  // If we find a registered SW (meaning this load was served from stale cache),
+  // unregister + purge + hard-reload once so the user gets fresh code. A
+  // sessionStorage flag prevents reload loops.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then(regs => {
-      regs.forEach(r => r.unregister());
-    });
-    caches.keys().then(keys => {
-      keys.forEach(k => caches.delete(k));
-    });
+    navigator.serviceWorker.getRegistrations().then(async (regs) => {
+      const hadSW = regs.length > 0;
+      await Promise.all(regs.map(r => r.unregister().catch(() => {})));
+      try {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k).catch(() => {})));
+      } catch {}
+      if (hadSW && !sessionStorage.getItem('sw_purged_v1')) {
+        sessionStorage.setItem('sw_purged_v1', '1');
+        window.location.reload();
+      }
+    }).catch(() => {});
   }
 }
 
