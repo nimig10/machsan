@@ -219,37 +219,50 @@ export async function storageSet(key, value) {
 
   const previousCachedValue = lsGet(key);
   lsSet(key, value); // cache immediately
-  try {
+
+  const doPost = async (token) => {
     const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 8000); // 8s timeout
-    const token = await getAuthToken().catch(() => null);
+    const timeout = setTimeout(() => ctrl.abort(), 8000);
     const postHeaders = { "Content-Type": "application/json" };
     if (token) postHeaders["Authorization"] = `Bearer ${token}`;
-    const res = await fetch("/api/store", {
-      method:  "POST",
-      headers: postHeaders,
-      body:    JSON.stringify({ key, data: value }),
-      signal:  ctrl.signal,
-    });
-    clearTimeout(timeout);
+    try {
+      const res = await fetch("/api/store", {
+        method:  "POST",
+        headers: postHeaders,
+        body:    JSON.stringify({ key, data: value }),
+        signal:  ctrl.signal,
+      });
+      clearTimeout(timeout);
+      return res;
+    } catch(e) {
+      clearTimeout(timeout);
+      throw e;
+    }
+  };
+
+  try {
+    let token = await getAuthToken().catch(() => null);
+    let res = await doPost(token);
+
+    // On 401 (stale cached token), force a fresh session refresh and retry once
+    if (res.status === 401) {
+      console.warn("storageSet got 401 — refreshing auth token and retrying");
+      invalidateAuthTokenCache();
+      try { await supabase.auth.refreshSession(); } catch {}
+      token = await getAuthToken().catch(() => null);
+      res = await doPost(token);
+    }
+
     if (!res.ok) {
       const err = await res.text();
       console.error("storageSet error", key, err);
       restoreCacheValue(key, previousCachedValue);
-      // Shrink-guard hit: the server refused because this write would have
-      // shrunk a protected list by >10%. The server already refused — data is
-      // safe. Log + cache-restore is enough; never reload or alert the user.
-      // Students in PublicForm often trigger this from background useEffects
-      // (lesson/archive normalization) whose list lags behind concurrent
-      // submits by other users; reloading them kicks them off a working form.
       if (res.status === 409 && /shrink_guard/i.test(err)) {
         console.warn(`storageSet shrink_guard refused key=${key} — keeping cache, not reloading`);
         return { ok: false, error: "shrink_guard_blocked", detail: err };
       }
       return { ok: false, error: err };
     }
-    // mirrorEquipmentIfNeeded removed (Stage 5) — equipment lives in Supabase tables
-    // mirrorReservationsIfNeeded removed (Stage 5) — reservations write directly to Supabase
     return { ok: true };
   } catch(e) {
     console.error("storageSet network error", key, e);
