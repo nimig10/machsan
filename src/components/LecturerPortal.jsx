@@ -111,7 +111,7 @@ export function LecturerPortal({
   const [eqTypeFilter, setEqTypeFilter] = useState("all");
   const [editorError, setEditorError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [activeKitId, setActiveKitId] = useState(null);
+  const [activeKitIds, setActiveKitIds] = useState(new Set());
 
   const activeLecturers = useMemo(
     () => lecturers.filter((lecturer) => lecturer?.isActive !== false),
@@ -354,7 +354,7 @@ export function LecturerPortal({
     setSelectedCats([]);
     setShowSelectedOnly(false);
     setEditorError("");
-    setActiveKitId(null);
+    setActiveKitIds(new Set());
   }, [editorContext, reservations]);
 
   const baseReservations = useMemo(() => {
@@ -450,7 +450,7 @@ export function LecturerPortal({
     setEditorState(null);
     setEditorError("");
     setEqTypeFilter("all");
-    setActiveKitId(null);
+    setActiveKitIds(new Set());
   };
 
   const setItemQuantity = (equipmentId, quantity) => {
@@ -480,13 +480,22 @@ export function LecturerPortal({
   const applyKitToDraft = (kit, copies = 1) => {
     if (!kit || !Array.isArray(kit.items) || !kit.items.length) return;
     const kitId = String(kit.id);
-    // Toggle: if this kit is already active, remove its items
-    if (activeKitId === kitId) {
-      const kitEqIds = new Set(kit.items.map((i) => String(i.equipment_id)));
-      setDraftItems((current) => current.filter((x) => !kitEqIds.has(String(x.equipment_id))));
-      setActiveKitId(null);
+    if (activeKitIds.has(kitId)) {
+      // Deselect: subtract this kit's quantities from draft; remove item if result <=0
+      const kitQtyMap = new Map(kit.items.map((i) => [String(i.equipment_id), Number(i.quantity) || 0]));
+      setDraftItems((current) =>
+        current
+          .map((x) => {
+            const eqId = String(x.equipment_id);
+            const subtract = kitQtyMap.get(eqId) || 0;
+            return subtract ? { ...x, quantity: Math.max(0, (x.quantity || 0) - subtract) } : x;
+          })
+          .filter((x) => (x.quantity || 0) > 0)
+      );
+      setActiveKitIds((prev) => { const next = new Set(prev); next.delete(kitId); return next; });
       return;
     }
+    // Select: inject kit items into draft
     const mult = Math.max(1, Number(copies) || 1);
     setDraftItems((current) => {
       const next = [...current];
@@ -500,12 +509,12 @@ export function LecturerPortal({
         const avail = Number(availabilityByEquipmentId[eqId] ?? 0);
         const bounded = Math.min(want, avail);
         const idx = next.findIndex((x) => String(x.equipment_id) === String(eqId));
-        if (idx >= 0) next[idx] = { ...next[idx], quantity: bounded, name: eqRec.name || next[idx].name || "" };
+        if (idx >= 0) { const combined = Math.min((next[idx].quantity || 0) + bounded, avail); next[idx] = { ...next[idx], quantity: combined, name: eqRec.name || next[idx].name || "" }; }
         else next.push({ equipment_id: eqId, quantity: bounded, name: eqRec.name || item.name || "" });
       });
       return next;
     });
-    setActiveKitId(kitId);
+    setActiveKitIds((prev) => new Set([...prev, kitId]));
   };
 
   const handleSaveLoan = async () => {
@@ -1084,7 +1093,7 @@ export function LecturerPortal({
                   {lessonKits.map((kit) => {
                     const maxCopies = computeMaxKitCopies(kit, availabilityByEquipmentId);
                     const disabled = maxCopies < 1;
-                    const isActive = activeKitId === String(kit.id);
+                    const isActive = activeKitIds.has(String(kit.id));
                     return (
                       <button
                         key={kit.id}
