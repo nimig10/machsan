@@ -65,8 +65,6 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
     if(!mOk1||!mOk2){showToast("error","יש להשלים את כל השדות");return;}
     if(!staffUser?.email){showToast("error","לא הצלחנו לזהות את המשתמש המחובר");return;}
     setMSaving(true);
-    let freshRes=reservations;
-    try{const fr=await (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] }))));if(Array.isArray(fr)){freshRes=fr;setReservations(fr);}}catch(e){}
     // Route through the atomic RPC (create_reservation_v2, migration 008).
     // The RPC locks equipment rows with FOR UPDATE and does a date-range
     // overlap check. If any requested item overlaps an existing active
@@ -131,7 +129,7 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
       items:           mItems,
       staff_loan:      true,
     };
-    const updated = [...freshRes, newRes];
+    const updated = [...reservations, newRes];
     setReservations(updated);
     // blob write removed (Stage 5) — DB already written via createReservation RPC
     logActivity({ user_id: staffUser.id, user_name: staffName, action: "staff_loan_create", entity: "reservation", entity_id: String(serverId), details: { borrow_date: mf.borrow_date, return_date: mf.return_date, items_count: mItems.length } });

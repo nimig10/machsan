@@ -5735,8 +5735,18 @@ export default function App() {
             } else if (key === "reservations") {
               if (Array.isArray(data)) {
                 const normalized = normalizeReservationsForArchive(data);
-                if (!dataEquals(reservationsRef.current, normalized)) {
-                  _setReservations(normalized);
+                const { reservations: genLesson, linkedKitIds } =
+                  buildLessonReservations(lessonsRef.current, kitsRef.current);
+                const merged = [
+                  ...normalized.filter(r => {
+                    if (r.lesson_auto || hasLinkedValue(r.lesson_id)) return false;
+                    if (hasLinkedValue(r.lesson_kit_id) && linkedKitIds.has(String(r.lesson_kit_id))) return false;
+                    return true;
+                  }),
+                  ...genLesson,
+                ];
+                if (!dataEquals(reservationsRef.current, merged)) {
+                  _setReservations(merged);
                 }
               }
             } else if (key === "studio_bookings") {
