@@ -15,3 +15,14 @@ export const supabase = createClient(SB_URL, SB_ANON, {
     detectSessionInUrl: true,
   },
 });
+
+// Track the latest access token via onAuthStateChange — no navigator.locks needed.
+// supabase.auth.getSession() acquires a navigator.lock which can time-out under
+// Edge tracking-prevention or when multiple calls contend (e.g. autoRefreshToken
+// fires at the same time). Reading from this variable is synchronous and safe.
+let _latestToken = null;
+export const getLatestToken = () => _latestToken;
+
+supabase.auth.onAuthStateChange((_event, session) => {
+  _latestToken = session?.access_token ?? null;
+});

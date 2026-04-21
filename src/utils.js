@@ -1,5 +1,5 @@
 // utils.js — shared constants, storage helpers, and utility functions
-import { supabase } from "./supabaseClient.js";
+import { supabase, getLatestToken } from "./supabaseClient.js";
 
 // ─── AUTH TOKEN ───────────────────────────────────────────────────────────────
 // Coalesce concurrent getSession() calls. Each call to supabase.auth.getSession()
@@ -245,43 +245,29 @@ export async function storageSet(key, value) {
     const STAFF_KEYS = new Set(["kits","equipment","reservations","lessons","lecturers","teamMembers","categories","deptHeads","siteSettings","policies","studios","certifications","students","collegeManager","managerToken"]);
     const isStaffKey = STAFF_KEYS.has(key);
 
-    // For staff keys: proactively validate token expiry BEFORE the POST.
-    // Decode the JWT exp field and if it's expired or within 60s of expiry,
-    // force a refresh first. This avoids the "fire-and-hope" pattern where
-    // we send a known-bad token and rely on 401-retry.
+    // Token retrieval — lock-free path first, async fallbacks only if needed.
+    // supabase.auth.getSession() acquires navigator.locks which can fail under
+    // Edge tracking-prevention or when autoRefreshToken holds the lock concurrently.
+    // onAuthStateChange (via getLatestToken) is synchronous and lock-free.
     let token = null;
     if (isStaffKey) {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const t = session?.access_token || null;
-        let needsRefresh = !t;
-        if (t) {
-          try {
-            const parts = t.split(".");
-            const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
-            const nowSec = Math.floor(Date.now() / 1000);
-            if (!payload.exp || payload.exp - nowSec < 60) needsRefresh = true;
-          } catch { needsRefresh = true; }
-        }
-        if (needsRefresh) {
-          console.log("[storageSet-v3] token stale/missing → refreshSession", { key });
-          invalidateAuthTokenCache();
-          try {
-            const r = await supabase.auth.refreshSession();
-            if (r?.data?.session?.access_token) {
-              token = r.data.session.access_token;
-            } else if (r?.error) {
-              console.warn("[storageSet-v3] refreshSession error:", r.error.message);
-            }
-          } catch (e) {
-            console.warn("[storageSet-v3] refreshSession threw:", e?.message);
+      // 1) In-memory token updated by onAuthStateChange — no locks, always fresh
+      token = getLatestToken();
+      // 2) Direct localStorage read — synchronous, bypasses all Supabase async machinery
+      if (!token) {
+        try {
+          const k = Object.keys(localStorage).find(
+            (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
+          );
+          if (k) {
+            const d = JSON.parse(localStorage.getItem(k) || "null");
+            token = d?.access_token ?? null;
           }
-          if (!token) token = t; // fall back to existing even if near-expiry
-        } else {
-          token = t;
-        }
-      } catch (e) {
-        console.warn("[storageSet-v3] getSession failed:", e?.message);
+        } catch {}
+      }
+      // 3) Last resort: async getSession (may contend on locks but rarely needed now)
+      if (!token) {
+        token = await getAuthToken().catch(() => null);
       }
     } else {
       token = await getAuthToken().catch(() => null);
@@ -290,20 +276,16 @@ export async function storageSet(key, value) {
     let res = await doPost(token);
 
     if (res.status === 401) {
-      console.warn("[storageSet-v3] got 401 — forcing refresh + retry", { key, hadToken: !!token });
+      // Token was rejected — force refresh and retry once
       invalidateAuthTokenCache();
       let refreshed = null;
       try {
         const r = await supabase.auth.refreshSession();
         refreshed = r?.data?.session?.access_token || null;
-        if (r?.error) console.warn("[storageSet-v3] refreshSession error:", r.error.message);
-      } catch (e) {
-        console.warn("[storageSet-v3] refreshSession threw:", e?.message);
-      }
-      console.log("[storageSet-v3] retry token present:", !!refreshed);
+      } catch {}
       res = await doPost(refreshed);
       if (res.status === 401) {
-        console.error("[storageSet-v3] retry also got 401 — session dead, user must re-login");
+        console.error("[storageSet] 401 after refresh — session expired, user must re-login");
         restoreCacheValue(key, previousCachedValue);
         return { ok: false, error: "session_expired", detail: "Please log in again" };
       }
