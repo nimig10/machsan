@@ -40,6 +40,52 @@ export function invalidateAuthTokenCache() {
   _tokenInflight = null;
 }
 
+// Get a valid access token directly from localStorage — no navigator.locks, no Supabase JS client.
+// If the stored token is expired, refresh it via the Supabase REST endpoint directly.
+async function getValidTokenDirect() {
+  try {
+    const k = Object.keys(localStorage).find(
+      (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
+    );
+    console.log("[tokenDirect] localStorage key found:", k || "NONE");
+    if (!k) return null;
+    const session = JSON.parse(localStorage.getItem(k) || "null");
+    if (!session) return null;
+    const { access_token, refresh_token } = session;
+
+    // Check if access_token is still valid (>30s remaining)
+    if (access_token) {
+      try {
+        const payload = JSON.parse(atob(access_token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+        const remaining = (payload.exp || 0) - Math.floor(Date.now() / 1000);
+        console.log("[tokenDirect] token exp remaining:", remaining, "s");
+        if (remaining > 30) return access_token;
+      } catch {}
+    }
+
+    // Token expired — refresh directly via Supabase REST (no locks)
+    if (!refresh_token) { console.log("[tokenDirect] no refresh_token"); return null; }
+    const sbUrl = import.meta.env.VITE_SUPABASE_URL;
+    const sbAnon = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    console.log("[tokenDirect] refreshing token via REST...");
+    const r = await fetch(`${sbUrl}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: sbAnon },
+      body: JSON.stringify({ refresh_token }),
+    });
+    if (!r.ok) { console.warn("[tokenDirect] refresh failed:", r.status); return null; }
+    const fresh = await r.json();
+    if (fresh?.access_token) {
+      try { localStorage.setItem(k, JSON.stringify({ ...session, ...fresh })); } catch {}
+      invalidateAuthTokenCache();
+    }
+    return fresh?.access_token ?? null;
+  } catch (e) {
+    console.warn("[tokenDirect] error:", e?.message);
+    return null;
+  }
+}
+
 // ─── ACTIVITY LOGGING ────────────────────────────────────────────────────────
 export async function logActivity({ user_id, user_name, action, entity, entity_id, details }) {
   try {
@@ -245,30 +291,15 @@ export async function storageSet(key, value) {
     const STAFF_KEYS = new Set(["kits","equipment","reservations","lessons","lecturers","teamMembers","categories","deptHeads","siteSettings","policies","studios","certifications","students","collegeManager","managerToken"]);
     const isStaffKey = STAFF_KEYS.has(key);
 
-    // Token retrieval — lock-free path first, async fallbacks only if needed.
-    // supabase.auth.getSession() acquires navigator.locks which can fail under
-    // Edge tracking-prevention or when autoRefreshToken holds the lock concurrently.
-    // onAuthStateChange (via getLatestToken) is synchronous and lock-free.
+    // Token retrieval — completely lock-free, bypasses Supabase JS client.
+    // All supabase.auth methods acquire navigator.locks which can block indefinitely
+    // under Edge tracking-prevention. We read/refresh tokens without any locks.
     let token = null;
     if (isStaffKey) {
-      // 1) In-memory token updated by onAuthStateChange — no locks, always fresh
-      token = getLatestToken();
-      // 2) Direct localStorage read — synchronous, bypasses all Supabase async machinery
-      if (!token) {
-        try {
-          const k = Object.keys(localStorage).find(
-            (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
-          );
-          if (k) {
-            const d = JSON.parse(localStorage.getItem(k) || "null");
-            token = d?.access_token ?? null;
-          }
-        } catch {}
-      }
-      // 3) Last resort: async getSession (may contend on locks but rarely needed now)
-      if (!token) {
-        token = await getAuthToken().catch(() => null);
-      }
+      token = await getValidTokenDirect();
+      if (!token) token = getLatestToken(); // onAuthStateChange in-memory fallback
+      if (!token) token = await getAuthToken().catch(() => null); // last resort
+      console.log("[storageSet-v4] key="+key+" tokenPresent="+!!token+" src="+(token ? (getLatestToken() === token ? "onAuth" : "direct/cache") : "none"));
     } else {
       token = await getAuthToken().catch(() => null);
     }
