@@ -39,6 +39,8 @@ export function CertificationsPage({ certifications, setCertifications, showToas
   const [eqSearch, setEqSearch] = useState("");
   const [eqShowSelected, setEqShowSelected] = useState(false);
   const trackClickTimeoutRef = useRef(null);
+  const certToggleTimer = useRef(null);
+  const pendingCertRef = useRef(null);
 
   const save = async (updatedPatch) => {
     const nextStudents = updatedPatch?.students ?? students;
@@ -128,20 +130,34 @@ export function CertificationsPage({ certifications, setCertifications, showToas
     }
   };
 
-  const toggleCert = async (stuId, typeId) => {
-    const updated = {
-      types,
-      students: students.map(s => {
-        if(s.id!==stuId) return s;
-        const current = (s.certs||{})[typeId];
-        const next = current==="עבר" ? "לא עבר" : "עבר";
-        return {...s, certs:{...s.certs,[typeId]:next}};
-      })
-    };
-    await save(updated);
+  const toggleCert = (stuId, typeId) => {
+    // Build from latest pending state so rapid clicks don't lose data
+    const base = pendingCertRef.current || certifications;
+    const nextStudents = (base.students || []).map(s => {
+      if (s.id !== stuId) return s;
+      const current = (s.certs || {})[typeId];
+      const next = current === "עבר" ? "לא עבר" : "עבר";
+      return { ...s, certs: { ...s.certs, [typeId]: next } };
+    });
+    const nextTS = buildTrackSettings(nextStudents, base.trackSettings ?? certifications?.trackSettings);
+    const fullUpdated = { ...base, types: base.types ?? types, students: nextStudents, trackSettings: nextTS };
+    pendingCertRef.current = fullUpdated;
+    setCertifications(fullUpdated); // immediate visual update — no saving flag
+    clearTimeout(certToggleTimer.current);
+    certToggleTimer.current = setTimeout(() => {
+      const toSave = pendingCertRef.current;
+      pendingCertRef.current = null;
+      storageSet("certifications", toSave).then(r => {
+        if (!r.ok) showToast("error", "שגיאה בשמירה");
+      });
+    }, 500);
   };
 
   const setTrackCertStatus = async (trackName, typeId, nextValue) => {
+    // Cancel any pending debounced toggle — the bulk save will include those changes
+    clearTimeout(certToggleTimer.current);
+    certToggleTimer.current = null;
+    pendingCertRef.current = null;
     const affectedStudents = students.filter((student) => (student.track || "") === trackName);
     if (!affectedStudents.length) return;
     const updated = {
