@@ -42,7 +42,7 @@ export function invalidateAuthTokenCache() {
 
 // Get a valid access token directly from localStorage — no navigator.locks, no Supabase JS client.
 // If the stored token is expired, refresh it via the Supabase REST endpoint directly.
-async function getValidTokenDirect() {
+export async function getValidTokenDirect() {
   try {
     const allKeys = Object.keys(localStorage);
     const sbKeys = allKeys.filter(k => k.startsWith("sb-") || k.includes("supabase") || k.includes("auth-token"));
