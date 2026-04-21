@@ -3,7 +3,7 @@ import { useState } from "react";
 import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, syncReservationStatusToBlob } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
-import { Calendar, CheckCircle, ClipboardList, Clock, Film, Mic, Package, X, XCircle } from "lucide-react";
+import { Activity, AlertTriangle, Briefcase, Calendar, Camera, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Mic, Package, Shield, User, X, XCircle } from "lucide-react";
 
 const HE_DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 function getDayName(dateStr) {
@@ -81,14 +81,14 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
   const DASHBOARD_CAL_STATUSES = ["ממתין","מאושר","פעילה","נדחה","באיחור","אישור ראש מחלקה"];
   const CAL_LOAN_TYPES = [
     { key:"הכל", label:"הכל", icon:<Package size={16} strokeWidth={1.75} color="var(--accent)" /> },
-    { key:"פרטית", label:"פרטית", icon:"👤" },
+    { key:"פרטית", label:"פרטית", icon:<User size={16} strokeWidth={1.75} color="var(--accent)" /> },
     { key:"הפקה", label:"הפקה", icon:<Film size={16} strokeWidth={1.75} color="var(--accent)" /> },
     { key:"סאונד", label:"סאונד", icon:<Mic size={16} strokeWidth={1.75} color="var(--accent)" /> },
-    { key:"קולנוע יומית", label:"קולנוע יומית", icon:"🎥" },
-    { key:"שיעור", label:"שיעור", icon:"📽️" },
-    { key:"צוות", label:"איש צוות", icon:"💼" },
+    { key:"קולנוע יומית", label:"קולנוע יומית", icon:<Camera size={16} strokeWidth={1.75} color="var(--accent)" /> },
+    { key:"שיעור", label:"שיעור", icon:<GraduationCap size={16} strokeWidth={1.75} color="var(--accent)" /> },
+    { key:"צוות", label:"איש צוות", icon:<Briefcase size={16} strokeWidth={1.75} color="var(--accent)" /> },
   ];
-  const LOAN_TYPE_ICON = { "פרטית":"👤","הפקה":<Film size={16} strokeWidth={1.75} color="var(--accent)" />,"סאונד":<Mic size={16} strokeWidth={1.75} color="var(--accent)" />,"שיעור":"📽️","קולנוע יומית":"🎥","צוות":"💼" };
+  const LOAN_TYPE_ICON = { "פרטית":<User size={16} strokeWidth={1.75} color="var(--accent)" />,"הפקה":<Film size={16} strokeWidth={1.75} color="var(--accent)" />,"סאונד":<Mic size={16} strokeWidth={1.75} color="var(--accent)" />,"שיעור":<GraduationCap size={16} strokeWidth={1.75} color="var(--accent)" />,"קולנוע יומית":<Camera size={16} strokeWidth={1.75} color="var(--accent)" />,"צוות":<Briefcase size={16} strokeWidth={1.75} color="var(--accent)" /> };
 
   const activeRes = reservations.filter(r =>
     r.status !== "הוחזר" && r.borrow_date && r.return_date &&
@@ -407,7 +407,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                 return (
                   <button key={s} type="button" onClick={()=>setCalStatusF(p=>active?p.filter(x=>x!==s):[...p,s])}
                     style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${active?clr:"var(--border)"}`,background:active?`color-mix(in srgb,${clr} 15%,transparent)`:"transparent",color:active?clr:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>
-                    {s==="מאושר" ? <CheckCircle size={16} strokeWidth={1.75} /> : s==="ממתין" ? <Clock size={16} strokeWidth={1.75} /> : s==="פעילה" ? "👍" : s==="באיחור" ? "⚠️" : s==="אישור ראש מחלקה" ? "🟣" : <XCircle size={16} strokeWidth={1.75} />} {s}
+                    {s==="מאושר" ? <CheckCircle size={16} strokeWidth={1.75} /> : s==="ממתין" ? <Clock size={16} strokeWidth={1.75} /> : s==="פעילה" ? <Activity size={16} strokeWidth={1.75} /> : s==="באיחור" ? <AlertTriangle size={16} strokeWidth={1.75} /> : s==="אישור ראש מחלקה" ? <Shield size={16} strokeWidth={1.75} /> : <XCircle size={16} strokeWidth={1.75} />} {s}
                   </button>
                 );
               })}
