@@ -241,16 +241,47 @@ export async function storageSet(key, value) {
   };
 
   try {
-    // Force a fresh session read for staff-only keys (kits, equipment, reservations, etc).
-    // The 30s token cache + async session hydration can hand out stale/null tokens.
+    // v3 auth flow marker — for debugging cached bundles
     const STAFF_KEYS = new Set(["kits","equipment","reservations","lessons","lecturers","teamMembers","categories","deptHeads","siteSettings","policies","studios","certifications","students","collegeManager","managerToken"]);
+    const isStaffKey = STAFF_KEYS.has(key);
+
+    // For staff keys: proactively validate token expiry BEFORE the POST.
+    // Decode the JWT exp field and if it's expired or within 60s of expiry,
+    // force a refresh first. This avoids the "fire-and-hope" pattern where
+    // we send a known-bad token and rely on 401-retry.
     let token = null;
-    if (STAFF_KEYS.has(key)) {
+    if (isStaffKey) {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        token = session?.access_token || null;
+        const t = session?.access_token || null;
+        let needsRefresh = !t;
+        if (t) {
+          try {
+            const parts = t.split(".");
+            const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+            const nowSec = Math.floor(Date.now() / 1000);
+            if (!payload.exp || payload.exp - nowSec < 60) needsRefresh = true;
+          } catch { needsRefresh = true; }
+        }
+        if (needsRefresh) {
+          console.log("[storageSet-v3] token stale/missing → refreshSession", { key });
+          invalidateAuthTokenCache();
+          try {
+            const r = await supabase.auth.refreshSession();
+            if (r?.data?.session?.access_token) {
+              token = r.data.session.access_token;
+            } else if (r?.error) {
+              console.warn("[storageSet-v3] refreshSession error:", r.error.message);
+            }
+          } catch (e) {
+            console.warn("[storageSet-v3] refreshSession threw:", e?.message);
+          }
+          if (!token) token = t; // fall back to existing even if near-expiry
+        } else {
+          token = t;
+        }
       } catch (e) {
-        console.warn("storageSet getSession failed:", e?.message);
+        console.warn("[storageSet-v3] getSession failed:", e?.message);
       }
     } else {
       token = await getAuthToken().catch(() => null);
@@ -259,26 +290,20 @@ export async function storageSet(key, value) {
     let res = await doPost(token);
 
     if (res.status === 401) {
-      console.warn("storageSet got 401 — refreshing session and retrying", { key, hadToken: !!token });
+      console.warn("[storageSet-v3] got 401 — forcing refresh + retry", { key, hadToken: !!token });
       invalidateAuthTokenCache();
       let refreshed = null;
       try {
         const r = await supabase.auth.refreshSession();
         refreshed = r?.data?.session?.access_token || null;
-        if (r?.error) console.warn("refreshSession error:", r.error.message);
+        if (r?.error) console.warn("[storageSet-v3] refreshSession error:", r.error.message);
       } catch (e) {
-        console.warn("refreshSession threw:", e?.message);
+        console.warn("[storageSet-v3] refreshSession threw:", e?.message);
       }
-      if (!refreshed) {
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          refreshed = session?.access_token || null;
-        } catch {}
-      }
-      console.log("storageSet retry token present:", !!refreshed);
+      console.log("[storageSet-v3] retry token present:", !!refreshed);
       res = await doPost(refreshed);
       if (res.status === 401) {
-        console.error("storageSet retry also got 401 — session is invalid, user must re-login");
+        console.error("[storageSet-v3] retry also got 401 — session dead, user must re-login");
         restoreCacheValue(key, previousCachedValue);
         return { ok: false, error: "session_expired", detail: "Please log in again" };
       }
