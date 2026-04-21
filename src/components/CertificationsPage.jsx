@@ -130,8 +130,21 @@ export function CertificationsPage({ certifications, setCertifications, showToas
     }
   };
 
+  // Immediate optimistic update + debounced network save — no blocking UI
+  const queueCertSave = (fullUpdated) => {
+    pendingCertRef.current = fullUpdated;
+    setCertifications(fullUpdated);
+    clearTimeout(certToggleTimer.current);
+    certToggleTimer.current = setTimeout(() => {
+      const toSave = pendingCertRef.current;
+      pendingCertRef.current = null;
+      storageSet("certifications", toSave).then(r => {
+        if (!r.ok) showToast("error", "שגיאה בשמירה");
+      });
+    }, 400);
+  };
+
   const toggleCert = (stuId, typeId) => {
-    // Build from latest pending state so rapid clicks don't lose data
     const base = pendingCertRef.current || certifications;
     const nextStudents = (base.students || []).map(s => {
       if (s.id !== stuId) return s;
@@ -140,38 +153,19 @@ export function CertificationsPage({ certifications, setCertifications, showToas
       return { ...s, certs: { ...s.certs, [typeId]: next } };
     });
     const nextTS = buildTrackSettings(nextStudents, base.trackSettings ?? certifications?.trackSettings);
-    const fullUpdated = { ...base, types: base.types ?? types, students: nextStudents, trackSettings: nextTS };
-    pendingCertRef.current = fullUpdated;
-    setCertifications(fullUpdated); // immediate visual update — no saving flag
-    clearTimeout(certToggleTimer.current);
-    certToggleTimer.current = setTimeout(() => {
-      const toSave = pendingCertRef.current;
-      pendingCertRef.current = null;
-      storageSet("certifications", toSave).then(r => {
-        if (!r.ok) showToast("error", "שגיאה בשמירה");
-      });
-    }, 500);
+    queueCertSave({ ...base, types: base.types ?? types, students: nextStudents, trackSettings: nextTS });
   };
 
-  const setTrackCertStatus = async (trackName, typeId, nextValue) => {
-    // Cancel any pending debounced toggle — the bulk save will include those changes
-    clearTimeout(certToggleTimer.current);
-    certToggleTimer.current = null;
-    pendingCertRef.current = null;
-    const affectedStudents = students.filter((student) => (student.track || "") === trackName);
-    if (!affectedStudents.length) return;
-    const updated = {
-      types,
-      students: students.map((student) => (
-        (student.track || "") !== trackName
-          ? student
-          : { ...student, certs:{ ...student.certs, [typeId]: nextValue } }
-      )),
-    };
-    if (await save(updated)) {
-      const trackLabel = trackName || "ללא מסלול";
-      showToast("success", `עודכנה הסמכה לכל תלמידי ${trackLabel}`);
-    }
+  const setTrackCertStatus = (trackName, typeId, nextValue) => {
+    const base = pendingCertRef.current || certifications;
+    const baseStudents = base.students || [];
+    if (!baseStudents.some(s => (s.track || "") === trackName)) return;
+    const nextStudents = baseStudents.map(s =>
+      (s.track || "") !== trackName ? s : { ...s, certs: { ...s.certs, [typeId]: nextValue } }
+    );
+    const nextTS = buildTrackSettings(nextStudents, base.trackSettings ?? certifications?.trackSettings);
+    queueCertSave({ ...base, types: base.types ?? types, students: nextStudents, trackSettings: nextTS });
+    showToast("success", `עודכנה הסמכה לכל תלמידי ${trackName || "ללא מסלול"}`);
   };
 
   const openTrackLoanTypeEditor = (trackName) => {
@@ -467,7 +461,6 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                                       <button
                                         type="button"
                                         onClick={()=>setTrackCertStatus(t, type.id, "עבר")}
-                                        disabled={saving}
                                         style={{padding:"4px 10px",borderRadius:20,border:`1px solid ${activeColor}`,background:`${activeColor}18`,color:activeColor,fontWeight:700,fontSize:10,cursor:"pointer",whiteSpace:"nowrap"}}
                                       >
                                         עבר/ה
@@ -475,7 +468,6 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                                       <button
                                         type="button"
                                         onClick={()=>setTrackCertStatus(t, type.id, "לא עבר")}
-                                        disabled={saving}
                                         style={{padding:"4px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontWeight:700,fontSize:10,cursor:"pointer",whiteSpace:"nowrap"}}
                                       >
                                         לא עבר/ה
@@ -505,7 +497,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                             const passedBg = isNight ? NIGHT_COLOR+"20" : "rgba(46,204,113,0.15)";
                             return (
                               <td key={t.id} style={{padding:"8px 12px",textAlign:"center",background:isNight?NIGHT_COLOR+"05":undefined}}>
-                                <button onClick={()=>toggleCert(s.id,t.id)} disabled={saving}
+                                <button onClick={()=>toggleCert(s.id,t.id)}
                                   style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${passed?passedColor:"var(--border)"}`,background:passed?passedBg:"transparent",color:passed?passedColor:"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap",minWidth:100}}>
                                   {passed?(isNight?"🌙 עבר/ה":<><CheckCircle size={16} strokeWidth={1.75} /> עבר/ה</>):"⬜ לא עבר/ה"}
                                 </button>
@@ -538,7 +530,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                           return (
                             <div key={t.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:isNight?NIGHT_COLOR+"08":undefined,borderRadius:8,padding:isNight?"6px 8px":undefined}}>
                               <span style={{fontSize:13,fontWeight:600,color:isNight?NIGHT_COLOR:undefined}}>{isNight?"🌙":certMode==="studio"?<Mic size={16} strokeWidth={1.75} />:<GraduationCap size={16} strokeWidth={1.75} />} {t.name}</span>
-                              <button onClick={()=>toggleCert(s.id,t.id)} disabled={saving}
+                              <button onClick={()=>toggleCert(s.id,t.id)}
                                 style={{padding:"5px 14px",borderRadius:20,border:`2px solid ${passed?passedColor:"var(--border)"}`,background:passed?passedBg:"transparent",color:passed?passedColor:"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",minWidth:110,textAlign:"center"}}>
                                 {passed?(isNight?"🌙 עבר/ה":<><CheckCircle size={16} strokeWidth={1.75} /> עבר/ה</>):"⬜ לא עבר/ה"}
                               </button>
