@@ -241,16 +241,47 @@ export async function storageSet(key, value) {
   };
 
   try {
-    let token = await getAuthToken().catch(() => null);
+    // Force a fresh session read for staff-only keys (kits, equipment, reservations, etc).
+    // The 30s token cache + async session hydration can hand out stale/null tokens.
+    const STAFF_KEYS = new Set(["kits","equipment","reservations","lessons","lecturers","teamMembers","categories","deptHeads","siteSettings","policies","studios","certifications","students","collegeManager","managerToken"]);
+    let token = null;
+    if (STAFF_KEYS.has(key)) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        token = session?.access_token || null;
+      } catch (e) {
+        console.warn("storageSet getSession failed:", e?.message);
+      }
+    } else {
+      token = await getAuthToken().catch(() => null);
+    }
+
     let res = await doPost(token);
 
-    // On 401 (stale cached token), force a fresh session refresh and retry once
     if (res.status === 401) {
-      console.warn("storageSet got 401 — refreshing auth token and retrying");
+      console.warn("storageSet got 401 — refreshing session and retrying", { key, hadToken: !!token });
       invalidateAuthTokenCache();
-      try { await supabase.auth.refreshSession(); } catch {}
-      token = await getAuthToken().catch(() => null);
-      res = await doPost(token);
+      let refreshed = null;
+      try {
+        const r = await supabase.auth.refreshSession();
+        refreshed = r?.data?.session?.access_token || null;
+        if (r?.error) console.warn("refreshSession error:", r.error.message);
+      } catch (e) {
+        console.warn("refreshSession threw:", e?.message);
+      }
+      if (!refreshed) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          refreshed = session?.access_token || null;
+        } catch {}
+      }
+      console.log("storageSet retry token present:", !!refreshed);
+      res = await doPost(refreshed);
+      if (res.status === 401) {
+        console.error("storageSet retry also got 401 — session is invalid, user must re-login");
+        restoreCacheValue(key, previousCachedValue);
+        return { ok: false, error: "session_expired", detail: "Please log in again" };
+      }
     }
 
     if (!res.ok) {
