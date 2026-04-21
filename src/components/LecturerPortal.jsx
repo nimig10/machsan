@@ -111,6 +111,7 @@ export function LecturerPortal({
   const [eqTypeFilter, setEqTypeFilter] = useState("all");
   const [editorError, setEditorError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [activeKitId, setActiveKitId] = useState(null);
 
   const activeLecturers = useMemo(
     () => lecturers.filter((lecturer) => lecturer?.isActive !== false),
@@ -353,6 +354,7 @@ export function LecturerPortal({
     setSelectedCats([]);
     setShowSelectedOnly(false);
     setEditorError("");
+    setActiveKitId(null);
   }, [editorContext, reservations]);
 
   const baseReservations = useMemo(() => {
@@ -448,6 +450,7 @@ export function LecturerPortal({
     setEditorState(null);
     setEditorError("");
     setEqTypeFilter("all");
+    setActiveKitId(null);
   };
 
   const setItemQuantity = (equipmentId, quantity) => {
@@ -476,6 +479,14 @@ export function LecturerPortal({
 
   const applyKitToDraft = (kit, copies = 1) => {
     if (!kit || !Array.isArray(kit.items) || !kit.items.length) return;
+    const kitId = String(kit.id);
+    // Toggle: if this kit is already active, remove its items
+    if (activeKitId === kitId) {
+      const kitEqIds = new Set(kit.items.map((i) => String(i.equipment_id)));
+      setDraftItems((current) => current.filter((x) => !kitEqIds.has(String(x.equipment_id))));
+      setActiveKitId(null);
+      return;
+    }
     const mult = Math.max(1, Number(copies) || 1);
     setDraftItems((current) => {
       const next = [...current];
@@ -494,6 +505,7 @@ export function LecturerPortal({
       });
       return next;
     });
+    setActiveKitId(kitId);
   };
 
   const handleSaveLoan = async () => {
@@ -1072,19 +1084,20 @@ export function LecturerPortal({
                   {lessonKits.map((kit) => {
                     const maxCopies = computeMaxKitCopies(kit, availabilityByEquipmentId);
                     const disabled = maxCopies < 1;
+                    const isActive = activeKitId === String(kit.id);
                     return (
                       <button
                         key={kit.id}
                         type="button"
                         disabled={disabled}
                         onClick={() => applyKitToDraft(kit, 1)}
-                        title={disabled ? "אין מלאי מספיק לעותק שלם של הערכה" : `זמינים עד ${maxCopies} עותקים`}
+                        title={isActive ? "לחץ שוב להסרת ציוד הערכה" : disabled ? "אין מלאי מספיק לעותק שלם" : `זמינים עד ${maxCopies} עותקים`}
                         style={{
                           padding: "6px 12px",
                           borderRadius: 20,
-                          border: `2px solid ${disabled ? "var(--border)" : "var(--accent)"}`,
-                          background: disabled ? "transparent" : "var(--accent-glow)",
-                          color: disabled ? "var(--text3)" : "var(--accent)",
+                          border: `2px solid ${disabled ? "var(--border)" : isActive ? "var(--green)" : "var(--accent)"}`,
+                          background: disabled ? "transparent" : isActive ? "rgba(46,204,113,0.14)" : "var(--accent-glow)",
+                          color: disabled ? "var(--text3)" : isActive ? "var(--green)" : "var(--accent)",
                           fontWeight: 700,
                           fontSize: 12,
                           cursor: disabled ? "not-allowed" : "pointer",
@@ -1092,10 +1105,12 @@ export function LecturerPortal({
                           display: "inline-flex",
                           alignItems: "center",
                           gap: 6,
+                          transition: "all 0.15s",
                         }}
                       >
                         <Backpack size={12} strokeWidth={1.75} /> {kit.name}
-                        {!disabled && maxCopies >= 2 && (
+                        {isActive && <span style={{ fontSize: 10, fontWeight: 400 }}>· לחץ להסרה</span>}
+                        {!isActive && !disabled && maxCopies >= 2 && (
                           <span style={{ fontSize: 10, color: "var(--text3)", fontWeight: 400 }}>· עד {maxCopies}</span>
                         )}
                         {disabled && <span style={{ fontSize: 10, color: "var(--red)", fontWeight: 700 }}>· אין מלאי</span>}

@@ -3669,8 +3669,18 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
 function KitsPage({ kits, setKits, equipment, categories, showToast, reservations=[], setReservations, lessons=[], lecturers=[] }) {
   const [mode, setMode] = useState(null); // null | "create" | "edit"
   const [editTarget, setEditTarget] = useState(null);
+  const [loanTypeFilter, setLoanTypeFilter] = useState([]); // empty = show all
   const LOAN_TYPES = ["פרטית","הפקה","סאונד","קולנוע יומית","שיעור","הכל"];
+  const LOAN_TYPES_FILTER = ["פרטית","הפקה","סאונד","קולנוע יומית","שיעור"];
   const LOAN_ICONS = { "פרטית":<User size={12} strokeWidth={1.75}/>, "הפקה":<Film size={12} strokeWidth={1.75}/>, "סאונד":<Mic size={12} strokeWidth={1.75}/>, "קולנוע יומית":<Camera size={12} strokeWidth={1.75}/>, "שיעור":<GraduationCap size={12} strokeWidth={1.75}/>, "הכל":<Package size={12} strokeWidth={1.75}/> };
+  const toggleLoanTypeFilter = (lt) => setLoanTypeFilter(prev => prev.includes(lt) ? prev.filter(x=>x!==lt) : [...prev, lt]);
+  const filteredKits = loanTypeFilter.length === 0 ? kits : kits.filter(k =>
+    loanTypeFilter.some(lt =>
+      lt === "כל סוגי ההשאלה"
+        ? !(k.loanTypes||[]).length
+        : (k.loanTypes||[]).includes(lt)
+    )
+  );
 
   const normalizeKitName = (name) => String(name||"").trim().toLowerCase();
   const hasDuplicateKitName = (name, excludeId=null) =>
@@ -3934,11 +3944,33 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
   return (
     <div className="page">
       {/* Header */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:12,flexWrap:"wrap"}}>
         <div style={{display:"flex",gap:8}}>
-          {mode===null&&<button className="btn btn-primary" onClick={()=>{setMode("create");setEditTarget(null);}}>➕ ערכה חדשה</button>}
+          {mode===null&&<button className="btn btn-primary" onClick={()=>{setMode("create");setEditTarget(null);}}><span style={{fontSize:16,lineHeight:1}}>+</span> ערכה חדשה</button>}
         </div>
       </div>
+      {/* Loan type filter pills */}
+      {mode===null&&(
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginBottom:14}}>
+          <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סינון:</span>
+          {LOAN_TYPES_FILTER.map(lt=>{
+            const active=loanTypeFilter.includes(lt);
+            return (
+              <button key={lt} type="button" onClick={()=>toggleLoanTypeFilter(lt)}
+                style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>
+                {LOAN_ICONS[lt]} {lt}
+              </button>
+            );
+          })}
+          {loanTypeFilter.length>0&&(
+            <button type="button" onClick={()=>setLoanTypeFilter([])}
+              style={{padding:"4px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}>
+              <X size={10} strokeWidth={1.75} color="var(--text3)"/> הצג הכל
+            </button>
+          )}
+          {loanTypeFilter.length>0&&<span style={{fontSize:12,color:"var(--text3)",marginRight:4}}>· {filteredKits.length} ערכות</span>}
+        </div>
+      )}
 
       {/* Forms */}
       {(mode==="create"||mode==="edit")&&(
@@ -4070,10 +4102,10 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
           <Backpack size={14} strokeWidth={1.75}/> ערכות
           {kits.length>0&&<span style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"1px 10px",fontSize:12,fontWeight:700,color:"var(--accent)"}}>{kits.length}</span>}
         </div>
-        {kits.length===0
-          ? <div className="empty-state"><div className="emoji"><Backpack size={48} strokeWidth={1.5}/></div><p>אין ערכות</p><p style={{fontSize:13,color:"var(--text3)"}}>ערכות מוצגות בטופס ההשאלה ובפורטל המרצה</p></div>
+        {filteredKits.length===0
+          ? <div className="empty-state"><div className="emoji"><Backpack size={48} strokeWidth={1.5}/></div><p>{kits.length===0?"אין ערכות":"אין ערכות מתאימות לסינון"}</p><p style={{fontSize:13,color:"var(--text3)"}}>ערכות מוצגות בטופס ההשאלה ובפורטל המרצה</p></div>
           : <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            {kits.map(kit=>{
+            {filteredKits.map(kit=>{
               const linkedLessons = getLessonsLinkedToKit(kit, lessons);
               const linkedSchedule = linkedLessons.flatMap(getLessonScheduleEntries).sort(compareDateTimeParts);
               const nextSession = linkedSchedule.find(s=>s.date>=today());
