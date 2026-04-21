@@ -44,36 +44,34 @@ export function invalidateAuthTokenCache() {
 // If the stored token is expired, refresh it via the Supabase REST endpoint directly.
 async function getValidTokenDirect() {
   try {
-    const k = Object.keys(localStorage).find(
-      (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
-    );
-    console.log("[tokenDirect] localStorage key found:", k || "NONE");
+    const allKeys = Object.keys(localStorage);
+    const sbKeys = allKeys.filter(k => k.startsWith("sb-") || k.includes("supabase") || k.includes("auth-token"));
+    console.warn("[tokenDirect] localStorage sb-keys:", sbKeys.length ? sbKeys : "(none, total keys: " + allKeys.length + ")");
+    const k = sbKeys.find(k => k.startsWith("sb-") && k.endsWith("-auth-token"));
     if (!k) return null;
     const session = JSON.parse(localStorage.getItem(k) || "null");
     if (!session) return null;
     const { access_token, refresh_token } = session;
 
-    // Check if access_token is still valid (>30s remaining)
     if (access_token) {
       try {
         const payload = JSON.parse(atob(access_token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
         const remaining = (payload.exp || 0) - Math.floor(Date.now() / 1000);
-        console.log("[tokenDirect] token exp remaining:", remaining, "s");
+        console.warn("[tokenDirect] token exp remaining:", remaining, "s");
         if (remaining > 30) return access_token;
       } catch {}
     }
 
-    // Token expired — refresh directly via Supabase REST (no locks)
-    if (!refresh_token) { console.log("[tokenDirect] no refresh_token"); return null; }
+    if (!refresh_token) { console.warn("[tokenDirect] no refresh_token"); return null; }
     const sbUrl = import.meta.env.VITE_SUPABASE_URL;
     const sbAnon = import.meta.env.VITE_SUPABASE_ANON_KEY;
-    console.log("[tokenDirect] refreshing token via REST...");
+    console.warn("[tokenDirect] refreshing via REST...");
     const r = await fetch(`${sbUrl}/auth/v1/token?grant_type=refresh_token`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: sbAnon },
       body: JSON.stringify({ refresh_token }),
     });
-    if (!r.ok) { console.warn("[tokenDirect] refresh failed:", r.status); return null; }
+    if (!r.ok) { console.warn("[tokenDirect] REST refresh failed:", r.status); return null; }
     const fresh = await r.json();
     if (fresh?.access_token) {
       try { localStorage.setItem(k, JSON.stringify({ ...session, ...fresh })); } catch {}
@@ -299,7 +297,7 @@ export async function storageSet(key, value) {
       token = await getValidTokenDirect();
       if (!token) token = getLatestToken(); // onAuthStateChange in-memory fallback
       if (!token) token = await getAuthToken().catch(() => null); // last resort
-      console.log("[storageSet-v4] key="+key+" tokenPresent="+!!token+" src="+(token ? (getLatestToken() === token ? "onAuth" : "direct/cache") : "none"));
+      console.warn("[storageSet-v4] key="+key+" tokenPresent="+!!token);
     } else {
       token = await getAuthToken().catch(() => null);
     }
