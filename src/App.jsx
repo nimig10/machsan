@@ -5135,9 +5135,20 @@ export default function App() {
     }
 
     if (key === "reservations" && Array.isArray(value)) {
-      const normalizedReservations = normalizeReservationsForArchive(value);
-      if (!dataEquals(reservationsRef.current, normalizedReservations)) {
-        _setReservations(normalizedReservations);
+      const normalizedDbRes = normalizeReservationsForArchive(value);
+      // Re-merge lesson virtuals so /public polling doesn't wipe them from state.
+      const { reservations: generatedLessonReservations, linkedKitIds } =
+        buildLessonReservations(lessonsRef.current, kitsRef.current);
+      const merged = [
+        ...normalizedDbRes.filter((r) => {
+          if (r.lesson_auto || hasLinkedValue(r.lesson_id)) return false;
+          if (hasLinkedValue(r.lesson_kit_id) && linkedKitIds.has(String(r.lesson_kit_id))) return false;
+          return true;
+        }),
+        ...generatedLessonReservations,
+      ];
+      if (!dataEquals(reservationsRef.current, merged)) {
+        _setReservations(merged);
       }
       return;
     }
@@ -5205,8 +5216,18 @@ export default function App() {
     }
 
     if (key === "reservations" && Array.isArray(value)) {
-      const normalizedReservations = normalizeReservationsForArchive(value);
-      if (!dataEquals(reservationsRef.current, normalizedReservations)) _setReservations(normalizedReservations);
+      const normalizedDbRes = normalizeReservationsForArchive(value);
+      const { reservations: generatedLessonReservations, linkedKitIds } =
+        buildLessonReservations(lessonsRef.current, kitsRef.current);
+      const merged = [
+        ...normalizedDbRes.filter((r) => {
+          if (r.lesson_auto || hasLinkedValue(r.lesson_id)) return false;
+          if (hasLinkedValue(r.lesson_kit_id) && linkedKitIds.has(String(r.lesson_kit_id))) return false;
+          return true;
+        }),
+        ...generatedLessonReservations,
+      ];
+      if (!dataEquals(reservationsRef.current, merged)) _setReservations(merged);
       return;
     }
 
