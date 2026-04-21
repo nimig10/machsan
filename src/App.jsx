@@ -3693,17 +3693,10 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     const prevKit = kits.find(k=>k.id===id);
     const updated = kits.filter(k=>k.id!==id);
     setKits(updated);
-    // also remove associated lesson reservations
-    let removedReservations = 0;
-    if(reservations && setReservations) {
-      const updatedRes = reservations.filter(r=>r.lesson_kit_id!==id);
-      if(updatedRes.length!==reservations.length) {
-        removedReservations = reservations.length - updatedRes.length;
-        const kitResIds = reservations.filter(r=>r.lesson_kit_id===id).map(r=>r.id);
-        if(kitResIds.length) await supabase.from("reservations_new").delete().in("id", kitResIds);
-        setReservations(updatedRes);
-      }
-    }
+    // Note: existing reservations (student loans + lesson meetings) retain their
+    // snapshotted equipment items regardless of whether the source kit still exists.
+    // Kits are a UX shortcut for equipment selection — deleting the preset must not
+    // retroactively alter already-submitted reservations.
     await storageSet("kits", updated);
     showToast("success", `ערכה "${name}" נמחקה`);
     // Audit log — without this, the 2026-04-16 silent-delete incident left no
@@ -3720,7 +3713,6 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
           name,
           loanTypes: prevKit?.loanTypes || [],
           item_count: (prevKit?.items||[]).length,
-          removed_reservations: removedReservations,
         },
       }).catch(err => console.error("kit_delete log failed:", err));
     } catch (e) { console.error("kit_delete log setup failed:", e); }
