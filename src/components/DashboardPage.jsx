@@ -3,7 +3,7 @@ import { useState } from "react";
 import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, syncReservationStatusToBlob } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
-import { Activity, AlertTriangle, Briefcase, Calendar, Camera, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Mic, Package, Shield, User, X, XCircle } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUpFromLine, Briefcase, Calendar, Camera, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Layers, Mic, Package, RefreshCw, Shield, User, Wrench, X, XCircle } from "lucide-react";
 
 const HE_DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 function getDayName(dateStr) {
@@ -137,8 +137,8 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginBottom:4}}>
         {[
           { l:"פריטי ציוד",  v:totalItems,   i:<Package size={16} strokeWidth={1.75} color="var(--accent)" />, c:"var(--accent)" },
-          { l:"סך יחידות",  v:totalUnits,   i:"🗃️", c:"var(--blue)"   },
-          { l:"יחידות בדיקה",v:totalDamaged, i:"🔧", c:"var(--red)"    },
+          { l:"סך יחידות",  v:totalUnits,   i:<Layers size={16} strokeWidth={1.75} color="var(--blue)" />, c:"var(--blue)"   },
+          { l:"יחידות בדיקה",v:totalDamaged, i:<Wrench size={16} strokeWidth={1.75} color="var(--red)" />, c:"var(--red)"    },
         ].map(s=>(
           <div key={s.l} className="stat-card" style={{"--ac":s.c}}>
             <div className="stat-label">{s.l}</div>
@@ -153,7 +153,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
           onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(230,126,34,0.35)";}}>
           <div className="stat-label">סוגי פריטים בהשאלה <span style={{fontSize:10,color:"var(--text3)"}}>← לחץ לפרטים</span></div>
           <div className="stat-value" style={{color:"#e67e22"}}>{onLoanItems}</div>
-          <div className="stat-icon">📤</div>
+          <div className="stat-icon"><ArrowUpFromLine size={16} strokeWidth={1.75} color="#e67e22" /></div>
         </div>
         <div className="stat-card" style={{"--ac":"var(--orange,#e67e22)",cursor:"pointer",border:"1px solid rgba(230,126,34,0.35)"}}
           onClick={()=>setOnLoanModal("units")}
@@ -161,7 +161,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
           onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(230,126,34,0.35)";}}>
           <div className="stat-label">יחידות בהשאלה <span style={{fontSize:10,color:"var(--text3)"}}>← לחץ לפרטים</span></div>
           <div className="stat-value" style={{color:"#e67e22"}}>{onLoanUnits}</div>
-          <div className="stat-icon">📤</div>
+          <div className="stat-icon"><ArrowUpFromLine size={16} strokeWidth={1.75} color="#e67e22" /></div>
         </div>
       </div>
 
@@ -171,8 +171,8 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
         {[
           { l:"השאלות פעילות", v:allApproved.length,  i:<CheckCircle size={16} strokeWidth={1.75} color="var(--green)" />, c:"var(--green)"  },
           { l:"ממתין לאישור",  v:pending,              i:<Clock size={16} strokeWidth={1.75} color="var(--yellow)" />, c:"var(--yellow)" },
-          { l:"אישור ראש מחלקה",v:deptHeadPending,    i:"🟣", c:"var(--purple)" },
-          { l:"באיחור",        v:reservations.filter(r=>r.status==="באיחור").length, i:"⚠️", c:"#e67e22" },
+          { l:"אישור ראש מחלקה",v:deptHeadPending,    i:<Shield size={16} strokeWidth={1.75} color="var(--purple)" />, c:"var(--purple)" },
+          { l:"באיחור",        v:reservations.filter(r=>r.status==="באיחור").length, i:<AlertTriangle size={16} strokeWidth={1.75} color="#e67e22" />, c:"#e67e22" },
           { l:"בקשות דחויות",  v:rejected,             i:<XCircle size={16} strokeWidth={1.75} color="var(--red)" />, c:"var(--red)"    },
         ].map(s=>(
           <div key={s.l} className="stat-card" style={{"--ac":s.c}}>
@@ -188,7 +188,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginBottom:24}}>
         {[
           { l:"השאלות פעילות היום", v:todayLoans, i:<ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" />, c:"var(--purple)" },
-          { l:"החזרות היום",        v:rtToday,    i:"🔄", c:"var(--blue)"   },
+          { l:"החזרות היום",        v:rtToday,    i:<RefreshCw size={16} strokeWidth={1.75} color="var(--blue)" />, c:"var(--blue)"   },
         ].map(s=>(
           <div key={s.l} className="stat-card" style={{"--ac":s.c}}>
             <div className="stat-label">{s.l}</div>
