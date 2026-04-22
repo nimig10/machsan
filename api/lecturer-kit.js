@@ -86,6 +86,11 @@ export default async function handler(req, res) {
     for (const session of allSessions) {
       if (!session.date) continue;
       const reservationId = String(Date.now()) + "_" + Math.random().toString(36).slice(2, 7);
+      // Lesson loans are pre-scheduled by the school calendar — they never sit in
+      // a manual "ממתין" state. Status auto-flows: מאושר while current, הוחזר once
+      // the session's return time has passed (see normalizeReservationsForArchive).
+      const returnTs = new Date(`${session.date}T${session.endTime || "23:59"}:00`).getTime();
+      const isPast = Number.isFinite(returnTs) && Date.now() >= returnTs;
       const reservation = {
         id: reservationId,
         loan_type: "שיעור",
@@ -99,10 +104,11 @@ export default async function handler(req, res) {
         borrow_time: session.startTime || "00:00",
         return_date: session.date,
         return_time: session.endTime || "23:59",
-        status: "ממתין",
+        status: isPast ? "הוחזר" : "מאושר",
+        returned_at: isPast ? new Date(returnTs).toISOString() : null,
         lesson_id: String(lessonId),
         lesson_auto: false,
-        overdue_notified: false,
+        overdue_notified: true,
       };
 
       const r = await createReservation(reservation, items);

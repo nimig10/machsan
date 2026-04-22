@@ -815,9 +815,15 @@ export function normalizeReservationsForArchive(reservations, now = new Date()) 
   const nowMs = now.getTime();
   return (reservations || []).map((reservation) => {
     if (!reservation) return reservation;
+    let nextStatus = normalizeReservationStatus(reservation.status);
+    // Lesson loans (השאלת שיעור) never sit in "ממתין" — they are pre-scheduled
+    // by the school calendar and auto-flow through מאושר → הוחזר based on time.
+    if (reservation.loan_type === "שיעור" && nextStatus === "ממתין") {
+      nextStatus = "מאושר";
+    }
     const normalizedReservation = {
       ...reservation,
-      status: normalizeReservationStatus(reservation.status),
+      status: nextStatus,
     };
     if (normalizedReservation.status === "הוחזר") {
       return normalizedReservation.returned_at ? normalizedReservation : markReservationReturned(normalizedReservation, now);
