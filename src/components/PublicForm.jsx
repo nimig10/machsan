@@ -489,7 +489,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
       {/* ── Kit selector ── */}
       {relevantKits.length>0 && (
         <div style={{marginBottom:20,padding:"14px 16px",background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
-          <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",marginBottom:10,letterSpacing:0.5}}>🎒 ערכות מוכנות לסוג השאלה זה</div>
+          <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",marginBottom:10,letterSpacing:0.5,display:"flex",alignItems:"center",gap:6}}><Backpack size={14} strokeWidth={1.75} /> ערכות מוכנות לסוג השאלה זה</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:activeKit?10:0}}>
             {/* "All equipment" pill */}
             <button type="button"
