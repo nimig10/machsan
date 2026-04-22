@@ -5069,7 +5069,11 @@ export default function App() {
       invalidateAuthTokenCache();
       validate(session);
     });
-    return () => { cancelled = true; subscription?.unsubscribe?.(); };
+    // Refresh the session every 4 minutes to prevent JWT expiry from kicking staff out.
+    const refreshInterval = setInterval(async () => {
+      try { await supabase.auth.refreshSession(); } catch { /* silent */ }
+    }, 4 * 60 * 1000);
+    return () => { cancelled = true; subscription?.unsubscribe?.(); clearInterval(refreshInterval); };
   }, [isAdmin]);
   const [staffView, setStaffView] = useState(() => sessionStorage.getItem("staff_view") || "hub"); // hub | warehouse | administration | staff-management
   const authed = !!staffUser;
