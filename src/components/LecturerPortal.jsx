@@ -1153,7 +1153,7 @@ export function LecturerPortal({
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12, alignItems: "center" }}>
               <button
                 type="button"
-                onClick={() => setShowSelectedOnly((current) => !current)}
+                onClick={() => { if (!showSelectedOnly) setSelectedCats([]); setShowSelectedOnly((current) => !current); }}
                 style={{ padding: "5px 12px", borderRadius: 20, border: `2px solid ${showSelectedOnly ? "var(--green)" : selectedItems.length > 0 ? "var(--accent)" : "var(--border)"}`, background: showSelectedOnly ? "rgba(46,204,113,0.12)" : selectedItems.length > 0 ? "var(--accent-glow)" : "transparent", color: showSelectedOnly ? "var(--green)" : selectedItems.length > 0 ? "var(--accent)" : "var(--text3)", fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", boxShadow: selectedItems.length > 0 && !showSelectedOnly ? "0 0 0 3px rgba(255,193,7,0.15)" : "none", transition: "all 0.2s" }}
               >
                 {showSelectedOnly ? <><CheckCircle size={12} strokeWidth={1.75} /> הצג הכל</> : <><CheckCircle size={12} strokeWidth={1.75} /> הצג נבחרים{selectedItems.length > 0 ? ` (${selectedItems.length})` : ""}</>}
