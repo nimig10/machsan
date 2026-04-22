@@ -442,6 +442,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
   )];
   const baseCategories = [...knownOrderedCategories, ...orphanedCategories];
   const filteredCategories = selectedCats.length===0 ? baseCategories : baseCategories.filter(c=>selectedCats.includes(c));
+  const selectedItemCount = visibleAvailEq.filter(e=>getItem(e.id).quantity>0).length;
 
   return (
     <>
@@ -481,8 +482,8 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
       {/* ── Category filter + selected toggle ── */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12,alignItems:"center"}}>
         <button type="button" onClick={()=>setShowSelectedOnly(p=>!p)}
-          style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${showSelectedOnly?"var(--green)":"var(--border)"}`,background:showSelectedOnly?"rgba(46,204,113,0.12)":"transparent",color:showSelectedOnly?"var(--green)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>
-          {showSelectedOnly?<><CheckCircle size={16} strokeWidth={1.75} /> נבחרו</>:"⬜"} {showSelectedOnly?"הצג הכל":"הצג נבחרים בלבד"}
+          style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${showSelectedOnly?"var(--green)":selectedItemCount>0?"var(--accent)":"var(--border)"}`,background:showSelectedOnly?"rgba(46,204,113,0.12)":selectedItemCount>0?"var(--accent-glow)":"transparent",color:showSelectedOnly?"var(--green)":selectedItemCount>0?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap",boxShadow:selectedItemCount>0&&!showSelectedOnly?"0 0 0 3px rgba(255,193,7,0.15)":"none",transition:"all 0.2s"}}>
+          {showSelectedOnly?<><CheckCircle size={12} strokeWidth={1.75}/> הצג הכל</>:<><CheckCircle size={12} strokeWidth={1.75}/> הצג נבחרים{selectedItemCount>0?` (${selectedItemCount})`:""}</>}
         </button>
         <div style={{width:1,height:20,background:"var(--border)",flexShrink:0}}/>
         {baseCategories.map(cat=>{

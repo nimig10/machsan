@@ -1154,9 +1154,9 @@ export function LecturerPortal({
               <button
                 type="button"
                 onClick={() => setShowSelectedOnly((current) => !current)}
-                style={{ padding: "5px 12px", borderRadius: 20, border: `2px solid ${showSelectedOnly ? "var(--green)" : "var(--border)"}`, background: showSelectedOnly ? "rgba(46,204,113,0.12)" : "transparent", color: showSelectedOnly ? "var(--green)" : "var(--text3)", fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}
+                style={{ padding: "5px 12px", borderRadius: 20, border: `2px solid ${showSelectedOnly ? "var(--green)" : selectedItems.length > 0 ? "var(--accent)" : "var(--border)"}`, background: showSelectedOnly ? "rgba(46,204,113,0.12)" : selectedItems.length > 0 ? "var(--accent-glow)" : "transparent", color: showSelectedOnly ? "var(--green)" : selectedItems.length > 0 ? "var(--accent)" : "var(--text3)", fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", boxShadow: selectedItems.length > 0 && !showSelectedOnly ? "0 0 0 3px rgba(255,193,7,0.15)" : "none", transition: "all 0.2s" }}
               >
-                {showSelectedOnly ? <><CheckCircle size={16} strokeWidth={1.75} /> נבחרו</> : "⬜"} {showSelectedOnly ? "הצג הכל" : "הצג נבחרים בלבד"}
+                {showSelectedOnly ? <><CheckCircle size={12} strokeWidth={1.75} /> הצג הכל</> : <><CheckCircle size={12} strokeWidth={1.75} /> הצג נבחרים{selectedItems.length > 0 ? ` (${selectedItems.length})` : ""}</>}
               </button>
               <div style={{ width: 1, height: 20, background: "var(--border)", flexShrink: 0 }} />
               {baseCategories.map((category) => {
