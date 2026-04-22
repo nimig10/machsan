@@ -7,6 +7,8 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.4"
   }
@@ -264,8 +266,10 @@ export type Database = {
           loan_type: string | null
           overdue_email_sent: boolean | null
           overdue_notified: boolean | null
+          overdue_student_note: string | null
           phone: string | null
           project_name: string | null
+          reminder_sent: boolean | null
           return_date: string | null
           return_time: string | null
           returned_at: string | null
@@ -295,8 +299,10 @@ export type Database = {
           loan_type?: string | null
           overdue_email_sent?: boolean | null
           overdue_notified?: boolean | null
+          overdue_student_note?: string | null
           phone?: string | null
           project_name?: string | null
+          reminder_sent?: boolean | null
           return_date?: string | null
           return_time?: string | null
           returned_at?: string | null
@@ -326,8 +332,10 @@ export type Database = {
           loan_type?: string | null
           overdue_email_sent?: boolean | null
           overdue_notified?: boolean | null
+          overdue_student_note?: string | null
           phone?: string | null
           project_name?: string | null
+          reminder_sent?: boolean | null
           return_date?: string | null
           return_time?: string | null
           returned_at?: string | null
@@ -660,6 +668,7 @@ export type Database = {
 }
 
 type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
 type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
