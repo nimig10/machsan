@@ -582,6 +582,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
                       זמין: <span style={{color:eq.avail===0?"var(--red)":eq.avail<=2?"var(--yellow)":"var(--green)",fontWeight:700}}>{eq.avail}</span>
                       {activeKit&&kitEntry&&<span style={{color:"var(--accent)",marginRight:6,fontWeight:700}}>· מקס׳ בערכה: {kitMax}</span>}
                     </div>
+                    {itm.quantity>0&&eq.notes&&<div style={{marginTop:4,fontSize:11,color:"var(--yellow)",fontWeight:600,display:"flex",alignItems:"flex-start",gap:4,lineHeight:1.4}}><Info size={11} strokeWidth={2} style={{flexShrink:0,marginTop:1}}/>{eq.notes}</div>}
                   </div>
                   {!canBorrowEq(eq)
                     ? <div style={{fontSize:11,color:"var(--yellow)",fontWeight:700,textAlign:"center",maxWidth:120,lineHeight:1.3,padding:"4px 6px",background:"rgba(241,196,15,0.12)",borderRadius:6,border:"1px solid rgba(241,196,15,0.3)"}}>

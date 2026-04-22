@@ -1282,7 +1282,13 @@ function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, savi
       </div>
       <div className="grid-2">
         <div className="form-group"><label className="form-label">מצב</label><select className="form-select" value={f.status} onChange={e=>s("status",e.target.value)}>{STATUSES.map(st=><option key={st}>{st}</option>)}</select></div>
-        <div className="form-group"><label className="form-label">הערות</label><input className="form-input" value={f.notes} onChange={e=>s("notes",e.target.value)}/></div>
+        <div className="form-group">
+          <label className="form-label" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span>הערה לסטודנט</span>
+            <span style={{fontWeight:400,fontSize:11,color:(f.notes||"").length>130?"var(--red)":"var(--text3)"}}>{(f.notes||"").length}/150</span>
+          </label>
+          <input className="form-input" value={f.notes} maxLength={150} onChange={e=>s("notes",e.target.value)} placeholder="הערה שתוצג לסטודנט בעת בחירת פריט זה"/>
+        </div>
       </div>
       <div className="form-group">
         <label className="form-label" style={{display:"flex",alignItems:"center",gap:4}}><GraduationCap size={14} strokeWidth={1.75}/> הסמכה נדרשת</label>

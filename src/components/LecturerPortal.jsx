@@ -2,7 +2,7 @@ import { supabase } from '../supabaseClient.js';
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, getAvailable, normalizeName, storageSet, storageGet, updateReservationStatus, getAuthToken } from "../utils.js";
 import { statusBadge } from "./ui.jsx";
-import { Backpack, BookOpen, Calendar, CheckCircle, Film, GraduationCap, Mic, Minus, Package, X, XCircle } from "lucide-react";
+import { Backpack, BookOpen, Calendar, CheckCircle, Film, GraduationCap, Info, Mic, Minus, Package, X, XCircle } from "lucide-react";
 import { DeptHeadCalendarPage } from "./CalendarViews.jsx";
 
 function hasLinkedValue(value) {
@@ -1213,6 +1213,11 @@ export function LecturerPortal({
                           <div style={{ fontSize: 12, color: overLimit ? "#ef4444" : "var(--text3)", marginTop: 4 }}>
                             זמין: <span style={{ color: availableQuantity === 0 ? "var(--red)" : availableQuantity <= 2 ? "var(--yellow)" : "var(--green)", fontWeight: 700 }}>{availableQuantity}</span>
                           </div>
+                          {selectedQuantity > 0 && item.notes && (
+                            <div style={{ fontSize: 11, color: "var(--yellow)", fontWeight: 600, display: "flex", alignItems: "flex-start", gap: 4, marginTop: 4, lineHeight: 1.4 }}>
+                              <Info size={11} strokeWidth={2} style={{ flexShrink: 0, marginTop: 1 }} />{item.notes}
+                            </div>
+                          )}
                           {overLimit && (
                             <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 700, marginTop: 4 }}>
                               הכמות שנבחרה גבוהה מהמלאי הזמין למפגש הזה.
