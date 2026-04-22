@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { AlertTriangle, AudioLines, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, Clock, ClipboardList, Download, FileText, Film, GraduationCap, HelpCircle, Info, Link, Lightbulb, LogOut, Mail, Mic, Minus, Package, Pencil, Phone, Plus, Save, Search, Settings, Shield, ShoppingCart, SlidersHorizontal, Trash2, Triangle, User, Video, Wrench, X, XCircle } from "lucide-react";
-import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB, getValidTokenDirect } from "./utils.js";
+import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB, equipmentWriteInFlight, getValidTokenDirect } from "./utils.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
 import { CalendarGrid } from "./components/CalendarGrid.jsx";
@@ -5626,13 +5626,23 @@ export default function App() {
     const ctrl = new AbortController();
     refreshAbortRef.current = ctrl;
     try {
-      const [resR, bookingsR, lecturersR, certsR] = await Promise.all([
+      const [resR, bookingsR, lecturersR, certsR, eqR] = await Promise.all([
         (supabase.from("reservations_new").select("*, reservation_items(*)").abortSignal(ctrl.signal).then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
         storageGet("studio_bookings", ctrl.signal),
         storageGet("lecturers", ctrl.signal),
         storageGet("certifications", ctrl.signal),
+        (supabase.from("equipment").select("*").abortSignal(ctrl.signal).then(res => ({ value: res.data || [], source: "supabase" }))),
       ]);
       if (ctrl.signal.aborted) return false;
+      // Refresh equipment state from DB — protects against stale local state
+      // (deleted items reappearing, category changes not reflecting, etc).
+      // Skip while a write is in flight to avoid clobbering an in-progress edit.
+      if (Array.isArray(eqR?.value) && !equipmentWriteInFlight()) {
+        const normalizedEq = normalizeEquipmentTagFlags(eqR.value, categoryTypesRef.current || {}).map(ensureUnits);
+        if (!dataEquals(equipmentRef.current, normalizedEq)) {
+          _setEquipment(normalizedEq);
+        }
+      }
       if (Array.isArray(resR?.value)) {
         const normalized = normalizeReservationsForArchive(resR.value);
         // Lesson reservations are generated client-side from kit items.
@@ -5764,6 +5774,27 @@ export default function App() {
             }
           } catch (err) {
             console.warn("store realtime payload handler failed", err);
+          }
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "equipment" },
+        async () => {
+          // Any equipment-table write — refetch the full normalized array and
+          // diff against local state. Skip while a local write is in flight
+          // (our own write would otherwise race its own echo and clobber
+          // the fresh local state with the pre-RPC DB snapshot).
+          if (equipmentWriteInFlight()) return;
+          try {
+            const { data: rows } = await supabase.from("equipment").select("*");
+            if (!Array.isArray(rows)) return;
+            const normalized = normalizeEquipmentTagFlags(rows, categoryTypesRef.current || {}).map(ensureUnits);
+            if (!dataEquals(equipmentRef.current, normalized)) {
+              _setEquipment(normalized);
+            }
+          } catch (err) {
+            console.warn("equipment realtime refetch failed", err);
           }
         },
       )

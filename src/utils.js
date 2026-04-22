@@ -984,9 +984,15 @@ export function getConsecutiveBookingWarnings(targetReservation, reservations, e
 
 // ─── EQUIPMENT DB WRITE (Stage 5) ────────────────────────────────────────────
 // Direct Supabase write via /api/sync-equipment — replaces storageSet("equipment")
+// Exposes an in-flight counter so equipment refresh / realtime listeners can
+// skip updates while a write is pending (prevents overwriting local state with
+// DB state that hasn't yet caught up to the in-flight write).
+let _equipmentWriteInFlight = 0;
+export function equipmentWriteInFlight() { return _equipmentWriteInFlight > 0; }
 export async function writeEquipmentToDB(equipment) {
   const token = await getAuthToken();
   if (!token) return { ok: false, error: "not_authenticated" };
+  _equipmentWriteInFlight++;
   try {
     const r = await fetch("/api/sync-equipment", {
       method: "POST",
@@ -1002,6 +1008,8 @@ export async function writeEquipmentToDB(equipment) {
   } catch (e) {
     console.error("writeEquipmentToDB network error:", e);
     return { ok: false, error: e.message };
+  } finally {
+    _equipmentWriteInFlight--;
   }
 }
 
