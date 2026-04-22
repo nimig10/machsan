@@ -1287,7 +1287,7 @@ function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, savi
             <span>הערה לסטודנט</span>
             <span style={{fontWeight:400,fontSize:11,color:(f.notes||"").length>130?"var(--red)":"var(--text3)"}}>{(f.notes||"").length}/150</span>
           </label>
-          <input className="form-input" value={f.notes} maxLength={150} onChange={e=>s("notes",e.target.value)} placeholder="הערה שתוצג לסטודנט בעת בחירת פריט זה"/>
+          <textarea className="form-input" value={f.notes} maxLength={150} rows={3} onChange={e=>s("notes",e.target.value)} placeholder="הערה שתוצג לסטודנט בעת בחירת פריט זה" style={{resize:"vertical",minHeight:72,fontFamily:"inherit",lineHeight:1.5}}/>
         </div>
       </div>
       <div className="form-group">
