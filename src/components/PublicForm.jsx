@@ -3006,23 +3006,19 @@ ${inventory}
             <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>שלום, {loggedInStudent.name}</div>
           </div>
           {/* ── View toggle: equipment vs studios ── */}
-          <div style={{display:"flex",gap:4,marginTop:16,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4}}>
-            <button type="button" onClick={()=>setPublicView("equipment")}
-              style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:publicView==="equipment"?"var(--accent)":"transparent",color:publicView==="equipment"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-              <Package size={16} strokeWidth={1.75} /> השאלת ציוד
-            </button>
-            <button type="button" onClick={()=>{setPublicView("studios");loadStudiosData();}}
-              style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:publicView==="studios"?"var(--accent)":"transparent",color:publicView==="studios"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-              <Mic size={16} strokeWidth={1.75} /> קביעת חדרים
-            </button>
-            <button type="button" onClick={()=>{setPublicView("daily");setDailyDayOffset(0);loadDailySchedule();}}
-              style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:publicView==="daily"?"var(--accent)":"transparent",color:publicView==="daily"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-              <Calendar size={16} strokeWidth={1.75} /> לוז יומי
-            </button>
-            <button type="button" onClick={()=>{setPublicView("my-bookings");loadStudiosData();loadReservationsData();}}
-              style={{flex:1,padding:"10px 8px",borderRadius:6,border:"none",background:publicView==="my-bookings"?"var(--accent)":"transparent",color:publicView==="my-bookings"?"#000":"var(--text2)",fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-              <ClipboardList size={16} strokeWidth={1.75} /> ההזמנות שלי
-            </button>
+          <div style={{display:"flex",gap:3,marginTop:16,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4}}>
+            {[
+              {view:"equipment", icon:<Package size={18} strokeWidth={1.75}/>, label:"השאלת\nציוד", onClick:()=>setPublicView("equipment")},
+              {view:"studios", icon:<Mic size={18} strokeWidth={1.75}/>, label:"קביעת\nחדרים", onClick:()=>{setPublicView("studios");loadStudiosData();}},
+              {view:"daily", icon:<Calendar size={18} strokeWidth={1.75}/>, label:"לוז\nיומי", onClick:()=>{setPublicView("daily");setDailyDayOffset(0);loadDailySchedule();}},
+              {view:"my-bookings", icon:<ClipboardList size={18} strokeWidth={1.75}/>, label:"ההזמנות\nשלי", onClick:()=>{setPublicView("my-bookings");loadStudiosData();loadReservationsData();}},
+            ].map(({view,icon,label,onClick})=>(
+              <button key={view} type="button" onClick={onClick}
+                style={{flex:1,minWidth:0,padding:"8px 2px",borderRadius:6,border:"none",background:publicView===view?"var(--accent)":"transparent",color:publicView===view?"#000":"var(--text2)",fontWeight:800,fontSize:"clamp(10px,2.8vw,13px)",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,lineHeight:1.25,whiteSpace:"pre-line",textAlign:"center"}}>
+                {icon}
+                <span>{label}</span>
+              </button>
+            ))}
           </div>
           {publicView==="equipment" && <>
           {/* Clickable tab navigation — always free to navigate, validation only on submit */}
