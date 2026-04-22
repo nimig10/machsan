@@ -1603,9 +1603,10 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   };
 
   const deleteEmptyCategoryFromFilters = async (categoryName) => {
-    const hasItems = equipment.some((item) => item.category === categoryName);
+    const { data: dbItems } = await supabase.from("equipment").select("id").eq("category", categoryName);
+    const hasItems = (dbItems && dbItems.length > 0) || equipment.some((item) => item.category === categoryName);
     if (hasItems) {
-      showToast("error", "לא ניתן למחוק — יש ציוד ברובריקה זו");
+      showToast("error", "לא ניתן למחוק — יש ציוד ברובריקה זו. העבר את הפריטים קודם.");
       return;
     }
     const updatedCats = categories.filter((category) => category !== categoryName);
@@ -1638,7 +1639,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   // See the EqForm function before EquipmentPage for the actual component.
 
   const damagedCount = equipment.reduce((n,eq) => n + (eq.units||[]).filter(u=>u.status!=="תקין").length, 0);
-  const visibleCategories = [...new Set([...(categories || []), ...existingCategories])];
+  const visibleCategories = [...(categories || [])];
   const filteredCategoryOptions = (typeFilter === "הכל"
     ? visibleCategories
     : visibleCategories.filter(c => getCatType(c) === typeFilter)
@@ -1954,8 +1955,10 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
             showToast("success", `קטגוריה עודכנה`);
             { const _c = JSON.parse(sessionStorage.getItem("staff_user")||"{}"); logActivity({ user_id: _c.id, user_name: _c.full_name, action: "category_rename", entity: "categories", entity_id: action.newName, details: { old_name: action.oldName, new_name: action.newName, type: action.type } }); }
           } else if(action.action==="delete") {
-            const hasItems = equipment.some(e => e.category===action.name);
-            if(hasItems) { showToast("error", "לא ניתן למחוק — יש ציוד בקטגוריה זו"); return; }
+            // Verify against DB (not just local state) that no items use this category
+            const { data: dbItems } = await supabase.from("equipment").select("id").eq("category", action.name);
+            const hasItems = (dbItems && dbItems.length > 0) || equipment.some(e => e.category===action.name);
+            if(hasItems) { showToast("error", "לא ניתן למחוק — יש ציוד בקטגוריה זו. העבר את הפריטים קודם."); return; }
             const updatedCats = categories.filter(c => c!==action.name);
             const updatedTypes = {...categoryTypes};
             delete updatedTypes[action.name];
@@ -5626,12 +5629,14 @@ export default function App() {
     const ctrl = new AbortController();
     refreshAbortRef.current = ctrl;
     try {
-      const [resR, bookingsR, lecturersR, certsR, eqR] = await Promise.all([
+      const [resR, bookingsR, lecturersR, certsR, eqR, catsR, catTypesR] = await Promise.all([
         (supabase.from("reservations_new").select("*, reservation_items(*)").abortSignal(ctrl.signal).then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
         storageGet("studio_bookings", ctrl.signal),
         storageGet("lecturers", ctrl.signal),
         storageGet("certifications", ctrl.signal),
         (supabase.from("equipment").select("*").abortSignal(ctrl.signal).then(res => ({ value: res.data || [], source: "supabase" }))),
+        storageGet("categories", ctrl.signal),
+        storageGet("categoryTypes", ctrl.signal),
       ]);
       if (ctrl.signal.aborted) return false;
       // Refresh equipment state from DB — protects against stale local state
@@ -5674,6 +5679,12 @@ export default function App() {
       // "update-student-credentials"). Also catches remote admin edits.
       if (certsR?.value && typeof certsR.value === "object" && !dataEquals(certificationsRef.current, certsR.value)) {
         _setCertifications(certsR.value);
+      }
+      if (Array.isArray(catsR?.value) && catsR.value.length > 0 && !dataEquals(categoriesRef.current, catsR.value)) {
+        _setCategories(catsR.value);
+      }
+      if (catTypesR?.value && typeof catTypesR.value === "object" && !Array.isArray(catTypesR.value) && !dataEquals(categoryTypesRef.current, catTypesR.value)) {
+        _setCategoryTypes(catTypesR.value);
       }
       // Return true if at least one response came from supabase (network is up)
       return [resR, bookingsR, lecturersR, certsR].some(r => r?.source === "supabase");
