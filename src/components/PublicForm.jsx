@@ -383,7 +383,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
   const [selectedCats, setSelectedCats] = useState([]); // multi-select, empty = all
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
 
-  const relevantKits = (kits||[]).filter(k => !(k.loanTypes||[]).includes("שיעור") && (!(k.loanTypes||[]).length || (k.loanTypes||[]).includes(loanType)));
+  const relevantKits = (kits||[]).filter(k => { const lt = k.loanTypes||[]; return lt.length === 0 || lt.includes(loanType); });
 
   const selectKit = (kit) => {
     if (activeKit?.id === kit.id) {
