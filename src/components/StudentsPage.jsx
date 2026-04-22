@@ -977,7 +977,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
                           <td style={{...tdS,fontWeight:700,fontSize:14}}>{getFirstName(s) || <span style={{color:"var(--text3)"}}>—</span>}</td>
                           <td style={{...tdS,fontWeight:700,fontSize:14}}>{getLastName(s) || <span style={{color:"var(--text3)"}}>—</span>}</td>
                           <td style={{...tdS,fontWeight:700,fontSize:14,overflow:"hidden",textOverflow:"ellipsis"}}>{s.email || <span style={{color:"var(--text3)"}}>—</span>}</td>
-                          <td style={{...tdS,fontSize:12,color:"var(--text3)"}}>{s.phone||"—"}</td>
+                          <td style={{...tdS,fontWeight:700,fontSize:14}}>{s.phone || <span style={{color:"var(--text3)"}}>—</span>}</td>
                           <td style={tdS}>
                             {s.track
                               ? <span style={{background:"rgba(245,166,35,0.1)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:20,padding:"3px 10px",fontSize:11,color:"var(--accent)",fontWeight:700}}><GraduationCap size={16} strokeWidth={1.75} /> {s.track}</span>
