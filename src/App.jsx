@@ -1232,7 +1232,7 @@ function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, savi
     <div>
       <div className="grid-2">
         <div className="form-group"><label className="form-label">שם הציוד *</label><input className="form-input" value={f.name} onChange={e=>s("name",e.target.value)}/></div>
-        <div className="form-group"><label className="form-label">קטגוריה</label><select className="form-select" value={f.category} onChange={e=>s("category",e.target.value)}>{categories.map(c=><option key={c}>{c}</option>)}</select></div>
+        <div className="form-group"><label className="form-label">קטגוריה</label><select className="form-select" value={f.category} onChange={e=>s("category",e.target.value)}>{[...(categories||[])].sort((a,b)=>a.localeCompare(b,"he")).map(c=><option key={c}>{c}</option>)}</select></div>
       </div>
       <div className="form-group">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap",direction:"ltr"}}>
@@ -1907,7 +1907,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
         categories={categories}
         onClose={()=>setModal(null)}
         onAdd={async(name,type)=>{
-          const updatedCats=[...categories, name];
+          const updatedCats=[...categories, name].sort((a, b) => a.localeCompare(b, "he"));
           const updatedTypes={...categoryTypes,...(type!==undefined?{[name]:type}:{})};
           setCategories(updatedCats);
           setCategoryTypes(updatedTypes);
@@ -1924,7 +1924,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
         onClose={()=>setModal(null)}
         onSave={async(action)=>{
           if(action.action==="add") {
-            const updatedCats = [...categories, action.name];
+            const updatedCats = [...categories, action.name].sort((a, b) => a.localeCompare(b, "he"));
             // Store "" for explicit "כללי" (general). Only skip when action.type is undefined.
             const updatedTypes = {...categoryTypes, ...(action.type !== undefined ? {[action.name]: action.type} : {})};
             setCategories(updatedCats);
