@@ -3023,7 +3023,7 @@ ${inventory}
           {publicView==="equipment" && <>
           {/* Clickable tab navigation — always free to navigate, validation only on submit */}
             <div style={{display:"flex",gap:4,marginTop:20,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4}}>
-              {[{n:1,l:"פרטים",icon:"👤"},{n:2,l:"תאריכים",icon:<Calendar size={14} strokeWidth={1.75} />},{n:3,l:"ציוד",icon:<Package size={14} strokeWidth={1.75} />},{n:4,l:"אישור",icon:<CheckCircle size={14} strokeWidth={1.75} />}].map(s=>{
+              {[{n:1,l:"פרטים",icon:<User size={14} strokeWidth={1.75} />},{n:2,l:"תאריכים",icon:<Calendar size={14} strokeWidth={1.75} />},{n:3,l:"ציוד",icon:<Package size={14} strokeWidth={1.75} />},{n:4,l:"אישור",icon:<CheckCircle size={14} strokeWidth={1.75} />}].map(s=>{
               const done = (s.n===1 && ok1) || (s.n===2 && ok2) || (s.n===3 && ok3) || (s.n===4 && canSubmit);
               const locked = s.n===4 && !canAccessStep(s.n);
               return (
