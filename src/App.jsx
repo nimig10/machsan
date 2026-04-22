@@ -1160,7 +1160,7 @@ function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, savi
   const generateAutoTechnicalDetails = async (itemName) => {
     await generateGeminiField({
       itemName,
-      systemInstruction: "You are a professional AV and film equipment technical specialist. The user will provide an equipment name. Write concise technical details in Hebrew for this item (around 3-5 short lines), focusing on relevant specs, connections, power or battery, compatibility, operating range, mounting, or practical setup details when appropriate. Output ONLY the Hebrew text, without formatting or markdown.",
+      systemInstruction: "You are a professional AV and film equipment technical specialist. The user will provide an equipment name. Write concise technical details in Hebrew for this item as a bullet list of 4-6 items, focusing on relevant specs, connections, power or battery, compatibility, operating range, mounting, or practical setup details. Each bullet must start with '• ' followed by the detail. Output ONLY the bullet list in Hebrew, one bullet per line, no headings, no extra text.",
       onSuccess: (generatedText) => setF(prev => ({ ...prev, technical_details: generatedText })),
       setLoading: setIsGeneratingTechDetails,
       errorPrefix: "שגיאה ביצירת הפרטים הטכניים",
