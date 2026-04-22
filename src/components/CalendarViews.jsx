@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient.js';
 import { useState } from "react";
 import { BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Film, Mic, Package, Phone, User, Video, X } from "lucide-react";
 import { CalendarGrid } from "./CalendarGrid.jsx";
-import { formatDate, today, storageGet, cloudinaryThumb, getAuthToken } from "../utils.js";
+import { formatDate, today, storageGet, cloudinaryThumb, getAuthToken, getLoanTypeColor } from "../utils.js";
 
 export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equipment=[], siteSettings={} }) {
   const [localRes, setLocalRes]   = useState(initialReservations);
@@ -47,13 +47,6 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
   for(let d=1;d<=new Date(yr,mo+1,0).getDate();d++) days.push(new Date(yr,mo,d));
   while(days.length<42) days.push(null);
 
-  const SPAN_COLORS = [
-    ["rgba(52,152,219,0.75)","#fff"],["rgba(46,204,113,0.75)","#fff"],
-    ["rgba(155,89,182,0.75)","#fff"],["rgba(230,126,34,0.75)","#fff"],
-    ["rgba(26,188,156,0.75)","#fff"],["rgba(236,72,153,0.75)","#fff"],
-    ["rgba(200,160,0,0.75)","#fff"], ["rgba(231,76,60,0.75)","#fff"],
-  ];
-
   const STATUS_OPTIONS = ["ממתין","אישור ראש מחלקה","מאושר","נדחה"];
   const STATUS_COLORS  = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","אישור ראש מחלקה":"#9b59b6" };
   const LOAN_ICONS     = { "פרטית":<User size={16} strokeWidth={1.75}/>,"הפקה":<Film size={16} strokeWidth={1.75} />,"סאונד":<Mic size={16} strokeWidth={1.75} />,"קולנוע יומית":<Camera size={16} strokeWidth={1.75}/>,"צוות":<Briefcase size={16} strokeWidth={1.75}/>,"הכל":<Package size={16} strokeWidth={1.75} /> };
@@ -64,7 +57,7 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
     (loanTypeF==="הכל" || r.loan_type===loanTypeF)
   );
   const colorMap = {};
-  activeRes.forEach((r,i) => { colorMap[r.id] = SPAN_COLORS[i % SPAN_COLORS.length]; });
+  activeRes.forEach(r => { colorMap[r.id] = getLoanTypeColor(r.loan_type); });
 
   // Month reservations for list
   const monthStart = `${yr}-${String(mo+1).padStart(2,"0")}-01`;
@@ -102,12 +95,13 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
           );
         })}
         <span style={{fontSize:12,color:"var(--border)"}}>|</span>
-        {/* Loan type */}
+        {/* Loan type — colored by type */}
         {["הכל","פרטית","הפקה","סאונד","קולנוע יומית","צוות"].map(lt=>{
           const active=loanTypeF===lt;
           const label = lt==="צוות" ? "איש צוות" : lt;
+          const [bg, fg] = lt !== "הכל" ? getLoanTypeColor(lt) : ["var(--accent-glow)", "var(--accent)"];
           return <button key={lt} type="button" onClick={()=>setLoanTypeF(lt)}
-            style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+            style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?bg:"var(--border)"}`,background:active?bg:"transparent",color:active?fg:"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
             {LOAN_ICONS[lt]||<Package size={16} strokeWidth={1.75} />} {label}
           </button>;
         })}
@@ -225,12 +219,6 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
   const LOAN_ICONS    = { "פרטית":<User size={16} strokeWidth={1.75}/>,"הפקה":<Film size={16} strokeWidth={1.75} />,"סאונד":<Mic size={16} strokeWidth={1.75} />,"קולנוע יומית":<Camera size={16} strokeWidth={1.75}/>,"צוות":<Briefcase size={16} strokeWidth={1.75}/>,"הכל":<Package size={16} strokeWidth={1.75} /> };
   const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
   const HE_D = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
-  const SPAN_COLORS = [
-    ["rgba(52,152,219,0.75)","#fff"],["rgba(46,204,113,0.75)","#fff"],
-    ["rgba(155,89,182,0.75)","#fff"],["rgba(230,126,34,0.75)","#fff"],
-    ["rgba(26,188,156,0.75)","#fff"],["rgba(236,72,153,0.75)","#fff"],
-    ["rgba(200,160,0,0.75)","#fff"], ["rgba(231,76,60,0.75)","#fff"],
-  ];
 
   const changeStatus = async (r, newStatus) => {
     setChangingStatus(r.id);
@@ -271,7 +259,7 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
     (loanTypeF==="הכל" || r.loan_type===loanTypeF)
   );
   const colorMap = {};
-  activeRes.forEach((r,i) => { colorMap[r.id] = SPAN_COLORS[i % SPAN_COLORS.length]; });
+  activeRes.forEach(r => { colorMap[r.id] = getLoanTypeColor(r.loan_type); });
 
   const monthStart = `${yr}-${String(mo+1).padStart(2,"0")}-01`;
   const monthEnd   = `${yr}-${String(mo+1).padStart(2,"0")}-${String(new Date(yr,mo+1,0).getDate()).padStart(2,"0")}`;
@@ -320,8 +308,9 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
         {["הכל","פרטית","הפקה","סאונד","קולנוע יומית","צוות"].map(lt=>{
           const active=loanTypeF===lt;
           const label = lt==="צוות" ? "איש צוות" : lt;
+          const [bg, fg] = lt !== "הכל" ? getLoanTypeColor(lt) : ["var(--accent-glow)", "var(--accent)"];
           return <button key={lt} type="button" onClick={()=>setLoanTypeF(lt)}
-            style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+            style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?bg:"var(--border)"}`,background:active?bg:"transparent",color:active?fg:"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
             {LOAN_ICONS[lt]||<Package size={16} strokeWidth={1.75} />} {label}
           </button>;
         })}

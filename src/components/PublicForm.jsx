@@ -1,7 +1,7 @@
 // PublicForm.jsx — public loan request form
 import { AlertTriangle, Backpack, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mic, Minus, Moon, Package, Pencil, Phone, Save, Search, Settings, Shield, User, X, XCircle } from "lucide-react";
 import { useEffect, useState, useRef, useMemo } from "react";
-import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken } from "../utils.js";
+import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR } from "../utils.js";
 import { supabase } from "../supabaseClient.js";
 import { useNotifications } from "../hooks/useNotifications.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
@@ -155,10 +155,22 @@ function getFutureStudioBookingHours(booking, now = new Date(), nightStartTime =
   return Math.max(0, (interval.end.getTime() - futureStart.getTime()) / 3600000);
 }
 
-function PublicMiniCalendar({ reservations, lessons=[], initialLoanType="הכל", previewStart="", previewEnd="", previewName="" }) {
+function PublicMiniCalendar({ reservations, lessons=[], initialLoanType="הכל", previewStart="", previewEnd="", previewName="", borrowDate="" }) {
   const lessonIdSet = useMemo(() => new Set((lessons||[]).map(l => String(l.id))), [lessons]);
-  const [calDate, setCalDate] = useState(new Date());
+  const [calDate, setCalDate] = useState(() => {
+    const d = borrowDate ? parseLocalDate(borrowDate) : null;
+    return d && !isNaN(d) ? new Date(d.getFullYear(), d.getMonth(), 1) : new Date();
+  });
   const [loanTypeF, setLoanTypeF] = useState(["פרטית","הפקה","סאונד","קולנוע יומית"].includes(initialLoanType) ? initialLoanType : "הכל");
+  // Auto-jump calendar to borrowDate's month when the user picks a date in step 2
+  useEffect(() => {
+    if (!borrowDate) return;
+    const d = parseLocalDate(borrowDate);
+    if (!d || isNaN(d)) return;
+    setCalDate(prev => (d.getFullYear() !== prev.getFullYear() || d.getMonth() !== prev.getMonth())
+      ? new Date(d.getFullYear(), d.getMonth(), 1)
+      : prev);
+  }, [borrowDate]);
   const yr = calDate.getFullYear();
   const mo = calDate.getMonth();
   const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
@@ -171,12 +183,6 @@ function PublicMiniCalendar({ reservations, lessons=[], initialLoanType="הכל"
   for(let d=1;d<=new Date(yr,mo+1,0).getDate();d++) days.push(new Date(yr,mo,d));
   while(days.length<42) days.push(null);
 
-  const SPAN_COLORS = [
-    ["rgba(52,152,219,0.75)","#fff"],["rgba(46,204,113,0.75)","#fff"],
-    ["rgba(155,89,182,0.75)","#fff"],["rgba(230,126,34,0.75)","#fff"],
-    ["rgba(26,188,156,0.75)","#fff"],["rgba(236,72,153,0.75)","#fff"],
-    ["rgba(200,160,0,0.75)","#fff"], ["rgba(231,76,60,0.75)","#fff"],
-  ];
   const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:<Package size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"פרטית",label:"פרטית",icon:<User size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"הפקה",label:"הפקה",icon:<Film size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"סאונד",label:"סאונד",icon:<Mic size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"קולנוע יומית",label:"קולנוע יומית",icon:<Camera size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"שיעור",label:"שיעור",icon:<Film size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"צוות",label:"איש צוות",icon:<Briefcase size={12} strokeWidth={1.75} color="var(--accent)" />}];
   const activeRes = reservations.filter(r=>
     (r.status==="מאושר"||r.status==="פעילה"||r.status==="באיחור") && r.borrow_date && r.return_date &&
@@ -198,8 +204,8 @@ function PublicMiniCalendar({ reservations, lessons=[], initialLoanType="הכל"
   }] : [];
   const allRes = [...activeResForCalendar, ...previewRes];
   const colorMap = {};
-  activeRes.forEach((r,i)=>{ colorMap[r.id]=SPAN_COLORS[i%SPAN_COLORS.length]; });
-  colorMap["__preview__"] = ["rgba(245,166,35,0.45)","#f5a623"]; // dashed yellow
+  activeRes.forEach(r => { colorMap[r.id] = getLoanTypeColor(r.loan_type); });
+  colorMap["__preview__"] = PREVIEW_COLOR;
 
   return (
     <div style={{marginBottom:16,marginTop:8}}>
@@ -211,13 +217,14 @@ function PublicMiniCalendar({ reservations, lessons=[], initialLoanType="הכל"
           <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo+1,1))}>›</button>
         </div>
       </div>
-      {/* Loan type filter chips */}
+      {/* Loan type filter chips — colored by loan type */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
         {LOAN_FILTERS.map(f=>{
           const isActive = loanTypeF===f.key;
+          const [bg, fg] = f.key !== "הכל" ? getLoanTypeColor(f.key) : ["var(--accent-glow)", "var(--accent)"];
           return (
             <button key={f.key} type="button" onClick={()=>setLoanTypeF(f.key)}
-              style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${isActive?"var(--accent)":"var(--border)"}`,background:isActive?"var(--accent-glow)":"transparent",color:isActive?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>
+              style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${isActive?bg:"var(--border)"}`,background:isActive?bg:"transparent",color:isActive?fg:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>
               {f.icon} {f.label}
             </button>
           );
@@ -3260,7 +3267,7 @@ ${inventory}
             {ok2 && !isSoundLoan && <div className="highlight-box" style={{display:"flex",alignItems:"center",gap:6}}>{isCinemaLoan ? <>🎥 השאלת קולנוע יומית · {formatDate(form.borrow_date)} · {form.borrow_time}–{form.return_time}</> : <><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> השאלה ל-{loanDays} ימים · איסוף {form.borrow_time} · החזרה {form.return_time}</>}</div>}
 
             {/* Mini calendar — approved reservations */}
-            <PublicMiniCalendar key={form.loan_type || "הכל"} reservations={reservations} lessons={lessons} initialLoanType={form.loan_type || "הכל"} previewStart={form.borrow_date} previewEnd={form.return_date} previewName={form.student_name||"הבקשה שלך"}/>
+            <PublicMiniCalendar reservations={reservations} lessons={lessons} initialLoanType="הכל" previewStart={form.borrow_date} previewEnd={form.return_date} previewName={form.student_name||"הבקשה שלך"} borrowDate={form.borrow_date}/>
 
             <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setStep(1)}>← חזור</button><button className="btn btn-primary" disabled={!ok2} onClick={()=>setStep(3)}>המשך ← ציוד</button></div>
           </>}

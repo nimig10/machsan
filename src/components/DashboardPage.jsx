@@ -1,6 +1,6 @@
 // DashboardPage.jsx — admin dashboard page
 import { useState } from "react";
-import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, syncReservationStatusToBlob } from "../utils.js";
+import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, syncReservationStatusToBlob, getLoanTypeColor } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import { Activity, AlertTriangle, ArrowUpFromLine, Briefcase, Calendar, Camera, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Layers, Mic, Package, RefreshCw, Shield, User, Wrench, X, XCircle } from "lucide-react";
@@ -72,12 +72,6 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
   for(let d=1;d<=new Date(yr,mo+1,0).getDate();d++) days.push(new Date(yr,mo,d));
   while(days.length<42) days.push(null);
 
-  const SPAN_COLORS = [
-    ["rgba(52,152,219,0.75)","#fff"],  ["rgba(46,204,113,0.75)","#fff"],
-    ["rgba(231,76,60,0.75)","#fff"],   ["rgba(155,89,182,0.75)","#fff"],
-    ["rgba(200,160,0,0.75)","#fff"],   ["rgba(230,126,34,0.75)","#fff"],
-    ["rgba(26,188,156,0.75)","#fff"],  ["rgba(236,72,153,0.75)","#fff"],
-  ];
   const DASHBOARD_CAL_STATUSES = ["ממתין","מאושר","פעילה","נדחה","באיחור","אישור ראש מחלקה"];
   const CAL_LOAN_TYPES = [
     { key:"הכל", label:"הכל", icon:<Package size={16} strokeWidth={1.75} color="var(--accent)" /> },
@@ -97,12 +91,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
   );
   const colorMap = {};
   const lessonResIds = new Set(activeRes.filter(r=>r.loan_type==="שיעור").map(r=>r.id));
-  let nonLessonIdx = 0;
-  activeRes.forEach(r => {
-    if(r.loan_type==="שיעור") colorMap[r.id] = ["rgba(155,89,182,0.7)","#fff"];
-    else if(r.loan_type==="צוות") colorMap[r.id] = ["rgba(100,120,150,0.75)","#fff"];
-    else { colorMap[r.id] = SPAN_COLORS[nonLessonIdx % SPAN_COLORS.length]; nonLessonIdx++; }
-  });
+  activeRes.forEach(r => { colorMap[r.id] = getLoanTypeColor(r.loan_type); });
   // aggregate by equipment
   const onLoanDetails = (() => {
     const map = {};
@@ -416,12 +405,13 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
             {CAL_LOAN_TYPES.map((filterOption) => {
               const active = calLoanTypeF === filterOption.key;
+              const [bg, fg] = filterOption.key !== "הכל" ? getLoanTypeColor(filterOption.key) : ["var(--accent-glow)", "var(--accent)"];
               return (
                 <button
                   key={filterOption.key}
                   type="button"
                   onClick={()=>setCalLoanTypeF(filterOption.key)}
-                  style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}
+                  style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${active?bg:"var(--border)"}`,background:active?bg:"transparent",color:active?fg:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}
                 >
                   {filterOption.icon} {filterOption.label}
                 </button>
