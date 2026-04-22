@@ -5636,25 +5636,17 @@ export default function App() {
     const ctrl = new AbortController();
     refreshAbortRef.current = ctrl;
     try {
-      const [resR, bookingsR, lecturersR, certsR, eqR, catsR, catTypesR] = await Promise.all([
+      const [resR, bookingsR, lecturersR, certsR, catsR, catTypesR] = await Promise.all([
         (supabase.from("reservations_new").select("*, reservation_items(*)").abortSignal(ctrl.signal).then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
         storageGet("studio_bookings", ctrl.signal),
         storageGet("lecturers", ctrl.signal),
         storageGet("certifications", ctrl.signal),
-        (supabase.from("equipment").select("*").abortSignal(ctrl.signal).then(res => ({ value: res.data || [], source: "supabase" }))),
         storageGet("categories", ctrl.signal),
         storageGet("categoryTypes", ctrl.signal),
       ]);
       if (ctrl.signal.aborted) return false;
-      // Refresh equipment state from DB — protects against stale local state
-      // (deleted items reappearing, category changes not reflecting, etc).
-      // Skip while a write is in flight to avoid clobbering an in-progress edit.
-      if (Array.isArray(eqR?.value) && !equipmentWriteInFlight()) {
-        const normalizedEq = normalizeEquipmentTagFlags(eqR.value, categoryTypesRef.current || {}).map(ensureUnits);
-        if (!dataEquals(equipmentRef.current, normalizedEq)) {
-          _setEquipment(normalizedEq);
-        }
-      }
+      // Equipment is refreshed via realtime debounce (600ms), not by polling.
+      // Polling only handles the keys listed above.
       if (Array.isArray(resR?.value)) {
         const normalized = normalizeReservationsForArchive(resR.value);
         // Lesson reservations are generated client-side from kit items.
@@ -5798,23 +5790,27 @@ export default function App() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "equipment" },
-        async () => {
-          // Any equipment-table write — refetch the full normalized array and
-          // diff against local state. Skip while a local write is in flight
-          // (our own write would otherwise race its own echo and clobber
-          // the fresh local state with the pre-RPC DB snapshot).
-          if (equipmentWriteInFlight()) return;
-          try {
-            const { data: rows } = await supabase.from("equipment").select("*");
-            if (!Array.isArray(rows)) return;
-            const normalized = normalizeEquipmentTagFlags(rows, categoryTypesRef.current || {}).map(ensureUnits);
-            if (!dataEquals(equipmentRef.current, normalized)) {
-              _setEquipment(normalized);
-            }
-          } catch (err) {
-            console.warn("equipment realtime refetch failed", err);
-          }
-        },
+        (() => {
+          // Debounce: the RPC upserts every equipment row, generating N realtime
+          // events in quick succession. Without debouncing, N concurrent fetches
+          // flood Chrome's connection pool (ERR_INSUFFICIENT_RESOURCES).
+          // A single 600ms trailing fetch handles the whole burst.
+          let debounceTimer = null;
+          return () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(async () => {
+              if (equipmentWriteInFlight()) return;
+              try {
+                const { data: rows } = await supabase.from("equipment").select("*");
+                if (!Array.isArray(rows)) return;
+                const normalized = normalizeEquipmentTagFlags(rows, categoryTypesRef.current || {}).map(ensureUnits);
+                if (!dataEquals(equipmentRef.current, normalized)) _setEquipment(normalized);
+              } catch (err) {
+                console.warn("equipment realtime refetch failed", err);
+              }
+            }, 600);
+          };
+        })(),
       )
       .subscribe((status) => {
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
