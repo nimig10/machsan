@@ -963,8 +963,8 @@ const css = `
     .flex-between { flex-wrap:wrap; gap:10px; }
     html, body, #root { min-height:100%; }
     .public-page-shell { justify-content:stretch; }
-    .form-page { min-height:100vh; padding:16px 12px 80px; }
-    .form-card { width:100%; max-width:100%; }
+    .form-page { min-height:100vh; padding:16px 0 80px; overflow-x:hidden; }
+    .form-card { width:calc(100% - 24px); max-width:calc(100% - 24px); margin-inline:auto; }
     .form-card-header { padding:20px; }
     .form-card-body { padding:20px; }
     .toast-container { left:12px; right:12px; bottom:76px; }
