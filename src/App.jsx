@@ -1096,17 +1096,16 @@ function CategoryLoanTypesModal({ categoryLoanTypes = {}, onSave, onClose }) {
 // ── EqForm: extracted outside EquipmentPage so React keeps a stable component identity ──
 // Previously defined inline → every parent re-render destroyed form state (quantity, description, etc.)
 function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, saving, onSave, onCancel }) {
-  const [f, setF] = useState({
-    name:"",
-    category:"מצלמות",
-    description:"",
-    technical_details:"",
-    total_quantity:1,
-    image:"📷",
-    notes:"",
-    status:"תקין",
-    certification_id:"",
-    ...(initial || {}),
+  const [f, setF] = useState(() => {
+    const base = { name:"", category:"מצלמות", description:"", technical_details:"", total_quantity:1, image:"📷", notes:"", status:"תקין", certification_id:"" };
+    const merged = { ...base, ...(initial || {}) };
+    // Normalize nullable fields to strings so controlled inputs never receive null
+    merged.notes           = merged.notes           ?? "";
+    merged.description     = merged.description     ?? "";
+    merged.technical_details = merged.technical_details ?? "";
+    merged.name            = merged.name            ?? "";
+    merged.certification_id = merged.certification_id ?? "";
+    return merged;
   });
   const s = (k,v) => setF(p=>({...p,[k]:v}));
   const [imgUploading, setImgUploading] = useState(false);
@@ -1500,7 +1499,8 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
 
   const save = async (form) => {
     setSaving(true);
-    const normalizedForm = normalizeEquipmentTagFlags([form], categoryTypes)[0];
+    const sanitized = { ...form, notes: form.notes ?? "", description: form.description ?? "", technical_details: form.technical_details ?? "" };
+    const normalizedForm = normalizeEquipmentTagFlags([sanitized], categoryTypes)[0];
     let updated;
     if (modal.type==="add") {
       const item = ensureUnits({ ...normalizedForm, id: Date.now() });
@@ -1878,7 +1878,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                       </div>
                       {isEmpty&&<span style={{fontSize:10,fontWeight:900,color:"var(--red)",background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.4)",borderRadius:6,padding:"2px 7px",whiteSpace:"nowrap"}}>אזל במלאי</span>}
                     </div>
-                    {eq.notes && <div className="chip" style={{marginTop:6}}>💬 {eq.notes}</div>}
+                    {eq.notes && <div className="chip" style={{marginTop:6,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%",display:"block",fontSize:11}} title={eq.notes}>💬 {eq.notes}</div>}
                     <div style={{marginTop:8}}>{statusBadge(eq.status)}</div>
                     <div className="flex gap-2" style={{marginTop:12,flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
                       <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"edit",item:eq})} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> עריכה</button>
