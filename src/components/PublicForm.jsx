@@ -387,8 +387,17 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
 // ─── STEP 3 EQUIPMENT SELECTOR ───────────────────────────────────────────────
 function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equipment, setItems, getItem, setQty, canBorrowEq=()=>true, studentRecord, certificationTypes=[], categoryLoanTypes={} }) {
   const [activeKit, setActiveKit] = useState(null);
+  const [kitDropOpen, setKitDropOpen] = useState(false);
+  const kitDropRef = useRef(null);
   const [selectedCats, setSelectedCats] = useState([]); // multi-select, empty = all
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
+
+  useEffect(() => {
+    if (!kitDropOpen) return;
+    const close = (e) => { if (kitDropRef.current && !kitDropRef.current.contains(e.target)) setKitDropOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [kitDropOpen]);
 
   const relevantKits = (kits||[]).filter(k => { const lt = k.loanTypes||[]; return lt.length === 0 || lt.includes(loanType); });
 
@@ -496,29 +505,50 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
       {/* ── Kit selector ── */}
       {relevantKits.length>0 && (
         <div style={{marginBottom:20,padding:"14px 16px",background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
-          <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",marginBottom:10,letterSpacing:0.5,display:"flex",alignItems:"center",gap:6}}><Backpack size={14} strokeWidth={1.75} /> ערכות מוכנות לסוג השאלה זה</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:activeKit?10:0}}>
-            {/* "All equipment" pill */}
+          <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",marginBottom:10,letterSpacing:0.5,display:"flex",alignItems:"center",gap:6}}>
+            <Film size={14} strokeWidth={1.75} color="var(--accent)" /> ערכות מוכנות לסוג השאלה זה
+          </div>
+          {/* Dropdown trigger */}
+          <div ref={kitDropRef} style={{position:"relative"}}>
             <button type="button"
-              onClick={()=>setActiveKit(null)}
-              style={{padding:"7px 14px",borderRadius:20,border:`2px solid ${!activeKit?"var(--text2)":"var(--border)"}`,background:!activeKit?"var(--surface3)":"transparent",color:!activeKit?"var(--text)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",transition:"all 0.15s"}}>
-              <Package size={16} strokeWidth={1.75} color="var(--accent)" /> כל הציוד
+              onClick={()=>setKitDropOpen(o=>!o)}
+              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderRadius:"var(--r-sm)",border:`1.5px solid ${activeKit?"var(--accent)":"var(--border)"}`,background:"var(--surface3)",cursor:"pointer",color:"var(--text)",fontWeight:600,fontSize:13,gap:8,transition:"border-color 0.15s"}}>
+              <span style={{display:"flex",alignItems:"center",gap:8}}>
+                <Film size={15} strokeWidth={1.75} color={activeKit?"var(--accent)":"var(--text3)"} />
+                {activeKit ? activeKit.name : <span style={{color:"var(--text3)"}}>ללא ערכה — הוסף ציוד ידנית</span>}
+              </span>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{flexShrink:0,transition:"transform 0.15s",transform:kitDropOpen?"rotate(180deg)":"rotate(0deg)"}}>
+                <path d="M2 4l4 4 4-4" stroke="var(--text3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
             </button>
-            {relevantKits.map(kit=>{
-              const isActive = activeKit?.id===kit.id;
-              return (
-                <button key={kit.id} type="button"
-                  onClick={()=>selectKit(kit)}
-                  style={{padding:"7px 16px",borderRadius:20,border:`2px solid ${isActive?"var(--accent)":"var(--border)"}`,background:isActive?"var(--accent)":"var(--surface3)",color:isActive?"#000":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer",transition:"all 0.15s",display:"flex",alignItems:"center",gap:6}}>
-                  🎒 {kit.name}
-                  {isActive&&<span style={{fontSize:10,opacity:0.7,display:"inline-flex",alignItems:"center",gap:2}}><Check size={10} strokeWidth={1.75} /> פעיל</span>}
-                </button>
-              );
-            })}
+            {kitDropOpen && (
+              <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,left:0,zIndex:50,background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",boxShadow:"0 8px 24px rgba(0,0,0,0.35)",overflow:"hidden"}}>
+                {/* No kit option */}
+                <div
+                  onClick={()=>{ setActiveKit(null); setItems([]); setKitDropOpen(false); }}
+                  style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",cursor:"pointer",background:!activeKit?"var(--accent-glow)":"transparent",color:!activeKit?"var(--accent)":"var(--text2)",fontWeight:!activeKit?700:500,fontSize:13,borderBottom:"1px solid var(--border)",transition:"background 0.1s"}}>
+                  <X size={14} strokeWidth={1.75} color={!activeKit?"var(--accent)":"var(--text3)"} />
+                  ללא ערכה — הוסף ציוד ידנית
+                  {!activeKit&&<Check size={12} strokeWidth={2} style={{marginRight:"auto"}} color="var(--accent)" />}
+                </div>
+                {relevantKits.map(kit=>{
+                  const isActive = activeKit?.id===kit.id;
+                  return (
+                    <div key={kit.id}
+                      onClick={()=>{ selectKit(kit); setKitDropOpen(false); }}
+                      style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",cursor:"pointer",background:isActive?"var(--accent-glow)":"transparent",color:isActive?"var(--accent)":"var(--text)",fontWeight:isActive?700:500,fontSize:13,borderBottom:"1px solid var(--border)",transition:"background 0.1s"}}>
+                      <Film size={14} strokeWidth={1.75} color={isActive?"var(--accent)":"var(--text3)"} />
+                      {kit.name}
+                      {isActive&&<Check size={12} strokeWidth={2} style={{marginRight:"auto"}} color="var(--accent)" />}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
           {activeKit&&(
-            <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>
-              מציג ציוד מערכת <strong style={{color:"var(--accent)"}}>{activeKit.name}</strong> בלבד · לחץ שוב לביטול הסינון
+            <div style={{fontSize:11,color:"var(--text3)",marginTop:8}}>
+              מציג ציוד ערכת <strong style={{color:"var(--accent)"}}>{activeKit.name}</strong> בלבד
             </div>
           )}
         </div>
