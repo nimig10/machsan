@@ -854,10 +854,10 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
             <div style={{display:"flex",flexDirection:"column",gap:20,maxWidth:800,margin:"0 auto"}}>
               {(kits||[]).length===0
                 ? <div style={{textAlign:"center",color:"var(--text3)",fontSize:14,padding:"40px 0"}}>אין ערכות מוגדרות עדיין</div>
-                : (kits||[]).filter(k=>!(k.loanTypes||[]).includes("שיעור")).map(kit=>(
+                : (kits||[]).filter(k=>{ const lt=k.loanTypes||[]; return lt.length===0 || lt.some(t=>t!=="שיעור"); }).map(kit=>(
                   <div key={kit.id} style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"20px"}}>
                     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:kit.description?8:14,flexWrap:"wrap"}}>
-                      <span style={{fontWeight:900,fontSize:17}}>🎒 {kit.name}</span>
+                      <span style={{fontWeight:900,fontSize:17,display:"flex",alignItems:"center",gap:6}}><Backpack size={16} strokeWidth={1.75} color="var(--accent)" /> {kit.name}</span>
                       {(kit.loanTypes||[]).map(lt=><span key={lt} style={{fontSize:12,background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:20,padding:"2px 10px",color:"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}>{LOAN_ICONS[lt]||<Package size={12} strokeWidth={1.75} color="var(--accent)" />} {lt}</span>)}
                     </div>
                     {kit.description&&(
