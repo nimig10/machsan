@@ -5155,7 +5155,7 @@ export default function App() {
         buildLessonReservations(lessonsRef.current, kitsRef.current);
       const merged = [
         ...normalizedDbRes.filter((r) => {
-          if (r.lesson_auto || hasLinkedValue(r.lesson_id)) return false;
+          if (r.lesson_auto === true) return false;
           if (hasLinkedValue(r.lesson_kit_id) && linkedKitIds.has(String(r.lesson_kit_id))) return false;
           return true;
         }),
@@ -5235,7 +5235,7 @@ export default function App() {
         buildLessonReservations(lessonsRef.current, kitsRef.current);
       const merged = [
         ...normalizedDbRes.filter((r) => {
-          if (r.lesson_auto || hasLinkedValue(r.lesson_id)) return false;
+          if (r.lesson_auto === true) return false;
           if (hasLinkedValue(r.lesson_kit_id) && linkedKitIds.has(String(r.lesson_kit_id))) return false;
           return true;
         }),
@@ -5659,7 +5659,7 @@ export default function App() {
         // (otherwise stale DB rows for deleted kits/lessons leak through).
         const merged = [
           ...normalized.filter(r => {
-            if (r.lesson_auto || hasLinkedValue(r.lesson_id)) return false;
+            if (r.lesson_auto === true) return false;
             if (hasLinkedValue(r.lesson_kit_id) && linkedKitIds.has(String(r.lesson_kit_id))) return false;
             return true;
           }),
@@ -5763,7 +5763,7 @@ export default function App() {
                   buildLessonReservations(lessonsRef.current, kitsRef.current);
                 const merged = [
                   ...normalized.filter(r => {
-                    if (r.lesson_auto || hasLinkedValue(r.lesson_id)) return false;
+                    if (r.lesson_auto === true) return false;
                     if (hasLinkedValue(r.lesson_kit_id) && linkedKitIds.has(String(r.lesson_kit_id))) return false;
                     return true;
                   }),
@@ -5927,7 +5927,7 @@ export default function App() {
     // (e.g. kits items temporarily 0 during a mid-save state update). Skip this run entirely
     // rather than wiping all lesson reservations from memory and Supabase.
     const currentLessonAutoCount = currentReservations.filter(
-      (r) => r.lesson_auto || hasLinkedValue(r.lesson_id)
+      (r) => r.lesson_auto === true
     ).length;
     if (lessons.length > 0 && kits.length > 0 && generatedLessonReservations.length === 0 && currentLessonAutoCount > 0) {
       return; // transient empty generation — preserve existing lesson reservations
@@ -5935,7 +5935,7 @@ export default function App() {
 
     const nextReservations = normalizeReservationsForArchive([
       ...currentReservations.filter((reservation) => {
-        if (reservation.lesson_auto || hasLinkedValue(reservation.lesson_id)) return false;
+        if (reservation.lesson_auto === true) return false;
         if (hasLinkedValue(reservation.lesson_kit_id) && linkedKitIds.has(String(reservation.lesson_kit_id))) return false;
         return true;
       }),
@@ -5952,7 +5952,7 @@ export default function App() {
 
     const generatedLessonBookings = buildLessonStudioBookings(lessons);
     const nextStudioBookings = [
-      ...currentStudioBookings.filter((booking) => !(booking.lesson_auto || hasLinkedValue(booking.lesson_id))),
+      ...currentStudioBookings.filter((booking) => booking.lesson_auto !== true),
       ...generatedLessonBookings,
     ];
 
