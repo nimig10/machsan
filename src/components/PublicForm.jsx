@@ -3230,7 +3230,8 @@ ${inventory}
                     const grp = groupedStudentBookings.find(g=>g.primaryId===gId);
                     if (grp) {
                       const hasNight = grp.bookings.some(b=>b.isNight);
-                      if (hasNight && new Date().getHours() >= 17) {
+                      const isSingleNightOnly = grp.bookings.length === 1 && hasNight;
+                      if (isSingleNightOnly && new Date().getHours() >= 17) {
                         showToast("error", "לא ניתן לשייך קביעת לילה להשאלת ציוד אחרי השעה 17:00.");
                         return;
                       }
