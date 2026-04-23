@@ -93,7 +93,7 @@ export function StaffHub({ user, logo, onNavigate, onLogout, canInstall = false,
                   boxShadow: hovered === opt.key ? `0 8px 24px ${opt.color}20` : "0 2px 8px rgba(0,0,0,0.06)",
                 }}
               >
-                <span style={{ fontSize: 48 }}>{opt.icon}</span>
+                <span style={{ fontSize: 48, color: "var(--text)" }}>{opt.icon}</span>
                 <span style={{ fontSize: 20, fontWeight: 800, color: "var(--text)" }}>{opt.title}</span>
                 <span style={{ fontSize: 13, color: "var(--text3)", textAlign: "center" }}>{opt.desc}</span>
               </button>
@@ -129,7 +129,7 @@ export function StaffHub({ user, logo, onNavigate, onLogout, canInstall = false,
                     boxShadow: hovered === btn.key ? `0 6px 18px ${btn.color}25` : "none",
                   }}
                 >
-                  <span>{btn.icon}</span> {btn.label}
+                  <span style={{ color: hovered === btn.key ? btn.color : "var(--text)" }}>{btn.icon}</span> {btn.label}
                 </button>
               ))}
             </div>
