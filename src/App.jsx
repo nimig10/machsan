@@ -2919,29 +2919,46 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
   const [pdfUploading, setPdfUploading] = useState(false);
   const fsRef = useRef(null);
 
-  function applyFormat(type) {
-    const ta = fsRef.current;
-    if (!ta) return;
-    const start = ta.selectionStart;
-    const end   = ta.selectionEnd;
-    const val   = draft[fsEdit] || "";
-    if (type === "bold") {
-      const sel    = val.slice(start, end);
-      const newVal = val.slice(0, start) + `**${sel}**` + val.slice(end);
-      setDraft(p => ({ ...p, [fsEdit]: newVal }));
-      setTimeout(() => { ta.selectionStart = start + 2; ta.selectionEnd = end + 2; ta.focus(); }, 0);
-    } else {
-      const lineStart = val.lastIndexOf('\n', start - 1) + 1;
-      const rawEnd    = val.indexOf('\n', end);
-      const lineEnd   = rawEnd === -1 ? val.length : rawEnd;
-      const lines     = val.slice(lineStart, lineEnd).split('\n');
-      const prefixed  = type === "bullet"
-        ? lines.map(l => `• ${l}`)
-        : lines.map((l, i) => `${i + 1}. ${l}`);
-      const newVal = val.slice(0, lineStart) + prefixed.join('\n') + val.slice(lineEnd);
-      setDraft(p => ({ ...p, [fsEdit]: newVal }));
-      setTimeout(() => ta.focus(), 0);
+  // Convert old markdown format to HTML (one-time migration when opening editor)
+  function mdToHtml(text) {
+    if (!text) return "";
+    if (/<[a-z]/i.test(text)) return text; // already HTML
+    const bold = s => s.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+    const lines = text.split('\n');
+    let out = '', inUl = false, inOl = false;
+    lines.forEach(line => {
+      if (/^• /.test(line)) {
+        if (inOl) { out += '</ol>'; inOl = false; }
+        if (!inUl) { out += '<ul>'; inUl = true; }
+        out += `<li>${bold(line.slice(2))}</li>`;
+      } else if (/^\d+\. /.test(line)) {
+        if (inUl) { out += '</ul>'; inUl = false; }
+        if (!inOl) { out += '<ol>'; inOl = true; }
+        out += `<li>${bold(line.replace(/^\d+\. /, ''))}</li>`;
+      } else {
+        if (inUl) { out += '</ul>'; inUl = false; }
+        if (inOl) { out += '</ol>'; inOl = false; }
+        out += `${bold(line)}<br>`;
+      }
+    });
+    if (inUl) out += '</ul>';
+    if (inOl) out += '</ol>';
+    return out;
+  }
+
+  useEffect(() => {
+    if (fsEdit && fsRef.current) {
+      fsRef.current.innerHTML = mdToHtml(draft[fsEdit] || "");
+      fsRef.current.focus();
     }
+  }, [fsEdit]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function applyFormat(type) {
+    fsRef.current?.focus();
+    if (type === "bold")     document.execCommand("bold", false, null);
+    if (type === "bullet")   document.execCommand("insertUnorderedList", false, null);
+    if (type === "numbered") document.execCommand("insertOrderedList", false, null);
+    setDraft(p => ({ ...p, [fsEdit]: fsRef.current?.innerHTML || p[fsEdit] }));
   }
 
   const handleCommitmentPdfUpload = async (e) => {
@@ -3067,13 +3084,14 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
               </button>
             ))}
           </div>
-          <textarea
+          <div
             ref={fsRef}
-            value={draft[fsEdit]||""}
-            onChange={e=>setDraft(p=>({...p,[fsEdit]:e.target.value}))}
+            contentEditable
+            suppressContentEditableWarning
+            onInput={e=>setDraft(p=>({...p,[fsEdit]:e.currentTarget.innerHTML}))}
             onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==="b"){e.preventDefault();applyFormat("bold");}}}
-            style={{flex:1,padding:"20px",background:"var(--surface2)",border:"none",outline:"none",resize:"none",fontFamily:"inherit",fontSize:15,lineHeight:1.9,color:"var(--text)",direction:"rtl"}}
-            placeholder={`כתוב כאן את נהלי ${lt_active.label}...`}
+            data-placeholder={`כתוב כאן את נהלי ${lt_active.label}...`}
+            style={{flex:1,padding:"20px",background:"var(--surface2)",border:"none",outline:"none",overflowY:"auto",fontFamily:"inherit",fontSize:15,lineHeight:1.9,color:"var(--text)",direction:"rtl",minHeight:0}}
           />
         </div>
       )}

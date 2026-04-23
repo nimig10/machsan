@@ -619,25 +619,31 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
   const policyText = (policies && policies[loanType]) || "";
   const hasPolicies = policyText.trim().length > 0;
 
-  function renderPolicyText(text) {
+  function policyHtml(text) {
+    if (!text) return "";
+    if (/<[a-z]/i.test(text)) return text; // already HTML from contentEditable
+    // Legacy: convert old markdown format
+    const bold = s => s.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
     const lines = text.split('\n');
-    const elements = [];
-    let numList = [], bulletList = [];
-    const flushLists = () => {
-      if (bulletList.length) { elements.push(<ul key={`ul-${elements.length}`} style={{paddingRight:20,margin:"4px 0"}}>{bulletList}</ul>); bulletList = []; }
-      if (numList.length)    { elements.push(<ol key={`ol-${elements.length}`} style={{paddingRight:20,margin:"4px 0"}}>{numList}</ol>);    numList = []; }
-    };
-    const renderInline = (line, key) => {
-      const parts = line.split(/(\*\*[^*]+\*\*)/g);
-      return <span key={key}>{parts.map((p,i)=>p.startsWith('**')&&p.endsWith('**')?<strong key={i}>{p.slice(2,-2)}</strong>:p)}</span>;
-    };
-    lines.forEach((line, i) => {
-      if (/^• /.test(line)) { flushLists(); bulletList.push(<li key={i}>{renderInline(line.slice(2), i)}</li>); }
-      else if (/^\d+\. /.test(line)) { flushLists(); numList.push(<li key={i}>{renderInline(line.replace(/^\d+\. /,''), i)}</li>); }
-      else { flushLists(); elements.push(<span key={i}>{renderInline(line, i)}<br/></span>); }
+    let out = '', inUl = false, inOl = false;
+    lines.forEach(line => {
+      if (/^• /.test(line)) {
+        if (inOl) { out += '</ol>'; inOl = false; }
+        if (!inUl) { out += '<ul>'; inUl = true; }
+        out += `<li>${bold(line.slice(2))}</li>`;
+      } else if (/^\d+\. /.test(line)) {
+        if (inUl) { out += '</ul>'; inUl = false; }
+        if (!inOl) { out += '<ol>'; inOl = true; }
+        out += `<li>${bold(line.replace(/^\d+\. /, ''))}</li>`;
+      } else {
+        if (inUl) { out += '</ul>'; inUl = false; }
+        if (inOl) { out += '</ol>'; inOl = false; }
+        out += `${bold(line)}<br>`;
+      }
     });
-    flushLists();
-    return elements;
+    if (inUl) out += '</ul>';
+    if (inOl) out += '</ol>';
+    return out;
   }
 
   const handleScroll = (e) => {
@@ -694,10 +700,8 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
             <button className="btn btn-secondary btn-sm" onClick={()=>setShowPolicies(false)}><X size={16} strokeWidth={1.75} color="var(--text3)" /> סגור</button>
           </div>
           {/* Scrollable body */}
-          <div
-            onScroll={handleScroll}
-            style={{flex:1,overflowY:"auto",padding:"24px 20px",background:"var(--surface2)",fontSize:15,lineHeight:1.9,color:"var(--text)"}}>
-            {renderPolicyText(policyText)}
+          <div onScroll={handleScroll} style={{flex:1,overflowY:"auto",padding:"24px 20px",background:"var(--surface2)",fontSize:15,lineHeight:1.9,color:"var(--text)"}}>
+            <div dangerouslySetInnerHTML={{__html: policyHtml(policyText)}} />
             {/* bottom anchor */}
             <div style={{height:60,display:"flex",alignItems:"center",justifyContent:"center",marginTop:24}}>
               {scrolledToBottom
