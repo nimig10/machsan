@@ -2947,18 +2947,27 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
   }
 
   useEffect(() => {
-    if (fsEdit && fsRef.current) {
-      fsRef.current.innerHTML = mdToHtml(draft[fsEdit] || "");
-      fsRef.current.focus();
+    if (!fsEdit || !fsRef.current) return;
+    const html = mdToHtml(draft[fsEdit] || "");
+    fsRef.current.innerHTML = html;
+    // Sync draft so save() writes HTML, not old markdown
+    if (html !== (draft[fsEdit] || "")) {
+      setDraft(p => ({ ...p, [fsEdit]: html }));
     }
+    // Focus after a tick so the browser sees the populated DOM
+    setTimeout(() => fsRef.current?.focus(), 0);
   }, [fsEdit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function applyFormat(type) {
-    fsRef.current?.focus();
-    if (type === "bold")     document.execCommand("bold", false, null);
+    // Do NOT call focus() here — toolbar buttons use onMouseDown+preventDefault
+    // to keep focus+selection; keyboard shortcuts are already focused.
+    if (type === "bold")     document.execCommand("bold",                false, null);
     if (type === "bullet")   document.execCommand("insertUnorderedList", false, null);
-    if (type === "numbered") document.execCommand("insertOrderedList", false, null);
-    setDraft(p => ({ ...p, [fsEdit]: fsRef.current?.innerHTML || p[fsEdit] }));
+    if (type === "numbered") document.execCommand("insertOrderedList",   false, null);
+    // Read innerHTML after a tick so execCommand has finished mutating the DOM
+    setTimeout(() => {
+      setDraft(p => ({ ...p, [fsEdit]: fsRef.current?.innerHTML || p[fsEdit] }));
+    }, 0);
   }
 
   const handleCommitmentPdfUpload = async (e) => {
