@@ -3230,6 +3230,10 @@ ${inventory}
                     const grp = groupedStudentBookings.find(g=>g.primaryId===gId);
                     if (grp) {
                       const hasNight = grp.bookings.some(b=>b.isNight);
+                      if (hasNight && new Date().getHours() >= 17) {
+                        showToast("error", "לא ניתן לשייך קביעת לילה להשאלת ציוד אחרי השעה 17:00.");
+                        return;
+                      }
                       setForm(prev=>({...prev, studio_booking_id:gId,
                         borrow_date:grp.startDate, borrow_time:grp.startTime||"",
                         return_date:grp.endDate, return_time:grp.endTime||"",
