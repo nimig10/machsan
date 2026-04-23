@@ -3064,7 +3064,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
         </div>
       </div>
 
-      <button className="btn btn-primary" disabled={saving} onClick={save}>
+      <button className="btn btn-primary" disabled={saving} onClick={()=>save()}>
         {saving ? <><Clock size={13} strokeWidth={1.75}/> שומר...</> : <><Save size={14} strokeWidth={1.75}/> שמור נהלים</>}
       </button>
 
