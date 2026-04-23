@@ -7,5 +7,10 @@
       "path": "/api/prune-snapshots",
       "schedule": "0 3 1 * *"
     }
-  ]
+  ],
+  "functions": {
+    "api/*.js": {
+      "runtime": "nodejs20.x"
+    }
+  }
 }
