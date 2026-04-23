@@ -9,6 +9,32 @@ import AIChatBot from "./AIChatBot.jsx";
 
 const SMART_LOAN_TYPES = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
 
+function policyHtml(text) {
+  if (!text) return "";
+  if (/<[a-z]/i.test(text)) return text;
+  const bold = s => s.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  const lines = text.split('\n');
+  let out = '', inUl = false, inOl = false;
+  lines.forEach(line => {
+    if (/^• /.test(line)) {
+      if (inOl) { out += '</ol>'; inOl = false; }
+      if (!inUl) { out += '<ul>'; inUl = true; }
+      out += `<li>${bold(line.slice(2))}</li>`;
+    } else if (/^\d+\. /.test(line)) {
+      if (inUl) { out += '</ul>'; inUl = false; }
+      if (!inOl) { out += '<ol>'; inOl = true; }
+      out += `<li>${bold(line.replace(/^\d+\. /, ''))}</li>`;
+    } else {
+      if (inUl) { out += '</ul>'; inUl = false; }
+      if (inOl) { out += '</ol>'; inOl = false; }
+      out += `${bold(line)}<br>`;
+    }
+  });
+  if (inUl) out += '</ul>';
+  if (inOl) out += '</ol>';
+  return out;
+}
+
 function normalizeSmartDate(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -618,33 +644,6 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
 
   const policyText = (policies && policies[loanType]) || "";
   const hasPolicies = policyText.trim().length > 0;
-
-  function policyHtml(text) {
-    if (!text) return "";
-    if (/<[a-z]/i.test(text)) return text; // already HTML from contentEditable
-    // Legacy: convert old markdown format
-    const bold = s => s.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
-    const lines = text.split('\n');
-    let out = '', inUl = false, inOl = false;
-    lines.forEach(line => {
-      if (/^• /.test(line)) {
-        if (inOl) { out += '</ol>'; inOl = false; }
-        if (!inUl) { out += '<ul>'; inUl = true; }
-        out += `<li>${bold(line.slice(2))}</li>`;
-      } else if (/^\d+\. /.test(line)) {
-        if (inUl) { out += '</ul>'; inUl = false; }
-        if (!inOl) { out += '<ol>'; inOl = true; }
-        out += `<li>${bold(line.replace(/^\d+\. /, ''))}</li>`;
-      } else {
-        if (inUl) { out += '</ul>'; inUl = false; }
-        if (inOl) { out += '</ol>'; inOl = false; }
-        out += `${bold(line)}<br>`;
-      }
-    });
-    if (inUl) out += '</ul>';
-    if (inOl) out += '</ol>';
-    return out;
-  }
 
   const handleScroll = (e) => {
     const el = e.target;
