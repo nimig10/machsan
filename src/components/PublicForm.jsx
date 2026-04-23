@@ -701,7 +701,7 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
           </div>
           {/* Scrollable body */}
           <div onScroll={handleScroll} style={{flex:1,overflowY:"auto",padding:"24px 20px",background:"var(--surface2)",fontSize:15,lineHeight:1.9,color:"var(--text)"}}>
-            <div dangerouslySetInnerHTML={{__html: policyHtml(policyText)}} />
+            <div className="policy-content" dangerouslySetInnerHTML={{__html: policyHtml(policyText)}} />
             {/* bottom anchor */}
             <div style={{height:60,display:"flex",alignItems:"center",justifyContent:"center",marginTop:24}}>
               {scrolledToBottom

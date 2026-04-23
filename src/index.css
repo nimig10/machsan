@@ -66,3 +66,14 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+/* Policy rich-text content — shared by editor, card preview, and public form */
+.policy-content ul,
+.policy-content ol {
+  padding-inline-start: 1.6em;
+  margin: 0.3em 0;
+}
+.policy-content li {
+  margin-bottom: 0.15em;
+}
+

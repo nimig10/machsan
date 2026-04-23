@@ -3024,7 +3024,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
           </div>
           {draft[lt.key]
             ? <div
-                className="form-input"
+                className="form-input policy-content"
                 dangerouslySetInnerHTML={{__html: draft[lt.key]}}
                 style={{minHeight:120,maxHeight:200,overflowY:"auto",lineHeight:1.7,fontSize:13,cursor:"default"}}
               />
@@ -3099,6 +3099,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
             onInput={e=>{const html=e.currentTarget.innerHTML;setDraft(p=>({...p,[fsEdit]:html}))}}
             onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==="b"){e.preventDefault();applyFormat("bold");}}}
             data-placeholder={`כתוב כאן את נהלי ${lt_active.label}...`}
+            className="policy-content"
             style={{flex:1,padding:"20px",background:"var(--surface2)",border:"none",outline:"none",overflowY:"auto",fontFamily:"inherit",fontSize:15,lineHeight:1.9,color:"var(--text)",direction:"rtl",minHeight:0}}
           />
         </div>
