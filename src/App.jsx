@@ -2917,6 +2917,32 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
   const [saving, setSaving] = useState(false);
   const [fsEdit, setFsEdit] = useState(null); // key being fullscreen-edited
   const [pdfUploading, setPdfUploading] = useState(false);
+  const fsRef = useRef(null);
+
+  function applyFormat(type) {
+    const ta = fsRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end   = ta.selectionEnd;
+    const val   = draft[fsEdit] || "";
+    if (type === "bold") {
+      const sel    = val.slice(start, end);
+      const newVal = val.slice(0, start) + `**${sel}**` + val.slice(end);
+      setDraft(p => ({ ...p, [fsEdit]: newVal }));
+      setTimeout(() => { ta.selectionStart = start + 2; ta.selectionEnd = end + 2; ta.focus(); }, 0);
+    } else {
+      const lineStart = val.lastIndexOf('\n', start - 1) + 1;
+      const rawEnd    = val.indexOf('\n', end);
+      const lineEnd   = rawEnd === -1 ? val.length : rawEnd;
+      const lines     = val.slice(lineStart, lineEnd).split('\n');
+      const prefixed  = type === "bullet"
+        ? lines.map(l => `• ${l}`)
+        : lines.map((l, i) => `${i + 1}. ${l}`);
+      const newVal = val.slice(0, lineStart) + prefixed.join('\n') + val.slice(lineEnd);
+      setDraft(p => ({ ...p, [fsEdit]: newVal }));
+      setTimeout(() => ta.focus(), 0);
+    }
+  }
 
   const handleCommitmentPdfUpload = async (e) => {
     const file = e.target.files[0];
@@ -3027,9 +3053,25 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
               <button className="btn btn-secondary btn-sm" onClick={()=>setFsEdit(null)} style={{display:"flex",alignItems:"center",gap:4}}><X size={14} strokeWidth={1.75} color="var(--text3)"/> סגור</button>
             </div>
           </div>
+          {/* Formatting toolbar */}
+          <div style={{padding:"8px 16px",background:"var(--surface)",borderBottom:"1px solid var(--border)",display:"flex",gap:6,flexShrink:0}}>
+            {[
+              { type:"bold",     label:<><strong>B</strong></>, title:"מודגש (Ctrl+B)" },
+              { type:"bullet",   label:"• רשימה",               title:"נקודות" },
+              { type:"numbered", label:"1. ממוספר",             title:"רשימה ממוספרת" },
+            ].map(btn=>(
+              <button key={btn.type} onMouseDown={e=>{e.preventDefault();applyFormat(btn.type);}}
+                title={btn.title}
+                style={{padding:"4px 12px",border:"1px solid var(--border)",borderRadius:6,background:"var(--surface2)",color:"var(--text)",cursor:"pointer",fontSize:13,fontFamily:"inherit"}}>
+                {btn.label}
+              </button>
+            ))}
+          </div>
           <textarea
+            ref={fsRef}
             value={draft[fsEdit]||""}
             onChange={e=>setDraft(p=>({...p,[fsEdit]:e.target.value}))}
+            onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==="b"){e.preventDefault();applyFormat("bold");}}}
             style={{flex:1,padding:"20px",background:"var(--surface2)",border:"none",outline:"none",resize:"none",fontFamily:"inherit",fontSize:15,lineHeight:1.9,color:"var(--text)",direction:"rtl"}}
             placeholder={`כתוב כאן את נהלי ${lt_active.label}...`}
           />

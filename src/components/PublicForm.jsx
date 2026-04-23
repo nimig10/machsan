@@ -619,6 +619,27 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
   const policyText = (policies && policies[loanType]) || "";
   const hasPolicies = policyText.trim().length > 0;
 
+  function renderPolicyText(text) {
+    const lines = text.split('\n');
+    const elements = [];
+    let numList = [], bulletList = [];
+    const flushLists = () => {
+      if (bulletList.length) { elements.push(<ul key={`ul-${elements.length}`} style={{paddingRight:20,margin:"4px 0"}}>{bulletList}</ul>); bulletList = []; }
+      if (numList.length)    { elements.push(<ol key={`ol-${elements.length}`} style={{paddingRight:20,margin:"4px 0"}}>{numList}</ol>);    numList = []; }
+    };
+    const renderInline = (line, key) => {
+      const parts = line.split(/(\*\*[^*]+\*\*)/g);
+      return <span key={key}>{parts.map((p,i)=>p.startsWith('**')&&p.endsWith('**')?<strong key={i}>{p.slice(2,-2)}</strong>:p)}</span>;
+    };
+    lines.forEach((line, i) => {
+      if (/^• /.test(line)) { flushLists(); bulletList.push(<li key={i}>{renderInline(line.slice(2), i)}</li>); }
+      else if (/^\d+\. /.test(line)) { flushLists(); numList.push(<li key={i}>{renderInline(line.replace(/^\d+\. /,''), i)}</li>); }
+      else { flushLists(); elements.push(<span key={i}>{renderInline(line, i)}<br/></span>); }
+    });
+    flushLists();
+    return elements;
+  }
+
   const handleScroll = (e) => {
     const el = e.target;
     if (el.scrollHeight - el.scrollTop <= el.clientHeight + 20) {
@@ -675,8 +696,8 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
           {/* Scrollable body */}
           <div
             onScroll={handleScroll}
-            style={{flex:1,overflowY:"auto",padding:"24px 20px",background:"var(--surface2)",whiteSpace:"pre-wrap",fontSize:15,lineHeight:1.9,color:"var(--text)"}}>
-            {policyText}
+            style={{flex:1,overflowY:"auto",padding:"24px 20px",background:"var(--surface2)",fontSize:15,lineHeight:1.9,color:"var(--text)"}}>
+            {renderPolicyText(policyText)}
             {/* bottom anchor */}
             <div style={{height:60,display:"flex",alignItems:"center",justifyContent:"center",marginTop:24}}>
               {scrolledToBottom
