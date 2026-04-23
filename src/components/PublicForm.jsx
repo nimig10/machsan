@@ -769,7 +769,19 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:5000,display:"flex",alignItems:"stretch",justifyContent:"center",padding:"0",direction:"rtl","--accent":accentColor||"#f5a623","--accent2":accentColor||"#f5a623","--accent-glow":`${accentColor||"#f5a623"}2e`}}>
-      <div style={{width:"100%",maxWidth:1100,background:"var(--surface)",display:"flex",flexDirection:"column",overflow:"hidden",margin:"0 auto",borderLeft:"1px solid var(--border)",borderRight:"1px solid var(--border)"}}>
+      <div
+        style={{width:"100%",maxWidth:1100,background:"var(--surface)",display:"flex",flexDirection:"column",height:"100%",margin:"0 auto",borderLeft:"1px solid var(--border)",borderRight:"1px solid var(--border)"}}
+        onTouchStart={e=>{ swipeRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }}
+        onTouchEnd={e=>{
+          const dx = e.changedTouches[0].clientX - swipeRef.current.x;
+          const dy = e.changedTouches[0].clientY - swipeRef.current.y;
+          if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+          const ids = tabs.map(t=>t.id);
+          const cur = ids.indexOf(tab);
+          if (dx > 0 && cur > 0)                   { setTab(ids[cur-1]); setSelectedEq(null); }
+          else if (dx < 0 && cur < ids.length-1)   { setTab(ids[cur+1]); setSelectedEq(null); }
+        }}
+      >
 
         {/* Header */}
         <div style={{padding:"18px 28px",background:"var(--surface2)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
@@ -790,20 +802,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
         </div>
 
         {/* Content */}
-        <div
-          style={{flex:1,overflowY:"auto",padding:"24px 28px"}}
-          onTouchStart={e=>{ swipeRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }}
-          onTouchEnd={e=>{
-            const dx = e.changedTouches[0].clientX - swipeRef.current.x;
-            const dy = e.changedTouches[0].clientY - swipeRef.current.y;
-            if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) return;
-            const ids = tabs.map(t=>t.id);
-            const cur = ids.indexOf(tab);
-            // RTL: swipe right → lower index (visually right), swipe left → higher index
-            if (dx > 0 && cur > 0)           { setTab(ids[cur-1]); setSelectedEq(null); }
-            else if (dx < 0 && cur < ids.length-1) { setTab(ids[cur+1]); setSelectedEq(null); }
-          }}
-        >
+        <div style={{flex:1,minHeight:0,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:"24px 28px"}}>
 
           {/* ── EQUIPMENT TAB ── */}
           {tab==="equipment" && !selectedEq && (
