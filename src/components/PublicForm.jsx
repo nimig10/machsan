@@ -904,7 +904,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                 return (
                   <div key={lt} style={{marginBottom:28}}>
                     <div style={{fontWeight:800,fontSize:16,color:"var(--accent)",marginBottom:10}}>{LOAN_ICONS[lt]} נהלי השאלה {lt}</div>
-                    <div style={{fontSize:14,lineHeight:1.9,color:"var(--text2)",whiteSpace:"pre-wrap",background:"var(--surface2)",borderRadius:"var(--r)",padding:"18px 20px",border:"1px solid var(--border)"}}>{text}</div>
+                    <div className="policy-content" style={{fontSize:14,lineHeight:1.9,color:"var(--text2)",background:"var(--surface2)",borderRadius:"var(--r)",padding:"18px 20px",border:"1px solid var(--border)"}} dangerouslySetInnerHTML={{__html:policyHtml(text)}} />
                   </div>
                 );
               })}
