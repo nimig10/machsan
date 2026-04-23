@@ -754,6 +754,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
   const [tab, setTab] = useState("policies");
   const [selectedEq, setSelectedEq] = useState(null);  // equipment detail view
   const [infoCatFilter, setInfoCatFilter] = useState([]); // multi-select
+  const swipeRef = useRef({ x: 0, y: 0 });
   const tabs = [
     { id:"equipment", label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><Package size={16} strokeWidth={1.75} color="var(--accent)" /> ציוד</span> },
     { id:"policies",  label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> נהלים</span> },
@@ -789,7 +790,20 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
         </div>
 
         {/* Content */}
-        <div style={{flex:1,overflowY:"auto",padding:"24px 28px"}}>
+        <div
+          style={{flex:1,overflowY:"auto",padding:"24px 28px"}}
+          onTouchStart={e=>{ swipeRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }}
+          onTouchEnd={e=>{
+            const dx = e.changedTouches[0].clientX - swipeRef.current.x;
+            const dy = e.changedTouches[0].clientY - swipeRef.current.y;
+            if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) return;
+            const ids = tabs.map(t=>t.id);
+            const cur = ids.indexOf(tab);
+            // RTL: swipe right → lower index (visually right), swipe left → higher index
+            if (dx > 0 && cur > 0)           { setTab(ids[cur-1]); setSelectedEq(null); }
+            else if (dx < 0 && cur < ids.length-1) { setTab(ids[cur+1]); setSelectedEq(null); }
+          }}
+        >
 
           {/* ── EQUIPMENT TAB ── */}
           {tab==="equipment" && !selectedEq && (
