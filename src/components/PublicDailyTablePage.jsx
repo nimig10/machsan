@@ -109,6 +109,7 @@ export function PublicDailyTablePage() {
         startTime: b.startTime || "",
         endTime:   b.endTime   || "",
         note:      b.note || b.purpose || "",
+        isNight:   !!b.isNight,
       }))
       .sort((a,b)=>(a.startTime||"").localeCompare(b.startTime||""));
   }, [bookings, today]);
@@ -216,6 +217,7 @@ export function PublicDailyTablePage() {
                     <th style={{...thBase,width:"14vw"}}>מסלול לימודים</th>
                     <th style={{...thBase,width:"15vw"}}>חדר / אולפן</th>
                     <th style={{...thBase,width:"11vw"}}>שעות</th>
+                    <th style={{...thBase,width:"8vw"}}>סוג</th>
                     <th style={{...thBase}}>הערה</th>
                   </tr>
                 </thead>
@@ -225,7 +227,12 @@ export function PublicDailyTablePage() {
                       <td style={{...cellBase,fontWeight:700,color:"#fff"}}>{r.name}</td>
                       <td style={{...cellBase,color:"#bbb",fontWeight:500}}>{r.track||"—"}</td>
                       <td style={{...cellBase,color:"#ddd"}}>{stName(r.studioId)}</td>
-                      <td style={{...cellBase,color:"#2ecc71",fontWeight:700,whiteSpace:"nowrap"}}>{r.startTime&&r.endTime?`${r.startTime}–${r.endTime}`:r.startTime||"—"}</td>
+                      <td style={{...cellBase,color:accent,fontWeight:700,whiteSpace:"nowrap"}}>{r.startTime&&r.endTime?`${r.startTime}–${r.endTime}`:r.startTime||"—"}</td>
+                      <td style={{...cellBase,whiteSpace:"nowrap"}}>
+                        {r.isNight
+                          ? <span style={{color:"#7b8cde",fontWeight:700,fontSize:"1.3vh"}}>🌙 לילה</span>
+                          : <span style={{color:"#f5c842",fontWeight:600,fontSize:"1.3vh"}}>☀️ יום</span>}
+                      </td>
                       <td style={{...cellBase,color:"#aaa"}}>{r.note||"—"}</td>
                     </tr>
                   ))}
