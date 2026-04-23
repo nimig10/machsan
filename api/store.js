@@ -1,4 +1,4 @@
-// store.js — server-side proxy for reading + writing the store table. v2
+// store.js — server-side proxy for reading + writing the store table.
 // Uses SERVICE_ROLE_KEY so writes bypass RLS. This lets us lock down the
 // anon role to read-only (+ reservations/studio_bookings only).
 //
