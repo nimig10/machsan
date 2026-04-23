@@ -3022,14 +3022,16 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
             <div className="card-title">{lt.icon} נהלי {lt.label}</div>
             <button className="btn btn-secondary btn-sm" onClick={()=>setFsEdit(lt.key)} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> עריכה מורחבת</button>
           </div>
-          <textarea
-            className="form-input"
-            rows={6}
-            placeholder={`כתוב כאן את נהלי ${lt.label}...`}
-            value={draft[lt.key]||""}
-            onChange={e=>setDraft(p=>({...p,[lt.key]:e.target.value}))}
-            style={{resize:"vertical",fontFamily:"inherit",lineHeight:1.7,fontSize:13}}
-          />
+          {draft[lt.key]
+            ? <div
+                className="form-input"
+                dangerouslySetInnerHTML={{__html: draft[lt.key]}}
+                style={{minHeight:120,maxHeight:200,overflowY:"auto",lineHeight:1.7,fontSize:13,cursor:"default"}}
+              />
+            : <div className="form-input" style={{minHeight:120,color:"var(--text3)",fontSize:13,lineHeight:1.7}}>
+                {`כתוב כאן את נהלי ${lt.label}...`}
+              </div>
+          }
         </div>
       ))}
       {/* Commitment PDF */}
