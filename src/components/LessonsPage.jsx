@@ -1,7 +1,7 @@
 // LessonsPage.jsx — course & lesson schedule management
 import { useRef, useState, useEffect } from "react";
 import * as XLSX from "xlsx";
-import { BookOpen, Calendar, Camera, Check, CheckCircle, Clock, FileText, Film, GraduationCap, Lightbulb, Link, Mail, Mic, Package, Pencil, Phone, Plus, Search, User, Video, X, XCircle } from "lucide-react";
+import { Award, BookOpen, Calendar, Camera, Check, CheckCircle, Clock, Download, FileText, Film, GraduationCap, Lightbulb, Link, Mail, Mic, Package, Pencil, Phone, Plus, Search, Trash2, Upload, User, Video, X, XCircle } from "lucide-react";
 import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAuthToken } from "../utils.js";
 import { makeLecturer } from "./LecturersPage.jsx";
 
@@ -985,6 +985,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           trackOptions={trackOptions}
           lecturers={lecturers}
           setLecturers={setLecturers}
+          certifications={certifications}
         />
       ) : (
         <>
@@ -1198,7 +1199,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 }
 
 // ── Lesson/Course Form ────────────────────────────────────────────────────────
-function LessonForm({ initial, onSave, onCancel, studios, equipment, reservations, setReservations, kits, showToast, trackOptions=[], lecturers=[], setLecturers }) {
+function LessonForm({ initial, onSave, onCancel, studios, equipment, reservations, setReservations, kits, showToast, trackOptions=[], lecturers=[], setLecturers, certifications={} }) {
   const lecturerOptions = lecturers.filter((lecturer) => lecturer?.isActive !== false);
   const [name, setName]                       = useState(initial?.name||"");
   const [track, setTrack]                     = useState(initial?.track||"");
@@ -1213,6 +1214,9 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
   const [localMsg, setLocalMsg]               = useState(null);
   const [teacherMessage, setTeacherMessage]   = useState("");
   const [teacherEmailSending, setTeacherEmailSending] = useState(false);
+  const [certificateTemplate, setCertificateTemplate] = useState(initial?.certificateTemplate || null);
+  const [certUploading, setCertUploading]     = useState(false);
+  const [certGenerating, setCertGenerating]   = useState(false);
   const normalizedTrackOptions = [...new Set((trackOptions || []).map(option => String(option || "").trim()).filter(Boolean))];
   const isMobile = typeof window !== "undefined" && window.innerWidth < 769;
   const selectedLecturerObj = lecturerId ? lecturers.find(l => l.id === lecturerId) : null;
@@ -1325,6 +1329,130 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
     }
   };
 
+  const handleCertTemplateUpload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const allowedExt = [".docx"];
+    const lowerName = String(file.name || "").toLowerCase();
+    if (!allowedExt.some(ext => lowerName.endsWith(ext))) {
+      setLocalMsg({type:"error",text:"יש להעלות קובץ Word בפורמט .docx"});
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setLocalMsg({type:"error",text:"הקובץ גדול מדי (מקסימום 8MB)"});
+      return;
+    }
+    setCertUploading(true);
+    try {
+      const b64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      const tok = await getAuthToken();
+      const res = await fetch("/api/upload-cert-template", {
+        method: "POST",
+        headers: { "Content-Type":"application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) },
+        body: JSON.stringify({ data: b64, filename: file.name }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || "העלאה נכשלה");
+      setCertificateTemplate({
+        url: json.url,
+        filename: json.filename || file.name,
+        uploadedAt: new Date().toISOString(),
+      });
+      setLocalMsg({type:"success",text:"תבנית התעודה הועלתה. זכור ללחוץ שמור."});
+    } catch (err) {
+      console.error("cert upload error", err);
+      setLocalMsg({type:"error",text:`שגיאה בהעלאת התבנית: ${err.message}`});
+    } finally {
+      setCertUploading(false);
+    }
+  };
+
+  const handleCertTemplateRemove = () => {
+    setCertificateTemplate(null);
+    setLocalMsg({type:"success",text:"התבנית הוסרה. זכור ללחוץ שמור."});
+  };
+
+  const studentsInTrack = (() => {
+    const trk = track.trim();
+    if (!trk) return [];
+    const all = Array.isArray(certifications?.students) ? certifications.students : [];
+    return all.filter(s => String(s?.track || "").trim() === trk);
+  })();
+
+  const generateCertificates = async () => {
+    if (!certificateTemplate?.url) {
+      setLocalMsg({type:"error",text:"צריך להעלות תבנית קודם"});
+      return;
+    }
+    if (studentsInTrack.length === 0) {
+      setLocalMsg({type:"error",text:`אין סטודנטים במסלול "${track}". ודא שהמסלול נבחר ושרשומים בו סטודנטים.`});
+      return;
+    }
+    setCertGenerating(true);
+    try {
+      const [{ default: PizZip }, { default: Docxtemplater }, { default: JSZip }, { saveAs }] = await Promise.all([
+        import("pizzip"),
+        import("docxtemplater"),
+        import("jszip"),
+        import("file-saver"),
+      ]);
+
+      const templateRes = await fetch(certificateTemplate.url);
+      if (!templateRes.ok) throw new Error("לא ניתן לטעון את קובץ התבנית");
+      const templateBuffer = await templateRes.arrayBuffer();
+
+      const outputZip = new JSZip();
+      const courseName = name.trim();
+      const trackName  = track.trim();
+      const todayStr   = formatDate(new Date().toISOString());
+
+      const sanitize = s => String(s || "").replace(/[\\/:*?"<>|]/g, "_").trim() || "student";
+      const used = new Set();
+
+      for (const student of studentsInTrack) {
+        const fullName = String(student?.name || `${student?.firstName || ""} ${student?.lastName || ""}`).trim() || "—";
+        const zip = new PizZip(templateBuffer);
+        const doc = new Docxtemplater(zip, {
+          paragraphLoop: true,
+          linebreaks: true,
+          delimiters: { start: "{", end: "}" },
+        });
+        doc.render({
+          name: fullName,
+          firstName: student?.firstName || fullName.split(/\s+/)[0] || "",
+          lastName:  student?.lastName  || fullName.split(/\s+/).slice(1).join(" ") || "",
+          courseName,
+          course: courseName,
+          track: trackName,
+          date: todayStr,
+        });
+        const out = doc.getZip().generate({ type: "uint8array" });
+        let fname = `${sanitize(fullName)}.docx`;
+        let idx = 2;
+        while (used.has(fname)) fname = `${sanitize(fullName)} (${idx++}).docx`;
+        used.add(fname);
+        outputZip.file(fname, out);
+      }
+
+      const blob = await outputZip.generateAsync({ type: "blob" });
+      const safeCourse = sanitize(courseName) || "course";
+      saveAs(blob, `תעודות-${safeCourse}-${todayStr.replace(/\//g,"-")}.zip`);
+      setLocalMsg({type:"success",text:`נוצרו ${studentsInTrack.length} תעודות. קובץ ה-ZIP ירד אוטומטית.`});
+    } catch (err) {
+      console.error("generate certs error", err);
+      const msg = err?.properties?.errors?.[0]?.message || err.message || "שגיאה לא ידועה";
+      setLocalMsg({type:"error",text:`שגיאה בייצור התעודות: ${msg}`});
+    } finally {
+      setCertGenerating(false);
+    }
+  };
+
   const handleSave = async () => {
     if(!name.trim()) { setLocalMsg({type:"error",text:"חובה למלא שם קורס"}); return; }
     if (!track.trim() || !normalizedTrackOptions.includes(track.trim())) {
@@ -1360,6 +1488,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
       description: description.trim(),
       studioId: studioId||null,
       schedule: finalSchedule,
+      certificateTemplate: certificateTemplate || null,
       created_at: initial?.created_at||new Date().toISOString(),
     };
     await onSave(lesson);
@@ -1585,6 +1714,53 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
             )}
           </div>
         </div>
+      </div>
+
+      {/* Certificate template */}
+      <div style={{background:"rgba(245,166,35,0.07)",border:"1px solid rgba(245,166,35,0.25)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
+        <div style={{fontWeight:800,fontSize:13,color:"#f5a623",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+          <Award size={14} strokeWidth={1.75}/> תעודת גמר — תבנית Word
+        </div>
+        <div style={{fontSize:12,color:"var(--text3)",marginBottom:10,lineHeight:1.5}}>
+          העלה מסמך Word (.docx). כל מקום שתכתוב <code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{name}"}</code> יוחלף אוטומטית בשם הסטודנט. ניתן להשתמש גם ב-<code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{courseName}"}</code>, <code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{track}"}</code>, <code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{date}"}</code>.
+        </div>
+
+        {!certificateTemplate ? (
+          <label className="btn btn-secondary" style={{display:"inline-flex",alignItems:"center",gap:6,cursor:certUploading?"wait":"pointer",opacity:certUploading?0.6:1}}>
+            {certUploading ? <><Clock size={16} strokeWidth={1.75}/> מעלה...</> : <><Upload size={14} strokeWidth={1.75}/> העלה תבנית (.docx)</>}
+            <input type="file" accept=".docx" style={{display:"none"}} onChange={handleCertTemplateUpload} disabled={certUploading}/>
+          </label>
+        ) : (
+          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",background:"rgba(0,0,0,0.15)",padding:"8px 12px",borderRadius:"var(--r-xs)",marginBottom:10}}>
+            <FileText size={16} strokeWidth={1.75} color="#f5a623"/>
+            <a href={certificateTemplate.url} target="_blank" rel="noopener noreferrer" style={{color:"var(--text)",fontSize:13,fontWeight:600,textDecoration:"underline",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+              {certificateTemplate.filename || "template.docx"}
+            </a>
+            <button type="button" className="btn btn-sm btn-secondary" onClick={handleCertTemplateRemove} style={{display:"inline-flex",alignItems:"center",gap:4}}>
+              <Trash2 size={13} strokeWidth={1.75}/> הסר
+            </button>
+          </div>
+        )}
+
+        {certificateTemplate && (
+          <div style={{marginTop:10}}>
+            <div style={{fontSize:12,color:"var(--text3)",marginBottom:8}}>
+              {track.trim()
+                ? <>סטודנטים במסלול <b>{track}</b>: <b style={{color:"var(--text)"}}>{studentsInTrack.length}</b></>
+                : <>יש לבחור מסלול לימודים לפני ייצור תעודות.</>
+              }
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{background:"#f5a623",borderColor:"#f5a623",color:"#0a0c10",display:"inline-flex",alignItems:"center",gap:6}}
+              onClick={generateCertificates}
+              disabled={certGenerating || !track.trim() || studentsInTrack.length === 0}
+            >
+              {certGenerating ? <><Clock size={16} strokeWidth={1.75}/> מייצר...</> : <><Download size={14} strokeWidth={1.75}/> ייצר תעודות לכל הסטודנטים ({studentsInTrack.length})</>}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Email to teacher */}
