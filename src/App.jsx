@@ -295,6 +295,32 @@ function formatDate(d) {
   return parseLocalDate(d).toLocaleDateString("he-IL", { day:"2-digit", month:"2-digit", year:"numeric" });
 }
 
+function policyHtml(text) {
+  if (!text) return "";
+  if (/<[a-z]/i.test(text)) return text;
+  const bold = s => s.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  const lines = text.split('\n');
+  let out = '', inUl = false, inOl = false;
+  lines.forEach(line => {
+    if (/^• /.test(line)) {
+      if (inOl) { out += '</ol>'; inOl = false; }
+      if (!inUl) { out += '<ul>'; inUl = true; }
+      out += `<li>${bold(line.slice(2))}</li>`;
+    } else if (/^\d+\. /.test(line)) {
+      if (inUl) { out += '</ul>'; inUl = false; }
+      if (!inOl) { out += '<ol>'; inOl = true; }
+      out += `<li>${bold(line.replace(/^\d+\. /, ''))}</li>`;
+    } else {
+      if (inUl) { out += '</ul>'; inUl = false; }
+      if (inOl) { out += '</ol>'; inOl = false; }
+      out += `${bold(line)}<br>`;
+    }
+  });
+  if (inUl) out += '</ul>';
+  if (inOl) out += '</ol>';
+  return out;
+}
+
 function normalizeName(value) {
   return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
@@ -2664,8 +2690,8 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
           {/* Scrollable body */}
           <div
             onScroll={handleScroll}
-            style={{flex:1,overflowY:"auto",padding:"24px 20px",background:"var(--surface2)",whiteSpace:"pre-wrap",fontSize:15,lineHeight:1.9,color:"var(--text)"}}>
-            {policyText}
+            style={{flex:1,overflowY:"auto",padding:"24px 20px",background:"var(--surface2)",fontSize:15,lineHeight:1.9,color:"var(--text)"}}>
+            <div className="policy-content" dangerouslySetInnerHTML={{__html:policyHtml(policyText)}} />
             {/* bottom anchor */}
             <div style={{height:60,display:"flex",alignItems:"center",justifyContent:"center",marginTop:24}}>
               {scrolledToBottom
@@ -2822,7 +2848,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                 return (
                   <div key={lt} style={{marginBottom:28}}>
                     <div style={{fontWeight:800,fontSize:16,color:"var(--accent)",marginBottom:10}}>{LOAN_ICONS[lt]} נהלי השאלה {lt}</div>
-                    <div style={{fontSize:14,lineHeight:1.9,color:"var(--text2)",whiteSpace:"pre-wrap",background:"var(--surface2)",borderRadius:"var(--r)",padding:"18px 20px",border:"1px solid var(--border)"}}>{text}</div>
+                    <div className="policy-content" style={{fontSize:14,lineHeight:1.9,color:"var(--text2)",background:"var(--surface2)",borderRadius:"var(--r)",padding:"18px 20px",border:"1px solid var(--border)"}} dangerouslySetInnerHTML={{__html:policyHtml(text)}} />
                   </div>
                 );
               })}
