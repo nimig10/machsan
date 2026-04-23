@@ -2948,13 +2948,8 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
 
   useEffect(() => {
     if (!fsEdit || !fsRef.current) return;
-    const html = mdToHtml(draft[fsEdit] || "");
-    fsRef.current.innerHTML = html;
-    // Sync draft so save() writes HTML, not old markdown
-    if (html !== (draft[fsEdit] || "")) {
-      setDraft(p => ({ ...p, [fsEdit]: html }));
-    }
-    // Focus after a tick so the browser sees the populated DOM
+    // Set innerHTML for display only — do NOT call setDraft here (causes null.innerHTML crash)
+    fsRef.current.innerHTML = mdToHtml(draft[fsEdit] || "");
     setTimeout(() => fsRef.current?.focus(), 0);
   }, [fsEdit]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -3003,10 +2998,12 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
     setPdfUploading(false);
   };
 
-  const save = async () => {
+  const save = async (overrideDraft) => {
+    const toSave = overrideDraft || draft;
     setSaving(true);
-    setPolicies(draft);
-    const r = await storageSet("policies", draft);
+    setPolicies(toSave);
+    setDraft(toSave);
+    const r = await storageSet("policies", toSave);
     setSaving(false);
     if(r.ok) showToast("success", "הנהלים נשמרו בהצלחה");
     else showToast("error", "שגיאה בשמירת הנהלים");
@@ -3075,7 +3072,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
           <div style={{padding:"16px 20px",background:"var(--surface)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
             <div style={{fontWeight:900,fontSize:17}}>{lt_active.icon} עריכת נהלי {lt_active.label}</div>
             <div style={{display:"flex",gap:8}}>
-              <button className="btn btn-primary btn-sm" onClick={async()=>{ await save(); setFsEdit(null); }} style={{display:"inline-flex",alignItems:"center",gap:4}}><Save size={14} strokeWidth={1.75}/> שמור וסגור</button>
+              <button className="btn btn-primary btn-sm" onClick={async()=>{ const toSave=fsRef.current?{...draft,[fsEdit]:fsRef.current.innerHTML}:draft; await save(toSave); setFsEdit(null); }} style={{display:"inline-flex",alignItems:"center",gap:4}}><Save size={14} strokeWidth={1.75}/> שמור וסגור</button>
               <button className="btn btn-secondary btn-sm" onClick={()=>setFsEdit(null)} style={{display:"flex",alignItems:"center",gap:4}}><X size={14} strokeWidth={1.75} color="var(--text3)"/> סגור</button>
             </div>
           </div>
@@ -3097,7 +3094,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
             ref={fsRef}
             contentEditable
             suppressContentEditableWarning
-            onInput={e=>setDraft(p=>({...p,[fsEdit]:e.currentTarget.innerHTML}))}
+            onInput={e=>{const html=e.currentTarget.innerHTML;setDraft(p=>({...p,[fsEdit]:html}))}}
             onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==="b"){e.preventDefault();applyFormat("bold");}}}
             data-placeholder={`כתוב כאן את נהלי ${lt_active.label}...`}
             style={{flex:1,padding:"20px",background:"var(--surface2)",border:"none",outline:"none",overflowY:"auto",fontFamily:"inherit",fontSize:15,lineHeight:1.9,color:"var(--text)",direction:"rtl",minHeight:0}}
