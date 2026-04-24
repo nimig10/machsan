@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|@vite|@react-refresh|@fs|node_modules/).*)", "destination": "/index.html" }
   ],
   "crons": [
     {
