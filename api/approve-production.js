@@ -64,16 +64,17 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Fetch current reservations from Supabase
-    const getRes = await fetch(`${SB_URL}/rest/v1/store?key=eq.reservations&select=data`, { headers: SB_HEADERS });
-    const getJson = await getRes.json();
-
-    if (!Array.isArray(getJson) || !getJson.length || !getJson[0].data) {
-      return res.status(500).send(buildPage("❌ שגיאה", "לא ניתן לטעון בקשות", "#e74c3c"));
+    // Fetch the specific reservation from the normalized table (Stage 5 —
+    // we no longer read store.reservations; see migration 024).
+    const getRes = await fetch(
+      `${SB_URL}/rest/v1/reservations_new?id=eq.${encodeURIComponent(id)}&select=id,student_name,status&limit=1`,
+      { headers: SB_HEADERS }
+    );
+    if (!getRes.ok) {
+      return res.status(500).send(buildPage("❌ שגיאה", "לא ניתן לטעון את הבקשה", "#e74c3c"));
     }
-
-    const reservations = getJson[0].data;
-    const reservation = reservations.find(r => String(r.id) === String(id));
+    const rows = await getRes.json();
+    const reservation = Array.isArray(rows) ? rows[0] : null;
 
     if (!reservation) {
       return res.status(404).send(buildPage("❌ לא נמצא", "הבקשה לא נמצאה במערכת", "#e74c3c"));
@@ -88,16 +89,15 @@ export default async function handler(req, res) {
       return res.status(200).send(buildPage("ℹ️ עדכון", msg, "#3498db"));
     }
 
-    // Update status to "ממתין"
-    const updated = reservations.map(r =>
-      String(r.id) === String(id) ? { ...r, status: "ממתין" } : r
+    // Update status to "ממתין" directly on the normalized row.
+    const saveRes = await fetch(
+      `${SB_URL}/rest/v1/reservations_new?id=eq.${encodeURIComponent(id)}`,
+      {
+        method: "PATCH",
+        headers: SB_HEADERS,
+        body: JSON.stringify({ status: "ממתין", updated_at: new Date().toISOString() }),
+      }
     );
-
-    const saveRes = await fetch(`${SB_URL}/rest/v1/store`, {
-      method: "POST",
-      headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates" },
-      body: JSON.stringify({ key: "reservations", data: updated, updated_at: new Date().toISOString() }),
-    });
 
     if (!saveRes.ok) {
       return res.status(500).send(buildPage("❌ שגיאה", "לא ניתן לעדכן את הסטטוס", "#e74c3c"));
