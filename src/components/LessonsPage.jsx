@@ -118,6 +118,14 @@ function normalizeImportedLessonDate(dateValue = "", dayOfWeek = "") {
 
 function normalizeImportedLessonTime(timeValue = "") {
   const raw = String(timeValue || "").trim();
+  // Excel stores times as decimal fraction of a day (e.g. 0.375 = 09:00)
+  const num = Number(raw);
+  if (!isNaN(num) && num > 0 && num < 1 && !raw.includes(":")) {
+    const totalMinutes = Math.round(num * 24 * 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  }
   const match = raw.match(/(\d{1,2}):(\d{1,2})/);
   if (!match) return "00:00";
   const hours = Math.max(0, Math.min(23, Number(match[1]) || 0));
@@ -564,8 +572,8 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           const sessionKitName = kitIdx >= 0 ? String(row[kitIdx] || "").trim() : "";
           group.schedule.push(normalizeScheduleEntry({
             date,
-            startTime: startIdx >= 0 ? String(row[startIdx] || "").trim() || "09:00" : "09:00",
-            endTime: endIdx >= 0 ? String(row[endIdx] || "").trim() || "12:00" : "12:00",
+            startTime: startIdx >= 0 ? normalizeImportedLessonTime(row[startIdx]) || "09:00" : "09:00",
+            endTime: endIdx >= 0 ? normalizeImportedLessonTime(row[endIdx]) || "12:00" : "12:00",
             topic: topicIdx >= 0 ? String(row[topicIdx] || "").trim() : "",
             studioId: sessionStudioName ? (studios.find(s=>s.name===sessionStudioName)?.id || null) : null,
             kitId: sessionKitName ? (lessonKits.find(k=>k.name===sessionKitName)?.id || null) : null,
