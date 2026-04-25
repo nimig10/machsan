@@ -83,6 +83,7 @@ export function LecturerPortal({
   equipment = [],
   reservations = [],
   studios = [],
+  certifications = { types: [], students: [] },
   setLessons,
   setKits,
   setReservations,
@@ -101,6 +102,12 @@ export function LecturerPortal({
   });
   const [search, setSearch] = useState("");
   const [courseFilter, setCourseFilter] = useState("הכל");
+  // archiveView: false = active courses, true = courses whose last meeting
+  // already passed (course archive). Lessons stay in the system until the
+  // admin deletes them — the lecturer can still update student statuses
+  // here for late submissions (computeStatusWindow keeps the window open
+  // post-end).
+  const [archiveView, setArchiveView] = useState(false);
   const [editorState, setEditorState] = useState(null);
   const [draftName, setDraftName] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
@@ -112,6 +119,14 @@ export function LecturerPortal({
   const [editorError, setEditorError] = useState("");
   const [saving, setSaving] = useState(false);
   const [activeKitIds, setActiveKitIds] = useState(new Set());
+
+  // ── Student status modal ──
+  // studentListLessonId: which lesson's student-list modal is open (null = closed).
+  // studentStatusDraft: per-row draft map { [studentId]: "passed" | "failed" | "" }
+  // savingStudentStatuses: spinner flag for the modal Save button.
+  const [studentListLessonId, setStudentListLessonId] = useState(null);
+  const [studentStatusDraft, setStudentStatusDraft] = useState({});
+  const [savingStudentStatuses, setSavingStudentStatuses] = useState(false);
 
   const activeLecturers = useMemo(
     () => lecturers.filter((lecturer) => lecturer?.isActive !== false),
@@ -232,6 +247,7 @@ export function LecturerPortal({
   }, [currentLecturer, lessons]);
 
   const lecturerCourseEntries = useMemo(() => {
+    const todayIso = new Date().toISOString().slice(0, 10);
     return lecturerLessons
       .map((lesson) => {
         const sessions = sortSessions((lesson.schedule || []).filter((session) => session?.date))
@@ -246,6 +262,14 @@ export function LecturerPortal({
         const fallbackSessions = sessions.filter((session) => !hasLinkedValue(session.kitId));
         const futureFallbackSessions = fallbackSessions.filter((session) => !session._isPast);
         const nextSession = futureSessions[0] || sessions[0] || null;
+        // A course is considered "archived" only when it has at least one
+        // scheduled meeting AND the last meeting's date is strictly before
+        // today (Israel local — same calendar day as everywhere else in this
+        // file). Courses without any schedule never auto-archive — there's
+        // no end date to compare to.
+        const sessionDates = sessions.map((s) => String(s?.date || "")).filter(Boolean);
+        const lastMeetingISO = sessionDates[sessionDates.length - 1] || "";
+        const isArchived = !!lastMeetingISO && lastMeetingISO < todayIso;
         return {
           lesson,
           sessions,
@@ -254,6 +278,8 @@ export function LecturerPortal({
           fallbackSessions,
           futureFallbackSessions,
           nextSession,
+          isArchived,
+          lastMeetingISO,
         };
       })
       .sort((a, b) => {
@@ -263,8 +289,19 @@ export function LecturerPortal({
       });
   }, [lecturerLessons, lessonKits]);
 
+  // Split entries into active vs archived for the two views.
+  const activeCourseEntries = useMemo(
+    () => lecturerCourseEntries.filter((e) => !e.isArchived),
+    [lecturerCourseEntries],
+  );
+  const archivedCourseEntries = useMemo(
+    () => lecturerCourseEntries.filter((e) => e.isArchived),
+    [lecturerCourseEntries],
+  );
+  const visibleCourseEntries = archiveView ? archivedCourseEntries : activeCourseEntries;
+
   const filteredCourseEntries = useMemo(() => {
-    let entries = lecturerCourseEntries;
+    let entries = visibleCourseEntries;
     // Apply course name filter
     if (courseFilter && courseFilter !== "הכל") {
       entries = entries.filter(({ lesson }) => lesson?.name === courseFilter);
@@ -281,7 +318,7 @@ export function LecturerPortal({
       ].map((value) => String(value || "").toLowerCase()).join(" ");
       return haystack.includes(term);
     });
-  }, [lecturerCourseEntries, search, courseFilter]);
+  }, [visibleCourseEntries, search, courseFilter]);
 
   const editorContext = useMemo(() => {
     if (!editorState) return null;
@@ -336,10 +373,10 @@ export function LecturerPortal({
     );
     const itemSource = realReservation || sourceKit;
 
-    setDraftName(
-      String(sourceKit?.name || "").trim()
-      || buildDefaultKitName(editorContext.lesson, editorContext.type, editorContext.session),
-    );
+    // Reservation name is auto-built from the course name + meeting date.
+    // The lecturer doesn't set this manually anymore — the field was removed
+    // from the modal because it always boils down to the same template.
+    setDraftName(buildDefaultKitName(editorContext.lesson, editorContext.type, editorContext.session));
     setDraftDescription(String(sourceKit?.description || "").trim());
     setDraftItems(
       (itemSource?.items || [])
@@ -451,6 +488,90 @@ export function LecturerPortal({
     setEditorError("");
     setEqTypeFilter("all");
     setActiveKitIds(new Set());
+  };
+
+  // ── Student-status helpers ──────────────────────────────────────────────
+  // Compute the last meeting date (YYYY-MM-DD) and whether the 7-day window
+  // is open. Window opens 7 days before the last meeting and stays open
+  // forever afterwards (so the lecturer can submit a late update).
+  function computeStatusWindow(lesson) {
+    const sched = Array.isArray(lesson?.schedule) ? lesson.schedule : [];
+    const dates = sched
+      .map((s) => (typeof s?.date === "string" ? s.date : ""))
+      .filter(Boolean)
+      .sort();
+    const lastMeetingDate = dates[dates.length - 1] || "";
+    if (!lastMeetingDate) {
+      return { windowOpen: false, lastMeetingDate: "", windowOpensISO: "", isPostEnd: false };
+    }
+    const lastMs = new Date(`${lastMeetingDate}T00:00:00`).getTime();
+    const opensMs = lastMs - 7 * 24 * 60 * 60 * 1000;
+    const opens = new Date(opensMs);
+    const yyyy = opens.getFullYear();
+    const mm = String(opens.getMonth() + 1).padStart(2, "0");
+    const dd = String(opens.getDate()).padStart(2, "0");
+    const windowOpensISO = `${yyyy}-${mm}-${dd}`;
+    const today = new Date().toISOString().slice(0, 10);
+    const windowOpen = today >= windowOpensISO;
+    const isPostEnd = today > lastMeetingDate;
+    return { windowOpen, lastMeetingDate, windowOpensISO, isPostEnd };
+  }
+
+  function getStudentsForLesson(lesson) {
+    const trk = String(lesson?.track || "").trim();
+    if (!trk) return [];
+    const all = Array.isArray(certifications?.students) ? certifications.students : [];
+    return all
+      .filter((s) => String(s?.track || "").trim() === trk)
+      .map((s) => ({
+        ...s,
+        _displayName: String(s?.name || `${s?.firstName || ""} ${s?.lastName || ""}`).trim() || "—",
+      }));
+  }
+
+  const openStudentList = (lesson) => {
+    if (!lesson) return;
+    const draft = {};
+    const existing = (lesson.studentStatuses && typeof lesson.studentStatuses === "object") ? lesson.studentStatuses : {};
+    getStudentsForLesson(lesson).forEach((s) => {
+      const v = existing[s.id];
+      draft[s.id] = (v === "passed" || v === "failed") ? v : "";
+    });
+    setStudentStatusDraft(draft);
+    setStudentListLessonId(lesson.id);
+  };
+
+  const closeStudentList = () => {
+    if (savingStudentStatuses) return;
+    setStudentListLessonId(null);
+    setStudentStatusDraft({});
+  };
+
+  const saveStudentStatuses = async () => {
+    const lesson = lessons.find((l) => String(l.id) === String(studentListLessonId));
+    if (!lesson) {
+      closeStudentList();
+      return;
+    }
+    setSavingStudentStatuses(true);
+    try {
+      const cleanMap = {};
+      Object.entries(studentStatusDraft || {}).forEach(([sid, val]) => {
+        if (val === "passed" || val === "failed") cleanMap[sid] = val;
+      });
+      const updatedLesson = { ...lesson, studentStatuses: cleanMap };
+      const updatedLessons = lessons.map((l) => String(l.id) === String(lesson.id) ? updatedLesson : l);
+      await storageSet("lessons", updatedLessons);
+      if (setLessons) setLessons(updatedLessons);
+      showToast && showToast("success", "סטטוסי התלמידים נשמרו");
+      setStudentListLessonId(null);
+      setStudentStatusDraft({});
+    } catch (err) {
+      console.error("saveStudentStatuses error", err);
+      showToast && showToast("error", "שמירה נכשלה. נסה שוב.");
+    } finally {
+      setSavingStudentStatuses(false);
+    }
   };
 
   const setItemQuantity = (equipmentId, quantity) => {
@@ -790,7 +911,7 @@ export function LecturerPortal({
     <div className="form-page" style={{ "--accent": siteSettings.accentColor || "#f5a623", direction: "rtl" }}>
       <div style={{ width: "min(1180px, 100%)", display: "flex", flexDirection: "column", gap: 20 }}>
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 18, padding: "22px 24px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap", marginBottom: lecturerCourseEntries.length > 1 ? 14 : 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap", marginBottom: visibleCourseEntries.length > 1 ? 14 : 0 }}>
             <div>
               <div style={{ fontSize: 24, fontWeight: 900, color: "var(--accent)", marginBottom: 4 }}>פורטל מרצה</div>
               <div style={{ fontSize: 14, color: "var(--text2)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -812,6 +933,29 @@ export function LecturerPortal({
                   onChange={(event) => { setSearch(event.target.value); setCourseFilter("הכל"); }}
                 />
               )}
+              {/* Archive toggle: switches between active courses and the archive
+                  (courses whose last meeting already passed). Only rendered
+                  when the archive has anything to show — otherwise it's noise. */}
+              {activeTab === "courses" && archivedCourseEntries.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => { setArchiveView((v) => !v); setCourseFilter("הכל"); setSearch(""); }}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: 20,
+                    border: `2px solid ${archiveView ? "var(--accent)" : "var(--border)"}`,
+                    background: archiveView ? "var(--accent-glow)" : "var(--surface2)",
+                    color: archiveView ? "var(--accent)" : "var(--text2)",
+                    fontWeight: 800,
+                    fontSize: 13,
+                    cursor: "pointer",
+                    transition: "all 0.15s",
+                  }}
+                  title={archiveView ? "חזרה לקורסים פעילים" : "הצג קורסים שהסתיימו"}
+                >
+                  {archiveView ? "← קורסים פעילים" : `🗂 ארכיון קורסים (${archivedCourseEntries.length})`}
+                </button>
+              )}
               {(() => { try { const r = loggedInLecturer || {}; return r.is_admin || r.is_warehouse; } catch { return false; } })() && (
                 <button
                   className="btn"
@@ -823,10 +967,11 @@ export function LecturerPortal({
               )}
             </div>
           </div>
-          {/* Course filter pills — only shown when there are 2+ courses */}
-          {activeTab === "courses" && lecturerCourseEntries.length > 1 && (
+          {/* Course filter pills — only shown when the current view (active or
+              archive) has 2+ courses. Pills filter within the visible subset. */}
+          {activeTab === "courses" && visibleCourseEntries.length > 1 && (
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", paddingTop: 2 }}>
-              {["הכל", ...lecturerCourseEntries.map(e => e.lesson?.name).filter(Boolean)].map(name => {
+              {["הכל", ...visibleCourseEntries.map(e => e.lesson?.name).filter(Boolean)].map(name => {
                 const active = courseFilter === name;
                 return (
                   <button key={name} type="button" onClick={() => { setCourseFilter(name); setSearch(""); }}
@@ -950,32 +1095,66 @@ export function LecturerPortal({
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 18, padding: 28, textAlign: "center", color: "var(--text2)" }}>
             {lecturerCourseEntries.length === 0
               ? "עדיין לא נמצאו קורסים שמקושרים למרצה הזה."
-              : "לא נמצאו קורסים שתואמים לחיפוש."}
+              : archiveView
+                ? (visibleCourseEntries.length === 0
+                  ? "אין קורסים בארכיון."
+                  : "לא נמצאו קורסים בארכיון שתואמים לחיפוש.")
+                : (visibleCourseEntries.length === 0
+                  ? "אין קורסים פעילים כרגע. ניתן לעיין בארכיון הקורסים."
+                  : "לא נמצאו קורסים שתואמים לחיפוש.")}
           </div>
         ) : (
-          filteredCourseEntries.map(({ lesson, sessions, futureSessions, courseKit, futureFallbackSessions }) => (
-            <div key={lesson.id} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 18, overflow: "hidden" }}>
+          filteredCourseEntries.map(({ lesson, sessions, futureSessions, courseKit, futureFallbackSessions, isArchived, lastMeetingISO }) => (
+            <div key={lesson.id} style={{ background: "var(--surface)", border: `1px solid ${isArchived ? "rgba(245,166,35,0.35)" : "var(--border)"}`, borderRadius: 18, overflow: "hidden", opacity: isArchived ? 0.96 : 1 }}>
               <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
                 <div>
-                  <div style={{ fontSize: 20, fontWeight: 900, color: "var(--text)" }}>{lesson.name}</div>
+                  <div style={{ fontSize: 20, fontWeight: 900, color: "var(--text)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span>{lesson.name}</span>
+                    {isArchived && (
+                      <span
+                        title={lastMeetingISO ? `מפגש אחרון: ${formatDate(lastMeetingISO)}` : ""}
+                        style={{ background: "rgba(245,166,35,0.12)", border: "1px solid rgba(245,166,35,0.4)", color: "var(--accent)", borderRadius: 999, padding: "2px 10px", fontSize: 11, fontWeight: 800 }}
+                      >
+                        🗂 הסתיים{lastMeetingISO ? ` · ${formatDate(lastMeetingISO)}` : ""}
+                      </span>
+                    )}
+                  </div>
                   <div style={{ fontSize: 13, color: "var(--text3)", marginTop: 4 }}>
                     {lesson.track ? `מסלול: ${lesson.track}` : "ללא מסלול לימודים"}
                     {courseKit ? ` · השאלת קורס: ${courseKit.name}` : " · ללא השאלת קורס"}
                   </div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => setEditorState({ scope: "course", lessonId: lesson.id })}
-                    disabled={!futureSessions.length}
-                  >
-                    יצירת השאלת קורס
-                  </button>
-                  <div style={{ fontSize: 11, color: "var(--text3)", maxWidth: 320, textAlign: "right" }}>
-                    {futureSessions.length
-                      ? `יוצר השאלת שיעור לכל ${futureSessions.length} המפגשים העתידיים של הקורס.`
-                      : "אין כרגע מפגשים עתידיים לקורס הזה."}
-                  </div>
+                  {(() => {
+                    const trackStudents = getStudentsForLesson(lesson);
+                    const statusMap = (lesson.studentStatuses && typeof lesson.studentStatuses === "object") ? lesson.studentStatuses : {};
+                    const decided = trackStudents.filter((s) => statusMap[s.id] === "passed" || statusMap[s.id] === "failed").length;
+                    const win = computeStatusWindow(lesson);
+                    return (
+                      <>
+                        {/* Two primary actions side-by-side. In RTL the first
+                            DOM child sits on the right, so '\u05e8\u05e9\u05d9\u05de\u05ea \u05ea\u05dc\u05de\u05d9\u05d3\u05d9\u05dd' is
+                            placed first to land to the right of '\u05d9\u05e6\u05d9\u05e8\u05ea \u05d4\u05e9\u05d0\u05dc\u05ea \u05e7\u05d5\u05e8\u05e1'. */}
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={() => openStudentList(lesson)}
+                            style={{ background: "rgba(155,89,182,0.12)", color: "#9b59b6", border: "2px solid rgba(155,89,182,0.4)", fontWeight: 800, fontSize: 13, padding: "8px 14px", borderRadius: 10, cursor: "pointer" }}
+                          >
+                            🎓 תעודות סיום{trackStudents.length ? ` (${decided}/${trackStudents.length})` : ""}
+                          </button>
+                          <button
+                            className="btn btn-primary"
+                            onClick={() => setEditorState({ scope: "course", lessonId: lesson.id })}
+                            disabled={!futureSessions.length}
+                          >
+                            יצירת השאלת קורס
+                          </button>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -1071,11 +1250,6 @@ export function LecturerPortal({
                 </div>
               </div>
               <button className="btn btn-secondary" onClick={closeEditor} disabled={saving}>סגירה</button>
-            </div>
-
-            <div className="form-group" style={{ marginBottom: 12 }}>
-              <label className="form-label">שם ההשאלה</label>
-              <input className="form-input" value={draftName} onChange={(event) => setDraftName(event.target.value)} />
             </div>
 
             <div className="form-group" style={{ marginBottom: 16 }}>
@@ -1322,6 +1496,111 @@ export function LecturerPortal({
           </div>
         </div>
       )}
+
+      {/* ── Student-status modal (lecturer marks each student passed/failed) ── */}
+      {studentListLessonId && (() => {
+        const lesson = lessons.find((l) => String(l.id) === String(studentListLessonId));
+        if (!lesson) return null;
+        const trackStudents = getStudentsForLesson(lesson);
+        const win = computeStatusWindow(lesson);
+        const banner = (() => {
+          if (!win.lastMeetingDate) {
+            return { color: "#8891a8", background: "rgba(136,145,168,0.10)", border: "rgba(136,145,168,0.35)", text: "לקורס זה אין מפגשים מתוזמנים — לא ניתן לחשב חלון עדכון סטטוסים." };
+          }
+          if (!win.windowOpen) {
+            return { color: "#8891a8", background: "rgba(136,145,168,0.10)", border: "rgba(136,145,168,0.35)", text: `ניתן יהיה לעדכן סטטוסים החל מ-${formatDate(win.windowOpensISO)} (7 ימים לפני סיום הקורס).` };
+          }
+          if (win.isPostEnd) {
+            return { color: "#f5a623", background: "rgba(245,166,35,0.10)", border: "rgba(245,166,35,0.4)", text: "הקורס הסתיים. ניתן עדיין לעדכן סטטוסים מאוחרים." };
+          }
+          return { color: "#2ecc71", background: "rgba(46,204,113,0.10)", border: "rgba(46,204,113,0.4)", text: `ניתן לעדכן סטטוסים עכשיו. סיום הקורס: ${formatDate(win.lastMeetingDate)}.` };
+        })();
+        const editable = !!win.windowOpen;
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.68)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1000 }}>
+            <div style={{ width: "min(820px, 100%)", maxHeight: "calc(100vh - 32px)", overflow: "auto", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 20, padding: 24 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", marginBottom: 14 }}>
+                <div>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: "#9b59b6", display: "flex", alignItems: "center", gap: 8 }}>
+                    <GraduationCap size={20} strokeWidth={1.75} /> תעודות סיום
+                  </div>
+                  <div style={{ fontSize: 13, color: "var(--text2)", marginTop: 6 }}>
+                    {lesson.name}{lesson.track ? ` · מסלול: ${lesson.track}` : ""}
+                  </div>
+                </div>
+                <button className="btn btn-secondary" onClick={closeStudentList} disabled={savingStudentStatuses}>סגירה</button>
+              </div>
+
+              {/* How-it-works explainer — keep short and concrete so the
+                  lecturer immediately knows why this matters. */}
+              <div style={{ padding: "12px 14px", marginBottom: 12, borderRadius: 12, background: "rgba(155,89,182,0.08)", border: "1px solid rgba(155,89,182,0.3)", color: "var(--text2)", fontSize: 12.5, lineHeight: 1.7 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 800, color: "#9b59b6", marginBottom: 4 }}>
+                  <Info size={14} strokeWidth={1.75} /> איך זה עובד?
+                </div>
+                סמן לכל תלמיד אם <b style={{ color: "#2ecc71" }}>סיים</b> את הקורס בהצלחה או <b style={{ color: "#e74c3c" }}>לא סיים</b>. אחרי שתסמן את כולם ותלחץ "שמירה" — המזכירות תוכל לייצר תעודות גמר רק לתלמידים שסומנו כ"סיים". העדכון נפתח 7 ימים לפני סיום הקורס ונשאר פתוח גם לאחר הסיום ובארכיון הקורסים.
+              </div>
+
+              <div style={{ padding: "10px 14px", marginBottom: 14, borderRadius: 12, background: banner.background, border: `1px solid ${banner.border}`, color: banner.color, fontSize: 13, fontWeight: 700 }}>
+                {banner.text}
+              </div>
+
+              {trackStudents.length === 0 ? (
+                <div style={{ padding: "18px 14px", borderRadius: 12, background: "var(--surface2)", border: "1px solid var(--border)", color: "var(--text3)", fontSize: 13, textAlign: "center" }}>
+                  לא נמצאו תלמידים במסלול הזה. ודא שהקורס משויך למסלול הנכון ושהמסלול מאוכלס בעמוד "סטודנטים".
+                </div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: "var(--surface2)" }}>
+                        <th style={{ textAlign: "right", padding: "10px 12px", color: "var(--text2)", fontWeight: 800, borderBottom: "1px solid var(--border)" }}>שם מלא</th>
+                        <th style={{ textAlign: "right", padding: "10px 12px", color: "var(--text2)", fontWeight: 800, borderBottom: "1px solid var(--border)" }}>אימייל</th>
+                        <th style={{ textAlign: "right", padding: "10px 12px", color: "var(--text2)", fontWeight: 800, borderBottom: "1px solid var(--border)", width: 200 }}>סטטוס</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {trackStudents.map((s) => {
+                        const value = studentStatusDraft[s.id] || "";
+                        return (
+                          <tr key={s.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                            <td style={{ padding: "10px 12px", color: "var(--text)", fontWeight: 700 }}>{s._displayName}</td>
+                            <td style={{ padding: "10px 12px", color: "var(--text3)" }}>{s.email || "—"}</td>
+                            <td style={{ padding: "10px 12px" }}>
+                              <select
+                                className="form-select"
+                                value={value}
+                                disabled={!editable || savingStudentStatuses}
+                                onChange={(e) => setStudentStatusDraft((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                                style={{ width: "100%" }}
+                              >
+                                <option value="">אין סטטוס</option>
+                                <option value="passed">סיים</option>
+                                <option value="failed">לא סיים</option>
+                              </select>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
+                <button className="btn btn-secondary" onClick={closeStudentList} disabled={savingStudentStatuses}>ביטול</button>
+                <button
+                  className="btn btn-primary"
+                  onClick={saveStudentStatuses}
+                  disabled={!editable || savingStudentStatuses || trackStudents.length === 0}
+                  style={{ background: "#9b59b6", borderColor: "#9b59b6" }}
+                >
+                  {savingStudentStatuses ? "שומר..." : "💾 שמירה"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

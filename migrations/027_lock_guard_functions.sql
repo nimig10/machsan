@@ -50,7 +50,17 @@ BEGIN
 END;
 $$;
 
-DROP EVENT TRIGGER IF EXISTS trg_protect_guard_ddl;
-CREATE EVENT TRIGGER trg_protect_guard_ddl
-  ON sql_drop
-  EXECUTE FUNCTION protect_guard_ddl();
+-- Wrap in exception handler so Supabase branches (which lack superuser) can skip gracefully.
+-- Production applies the trigger successfully; branches log a NOTICE and continue.
+DO $$
+BEGIN
+  DROP EVENT TRIGGER IF EXISTS trg_protect_guard_ddl;
+  CREATE EVENT TRIGGER trg_protect_guard_ddl
+    ON sql_drop
+    EXECUTE FUNCTION protect_guard_ddl();
+EXCEPTION
+  WHEN insufficient_privilege THEN
+    RAISE NOTICE 'Skipping event trigger trg_protect_guard_ddl: insufficient privileges (Supabase branch environment)';
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Event trigger trg_protect_guard_ddl not created: %', SQLERRM;
+END $$;

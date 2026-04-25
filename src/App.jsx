@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { AlertTriangle, AudioLines, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, Clock, ClipboardList, Download, FileText, Film, GraduationCap, HelpCircle, Info, Link, Lightbulb, LogOut, Mail, Mic, Minus, Package, Pencil, Phone, Plus, Save, Search, Settings, Shield, ShoppingCart, SlidersHorizontal, Trash2, Triangle, User, Video, Wrench, X, XCircle } from "lucide-react";
+import { AlertTriangle, AudioLines, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, Clock, ClipboardList, Download, FileText, Film, GraduationCap, HelpCircle, Info, Link, Lightbulb, LogOut, Mail, Mic, Minus, Package, Pencil, Phone, Plus, Save, Search, Settings, Shield, ShoppingCart, SlidersHorizontal, Trash2, Triangle, Upload, User, Video, Wrench, X, XCircle } from "lucide-react";
 import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB, equipmentWriteInFlight, getValidTokenDirect } from "./utils.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
@@ -4761,6 +4761,52 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, settingsRole =
   const fontKey  = settingsRole === "warehouse" ? "warehouseFontSize"   : "adminFontSize";
   const [draft, setDraft] = useState({ ...siteSettings });
   const [saving, setSaving] = useState(false);
+  const [certUploadBusy, setCertUploadBusy] = useState({ cinema: false, sound: false });
+
+  const handleCertTemplateUploadSettings = async (type, e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!String(file.name || "").toLowerCase().endsWith(".docx")) {
+      showToast("error", "יש להעלות קובץ Word בפורמט .docx");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      showToast("error", "הקובץ גדול מדי (מקסימום 8MB)");
+      return;
+    }
+    setCertUploadBusy(p => ({ ...p, [type]: true }));
+    try {
+      const b64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      const tok = await getAuthToken();
+      const res = await fetch("/api/upload-cert-template", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) },
+        body: JSON.stringify({ data: b64, filename: file.name }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || "העלאה נכשלה");
+      const updated = {
+        ...draft,
+        certificateTemplates: {
+          ...(draft.certificateTemplates || {}),
+          [type]: { url: json.url, filename: json.filename || file.name, uploadedAt: new Date().toISOString() },
+        },
+      };
+      setDraft(updated);
+      showToast("success", `תבנית ${type === "cinema" ? "קולנוע" : "סאונד"} הועלתה. לחץ "שמור הגדרות" לשמירה.`);
+    } catch (err) {
+      console.error("cert template upload error", err);
+      showToast("error", `שגיאה בהעלאה: ${err.message}`);
+    } finally {
+      setCertUploadBusy(p => ({ ...p, [type]: false }));
+    }
+  };
 
   const toggleTheme = (theme) => {
     setDraft(p => ({ ...p, theme }));
@@ -4861,6 +4907,58 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, settingsRole =
                   <div style={{ fontSize: 11, color: "var(--text3)" }}>מבנה לייבוא רשימת סטודנטים</div>
                 </div>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Certificate Templates — administration only */}
+      {settingsRole === "administration" && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-header"><div className="card-title" style={{display:"inline-flex",alignItems:"center",gap:6}}><GraduationCap size={16} strokeWidth={1.75} color="var(--accent)"/> תבניות תעודות גמר</div></div>
+          <div style={{ padding: "16px 20px" }}>
+            <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 16, lineHeight: 1.7 }}>
+              העלה תבניות Word (.docx) לתעודות גמר. בפאנל עריכת קורס ניתן לבחור איזו תבנית להשתמש בה.
+              ניתן להשתמש בתבנית ב-placeholders: <code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{name}"}</code>, <code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{courseName}"}</code>, <code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{track}"}</code>, <code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{lecturer}"}</code>, <code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{date}"}</code>, <code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{academicHours}"}</code>.
+            </div>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+              {[
+                { key: "cinema", icon: <Film size={14} strokeWidth={1.75} color="var(--accent)"/>, label: "קולנוע" },
+                { key: "sound",  icon: <Mic  size={14} strokeWidth={1.75} color="var(--accent)"/>, label: "סאונד" },
+              ].map(({ key, icon, label }) => {
+                const tmpl = draft.certificateTemplates?.[key];
+                const busy = certUploadBusy[key];
+                return (
+                  <div key={key} style={{ flex: "1 1 220px", minWidth: 200, padding: "12px 14px", borderRadius: "var(--r)", border: `1px solid ${tmpl ? "rgba(245,166,35,0.4)" : "var(--border)"}`, background: tmpl ? "rgba(245,166,35,0.06)" : "var(--surface2)" }}>
+                    <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                      {icon} תעודת {label}
+                    </div>
+                    {tmpl ? (
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(0,0,0,0.15)", padding: "6px 10px", borderRadius: "var(--r-xs)", marginBottom: 6 }}>
+                          <FileText size={14} strokeWidth={1.75} color="var(--accent)"/>
+                          <span style={{ fontSize: 12, color: "var(--text)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{tmpl.filename || "template.docx"}</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--text3)" }}>הועלה: {tmpl.uploadedAt ? new Date(tmpl.uploadedAt).toLocaleDateString("he-IL") : "—"}</div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 8 }}>לא הועלתה תבנית</div>
+                    )}
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <label className="btn btn-secondary" style={{ fontSize: 12, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.6 : 1, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        {busy ? <><Clock size={13} strokeWidth={1.75}/> מעלה...</> : <><Upload size={12} strokeWidth={1.75}/> {tmpl ? "החלף תבנית" : "העלה תבנית"}</>}
+                        <input type="file" accept=".docx" style={{ display: "none" }} disabled={busy} onChange={e => handleCertTemplateUploadSettings(key, e)} />
+                      </label>
+                      {tmpl && (
+                        <button type="button" className="btn btn-secondary" style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}
+                          onClick={() => setDraft(p => ({ ...p, certificateTemplates: { ...(p.certificateTemplates || {}), [key]: null } }))}>
+                          <Trash2 size={12} strokeWidth={1.75} color="var(--accent)"/> הסר
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -6262,6 +6360,7 @@ export default function App() {
               equipment={equipment}
               reservations={reservations}
               studios={studios}
+              certifications={certifications}
               setLessons={setLessons}
               setKits={setKits}
               setReservations={setReservations}
@@ -6461,7 +6560,7 @@ export default function App() {
                 initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} siteSettings={siteSettings} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports} lessons={lessons} setLessons={setLessons}/></div>
               <div style={{display:page==="team"?"block":"none"}}><TeamPage teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/></div>
               <div style={{display:page==="kits"?"block":"none"}}><KitsPage kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons} lecturers={lecturers}/></div>
-              <div style={{display:page==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} lecturers={lecturers} setLecturers={setLecturers} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length
+              <div style={{display:page==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} lecturers={lecturers} setLecturers={setLecturers} siteSettings={siteSettings} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length
                 ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean)
                 : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
               <div style={{display:page==="policies"?"block":"none"}}><PoliciesPage policies={policies} setPolicies={setPolicies} showToast={showToast}/></div>
@@ -6538,7 +6637,7 @@ export default function App() {
               <div style={{display:secretaryPage==="dashboard"?"block":"none"}}><SecretaryDashboardPage certifications={certifications} studios={studios} studioBookings={studioBookings} lessons={lessons}/></div>
               <div style={{display:secretaryPage==="studios"?"block":"none"}}><StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin" studios={studios} setStudios={setStudios} bookings={studioBookings} setBookings={setStudioBookings} siteSettings={siteSettings} setSiteSettings={setSiteSettings} isActive={secretaryPage==="studios"} currentUser={staffUser} lessons={lessons} setLessons={setLessons} onNavigateToLesson={(lessonId) => { setEditLessonId(lessonId); setSecretaryPage("lessons"); }}/></div>
               <div style={{display:secretaryPage==="studio-certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment} onlyMode="studio"/></div>
-              <div style={{display:secretaryPage==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} openLessonId={editLessonId} onOpenLessonConsumed={() => setEditLessonId(null)} lecturers={lecturers} setLecturers={setLecturers} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean) : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
+              <div style={{display:secretaryPage==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} openLessonId={editLessonId} onOpenLessonConsumed={() => setEditLessonId(null)} lecturers={lecturers} setLecturers={setLecturers} siteSettings={siteSettings} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean) : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
               <div style={{display:secretaryPage==="lecturers"?"block":"none"}}><LecturersPage lecturers={lecturers} setLecturers={setLecturers} showToast={showToast} lessons={lessons} trackOptions={Array.isArray(certifications?.trackSettings)&&certifications.trackSettings.length?certifications.trackSettings.map(s=>String(s?.name||"").trim()).filter(Boolean):[...new Set((certifications?.students||[]).map(s=>String(s?.track||"").trim()).filter(Boolean))]}/></div>
               <div style={{display:secretaryPage==="students"?"block":"none"}}><StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} onLogCreated={attachLogIdToUndo} studioBookings={studioBookings} setStudioBookings={setStudioBookings} reservations={reservations} setReservations={setReservations}/></div>
               <div style={{display:secretaryPage==="policies"?"block":"none"}}><PoliciesPage policies={policies} setPolicies={setPolicies} showToast={showToast}/></div>

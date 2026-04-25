@@ -36,3 +36,4 @@ dist-ssr
 # Supabase CLI local state (config.toml only if present)
 supabase/.temp/
 supabase/.branches/
+.env*.local

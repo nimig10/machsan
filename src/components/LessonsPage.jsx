@@ -1,7 +1,7 @@
 // LessonsPage.jsx — course & lesson schedule management
 import { useRef, useState, useEffect } from "react";
 import * as XLSX from "xlsx";
-import { BookOpen, Calendar, Camera, Check, CheckCircle, Clock, FileText, Film, GraduationCap, Lightbulb, Link, Mail, Mic, Package, Pencil, Phone, Plus, Search, User, Video, X, XCircle } from "lucide-react";
+import { Award, BookOpen, Calendar, Camera, Check, CheckCircle, Clock, Download, FileText, Film, GraduationCap, Lightbulb, Link, Mail, Mic, Package, Pencil, Phone, Plus, Search, Trash2, Upload, User, Video, X, XCircle } from "lucide-react";
 import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAuthToken } from "../utils.js";
 import { makeLecturer } from "./LecturersPage.jsx";
 
@@ -118,6 +118,14 @@ function normalizeImportedLessonDate(dateValue = "", dayOfWeek = "") {
 
 function normalizeImportedLessonTime(timeValue = "") {
   const raw = String(timeValue || "").trim();
+  // Excel stores times as decimal fraction of a day (e.g. 0.375 = 09:00)
+  const num = Number(raw);
+  if (!isNaN(num) && num > 0 && num < 1 && !raw.includes(":")) {
+    const totalMinutes = Math.round(num * 24 * 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  }
   const match = raw.match(/(\d{1,2}):(\d{1,2})/);
   if (!match) return "00:00";
   const hours = Math.max(0, Math.min(23, Number(match[1]) || 0));
@@ -195,7 +203,7 @@ const fetchWithRetry = async (url, options, maxRetries = 5) => {
   return fetch(url, options);
 };
 
-export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[], trackOptions=[], studioBookings=[], setStudioBookings, certifications={}, openLessonId=null, onOpenLessonConsumed=null, lecturers=[], setLecturers }) {
+export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[], trackOptions=[], studioBookings=[], setStudioBookings, certifications={}, openLessonId=null, onOpenLessonConsumed=null, lecturers=[], setLecturers, siteSettings={} }) {
   const [mode, setMode] = useState(null); // null | "add" | "edit"
   const [editTarget, setEditTarget] = useState(null);
   const [pendingLesson, setPendingLesson] = useState(null);
@@ -564,8 +572,8 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           const sessionKitName = kitIdx >= 0 ? String(row[kitIdx] || "").trim() : "";
           group.schedule.push(normalizeScheduleEntry({
             date,
-            startTime: startIdx >= 0 ? String(row[startIdx] || "").trim() || "09:00" : "09:00",
-            endTime: endIdx >= 0 ? String(row[endIdx] || "").trim() || "12:00" : "12:00",
+            startTime: startIdx >= 0 ? normalizeImportedLessonTime(row[startIdx]) || "09:00" : "09:00",
+            endTime: endIdx >= 0 ? normalizeImportedLessonTime(row[endIdx]) || "12:00" : "12:00",
             topic: topicIdx >= 0 ? String(row[topicIdx] || "").trim() : "",
             studioId: sessionStudioName ? (studios.find(s=>s.name===sessionStudioName)?.id || null) : null,
             kitId: sessionKitName ? (lessonKits.find(k=>k.name===sessionKitName)?.id || null) : null,
@@ -985,6 +993,8 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           trackOptions={trackOptions}
           lecturers={lecturers}
           setLecturers={setLecturers}
+          certifications={certifications}
+          siteSettings={siteSettings}
         />
       ) : (
         <>
@@ -1198,7 +1208,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 }
 
 // ── Lesson/Course Form ────────────────────────────────────────────────────────
-function LessonForm({ initial, onSave, onCancel, studios, equipment, reservations, setReservations, kits, showToast, trackOptions=[], lecturers=[], setLecturers }) {
+function LessonForm({ initial, onSave, onCancel, studios, equipment, reservations, setReservations, kits, showToast, trackOptions=[], lecturers=[], setLecturers, certifications={}, siteSettings={} }) {
   const lecturerOptions = lecturers.filter((lecturer) => lecturer?.isActive !== false);
   const [name, setName]                       = useState(initial?.name||"");
   const [track, setTrack]                     = useState(initial?.track||"");
@@ -1213,6 +1223,59 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
   const [localMsg, setLocalMsg]               = useState(null);
   const [teacherMessage, setTeacherMessage]   = useState("");
   const [teacherEmailSending, setTeacherEmailSending] = useState(false);
+  const [certificateTemplateType, setCertificateTemplateType] = useState(initial?.certificateTemplateType || "");
+  const [certGenerating, setCertGenerating]   = useState(false);
+  // Floating panel that shows the list of students with their lecturer-set
+  // status (סיים / לא סיים / אין סטטוס). Read-only — admin verifies, doesn't
+  // override. Toggled by the "צפה ברשימת תלמידים" button under "תעודת גמר".
+  const [showStudentStatuses, setShowStudentStatuses] = useState(false);
+
+  // Infer the certificate template type from the track's classification:
+  //   הנדסאי סאונד  → "sound"
+  //   הנדסאי קולנוע → "cinema"
+  // Source of truth is `certifications.trackSettings[].trackType` (set in
+  // StudentsPage). Falls back to keyword matching on the track name so a
+  // track that hasn't been explicitly classified still gets a sensible
+  // default.
+  const inferredTemplateType = (() => {
+    const trk = String(track || "").trim();
+    if (!trk) return "";
+    const settings = Array.isArray(certifications?.trackSettings) ? certifications.trackSettings : [];
+    const match = settings.find((s) => String(s?.name || "").trim() === trk);
+    if (match?.trackType === "sound" || match?.trackType === "cinema") return match.trackType;
+    if (/סאונד|sound/i.test(trk)) return "sound";
+    if (/קולנוע|cinema|film/i.test(trk)) return "cinema";
+    return "";
+  })();
+
+  // Default the certificate template type to match the track's classification.
+  // Behavior:
+  //   - On first mount: keep the saved templateType if any; remember the
+  //     current inferred value as the baseline.
+  //   - When the admin switches the track (e.g. הנדסאי סאונד א → הנדסאי
+  //     קולנוע ב), the inferred value changes — update the template to
+  //     match the new classification, since the user expects the default
+  //     to follow the track.
+  //   - The admin can still pick a different template AFTER the track
+  //     change; it sticks until the track changes again (because we only
+  //     re-sync when `inferredTemplateType` itself changes).
+  const lastInferredRef = useRef(null);
+  useEffect(() => {
+    // First call: just record the baseline; never overwrite a saved value.
+    if (lastInferredRef.current === null) {
+      lastInferredRef.current = inferredTemplateType;
+      // If nothing saved and we have a clear inference, fill it.
+      if (!certificateTemplateType && inferredTemplateType) {
+        setCertificateTemplateType(inferredTemplateType);
+      }
+      return;
+    }
+    // Subsequent calls: track classification changed → re-sync.
+    if (inferredTemplateType && inferredTemplateType !== lastInferredRef.current) {
+      lastInferredRef.current = inferredTemplateType;
+      setCertificateTemplateType(inferredTemplateType);
+    }
+  }, [inferredTemplateType]); // eslint-disable-line react-hooks/exhaustive-deps
   const normalizedTrackOptions = [...new Set((trackOptions || []).map(option => String(option || "").trim()).filter(Boolean))];
   const isMobile = typeof window !== "undefined" && window.innerWidth < 769;
   const selectedLecturerObj = lecturerId ? lecturers.find(l => l.id === lecturerId) : null;
@@ -1325,6 +1388,144 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
     }
   };
 
+  const studentsInTrack = (() => {
+    const trk = track.trim();
+    if (!trk) return [];
+    const all = Array.isArray(certifications?.students) ? certifications.students : [];
+    return all.filter(s => String(s?.track || "").trim() === trk);
+  })();
+
+  // ── Lecturer status gate ────────────────────────────────────────────────
+  // The lecturer must mark every track-student as either "passed" or "failed"
+  // before the admin is allowed to generate certificates. studentStatuses is
+  // a map { [studentId]: "passed" | "failed" } stored on the lesson itself
+  // (set by the lecturer in /lecturer → "רשימת תלמידים").
+  const studentStatusMap = (initial?.studentStatuses && typeof initial.studentStatuses === "object")
+    ? initial.studentStatuses
+    : {};
+  const decidedStudents = studentsInTrack.filter(s => {
+    const v = studentStatusMap[s.id];
+    return v === "passed" || v === "failed";
+  });
+  const passedStudents = studentsInTrack.filter(s => studentStatusMap[s.id] === "passed");
+  const allStudentsDecided = studentsInTrack.length > 0 && decidedStudents.length === studentsInTrack.length;
+
+  const generateCertificates = async () => {
+    const templateInfo = siteSettings?.certificateTemplates?.[certificateTemplateType];
+    if (!certificateTemplateType || !templateInfo?.url) {
+      setLocalMsg({type:"error",text:"יש לבחור סוג תבנית תעודה (קולנוע / סאונד) בהגדרות"});
+      return;
+    }
+    if (studentsInTrack.length === 0) {
+      setLocalMsg({type:"error",text:`אין סטודנטים במסלול "${track}". ודא שהמסלול נבחר ושרשומים בו סטודנטים.`});
+      return;
+    }
+    if (!allStudentsDecided) {
+      setLocalMsg({type:"error",text:"המרצה צריך לסמן סטטוס (סיים / לא סיים) לכל תלמיד לפני שניתן ליצור תעודות."});
+      return;
+    }
+    if (passedStudents.length === 0) {
+      setLocalMsg({type:"error",text:"אין תלמידים שסומנו כ\"סיים\". לא נוצרו תעודות."});
+      return;
+    }
+    setCertGenerating(true);
+    try {
+      const [{ default: PizZip }, { default: Docxtemplater }, { default: JSZip }, { saveAs }] = await Promise.all([
+        import("pizzip"),
+        import("docxtemplater"),
+        import("jszip"),
+        import("file-saver"),
+      ]);
+
+      const templateRes = await fetch(templateInfo.url);
+      if (!templateRes.ok) throw new Error("לא ניתן לטעון את קובץ התבנית");
+      const templateBuffer = await templateRes.arrayBuffer();
+
+      const outputZip = new JSZip();
+      const courseName = name.trim();
+      const trackName  = track.trim();
+      const todayStr   = formatDate(new Date().toISOString());
+
+      // Course end date = the latest schedule entry's date (schedule is already
+      // sorted by dedupeScheduleEntries → utils.js). Falls back to today's date
+      // for courses with no scheduled meetings.
+      const validDates = (schedule || [])
+        .map(s => s?.date)
+        .filter(d => typeof d === "string" && d.length > 0);
+      const lastMeetingISO = validDates[validDates.length - 1] || null;
+      const endDateStr = lastMeetingISO ? formatDate(lastMeetingISO) : todayStr;
+
+      // Lecturer name — empty string if none assigned (Hebrew renders nothing).
+      const lecturerName = selectedLecturerObj?.fullName || "";
+
+      // Total course hours.
+      // Academic hour = 45 minutes (Israeli academic standard).
+      // Sum every meeting's (endTime - startTime), then divide by 45 for
+      // academic hours. Skip malformed/empty entries silently.
+      const parseHM = (s) => {
+        if (typeof s !== "string") return null;
+        const m = s.match(/^(\d{1,2}):(\d{2})$/);
+        if (!m) return null;
+        return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+      };
+      const totalMinutes = (schedule || []).reduce((sum, s) => {
+        const a = parseHM(s?.startTime);
+        const b = parseHM(s?.endTime);
+        if (a == null || b == null || b <= a) return sum;
+        return sum + (b - a);
+      }, 0);
+      const totalHoursStr    = String(Math.round(totalMinutes / 60));
+      const academicHoursStr = String(Math.round(totalMinutes / 45));
+
+      const sanitize = s => String(s || "").replace(/[\\/:*?"<>|]/g, "_").trim() || "student";
+      const used = new Set();
+
+      // Only generate certificates for students explicitly marked "passed"
+      // by the lecturer (not "אין סטטוס" and not "failed").
+      for (const student of passedStudents) {
+        const fullName = String(student?.name || `${student?.firstName || ""} ${student?.lastName || ""}`).trim() || "—";
+        const zip = new PizZip(templateBuffer);
+        const doc = new Docxtemplater(zip, {
+          paragraphLoop: true,
+          linebreaks: true,
+          delimiters: { start: "{", end: "}" },
+        });
+        doc.render({
+          name: fullName,
+          firstName: student?.firstName || fullName.split(/\s+/)[0] || "",
+          lastName:  student?.lastName  || fullName.split(/\s+/).slice(1).join(" ") || "",
+          courseName,
+          course: courseName,
+          track: trackName,
+          lecturer: lecturerName,
+          date: endDateStr,
+          endDate: endDateStr,
+          issuedDate: todayStr,
+          academicHours: academicHoursStr,
+          hours: academicHoursStr,
+          totalHours: totalHoursStr,
+        });
+        const out = doc.getZip().generate({ type: "uint8array" });
+        let fname = `${sanitize(fullName)}.docx`;
+        let idx = 2;
+        while (used.has(fname)) fname = `${sanitize(fullName)} (${idx++}).docx`;
+        used.add(fname);
+        outputZip.file(fname, out);
+      }
+
+      const blob = await outputZip.generateAsync({ type: "blob" });
+      const safeCourse = sanitize(courseName) || "course";
+      saveAs(blob, `תעודות-${safeCourse}-${todayStr.replace(/\//g,"-")}.zip`);
+      setLocalMsg({type:"success",text:`נוצרו ${passedStudents.length} תעודות (מתוך ${studentsInTrack.length} תלמידים במסלול). קובץ ה-ZIP ירד אוטומטית.`});
+    } catch (err) {
+      console.error("generate certs error", err);
+      const msg = err?.properties?.errors?.[0]?.message || err.message || "שגיאה לא ידועה";
+      setLocalMsg({type:"error",text:`שגיאה בייצור התעודות: ${msg}`});
+    } finally {
+      setCertGenerating(false);
+    }
+  };
+
   const handleSave = async () => {
     if(!name.trim()) { setLocalMsg({type:"error",text:"חובה למלא שם קורס"}); return; }
     if (!track.trim() || !normalizedTrackOptions.includes(track.trim())) {
@@ -1360,6 +1561,10 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
       description: description.trim(),
       studioId: studioId||null,
       schedule: finalSchedule,
+      certificateTemplateType: certificateTemplateType || "",
+      // Preserve lecturer-managed fields so an admin save doesn't wipe them.
+      studentStatuses: (initial?.studentStatuses && typeof initial.studentStatuses === "object") ? initial.studentStatuses : {},
+      lecturerNotifiedAt7d: initial?.lecturerNotifiedAt7d || null,
       created_at: initial?.created_at||new Date().toISOString(),
     };
     await onSave(lesson);
@@ -1586,6 +1791,208 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
           </div>
         </div>
       </div>
+
+      {/* Certificate template — global type selection */}
+      <div style={{background:"rgba(245,166,35,0.07)",border:"1px solid rgba(245,166,35,0.25)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
+        <div style={{fontWeight:800,fontSize:13,color:"#f5a623",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+          <Award size={14} strokeWidth={1.75}/> תעודת גמר
+        </div>
+        <div style={{fontSize:12,color:"var(--text3)",marginBottom:10,lineHeight:1.5}}>
+          בחר את סוג תבנית התעודה לקורס זה. הטמפלטים מוגדרים ברובריקת <b>הגדרות → תבניות תעודות</b>.
+        </div>
+
+        {/* Type selector — pill buttons with lucide outline icons (matches
+            the rest of the admin UI). Default value is inferred from the
+            track classification (see useEffect above), but the admin can
+            still flip between options. */}
+        <div className="form-group" style={{marginBottom:10}}>
+          <label className="form-label">סוג תבנית תעודה</label>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {[
+              { value: "", icon: <X size={14} strokeWidth={1.75} color="var(--accent)"/>, label: "ללא תעודה", disabled: false, missing: false },
+              { value: "cinema", icon: <Film size={14} strokeWidth={1.75} color="var(--accent)"/>, label: "קולנוע", disabled: !siteSettings?.certificateTemplates?.cinema?.url, missing: !siteSettings?.certificateTemplates?.cinema?.url },
+              { value: "sound", icon: <Mic size={14} strokeWidth={1.75} color="var(--accent)"/>, label: "סאונד", disabled: !siteSettings?.certificateTemplates?.sound?.url, missing: !siteSettings?.certificateTemplates?.sound?.url },
+            ].map((opt) => {
+              const active = certificateTemplateType === opt.value;
+              return (
+                <button
+                  key={opt.value || "none"}
+                  type="button"
+                  onClick={() => !opt.disabled && setCertificateTemplateType(opt.value)}
+                  disabled={opt.disabled}
+                  title={opt.missing ? "לא הועלתה תבנית — ניתן להעלות בהגדרות → תבניות תעודות" : ""}
+                  style={{
+                    display:"inline-flex",
+                    alignItems:"center",
+                    gap:6,
+                    padding:"8px 14px",
+                    borderRadius:10,
+                    border:`2px solid ${active ? "var(--accent)" : "var(--border)"}`,
+                    background: active ? "rgba(245,166,35,0.12)" : "var(--surface2)",
+                    color: active ? "var(--accent)" : (opt.disabled ? "var(--text3)" : "var(--text2)"),
+                    fontWeight: active ? 800 : 700,
+                    fontSize: 13,
+                    cursor: opt.disabled ? "not-allowed" : "pointer",
+                    opacity: opt.disabled ? 0.55 : 1,
+                    transition:"all 0.15s",
+                  }}
+                >
+                  {opt.icon} {opt.label}{opt.missing ? " (חסרה תבנית)" : ""}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Generate button — shown when a valid type is selected.
+            Disabled until the lecturer marks every track-student as
+            "סיים" or "לא סיים" via the lecturer portal. */}
+        {certificateTemplateType && siteSettings?.certificateTemplates?.[certificateTemplateType]?.url && (
+          <div style={{marginTop:4}}>
+            <div style={{fontSize:12,color:"var(--text3)",marginBottom:8}}>
+              {track.trim()
+                ? <>סטודנטים במסלול <b>{track}</b>: <b style={{color:"var(--text)"}}>{studentsInTrack.length}</b>
+                    {studentsInTrack.length > 0 && <> · סומנו על-ידי המרצה: <b style={{color:"var(--text)"}}>{decidedStudents.length}</b>/{studentsInTrack.length} (מתוכם <b style={{color:"#2ecc71"}}>{passedStudents.length}</b> סיימו)</>}
+                  </>
+                : <>יש לבחור מסלול לימודים לפני ייצור תעודות.</>
+              }
+            </div>
+            {track.trim() && studentsInTrack.length > 0 && !allStudentsDecided && (
+              <div style={{fontSize:12,color:"#f5a623",marginBottom:8,padding:"8px 10px",background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:8,lineHeight:1.5}}>
+                המרצה צריך לסמן סטטוס (סיים / לא סיים) לכל תלמיד לפני שניתן ליצור תעודות.
+                תזכורת אוטומטית תישלח למרצה 7 ימים לפני סיום הקורס.
+              </div>
+            )}
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{background:"#f5a623",borderColor:"#f5a623",color:"#0a0c10",display:"inline-flex",alignItems:"center",gap:6}}
+                onClick={generateCertificates}
+                disabled={certGenerating || !track.trim() || studentsInTrack.length === 0 || !allStudentsDecided || passedStudents.length === 0}
+                title={!allStudentsDecided ? "המרצה עדיין לא סימן את כל התלמידים" : passedStudents.length === 0 ? "אין תלמידים שסומנו כ\"סיים\"" : ""}
+              >
+                {certGenerating ? <><Clock size={16} strokeWidth={1.75}/> מייצר...</> : <><Download size={14} strokeWidth={1.75}/> ייצר תעודות ({passedStudents.length})</>}
+              </button>
+              {/* Read-only roster — opens the floating panel rendered below.
+                  Always available once a track is selected so the secretariat
+                  can verify exactly who the lecturer marked, regardless of
+                  whether the gate is open. */}
+              {track.trim() && studentsInTrack.length > 0 && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={()=>setShowStudentStatuses(true)}
+                  style={{background:"rgba(155,89,182,0.1)",border:"2px solid rgba(155,89,182,0.4)",color:"#9b59b6",fontWeight:800,fontSize:13,padding:"8px 14px",borderRadius:10,display:"inline-flex",alignItems:"center",gap:6,cursor:"pointer"}}
+                  title="הצג פאנל צף עם רשימת התלמידים והסטטוס שסומן על-ידי המרצה"
+                >
+                  <GraduationCap size={14} strokeWidth={1.75}/> צפה ברשימת תלמידים
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Student-status floating panel — admin/secretariat read-only view.
+          Mirrors what the lecturer sees in the portal but cannot be edited
+          here (lecturer is source of truth). Closes on backdrop click, ESC,
+          or the X button. */}
+      {showStudentStatuses && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={()=>setShowStudentStatuses(false)}
+          style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:16}}
+        >
+          <div
+            onClick={(e)=>e.stopPropagation()}
+            style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:18,padding:"22px 24px",width:"min(640px, 100%)",maxHeight:"85vh",overflow:"auto",direction:"rtl",boxShadow:"0 20px 60px rgba(0,0,0,0.45)"}}
+          >
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,marginBottom:14}}>
+              <div>
+                <div style={{fontSize:18,fontWeight:900,color:"#9b59b6",display:"flex",alignItems:"center",gap:8}}>
+                  <GraduationCap size={18} strokeWidth={1.75}/> רשימת תלמידים — {name || "ללא שם"}
+                </div>
+                <div style={{fontSize:12,color:"var(--text3)",marginTop:4}}>
+                  מסלול: <b style={{color:"var(--text2)"}}>{track || "—"}</b> · סטטוס נקבע על-ידי המרצה
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={()=>setShowStudentStatuses(false)}
+                style={{background:"transparent",border:"none",color:"var(--text3)",cursor:"pointer",padding:6,display:"flex"}}
+                aria-label="סגור"
+              >
+                <X size={20} strokeWidth={2}/>
+              </button>
+            </div>
+
+            <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14,fontSize:12}}>
+              <span style={{background:"rgba(46,204,113,0.12)",border:"1px solid rgba(46,204,113,0.4)",color:"#2ecc71",borderRadius:999,padding:"3px 12px",fontWeight:800}}>
+                סיים: {passedStudents.length}
+              </span>
+              <span style={{background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.4)",color:"#e74c3c",borderRadius:999,padding:"3px 12px",fontWeight:800}}>
+                לא סיים: {decidedStudents.length - passedStudents.length}
+              </span>
+              <span style={{background:"rgba(136,145,168,0.12)",border:"1px solid rgba(136,145,168,0.35)",color:"var(--text2)",borderRadius:999,padding:"3px 12px",fontWeight:800}}>
+                אין סטטוס: {studentsInTrack.length - decidedStudents.length}
+              </span>
+            </div>
+
+            {studentsInTrack.length === 0 ? (
+              <div style={{padding:"24px 0",textAlign:"center",color:"var(--text3)",fontSize:14}}>
+                אין תלמידים במסלול הזה.
+              </div>
+            ) : (
+              <div style={{border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 140px",background:"var(--surface2)",padding:"10px 14px",fontSize:12,fontWeight:800,color:"var(--text2)",borderBottom:"1px solid var(--border)"}}>
+                  <div>שם מלא</div>
+                  <div style={{textAlign:"center"}}>סטטוס</div>
+                </div>
+                {studentsInTrack.map((s, idx) => {
+                  const fullName = String(s?.name || `${s?.firstName || ""} ${s?.lastName || ""}`).trim() || "—";
+                  const status = studentStatusMap[s.id];
+                  const isPassed = status === "passed";
+                  const isFailed = status === "failed";
+                  return (
+                    <div key={s.id || idx} style={{display:"grid",gridTemplateColumns:"1fr 140px",padding:"10px 14px",borderTop: idx === 0 ? "none" : "1px solid var(--border)",alignItems:"center",fontSize:13}}>
+                      <div style={{fontWeight:700,color:"var(--text)"}}>{fullName}</div>
+                      <div style={{textAlign:"center"}}>
+                        {isPassed && (
+                          <span style={{background:"rgba(46,204,113,0.12)",border:"1px solid rgba(46,204,113,0.4)",color:"#2ecc71",borderRadius:999,padding:"3px 12px",fontWeight:800,fontSize:12,display:"inline-flex",alignItems:"center",gap:4}}>
+                            <CheckCircle size={13} strokeWidth={2}/> סיים
+                          </span>
+                        )}
+                        {isFailed && (
+                          <span style={{background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.4)",color:"#e74c3c",borderRadius:999,padding:"3px 12px",fontWeight:800,fontSize:12,display:"inline-flex",alignItems:"center",gap:4}}>
+                            <XCircle size={13} strokeWidth={2}/> לא סיים
+                          </span>
+                        )}
+                        {!isPassed && !isFailed && (
+                          <span style={{background:"rgba(136,145,168,0.12)",border:"1px solid rgba(136,145,168,0.35)",color:"var(--text3)",borderRadius:999,padding:"3px 12px",fontWeight:700,fontSize:12}}>
+                            אין סטטוס
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div style={{marginTop:14,fontSize:11,color:"var(--text3)",lineHeight:1.6}}>
+              ℹ️ הסטטוסים נקבעים על-ידי המרצה דרך פורטל המרצים (<b>רשימת תלמידים</b>). תצוגה זו לקריאה בלבד.
+            </div>
+
+            <div style={{display:"flex",justifyContent:"flex-end",marginTop:14}}>
+              <button type="button" className="btn btn-secondary" onClick={()=>setShowStudentStatuses(false)}>
+                סגור
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Email to teacher */}
       {selectedLecturerObj?.email && (
