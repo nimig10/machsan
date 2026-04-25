@@ -373,10 +373,10 @@ export function LecturerPortal({
     );
     const itemSource = realReservation || sourceKit;
 
-    setDraftName(
-      String(sourceKit?.name || "").trim()
-      || buildDefaultKitName(editorContext.lesson, editorContext.type, editorContext.session),
-    );
+    // Reservation name is auto-built from the course name + meeting date.
+    // The lecturer doesn't set this manually anymore — the field was removed
+    // from the modal because it always boils down to the same template.
+    setDraftName(buildDefaultKitName(editorContext.lesson, editorContext.type, editorContext.session));
     setDraftDescription(String(sourceKit?.description || "").trim());
     setDraftItems(
       (itemSource?.items || [])
@@ -1152,19 +1152,9 @@ export function LecturerPortal({
                             יצירת השאלת קורס
                           </button>
                         </div>
-                        {win.lastMeetingDate && !win.windowOpen && (
-                          <div style={{ fontSize: 11, color: "var(--text3)", maxWidth: 320, textAlign: "right" }}>
-                            ניתן יהיה לעדכן סטטוסים החל מ-{formatDate(win.windowOpensISO)} (7 ימים לפני סיום הקורס).
-                          </div>
-                        )}
                       </>
                     );
                   })()}
-                  <div style={{ fontSize: 11, color: "var(--text3)", maxWidth: 320, textAlign: "right" }}>
-                    {futureSessions.length
-                      ? `יוצר השאלת שיעור לכל ${futureSessions.length} המפגשים העתידיים של הקורס.`
-                      : "אין כרגע מפגשים עתידיים לקורס הזה."}
-                  </div>
                 </div>
               </div>
 
@@ -1260,11 +1250,6 @@ export function LecturerPortal({
                 </div>
               </div>
               <button className="btn btn-secondary" onClick={closeEditor} disabled={saving}>סגירה</button>
-            </div>
-
-            <div className="form-group" style={{ marginBottom: 12 }}>
-              <label className="form-label">שם ההשאלה</label>
-              <input className="form-input" value={draftName} onChange={(event) => setDraftName(event.target.value)} />
             </div>
 
             <div className="form-group" style={{ marginBottom: 16 }}>
