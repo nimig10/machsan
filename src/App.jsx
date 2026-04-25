@@ -4915,25 +4915,28 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, settingsRole =
       {/* Certificate Templates — administration only */}
       {settingsRole === "administration" && (
         <div className="card" style={{ marginBottom: 20 }}>
-          <div className="card-header"><div className="card-title">🎓 תבניות תעודות גמר</div></div>
+          <div className="card-header"><div className="card-title" style={{display:"inline-flex",alignItems:"center",gap:6}}><GraduationCap size={16} strokeWidth={1.75} color="var(--accent)"/> תבניות תעודות גמר</div></div>
           <div style={{ padding: "16px 20px" }}>
             <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 16, lineHeight: 1.7 }}>
               העלה תבניות Word (.docx) לתעודות גמר. בפאנל עריכת קורס ניתן לבחור איזו תבנית להשתמש בה.
               ניתן להשתמש בתבנית ב-placeholders: <code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{name}"}</code>, <code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{courseName}"}</code>, <code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{track}"}</code>, <code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{lecturer}"}</code>, <code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{date}"}</code>, <code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{academicHours}"}</code>.
             </div>
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-              {[{ key: "cinema", emoji: "🎬", label: "קולנוע" }, { key: "sound", emoji: "🎙️", label: "סאונד" }].map(({ key, emoji, label }) => {
+              {[
+                { key: "cinema", icon: <Film size={14} strokeWidth={1.75} color="var(--accent)"/>, label: "קולנוע" },
+                { key: "sound",  icon: <Mic  size={14} strokeWidth={1.75} color="var(--accent)"/>, label: "סאונד" },
+              ].map(({ key, icon, label }) => {
                 const tmpl = draft.certificateTemplates?.[key];
                 const busy = certUploadBusy[key];
                 return (
                   <div key={key} style={{ flex: "1 1 220px", minWidth: 200, padding: "12px 14px", borderRadius: "var(--r)", border: `1px solid ${tmpl ? "rgba(245,166,35,0.4)" : "var(--border)"}`, background: tmpl ? "rgba(245,166,35,0.06)" : "var(--surface2)" }}>
                     <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                      <span>{emoji}</span> תעודת {label}
+                      {icon} תעודת {label}
                     </div>
                     {tmpl ? (
                       <div style={{ marginBottom: 8 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(0,0,0,0.15)", padding: "6px 10px", borderRadius: "var(--r-xs)", marginBottom: 6 }}>
-                          <span style={{ fontSize: 16 }}>📄</span>
+                          <FileText size={14} strokeWidth={1.75} color="var(--accent)"/>
                           <span style={{ fontSize: 12, color: "var(--text)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{tmpl.filename || "template.docx"}</span>
                         </div>
                         <div style={{ fontSize: 11, color: "var(--text3)" }}>הועלה: {tmpl.uploadedAt ? new Date(tmpl.uploadedAt).toLocaleDateString("he-IL") : "—"}</div>
@@ -4949,7 +4952,7 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, settingsRole =
                       {tmpl && (
                         <button type="button" className="btn btn-secondary" style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}
                           onClick={() => setDraft(p => ({ ...p, certificateTemplates: { ...(p.certificateTemplates || {}), [key]: null } }))}>
-                          <span>🗑</span> הסר
+                          <Trash2 size={12} strokeWidth={1.75} color="var(--accent)"/> הסר
                         </button>
                       )}
                     </div>
@@ -6357,6 +6360,7 @@ export default function App() {
               equipment={equipment}
               reservations={reservations}
               studios={studios}
+              certifications={certifications}
               setLessons={setLessons}
               setKits={setKits}
               setReservations={setReservations}

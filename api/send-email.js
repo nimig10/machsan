@@ -70,6 +70,7 @@ function buildEmail({
   const isStudioApproved  = type === "studio_approved";
   const isStudioDeleted   = type === "studio_deleted";
   const isLessonConflict  = type === "studio_lesson_conflict";
+  const isCourseEndNotice = type === "course_end_notice";
 
   const finalTeacherMessage =
     teacher_message || custom_message || lesson_message || report_note || "";
@@ -86,6 +87,7 @@ function buildEmail({
     : isDeptHead ? "#9b59b6"
     : isManagerReport ? "#e67e22"
     : isLessonKitReady ? "#3498db"
+    : isCourseEndNotice ? "#9b59b6"
     : (isOverdue || isOverdueTeam) ? "#e74c3c"
     : (isNew || isTeamNotify) ? "#f5a623"
     : "#e74c3c";
@@ -97,6 +99,7 @@ function buildEmail({
     : isDeptHead ? "🎓"
     : isManagerReport ? "📋"
     : isLessonKitReady ? "📚"
+    : isCourseEndNotice ? "🎓"
     : (isOverdue || isOverdueTeam) ? "🚨"
     : (isNew || isTeamNotify) ? "⏳"
     : "❌";
@@ -108,6 +111,7 @@ function buildEmail({
     : isDeptHead ? "בקשת השאלת הפקה ממתינה לאישורך"
     : isManagerReport ? "דיווח מצוות המחסן"
     : isLessonKitReady ? "ערכת השיעור מוכנה לבדיקה"
+    : isCourseEndNotice ? "הקורס מסתיים בעוד שבוע — נא לעדכן סטטוסים"
     : isOverdue ? "⚠️ הציוד לא הוחזר — נדרשת פעולה מיידית"
     : isOverdueTeam ? `🚨 ציוד לא הוחזר — ${student_name || ""}`
     : isTeamNotify ? `בקשת השאלה חדשה — ${loan_type || ""}`
@@ -117,6 +121,7 @@ function buildEmail({
   const greetingName = (isDeptHead || isManagerReport || isTeamNotify) ? (recipient_name || student_name)
     : isOverdueTeam ? (recipient_name || "צוות המחסן")
     : isLessonKitReady ? (recipient_name || student_name || "המורה")
+    : isCourseEndNotice ? (recipient_name || "המרצה")
     : student_name;
 
   const body = isLessonConflict
@@ -150,6 +155,16 @@ function buildEmail({
        מומלץ ליצור קשר עם הסטודנט בהקדם האפשרי.`
     : isTeamNotify
     ? `<strong>${student_name}</strong> הגיש/ה בקשת השאלה חדשה (${loan_type || ""}) הממתינה לאישורך.`
+    : isCourseEndNotice
+    ? `הקורס <strong style="color:#e8eaf0">${project_name || lesson_kit_name || "שלך"}</strong> מסתיים בעוד שבוע${return_date ? ` (תאריך סיום: <strong style="color:#e8eaf0">${return_date}</strong>)` : ""}.<br/><br/>
+       לפני שהמכללה תוכל להפיק תעודות לסטודנטים, אנו זקוקים לעדכון שלך לגבי כל אחד מהתלמידים בקורס:<br/>
+       <strong style="color:#9b59b6">סיים</strong> · <strong style="color:#e74c3c">לא סיים</strong>.<br/><br/>
+       <strong style="color:#f5a623">איך לעדכן:</strong><br/>
+       1. כניסה לפורטל המרצים בקישור מטה.<br/>
+       2. פתיחת הקורס הרלוונטי.<br/>
+       3. לחיצה על הכפתור <strong style="color:#9b59b6">"רשימת תלמידים"</strong>.<br/>
+       4. בחירת סטטוס לכל תלמיד ולחיצה על "שמירה".<br/><br/>
+       ללא העדכון הזה, צוות האדמיניסטרציה לא יוכל להפיק את תעודות הסיום.`
     : isNew
     ? `בקשת ההשאלה שלך <strong style="color:#f5a623">התקבלה</strong> וממתינה לאישור.`
     : `לצערנו בקשת ההשאלה שלך <strong style="color:#e74c3c">נדחתה</strong>.`;
@@ -211,7 +226,14 @@ function buildEmail({
       </a>
     </div>` : "";
 
-  const showDetails = !isManagerReport || student_name !== "צוות המחסן";
+  const courseEndPortalButton = isCourseEndNotice && portal_url ? `
+    <div style="text-align:center;margin:24px 0">
+      <a href="${portal_url}" style="display:inline-block;padding:16px 36px;background:#9b59b6;color:#fff;font-weight:900;font-size:15px;border-radius:10px;text-decoration:none;letter-spacing:0.4px;box-shadow:0 4px 18px rgba(155,89,182,0.4)">
+        🎓 כניסה לפורטל המרצים
+      </a>
+    </div>` : "";
+
+  const showDetails = (!isManagerReport || student_name !== "צוות המחסן") && !isCourseEndNotice;
 
   return `
 <!DOCTYPE html>
@@ -236,6 +258,7 @@ function buildEmail({
       ${reportSection}
       ${lessonKitSection}
       ${studentMessageSection}
+      ${isCourseEndNotice ? "" : `
       <div style="background:#111318;border:1px solid #252b38;border-radius:10px;padding:20px;margin:20px 0;direction:rtl">
         <h3 style="color:#f5a623;font-size:14px;margin:0 0 12px;text-align:right">פרטי הבקשה</h3>
         <table style="width:100%;font-size:13px;color:#8891a8;border-collapse:collapse;direction:rtl">
@@ -256,10 +279,11 @@ function buildEmail({
             <tbody>${typeof items_list === "string" && items_list.includes("<tr>") ? items_list : `<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130" colspan="2">${items_list}</td></tr>`}</tbody>
           </table>
         </div>` : ""}
-      </div>
+      </div>`}
       ${approveButton}
       ${portalButton}
       ${calendarButton}
+      ${courseEndPortalButton}
       ${isApproved ? `
       <div style="background:rgba(46,204,113,0.08);border:1px solid rgba(46,204,113,0.2);border-radius:8px;padding:16px;font-size:13px;color:#8891a8;margin-bottom:20px;direction:rtl;text-align:right">
         📌 <strong style="color:#e8eaf0">תזכורת:</strong> יש להחזיר את הציוד עד <strong style="color:#f5a623">${return_date}${return_time ? " בשעה " + return_time : ""}</strong> במצב תקין.
@@ -308,11 +332,18 @@ export default async function handler(req, res) {
   // Authorization gate:
   //   - Anonymous callers may only send public-form types (new/team_notify/dept_head_notify).
   //   - Any other type requires a valid user JWT (student/lecturer/staff).
+  //   - Internal cron jobs running on the same Vercel project may present
+  //     `X-Cron-Secret: <CRON_SECRET>` to bypass the role gate. CRON_SECRET
+  //     is not exposed to clients, so this is safe.
   //   - This blocks attackers from using the endpoint to spoof "approved"/
   //     "rejected"/"overdue"/etc. emails that appear to come from the warehouse.
-  const role = await resolveUserRole(req);
-  if (role.role === "anon" && !ANON_ALLOWED_TYPES.has(type)) {
-    return res.status(401).json({ error: "Unauthorized" });
+  const cronSecretHeader = String(req.headers["x-cron-secret"] || "");
+  const isTrustedCron = !!process.env.CRON_SECRET && cronSecretHeader === process.env.CRON_SECRET;
+  if (!isTrustedCron) {
+    const role = await resolveUserRole(req);
+    if (role.role === "anon" && !ANON_ALLOWED_TYPES.has(type)) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
   }
 
   // approve_url is NEVER accepted from the client — it must be signed here.
@@ -332,6 +363,7 @@ export default async function handler(req, res) {
     overdue:           "אזהרת איחור בהחזרת ציוד — נדרשת פעולה מיידית",
     overdue_team:      `🚨 ציוד לא הוחזר במועד — ${student_name || ""}`,
     lesson_kit_ready:  `📚 ערכת שיעור מוכנה לבדיקה — ${lesson_kit_name || project_name || student_name || ""}`,
+    course_end_notice: `🎓 הקורס "${project_name || lesson_kit_name || ""}" מסתיים בעוד שבוע — נא לעדכן סטטוסים`,
   };
 
   // Convert base64 data URIs to inline CID attachments (email clients block data: URIs)

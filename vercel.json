@@ -6,6 +6,10 @@
     {
       "path": "/api/prune-snapshots",
       "schedule": "0 3 1 * *"
+    },
+    {
+      "path": "/api/notify-course-end-7days",
+      "schedule": "0 9 * * *"
     }
   ]
 }
