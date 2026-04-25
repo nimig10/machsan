@@ -203,7 +203,7 @@ const fetchWithRetry = async (url, options, maxRetries = 5) => {
   return fetch(url, options);
 };
 
-export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[], trackOptions=[], studioBookings=[], setStudioBookings, certifications={}, openLessonId=null, onOpenLessonConsumed=null, lecturers=[], setLecturers }) {
+export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[], trackOptions=[], studioBookings=[], setStudioBookings, certifications={}, openLessonId=null, onOpenLessonConsumed=null, lecturers=[], setLecturers, siteSettings={} }) {
   const [mode, setMode] = useState(null); // null | "add" | "edit"
   const [editTarget, setEditTarget] = useState(null);
   const [pendingLesson, setPendingLesson] = useState(null);
@@ -994,6 +994,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           lecturers={lecturers}
           setLecturers={setLecturers}
           certifications={certifications}
+          siteSettings={siteSettings}
         />
       ) : (
         <>
@@ -1207,7 +1208,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 }
 
 // ── Lesson/Course Form ────────────────────────────────────────────────────────
-function LessonForm({ initial, onSave, onCancel, studios, equipment, reservations, setReservations, kits, showToast, trackOptions=[], lecturers=[], setLecturers, certifications={} }) {
+function LessonForm({ initial, onSave, onCancel, studios, equipment, reservations, setReservations, kits, showToast, trackOptions=[], lecturers=[], setLecturers, certifications={}, siteSettings={} }) {
   const lecturerOptions = lecturers.filter((lecturer) => lecturer?.isActive !== false);
   const [name, setName]                       = useState(initial?.name||"");
   const [track, setTrack]                     = useState(initial?.track||"");
@@ -1222,8 +1223,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
   const [localMsg, setLocalMsg]               = useState(null);
   const [teacherMessage, setTeacherMessage]   = useState("");
   const [teacherEmailSending, setTeacherEmailSending] = useState(false);
-  const [certificateTemplate, setCertificateTemplate] = useState(initial?.certificateTemplate || null);
-  const [certUploading, setCertUploading]     = useState(false);
+  const [certificateTemplateType, setCertificateTemplateType] = useState(initial?.certificateTemplateType || "");
   const [certGenerating, setCertGenerating]   = useState(false);
   const normalizedTrackOptions = [...new Set((trackOptions || []).map(option => String(option || "").trim()).filter(Boolean))];
   const isMobile = typeof window !== "undefined" && window.innerWidth < 769;
@@ -1337,55 +1337,6 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
     }
   };
 
-  const handleCertTemplateUpload = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    const allowedExt = [".docx"];
-    const lowerName = String(file.name || "").toLowerCase();
-    if (!allowedExt.some(ext => lowerName.endsWith(ext))) {
-      setLocalMsg({type:"error",text:"יש להעלות קובץ Word בפורמט .docx"});
-      return;
-    }
-    if (file.size > 8 * 1024 * 1024) {
-      setLocalMsg({type:"error",text:"הקובץ גדול מדי (מקסימום 8MB)"});
-      return;
-    }
-    setCertUploading(true);
-    try {
-      const b64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(file);
-      });
-      const tok = await getAuthToken();
-      const res = await fetch("/api/upload-cert-template", {
-        method: "POST",
-        headers: { "Content-Type":"application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) },
-        body: JSON.stringify({ data: b64, filename: file.name }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error || "העלאה נכשלה");
-      setCertificateTemplate({
-        url: json.url,
-        filename: json.filename || file.name,
-        uploadedAt: new Date().toISOString(),
-      });
-      setLocalMsg({type:"success",text:"תבנית התעודה הועלתה. זכור ללחוץ שמור."});
-    } catch (err) {
-      console.error("cert upload error", err);
-      setLocalMsg({type:"error",text:`שגיאה בהעלאת התבנית: ${err.message}`});
-    } finally {
-      setCertUploading(false);
-    }
-  };
-
-  const handleCertTemplateRemove = () => {
-    setCertificateTemplate(null);
-    setLocalMsg({type:"success",text:"התבנית הוסרה. זכור ללחוץ שמור."});
-  };
-
   const studentsInTrack = (() => {
     const trk = track.trim();
     if (!trk) return [];
@@ -1394,8 +1345,9 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
   })();
 
   const generateCertificates = async () => {
-    if (!certificateTemplate?.url) {
-      setLocalMsg({type:"error",text:"צריך להעלות תבנית קודם"});
+    const templateInfo = siteSettings?.certificateTemplates?.[certificateTemplateType];
+    if (!certificateTemplateType || !templateInfo?.url) {
+      setLocalMsg({type:"error",text:"יש לבחור סוג תבנית תעודה (קולנוע / סאונד) בהגדרות"});
       return;
     }
     if (studentsInTrack.length === 0) {
@@ -1411,7 +1363,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
         import("file-saver"),
       ]);
 
-      const templateRes = await fetch(certificateTemplate.url);
+      const templateRes = await fetch(templateInfo.url);
       if (!templateRes.ok) throw new Error("לא ניתן לטעון את קובץ התבנית");
       const templateBuffer = await templateRes.arrayBuffer();
 
@@ -1419,6 +1371,37 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
       const courseName = name.trim();
       const trackName  = track.trim();
       const todayStr   = formatDate(new Date().toISOString());
+
+      // Course end date = the latest schedule entry's date (schedule is already
+      // sorted by dedupeScheduleEntries → utils.js). Falls back to today's date
+      // for courses with no scheduled meetings.
+      const validDates = (schedule || [])
+        .map(s => s?.date)
+        .filter(d => typeof d === "string" && d.length > 0);
+      const lastMeetingISO = validDates[validDates.length - 1] || null;
+      const endDateStr = lastMeetingISO ? formatDate(lastMeetingISO) : todayStr;
+
+      // Lecturer name — empty string if none assigned (Hebrew renders nothing).
+      const lecturerName = selectedLecturerObj?.fullName || "";
+
+      // Total course hours.
+      // Academic hour = 45 minutes (Israeli academic standard).
+      // Sum every meeting's (endTime - startTime), then divide by 45 for
+      // academic hours. Skip malformed/empty entries silently.
+      const parseHM = (s) => {
+        if (typeof s !== "string") return null;
+        const m = s.match(/^(\d{1,2}):(\d{2})$/);
+        if (!m) return null;
+        return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+      };
+      const totalMinutes = (schedule || []).reduce((sum, s) => {
+        const a = parseHM(s?.startTime);
+        const b = parseHM(s?.endTime);
+        if (a == null || b == null || b <= a) return sum;
+        return sum + (b - a);
+      }, 0);
+      const totalHoursStr    = String(Math.round(totalMinutes / 60));
+      const academicHoursStr = String(Math.round(totalMinutes / 45));
 
       const sanitize = s => String(s || "").replace(/[\\/:*?"<>|]/g, "_").trim() || "student";
       const used = new Set();
@@ -1438,7 +1421,13 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
           courseName,
           course: courseName,
           track: trackName,
-          date: todayStr,
+          lecturer: lecturerName,
+          date: endDateStr,
+          endDate: endDateStr,
+          issuedDate: todayStr,
+          academicHours: academicHoursStr,
+          hours: academicHoursStr,
+          totalHours: totalHoursStr,
         });
         const out = doc.getZip().generate({ type: "uint8array" });
         let fname = `${sanitize(fullName)}.docx`;
@@ -1496,7 +1485,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
       description: description.trim(),
       studioId: studioId||null,
       schedule: finalSchedule,
-      certificateTemplate: certificateTemplate || null,
+      certificateTemplateType: certificateTemplateType || "",
       created_at: initial?.created_at||new Date().toISOString(),
     };
     await onSave(lesson);
@@ -1724,34 +1713,33 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
         </div>
       </div>
 
-      {/* Certificate template */}
+      {/* Certificate template — global type selection */}
       <div style={{background:"rgba(245,166,35,0.07)",border:"1px solid rgba(245,166,35,0.25)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
         <div style={{fontWeight:800,fontSize:13,color:"#f5a623",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
-          <Award size={14} strokeWidth={1.75}/> תעודת גמר — תבנית Word
+          <Award size={14} strokeWidth={1.75}/> תעודת גמר
         </div>
         <div style={{fontSize:12,color:"var(--text3)",marginBottom:10,lineHeight:1.5}}>
-          העלה מסמך Word (.docx). כל מקום שתכתוב <code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{name}"}</code> יוחלף אוטומטית בשם הסטודנט. ניתן להשתמש גם ב-<code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{courseName}"}</code>, <code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{track}"}</code>, <code style={{background:"rgba(0,0,0,0.15)",padding:"1px 5px",borderRadius:4}}>{"{date}"}</code>.
+          בחר את סוג תבנית התעודה לקורס זה. הטמפלטים מוגדרים ברובריקת <b>הגדרות → תבניות תעודות</b>.
         </div>
 
-        {!certificateTemplate ? (
-          <label className="btn btn-secondary" style={{display:"inline-flex",alignItems:"center",gap:6,cursor:certUploading?"wait":"pointer",opacity:certUploading?0.6:1}}>
-            {certUploading ? <><Clock size={16} strokeWidth={1.75}/> מעלה...</> : <><Upload size={14} strokeWidth={1.75}/> העלה תבנית (.docx)</>}
-            <input type="file" accept=".docx" style={{display:"none"}} onChange={handleCertTemplateUpload} disabled={certUploading}/>
-          </label>
-        ) : (
-          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",background:"rgba(0,0,0,0.15)",padding:"8px 12px",borderRadius:"var(--r-xs)",marginBottom:10}}>
-            <FileText size={16} strokeWidth={1.75} color="#f5a623"/>
-            <a href={certificateTemplate.url} target="_blank" rel="noopener noreferrer" style={{color:"var(--text)",fontSize:13,fontWeight:600,textDecoration:"underline",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-              {certificateTemplate.filename || "template.docx"}
-            </a>
-            <button type="button" className="btn btn-sm btn-secondary" onClick={handleCertTemplateRemove} style={{display:"inline-flex",alignItems:"center",gap:4}}>
-              <Trash2 size={13} strokeWidth={1.75}/> הסר
-            </button>
-          </div>
-        )}
+        {/* Type selector */}
+        <div className="form-group" style={{maxWidth:240,marginBottom:10}}>
+          <label className="form-label">סוג תבנית תעודה</label>
+          <select className="form-select" value={certificateTemplateType}
+            onChange={e => setCertificateTemplateType(e.target.value)}>
+            <option value="">— ללא תעודה —</option>
+            <option value="cinema" disabled={!siteSettings?.certificateTemplates?.cinema?.url}>
+              🎬 קולנוע{!siteSettings?.certificateTemplates?.cinema?.url ? " (לא הועלתה תבנית)" : ""}
+            </option>
+            <option value="sound" disabled={!siteSettings?.certificateTemplates?.sound?.url}>
+              🎙️ סאונד{!siteSettings?.certificateTemplates?.sound?.url ? " (לא הועלתה תבנית)" : ""}
+            </option>
+          </select>
+        </div>
 
-        {certificateTemplate && (
-          <div style={{marginTop:10}}>
+        {/* Generate button — shown when a valid type is selected */}
+        {certificateTemplateType && siteSettings?.certificateTemplates?.[certificateTemplateType]?.url && (
+          <div style={{marginTop:4}}>
             <div style={{fontSize:12,color:"var(--text3)",marginBottom:8}}>
               {track.trim()
                 ? <>סטודנטים במסלול <b>{track}</b>: <b style={{color:"var(--text)"}}>{studentsInTrack.length}</b></>
