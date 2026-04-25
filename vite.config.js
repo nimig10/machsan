@@ -1,11 +1,20 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import devApi from './scripts/vite-api-plugin.mjs'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Certificate generation uses dynamic imports (see LessonsPage.jsx).
+  // Force Vite to pre-bundle these CommonJS-shaped deps so the first
+  // visit to the certificates flow doesn't fail with
+  // "Failed to resolve import 'docxtemplater'" etc.
+  optimizeDeps: {
+    include: ['pizzip', 'docxtemplater', 'jszip', 'file-saver'],
+  },
   plugins: [
     react(),
+    devApi(),
     VitePWA({
       // Use a custom service worker so we can handle push notifications.
       // The build plugin injects the precache manifest into src/sw.js via

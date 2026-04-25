@@ -1,0 +1,23 @@
+-- 022_drop_anon_select_store.sql
+-- Applied: 2026-04-17
+--
+-- Final lockdown: remove the anon SELECT policy from public.store.
+--
+-- Background:
+--   Migration 019 originally locked down anon reads but caused a regression
+--   where students/lecturers couldn't log in (PublicForm loads certifications
+--   BEFORE the session is established). Migration 020 temporarily restored
+--   `anon_select_all` to unblock login.
+--
+--   Now that all client reads go through the /api/store proxy (service_role,
+--   with role-based phone redaction in [api/store.js](api/store.js)), anon
+--   no longer needs direct SELECT on the table.
+--
+-- Effect:
+--   * Anon callers hitting PostgREST `/rest/v1/store` directly are refused.
+--   * Authenticated staff REST usage (dbDiag etc.) continues to work via the
+--     authenticated-role policies.
+--   * The /api/store GET/POST endpoints use SERVICE_ROLE_KEY, so they bypass
+--     RLS and return redacted data for non-staff callers.
+
+DROP POLICY IF EXISTS "anon_select_all" ON public.store;
