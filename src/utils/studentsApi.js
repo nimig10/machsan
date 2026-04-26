@@ -99,22 +99,19 @@ export async function upsertStudent(stu) {
   try {
     const track_id = await resolveTrackId(stu.track);
 
-    const { error: stuErr } = await supabase.from("students").upsert({
-      id:         stu.id,
-      name:       stu.name ?? "",
-      email:      stu.email || null,
-      phone:      stu.phone || null,
-      track_name: stu.track || null,
-      track_id,
-    });
+    // Run student upsert + cert delete in parallel — independent operations.
+    const [{ error: stuErr }, { error: delErr }] = await Promise.all([
+      supabase.from("students").upsert({
+        id:         stu.id,
+        name:       stu.name ?? "",
+        email:      stu.email || null,
+        phone:      stu.phone || null,
+        track_name: stu.track || null,
+        track_id,
+      }),
+      supabase.from("student_certifications").delete().eq("student_id", stu.id),
+    ]);
     if (stuErr) throw stuErr;
-
-    // Replace certs: delete existing, insert current map. Junction has
-    // ON DELETE CASCADE so we just delete by student_id.
-    const { error: delErr } = await supabase
-      .from("student_certifications")
-      .delete()
-      .eq("student_id", stu.id);
     if (delErr) throw delErr;
 
     const certEntries = Object.entries(stu.certs || {}).filter(
@@ -215,26 +212,24 @@ export async function syncTracks(tracks, trackSettings) {
 }
 
 // Full reconciliation: upsert every student in `nextStudents` and delete any
-// IDs in the table that aren't in the new list. Used after a blob save() so
-// the tables converge to the same state regardless of which fields changed.
+// IDs in the table that aren't in the new list. Upserts run in parallel.
 export async function syncAllStudents(nextStudents) {
   if (!Array.isArray(nextStudents)) return { ok: false, error: "not an array" };
   try {
     const wantIds = new Set(nextStudents.map(s => s.id).filter(Boolean));
 
-    const { data: existing, error: listErr } = await supabase
-      .from("students")
-      .select("id");
+    const [{ data: existing, error: listErr }] = await Promise.all([
+      supabase.from("students").select("id"),
+    ]);
     if (listErr) throw listErr;
 
     const toDelete = (existing ?? []).map(r => r.id).filter(id => !wantIds.has(id));
 
-    for (const stu of nextStudents) {
-      await upsertStudent(stu);
-    }
-    for (const id of toDelete) {
-      await deleteStudent(id);
-    }
+    // Parallel upserts + deletes — avoids N sequential round trips.
+    await Promise.all([
+      ...nextStudents.map(stu => upsertStudent(stu)),
+      ...toDelete.map(id => deleteStudent(id)),
+    ]);
     return { ok: true, upserted: nextStudents.length, deleted: toDelete.length };
   } catch (err) {
     console.warn("[studentsApi.syncAllStudents]", err);
