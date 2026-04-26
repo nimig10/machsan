@@ -33,17 +33,23 @@ function shapeStudents(rows) {
   return Array.from(byId.values());
 }
 
-// Single Supabase select with embedded relation. Returns nested cert rows
+// Single Supabase select with embedded relations. Returns nested cert rows
 // inline; we flatten + reshape in JS.
+// Stage 6 step 8: track_name column dropped — join tracks!track_id for name.
 async function fetchStudentsRaw(filter) {
   let q = supabase
     .from("students")
     .select(`
-      id, name, email, phone, track_name,
+      id, name, email, phone,
+      tracks!track_id ( name ),
       student_certifications ( cert_type_id, status )
     `);
-  if (filter?.id)         q = q.eq("id", filter.id);
-  if (filter?.trackName)  q = q.eq("track_name", filter.trackName);
+  if (filter?.id) q = q.eq("id", filter.id);
+  if (filter?.trackName) {
+    const trackId = await resolveTrackId(filter.trackName);
+    if (trackId) q = q.eq("track_id", trackId);
+    else return []; // unknown track name → no results
+  }
 
   const { data, error } = await q;
   if (error) throw error;
@@ -51,12 +57,13 @@ async function fetchStudentsRaw(filter) {
   // Flatten nested cert rows so shapeStudents can consume a uniform row set.
   const flat = [];
   for (const s of data ?? []) {
+    const trackName = s.tracks?.name ?? null;
     const certs = s.student_certifications ?? [];
     if (certs.length === 0) {
-      flat.push({ id: s.id, name: s.name, email: s.email, phone: s.phone, track_name: s.track_name, cert_type_id: null, cert_status: null });
+      flat.push({ id: s.id, name: s.name, email: s.email, phone: s.phone, track_name: trackName, cert_type_id: null, cert_status: null });
     } else {
       for (const c of certs) {
-        flat.push({ id: s.id, name: s.name, email: s.email, phone: s.phone, track_name: s.track_name, cert_type_id: c.cert_type_id, cert_status: c.status });
+        flat.push({ id: s.id, name: s.name, email: s.email, phone: s.phone, track_name: trackName, cert_type_id: c.cert_type_id, cert_status: c.status });
       }
     }
   }
@@ -102,11 +109,10 @@ export async function upsertStudent(stu) {
     // Run student upsert + cert delete in parallel — independent operations.
     const [{ error: stuErr }, { error: delErr }] = await Promise.all([
       supabase.from("students").upsert({
-        id:         stu.id,
-        name:       stu.name ?? "",
-        email:      stu.email || null,
-        phone:      stu.phone || null,
-        track_name: stu.track || null,
+        id:      stu.id,
+        name:    stu.name ?? "",
+        email:   stu.email || null,
+        phone:   stu.phone || null,
         track_id,
       }),
       supabase.from("student_certifications").delete().eq("student_id", stu.id),

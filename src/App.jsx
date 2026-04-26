@@ -5818,7 +5818,7 @@ export default function App() {
         if(!tm && tmSrc === "supabase_empty")   await storageSet("teamMembers",  []);
         if(!kts && ktsSrc === "supabase_empty")  await storageSet("kits",         []);
         if(!pol && polSrc === "supabase_empty")   await storageSet("policies",        { פרטית:"", הפקה:"", סאונד:"", לילה:"" });
-        if(!certs && certsSrc === "supabase_empty") await storageSet("certifications", { types:[], students:[] });
+        // certifications blob init removed (Stage 6) — normalized tables are source of truth
         if(!dhs && dhsSrc === "supabase_empty")     await storageSet("deptHeads",       []);
         if(!mgrTok && mgrTokSrc === "supabase_empty") {
           const tok = "mgr_"+Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10);
