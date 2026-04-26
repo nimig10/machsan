@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Calendar, ClipboardList, Film, GraduationCap, Mic, Users } from "lucide-react";
-import { listStudents } from "../utils/studentsApi.js";
 
 const NIGHT_COLOR   = "#2196f3";
 const STUDENT_COLOR = "#2ecc71";
@@ -53,11 +52,8 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
 
   const MOBILE_DAYS = 3;
 
-  // ── Students & tracks — read from normalized tables (Stage 6) ────────
-  const [students, setStudents] = useState([]);
-  useEffect(() => {
-    listStudents().then(rows => { if (Array.isArray(rows)) setStudents(rows); });
-  }, []);
+  // ── Students & tracks — from certifications prop (updated optimistically by save()) ──
+  const students = certifications?.students || [];
   const trackMap = useMemo(() => {
     const map = {};
     students.forEach(s => {
