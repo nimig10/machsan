@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from '../supabaseClient.js';
 import { CheckCircle, ClipboardList, Clock, Film, GraduationCap, Headphones, LayoutDashboard, Lightbulb, Package, Pencil, Plus, Search, X } from "lucide-react";
 import { storageSet, logActivity } from "../utils.js";
+import { dualWriteCertifications } from "../utils/studentsApi.js";
 import { Modal } from "./ui.jsx";
 import SmartExcelImportButton from "./SmartExcelImportButton.jsx";
 
@@ -117,6 +118,11 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
     const r = await storageSet("certifications", updated);
     setSaving(false);
     if(!r.ok) showToast("error","שגיאה בשמירה");
+    // Stage 6 step 4: dual-write — mirror the new certifications state to the
+    // normalized tables. Fire-and-forget; the blob is still authoritative.
+    if (r.ok) {
+      dualWriteCertifications(updated);
+    }
     return r.ok;
   };
 

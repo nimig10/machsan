@@ -2,6 +2,7 @@
 import { useRef, useState } from "react";
 import { Camera, CheckCircle, ClipboardList, GraduationCap, Lightbulb, Mic, Package, Pencil, Search, X } from "lucide-react";
 import { storageSet, cloudinaryThumb, writeEquipmentToDB } from "../utils.js";
+import { dualWriteCertifications } from "../utils/studentsApi.js";
 import { Modal } from "./ui.jsx";
 
 const NIGHT_CERT_ID = "cert_night_studio";
@@ -61,6 +62,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
     const r = await storageSet("certifications", updated);
     setSaving(false);
     if(!r.ok) showToast("error","שגיאה בשמירה");
+    if (r.ok) dualWriteCertifications(updated);
     return r.ok;
   };
 
@@ -148,6 +150,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
       setStudentsLocal(null);
       storageSet("certifications", fullUpdated).then(r => {
         if (!r.ok) showToast("error", "שגיאה בשמירה");
+        else dualWriteCertifications(fullUpdated);
       });
     }, 400);
   };

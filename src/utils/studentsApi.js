@@ -75,3 +75,182 @@ export async function getStudent(id) {
 export async function getStudentsByTrack(trackName) {
   return fetchStudentsRaw({ trackName });
 }
+
+// ─── Write path (Stage 6 step 4 — dual-write) ─────────────────────────────
+//
+// These helpers keep the normalized tables in sync with whatever the legacy
+// blob path already wrote. Failure here is non-fatal during dual-write — the
+// blob is still authoritative until step 5 migrates reads.
+
+async function resolveTrackId(trackName) {
+  if (!trackName) return null;
+  const { data } = await supabase
+    .from("tracks")
+    .select("id")
+    .eq("name", trackName)
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
+// Upsert one student + replace their cert statuses. Best-effort; logs but
+// does not throw, since the blob write is the source of truth right now.
+export async function upsertStudent(stu) {
+  if (!stu?.id) return { ok: false, error: "missing id" };
+  try {
+    const track_id = await resolveTrackId(stu.track);
+
+    const { error: stuErr } = await supabase.from("students").upsert({
+      id:         stu.id,
+      name:       stu.name ?? "",
+      email:      stu.email || null,
+      phone:      stu.phone || null,
+      track_name: stu.track || null,
+      track_id,
+    });
+    if (stuErr) throw stuErr;
+
+    // Replace certs: delete existing, insert current map. Junction has
+    // ON DELETE CASCADE so we just delete by student_id.
+    const { error: delErr } = await supabase
+      .from("student_certifications")
+      .delete()
+      .eq("student_id", stu.id);
+    if (delErr) throw delErr;
+
+    const certEntries = Object.entries(stu.certs || {}).filter(
+      ([, status]) => status === "עבר" || status === "לא עבר"
+    );
+    if (certEntries.length > 0) {
+      const rows = certEntries.map(([cert_type_id, status]) => ({
+        student_id: stu.id, cert_type_id, status,
+      }));
+      const { error: insErr } = await supabase
+        .from("student_certifications")
+        .insert(rows);
+      if (insErr) throw insErr;
+    }
+
+    return { ok: true };
+  } catch (err) {
+    console.warn("[studentsApi.upsertStudent]", stu.id, err);
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+export async function deleteStudent(id) {
+  if (!id) return { ok: false, error: "missing id" };
+  try {
+    // CASCADE on student_certifications means the FK rows go too.
+    const { error } = await supabase.from("students").delete().eq("id", id);
+    if (error) throw error;
+    return { ok: true };
+  } catch (err) {
+    console.warn("[studentsApi.deleteStudent]", id, err);
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+// Sync certification_types — keeps the FK target for student_certifications
+// valid when new types are added in the blob.
+export async function syncCertificationTypes(types) {
+  if (!Array.isArray(types)) return { ok: false };
+  try {
+    const wantIds = new Set(types.map(t => t.id).filter(Boolean));
+    const rows = types
+      .filter(t => t.id && t.name)
+      .map(t => ({ id: t.id, name: t.name }));
+    if (rows.length > 0) {
+      const { error } = await supabase.from("certification_types").upsert(rows);
+      if (error) throw error;
+    }
+    const { data: existing } = await supabase.from("certification_types").select("id");
+    const toDelete = (existing ?? []).map(r => r.id).filter(id => !wantIds.has(id));
+    if (toDelete.length > 0) {
+      // ON DELETE CASCADE on student_certifications removes orphan cert rows.
+      await supabase.from("certification_types").delete().in("id", toDelete);
+    }
+    return { ok: true };
+  } catch (err) {
+    console.warn("[studentsApi.syncCertificationTypes]", err);
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+// Sync tracks — merges blob's tracks[] (track_type) and trackSettings[] (loan_types)
+// into one row per name. Keeps the FK target for students.track_id valid.
+export async function syncTracks(tracks, trackSettings) {
+  try {
+    const byName = new Map();
+    for (const t of tracks ?? []) {
+      if (!t?.name) continue;
+      byName.set(t.name, {
+        name: t.name,
+        track_type: t.trackType === "sound" ? "sound" : "cinema",
+        loan_types: byName.get(t.name)?.loan_types ?? [],
+      });
+    }
+    for (const t of trackSettings ?? []) {
+      if (!t?.name) continue;
+      const existing = byName.get(t.name) ?? { name: t.name, track_type: "cinema", loan_types: [] };
+      existing.loan_types = Array.isArray(t.loanTypes) ? t.loanTypes : [];
+      byName.set(t.name, existing);
+    }
+    const rows = Array.from(byName.values());
+    if (rows.length > 0) {
+      const { error } = await supabase.from("tracks").upsert(rows, { onConflict: "name" });
+      if (error) throw error;
+    }
+    const wantNames = new Set(rows.map(r => r.name));
+    const { data: existing } = await supabase.from("tracks").select("name");
+    const toDelete = (existing ?? []).map(r => r.name).filter(n => !wantNames.has(n));
+    if (toDelete.length > 0) {
+      // ON DELETE SET NULL on students.track_id keeps student rows safe.
+      await supabase.from("tracks").delete().in("name", toDelete);
+    }
+    return { ok: true };
+  } catch (err) {
+    console.warn("[studentsApi.syncTracks]", err);
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+// Full reconciliation: upsert every student in `nextStudents` and delete any
+// IDs in the table that aren't in the new list. Used after a blob save() so
+// the tables converge to the same state regardless of which fields changed.
+export async function syncAllStudents(nextStudents) {
+  if (!Array.isArray(nextStudents)) return { ok: false, error: "not an array" };
+  try {
+    const wantIds = new Set(nextStudents.map(s => s.id).filter(Boolean));
+
+    const { data: existing, error: listErr } = await supabase
+      .from("students")
+      .select("id");
+    if (listErr) throw listErr;
+
+    const toDelete = (existing ?? []).map(r => r.id).filter(id => !wantIds.has(id));
+
+    for (const stu of nextStudents) {
+      await upsertStudent(stu);
+    }
+    for (const id of toDelete) {
+      await deleteStudent(id);
+    }
+    return { ok: true, upserted: nextStudents.length, deleted: toDelete.length };
+  } catch (err) {
+    console.warn("[studentsApi.syncAllStudents]", err);
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+// ─── Orchestrator ─────────────────────────────────────────────────────────
+//
+// Call this RIGHT AFTER a successful storageSet("certifications", updated).
+// Order matters: types/tracks first (FK targets), then students (FKs into them).
+// Errors are logged, never thrown — the blob write already succeeded so we
+// never want to surface a sync glitch to the user during dual-write.
+export async function dualWriteCertifications(certifications) {
+  if (!certifications) return;
+  await syncCertificationTypes(certifications.types);
+  await syncTracks(certifications.tracks, certifications.trackSettings);
+  await syncAllStudents(certifications.students);
+}
