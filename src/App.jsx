@@ -5758,8 +5758,8 @@ export default function App() {
         _setTeamMembers(tm || []);
         _setKits(kts || []);
         _setPolicies(pol || { פרטית:"", הפקה:"", סאונד:"", לילה:"" });
-        // Stage 6 step 8: blob deleted — load from normalized tables.
-        loadCertificationsFromTables().then(c => _setCertifications(c));
+        // Stage 6 step 8: blob deleted — await so tracks/types are set before UI renders.
+        _setCertifications(await loadCertificationsFromTables());
         _setDeptHeads(Array.isArray(dhs) ? dhs : []);
         _setCollegeManager(mgr || { name:"", email:"" });
           setManagerToken(mgrTok || "");

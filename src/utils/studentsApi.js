@@ -286,10 +286,14 @@ export async function loadCertificationsFromTables() {
 // can surface a save error like the old storageSet did.
 //
 // Order matters: types/tracks first (FK targets), then students (FKs into them).
-export async function dualWriteCertifications(certifications) {
+export async function dualWriteCertifications(certifications, { skipStudents = false } = {}) {
   if (!certifications) return { ok: false, error: "no payload" };
   const r1 = await syncCertificationTypes(certifications.types);
   const r2 = await syncTracks(certifications.tracks, certifications.trackSettings);
+  if (skipStudents) {
+    const ok = r1?.ok !== false && r2?.ok !== false;
+    return { ok, types: r1, tracks: r2, students: { ok: true, skipped: true } };
+  }
   const r3 = await syncAllStudents(certifications.students);
   const ok = r1?.ok !== false && r2?.ok !== false && r3?.ok !== false;
   return { ok, types: r1, tracks: r2, students: r3 };

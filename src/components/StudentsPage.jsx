@@ -132,7 +132,9 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
     // round-trip below confirms.
     setStudents(nextStudents);
     // Stage 6 step 6: tables are now the source of truth — no more blob write.
-    const r = await dualWriteCertifications(updated);
+    // Skip student sync when only tracks/types changed — avoids 332+ needless DB calls.
+    const skipStudents = updatedPatch?.students === undefined;
+    const r = await dualWriteCertifications(updated, { skipStudents });
     setSaving(false);
     if(!r.ok) showToast("error","שגיאה בשמירה");
     if (r.ok) {
