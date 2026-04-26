@@ -112,13 +112,15 @@ export function LecturerPortal({
 
   // Stage 6 step 5b: students for getStudentsForLesson() come from
   // public.students via studentsApi. Falls back to certifications.students
-  // (blob) until the fetch resolves so the UI is never empty.
-  const [studentsFromTable, setStudentsFromTable] = useState(() => certifications?.students ?? []);
+  // (blob) until the fetch resolves so the UI is never empty AND validation
+  // logic that depends on a non-empty list never runs against [].
+  const [tableStudents, setTableStudents] = useState(null);
   useEffect(() => {
     let alive = true;
-    listStudents().then(s => { if (alive && Array.isArray(s)) setStudentsFromTable(s); });
+    listStudents().then(s => { if (alive && Array.isArray(s)) setTableStudents(s); });
     return () => { alive = false; };
   }, []);
+  const studentsFromTable = tableStudents ?? (certifications?.students || []);
   const [editorState, setEditorState] = useState(null);
   const [draftName, setDraftName] = useState("");
   const [draftDescription, setDraftDescription] = useState("");

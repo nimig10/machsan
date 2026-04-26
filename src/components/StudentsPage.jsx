@@ -60,14 +60,17 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
   const { types = [], tracks: explicitTracks = [] } = certifications;
 
   // Stage 6 step 5a: students now read from public.students (the normalized
-  // table) instead of certifications.students (the blob). Initial value falls
-  // back to the blob so the UI is never empty before the fetch completes.
-  const [students, setStudents] = useState(() => certifications?.students ?? []);
+  // table) instead of certifications.students (the blob). Falls back to the
+  // blob until the table fetch resolves so the UI is never empty AND any
+  // logic that depends on a non-empty list (shrink guard, etc) doesn't trip.
+  const [tableStudents, setTableStudents] = useState(null);
   useEffect(() => {
     let alive = true;
-    listStudents().then(s => { if (alive && Array.isArray(s)) setStudents(s); });
+    listStudents().then(s => { if (alive && Array.isArray(s)) setTableStudents(s); });
     return () => { alive = false; };
   }, []);
+  const students = tableStudents ?? (certifications?.students || []);
+  const setStudents = setTableStudents;
   const trackSettings = buildTrackSettings(students, certifications?.trackSettings, explicitTracks);
   const [addingStudent, setAddingStudent] = useState(false);
   const [studentForm, setStudentForm] = useState({ firstName:"", lastName:"", email:"", phone:"", track:"" });

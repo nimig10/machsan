@@ -1229,14 +1229,16 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 
   // Stage 6 step 5d: every read of certifications.students in this file
   // (login check, student lookup by id/email/phone, night-cert check, etc.)
-  // now goes through public.students via studentsApi. The blob fallback
-  // keeps the UI populated during the initial fetch.
-  const [studentsFromTable, setStudentsFromTable] = useState(() => certifications?.students ?? []);
+  // now goes through public.students via studentsApi. CRITICAL: must fall
+  // back to the blob until the table fetch resolves — otherwise the login
+  // isStudent check sees an empty array and signs valid users out.
+  const [tableStudents, setTableStudents] = useState(null);
   useEffect(() => {
     let alive = true;
-    listStudents().then(s => { if (alive && Array.isArray(s)) setStudentsFromTable(s); });
+    listStudents().then(s => { if (alive && Array.isArray(s)) setTableStudents(s); });
     return () => { alive = false; };
   }, []);
+  const studentsFromTable = tableStudents ?? (certifications?.students || []);
   const swipeTouchRef = useRef(null);
   const [form, setForm]       = useState({student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_first_name:"",crew_photographer_last_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_first_name:"",crew_sound_last_name:"",crew_sound_phone:"",production_reason:""});
   const [items, setItems]     = useState([]);
@@ -3810,6 +3812,18 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
 
   const studioFutureHoursLimit = getStudioFutureHoursLimit(siteSettings);
   const normalizeStudioPhone = (value) => String(value || "").replace(/[^0-9]/g, "");
+
+  // Stage 6 step 5d: PublicStudioBooking is its own component, so it needs
+  // its own students fetch (parent's studentsFromTable isn't in scope here).
+  // Falls back to certifications.students until the table fetch resolves.
+  const [tableStudents, setTableStudents] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    listStudents().then(s => { if (alive && Array.isArray(s)) setTableStudents(s); });
+    return () => { alive = false; };
+  }, []);
+  const studentsFromTable = tableStudents ?? (certifications?.students || []);
+
   // Check if student has night certification
   const studentRecord = (() => {
     const students = studentsFromTable;

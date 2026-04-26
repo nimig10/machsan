@@ -220,12 +220,13 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   // Stage 6 step 5c: students used by studentsInTrack and the conflict-email
   // lookup come from public.students via studentsApi. Falls back to
   // certifications.students until the fetch resolves so nothing is empty.
-  const [studentsFromTable, setStudentsFromTable] = useState(() => certifications?.students ?? []);
+  const [tableStudents, setTableStudents] = useState(null);
   useEffect(() => {
     let alive = true;
-    listStudents().then(s => { if (alive && Array.isArray(s)) setStudentsFromTable(s); });
+    listStudents().then(s => { if (alive && Array.isArray(s)) setTableStudents(s); });
     return () => { alive = false; };
   }, []);
+  const studentsFromTable = tableStudents ?? (certifications?.students || []);
   const [xlImporting, setXlImporting] = useState(false);
   const [aiImporting, setAiImporting] = useState(false);
   const importInputRef = useRef(null);
