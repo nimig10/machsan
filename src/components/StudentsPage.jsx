@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from '../supabaseClient.js';
 import { CheckCircle, ClipboardList, Clock, Film, GraduationCap, Headphones, LayoutDashboard, Lightbulb, Package, Pencil, Plus, Search, X } from "lucide-react";
 import { storageSet, logActivity } from "../utils.js";
-import { dualWriteCertifications } from "../utils/studentsApi.js";
+import { dualWriteCertifications, listStudents } from "../utils/studentsApi.js";
 import { Modal } from "./ui.jsx";
 import SmartExcelImportButton from "./SmartExcelImportButton.jsx";
 
@@ -57,7 +57,17 @@ const buildTrackSettings = (students = [], existingTrackSettings = [], explicitT
 };
 
 export function StudentsPage({ certifications, setCertifications, showToast, onLogCreated = () => {}, studioBookings = [], setStudioBookings, reservations = [], setReservations }) {
-  const { types = [], students = [], tracks: explicitTracks = [] } = certifications;
+  const { types = [], tracks: explicitTracks = [] } = certifications;
+
+  // Stage 6 step 5a: students now read from public.students (the normalized
+  // table) instead of certifications.students (the blob). Initial value falls
+  // back to the blob so the UI is never empty before the fetch completes.
+  const [students, setStudents] = useState(() => certifications?.students ?? []);
+  useEffect(() => {
+    let alive = true;
+    listStudents().then(s => { if (alive && Array.isArray(s)) setStudents(s); });
+    return () => { alive = false; };
+  }, []);
   const trackSettings = buildTrackSettings(students, certifications?.trackSettings, explicitTracks);
   const [addingStudent, setAddingStudent] = useState(false);
   const [studentForm, setStudentForm] = useState({ firstName:"", lastName:"", email:"", phone:"", track:"" });
@@ -115,13 +125,20 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
     }
     setSaving(true);
     setCertifications(updated);
+    // Optimistic local update — keeps the UI responsive before the table
+    // round-trip below confirms.
+    setStudents(nextStudents);
     const r = await storageSet("certifications", updated);
     setSaving(false);
     if(!r.ok) showToast("error","שגיאה בשמירה");
-    // Stage 6 step 4: dual-write — mirror the new certifications state to the
-    // normalized tables. Fire-and-forget; the blob is still authoritative.
+    // Stage 6 step 4: dual-write — mirror to normalized tables.
+    // Stage 6 step 5a: re-read from table so local state matches the truth
+    // (catches any sync hiccups that the optimistic update glossed over).
     if (r.ok) {
-      dualWriteCertifications(updated);
+      dualWriteCertifications(updated).then(async () => {
+        const fresh = await listStudents();
+        if (Array.isArray(fresh)) setStudents(fresh);
+      });
     }
     return r.ok;
   };
