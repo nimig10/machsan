@@ -5709,7 +5709,7 @@ export default function App() {
     (async()=>{
         try {
           historySuspendedRef.current = true;
-          const [eqR, resR, catsR, catTypesR, catLoanTypesR, tmR, ktsR, polR, certsR, dhsR, mgrR, mgrTokR, siteSetR, studiosR, studioBkR, lessonsR, lecturersR] = await Promise.all([
+          const [eqR, resR, catsR, catTypesR, catLoanTypesR, tmR, ktsR, polR, dhsR, mgrR, mgrTokR, siteSetR, studiosR, studioBkR, lessonsR, lecturersR] = await Promise.all([
             (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
           (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
           storageGet("categories"),
@@ -5718,7 +5718,6 @@ export default function App() {
           storageGet("teamMembers"),
           storageGet("kits"),
           storageGet("policies"),
-          storageGet("certifications"),
           storageGet("deptHeads"),
           storageGet("collegeManager"),
           storageGet("managerToken"),
@@ -5737,7 +5736,6 @@ export default function App() {
           const tm = tmR.value, tmSrc = tmR.source;
           const kts = ktsR.value, ktsSrc = ktsR.source;
           const pol = polR.value, polSrc = polR.source;
-          const certs = certsR.value, certsSrc = certsR.source;
           const dhs = dhsR.value, dhsSrc = dhsR.source;
           const mgr = mgrR.value, mgrSrc = mgrR.source;
           const mgrTok = mgrTokR.value, mgrTokSrc = mgrTokR.source;
@@ -5854,7 +5852,8 @@ export default function App() {
         (supabase.from("reservations_new").select("*, reservation_items(*)").abortSignal(ctrl.signal).then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
         storageGet("studio_bookings", ctrl.signal),
         storageGet("lecturers", ctrl.signal),
-        storageGet("certifications", ctrl.signal),
+        // Stage 6: read certifications from normalized tables, not the deleted blob.
+        loadCertificationsFromTables().then(v => ({ value: v, source: "tables" })).catch(() => ({ value: null, source: "error" })),
         storageGet("categories", ctrl.signal),
         storageGet("categoryTypes", ctrl.signal),
       ]);
@@ -5887,9 +5886,9 @@ export default function App() {
       if (Array.isArray(lecturersR?.value) && !dataEquals(lecturersRef.current, lecturersR.value)) {
         _setLecturers(lecturersR.value);
       }
-      // Pick up student-self-service updates made via PublicForm's Account Settings
-      // modal (which writes certifications.students[] via /api/auth action
-      // "update-student-credentials"). Also catches remote admin edits.
+      // Pick up student-self-service updates (PublicForm Account Settings modal
+      // updates students table via /api/auth) and remote admin edits. Source is
+      // the normalized students/tracks/certification_types tables (Stage 6).
       if (certsR?.value && typeof certsR.value === "object" && !dataEquals(certificationsRef.current, certsR.value)) {
         _setCertifications(certsR.value);
       }
@@ -5942,12 +5941,9 @@ export default function App() {
   }, [loading, isPublicFormView, isLecturerPortalView]);
 
   // ── Supabase realtime listener on the `store` table ────────────────────────
-  // Live-sync certifications (and the rest of the store keys we care about)
-  // into local state the instant anyone — the admin in another tab, another
-  // admin on another machine, or a student self-updating their own profile
-  // via PublicForm's Account Settings modal — writes to the store. This is
-  // what drives the Students page in the secretary panel updating in real
-  // time when a logged-in student changes their name / email / phone.
+  // Live-sync remaining store-backed keys (reservations etc.) into local state.
+  // certifications was migrated to normalized tables in Stage 6 — refresh for
+  // those goes through refreshAdminData() polling instead.
   //
   // The publication `supabase_realtime` was granted SELECT on public.store
   // via a server-side migration; without that the subscribe() below returns
@@ -5965,12 +5961,7 @@ export default function App() {
             const key = row?.key;
             const data = payload.new?.data;
             if (!key || data === undefined) return;
-            if (key === "certifications") {
-              if (typeof data === "object" && data !== null &&
-                  !dataEquals(certificationsRef.current, data)) {
-                _setCertifications(data);
-              }
-            } else if (key === "reservations") {
+            if (key === "reservations") {
               if (Array.isArray(data)) {
                 const normalized = normalizeReservationsForArchive(data);
                 const { reservations: genLesson, linkedKitIds } =
