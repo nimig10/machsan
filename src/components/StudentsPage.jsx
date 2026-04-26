@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from '../supabaseClient.js';
 import { CheckCircle, ClipboardList, Clock, Film, GraduationCap, Headphones, LayoutDashboard, Lightbulb, Package, Pencil, Plus, Search, X } from "lucide-react";
 import { storageSet, logActivity } from "../utils.js";
+import { dualWriteCertifications, listStudents } from "../utils/studentsApi.js";
 import { Modal } from "./ui.jsx";
 import SmartExcelImportButton from "./SmartExcelImportButton.jsx";
 
@@ -56,7 +57,20 @@ const buildTrackSettings = (students = [], existingTrackSettings = [], explicitT
 };
 
 export function StudentsPage({ certifications, setCertifications, showToast, onLogCreated = () => {}, studioBookings = [], setStudioBookings, reservations = [], setReservations }) {
-  const { types = [], students = [], tracks: explicitTracks = [] } = certifications;
+  const { types = [], tracks: explicitTracks = [] } = certifications;
+
+  // Stage 6 step 5a: students now read from public.students (the normalized
+  // table) instead of certifications.students (the blob). Falls back to the
+  // blob until the table fetch resolves so the UI is never empty AND any
+  // logic that depends on a non-empty list (shrink guard, etc) doesn't trip.
+  const [tableStudents, setTableStudents] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    listStudents().then(s => { if (alive && Array.isArray(s)) setTableStudents(s); });
+    return () => { alive = false; };
+  }, []);
+  const students = tableStudents ?? (certifications?.students || []);
+  const setStudents = setTableStudents;
   const trackSettings = buildTrackSettings(students, certifications?.trackSettings, explicitTracks);
   const [addingStudent, setAddingStudent] = useState(false);
   const [studentForm, setStudentForm] = useState({ firstName:"", lastName:"", email:"", phone:"", track:"" });
@@ -114,9 +128,20 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
     }
     setSaving(true);
     setCertifications(updated);
-    const r = await storageSet("certifications", updated);
+    // Optimistic local update — keeps the UI responsive before the table
+    // round-trip below confirms.
+    setStudents(nextStudents);
+    // Stage 6 step 6: tables are now the source of truth — no more blob write.
+    // Skip student sync when only tracks/types changed — avoids 332+ needless DB calls.
+    const skipStudents = updatedPatch?.students === undefined;
+    const r = await dualWriteCertifications(updated, { skipStudents });
     setSaving(false);
     if(!r.ok) showToast("error","שגיאה בשמירה");
+    if (r.ok) {
+      // Re-read so local state matches the canonical table state.
+      const fresh = await listStudents();
+      if (Array.isArray(fresh)) setStudents(fresh);
+    }
     return r.ok;
   };
 

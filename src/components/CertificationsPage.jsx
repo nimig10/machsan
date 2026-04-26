@@ -2,6 +2,7 @@
 import { useRef, useState } from "react";
 import { Camera, CheckCircle, ClipboardList, GraduationCap, Lightbulb, Mic, Package, Pencil, Search, X } from "lucide-react";
 import { storageSet, cloudinaryThumb, writeEquipmentToDB } from "../utils.js";
+import { dualWriteCertifications } from "../utils/studentsApi.js";
 import { Modal } from "./ui.jsx";
 
 const NIGHT_CERT_ID = "cert_night_studio";
@@ -58,7 +59,8 @@ export function CertificationsPage({ certifications, setCertifications, showToas
     };
     setSaving(true);
     setCertifications(updated);
-    const r = await storageSet("certifications", updated);
+    // Stage 6 step 6: tables are the source of truth — no more blob write.
+    const r = await dualWriteCertifications(updated);
     setSaving(false);
     if(!r.ok) showToast("error","שגיאה בשמירה");
     return r.ok;
@@ -146,7 +148,8 @@ export function CertificationsPage({ certifications, setCertifications, showToas
       const fullUpdated = { ...certifications, types, students: finalStudents, trackSettings: nextTS };
       setCertifications(fullUpdated);
       setStudentsLocal(null);
-      storageSet("certifications", fullUpdated).then(r => {
+      // Stage 6 step 6: tables are the source of truth — no more blob write.
+      dualWriteCertifications(fullUpdated).then(r => {
         if (!r.ok) showToast("error", "שגיאה בשמירה");
       });
     }, 400);

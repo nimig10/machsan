@@ -1,6 +1,7 @@
 import { supabase } from '../supabaseClient.js';
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, getAvailable, normalizeName, storageSet, storageGet, updateReservationStatus, getAuthToken } from "../utils.js";
+import { listStudents } from "../utils/studentsApi.js";
 import { statusBadge } from "./ui.jsx";
 import { Backpack, BookOpen, Calendar, CheckCircle, Film, GraduationCap, Info, Mic, Minus, Package, X, XCircle } from "lucide-react";
 import { DeptHeadCalendarPage } from "./CalendarViews.jsx";
@@ -108,6 +109,18 @@ export function LecturerPortal({
   // here for late submissions (computeStatusWindow keeps the window open
   // post-end).
   const [archiveView, setArchiveView] = useState(false);
+
+  // Stage 6 step 5b: students for getStudentsForLesson() come from
+  // public.students via studentsApi. Falls back to certifications.students
+  // (blob) until the fetch resolves so the UI is never empty AND validation
+  // logic that depends on a non-empty list never runs against [].
+  const [tableStudents, setTableStudents] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    listStudents().then(s => { if (alive && Array.isArray(s)) setTableStudents(s); });
+    return () => { alive = false; };
+  }, []);
+  const studentsFromTable = tableStudents ?? (certifications?.students || []);
   const [editorState, setEditorState] = useState(null);
   const [draftName, setDraftName] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
@@ -520,7 +533,7 @@ export function LecturerPortal({
   function getStudentsForLesson(lesson) {
     const trk = String(lesson?.track || "").trim();
     if (!trk) return [];
-    const all = Array.isArray(certifications?.students) ? certifications.students : [];
+    const all = Array.isArray(studentsFromTable) ? studentsFromTable : [];
     return all
       .filter((s) => String(s?.track || "").trim() === trk)
       .map((s) => ({

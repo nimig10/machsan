@@ -3,6 +3,7 @@ import { AlertTriangle, Backpack, Briefcase, Calendar, Camera, Check, CheckCircl
 import { useEffect, useState, useRef, useMemo } from "react";
 import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR } from "../utils.js";
 import { supabase } from "../supabaseClient.js";
+import { listStudents } from "../utils/studentsApi.js";
 import { useNotifications } from "../hooks/useNotifications.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import AIChatBot from "./AIChatBot.jsx";
@@ -1225,6 +1226,24 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     : (Number.isInteger(initialStepParam) && initialStepParam >= 1 && initialStepParam <= 4 ? initialStepParam : 1);
   const [step, setStep]       = useState(initialStep);
   const [showAccountSettings, setShowAccountSettings] = useState(false);
+
+  // Stage 6 step 5d/7: every read of certifications.students in this file
+  // (login check, student lookup by id/email/phone, night-cert check, etc.)
+  // now goes through public.students via studentsApi. CRITICAL: anon role
+  // can't read public.students through RLS, so the initial fetch from a
+  // logged-out page returns empty. We re-fetch on every auth state change
+  // and fall back to the blob until something populates.
+  const [tableStudents, setTableStudents] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    const refetch = () => {
+      listStudents().then(s => { if (alive && Array.isArray(s) && s.length > 0) setTableStudents(s); });
+    };
+    refetch();
+    const { data: sub } = supabase.auth.onAuthStateChange(() => refetch());
+    return () => { alive = false; sub?.subscription?.unsubscribe?.(); };
+  }, []);
+  const studentsFromTable = tableStudents ?? (certifications?.students || []);
   const swipeTouchRef = useRef(null);
   const [form, setForm]       = useState({student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_first_name:"",crew_photographer_last_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_first_name:"",crew_sound_last_name:"",crew_sound_phone:"",production_reason:""});
   const [items, setItems]     = useState([]);
@@ -1291,7 +1310,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [showEquipmentAiLoanTypePrompt, setShowEquipmentAiLoanTypePrompt] = useState(false);
   const [equipmentAiForcedLoanType, setEquipmentAiForcedLoanType] = useState("");
   const todayStr = today();
-  const normalizedTrackSettings = buildTrackSettings(certifications?.students, certifications?.trackSettings, certifications?.tracks);
+  const normalizedTrackSettings = buildTrackSettings(studentsFromTable, certifications?.trackSettings, certifications?.tracks);
   const activeStudentTrack = String(loggedInStudent?.track || form.course || "").trim();
   // ── Studio track-type filtering ──
   const studentTrackType = normalizedTrackSettings.find(s => s.name === activeStudentTrack)?.trackType || "";
@@ -1607,7 +1626,12 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       // No public.users row — verify eligibility via multiple paths so a
       // transient store load delay or local drift cannot cause a spurious
       // "not found" for a legitimate user.
-      const isStudent = (certifications?.students || []).some(s => s.email?.toLowerCase().trim() === authEmail);
+      // Stage 6 step 7 fix: anon role can't read public.students (RLS),
+      // so the cached studentsFromTable from mount may be empty. We're now
+      // authenticated — re-fetch directly to get current state.
+      const freshStudents = (await listStudents()) ?? [];
+      const isStudent = freshStudents.some(s => s.email?.toLowerCase().trim() === authEmail)
+        || studentsFromTable.some(s => s.email?.toLowerCase().trim() === authEmail);
       const isLecturer = (lecturers || []).some(l => l.isActive !== false && l.email?.toLowerCase().trim() === authEmail);
       let isStaff = false;
       if (!isStudent && !isLecturer) {
@@ -1743,7 +1767,11 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   };
 
   const routeToStudent = async (authUserId, authEmail, userRow, roleFlags) => {
-    const stuList = certifications?.students || [];
+    // Stage 6 step 7 fix: anon role can't read public.students (RLS), so the
+    // mount-time studentsFromTable may be empty. We're authenticated now —
+    // re-fetch directly to get current state.
+    const freshStudents = (await listStudents()) ?? [];
+    const stuList = freshStudents.length > 0 ? freshStudents : studentsFromTable;
     const matchedStudent = stuList.find(
       (s) => s.email?.toLowerCase().trim() === authEmail,
     );
@@ -1859,7 +1887,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   // bounce back to the login screen with the standard gatekeeper error.
   useEffect(() => {
     if (!loggedInStudent) return;
-    const stuList = certifications?.students || [];
+    const stuList = studentsFromTable;
     if (!Array.isArray(stuList) || stuList.length === 0) return;
     const storedEmail = String(loggedInStudent.email || "").toLowerCase().trim();
     if (!storedEmail) return;
@@ -2204,14 +2232,14 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     const normalizedName = normalizeName(name);
     const normalizedPhone = normalizePhone(phone);
     if (!normalizedName || !normalizedPhone) return null;
-    return (certifications.students||[]).find(s =>
+    return studentsFromTable.find(s =>
       normalizeName(s.name) === normalizedName &&
       normalizePhone(s.phone) === normalizedPhone
     ) || null;
   };
   const studentRecord = (() => {
     if (!loggedInStudent) return null;
-    const students = certifications.students || [];
+    const students = studentsFromTable;
     if (loggedInStudent.id !== undefined && loggedInStudent.id !== null) {
       const byId = students.find(s => String(s.id) === String(loggedInStudent.id));
       if (byId) return byId;
@@ -3798,9 +3826,21 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
 
   const studioFutureHoursLimit = getStudioFutureHoursLimit(siteSettings);
   const normalizeStudioPhone = (value) => String(value || "").replace(/[^0-9]/g, "");
+
+  // Stage 6 step 5d: PublicStudioBooking is its own component, so it needs
+  // its own students fetch (parent's studentsFromTable isn't in scope here).
+  // Falls back to certifications.students until the table fetch resolves.
+  const [tableStudents, setTableStudents] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    listStudents().then(s => { if (alive && Array.isArray(s)) setTableStudents(s); });
+    return () => { alive = false; };
+  }, []);
+  const studentsFromTable = tableStudents ?? (certifications?.students || []);
+
   // Check if student has night certification
   const studentRecord = (() => {
-    const students = certifications?.students || [];
+    const students = studentsFromTable;
     if (!student) return null;
     if (student.id !== undefined && student.id !== null) {
       const byId = students.find((candidate) => String(candidate.id) === String(student.id));
