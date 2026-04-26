@@ -3,6 +3,7 @@ import { useRef, useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { Award, BookOpen, Calendar, Camera, Check, CheckCircle, Clock, Download, FileText, Film, GraduationCap, Lightbulb, Link, Mail, Mic, Package, Pencil, Phone, Plus, Search, Trash2, Upload, User, Video, X, XCircle } from "lucide-react";
 import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAuthToken } from "../utils.js";
+import { listStudents } from "../utils/studentsApi.js";
 import { makeLecturer } from "./LecturersPage.jsx";
 
 let _skeyCounter = 0;
@@ -215,6 +216,16 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const [sortMode, setSortMode] = useState("recent"); // "recent" | "urgency"
   const [archiveView, setArchiveView] = useState(false);
   const [timeFilter, setTimeFilter] = useState("all"); // "all" | "week" | "month"
+
+  // Stage 6 step 5c: students used by studentsInTrack and the conflict-email
+  // lookup come from public.students via studentsApi. Falls back to
+  // certifications.students until the fetch resolves so nothing is empty.
+  const [studentsFromTable, setStudentsFromTable] = useState(() => certifications?.students ?? []);
+  useEffect(() => {
+    let alive = true;
+    listStudents().then(s => { if (alive && Array.isArray(s)) setStudentsFromTable(s); });
+    return () => { alive = false; };
+  }, []);
   const [xlImporting, setXlImporting] = useState(false);
   const [aiImporting, setAiImporting] = useState(false);
   const importInputRef = useRef(null);
@@ -361,7 +372,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       if (setStudioBookings) setStudioBookings(newBookings);
       await storageSet("studio_bookings", newBookings);
       await Promise.all(conflicts.map(async ({ booking, studioName }) => {
-        const studentRecord = (certifications?.students || []).find(s => s.name === booking.studentName);
+        const studentRecord = studentsFromTable.find(s => s.name === booking.studentName);
         const email = studentRecord?.email || booking.email;
         if (!email) return;
         try {
@@ -1391,7 +1402,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
   const studentsInTrack = (() => {
     const trk = track.trim();
     if (!trk) return [];
-    const all = Array.isArray(certifications?.students) ? certifications.students : [];
+    const all = Array.isArray(studentsFromTable) ? studentsFromTable : [];
     return all.filter(s => String(s?.track || "").trim() === trk);
   })();
 
