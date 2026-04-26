@@ -243,6 +243,42 @@ export async function syncAllStudents(nextStudents) {
   }
 }
 
+// ─── Full certifications shape loader ─────────────────────────────────────
+//
+// Returns a certifications-shaped object compatible with the legacy blob so
+// that existing consumers (StudentsPage, CertificationsPage, LessonsPage, etc.)
+// continue to work without changes. Used in App.jsx instead of storageGet.
+export async function loadCertificationsFromTables() {
+  const [typesRes, tracksRes, studentsData] = await Promise.all([
+    supabase.from("certification_types").select("id, name, category"),
+    supabase.from("tracks").select("id, name, track_type, loan_types"),
+    listStudents(),
+  ]);
+
+  const types = (typesRes.data ?? []).map(t => ({
+    id: t.id,
+    name: t.name,
+    ...(t.category ? { category: t.category } : {}),
+  }));
+
+  const tracks = (tracksRes.data ?? []).map(t => ({
+    name: t.name,
+    trackType: t.track_type ?? "cinema",
+  }));
+
+  const trackSettings = (tracksRes.data ?? []).map(t => ({
+    name: t.name,
+    loanTypes: Array.isArray(t.loan_types) ? t.loan_types : [],
+  }));
+
+  return {
+    types,
+    tracks,
+    trackSettings,
+    students: studentsData ?? [],
+  };
+}
+
 // ─── Orchestrator ─────────────────────────────────────────────────────────
 //
 // Stage 6 step 6: tables are now the source of truth. Callers no longer write

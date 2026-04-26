@@ -25,6 +25,7 @@ import { StaffSchedulePage } from "./components/StaffSchedulePage.jsx";
 import { LecturerPortal } from "./components/LecturerPortal.jsx";
 import { useInstallPrompt } from "./components/InstallPrompt.jsx";
 import { supabase } from "./supabaseClient.js";
+import { loadCertificationsFromTables } from "./utils/studentsApi.js";
 
 // ─── SUPABASE AUTH: strip PKCE / magic-link params early ─────────────────────
 // supabase-js auto-detects ?code= (PKCE) and #access_token= (implicit) on
@@ -5757,7 +5758,8 @@ export default function App() {
         _setTeamMembers(tm || []);
         _setKits(kts || []);
         _setPolicies(pol || { פרטית:"", הפקה:"", סאונד:"", לילה:"" });
-        _setCertifications(certs || { types:[], students:[] });
+        // Stage 6 step 8: blob deleted — load from normalized tables.
+        loadCertificationsFromTables().then(c => _setCertifications(c));
         _setDeptHeads(Array.isArray(dhs) ? dhs : []);
         _setCollegeManager(mgr || { name:"", email:"" });
           setManagerToken(mgrTok || "");
