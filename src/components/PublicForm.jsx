@@ -1227,16 +1227,21 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [step, setStep]       = useState(initialStep);
   const [showAccountSettings, setShowAccountSettings] = useState(false);
 
-  // Stage 6 step 5d: every read of certifications.students in this file
+  // Stage 6 step 5d/7: every read of certifications.students in this file
   // (login check, student lookup by id/email/phone, night-cert check, etc.)
-  // now goes through public.students via studentsApi. CRITICAL: must fall
-  // back to the blob until the table fetch resolves — otherwise the login
-  // isStudent check sees an empty array and signs valid users out.
+  // now goes through public.students via studentsApi. CRITICAL: anon role
+  // can't read public.students through RLS, so the initial fetch from a
+  // logged-out page returns empty. We re-fetch on every auth state change
+  // and fall back to the blob until something populates.
   const [tableStudents, setTableStudents] = useState(null);
   useEffect(() => {
     let alive = true;
-    listStudents().then(s => { if (alive && Array.isArray(s)) setTableStudents(s); });
-    return () => { alive = false; };
+    const refetch = () => {
+      listStudents().then(s => { if (alive && Array.isArray(s) && s.length > 0) setTableStudents(s); });
+    };
+    refetch();
+    const { data: sub } = supabase.auth.onAuthStateChange(() => refetch());
+    return () => { alive = false; sub?.subscription?.unsubscribe?.(); };
   }, []);
   const studentsFromTable = tableStudents ?? (certifications?.students || []);
   const swipeTouchRef = useRef(null);
@@ -1621,7 +1626,12 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       // No public.users row — verify eligibility via multiple paths so a
       // transient store load delay or local drift cannot cause a spurious
       // "not found" for a legitimate user.
-      const isStudent = studentsFromTable.some(s => s.email?.toLowerCase().trim() === authEmail);
+      // Stage 6 step 7 fix: anon role can't read public.students (RLS),
+      // so the cached studentsFromTable from mount may be empty. We're now
+      // authenticated — re-fetch directly to get current state.
+      const freshStudents = (await listStudents()) ?? [];
+      const isStudent = freshStudents.some(s => s.email?.toLowerCase().trim() === authEmail)
+        || studentsFromTable.some(s => s.email?.toLowerCase().trim() === authEmail);
       const isLecturer = (lecturers || []).some(l => l.isActive !== false && l.email?.toLowerCase().trim() === authEmail);
       let isStaff = false;
       if (!isStudent && !isLecturer) {
