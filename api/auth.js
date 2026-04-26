@@ -44,6 +44,55 @@ async function fetchStoreKey(key) {
   }
 }
 
+// Stage 6 step 8: students live in the normalized students table now (the
+// store.certifications blob has been deleted). Query the table directly via
+// REST instead of reading from the dead blob.
+async function fetchStudentByEmail(normalizedEmail) {
+  try {
+    const res = await fetch(
+      `${SB_URL}/rest/v1/students?email=eq.${encodeURIComponent(normalizedEmail)}&select=id,name,email,phone&limit=1`,
+      { headers: SERVICE_HEADERS },
+    );
+    if (!res.ok) return null;
+    const rows = await res.json();
+    return Array.isArray(rows) && rows[0] ? rows[0] : null;
+  } catch {
+    return null;
+  }
+}
+
+// Returns true iff the email is taken by some student other than `excludeId`.
+async function studentEmailTaken(normalizedEmail, excludeId) {
+  try {
+    const res = await fetch(
+      `${SB_URL}/rest/v1/students?email=eq.${encodeURIComponent(normalizedEmail)}&select=id&limit=2`,
+      { headers: SERVICE_HEADERS },
+    );
+    if (!res.ok) return false;
+    const rows = await res.json();
+    if (!Array.isArray(rows)) return false;
+    return rows.some(r => String(r.id) !== String(excludeId));
+  } catch {
+    return false;
+  }
+}
+
+async function updateStudentRow(id, updates) {
+  try {
+    const res = await fetch(
+      `${SB_URL}/rest/v1/students?id=eq.${encodeURIComponent(id)}`,
+      {
+        method: "PATCH",
+        headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
+        body: JSON.stringify(updates),
+      },
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 function normalizeEmail(raw) {
   return String(raw || "").trim().toLowerCase();
 }
@@ -159,13 +208,9 @@ async function findEligibleRecord(normalizedEmail) {
     if (match) return { role: "lecturer", id: String(match.id), name: String(match.fullName || "") };
   }
 
-  const certifications = await fetchStoreKey("certifications");
-  const students = certifications?.students;
-  if (Array.isArray(students)) {
-    const match = students.find(
-      (s) => normalizeEmail(s.email) === normalizedEmail,
-    );
-    if (match) return { role: "student", id: String(match.id), name: String(match.name || "") };
+  const studentRow = await fetchStudentByEmail(normalizedEmail);
+  if (studentRow) {
+    return { role: "student", id: String(studentRow.id), name: String(studentRow.name || "") };
   }
 
   // Also check staff_members so forgot-password works for staff/admin
@@ -444,39 +489,24 @@ async function handleUpdateStudentCredentials(req, res) {
     return res.status(400).json({ error: "password_too_short" });
   }
 
-  // Load certifications and locate the student by current (session) email.
-  const certifications = await fetchStoreKey("certifications");
-  const students = Array.isArray(certifications?.students) ? certifications.students : [];
-  const meIdx = students.findIndex(
-    (s) => normalizeEmail(s.email) === currentEmail,
-  );
-  if (meIdx === -1) {
+  // Stage 6 step 8: students live in the normalized students table now.
+  const me = await fetchStudentByEmail(currentEmail);
+  if (!me) {
     return res.status(403).json({ error: "student_not_found" });
   }
 
   // If email is changing, verify it's not already taken by another student.
   if (nextEmail !== currentEmail) {
-    const taken = students.some(
-      (s, i) => i !== meIdx && normalizeEmail(s.email) === nextEmail,
-    );
-    if (taken) {
+    if (await studentEmailTaken(nextEmail, me.id)) {
       return res.status(409).json({ error: "email_taken" });
     }
   }
 
-  // Update the store (certifications.students[meIdx]). Only overwrite `phone`
-  // when the client actually sent the field — this keeps legacy clients that
-  // don't know about phone from wiping existing values.
-  const updatedStudent = {
-    ...students[meIdx],
-    name:  nextName,
-    email: nextEmail,
-    ...(phoneProvided ? { phone: nextPhone } : {}),
-  };
-  const updatedStudents = students.map((s, i) => (i === meIdx ? updatedStudent : s));
-  const updatedCertifications = { ...certifications, students: updatedStudents };
-
-  const storeOk = await writeStoreKey("certifications", updatedCertifications);
+  // Update the students table directly. Only overwrite `phone` when the client
+  // actually sent the field — keeps legacy clients from wiping existing values.
+  const studentUpdates = { name: nextName, email: nextEmail };
+  if (phoneProvided) studentUpdates.phone = nextPhone || null;
+  const storeOk = await updateStudentRow(me.id, studentUpdates);
   if (!storeOk) {
     return res.status(500).json({ error: "store_update_failed" });
   }
@@ -553,11 +583,9 @@ async function handleSyncStudentAuth(req, res) {
     return res.status(400).json({ error: "invalid_new_email" });
   }
 
-  // Verify newEmail is present in certifications.students (admin must have
-  // already updated the store).
-  const certifications = await fetchStoreKey("certifications");
-  const students = Array.isArray(certifications?.students) ? certifications.students : [];
-  const match = students.find((s) => normalizeEmail(s.email) === normNew);
+  // Verify newEmail is present in the students table (admin must have already
+  // updated the row). Stage 6 step 8: blob is gone — query the table.
+  const match = await fetchStudentByEmail(normNew);
   if (!match) {
     return res.status(403).json({ error: "new_email_not_in_certifications" });
   }
@@ -686,11 +714,10 @@ async function handleDeleteStudentAuth(req, res) {
     return res.status(400).json({ error: "invalid_email" });
   }
 
-  // Verify the email is NOT in certifications.students (admin already removed it)
+  // Verify the email is NOT in the students table (admin already removed it)
   // and NOT in lecturers — we only delete when the email is orphaned.
-  const certifications = await fetchStoreKey("certifications");
-  const students = Array.isArray(certifications?.students) ? certifications.students : [];
-  const stillInStudents = students.some((s) => normalizeEmail(s.email) === normEmail);
+  // Stage 6 step 8: blob is gone — query the table.
+  const stillInStudents = await fetchStudentByEmail(normEmail);
   if (stillInStudents) {
     return res.status(409).json({ error: "email_still_active_in_students" });
   }
