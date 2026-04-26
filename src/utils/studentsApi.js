@@ -244,13 +244,16 @@ export async function syncAllStudents(nextStudents) {
 
 // ─── Orchestrator ─────────────────────────────────────────────────────────
 //
-// Call this RIGHT AFTER a successful storageSet("certifications", updated).
+// Stage 6 step 6: tables are now the source of truth. Callers no longer write
+// to store.certifications — they call this instead. Returns { ok } so the UI
+// can surface a save error like the old storageSet did.
+//
 // Order matters: types/tracks first (FK targets), then students (FKs into them).
-// Errors are logged, never thrown — the blob write already succeeded so we
-// never want to surface a sync glitch to the user during dual-write.
 export async function dualWriteCertifications(certifications) {
-  if (!certifications) return;
-  await syncCertificationTypes(certifications.types);
-  await syncTracks(certifications.tracks, certifications.trackSettings);
-  await syncAllStudents(certifications.students);
+  if (!certifications) return { ok: false, error: "no payload" };
+  const r1 = await syncCertificationTypes(certifications.types);
+  const r2 = await syncTracks(certifications.tracks, certifications.trackSettings);
+  const r3 = await syncAllStudents(certifications.students);
+  const ok = r1?.ok !== false && r2?.ok !== false && r3?.ok !== false;
+  return { ok, types: r1, tracks: r2, students: r3 };
 }

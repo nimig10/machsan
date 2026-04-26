@@ -131,17 +131,14 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
     // Optimistic local update — keeps the UI responsive before the table
     // round-trip below confirms.
     setStudents(nextStudents);
-    const r = await storageSet("certifications", updated);
+    // Stage 6 step 6: tables are now the source of truth — no more blob write.
+    const r = await dualWriteCertifications(updated);
     setSaving(false);
     if(!r.ok) showToast("error","שגיאה בשמירה");
-    // Stage 6 step 4: dual-write — mirror to normalized tables.
-    // Stage 6 step 5a: re-read from table so local state matches the truth
-    // (catches any sync hiccups that the optimistic update glossed over).
     if (r.ok) {
-      dualWriteCertifications(updated).then(async () => {
-        const fresh = await listStudents();
-        if (Array.isArray(fresh)) setStudents(fresh);
-      });
+      // Re-read so local state matches the canonical table state.
+      const fresh = await listStudents();
+      if (Array.isArray(fresh)) setStudents(fresh);
     }
     return r.ok;
   };

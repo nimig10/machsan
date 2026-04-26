@@ -1767,7 +1767,11 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   };
 
   const routeToStudent = async (authUserId, authEmail, userRow, roleFlags) => {
-    const stuList = studentsFromTable;
+    // Stage 6 step 7 fix: anon role can't read public.students (RLS), so the
+    // mount-time studentsFromTable may be empty. We're authenticated now —
+    // re-fetch directly to get current state.
+    const freshStudents = (await listStudents()) ?? [];
+    const stuList = freshStudents.length > 0 ? freshStudents : studentsFromTable;
     const matchedStudent = stuList.find(
       (s) => s.email?.toLowerCase().trim() === authEmail,
     );
