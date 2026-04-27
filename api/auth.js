@@ -93,6 +93,25 @@ async function updateStudentRow(id, updates) {
   }
 }
 
+// Stage 7 step 6: lecturers now live in a normalized table (public.lecturers)
+// instead of the store.lecturers JSONB blob. Eligibility / sync / revoke
+// checks query the table directly via the case-insensitive email index.
+// `email=ilike.<x>` against the lecturers_email_lower_idx UNIQUE index.
+async function fetchActiveLecturerByEmail(normalizedEmail) {
+  if (!normalizedEmail) return null;
+  try {
+    const res = await fetch(
+      `${SB_URL}/rest/v1/lecturers?email=ilike.${encodeURIComponent(normalizedEmail)}&is_active=eq.true&select=id,full_name,email&limit=1`,
+      { headers: SERVICE_HEADERS },
+    );
+    if (!res.ok) return null;
+    const rows = await res.json();
+    return Array.isArray(rows) && rows[0] ? rows[0] : null;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeEmail(raw) {
   return String(raw || "").trim().toLowerCase();
 }
@@ -200,12 +219,10 @@ async function handleStaffLogin(req, res) {
 async function findEligibleRecord(normalizedEmail) {
   if (!normalizedEmail || !isValidEmail(normalizedEmail)) return null;
 
-  const lecturers = await fetchStoreKey("lecturers");
-  if (Array.isArray(lecturers)) {
-    const match = lecturers.find(
-      (l) => l.isActive !== false && normalizeEmail(l.email) === normalizedEmail,
-    );
-    if (match) return { role: "lecturer", id: String(match.id), name: String(match.fullName || "") };
+  // Stage 7 step 6: lecturer eligibility check now hits the normalized table.
+  const lecturer = await fetchActiveLecturerByEmail(normalizedEmail);
+  if (lecturer) {
+    return { role: "lecturer", id: String(lecturer.id), name: String(lecturer.full_name || "") };
   }
 
   const studentRow = await fetchStudentByEmail(normalizedEmail);
@@ -651,11 +668,9 @@ async function handleSyncLecturerAuth(req, res) {
   const nextName = String(newName || "").trim();
   if (!isValidEmail(normNew)) return res.status(400).json({ error: "invalid_new_email" });
 
-  // Verify newEmail is present in store.lecturers (admin must have saved first)
-  const lecturers = await fetchStoreKey("lecturers");
-  const match = Array.isArray(lecturers)
-    ? lecturers.find((l) => l.isActive !== false && normalizeEmail(l.email) === normNew)
-    : null;
+  // Stage 7 step 6: verify the new email is present in the normalized
+  // lecturers table (admin must have already saved the rename via dual-write).
+  const match = await fetchActiveLecturerByEmail(normNew);
   if (!match) return res.status(403).json({ error: "new_email_not_in_lecturers" });
 
   const authUser = await findAuthUserByEmail(normOld);
@@ -721,14 +736,10 @@ async function handleDeleteStudentAuth(req, res) {
   if (stillInStudents) {
     return res.status(409).json({ error: "email_still_active_in_students" });
   }
-  const lecturers = await fetchStoreKey("lecturers");
-  if (Array.isArray(lecturers)) {
-    const stillInLecturers = lecturers.some(
-      (l) => l.isActive !== false && normalizeEmail(l.email) === normEmail,
-    );
-    if (stillInLecturers) {
-      return res.status(409).json({ error: "email_still_active_in_lecturers" });
-    }
+  // Stage 7 step 6: orphan-check now hits the normalized lecturers table.
+  const stillInLecturers = await fetchActiveLecturerByEmail(normEmail);
+  if (stillInLecturers) {
+    return res.status(409).json({ error: "email_still_active_in_lecturers" });
   }
 
   // Check public.users — never delete an auth user that also has staff/admin/lecturer roles
