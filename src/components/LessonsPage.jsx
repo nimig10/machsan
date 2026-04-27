@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import { Award, BookOpen, Calendar, Camera, Check, CheckCircle, Clock, Download, FileText, Film, GraduationCap, Lightbulb, Link, Mail, Mic, Package, Pencil, Phone, Plus, Search, Trash2, Upload, User, Video, X, XCircle } from "lucide-react";
 import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAuthToken } from "../utils.js";
 import { listStudents } from "../utils/studentsApi.js";
+import { syncAllLecturers } from "../utils/lecturersApi.js";
 import { makeLecturer } from "./LecturersPage.jsx";
 
 let _skeyCounter = 0;
@@ -273,6 +274,9 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       if (!result?.ok) {
         throw new Error("שגיאה בשמירת המרצים החדשים שנוצרו מהייבוא");
       }
+      // Stage 7 dual-write: bulk-mirror the merged lecturer list into the
+      // normalized table. Non-fatal — blob remains source of truth.
+      void syncAllLecturers(allLecs);
       setLecturers(allLecs);
     }
     return updated;

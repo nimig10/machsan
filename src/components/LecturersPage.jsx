@@ -2,6 +2,11 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import { storageSet } from "../utils.js";
+import {
+  dualWriteLecturer,
+  deleteLecturer as deleteLecturerRow,
+  syncAllLecturers,
+} from "../utils/lecturersApi.js";
 import { Check, Download, X } from "lucide-react";
 
 /* ── helpers ── */
@@ -187,6 +192,9 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
       showToast("error", "שגיאה בשמירת המרצה. הנתונים לא נשמרו.");
       return;
     }
+    // Stage 7 dual-write: mirror new lecturer into normalized table.
+    // Non-fatal — blob is still source of truth during Session A.
+    void dualWriteLecturer(newLec);
     setLecturers(updated);
     showToast("success", "המרצה נוסף");
     setShowAddModal(false);
@@ -307,8 +315,9 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
     }
 
     setInlineSaving(true);
+    const updatedLec = makeLecturer({ ...lec, ...draft });
     const updated = lecturers.map((item) => (
-      item.id === lec.id ? makeLecturer({ ...item, ...draft }) : item
+      item.id === lec.id ? updatedLec : item
     ));
     const result = await storageSet("lecturers", updated);
     setInlineSaving(false);
@@ -318,6 +327,8 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
       showToast("error", "שגיאה בעדכון המרצה. הנתונים לא נשמרו.");
       return false;
     }
+    // Stage 7 dual-write: mirror the edited row into the normalized table.
+    void dualWriteLecturer(updatedLec);
 
     lastSavedInlineDraftRef.current = draftKey;
     lastFailedInlineDraftRef.current = "";
@@ -382,6 +393,8 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
       showToast("error", "שגיאה במחיקת המרצה. המחיקה לא נשמרה.");
       return;
     }
+    // Stage 7 dual-write: mirror delete into the normalized table.
+    void deleteLecturerRow(lec.id);
     setLecturers(updated);
     showToast("success", "המרצה נמחק");
     if (editingId === lec.id) {
@@ -465,6 +478,8 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
           showToast("error", "שגיאה בשמירת ייבוא המרצים. הנתונים לא נשמרו.");
           return;
         }
+        // Stage 7 dual-write: bulk-sync the imported set into the normalized table.
+        void syncAllLecturers(updated);
         setLecturers(updated);
       }
       showToast("success", `יובאו ${addedCount} מרצים${skippedCount ? ` (${skippedCount} דולגו — כבר קיימים)` : ""}`);
@@ -583,6 +598,25 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
         <h2 style={{ margin: 0, fontSize: 20, fontWeight: 900 }}>👩‍🏫 מרצים ({lecturers.filter(l => l.isActive !== false).length})</h2>
         <div style={{ display: "flex", gap: 8 }}>
+          {import.meta.env.DEV && (
+            // Stage 7 dev-only: one-shot reconcile of the lecturers blob into
+            // the normalized public.lecturers table. Hidden in production.
+            <button
+              className="btn btn-secondary"
+              title="Stage 7: dual-write backfill (dev only)"
+              onClick={async () => {
+                const res = await syncAllLecturers(lecturers);
+                showToast(
+                  res?.ok ? "success" : "error",
+                  res?.ok
+                    ? `✓ Sync: ${res.upserted} upserted, ${res.deleted} removed`
+                    : `Sync failed: ${res?.error || "unknown"}`,
+                );
+              }}
+            >
+              🔄 Backfill table
+            </button>
+          )}
           <input ref={importRef} type="file" accept=".csv,.tsv,.xlsx,.xls" style={{ display: "none" }} onChange={importXL} disabled={xlImporting} />
           <button className="btn btn-secondary" onClick={() => importRef.current?.click()} disabled={xlImporting}>
             {xlImporting ? "מייבא..." : <><Download size={14} strokeWidth={1.75} /> ייבוא XL</>}

@@ -26,6 +26,7 @@ import { LecturerPortal } from "./components/LecturerPortal.jsx";
 import { useInstallPrompt } from "./components/InstallPrompt.jsx";
 import { supabase } from "./supabaseClient.js";
 import { loadCertificationsFromTables } from "./utils/studentsApi.js";
+import { syncAllLecturers } from "./utils/lecturersApi.js";
 
 // ─── SUPABASE AUTH: strip PKCE / magic-link params early ─────────────────────
 // supabase-js auto-detects ?code= (PKCE) and #access_token= (implicit) on
@@ -5797,6 +5798,9 @@ export default function App() {
         if (newLecturers.length > 0) {
           loadedLecturers = [...loadedLecturers, ...newLecturers];
           await storageSet("lecturers", loadedLecturers);
+          // Stage 7 dual-write: also mirror auto-extracted lecturers (created
+          // from lessons.instructorName) into the normalized table. Non-fatal.
+          void syncAllLecturers(loadedLecturers);
         }
         if (lessonsChanged) {
           _setLessons(updatedLessons);
