@@ -26,7 +26,19 @@ import { LecturerPortal } from "./components/LecturerPortal.jsx";
 import { useInstallPrompt } from "./components/InstallPrompt.jsx";
 import { supabase } from "./supabaseClient.js";
 import { loadCertificationsFromTables } from "./utils/studentsApi.js";
-import { syncAllLecturers } from "./utils/lecturersApi.js";
+import { syncAllLecturers, loadLecturersFromTable } from "./utils/lecturersApi.js";
+
+// Stage 7 step 5: replace `storageGet("lecturers")` with the table loader,
+// wrapped in the same { value, source } envelope every other loader uses.
+async function loadLecturersWrapped() {
+  try {
+    const value = await loadLecturersFromTable();
+    return { value: Array.isArray(value) ? value : [], source: "table" };
+  } catch (err) {
+    console.warn("[loadLecturersWrapped]", err);
+    return { value: [], source: "error" };
+  }
+}
 
 // ─── SUPABASE AUTH: strip PKCE / magic-link params early ─────────────────────
 // supabase-js auto-detects ?code= (PKCE) and #access_token= (implicit) on
@@ -5485,7 +5497,7 @@ export default function App() {
         (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
         (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
         storageGet("lessons"),
-        storageGet("lecturers"),
+        loadLecturersWrapped(),
         storageGet("kits"),
         storageGet("studios"),
       ]);
@@ -5726,7 +5738,7 @@ export default function App() {
           storageGet("studios"),
           storageGet("studio_bookings"),
           storageGet("lessons"),
-          storageGet("lecturers"),
+          loadLecturersWrapped(),
           ]);
           // Extract values and sources
           const eq = eqR.value, eqSrc = eqR.source;
@@ -5855,7 +5867,8 @@ export default function App() {
       const [resR, bookingsR, lecturersR, certsR, catsR, catTypesR] = await Promise.all([
         (supabase.from("reservations_new").select("*, reservation_items(*)").abortSignal(ctrl.signal).then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
         storageGet("studio_bookings", ctrl.signal),
-        storageGet("lecturers", ctrl.signal),
+        // Stage 7 step 5: read lecturers from the normalized table (was blob).
+        loadLecturersWrapped(),
         // Stage 6: read certifications from normalized tables, not the deleted blob.
         loadCertificationsFromTables().then(v => ({ value: v, source: "tables" })).catch(() => ({ value: null, source: "error" })),
         storageGet("categories", ctrl.signal),
