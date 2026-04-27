@@ -1582,15 +1582,27 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     }
   };
 
-  // Helper: upsert auth_entity_map row via authenticated Supabase client
+  // Helper: upsert auth_entity_map row via authenticated Supabase client.
+  // The table has TWO unique constraints — UNIQUE(auth_user_id) and
+  // UNIQUE(entity_type, entity_id). A naive upsert with onConflict on one
+  // key 409s when the OTHER key already collides (e.g. student deleted +
+  // recreated with new auth_user_id but same id, or email re-used by a new
+  // auth account). To keep login resilient we wipe both potential
+  // collisions, then insert.
   const upsertAuthEntityMap = async (authUserId, entityType, entityId, email) => {
+    const normalizedEmail = email.toLowerCase().trim();
     try {
-      await supabase.from("auth_entity_map").upsert({
+      await supabase
+        .from("auth_entity_map")
+        .delete()
+        .or(`auth_user_id.eq.${authUserId},and(entity_type.eq.${entityType},entity_id.eq.${entityId})`);
+      const { error } = await supabase.from("auth_entity_map").insert({
         auth_user_id: authUserId,
         entity_type: entityType,
         entity_id: entityId,
-        email: email.toLowerCase().trim(),
-      }, { onConflict: "auth_user_id" });
+        email: normalizedEmail,
+      });
+      if (error) throw error;
     } catch (err) {
       console.warn("upsertAuthEntityMap failed:", err);
     }
