@@ -1327,13 +1327,23 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const todayStr = today();
   const normalizedTrackSettings = buildTrackSettings(studentsFromTable, certifications?.trackSettings, certifications?.tracks);
   const activeStudentTrack = String(loggedInStudent?.track || form.course || "").trim();
-  // ── Studio track-type filtering ──
+  // ── Studio classification filtering ──
+  // Same hard rule as loan types: classification dictates visibility.
+  //   classroomOnly=true       → hidden from public form (classes only)
+  //   studioTrackType="all"    → visible to every classification
+  //   studioTrackType=sound    → sound students only
+  //   studioTrackType=cinema   → cinema students only
+  //   unclassified studio      → hidden (admin must classify)
+  //   unclassified student     → sees only "all" studios (safe default)
   const studentTrackType = normalizedTrackSettings.find(s => s.name === activeStudentTrack)?.trackType || "";
   const visibleStudios = studios.filter(studio => {
     if (studio.classroomOnly) return false;
     // studioTrackType is the new field; fall back to legacy studio.type field
     const sType = studio.studioTrackType || (studio.type === "sound" ? "sound" : studio.type === "cinema" ? "cinema" : "");
-    return !sType || sType === "all" || !studentTrackType || sType === studentTrackType;
+    if (sType === "all") return true;
+    if (!sType) return false;
+    if (!studentTrackType) return false;
+    return sType === studentTrackType;
   });
   const allowedLoanTypes = activeStudentTrack
     ? (normalizedTrackSettings.find((setting) => setting.name === activeStudentTrack)?.loanTypes || [...SMART_LOAN_TYPES])
