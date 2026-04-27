@@ -14,13 +14,15 @@ const SMART_LOAN_TYPES = ["פרטית", "הפקה", "סאונד", "קולנוע 
 // loan types a student sees. "פרטית" is global (every track), "סאונד" is for
 // sound classification only, "הפקה" + "קולנוע יומית" for cinema only. Any
 // per-track loan_types stored elsewhere (DB, blob, admin UI) is ignored —
-// the school's policy is uniform per classification.
+// the school's policy is uniform per classification. Unclassified tracks
+// ("ללא סיווג") get only "פרטית" — the safe default — so an admin must
+// explicitly set a classification before broader loan types become visible.
 const TRACK_TYPE_LOAN_TYPES = {
   sound:  ["פרטית", "סאונד"],
   cinema: ["פרטית", "הפקה", "קולנוע יומית"],
 };
 function loanTypesForTrackType(trackType) {
-  return TRACK_TYPE_LOAN_TYPES[trackType] || [...SMART_LOAN_TYPES];
+  return TRACK_TYPE_LOAN_TYPES[trackType] || ["פרטית"];
 }
 
 function policyHtml(text) {
