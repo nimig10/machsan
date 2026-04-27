@@ -101,11 +101,26 @@ export default async function handler(req, res) {
   }
 
   try {
-    const [lessons, lecturers, siteSettings] = await Promise.all([
+    // Stage 7 step 4: lecturers come from the normalized table; lessons +
+    // siteSettings still live in the blob (Stages 8/9). Shape stays compatible
+    // (id/email/fullName/...) so the lecturer lookup further down is unchanged.
+    const [lessons, lecturersResp, siteSettings] = await Promise.all([
       readStoreKey("lessons"),
-      readStoreKey("lecturers"),
+      fetch(`${SB_URL}/rest/v1/lecturers?select=id,full_name,email,phone,is_active`, { headers: SERVICE_HEADERS }),
       readStoreKey("siteSettings"),
     ]);
+
+    let lecturers = null;
+    if (lecturersResp?.ok) {
+      const rows = await lecturersResp.json();
+      lecturers = (Array.isArray(rows) ? rows : []).map((r) => ({
+        id:       r.id,
+        fullName: r.full_name ?? "",
+        email:    r.email ?? "",
+        phone:    r.phone ?? "",
+        isActive: r.is_active !== false,
+      }));
+    }
 
     if (!Array.isArray(lessons) || !Array.isArray(lecturers)) {
       return res.status(503).json({ ok: false, error: "Could not load store" });

@@ -33,6 +33,21 @@ async function readStoreKey(key) {
   return rows?.[0]?.data ?? null;
 }
 
+// Stage 7 step 4: verify caller email against the normalized lecturers table.
+// Replaces the previous full-blob read for the lecturer-eligibility check;
+// case-insensitive match against the lecturers_email_lower_idx UNIQUE index.
+async function isKnownLecturerEmail(email) {
+  const normalized = String(email || "").trim().toLowerCase();
+  if (!normalized) return false;
+  const r = await fetch(
+    `${SB_URL}/rest/v1/lecturers?select=id&email=ilike.${encodeURIComponent(normalized)}&limit=1`,
+    { headers: SERVICE_HEADERS }
+  );
+  if (!r.ok) return false;
+  const rows = await r.json();
+  return Array.isArray(rows) && rows.length > 0;
+}
+
 async function writeStoreKey(key, data) {
   return fetch(`${SB_URL}/rest/v1/store`, {
     method: "POST",
@@ -66,12 +81,9 @@ export default async function handler(req, res) {
   const { kitType, lessonId } = req.body || {};
   if (!lessonId) return res.status(400).json({ error: "Missing lessonId" });
 
-  // Verify the caller is a known lecturer (email match in store)
-  const lecturers = await readStoreKey("lecturers");
-  if (!Array.isArray(lecturers)) return res.status(503).json({ error: "Could not load lecturers" });
-
-  const normalize = (s) => String(s || "").trim().toLowerCase();
-  const isKnownLecturer = lecturers.some((l) => normalize(l.email) === normalize(user.email));
+  // Stage 7 step 4: verify the caller against the normalized lecturers table
+  // (was: full blob read + email scan). Same semantics, single index lookup.
+  const isKnownLecturer = await isKnownLecturerEmail(user.email);
   if (!isKnownLecturer) return res.status(403).json({ error: "Forbidden: not a lecturer" });
 
   // ── Course type: create individual reservations per session ──
