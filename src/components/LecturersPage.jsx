@@ -186,15 +186,13 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
     setAddSaving(true);
     const newLec = makeLecturer({ firstName: fn, lastName: ln, phone: addPhone.trim(), email: addEmail.trim(), notes: addNotes.trim() });
     const updated = [...lecturers, newLec];
-    const result = await storageSet("lecturers", updated);
+    // Stage 7 cleanup: lecturers live in public.lecturers — blob is gone.
+    const result = await dualWriteLecturer(newLec);
     if (!result?.ok) {
       setAddSaving(false);
       showToast("error", "שגיאה בשמירת המרצה. הנתונים לא נשמרו.");
       return;
     }
-    // Stage 7 dual-write: mirror new lecturer into normalized table.
-    // Non-fatal — blob is still source of truth during Session A.
-    void dualWriteLecturer(newLec);
     setLecturers(updated);
     showToast("success", "המרצה נוסף");
     setShowAddModal(false);
@@ -319,7 +317,8 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
     const updated = lecturers.map((item) => (
       item.id === lec.id ? updatedLec : item
     ));
-    const result = await storageSet("lecturers", updated);
+    // Stage 7 cleanup: lecturers live in public.lecturers — blob is gone.
+    const result = await dualWriteLecturer(updatedLec);
     setInlineSaving(false);
 
     if (!result?.ok) {
@@ -327,8 +326,6 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
       showToast("error", "שגיאה בעדכון המרצה. הנתונים לא נשמרו.");
       return false;
     }
-    // Stage 7 dual-write: mirror the edited row into the normalized table.
-    void dualWriteLecturer(updatedLec);
 
     lastSavedInlineDraftRef.current = draftKey;
     lastFailedInlineDraftRef.current = "";
@@ -388,13 +385,12 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
 
   const deleteLecturer = async (lec) => {
     const updated = lecturers.filter(l => l.id !== lec.id);
-    const result = await storageSet("lecturers", updated);
+    // Stage 7 cleanup: lecturers live in public.lecturers — blob is gone.
+    const result = await deleteLecturerRow(lec.id);
     if (!result?.ok) {
       showToast("error", "שגיאה במחיקת המרצה. המחיקה לא נשמרה.");
       return;
     }
-    // Stage 7 dual-write: mirror delete into the normalized table.
-    void deleteLecturerRow(lec.id);
     setLecturers(updated);
     showToast("success", "המרצה נמחק");
     if (editingId === lec.id) {
@@ -473,13 +469,12 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
 
       if (newLecs.length > 0) {
         const updated = [...lecturers, ...newLecs];
-        const result = await storageSet("lecturers", updated);
+        // Stage 7 cleanup: lecturers live in public.lecturers — blob is gone.
+        const result = await syncAllLecturers(updated);
         if (!result?.ok) {
           showToast("error", "שגיאה בשמירת ייבוא המרצים. הנתונים לא נשמרו.");
           return;
         }
-        // Stage 7 dual-write: bulk-sync the imported set into the normalized table.
-        void syncAllLecturers(updated);
         setLecturers(updated);
       }
       showToast("success", `יובאו ${addedCount} מרצים${skippedCount ? ` (${skippedCount} דולגו — כבר קיימים)` : ""}`);

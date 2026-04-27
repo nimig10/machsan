@@ -270,13 +270,11 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
     if (newLecs.length > 0) {
       const allLecs = [...lecturers, ...newLecs];
-      const result = await storageSet("lecturers", allLecs);
+      // Stage 7 cleanup: lecturers live in public.lecturers — blob is gone.
+      const result = await syncAllLecturers(allLecs);
       if (!result?.ok) {
         throw new Error("שגיאה בשמירת המרצים החדשים שנוצרו מהייבוא");
       }
-      // Stage 7 dual-write: bulk-mirror the merged lecturer list into the
-      // normalized table. Non-fatal — blob remains source of truth.
-      void syncAllLecturers(allLecs);
       setLecturers(allLecs);
     }
     return updated;

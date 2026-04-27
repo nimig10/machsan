@@ -5476,10 +5476,9 @@ export default function App() {
       return;
     }
 
-    if (key === "lecturers" && Array.isArray(value) && !dataEquals(lecturersRef.current, value)) {
-      _setLecturers(value);
-      return;
-    }
+    // Stage 7 cleanup: lecturers are normalized — no blob to mirror from.
+    // Cross-tab realtime updates for lecturers can be added later via a
+    // postgres_changes subscription on public.lecturers if needed.
 
     if (key === "kits" && Array.isArray(value) && !dataEquals(kitsRef.current, value)) {
       _setKits(value);
@@ -5809,10 +5808,9 @@ export default function App() {
         }
         if (newLecturers.length > 0) {
           loadedLecturers = [...loadedLecturers, ...newLecturers];
-          await storageSet("lecturers", loadedLecturers);
-          // Stage 7 dual-write: also mirror auto-extracted lecturers (created
-          // from lessons.instructorName) into the normalized table. Non-fatal.
-          void syncAllLecturers(loadedLecturers);
+          // Stage 7 cleanup: auto-extracted lecturers are written straight to
+          // the normalized table. The blob is gone.
+          await syncAllLecturers(loadedLecturers);
         }
         if (lessonsChanged) {
           _setLessons(updatedLessons);
@@ -5999,11 +5997,9 @@ export default function App() {
               if (Array.isArray(data) && !dataEquals(studioBookingsRef.current, data)) {
                 _setStudioBookings(data);
               }
-            } else if (key === "lecturers") {
-              if (Array.isArray(data) && !dataEquals(lecturersRef.current, data)) {
-                _setLecturers(data);
-              }
             }
+            // Stage 7 cleanup: lecturers no longer ride the store-row realtime
+            // channel — table updates fall back to the polling refresh.
           } catch (err) {
             console.warn("store realtime payload handler failed", err);
           }
