@@ -10,18 +10,17 @@ import AIChatBot from "./AIChatBot.jsx";
 
 const SMART_LOAN_TYPES = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
 
-// Hard rule: track classification dictates loan-type ceiling. "פרטית" is
-// global (every track), "סאונד" only for sound classification, "הפקה" and
-// "קולנוע יומית" only for cinema. Per-track loan_types in the DB may narrow
-// this set further but can NEVER widen it — this prevents accidental data
-// drift from re-introducing the bug where sound students saw cinema-only
-// loan types.
-const TRACK_TYPE_LOAN_CEILING = {
+// Hard rule: track classification — and ONLY classification — dictates which
+// loan types a student sees. "פרטית" is global (every track), "סאונד" is for
+// sound classification only, "הפקה" + "קולנוע יומית" for cinema only. Any
+// per-track loan_types stored elsewhere (DB, blob, admin UI) is ignored —
+// the school's policy is uniform per classification.
+const TRACK_TYPE_LOAN_TYPES = {
   sound:  ["פרטית", "סאונד"],
   cinema: ["פרטית", "הפקה", "קולנוע יומית"],
 };
-function ceilingForTrackType(trackType) {
-  return TRACK_TYPE_LOAN_CEILING[trackType] || [...SMART_LOAN_TYPES];
+function loanTypesForTrackType(trackType) {
+  return TRACK_TYPE_LOAN_TYPES[trackType] || [...SMART_LOAN_TYPES];
 }
 
 function policyHtml(text) {
@@ -132,19 +131,14 @@ function buildTrackSettings(students = [], existingTrackSettings = [], explicitT
   return trackNames.map((name) => {
     const match = existing.find((setting) => String(setting?.name || "").trim() === name);
     const explicitMatch = explicit.find(t => String(t?.name || "").trim() === name);
-    // infer trackType: explicit tracks → trackSettings cache → keyword fallback
+    // Classification (trackType) is the SOLE source of truth for which loan
+    // types this track sees. Per-track loan_types overrides are ignored.
     const inferredType = explicitMatch?.trackType
       || match?.trackType
       || (/סאונד|sound/i.test(name) ? "sound" : /קולנוע|cinema|film/i.test(name) ? "cinema" : "");
-    // Hard ceiling by classification — prevents data drift from widening.
-    const ceiling = ceilingForTrackType(inferredType);
-    const perTrackOverride = Array.isArray(match?.loanTypes) ? match.loanTypes : null;
-    const allowedLoanTypes = perTrackOverride
-      ? ceiling.filter((lt) => perTrackOverride.includes(lt))
-      : ceiling;
     return {
       name,
-      loanTypes: allowedLoanTypes.length ? allowedLoanTypes : [...ceiling],
+      loanTypes: loanTypesForTrackType(inferredType),
       trackType: inferredType,
     };
   });
