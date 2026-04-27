@@ -3810,6 +3810,239 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
 }
 
 // ─── KITS PAGE ────────────────────────────────────────────────────────────────
+// ── Kit Form ──────────────────────────────────────────────────────────────
+// Top-level component so its identity is stable across KitsPage re-renders.
+// Previously this lived inside KitsPage, which meant every parent render —
+// including the 60s admin polling refresh and every realtime store update —
+// produced a brand-new function reference. React reconciler treated that as
+// "different component type" and unmounted + remounted the form on each tick,
+// resetting eqTypeF / eqCatF / eqSearch / showSelected back to defaults.
+// Lifting the form out fixes that: the filter state survives parent renders
+// because the component instance survives.
+const STUDENT_KIT_LOAN_TYPES = ["פרטית","הפקה","סאונד","קולנוע יומית","שיעור"];
+const STUDENT_KIT_LOAN_ICONS = {
+  "פרטית": <User size={12} strokeWidth={1.75}/>,
+  "הפקה":  <Film size={12} strokeWidth={1.75}/>,
+  "סאונד": <Mic size={12} strokeWidth={1.75}/>,
+  "קולנוע יומית": <Camera size={12} strokeWidth={1.75}/>,
+  "שיעור": <GraduationCap size={12} strokeWidth={1.75}/>,
+};
+
+function StudentKitForm({ initial, onDone, kits, setKits, equipment, categories, showToast }) {
+  const [name, setName] = useState(initial?.name||"");
+  const [description, setDescription] = useState(initial?.description||"");
+  const [loanTypes, setLoanTypes] = useState(initial?.loanTypes || []);
+  const toggleLoanType = (lt) => setLoanTypes(prev => prev.includes(lt) ? prev.filter(x=>x!==lt) : [...prev, lt]);
+  const [kitItems, setKitItems] = useState(initial?.items||[]);
+  const [saving, setSaving] = useState(false);
+  const [eqTypeF, setEqTypeF] = useState("all");
+  const [eqCatF, setEqCatF] = useState([]);
+  const [eqSearch, setEqSearch] = useState("");
+  const [showSelected, setShowSelected] = useState(false);
+  const trimmedName = name.trim();
+  const normalizeKitName = (n) => String(n||"").trim().toLowerCase();
+  const duplicateName = !!trimmedName && kits.some(k =>
+    k.id !== (initial?.id||null) &&
+    normalizeKitName(k.name) === normalizeKitName(trimmedName)
+  );
+
+  const maxQty = eqId => {
+    const eq = equipment.find(e=>e.id==eqId);
+    if(!eq) return 0;
+    return Number(eq.total_quantity)||0;
+  };
+  const setItemQty = (eqId, qty) => {
+    const max = maxQty(eqId);
+    const bounded = Math.max(0, Math.min(qty, max));
+    const eqName = equipment.find(e=>e.id==eqId)?.name||"";
+    setKitItems(prev => bounded<=0 ? prev.filter(i=>i.equipment_id!=eqId)
+      : prev.find(i=>i.equipment_id==eqId) ? prev.map(i=>i.equipment_id==eqId?{...i,quantity:bounded}:i)
+      : [...prev,{equipment_id:eqId,quantity:bounded,name:eqName}]);
+  };
+  const getQty = eqId => kitItems.find(i=>i.equipment_id==eqId)?.quantity||0;
+
+  const save = async () => {
+    if(!trimmedName||duplicateName) return;
+    setSaving(true);
+    const kit = {
+      id: initial?.id||Date.now(),
+      name: trimmedName,
+      description: description.trim(),
+      loanTypes,
+      items: kitItems
+    };
+    const updated = initial ? kits.map(k=>k.id===initial.id?kit:k) : [...kits, kit];
+    setKits(updated);
+    const r = await storageSet("kits", updated);
+    showToast(r.ok?"success":"error", r.ok ? (initial?"הערכה עודכנה":`ערכה "${trimmedName}" נוצרה`) : "שגיאה בשמירה");
+    if(r.ok) {
+      try {
+        const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
+        logActivity({
+          user_id: caller.id,
+          user_name: caller.full_name,
+          action: initial ? "kit_edit" : "kit_create",
+          entity: "kit",
+          entity_id: String(kit.id),
+          details: {
+            name: kit.name,
+            loanTypes: kit.loanTypes,
+            item_count: kit.items.length,
+          },
+        }).catch(err => console.error("kit save log failed:", err));
+      } catch (e) { console.error("kit save log setup failed:", e); }
+      onDone();
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div className="card" style={{marginBottom:20}}>
+      <div className="card-header">
+        <div className="card-title" style={{display:"flex",alignItems:"center",gap:6}}><Backpack size={16} strokeWidth={1.75}/> {initial?"עריכת ערכה":"ערכה חדשה"}</div>
+        <button className="btn btn-secondary btn-sm" onClick={onDone} style={{display:"flex",alignItems:"center",gap:4}}><X size={14} strokeWidth={1.75} color="var(--text3)"/> ביטול</button>
+      </div>
+      <div className="responsive-split" style={{marginBottom:12}}>
+        <div className="form-group"><label className="form-label">שם הערכה *</label>
+          <input className="form-input" placeholder='לדוגמה: "ערכת דוקומנטרי"' value={name} onChange={e=>setName(e.target.value)}/>
+          {duplicateName&&<div style={{fontSize:12,color:"var(--red)",marginTop:4}}>כבר קיימת ערכה עם השם הזה.</div>}
+        </div>
+        <div className="form-group">
+          <label className="form-label">סוגי השאלה <span style={{fontWeight:400,fontSize:11,color:"var(--text3)"}}>· בחר אחד או יותר</span></label>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>
+            {STUDENT_KIT_LOAN_TYPES.map(lt=>{
+              const active = loanTypes.includes(lt);
+              return (
+                <button key={lt} type="button" onClick={()=>toggleLoanType(lt)}
+                  style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"var(--surface2)",color:active?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:12,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>
+                  {STUDENT_KIT_LOAN_ICONS[lt]} {lt}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>{loanTypes.length===0?"ללא סיווג — הערכה תופיע בכל סוגי ההשאלה":""}ערכה עם <strong>"שיעור"</strong> תופיע בפורטל מרצה. שיוך לשיעור ספציפי — דרך "שיעורים" באדמין.</div>
+        </div>
+      </div>
+      <div className="form-group" style={{marginBottom:16}}>
+        <label className="form-label">תיאור הערכה</label>
+        <textarea className="form-textarea" rows={2} placeholder="תיאור קצר..." value={description} onChange={e=>setDescription(e.target.value)}/>
+      </div>
+      <div className="form-section-title">ציוד בערכה</div>
+      <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"12px 14px",marginBottom:12}}>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
+          <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סינון:</span>
+          {[{k:"all",l:<><Package size={12} strokeWidth={1.75}/> הכל</>},{k:"sound",l:<><Mic size={12} strokeWidth={1.75}/> ציוד סאונד</>},{k:"photo",l:<><Camera size={12} strokeWidth={1.75}/> ציוד צילום</>}].map(({k,l})=>{
+            const active=eqTypeF===k;
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={()=>setEqTypeF(k)}
+                style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}
+              >
+                {l}
+              </button>
+            );
+          })}
+          <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
+          {(categories||[]).map(cat=>{
+            const active=eqCatF.includes(cat);
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={()=>setEqCatF(prev=>active?prev.filter(c=>c!==cat):[...prev,cat])}
+                style={{padding:"4px 10px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}
+              >
+                {cat}
+              </button>
+            );
+          })}
+          {eqCatF.length>0&&(
+            <button type="button" onClick={()=>setEqCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
+              <X size={10} strokeWidth={1.75} color="var(--text3)"/> נקה
+            </button>
+          )}
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <div className="search-bar" style={{flex:1,minWidth:150}}>
+            <span><Search size={14} strokeWidth={1.75} color="var(--text3)"/></span>
+            <input placeholder="חיפוש ציוד..." value={eqSearch} onChange={e=>setEqSearch(e.target.value)}/>
+          </div>
+          <button
+            type="button"
+            onClick={()=>setShowSelected(prev=>!prev)}
+            style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${showSelected?"var(--green)":"var(--border)"}`,background:showSelected?"rgba(46,204,113,0.12)":"transparent",color:showSelected?"var(--green)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}
+          >
+            {showSelected ? <><CheckCircle size={12} strokeWidth={1.75}/> נבחרים</> : "⬜ נבחרים בלבד"}
+          </button>
+        </div>
+      </div>
+      {(()=>{
+        const matchesType = (eq) => {
+          if (eqTypeF === "sound") return !!eq.soundOnly;
+          if (eqTypeF === "photo") return !!eq.photoOnly;
+          return true;
+        };
+        const matchesSearch = (eq) => !eqSearch || String(eq.name||"").toLowerCase().includes(eqSearch.toLowerCase());
+        const visibleCats = (eqCatF.length>0 ? eqCatF : (categories||[])).filter(cat =>
+          equipment.some(eq =>
+            eq.category===cat &&
+            matchesType(eq) &&
+            matchesSearch(eq) &&
+            (!showSelected || getQty(eq.id)>0)
+          )
+        );
+        if(visibleCats.length===0) return <div style={{textAlign:"center",color:"var(--text3)",padding:"16px",fontSize:13}}>לא נמצא ציוד תואם</div>;
+        return visibleCats.map(cat=>{
+          const catEq = equipment.filter(eq =>
+            eq.category===cat &&
+            matchesType(eq) &&
+            matchesSearch(eq) &&
+            (!showSelected || getQty(eq.id)>0)
+          );
+          if(!catEq.length) return null;
+          return (
+            <div key={cat} style={{marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
+                <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",textTransform:"uppercase",letterSpacing:1}}>{cat}</div>
+                {catEq.some(eq=>eq.soundOnly)&&<span style={{fontSize:10,color:"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}><Mic size={10} strokeWidth={1.75}/> סאונד</span>}
+                {catEq.some(eq=>eq.photoOnly)&&<span style={{fontSize:10,color:"var(--green)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}><Camera size={9} strokeWidth={1.75}/> צילום</span>}
+              </div>
+              {catEq.map(eq=>{
+                const max = maxQty(eq.id);
+                const qty = getQty(eq.id);
+                return (
+                  <div key={eq.id} className="item-row" style={{marginBottom:4,opacity:max===0?0.4:1,background:qty>0?"rgba(245,166,35,0.05)":"",border:qty>0?"1px solid rgba(245,166,35,0.2)":""}}>
+                    <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||<Package size={20} strokeWidth={1.75} color="var(--text3)"/>}</span>
+                    <div style={{flex:1,fontSize:13,fontWeight:600}}>
+                      {eq.name}
+                      <span style={{fontSize:11,color:"var(--text3)",marginRight:6,fontWeight:400}}>מלאי: {max}</span>
+                      {eq.soundOnly&&<span style={{fontSize:10,color:"var(--accent)",fontWeight:700,marginRight:4}}><Mic size={10} strokeWidth={1.75}/></span>}
+                      {eq.photoOnly&&<span style={{color:"var(--green)",fontWeight:700,marginRight:4,display:"inline-flex",alignItems:"center"}}><Camera size={9} strokeWidth={1.75}/></span>}
+                    </div>
+                    {max>0
+                      ? <div className="qty-ctrl">
+                          <button className="qty-btn" onClick={()=>setItemQty(eq.id,qty-1)}>−</button>
+                          <span className="qty-num" style={{color:qty>0?"var(--accent)":"inherit"}}>{qty}</span>
+                          <button className="qty-btn" disabled={qty>=max} onClick={()=>setItemQty(eq.id,qty+1)} style={{opacity:qty>=max?0.3:1}}>+</button>
+                        </div>
+                      : <span style={{fontSize:11,color:"var(--red)",fontWeight:700}}>אין מלאי</span>}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        });
+      })()}
+      {kitItems.length>0&&<div className="highlight-box" style={{marginTop:8,display:"flex",alignItems:"center",gap:6}}><Package size={13} strokeWidth={1.75}/> {kitItems.length} סוגי ציוד · {kitItems.reduce((s,i)=>s+i.quantity,0)} יחידות</div>}
+      <div style={{marginTop:12,display:"flex",gap:8}}>
+        <button className="btn btn-primary" disabled={!trimmedName||duplicateName||saving} onClick={save}>{saving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:initial?<><Save size={14} strokeWidth={1.75}/> שמור</>:"➕ צור ערכה"}</button>
+      </div>
+    </div>
+  );
+}
+
 function KitsPage({ kits, setKits, equipment, categories, showToast, reservations=[], setReservations, lessons=[], lecturers=[] }) {
   const [mode, setMode] = useState(null); // null | "create" | "edit"
   const [editTarget, setEditTarget] = useState(null);
@@ -3859,222 +4092,6 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     } catch (e) { console.error("kit_delete log setup failed:", e); }
   };
 
-  // ── Kit Form ──────────────────────────────────────────────────────────────
-  const StudentKitForm = ({ initial, onDone }) => {
-    const [name, setName] = useState(initial?.name||"");
-    const [description, setDescription] = useState(initial?.description||"");
-    const [loanTypes, setLoanTypes] = useState(initial?.loanTypes || []);
-    const toggleLoanType = (lt) => setLoanTypes(prev => prev.includes(lt) ? prev.filter(x=>x!==lt) : [...prev, lt]);
-    const [kitItems, setKitItems] = useState(initial?.items||[]);
-    const [saving, setSaving] = useState(false);
-    const [eqTypeF, setEqTypeF] = useState("all");
-    const [eqCatF, setEqCatF] = useState([]);
-    const [eqSearch, setEqSearch] = useState("");
-    const [showSelected, setShowSelected] = useState(false);
-    const trimmedName = name.trim();
-    const duplicateName = !!trimmedName && hasDuplicateKitName(trimmedName, initial?.id||null);
-
-    const maxQty = eqId => {
-      const eq = equipment.find(e=>e.id==eqId);
-      if(!eq) return 0;
-      return Number(eq.total_quantity)||0;
-    };
-    const setItemQty = (eqId, qty) => {
-      const max = maxQty(eqId);
-      const bounded = Math.max(0, Math.min(qty, max));
-      const eqName = equipment.find(e=>e.id==eqId)?.name||"";
-      setKitItems(prev => bounded<=0 ? prev.filter(i=>i.equipment_id!=eqId)
-        : prev.find(i=>i.equipment_id==eqId) ? prev.map(i=>i.equipment_id==eqId?{...i,quantity:bounded}:i)
-        : [...prev,{equipment_id:eqId,quantity:bounded,name:eqName}]);
-    };
-    const getQty = eqId => kitItems.find(i=>i.equipment_id==eqId)?.quantity||0;
-
-    const save = async () => {
-      if(!trimmedName||duplicateName) return;
-      setSaving(true);
-      const kit = {
-        id: initial?.id||Date.now(),
-        name: trimmedName,
-        description: description.trim(),
-        loanTypes,
-        items: kitItems
-      };
-      const updated = initial ? kits.map(k=>k.id===initial.id?kit:k) : [...kits, kit];
-      setKits(updated);
-      const r = await storageSet("kits", updated);
-      showToast(r.ok?"success":"error", r.ok ? (initial?"הערכה עודכנה":`ערכה "${trimmedName}" נוצרה`) : "שגיאה בשמירה");
-      if(r.ok) {
-        // Audit log for kit create/edit — critical context for silent-delete
-        // investigations (e.g. 2026-04-16 incident where a stale cache wiped
-        // 3 kits + 14 reservations with no trace in activity_logs).
-        try {
-          const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
-          logActivity({
-            user_id: caller.id,
-            user_name: caller.full_name,
-            action: initial ? "kit_edit" : "kit_create",
-            entity: "kit",
-            entity_id: String(kit.id),
-            details: {
-              name: kit.name,
-              loanTypes: kit.loanTypes,
-              item_count: kit.items.length,
-            },
-          }).catch(err => console.error("kit save log failed:", err));
-        } catch (e) { console.error("kit save log setup failed:", e); }
-        onDone();
-      }
-      setSaving(false);
-    };
-
-    return (
-      <div className="card" style={{marginBottom:20}}>
-        <div className="card-header">
-          <div className="card-title" style={{display:"flex",alignItems:"center",gap:6}}><Backpack size={16} strokeWidth={1.75}/> {initial?"עריכת ערכה":"ערכה חדשה"}</div>
-          <button className="btn btn-secondary btn-sm" onClick={onDone} style={{display:"flex",alignItems:"center",gap:4}}><X size={14} strokeWidth={1.75} color="var(--text3)"/> ביטול</button>
-        </div>
-
-        <div className="responsive-split" style={{marginBottom:12}}>
-          <div className="form-group"><label className="form-label">שם הערכה *</label>
-            <input className="form-input" placeholder='לדוגמה: "ערכת דוקומנטרי"' value={name} onChange={e=>setName(e.target.value)}/>
-            {duplicateName&&<div style={{fontSize:12,color:"var(--red)",marginTop:4}}>כבר קיימת ערכה עם השם הזה.</div>}
-          </div>
-          <div className="form-group">
-            <label className="form-label">סוגי השאלה <span style={{fontWeight:400,fontSize:11,color:"var(--text3)"}}>· בחר אחד או יותר</span></label>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>
-              {LOAN_TYPES.filter(lt=>lt!=="הכל").map(lt=>{
-                const active = loanTypes.includes(lt);
-                return (
-                  <button key={lt} type="button" onClick={()=>toggleLoanType(lt)}
-                    style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"var(--surface2)",color:active?"var(--accent)":"var(--text2)",fontWeight:700,fontSize:12,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>
-                    {LOAN_ICONS[lt]} {lt}
-                  </button>
-                );
-              })}
-            </div>
-            <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>{loanTypes.length===0?"ללא סיווג — הערכה תופיע בכל סוגי ההשאלה":""}ערכה עם <strong>"שיעור"</strong> תופיע בפורטל מרצה. שיוך לשיעור ספציפי — דרך "שיעורים" באדמין.</div>
-          </div>
-        </div>
-        <div className="form-group" style={{marginBottom:16}}>
-          <label className="form-label">תיאור הערכה</label>
-          <textarea className="form-textarea" rows={2} placeholder="תיאור קצר..." value={description} onChange={e=>setDescription(e.target.value)}/>
-        </div>
-        <div className="form-section-title">ציוד בערכה</div>
-        <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"12px 14px",marginBottom:12}}>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
-            <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סינון:</span>
-            {[{k:"all",l:<><Package size={12} strokeWidth={1.75}/> הכל</>},{k:"sound",l:<><Mic size={12} strokeWidth={1.75}/> ציוד סאונד</>},{k:"photo",l:<><Camera size={12} strokeWidth={1.75}/> ציוד צילום</>}].map(({k,l})=>{
-              const active=eqTypeF===k;
-              return (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={()=>setEqTypeF(k)}
-                  style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}
-                >
-                  {l}
-                </button>
-              );
-            })}
-            <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
-            {(categories||[]).map(cat=>{
-              const active=eqCatF.includes(cat);
-              return (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={()=>setEqCatF(prev=>active?prev.filter(c=>c!==cat):[...prev,cat])}
-                  style={{padding:"4px 10px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}
-                >
-                  {cat}
-                </button>
-              );
-            })}
-            {eqCatF.length>0&&(
-              <button type="button" onClick={()=>setEqCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
-                <X size={10} strokeWidth={1.75} color="var(--text3)"/> נקה
-              </button>
-            )}
-          </div>
-          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-            <div className="search-bar" style={{flex:1,minWidth:150}}>
-              <span><Search size={14} strokeWidth={1.75} color="var(--text3)"/></span>
-              <input placeholder="חיפוש ציוד..." value={eqSearch} onChange={e=>setEqSearch(e.target.value)}/>
-            </div>
-            <button
-              type="button"
-              onClick={()=>setShowSelected(prev=>!prev)}
-              style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${showSelected?"var(--green)":"var(--border)"}`,background:showSelected?"rgba(46,204,113,0.12)":"transparent",color:showSelected?"var(--green)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}
-            >
-              {showSelected ? <><CheckCircle size={12} strokeWidth={1.75}/> נבחרים</> : "⬜ נבחרים בלבד"}
-            </button>
-          </div>
-        </div>
-        {(()=>{
-          const matchesType = (eq) => {
-            if (eqTypeF === "sound") return !!eq.soundOnly;
-            if (eqTypeF === "photo") return !!eq.photoOnly;
-            return true;
-          };
-          const matchesSearch = (eq) => !eqSearch || String(eq.name||"").toLowerCase().includes(eqSearch.toLowerCase());
-          const visibleCats = (eqCatF.length>0 ? eqCatF : (categories||[])).filter(cat =>
-            equipment.some(eq =>
-              eq.category===cat &&
-              matchesType(eq) &&
-              matchesSearch(eq) &&
-              (!showSelected || getQty(eq.id)>0)
-            )
-          );
-          if(visibleCats.length===0) return <div style={{textAlign:"center",color:"var(--text3)",padding:"16px",fontSize:13}}>לא נמצא ציוד תואם</div>;
-          return visibleCats.map(cat=>{
-            const catEq = equipment.filter(eq =>
-              eq.category===cat &&
-              matchesType(eq) &&
-              matchesSearch(eq) &&
-              (!showSelected || getQty(eq.id)>0)
-            );
-            if(!catEq.length) return null;
-            return (
-              <div key={cat} style={{marginBottom:12}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
-                  <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",textTransform:"uppercase",letterSpacing:1}}>{cat}</div>
-                  {catEq.some(eq=>eq.soundOnly)&&<span style={{fontSize:10,color:"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}><Mic size={10} strokeWidth={1.75}/> סאונד</span>}
-                  {catEq.some(eq=>eq.photoOnly)&&<span style={{fontSize:10,color:"var(--green)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}><Camera size={9} strokeWidth={1.75}/> צילום</span>}
-                </div>
-                {catEq.map(eq=>{
-                  const max = maxQty(eq.id);
-                  const qty = getQty(eq.id);
-                  return (
-                    <div key={eq.id} className="item-row" style={{marginBottom:4,opacity:max===0?0.4:1,background:qty>0?"rgba(245,166,35,0.05)":"",border:qty>0?"1px solid rgba(245,166,35,0.2)":""}}>
-                      <span style={{fontSize:20}}>{eq.image?.startsWith("data:")||eq.image?.startsWith("http")?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4}}/>:eq.image||<Package size={20} strokeWidth={1.75} color="var(--text3)"/>}</span>
-                      <div style={{flex:1,fontSize:13,fontWeight:600}}>
-                        {eq.name}
-                        <span style={{fontSize:11,color:"var(--text3)",marginRight:6,fontWeight:400}}>מלאי: {max}</span>
-                        {eq.soundOnly&&<span style={{fontSize:10,color:"var(--accent)",fontWeight:700,marginRight:4}}><Mic size={10} strokeWidth={1.75}/></span>}
-                        {eq.photoOnly&&<span style={{color:"var(--green)",fontWeight:700,marginRight:4,display:"inline-flex",alignItems:"center"}}><Camera size={9} strokeWidth={1.75}/></span>}
-                      </div>
-                      {max>0
-                        ? <div className="qty-ctrl">
-                            <button className="qty-btn" onClick={()=>setItemQty(eq.id,qty-1)}>−</button>
-                            <span className="qty-num" style={{color:qty>0?"var(--accent)":"inherit"}}>{qty}</span>
-                            <button className="qty-btn" disabled={qty>=max} onClick={()=>setItemQty(eq.id,qty+1)} style={{opacity:qty>=max?0.3:1}}>+</button>
-                          </div>
-                        : <span style={{fontSize:11,color:"var(--red)",fontWeight:700}}>אין מלאי</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          });
-        })()}
-        {kitItems.length>0&&<div className="highlight-box" style={{marginTop:8,display:"flex",alignItems:"center",gap:6}}><Package size={13} strokeWidth={1.75}/> {kitItems.length} סוגי ציוד · {kitItems.reduce((s,i)=>s+i.quantity,0)} יחידות</div>}
-        <div style={{marginTop:12,display:"flex",gap:8}}>
-          <button className="btn btn-primary" disabled={!trimmedName||duplicateName||saving} onClick={save}>{saving?<><Clock size={13} strokeWidth={1.75}/> שומר...</>:initial?<><Save size={14} strokeWidth={1.75}/> שמור</>:"➕ צור ערכה"}</button>
-        </div>
-      </div>
-    );
-  };
-
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -4110,7 +4127,15 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
 
       {/* Forms */}
       {(mode==="create"||mode==="edit")&&(
-        <StudentKitForm initial={mode==="edit"?editTarget:null} onDone={()=>{setMode(null);setEditTarget(null);}}/>
+        <StudentKitForm
+          initial={mode==="edit"?editTarget:null}
+          onDone={()=>{setMode(null);setEditTarget(null);}}
+          kits={kits}
+          setKits={setKits}
+          equipment={equipment}
+          categories={categories}
+          showToast={showToast}
+        />
       )}
 
       {/* Floating view kit panel (overlay) */}
