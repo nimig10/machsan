@@ -1022,7 +1022,11 @@ export async function writeEquipmentToDB(equipment) {
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 export const css = `
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap');
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  /* iOS: stop Mobile Safari from auto-zooming text after rotation, and remove the
+     300ms tap delay on interactive elements. */
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  button, a, [role="button"], input[type="submit"], input[type="button"] { touch-action: manipulation; }
   :root {
     --bg:#0a0c10; --surface:#111318; --surface2:#181c24; --surface3:#1e232e;
     --border:#252b38; --accent:#f5a623; --accent2:#e8863a; --accent-glow:rgba(245,166,35,0.18);
@@ -1185,9 +1189,9 @@ export const css = `
   .cal-fs-event-mid    { border-radius:0; margin-left:-5px; margin-right:-5px; }
   .cal-fs-event-end    { border-radius:0 4px 4px 0; margin-left:-5px; }
   .cal-fs-event-single { border-radius:4px; }
-  .public-page-shell { width:100%; min-height:100vh; background:var(--bg); display:flex; justify-content:center; align-items:flex-start; }
+  .public-page-shell { width:100%; min-height:100vh; min-height:100dvh; background:var(--bg); display:flex; justify-content:center; align-items:flex-start; }
   .public-page-shell > * { width:100%; }
-  .form-page { width:100%; min-height:100vh; display:flex; justify-content:center; align-items:flex-start; padding:40px 20px; }
+  .form-page { width:100%; min-height:100vh; min-height:100dvh; display:flex; justify-content:center; align-items:flex-start; padding:40px 20px; }
   .form-card { width:min(100%, 680px); max-width:680px; margin-inline:auto; background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; direction:rtl; }
   .form-card-header { padding:32px 36px 24px; background:linear-gradient(135deg,var(--surface2),var(--surface)); border-bottom:1px solid var(--border); }
   .form-card-body { padding:32px 36px; }
@@ -1251,11 +1255,20 @@ export const css = `
     .search-bar { min-width:0; flex:1; }
     .flex-between { flex-wrap:wrap; gap:10px; }
     html, body, #root { min-height:100%; }
-    .public-page-shell { justify-content:stretch; }
-    .form-page { min-height:100vh; padding:16px 12px 80px; }
+    .public-page-shell { justify-content:stretch; min-height:100dvh; }
+    .form-page { min-height:100vh; min-height:100dvh; padding:16px 12px calc(80px + env(safe-area-inset-bottom)); padding-left:max(12px, env(safe-area-inset-left)); padding-right:max(12px, env(safe-area-inset-right)); }
     .form-card { width:100%; max-width:100%; }
-    .form-card-header { padding:20px; }
+    .form-card-header { padding:max(20px, calc(20px + env(safe-area-inset-top))) 20px 20px; }
     .form-card-body { padding:20px; }
+    /* iOS: 16px+ on focusable inputs prevents auto-zoom */
+    .form-input, .form-select, .form-textarea { font-size:16px; padding:11px 12px; }
+    /* Bigger tap targets per Apple HIG (44pt minimum) */
+    .qty-btn { width:36px; height:36px; }
+    /* Smoother momentum scrolling inside scrollable boxes */
+    .terms-box, .modal, .modal-body, .table-wrap { -webkit-overflow-scrolling:touch; }
+    /* Modal sheets: respect bottom safe-area on notched iPhones */
+    .modal { max-height:95dvh; padding-bottom:env(safe-area-inset-bottom); }
+    .toast-container { bottom:calc(76px + env(safe-area-inset-bottom)); }
     .toast-container { left:12px; right:12px; bottom:76px; }
     .toast { min-width:0; width:100%; }
     .dashboard-bottom-grid { grid-template-columns:1fr; order:1; }

@@ -3089,12 +3089,24 @@ ${inventory}
           if(isStandalone) return null;
           const isIOS=/iPhone|iPad|iPod/i.test(ua)&&!window.MSStream;
           if(!isIOS&&!canInstall) return null;
+          if(isIOS) {
+            // iOS Safari: no programmatic install — must guide the user via Share → Add to Home Screen.
+            return (
+              <div style={{marginTop:20,padding:"14px 16px",background:"var(--accent-glow)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:12,direction:"rtl",lineHeight:1.55}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,fontSize:14,fontWeight:800,color:"var(--accent)"}}>
+                  <Download size={18} strokeWidth={1.75} /> התקנת האפליקציה (אייפון)
+                </div>
+                <div style={{fontSize:13,color:"var(--text2)"}}>
+                  1. לחץ/י על כפתור <strong>השיתוף</strong> בתחתית ספארי <span aria-hidden="true">⬆︎</span><br/>
+                  2. גלול/י ובחר/י <strong>"הוסף למסך הבית"</strong> (Add to Home Screen)<br/>
+                  3. לחץ/י <strong>"הוסף"</strong> ופתח/י את האפליקציה מאייקון מסך הבית
+                </div>
+              </div>
+            );
+          }
           return (
-            <div style={{marginTop:20,textAlign:"center",fontSize:12,color:"var(--text3)",lineHeight:1.6}}>
-              {isIOS
-                ? <><Download size={16} strokeWidth={1.75} /> להתקנת האפליקציה: לחץ/י על כפתור <strong>השיתוף</strong> ובחר/י <strong>"הוסף למסך הבית"</strong></>
-                : <button type="button" onClick={()=>void onInstall()} style={{background:"var(--accent)",border:"none",color:"#0a0c10",fontSize:13,fontWeight:800,cursor:"pointer",padding:"10px 20px",borderRadius:8,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><Download size={16} strokeWidth={1.75} /> התקן את האפליקציה</button>
-              }
+            <div style={{marginTop:20,textAlign:"center"}}>
+              <button type="button" onClick={()=>void onInstall()} style={{background:"var(--accent)",border:"none",color:"#0a0c10",fontSize:14,fontWeight:800,cursor:"pointer",padding:"12px 20px",borderRadius:10,width:"100%",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,minHeight:44}}><Download size={18} strokeWidth={1.75} /> התקן את האפליקציה</button>
             </div>
           );
         })()}
