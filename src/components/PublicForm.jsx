@@ -10,6 +10,20 @@ import AIChatBot from "./AIChatBot.jsx";
 
 const SMART_LOAN_TYPES = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
 
+// Hard rule: track classification dictates loan-type ceiling. "פרטית" is
+// global (every track), "סאונד" only for sound classification, "הפקה" and
+// "קולנוע יומית" only for cinema. Per-track loan_types in the DB may narrow
+// this set further but can NEVER widen it — this prevents accidental data
+// drift from re-introducing the bug where sound students saw cinema-only
+// loan types.
+const TRACK_TYPE_LOAN_CEILING = {
+  sound:  ["פרטית", "סאונד"],
+  cinema: ["פרטית", "הפקה", "קולנוע יומית"],
+};
+function ceilingForTrackType(trackType) {
+  return TRACK_TYPE_LOAN_CEILING[trackType] || [...SMART_LOAN_TYPES];
+}
+
 function policyHtml(text) {
   if (!text) return "";
   if (/<[a-z]/i.test(text)) return text;
@@ -118,14 +132,19 @@ function buildTrackSettings(students = [], existingTrackSettings = [], explicitT
   return trackNames.map((name) => {
     const match = existing.find((setting) => String(setting?.name || "").trim() === name);
     const explicitMatch = explicit.find(t => String(t?.name || "").trim() === name);
-    const allowedLoanTypes = SMART_LOAN_TYPES.filter((loanType) => Array.isArray(match?.loanTypes) && match.loanTypes.includes(loanType));
     // infer trackType: explicit tracks → trackSettings cache → keyword fallback
     const inferredType = explicitMatch?.trackType
       || match?.trackType
       || (/סאונד|sound/i.test(name) ? "sound" : /קולנוע|cinema|film/i.test(name) ? "cinema" : "");
+    // Hard ceiling by classification — prevents data drift from widening.
+    const ceiling = ceilingForTrackType(inferredType);
+    const perTrackOverride = Array.isArray(match?.loanTypes) ? match.loanTypes : null;
+    const allowedLoanTypes = perTrackOverride
+      ? ceiling.filter((lt) => perTrackOverride.includes(lt))
+      : ceiling;
     return {
       name,
-      loanTypes: allowedLoanTypes.length ? allowedLoanTypes : [...SMART_LOAN_TYPES],
+      loanTypes: allowedLoanTypes.length ? allowedLoanTypes : [...ceiling],
       trackType: inferredType,
     };
   });
