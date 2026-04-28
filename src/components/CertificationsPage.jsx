@@ -2,7 +2,7 @@
 import { useRef, useState } from "react";
 import { Camera, CheckCircle, ClipboardList, GraduationCap, Lightbulb, Mic, Package, Pencil, Search, X } from "lucide-react";
 import { storageSet, cloudinaryThumb, writeEquipmentToDB } from "../utils.js";
-import { dualWriteCertifications } from "../utils/studentsApi.js";
+import { dualWriteCertifications, setStudentCertStatus } from "../utils/studentsApi.js";
 import { Modal } from "./ui.jsx";
 
 const NIGHT_CERT_ID = "cert_night_studio";
@@ -23,7 +23,7 @@ const buildTrackSettings = (students = [], existingTrackSettings = []) => {
   });
 };
 
-export function CertificationsPage({ certifications, setCertifications, showToast, studios=[], setStudios, equipment=[], setEquipment, onlyMode=null }) {
+export function CertificationsPage({ certifications, setCertifications, showToast, studios=[], setStudios, equipment=[], setEquipment, onlyMode=null, certSaveInFlightRef=null }) {
   const { types = [], students = [] } = certifications;
   const trackSettings = buildTrackSettings(students, certifications?.trackSettings);
   const [certMode, setCertMode] = useState(onlyMode || "equipment");
@@ -59,8 +59,15 @@ export function CertificationsPage({ certifications, setCertifications, showToas
     };
     setSaving(true);
     setCertifications(updated);
+    if (certSaveInFlightRef) certSaveInFlightRef.current = (Number(certSaveInFlightRef.current) || 0) + 1;
     // Stage 6 step 6: tables are the source of truth — no more blob write.
     const r = await dualWriteCertifications(updated);
+    if (certSaveInFlightRef) {
+      setTimeout(() => {
+        const n = Number(certSaveInFlightRef.current) || 1;
+        certSaveInFlightRef.current = Math.max(0, n - 1);
+      }, 1500);
+    }
     setSaving(false);
     if(!r.ok) showToast("error","שגיאה בשמירה");
     return r.ok;
@@ -135,44 +142,84 @@ export function CertificationsPage({ certifications, setCertifications, showToas
     }
   };
 
-  // Update local students instantly (no App.jsx re-render), sync to parent once per debounce burst
-  const queueCertSave = (nextStudents) => {
+  // Surgical write: a single (student, cert_type) UPSERT. Counter-based lock so
+  // concurrent saves don't release the polling lock until the LAST one finishes.
+  const acquireSaveLock = () => {
+    if (!certSaveInFlightRef) return;
+    certSaveInFlightRef.current = (Number(certSaveInFlightRef.current) || 0) + 1;
+  };
+  const releaseSaveLock = () => {
+    if (!certSaveInFlightRef) return;
+    setTimeout(() => {
+      const n = Number(certSaveInFlightRef.current) || 1;
+      certSaveInFlightRef.current = Math.max(0, n - 1);
+    }, 1500); // grace for Supabase read replicas
+  };
+
+  // Optimistic per-cell update: write only the affected row to DB, then sync
+  // parent state. On failure, revert the cell + toast — no global rewrite,
+  // no race between students.
+  const applyCertChange = async (changedStuIds, mapStudent) => {
+    const base = pendingCertRef.current ?? effectiveStudents;
+    const nextStudents = base.map(s => (changedStuIds.has(s.id) ? mapStudent(s) : s));
+    const prevByStu = new Map(base.filter(s => changedStuIds.has(s.id)).map(s => [s.id, s.certs || {}]));
+    const nextByStu = new Map(nextStudents.filter(s => changedStuIds.has(s.id)).map(s => [s.id, s.certs || {}]));
+
     pendingCertRef.current = nextStudents;
     setStudentsLocal(nextStudents);
-    clearTimeout(certToggleTimer.current);
-    certToggleTimer.current = setTimeout(() => {
-      const finalStudents = pendingCertRef.current;
-      pendingCertRef.current = null;
-      if (!finalStudents) return;
-      const nextTS = buildTrackSettings(finalStudents, certifications?.trackSettings);
-      const fullUpdated = { ...certifications, types, students: finalStudents, trackSettings: nextTS };
-      setCertifications(fullUpdated);
+    const nextTS = buildTrackSettings(nextStudents, certifications?.trackSettings);
+    setCertifications({ ...certifications, types, students: nextStudents, trackSettings: nextTS });
+
+    acquireSaveLock();
+    try {
+      // For each changed cell of each student, fire one surgical UPSERT.
+      const writes = [];
+      for (const stuId of changedStuIds) {
+        const prev = prevByStu.get(stuId) || {};
+        const next = nextByStu.get(stuId) || {};
+        const allTypes = new Set([...Object.keys(prev), ...Object.keys(next)]);
+        for (const typeId of allTypes) {
+          if (prev[typeId] !== next[typeId] && (next[typeId] === "עבר" || next[typeId] === "לא עבר")) {
+            writes.push(setStudentCertStatus(stuId, typeId, next[typeId]));
+          }
+        }
+      }
+      const results = await Promise.all(writes);
+      const failed = results.filter(r => r?.ok === false);
+      if (failed.length > 0) {
+        showToast("error", "שגיאה בשמירה");
+        // Revert: pull authoritative state for affected students by re-applying base
+        const rolledBack = (pendingCertRef.current || nextStudents).map(s =>
+          changedStuIds.has(s.id) ? { ...s, certs: prevByStu.get(s.id) || s.certs } : s
+        );
+        pendingCertRef.current = rolledBack;
+        setStudentsLocal(rolledBack);
+        const ts = buildTrackSettings(rolledBack, certifications?.trackSettings);
+        setCertifications({ ...certifications, types, students: rolledBack, trackSettings: ts });
+      }
+    } catch {
+      showToast("error", "שגיאה בשמירה");
+    } finally {
+      // Drop the local override — parent now owns the state.
       setStudentsLocal(null);
-      // Stage 6 step 6: tables are the source of truth — no more blob write.
-      dualWriteCertifications(fullUpdated).then(r => {
-        if (!r.ok) showToast("error", "שגיאה בשמירה");
-      });
-    }, 400);
+      pendingCertRef.current = null;
+      releaseSaveLock();
+    }
   };
 
   const toggleCert = (stuId, typeId) => {
-    const base = pendingCertRef.current ?? effectiveStudents;
-    const nextStudents = base.map(s => {
-      if (s.id !== stuId) return s;
+    applyCertChange(new Set([stuId]), (s) => {
       const current = (s.certs || {})[typeId];
       const next = current === "עבר" ? "לא עבר" : "עבר";
       return { ...s, certs: { ...s.certs, [typeId]: next } };
     });
-    queueCertSave(nextStudents);
   };
 
   const setTrackCertStatus = (trackName, typeId, nextValue) => {
     const base = pendingCertRef.current ?? effectiveStudents;
-    if (!base.some(s => (s.track || "") === trackName)) return;
-    const nextStudents = base.map(s =>
-      (s.track || "") !== trackName ? s : { ...s, certs: { ...s.certs, [typeId]: nextValue } }
-    );
-    queueCertSave(nextStudents);
+    const targetIds = new Set(base.filter(s => (s.track || "") === trackName).map(s => s.id));
+    if (targetIds.size === 0) return;
+    applyCertChange(targetIds, (s) => ({ ...s, certs: { ...s.certs, [typeId]: nextValue } }));
     showToast("success", `עודכנה הסמכה לכל תלמידי ${trackName || "ללא מסלול"}`);
   };
 

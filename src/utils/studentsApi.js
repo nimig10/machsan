@@ -99,43 +99,82 @@ async function resolveTrackId(trackName) {
   return data?.id ?? null;
 }
 
-// Upsert one student + replace their cert statuses. Best-effort; logs but
-// does not throw, since the blob write is the source of truth right now.
+// Upsert one student + reconcile their cert statuses atomically.
+// student_certifications has PK (student_id, cert_type_id), so UPSERT is safe.
+// We only DELETE the cert pairs that are no longer wanted — never wipe-then-rewrite.
 export async function upsertStudent(stu) {
   if (!stu?.id) return { ok: false, error: "missing id" };
   try {
     const track_id = await resolveTrackId(stu.track);
 
-    // Run student upsert + cert delete in parallel — independent operations.
-    const [{ error: stuErr }, { error: delErr }] = await Promise.all([
-      supabase.from("students").upsert({
-        id:      stu.id,
-        name:    stu.name ?? "",
-        email:   stu.email || null,
-        phone:   stu.phone || null,
-        track_id,
-      }),
-      supabase.from("student_certifications").delete().eq("student_id", stu.id),
-    ]);
+    const { error: stuErr } = await supabase.from("students").upsert({
+      id:      stu.id,
+      name:    stu.name ?? "",
+      email:   stu.email || null,
+      phone:   stu.phone || null,
+      track_id,
+    });
     if (stuErr) throw stuErr;
-    if (delErr) throw delErr;
 
     const certEntries = Object.entries(stu.certs || {}).filter(
       ([, status]) => status === "עבר" || status === "לא עבר"
     );
+    const wantTypeIds = new Set(certEntries.map(([cert_type_id]) => cert_type_id));
+
     if (certEntries.length > 0) {
       const rows = certEntries.map(([cert_type_id, status]) => ({
         student_id: stu.id, cert_type_id, status,
       }));
-      const { error: insErr } = await supabase
+      const { error: upsertErr } = await supabase
         .from("student_certifications")
-        .insert(rows);
-      if (insErr) throw insErr;
+        .upsert(rows, { onConflict: "student_id,cert_type_id" });
+      if (upsertErr) throw upsertErr;
+    }
+
+    // Remove only stale pairs — leaves wanted ones untouched (no race window).
+    const { data: existing, error: listErr } = await supabase
+      .from("student_certifications")
+      .select("cert_type_id")
+      .eq("student_id", stu.id);
+    if (listErr) throw listErr;
+    const stale = (existing ?? [])
+      .map(r => r.cert_type_id)
+      .filter(id => !wantTypeIds.has(id));
+    if (stale.length > 0) {
+      const { error: delErr } = await supabase
+        .from("student_certifications")
+        .delete()
+        .eq("student_id", stu.id)
+        .in("cert_type_id", stale);
+      if (delErr) throw delErr;
     }
 
     return { ok: true };
   } catch (err) {
     console.warn("[studentsApi.upsertStudent]", stu.id, err);
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+// Surgical: write a single (student, cert_type) status — one UPSERT, atomic.
+// Used by the cert toggle button so each click only touches the affected row,
+// avoiding the race-prone full rewrite of all students.
+export async function setStudentCertStatus(studentId, certTypeId, status) {
+  if (!studentId || !certTypeId) return { ok: false, error: "missing params" };
+  if (status !== "עבר" && status !== "לא עבר") {
+    return { ok: false, error: "invalid status" };
+  }
+  try {
+    const { error } = await supabase
+      .from("student_certifications")
+      .upsert(
+        { student_id: studentId, cert_type_id: certTypeId, status },
+        { onConflict: "student_id,cert_type_id" }
+      );
+    if (error) throw error;
+    return { ok: true };
+  } catch (err) {
+    console.warn("[studentsApi.setStudentCertStatus]", studentId, certTypeId, err);
     return { ok: false, error: err?.message || String(err) };
   }
 }
@@ -219,23 +258,28 @@ export async function syncTracks(tracks, trackSettings) {
 
 // Full reconciliation: upsert every student in `nextStudents` and delete any
 // IDs in the table that aren't in the new list. Upserts run in parallel.
+// Surfaces individual failures — caller (UI toast) needs to know if any row failed.
 export async function syncAllStudents(nextStudents) {
   if (!Array.isArray(nextStudents)) return { ok: false, error: "not an array" };
   try {
     const wantIds = new Set(nextStudents.map(s => s.id).filter(Boolean));
 
-    const [{ data: existing, error: listErr }] = await Promise.all([
-      supabase.from("students").select("id"),
-    ]);
+    const { data: existing, error: listErr } = await supabase.from("students").select("id");
     if (listErr) throw listErr;
 
     const toDelete = (existing ?? []).map(r => r.id).filter(id => !wantIds.has(id));
 
-    // Parallel upserts + deletes — avoids N sequential round trips.
-    await Promise.all([
-      ...nextStudents.map(stu => upsertStudent(stu)),
-      ...toDelete.map(id => deleteStudent(id)),
-    ]);
+    const upsertResults = await Promise.all(nextStudents.map(stu => upsertStudent(stu)));
+    const deleteResults = await Promise.all(toDelete.map(id => deleteStudent(id)));
+    const failures = [
+      ...upsertResults.filter(r => r?.ok === false),
+      ...deleteResults.filter(r => r?.ok === false),
+    ];
+    if (failures.length > 0) {
+      const first = failures[0]?.error || "unknown";
+      console.warn("[studentsApi.syncAllStudents] failures:", failures.length, first);
+      return { ok: false, error: `${failures.length} row(s) failed: ${first}`, failures };
+    }
     return { ok: true, upserted: nextStudents.length, deleted: toDelete.length };
   } catch (err) {
     console.warn("[studentsApi.syncAllStudents]", err);

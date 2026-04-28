@@ -5372,6 +5372,7 @@ export default function App() {
   const undoInFlightRef = useRef(false);
   const refreshAbortRef = useRef(null);
   const swipeTouchRef = useRef(null);
+  const certSaveInFlightRef = useRef(false);
 
   equipmentRef.current = equipment;
   reservationsRef.current = reservations;
@@ -5929,7 +5930,7 @@ export default function App() {
       // Pick up student-self-service updates (PublicForm Account Settings modal
       // updates students table via /api/auth) and remote admin edits. Source is
       // the normalized students/tracks/certification_types tables (Stage 6).
-      if (certsR?.value && typeof certsR.value === "object" && !dataEquals(certificationsRef.current, certsR.value)) {
+      if (!certSaveInFlightRef.current && certsR?.value && typeof certsR.value === "object" && !dataEquals(certificationsRef.current, certsR.value)) {
         _setCertifications(certsR.value);
       }
       if (Array.isArray(catsR?.value) && catsR.value.length > 0 && !dataEquals(categoriesRef.current, catsR.value)) {
@@ -6595,7 +6596,7 @@ export default function App() {
                 ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean)
                 : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
               <div style={{display:page==="policies"?"block":"none"}}><PoliciesPage policies={policies} setPolicies={setPolicies} showToast={showToast}/></div>
-              <div style={{display:page==="certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment} onlyMode="equipment"/></div>
+              <div style={{display:page==="certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment} onlyMode="equipment" certSaveInFlightRef={certSaveInFlightRef}/></div>
               <div style={{display:page==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} settingsRole="warehouse"/></div>
             </>}
           </div>
@@ -6667,7 +6668,7 @@ export default function App() {
             {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <>
               <div style={{display:secretaryPage==="dashboard"?"block":"none"}}><SecretaryDashboardPage certifications={certifications} studios={studios} studioBookings={studioBookings} lessons={lessons}/></div>
               <div style={{display:secretaryPage==="studios"?"block":"none"}}><StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin" studios={studios} setStudios={setStudios} bookings={studioBookings} setBookings={setStudioBookings} siteSettings={siteSettings} setSiteSettings={setSiteSettings} isActive={secretaryPage==="studios"} currentUser={staffUser} lessons={lessons} setLessons={setLessons} onNavigateToLesson={(lessonId) => { setEditLessonId(lessonId); setSecretaryPage("lessons"); }}/></div>
-              <div style={{display:secretaryPage==="studio-certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment} onlyMode="studio"/></div>
+              <div style={{display:secretaryPage==="studio-certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment} onlyMode="studio" certSaveInFlightRef={certSaveInFlightRef}/></div>
               <div style={{display:secretaryPage==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} openLessonId={editLessonId} onOpenLessonConsumed={() => setEditLessonId(null)} lecturers={lecturers} setLecturers={setLecturers} siteSettings={siteSettings} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean) : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
               <div style={{display:secretaryPage==="lecturers"?"block":"none"}}><LecturersPage lecturers={lecturers} setLecturers={setLecturers} showToast={showToast} lessons={lessons} trackOptions={Array.isArray(certifications?.trackSettings)&&certifications.trackSettings.length?certifications.trackSettings.map(s=>String(s?.name||"").trim()).filter(Boolean):[...new Set((certifications?.students||[]).map(s=>String(s?.track||"").trim()).filter(Boolean))]}/></div>
               <div style={{display:secretaryPage==="students"?"block":"none"}}><StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} onLogCreated={attachLogIdToUndo} studioBookings={studioBookings} setStudioBookings={setStudioBookings} reservations={reservations} setReservations={setReservations}/></div>
