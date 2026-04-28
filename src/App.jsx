@@ -5833,13 +5833,13 @@ export default function App() {
         }
         if (newLecturers.length > 0) {
           loadedLecturers = [...loadedLecturers, ...newLecturers];
-          // Stage 7 cleanup: auto-extracted lecturers are written straight to
-          // the normalized table. The blob is gone.
-          await syncAllLecturers(loadedLecturers);
+          const { data: { session: initSession } } = await supabase.auth.getSession();
+          if (initSession) await syncAllLecturers(loadedLecturers);
         }
         if (lessonsChanged) {
           _setLessons(updatedLessons);
-          await storageSet("lessons", updatedLessons);
+          const { data: { session: initSession2 } } = await supabase.auth.getSession();
+          if (initSession2) await storageSet("lessons", updatedLessons);
         }
         _setLecturers(loadedLecturers);
           const loadedSettings = siteSet || { logo:"", theme:"dark" };
