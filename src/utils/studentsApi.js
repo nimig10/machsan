@@ -200,7 +200,7 @@ export async function syncCertificationTypes(types) {
     const wantIds = new Set(types.map(t => t.id).filter(Boolean));
     const rows = types
       .filter(t => t.id && t.name)
-      .map(t => ({ id: t.id, name: t.name }));
+      .map(t => ({ id: t.id, name: t.name, category: t.category || null }));
     if (rows.length > 0) {
       const { error } = await supabase.from("certification_types").upsert(rows);
       if (error) throw error;
