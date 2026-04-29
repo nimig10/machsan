@@ -5637,9 +5637,6 @@ export default function App() {
       return;
     }
 
-    if (key === "studios" && Array.isArray(value) && !dataEquals(studiosRef.current, value)) {
-      _setStudios(value);
-    }
   };
 
   const refreshLecturerData = async () => {
