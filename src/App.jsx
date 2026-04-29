@@ -6265,6 +6265,29 @@ export default function App() {
     const currentReservations = reservationsRef.current;
     const currentStudioBookings = studioBookingsRef.current;
 
+    // Pre-Stage-8 cleanup: virtual lesson reservations have been retired.
+    // Lecturer portal (api/lecturer-kit.js) writes real reservation_items rows
+    // directly; KitsPage delete handler materializes any remaining virtuals
+    // before kit removal. lessons.kitId / schedule[].kitId are no longer used.
+    // If no lesson references a kit, skip the entire generate-and-merge pass —
+    // this eliminates the polling race that briefly wiped virtuals on mid-edit.
+    const hasAnyKitLink = (lessons || []).some(l =>
+      l?.kitId || (Array.isArray(l?.schedule) && l.schedule.some(s => s?.kitId))
+    );
+    if (!hasAnyKitLink) {
+      // Still need to keep studio bookings in sync, but no reservation churn.
+      const generatedLessonBookings = buildLessonStudioBookings(lessons);
+      const nextStudioBookings = [
+        ...currentStudioBookings.filter((booking) => booking.lesson_auto !== true),
+        ...generatedLessonBookings,
+      ];
+      if (!dataEquals(nextStudioBookings, currentStudioBookings)) {
+        _setStudioBookings(nextStudioBookings);
+        void storageSet("studio_bookings", nextStudioBookings);
+      }
+      return;
+    }
+
     const { reservations: generatedLessonReservations, linkedKitIds } = buildLessonReservations(lessons, kits);
 
     // Safety guard: if we currently have lesson-auto reservations but the new generation
