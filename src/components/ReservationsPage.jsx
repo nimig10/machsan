@@ -5,6 +5,7 @@ import { storageGet, storageSet, formatDate, getLoanDurationDays, formatLocalDat
 import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
+import { syncAllLessons } from "../utils/lessonsApi.js";
 import { AlertTriangle, BookOpen, Briefcase, Camera, Calendar, CheckCircle, ClipboardList, Clock, FileText, Film, Mic, Package, Pencil, RotateCcw, Save, Trash2, User, X, XCircle } from "lucide-react";
 
 // ── Staff Loan Form (module-scope component) ──
@@ -383,6 +384,8 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       setLessons(updatedLessons);
       try {
         await storageSet("lessons", updatedLessons);
+        // Stage 8 Session A dual-write
+        syncAllLessons(updatedLessons).catch(err => console.warn("[lessonsApi dual-write]", err));
         showToast("success", "בקשת השיעור בוטלה");
         const caller = JSON.parse(sessionStorage.getItem("staff_user") || "{}");
         logActivity({

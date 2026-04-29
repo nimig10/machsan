@@ -5,6 +5,7 @@ import { Award, BookOpen, Calendar, Camera, Check, CheckCircle, Clock, Download,
 import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAuthToken } from "../utils.js";
 import { listStudents } from "../utils/studentsApi.js";
 import { syncAllLecturers } from "../utils/lecturersApi.js";
+import { syncAllLessons } from "../utils/lessonsApi.js";
 import { makeLecturer } from "./LecturersPage.jsx";
 
 let _skeyCounter = 0;
@@ -229,6 +230,31 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   }, []);
   const studentsFromTable = tableStudents ?? (certifications?.students || []);
   const [xlImporting, setXlImporting] = useState(false);
+  const [stage8Backfilling, setStage8Backfilling] = useState(false);
+
+  // Stage 8 Session A — manually trigger a full lessons-blob → public.lessons sync.
+  // Dev-only button so we can verify table parity without triggering it via a
+  // user-driven save. Mirror of the lecturers backfill pattern from Stage 7.
+  const runStage8Backfill = async () => {
+    if (!Array.isArray(lessons) || lessons.length === 0) {
+      showToast("error", "אין שיעורים ב-blob ל-backfill");
+      return;
+    }
+    setStage8Backfilling(true);
+    try {
+      const r = await syncAllLessons(lessons);
+      if (r?.ok) {
+        showToast("success", `Stage 8 backfill: upserted ${r.upserted}, deleted ${r.deleted}`);
+      } else {
+        showToast("error", `Stage 8 backfill failed: ${r?.error || "unknown"}`);
+      }
+    } catch (err) {
+      console.error("Stage 8 backfill error", err);
+      showToast("error", "Stage 8 backfill: שגיאה. בדוק קונסול.");
+    } finally {
+      setStage8Backfilling(false);
+    }
+  };
   const [aiImporting, setAiImporting] = useState(false);
   const importInputRef = useRef(null);
   const aiImportInputRef = useRef(null);
@@ -295,6 +321,8 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       : [...lessons, lesson];
     setLessons(updated);
     const result = await storageSet("lessons", updated);
+    // Stage 8 Session A dual-write — fire-and-forget; blob remains source of truth.
+    syncAllLessons(updated).catch(err => console.warn("[lessonsApi dual-write]", err));
     if (result?.ok === false) {
       showToast("error", "השינויים נשמרו מקומית אך לא נשמרו בשרת. נסה שוב מאוחר יותר.");
     } else {
@@ -407,6 +435,8 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     const updated = lessons.filter(l => l.id !== id);
     setLessons(updated);
     await storageSet("lessons", updated);
+    // Stage 8 Session A dual-write
+    syncAllLessons(updated).catch(err => console.warn("[lessonsApi dual-write]", err));
     showToast("success", "הקורס נמחק. ניתן לשחזר עם לחצן ↩ בטל פעולה למעלה.");
   };
 
@@ -655,6 +685,8 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       const synced = await syncImportedLecturers(updatedLessons);
       setLessons(synced);
       await storageSet("lessons", synced);
+      // Stage 8 Session A dual-write
+      syncAllLessons(synced).catch(err => console.warn("[lessonsApi dual-write]", err));
       showToast("success", `יובאו ${addedCount} קורסים ועודכנו ${updatedCount} קורסים`);
     } catch (error) {
       console.error("Lessons XL import failed", error);
@@ -936,6 +968,8 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           const synced = await syncImportedLecturers(updatedLessons);
           setLessons(synced);
           await storageSet("lessons", synced);
+          // Stage 8 Session A dual-write
+          syncAllLessons(synced).catch(err => console.warn("[lessonsApi dual-write]", err));
           showToast("success", `פוענחו ${cleanedLessons.length} שיעורים. נוספו ${addedCount} קורסים ועודכנו ${updatedCount} קורסים.`);
         } catch (err) {
           console.error("Error processing Excel:", err);
@@ -1069,6 +1103,11 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
               </button>
               <input ref={importInputRef} type="file" accept=".csv,.tsv,.xlsx,.xls" style={{display:"none"}} onChange={importLessonsXL} disabled={xlImporting}/>
               <button className="btn btn-secondary" onClick={()=>importInputRef.current?.click()} disabled={xlImporting}>{xlImporting ? "מייבא..." : "ייבוא XL"}</button>
+              {import.meta.env.DEV && (
+                <button className="btn btn-secondary" onClick={runStage8Backfill} disabled={stage8Backfilling} title="Sync store.lessons blob → public.lessons table (dev only)">
+                  {stage8Backfilling ? "מסנכרן..." : "🔁 Stage 8 Backfill"}
+                </button>
+              )}
               <button className="btn btn-primary" onClick={()=>{setMode("add");setEditTarget(null);}}>➕ קורס חדש</button>
             </div>
           </div>
@@ -1405,7 +1444,10 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
   const studentsInTrack = (() => {
     const trk = track.trim();
     if (!trk) return [];
-    const all = Array.isArray(studentsFromTable) ? studentsFromTable : [];
+    // LessonForm is a top-level component — read students from the certifications
+    // prop (passed in from parent) rather than the parent's `studentsFromTable`
+    // closure variable, which is out of scope here.
+    const all = Array.isArray(certifications?.students) ? certifications.students : [];
     return all.filter(s => String(s?.track || "").trim() === trk);
   })();
 
@@ -1555,11 +1597,18 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
       const count = Math.max(1,Math.min(52,Number(manCount)||1));
       let d = parseLocalDate(manStartDate);
       for(let i=0;i<count;i++) {
-        finalSchedule.push({date:formatLocalDateInput(d),startTime:manStartTime,endTime:manEndTime,topic:""});
+        finalSchedule.push({date:formatLocalDateInput(d),startTime:manStartTime,endTime:manEndTime,topic:"",studioId: studioId||null});
         d.setDate(d.getDate()+7);
       }
     }
-    finalSchedule = dedupeScheduleEntries(finalSchedule.map(normalizeScheduleEntry));
+    finalSchedule = dedupeScheduleEntries(finalSchedule.map(normalizeScheduleEntry).map(s => ({
+      ...s,
+      // Sessions without an explicit studioId inherit the course-level
+      // assignment. Without this fallback, sessions added before the user
+      // picked a course studio (or via paths that didn't propagate it) saved
+      // with studioId=null, making the lesson "unassigned" on re-open.
+      studioId: s.studioId || (studioId || null),
+    })));
     const invalidSession = finalSchedule.find(session => !session.date || session.startTime >= session.endTime);
     if(invalidSession) { setLocalMsg({type:"error",text:"יש לתקן תאריך או שעות לא תקינים בלוח השיעורים"}); return; }
     setSaving(true);
@@ -1672,7 +1721,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                         <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>🏫 כיתה</div>
                         <select className="form-select" value={s.studioId||""} style={{fontSize:12,padding:"4px 6px",height:32,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"studioId",e.target.value||null)}>
                           <option value="">ללא</option>
-                          {studios.filter(st=>st.isClassroom||st.classroomOnly).map(st=><option key={st.id} value={st.id}>{st.name}</option>)}
+                          {studios.filter(st=>st.isClassroom||st.classroomOnly||String(st.id)===String(s.studioId||"")).map(st=><option key={st.id} value={st.id}>{st.name}{(!st.isClassroom && !st.classroomOnly) ? " (לא מסומן ככיתה)" : ""}</option>)}
                         </select>
                       </div>
                     </div>

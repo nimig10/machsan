@@ -27,6 +27,7 @@ import { useInstallPrompt } from "./components/InstallPrompt.jsx";
 import { supabase } from "./supabaseClient.js";
 import { loadCertificationsFromTables } from "./utils/studentsApi.js";
 import { syncAllLecturers, loadLecturersFromTable } from "./utils/lecturersApi.js";
+import { syncAllLessons } from "./utils/lessonsApi.js";
 
 // Stage 7 step 5: replace `storageGet("lecturers")` with the table loader,
 // wrapped in the same { value, source } envelope every other loader uses.
@@ -4147,6 +4148,8 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
       });
       setLessons(updatedLessons);
       try { await storageSet("lessons", updatedLessons); } catch {}
+      // Stage 8 Session A dual-write
+      syncAllLessons(updatedLessons).catch(err => console.warn("[lessonsApi dual-write]", err));
     }
 
     // Now safe to remove the kit itself.
@@ -5941,7 +5944,11 @@ export default function App() {
         if (lessonsChanged) {
           _setLessons(updatedLessons);
           const { data: { session: initSession2 } } = await supabase.auth.getSession();
-          if (initSession2) await storageSet("lessons", updatedLessons);
+          if (initSession2) {
+            await storageSet("lessons", updatedLessons);
+            // Stage 8 Session A dual-write
+            syncAllLessons(updatedLessons).catch(err => console.warn("[lessonsApi dual-write]", err));
+          }
         }
         _setLecturers(loadedLecturers);
           const loadedSettings = siteSet || { logo:"", theme:"dark" };

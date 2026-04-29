@@ -2,6 +2,7 @@ import { supabase } from '../supabaseClient.js';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatDate, getAvailable, normalizeName, storageSet, storageGet, updateReservationStatus, getAuthToken } from "../utils.js";
 import { listStudents } from "../utils/studentsApi.js";
+import { syncAllLessons } from "../utils/lessonsApi.js";
 import { statusBadge } from "./ui.jsx";
 import { Backpack, BookOpen, Calendar, CheckCircle, Film, GraduationCap, Info, Mic, Minus, Package, X, XCircle } from "lucide-react";
 import { DeptHeadCalendarPage } from "./CalendarViews.jsx";
@@ -592,6 +593,8 @@ export function LecturerPortal({
       const updatedLesson = { ...lesson, studentStatuses: cleanMap };
       const updatedLessons = lessons.map((l) => String(l.id) === String(lesson.id) ? updatedLesson : l);
       await storageSet("lessons", updatedLessons);
+      // Stage 8 Session A dual-write
+      syncAllLessons(updatedLessons).catch(err => console.warn("[lessonsApi dual-write]", err));
       if (setLessons) setLessons(updatedLessons);
       showToast && showToast("success", "סטטוסי התלמידים נשמרו");
       setStudentListLessonId(null);

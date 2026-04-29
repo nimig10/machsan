@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { BookOpen, Calendar, ClipboardList, Film, GraduationCap, Mic, Pencil, Shield, User, Video, X } from "lucide-react";
 import { storageSet, lsGet, getAuthToken } from "../utils.js";
+import { syncAllLessons } from "../utils/lessonsApi.js";
 import { Modal } from "./ui.jsx";
 
 const DAY_HOURS = (() => { const h = []; for (let hr = 9; hr <= 21; hr++) for (let m = 0; m < 60; m += 15) { if (hr === 21 && m > 30) break; h.push(`${String(hr).padStart(2,"0")}:${String(m).padStart(2,"0")}`); } return h; })();
@@ -463,6 +464,8 @@ export default function StudioBookingPage(props) {
     try {
       setLessons(updatedLessons);
       await storageSet("lessons", updatedLessons);
+      // Stage 8 Session A dual-write
+      syncAllLessons(updatedLessons).catch(err => console.warn("[lessonsApi dual-write]", err));
       showToast("success", "השיעור עודכן");
       closeModal();
     } catch {

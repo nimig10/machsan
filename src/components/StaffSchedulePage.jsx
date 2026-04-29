@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
 import { Modal } from "./ui.jsx";
 import { storageSet, getAuthToken } from "../utils.js";
+import { syncAllLessons } from "../utils/lessonsApi.js";
 import { BookOpen, Calendar, Check, ClipboardList, Package, Shield, X } from "lucide-react";
 
 /* ── Half-hour time slots 09:00–22:00 ── */
@@ -473,6 +474,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
     });
     setLessons(updated);
     await storageSet("lessons", updated);
+    syncAllLessons(updated).catch(err => console.warn("[lessonsApi dual-write]", err));
     showToast("success", "השיעור עודכן");
     return true;
   };
@@ -484,6 +486,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
     });
     setLessons(updated);
     await storageSet("lessons", updated);
+    syncAllLessons(updated).catch(err => console.warn("[lessonsApi dual-write]", err));
     showToast("success", "השיעור נמחק מיום זה");
   };
 
