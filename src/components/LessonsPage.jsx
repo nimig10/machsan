@@ -26,8 +26,9 @@ function sortScheduleEntries(entries = []) {
 }
 
 function normalizeScheduleEntry(entry = {}) {
+  const isLegacyKey = !entry?._key || /^sk-\d+$/.test(entry._key);
   return {
-    _key: entry?._key || newScheduleKey(),
+    _key: isLegacyKey ? newScheduleKey() : entry._key,
     date: entry?.date || "",
     startTime: entry?.startTime || "09:00",
     endTime: entry?.endTime || "12:00",
