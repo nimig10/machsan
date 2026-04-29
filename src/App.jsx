@@ -5879,7 +5879,7 @@ export default function App() {
     })();
   },[]);
 
-  useEffect(() => { if (!loading && !isPublicFormView) fetchEquipmentReports(); },[loading]);
+  useEffect(() => { if (!loading && !isPublicFormView && !isLecturerPortalView) fetchEquipmentReports(); },[loading]);
 
   const refreshAdminData = async () => {
     if (historySuspendedRef.current) return false;

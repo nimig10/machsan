@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient.js';
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatDate, getAvailable, normalizeName, storageSet, storageGet, updateReservationStatus, getAuthToken } from "../utils.js";
 import { listStudents } from "../utils/studentsApi.js";
 import { statusBadge } from "./ui.jsx";
@@ -371,8 +371,25 @@ export function LecturerPortal({
     };
   }, [editorState, lecturerCourseEntries, lessonKits]);
 
+  // Init guard: only re-seed draft fields when the editor TARGET changes
+  // (different lesson/session/type), NOT on every reservations poll. Otherwise
+  // the lecturer's in-progress equipment additions get wiped every poll cycle.
+  const lastEditorInitKeyRef = useRef(null);
   useEffect(() => {
-    if (!editorContext) return;
+    if (!editorContext) {
+      lastEditorInitKeyRef.current = null;
+      return;
+    }
+    const initKey = JSON.stringify({
+      lessonId: String(editorContext.lesson?.id || ""),
+      type: editorContext.type || "",
+      sessionDate: editorContext.session?.date || "",
+      sessionTime: editorContext.session?.time || "",
+      targetDates: (editorContext.targetSessions || []).map(s => s.date),
+    });
+    if (initKey === lastEditorInitKeyRef.current) return;
+    lastEditorInitKeyRef.current = initKey;
+
     const sourceKit = editorContext.currentKit || editorContext.templateKit;
 
     // Prefer items from an actual (non-auto) reservation — reflects staff edits
