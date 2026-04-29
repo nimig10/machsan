@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { storageGet } from "../utils.js";
 import { listLessons } from "../utils/lessonsApi.js";
+import { listStudios } from "../utils/studiosApi.js";
 import { BookOpen, GraduationCap, Mic } from "lucide-react";
 
 const HE_DAYS   = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
@@ -40,7 +41,7 @@ export function PublicDisplayPage() {
     const [lsns, bkgs, stds, settings] = await Promise.all([
       listLessons(),
       storageGet("studio_bookings"),
-      storageGet("studios"),
+      listStudios(),
       storageGet("siteSettings"),
     ]);
     setLessons(Array.isArray(lsns) ? lsns : []);

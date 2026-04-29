@@ -5,6 +5,7 @@ import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDat
 import { supabase } from "../supabaseClient.js";
 import { listStudents } from "../utils/studentsApi.js";
 import { listLessons } from "../utils/lessonsApi.js";
+import { listStudios } from "../utils/studiosApi.js";
 import { useNotifications } from "../hooks/useNotifications.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import AIChatBot from "./AIChatBot.jsx";
@@ -1458,7 +1459,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 
   // Load studios data when switching to studios view
   const loadStudiosData = async () => {
-    const [s, b] = await Promise.all([storageGet("studios"), storageGet("studio_bookings")]);
+    const [s, b] = await Promise.all([listStudios(), storageGet("studio_bookings")]);
     if (Array.isArray(s)) setStudios(s);
     if (Array.isArray(b)) setStudioBookings(b);
   };
