@@ -6,6 +6,8 @@ import { supabase } from "../supabaseClient.js";
 import { listStudents } from "../utils/studentsApi.js";
 import { listLessons } from "../utils/lessonsApi.js";
 import { listStudios } from "../utils/studiosApi.js";
+import { listStudioBookings, upsertStudioBooking, deleteStudioBooking } from "../utils/studioBookingsApi.js";
+import { buildLessonStudioBookings } from "../utils/lessonBookings.js";
 import { useNotifications } from "../hooks/useNotifications.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import AIChatBot from "./AIChatBot.jsx";
@@ -1408,7 +1410,38 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   useEffect(() => {
     if (loggedInStudent) sessionStorage.setItem("public_view", publicView);
     if (loggedInStudent && publicView === "daily") loadDailySchedule();
+    // Stage 10 fix: auto-load studios on mount/view-change so reloads with
+    // public_view="studios"|"my-bookings" populate the calendar (was empty
+    // until the user clicked the tab again).
+    if (loggedInStudent && (publicView === "studios" || publicView === "my-bookings")) {
+      loadStudiosData();
+    }
+    if (loggedInStudent && publicView === "my-bookings") loadReservationsData();
   }, [publicView, loggedInStudent]);
+
+  // Stage 10 Session C: realtime listener on public.studio_bookings — keeps
+  // the student's view in sync when other users (or other tabs of the same
+  // student) create/update/delete bookings. Debounced to absorb bursts.
+  useEffect(() => {
+    if (!loggedInStudent) return undefined;
+    if (publicView !== "studios" && publicView !== "my-bookings") return undefined;
+    let debounceTimer = null;
+    const channel = supabase
+      .channel("public-form-studio-bookings")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "studio_bookings" },
+        () => {
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => loadStudiosData(), 500);
+        },
+      )
+      .subscribe();
+    return () => {
+      clearTimeout(debounceTimer);
+      try { supabase.removeChannel(channel); } catch {}
+    };
+  }, [loggedInStudent, publicView]);
 
   // ─── טיימר חוסר פעילות — 60 שניות ─────────────────────────────────────────
   useEffect(() => {
@@ -1459,9 +1492,16 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 
   // Load studios data when switching to studios view
   const loadStudiosData = async () => {
-    const [s, b] = await Promise.all([listStudios(), storageGet("studio_bookings")]);
+    const [s, realBookings, lessons] = await Promise.all([
+      listStudios(),
+      listStudioBookings(),
+      listLessons(),
+    ]);
     if (Array.isArray(s)) setStudios(s);
-    if (Array.isArray(b)) setStudioBookings(b);
+    // Merge persisted bookings with in-memory lesson_auto bookings (regenerated
+    // from lessons.schedule). Same pattern as App.jsx initial load.
+    const lessonAuto = Array.isArray(lessons) ? buildLessonStudioBookings(lessons) : [];
+    setStudioBookings([...(Array.isArray(realBookings) ? realBookings : []), ...lessonAuto]);
   };
 
   const loadReservationsData = async () => {
@@ -1619,16 +1659,28 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const upsertAuthEntityMap = async (authUserId, entityType, entityId, email) => {
     const normalizedEmail = email.toLowerCase().trim();
     try {
+      // Clean any stale row pointing entityType/entityId at a different auth_user
+      // (rare — only when the same student/lecturer record gets reassigned across
+      // accounts). Skip the matching auth_user_id row so we don't fight the upsert.
       await supabase
         .from("auth_entity_map")
         .delete()
-        .or(`auth_user_id.eq.${authUserId},and(entity_type.eq.${entityType},entity_id.eq.${entityId})`);
-      const { error } = await supabase.from("auth_entity_map").insert({
-        auth_user_id: authUserId,
-        entity_type: entityType,
-        entity_id: entityId,
-        email: normalizedEmail,
-      });
+        .eq("entity_type", entityType)
+        .eq("entity_id", entityId)
+        .neq("auth_user_id", authUserId);
+      // Upsert on auth_user_id unique key — eliminates the DELETE+INSERT race
+      // that two parallel tabs trigger (23505 duplicate key).
+      const { error } = await supabase
+        .from("auth_entity_map")
+        .upsert(
+          {
+            auth_user_id: authUserId,
+            entity_type: entityType,
+            entity_id: entityId,
+            email: normalizedEmail,
+          },
+          { onConflict: "auth_user_id" },
+        );
       if (error) throw error;
     } catch (err) {
       console.warn("upsertAuthEntityMap failed:", err);
@@ -3570,7 +3622,7 @@ ${inventory}
             const NBST="21:30",NBET="08:00";
             const isFuture=b=>{const e=b.isNight?(()=>{const d=new Date(b.date);d.setDate(d.getDate()+1);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;})():b.date;return new Date(`${e}T${b.endTime||"23:59"}:00`).getTime()>Date.now();};
             const futureOnes=myBookings.filter(isFuture);
-            const handleCancel=async id=>{const updated=studioBookings.filter(b=>b.id!==id);setStudioBookings(updated);await storageSet("studio_bookings",updated);showToast("success","ההזמנה בוטלה");};
+            const handleCancel=async id=>{const updated=studioBookings.filter(b=>b.id!==id);setStudioBookings(updated);await deleteStudioBooking(id);showToast("success","ההזמנה בוטלה");};
             const handleSaveEdit=async()=>{
               if(!editingBooking) return;
               const{id,studioId,date,startTime,endTime}=editingBooking;
@@ -3591,8 +3643,9 @@ ${inventory}
               if(otherFutureHours+reqHours>hoursLimit+0.0001){showToast("error",`חרגת ממכסת השעות (${formatStudioHoursValue(hoursLimit)} שעות)`);return;}
               setEditBookingSaving(true);
               const updated=studioBookings.map(b=>b.id===id?{...b,startTime,endTime}:b);
+              const updatedBooking = updated.find(b => b.id === id);
               setStudioBookings(updated);
-              await storageSet("studio_bookings",updated);
+              if (updatedBooking) await upsertStudioBooking(updatedBooking);
               setEditingBooking(null);
               setEditBookingSaving(false);
               showToast("success","ההזמנה עודכנה");
@@ -4144,7 +4197,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       };
       const updated = [...bookings, newBooking];
       setBookings(updated);
-      await storageSet("studio_bookings", updated);
+      await upsertStudioBooking(newBooking);
       showToast("success", successMessage);
       return true;
     } catch(err) {
@@ -4395,8 +4448,9 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     const overlap = bookings.some(b => sameStudioId(b.studioId, studioId) && b.date===date && b.id!==bookingId && isActiveStudioBooking(b) && !(endTime<=b.startTime || startTime>=b.endTime));
     if(!isNight && overlap) { showToast("error","קיימת הזמנה חופפת"); setSaving(false); return; }
     const updated = bookings.map(b => b.id===bookingId ? {...b, startTime, endTime, notes: notes || b.notes} : b);
+    const updatedBooking = updated.find(b => b.id === bookingId);
     setBookings(updated);
-    await storageSet("studio_bookings", updated);
+    if (updatedBooking) await upsertStudioBooking(updatedBooking);
     showToast("success","ההזמנה עודכנה בהצלחה");
     setModal(null); setSaving(false);
   };
@@ -4405,7 +4459,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     if(!confirm("לבטל את ההזמנה שלך?")) return;
     const updated = bookings.filter(b=>b.id!==bookingId);
     setBookings(updated);
-    await storageSet("studio_bookings", updated);
+    await deleteStudioBooking(bookingId);
     showToast("success","ההזמנה בוטלה");
   };
 
@@ -4909,7 +4963,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                       const newBooking = { id:Date.now(), bookingKind:"student", studioId:args.studioId, date:args.date, startTime:normalizedStartTime, endTime:normalizedEndTime, studentName:student.name, studentEmail:student.email||"", studentPhone:student.phone||"", studentId:student?.id??null, notes:args.notes, isNight:args.isNight, createdAt:new Date().toISOString() };
                       const next = [...bookings, newBooking];
                       setBookings(next);
-                      await storageSet("studio_bookings", next);
+                      await upsertStudioBooking(newBooking);
                       showToast("success", args.successMessage || "החדר הוזמן בהצלחה!");
                       closeBookingModal();
                     } catch(err) {

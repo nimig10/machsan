@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import { Award, BookOpen, Calendar, Camera, Check, CheckCircle, Clock, Download, FileText, Film, GraduationCap, Lightbulb, Link, Mail, Mic, Package, Pencil, Phone, Plus, Search, Trash2, Upload, User, Video, X, XCircle } from "lucide-react";
 import { storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAuthToken } from "../utils.js";
 import { listStudents } from "../utils/studentsApi.js";
+import { syncAllStudioBookings } from "../utils/studioBookingsApi.js";
 import { syncAllLecturers } from "../utils/lecturersApi.js";
 import { syncAllLessons } from "../utils/lessonsApi.js";
 import { makeLecturer } from "./LecturersPage.jsx";
@@ -407,7 +408,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       const conflictIds = new Set(conflicts.map(c => String(c.booking.id)));
       const newBookings = studioBookings.filter(b => !conflictIds.has(String(b.id)));
       if (setStudioBookings) setStudioBookings(newBookings);
-      await storageSet("studio_bookings", newBookings);
+      await syncAllStudioBookings(newBookings);
       await Promise.all(conflicts.map(async ({ booking, studioName }) => {
         const studentRecord = studentsFromTable.find(s => s.name === booking.studentName);
         const email = studentRecord?.email || booking.email;

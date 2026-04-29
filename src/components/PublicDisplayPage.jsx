@@ -3,6 +3,8 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { storageGet } from "../utils.js";
 import { listLessons } from "../utils/lessonsApi.js";
 import { listStudios } from "../utils/studiosApi.js";
+import { listStudioBookings } from "../utils/studioBookingsApi.js";
+import { buildLessonStudioBookings } from "../utils/lessonBookings.js";
 import { BookOpen, GraduationCap, Mic } from "lucide-react";
 
 const HE_DAYS   = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
@@ -38,14 +40,17 @@ export function PublicDisplayPage() {
 
   // ── Load data ─────────────────────────────────────────────────────────────
   const loadData = async () => {
-    const [lsns, bkgs, stds, settings] = await Promise.all([
+    const [lsns, realBookings, stds, settings] = await Promise.all([
       listLessons(),
-      storageGet("studio_bookings"),
+      listStudioBookings(),
       listStudios(),
       storageGet("siteSettings"),
     ]);
-    setLessons(Array.isArray(lsns) ? lsns : []);
-    setBookings(Array.isArray(bkgs) ? bkgs : []);
+    const lessons = Array.isArray(lsns) ? lsns : [];
+    setLessons(lessons);
+    // Merge persisted bookings with in-memory lesson_auto (from lessons.schedule)
+    const lessonAuto = buildLessonStudioBookings(lessons);
+    setBookings([...(Array.isArray(realBookings) ? realBookings : []), ...lessonAuto]);
     setStudios(Array.isArray(stds) ? stds : []);
     if (settings && typeof settings === "object") setSiteSettings(settings);
   };

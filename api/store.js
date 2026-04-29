@@ -110,10 +110,11 @@ const STAFF_ONLY_KEYS = new Set([
 // resurrect the dead blob. See migrations 035 (lecturers) and
 // 018_stage8c_remove_lessons_blob (lessons).
 const RETIRED_KEYS = new Set([
-  "lecturers", // Stage 7-C — public.lecturers is source of truth
-  "lessons",   // Stage 8-C — public.lessons is source of truth
-  "studios",   // Stage 9-C — public.studios is source of truth
-  "studioBookings", // legacy camelCase typo — use studio_bookings instead
+  "lecturers",        // Stage 7-C — public.lecturers is source of truth
+  "lessons",          // Stage 8-C — public.lessons is source of truth
+  "studios",          // Stage 9-C — public.studios is source of truth
+  "studio_bookings",  // Stage 10-C — public.studio_bookings is source of truth
+  "studioBookings",   // legacy camelCase typo — already retired
 ]);
 
 async function handlePost(req, res) {

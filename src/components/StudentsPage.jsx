@@ -4,6 +4,7 @@ import { supabase } from '../supabaseClient.js';
 import { CheckCircle, ClipboardList, Clock, Film, GraduationCap, Headphones, LayoutDashboard, Lightbulb, Package, Pencil, Plus, Search, X } from "lucide-react";
 import { storageSet, logActivity } from "../utils.js";
 import { dualWriteCertifications, listStudents } from "../utils/studentsApi.js";
+import { syncAllStudioBookings } from "../utils/studioBookingsApi.js";
 import { Modal } from "./ui.jsx";
 import SmartExcelImportButton from "./SmartExcelImportButton.jsx";
 
@@ -279,7 +280,7 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
         const filteredBookings = studioBookings.filter(b => b.studentName !== stuName);
         if (filteredBookings.length !== studioBookings.length) {
           setStudioBookings(filteredBookings);
-          await storageSet("studio_bookings", filteredBookings);
+          await syncAllStudioBookings(filteredBookings);
         }
       }
       // Cascade: delete non-returned reservations for this student

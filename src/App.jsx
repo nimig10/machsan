@@ -29,6 +29,8 @@ import { loadCertificationsFromTables } from "./utils/studentsApi.js";
 import { syncAllLecturers, loadLecturersFromTable } from "./utils/lecturersApi.js";
 import { syncAllLessons, loadLessonsFromTable } from "./utils/lessonsApi.js";
 import { loadStudiosFromTable } from "./utils/studiosApi.js";
+import { loadStudioBookingsFromTable } from "./utils/studioBookingsApi.js";
+import { buildLessonStudioBookings } from "./utils/lessonBookings.js";
 
 // Stage 7 step 5: replace `storageGet("lecturers")` with the table loader,
 // wrapped in the same { value, source } envelope every other loader uses.
@@ -61,6 +63,19 @@ async function loadStudiosWrapped() {
     return { value: Array.isArray(value) ? value : [], source: "table" };
   } catch (err) {
     console.warn("[loadStudiosWrapped]", err);
+    return { value: [], source: "error" };
+  }
+}
+
+// Stage 10 Session B: replace `storageGet("studio_bookings")` with the table
+// loader. Returns only persisted (non-auto) bookings; lesson_auto entries are
+// merged in by the caller via buildLessonStudioBookings(lessons).
+async function loadStudioBookingsWrapped() {
+  try {
+    const value = await loadStudioBookingsFromTable();
+    return { value: Array.isArray(value) ? value : [], source: "table" };
+  } catch (err) {
+    console.warn("[loadStudioBookingsWrapped]", err);
     return { value: [], source: "error" };
   }
 }
@@ -665,46 +680,6 @@ function buildLessonReservations(lessons = [], kits = []) {
   return { reservations, linkedKitIds };
 }
 
-function buildLessonStudioBookings(lessons = []) {
-  const bookings = [];
-
-  lessons.forEach((lesson) => {
-    const schedule = getLessonScheduleEntries(lesson);
-    if (!schedule.length) return;
-
-    schedule.forEach((session, index) => {
-      // שיוך כיתה ברמת המפגש עוקף שיוך ברמת הקורס
-      const effectiveStudioId = hasLinkedValue(session.studioId) ? session.studioId
-        : hasLinkedValue(lesson.studioId) ? lesson.studioId : null;
-      // שיעור ללא כיתה עדיין מופיע בלו"ז — studioId יהיה null
-
-      const lessonName = String(lesson.name || "").trim();
-      const instructorName = String(lesson.instructorName || "").trim();
-      const track = String(lesson.track || "").trim();
-      bookings.push({
-        id: `lesson_booking_${lesson.id}_${index}`,
-        lesson_id: lesson.id,
-        lesson_auto: true,
-        bookingKind: "lesson",
-        studioId: effectiveStudioId,
-        date: session.date,
-        startTime: session.startTime,
-        endTime: session.endTime,
-        courseName: lessonName,
-        instructorName,
-        track,
-        subject: String(session.topic || "").trim(),
-        studentName: lessonName && instructorName ? `${lessonName} · ${instructorName}` : (lessonName || instructorName),
-        notes: String(lesson.description || "").trim(),
-        isNight: false,
-        createdAt: lesson.created_at || new Date().toISOString(),
-      });
-    });
-  });
-
-  return bookings.sort(compareDateTimeParts);
-}
- 
 function getReservationApprovalConflicts(targetReservation, reservations, equipment) {
   if (!targetReservation) return [];
   const reqStart = toDateTime(targetReservation.borrow_date, targetReservation.borrow_time || "00:00");
@@ -5891,7 +5866,7 @@ export default function App() {
           storageGet("managerToken"),
           storageGet("siteSettings"),
           loadStudiosWrapped(), // Stage 9 Session B: initial load reads from public.studios
-          storageGet("studio_bookings"),
+          loadStudioBookingsWrapped(), // Stage 10 Session B: read from public.studio_bookings
           loadLessonsWrapped(), // Stage 8 Session B step 5: initial load reads from public.lessons
           loadLecturersWrapped(),
           ]);
@@ -5930,9 +5905,14 @@ export default function App() {
         _setCollegeManager(mgr || { name:"", email:"" });
           setManagerToken(mgrTok || "");
         _setStudios(Array.isArray(stds) ? stds : []);
-        _setStudioBookings(Array.isArray(stdBk) ? stdBk : []);
         const lsns = Array.isArray(lessonsR.value) ? lessonsR.value : [];
         _setLessons(lsns);
+        // Stage 10 Session B: merge real bookings (table) with in-memory
+        // lesson_auto (regenerated from lessons.schedule). This avoids a flicker
+        // on initial render before the regen effect fires.
+        const realBookings = Array.isArray(stdBk) ? stdBk : [];
+        const lessonAutoBookings = buildLessonStudioBookings(lsns);
+        _setStudioBookings([...realBookings, ...lessonAutoBookings]);
         let loadedLecturers = Array.isArray(lecturersR.value) ? lecturersR.value : [];
 
         // ── Sync: extract lecturers from existing lessons that aren't in the lecturers list yet ──
@@ -6022,7 +6002,7 @@ export default function App() {
     try {
       const [resR, bookingsR, lecturersR, certsR, catsR, catTypesR] = await Promise.all([
         (supabase.from("reservations_new").select("*, reservation_items(*)").abortSignal(ctrl.signal).then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
-        storageGet("studio_bookings", ctrl.signal),
+        loadStudioBookingsWrapped(), // Stage 10 Session B: poll from public.studio_bookings
         // Stage 7 step 5: read lecturers from the normalized table (was blob).
         loadLecturersWrapped(),
         // Stage 6: read certifications from normalized tables, not the deleted blob.
@@ -6053,8 +6033,14 @@ export default function App() {
         ];
         if (!dataEquals(reservationsRef.current, merged)) _setReservations(merged);
       }
-      if (Array.isArray(bookingsR?.value) && !dataEquals(studioBookingsRef.current, bookingsR.value)) {
-        _setStudioBookings(bookingsR.value);
+      if (Array.isArray(bookingsR?.value)) {
+        // Merge real bookings (from table) with in-memory lesson_auto entries
+        // (regenerated from lessons.schedule, never persisted).
+        const lessonAuto = studioBookingsRef.current.filter(b => b.lesson_auto === true);
+        const merged = [...bookingsR.value, ...lessonAuto];
+        if (!dataEquals(studioBookingsRef.current, merged)) {
+          _setStudioBookings(merged);
+        }
       }
       if (Array.isArray(lecturersR?.value) && !dataEquals(lecturersRef.current, lecturersR.value)) {
         _setLecturers(lecturersR.value);
@@ -6151,13 +6137,12 @@ export default function App() {
                   _setReservations(merged);
                 }
               }
-            } else if (key === "studio_bookings") {
-              if (Array.isArray(data) && !dataEquals(studioBookingsRef.current, data)) {
-                _setStudioBookings(data);
-              }
             }
             // Stage 7 cleanup: lecturers no longer ride the store-row realtime
             // channel — table updates fall back to the polling refresh.
+            // Stage 10 cleanup: studio_bookings moved off the store-row channel
+            // — see the dedicated realtime subscription on public.studio_bookings
+            // below.
           } catch (err) {
             console.warn("store realtime payload handler failed", err);
           }
@@ -6183,6 +6168,33 @@ export default function App() {
                 if (!dataEquals(equipmentRef.current, normalized)) _setEquipment(normalized);
               } catch (err) {
                 console.warn("equipment realtime refetch failed", err);
+              }
+            }, 600);
+          };
+        })(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "studio_bookings" },
+        (() => {
+          // Debounce: bulk operations (admin saveBookings) generate many events.
+          // A single trailing fetch handles the whole burst.
+          let debounceTimer = null;
+          return () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(async () => {
+              try {
+                const value = await loadStudioBookingsFromTable();
+                if (!Array.isArray(value)) return;
+                // Merge with in-memory lesson_auto bookings (regenerated from
+                // lessons.schedule, never persisted).
+                const lessonAuto = studioBookingsRef.current.filter(b => b.lesson_auto === true);
+                const merged = [...value, ...lessonAuto];
+                if (!dataEquals(studioBookingsRef.current, merged)) {
+                  _setStudioBookings(merged);
+                }
+              } catch (err) {
+                console.warn("studio_bookings realtime refetch failed", err);
               }
             }, 600);
           };
