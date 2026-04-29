@@ -5666,7 +5666,7 @@ export default function App() {
     certifications: safeClone(certificationsRef.current),
     siteSettings: safeClone(siteSettingsRef.current),
     studios: safeClone(studiosRef.current),
-    studioBookings: safeClone(studioBookingsRef.current),
+    studio_bookings: safeClone(studioBookingsRef.current),
     lessons: safeClone(lessonsRef.current),
     lecturers: safeClone(lecturersRef.current),
   });
@@ -5754,14 +5754,21 @@ export default function App() {
       const keysToUpdate = [
         "equipment", "reservations", "categories", "categoryTypes", "categoryLoanTypes",
         "teamMembers", "deptHeads", "collegeManager", "kits", "policies",
-        "certifications", "siteSettings", "studios", "studioBookings", "lessons", "lecturers"
+        "certifications", "siteSettings", "studios", "studio_bookings"
       ];
-      
+
       const promises = [];
       for (const key of keysToUpdate) {
         if (snapshot[key] !== undefined && !dataEquals(currentState[key], snapshot[key])) {
           promises.push(storageSet(key, snapshot[key]));
         }
+      }
+      // Lessons + lecturers are normalized — restore via the table API.
+      if (snapshot.lessons !== undefined && !dataEquals(currentState.lessons, snapshot.lessons)) {
+        promises.push(syncAllLessons(snapshot.lessons));
+      }
+      if (snapshot.lecturers !== undefined && !dataEquals(currentState.lecturers, snapshot.lecturers)) {
+        promises.push(syncAllLecturers(snapshot.lecturers));
       }
 
       _setEquipment(snapshot.equipment);
@@ -5777,7 +5784,7 @@ export default function App() {
       _setCertifications(snapshot.certifications);
       _setSiteSettings(snapshot.siteSettings);
       if (snapshot.studios) _setStudios(snapshot.studios);
-      if (snapshot.studioBookings) _setStudioBookings(snapshot.studioBookings);
+      if (snapshot.studio_bookings) _setStudioBookings(snapshot.studio_bookings);
       if (snapshot.lessons) _setLessons(snapshot.lessons);
       if (snapshot.lecturers) _setLecturers(snapshot.lecturers);
 
