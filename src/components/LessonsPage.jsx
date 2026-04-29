@@ -8,7 +8,14 @@ import { syncAllLecturers } from "../utils/lecturersApi.js";
 import { syncAllLessons } from "../utils/lessonsApi.js";
 import { makeLecturer } from "./LecturersPage.jsx";
 
-let _skeyCounter = 0;
+// Stage 8 fix: previously a module-scoped counter (`sk-${++_skeyCounter}`)
+// reset on every page load, so newly-added sessions could collide with
+// `sk-1`/`sk-2`/... keys that legacy sessions already had stored in the
+// blob/table. Now we generate collision-resistant keys with a timestamp +
+// random suffix on first creation, then preserve them through edits.
+function newScheduleKey() {
+  return `sk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 function sortScheduleEntries(entries = []) {
   return [...entries].sort((a, b) => {
@@ -20,7 +27,7 @@ function sortScheduleEntries(entries = []) {
 
 function normalizeScheduleEntry(entry = {}) {
   return {
-    _key: entry?._key || `sk-${++_skeyCounter}`,
+    _key: entry?._key || newScheduleKey(),
     date: entry?.date || "",
     startTime: entry?.startTime || "09:00",
     endTime: entry?.endTime || "12:00",
