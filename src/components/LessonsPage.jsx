@@ -327,9 +327,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       ? lessons.map(l=>l.id===editTarget.id?lesson:l)
       : [...lessons, lesson];
     setLessons(updated);
-    const result = await storageSet("lessons", updated);
-    // Stage 8 Session A dual-write — fire-and-forget; blob remains source of truth.
-    syncAllLessons(updated).catch(err => console.warn("[lessonsApi dual-write]", err));
+    const result = await syncAllLessons(updated);
     if (result?.ok === false) {
       showToast("error", "השינויים נשמרו מקומית אך לא נשמרו בשרת. נסה שוב מאוחר יותר.");
     } else {
@@ -441,9 +439,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const del = async (id) => {
     const updated = lessons.filter(l => l.id !== id);
     setLessons(updated);
-    await storageSet("lessons", updated);
-    // Stage 8 Session A dual-write
-    syncAllLessons(updated).catch(err => console.warn("[lessonsApi dual-write]", err));
+    await syncAllLessons(updated);
     showToast("success", "הקורס נמחק. ניתן לשחזר עם לחצן ↩ בטל פעולה למעלה.");
   };
 
@@ -691,9 +687,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
       const synced = await syncImportedLecturers(updatedLessons);
       setLessons(synced);
-      await storageSet("lessons", synced);
-      // Stage 8 Session A dual-write
-      syncAllLessons(synced).catch(err => console.warn("[lessonsApi dual-write]", err));
+      await syncAllLessons(synced);
       showToast("success", `יובאו ${addedCount} קורסים ועודכנו ${updatedCount} קורסים`);
     } catch (error) {
       console.error("Lessons XL import failed", error);
@@ -974,9 +968,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
           const synced = await syncImportedLecturers(updatedLessons);
           setLessons(synced);
-          await storageSet("lessons", synced);
-          // Stage 8 Session A dual-write
-          syncAllLessons(synced).catch(err => console.warn("[lessonsApi dual-write]", err));
+          await syncAllLessons(synced);
           showToast("success", `פוענחו ${cleanedLessons.length} שיעורים. נוספו ${addedCount} קורסים ועודכנו ${updatedCount} קורסים.`);
         } catch (err) {
           console.error("Error processing Excel:", err);

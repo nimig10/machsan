@@ -383,9 +383,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       setSelected(null);
       setLessons(updatedLessons);
       try {
-        await storageSet("lessons", updatedLessons);
-        // Stage 8 Session A dual-write
-        syncAllLessons(updatedLessons).catch(err => console.warn("[lessonsApi dual-write]", err));
+        await syncAllLessons(updatedLessons);
         showToast("success", "בקשת השיעור בוטלה");
         const caller = JSON.parse(sessionStorage.getItem("staff_user") || "{}");
         logActivity({

@@ -1,8 +1,6 @@
-// lessonsApi.js — Stage 8 normalized read/write path for the public.lessons
-// table. During Session A this module is a dual-write target only — every
-// existing storageSet("lessons", arr) call is followed by syncAllLessons,
-// but reads still flow through store.lessons blob. Sessions B/C will swap
-// consumers over.
+// lessonsApi.js — normalized read/write path for the public.lessons table.
+// All reads and writes go through this module; the store.lessons blob was
+// removed in Stage 8 Session C.
 //
 // Returns rows in the SAME shape as the legacy blob:
 //   {
@@ -92,12 +90,7 @@ export async function getLesson(id) {
   return rowToBlob(data);
 }
 
-// ─── Write path (Stage 8 step 3 — dual-write) ─────────────────────────────
-//
-// All writes are best-effort: log + return { ok:false, error } on failure.
-// The blob remains the source of truth during Session A, so a table-write
-// failure must NOT block the user-facing operation. Same policy as
-// studentsApi / lecturersApi.
+// ─── Write path ───────────────────────────────────────────────────────────
 
 export async function upsertLesson(blob) {
   const row = blobToRow(blob);

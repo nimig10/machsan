@@ -161,11 +161,9 @@ export default async function handler(req, res) {
 
     let sent = 0;
     let considered = 0;
-    const updatedLessons = [...lessons];
-    let mutated = false;
 
-    for (let i = 0; i < updatedLessons.length; i++) {
-      const lesson = updatedLessons[i];
+    for (let i = 0; i < lessons.length; i++) {
+      const lesson = lessons[i];
       if (!lesson || lesson.lecturerNotifiedAt7d) continue;
 
       const lastDate = lastMeetingDate(lesson);
@@ -215,33 +213,20 @@ export default async function handler(req, res) {
           continue;
         }
 
-        // Mark sent so we don't email twice. We update the local copy and
-        // flush to the store at the very end (single write).
         const notifyTs = new Date().toISOString();
-        updatedLessons[i] = { ...lesson, lecturerNotifiedAt7d: notifyTs };
-        mutated = true;
         sent++;
-        // Stage 8 Session B: also patch the table directly so it doesn't
-        // drift from the blob between cron runs (the bulk blob write at the
-        // end of the loop is the legacy primary; this row-level PATCH keeps
-        // public.lessons in sync). Best-effort, non-blocking.
-        fetch(`${SB_URL}/rest/v1/lessons?id=eq.${encodeURIComponent(lesson.id)}`, {
+        const patchRes = await fetch(`${SB_URL}/rest/v1/lessons?id=eq.${encodeURIComponent(lesson.id)}`, {
           method: "PATCH",
           headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
           body: JSON.stringify({ lecturer_notified_at_7d: notifyTs }),
-        }).catch(err => console.warn("notify-course-end-7days lessons table sync:", err.message));
+        });
+        if (!patchRes.ok) {
+          const text = await patchRes.text();
+          console.error(`notify-course-end-7days: lessons table patch failed for ${lesson.id}:`, patchRes.status, text);
+        }
         console.log(`notify-course-end-7days: emailed ${email} for lesson "${lesson.name}" (ends ${lastDate})`);
       } catch (err) {
         console.error(`notify-course-end-7days: error for lesson ${lesson.id}:`, err.message);
-      }
-    }
-
-    if (mutated) {
-      const writeRes = await writeStoreKey("lessons", updatedLessons);
-      if (!writeRes.ok) {
-        const text = await writeRes.text();
-        console.error("notify-course-end-7days: lessons write-back failed:", writeRes.status, text);
-        return res.status(500).json({ ok: false, error: "store_write_failed", sent, considered });
       }
     }
 
