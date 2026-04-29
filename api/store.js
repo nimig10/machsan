@@ -115,6 +115,9 @@ const RETIRED_KEYS = new Set([
   "studios",          // Stage 9-C — public.studios is source of truth
   "studio_bookings",  // Stage 10-C — public.studio_bookings is source of truth
   "studioBookings",   // legacy camelCase typo — already retired
+  "kits",             // Stage 11-C — public.kits is source of truth
+  "teamMembers",      // Stage 11-C — public.team_members is source of truth
+  "reservations",     // blob was already empty (Stage 5); retire formally
 ]);
 
 async function handlePost(req, res) {

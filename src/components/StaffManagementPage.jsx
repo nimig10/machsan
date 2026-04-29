@@ -2,6 +2,7 @@ import { supabase } from '../supabaseClient.js';
 import { useState, useEffect } from "react";
 import { Modal } from "./ui.jsx";
 import { storageSet, storageGet, isValidEmailAddress, logActivity, getAuthToken } from "../utils.js";
+import { syncAllTeamMembers } from "../utils/teamMembersApi.js";
 import { BookOpen, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Mic, Package, Settings, Shield, X } from "lucide-react";
 
 const WAREHOUSE_SECTIONS = [
@@ -107,7 +108,7 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
           if (!current.some(m => m.email?.toLowerCase() === emailLower)) {
             const updated = [...current, { id: data.user?.id || Date.now(), name: full_name.trim(), email: emailLower, phone: "", loanTypes: notifyTypes }];
             setTeamMembers(updated);
-            storageSet("teamMembers", updated);
+            syncAllTeamMembers(updated).catch(err => console.warn("[stage11] team_members sync failed:", err));
           }
         } else {
           // UPDATE — update matching entry in teamMembers
@@ -118,7 +119,7 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
             const updated = [...current];
             updated[idx] = { ...updated[idx], name: newName, email: emailLower, loanTypes: notifyTypes };
             setTeamMembers(updated);
-            storageSet("teamMembers", updated);
+            syncAllTeamMembers(updated).catch(err => console.warn("[stage11] team_members sync failed:", err));
           }
           // Cascade rename through historical reservations so the new name shows
           // everywhere (calendar, dashboard, archive, …) instead of the snapshot
@@ -174,7 +175,7 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
           const deleted = staff.find(s => s.id === id);
           if (deleted) {
             const updated = current.filter(m => m.id !== id && m.email?.toLowerCase() !== deleted.email?.toLowerCase());
-            if (updated.length !== current.length) { setTeamMembers(updated); storageSet("teamMembers", updated); }
+            if (updated.length !== current.length) { setTeamMembers(updated); syncAllTeamMembers(updated).catch(err => console.warn("[stage11] team_members sync failed:", err)); }
           }
           showToast?.("success", "המשתמש נמחק"); fetchStaff();
         }
@@ -462,7 +463,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
     if (hasDuplicateEmail(email, editMember.id)) { showToast("error","כתובת המייל כבר קיימת"); return; }
     const updated = (teamMembers||[]).map(m => m.id===editMember.id ? {...m,...editForm,name,email,phone:editForm.phone?.trim()||""} : m);
     setTeamMembers(updated);
-    const r = await storageSet("teamMembers", updated);
+    const r = await syncAllTeamMembers(updated);
     if (!r.ok) showToast("error","שגיאה בשמירה");
     else showToast("success","איש צוות עודכן");
     setEditMember(null);
@@ -471,7 +472,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
   const del = async (id) => {
     const updated = (teamMembers||[]).filter(m => m.id!==id);
     setTeamMembers(updated);
-    const r = await storageSet("teamMembers", updated);
+    const r = await syncAllTeamMembers(updated);
     if (!r.ok) showToast("error","שגיאה בשמירה");
     else showToast("success","איש צוות הוסר");
   };

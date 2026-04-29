@@ -6,6 +6,7 @@ import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
 import { syncAllLessons } from "../utils/lessonsApi.js";
+import { listKits, syncAllKits } from "../utils/kitsApi.js";
 import { AlertTriangle, BookOpen, Briefcase, Camera, Calendar, CheckCircle, ClipboardList, Clock, FileText, Film, Mic, Package, Pencil, RotateCcw, Save, Trash2, User, X, XCircle } from "lucide-react";
 
 // ── Staff Loan Form (module-scope component) ──
@@ -599,11 +600,11 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
     if (isVirtual) {
       // Update kit items in store.kits so the LecturerPortal sees the change
       if (linkedKitId && updatedItems) {
-        const freshKits = await storageGet("kits");
+        const freshKits = await listKits(); // Stage 11 Session B: read from public.kits
         if (Array.isArray(freshKits)) {
           const normalized = updatedItems.map(i => ({ equipment_id: i.equipment_id, quantity: Number(i.quantity) || 1, name: i.name || "" }));
           const newKits = freshKits.map(k => String(k.id) === linkedKitId ? { ...k, items: normalized } : k);
-          const r = await storageSet("kits", newKits);
+          const r = await syncAllKits(newKits);
           if (!r.ok) { showToast("error", "שגיאה בעדכון ערכת השיעור"); return; }
         }
       }

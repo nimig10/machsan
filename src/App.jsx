@@ -31,6 +31,8 @@ import { syncAllLessons, loadLessonsFromTable } from "./utils/lessonsApi.js";
 import { loadStudiosFromTable } from "./utils/studiosApi.js";
 import { loadStudioBookingsFromTable } from "./utils/studioBookingsApi.js";
 import { buildLessonStudioBookings } from "./utils/lessonBookings.js";
+import { syncAllKits, loadKitsFromTable } from "./utils/kitsApi.js";
+import { syncAllTeamMembers, loadTeamMembersFromTable } from "./utils/teamMembersApi.js";
 
 // Stage 7 step 5: replace `storageGet("lecturers")` with the table loader,
 // wrapped in the same { value, source } envelope every other loader uses.
@@ -76,6 +78,28 @@ async function loadStudioBookingsWrapped() {
     return { value: Array.isArray(value) ? value : [], source: "table" };
   } catch (err) {
     console.warn("[loadStudioBookingsWrapped]", err);
+    return { value: [], source: "error" };
+  }
+}
+
+// Stage 11 Session B: replace storageGet("kits") with table loader.
+async function loadKitsWrapped() {
+  try {
+    const value = await loadKitsFromTable();
+    return { value: Array.isArray(value) ? value : [], source: "table" };
+  } catch (err) {
+    console.warn("[loadKitsWrapped]", err);
+    return { value: [], source: "error" };
+  }
+}
+
+// Stage 11 Session B: replace storageGet("teamMembers") with table loader.
+async function loadTeamMembersWrapped() {
+  try {
+    const value = await loadTeamMembersFromTable();
+    return { value: Array.isArray(value) ? value : [], source: "table" };
+  } catch (err) {
+    console.warn("[loadTeamMembersWrapped]", err);
     return { value: [], source: "error" };
   }
 }
@@ -3469,7 +3493,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
     }
     const updated = [...teamMembers, { ...addForm, id: Date.now(), name, email, phone: addForm.phone?.trim()||"" }];
     setTeamMembers(updated);
-    const _tmNew = await storageSet("teamMembers", updated);
+    const _tmNew = await syncAllTeamMembers(updated);
     if(!_tmNew.ok) showToast("error", "שגיאה בשמירה — נסה שוב");
     else {
       showToast("success", `${name} נוסף לצוות`);
@@ -3493,7 +3517,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
     }
     const updated = teamMembers.map(m => m.id===editMember.id ? {...m,...editForm,name,email,phone:editForm.phone?.trim()||""} : m);
     setTeamMembers(updated);
-    const _tmEditRes = await storageSet("teamMembers", updated);
+    const _tmEditRes = await syncAllTeamMembers(updated);
     if(!_tmEditRes.ok) showToast("error", "שגיאה בשמירה — נסה שוב");
     else {
       showToast("success", "איש צוות עודכן");
@@ -3507,7 +3531,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
     const target = teamMembers.find(m => m.id===id);
     const updated = teamMembers.filter(m => m.id!==id);
     setTeamMembers(updated);
-    const _tmDelRes = await storageSet("teamMembers", updated);
+    const _tmDelRes = await syncAllTeamMembers(updated);
     if(!_tmDelRes.ok) showToast("error", "שגיאה בשמירה");
     else {
       showToast("success", "איש צוות הוסר");
@@ -3873,7 +3897,7 @@ function StudentKitForm({ initial, onDone, kits, setKits, equipment, categories,
     };
     const updated = initial ? kits.map(k=>k.id===initial.id?kit:k) : [...kits, kit];
     setKits(updated);
-    const r = await storageSet("kits", updated);
+    const r = await syncAllKits(updated);
     showToast(r.ok?"success":"error", r.ok ? (initial?"הערכה עודכנה":`ערכה "${trimmedName}" נוצרה`) : "שגיאה בשמירה");
     if(r.ok) {
       try {
@@ -4152,7 +4176,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
     // Now safe to remove the kit itself.
     const updated = kits.filter(k=>k.id!==id);
     setKits(updated);
-    await storageSet("kits", updated);
+    await syncAllKits(updated);
 
     // Refresh reservations from DB so the materialized rows show up immediately.
     try {
@@ -5621,7 +5645,7 @@ export default function App() {
         (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
         loadLessonsWrapped(), // Stage 8 Session B step 5: read from public.lessons
         loadLecturersWrapped(),
-        storageGet("kits"),
+        loadKitsWrapped(), // Stage 11 Session B: read from public.kits
         loadStudiosWrapped(), // Stage 9 Session B: read from public.studios
       ]);
 
@@ -5858,8 +5882,8 @@ export default function App() {
           storageGet("categories"),
           storageGet("categoryTypes"),
           storageGet("categoryLoanTypes"),
-          storageGet("teamMembers"),
-          storageGet("kits"),
+          loadTeamMembersWrapped(), // Stage 11 Session B: read from public.team_members
+          loadKitsWrapped(), // Stage 11 Session B: read from public.kits
           storageGet("policies"),
           storageGet("deptHeads"),
           storageGet("collegeManager"),
@@ -5967,8 +5991,7 @@ export default function App() {
         // equipment blob write removed (Stage 5) — equipment lives in Supabase tables only
         // reservations blob init removed (Stage 5) — Supabase is source of truth
         if(!cats && catsSrc === "supabase_empty") await storageSet("categories",   DEFAULT_CATEGORIES);
-        if(!tm && tmSrc === "supabase_empty")   await storageSet("teamMembers",  []);
-        if(!kts && ktsSrc === "supabase_empty")  await storageSet("kits",         []);
+        // teamMembers + kits: Stage 11-C — reads come from normalized tables, blob retired.
         if(!pol && polSrc === "supabase_empty")   await storageSet("policies",        { פרטית:"", הפקה:"", סאונד:"", לילה:"" });
         // certifications blob init removed (Stage 6) — normalized tables are source of truth
         if(!dhs && dhsSrc === "supabase_empty")     await storageSet("deptHeads",       []);
@@ -6197,6 +6220,40 @@ export default function App() {
                 console.warn("studio_bookings realtime refetch failed", err);
               }
             }, 600);
+          };
+        })(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "kits" },
+        (() => {
+          // Stage 11 Session B: live-sync kits table into local state.
+          let t = null;
+          return () => {
+            clearTimeout(t);
+            t = setTimeout(async () => {
+              try {
+                const value = await loadKitsFromTable();
+                if (Array.isArray(value) && !dataEquals(kitsRef.current, value)) _setKits(value);
+              } catch (err) { console.warn("kits realtime refetch failed", err); }
+            }, 400);
+          };
+        })(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "team_members" },
+        (() => {
+          // Stage 11 Session B: live-sync team_members table into local state.
+          let t = null;
+          return () => {
+            clearTimeout(t);
+            t = setTimeout(async () => {
+              try {
+                const value = await loadTeamMembersFromTable();
+                if (Array.isArray(value) && !dataEquals(teamMembersRef.current, value)) _setTeamMembers(value);
+              } catch (err) { console.warn("team_members realtime refetch failed", err); }
+            }, 400);
           };
         })(),
       )
