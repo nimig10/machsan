@@ -1,6 +1,7 @@
 // PublicDailyTablePage.jsx — public display of today's combined schedule as a table
 import { useState, useEffect, useMemo } from "react";
 import { storageGet } from "../utils.js";
+import { listLessons } from "../utils/lessonsApi.js";
 import { ClipboardList, GraduationCap, Mic } from "lucide-react";
 
 const HE_DAYS   = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
@@ -40,7 +41,7 @@ export function PublicDailyTablePage() {
 
   const loadData = async () => {
     const [lsns, bkgs, stds, st] = await Promise.all([
-      storageGet("lessons"),
+      listLessons(),
       storageGet("studio_bookings"),
       storageGet("studios"),
       storageGet("siteSettings"),

@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import { storageGet, storageSet, formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR } from "../utils.js";
 import { supabase } from "../supabaseClient.js";
 import { listStudents } from "../utils/studentsApi.js";
+import { listLessons } from "../utils/lessonsApi.js";
 import { useNotifications } from "../hooks/useNotifications.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import AIChatBot from "./AIChatBot.jsx";
@@ -1468,7 +1469,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   };
 
   const loadDailySchedule = async () => {
-    const lessons = await storageGet("lessons");
+    const lessons = await listLessons();
     setDailyLessons(Array.isArray(lessons) ? lessons : []);
   };
 
