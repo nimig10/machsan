@@ -31,7 +31,8 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
 
   const eqName = id => equipment.find(e=>e.id==id)?.name||"?";
   const EqImg = ({id,size=20}) => {
-    const img = equipment.find(e=>e.id==id)?.image||null;
+    const img = equipment.find(e=>e.id==id)?.image || null;
+    if (!img) return <Package size={size*0.8} strokeWidth={1.75} />;
     return img.startsWith("data:")||img.startsWith("http")
       ? <img src={img} alt="" style={{width:size,height:size,objectFit:"cover",borderRadius:4,verticalAlign:"middle"}}/>
       : <span style={{fontSize:size*0.8}}>{img}</span>;
