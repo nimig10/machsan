@@ -716,7 +716,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                 {(r.status==="ממתין"||r.status==="מאושר"||r.status==="נדחה"||r.status==="באיחור")&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}><><Pencil size={14} strokeWidth={1.75} /> עריכת בקשה</></button>}
                 {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"מאושר")}>{busyIds.has(r.id)?<Clock size={14} strokeWidth={1.75} />:<><CheckCircle size={14} strokeWidth={1.75} /> אשר</>}</button><button className="btn btn-danger btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"נדחה")}><XCircle size={14} strokeWidth={1.75} /> דחה</button></>}
                 {(getEffectiveStatus(r)==="פעילה"||getEffectiveStatus(r)==="באיחור")&&<button className="btn btn-secondary btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"הוחזר")}><><RotateCcw size={14} strokeWidth={1.75} /> הוחזר</></button>}
-                <button className="btn btn-danger btn-sm" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${r.student_name}?`)) deleteReservation(r.id); }}><Trash2 size={14} strokeWidth={1.75} /></button>
+                <button className="btn btn-danger btn-sm" onClick={()=>deleteReservation(r.id)}><Trash2 size={14} strokeWidth={1.75} /></button>
               </div>
             </div>
             );
@@ -917,7 +917,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
             {selected.status==="נדחה"&&<button className="btn btn-success" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"מאושר")}>{busyIds.has(selected.id)?<><Clock size={14} strokeWidth={1.75} /> מאשר...</>:<><CheckCircle size={14} strokeWidth={1.75} /> אשר בקשה</>}</button>}
             {(getEffectiveStatus(selected)==="פעילה"||getEffectiveStatus(selected)==="באיחור")&&<button className="btn btn-secondary" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"הוחזר")}>🔄 סמן כהוחזר</button>}
             <button className="btn btn-secondary" onClick={()=>exportPDF(selected)}>📄 ייצא PDF</button>
-            <button className="btn btn-danger" onClick={()=>{ if(window.confirm(`למחוק את הבקשה של ${selected.student_name}?`)) deleteReservation(selected.id); }}>🗑️ מחק</button>
+            <button className="btn btn-danger" onClick={()=>deleteReservation(selected.id)}>🗑️ מחק</button>
             <button className="btn btn-secondary" onClick={()=>{setSelected(null);setOverdueEmailText("");}}>סגור</button>
           </>}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:20}}>
