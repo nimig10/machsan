@@ -114,8 +114,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
           return withStudioCertIds(s, [...getStudioCertIds(s), id]);
         });
         setStudios(updatedStudios);
-        await storageSet("studios", updatedStudios);
-        syncAllStudios(updatedStudios).catch(() => {});
+        await syncAllStudios(updatedStudios);
       }
       showToast("success", `הסמכה "${name}" נוספה`);
       setNewTypeName("");
@@ -133,8 +132,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
       if (setStudios && isStudioType(types.find(t=>t.id===typeId)||{})) {
         const updatedStudios = studios.map(s => withStudioCertIds(s, getStudioCertIds(s).filter(id => id !== typeId)));
         setStudios(updatedStudios);
-        await storageSet("studios", updatedStudios);
-        syncAllStudios(updatedStudios).catch(() => {});
+        await syncAllStudios(updatedStudios);
       }
       if (setEquipment && !isStudioType(types.find(t=>t.id===typeId)||{})) {
         const updatedEquipment = equipment.map(eq => eq.certification_id === typeId ? { ...eq, certification_id: "" } : eq);
@@ -291,8 +289,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
           return withStudioCertIds(s, [...ids]);
         });
         setStudios(updatedStudios);
-        await storageSet("studios", updatedStudios);
-        syncAllStudios(updatedStudios).catch(() => {});
+        await syncAllStudios(updatedStudios);
       }
       showToast("success", `הסמכה "${name}" עודכנה`);
       setEditCert(null);

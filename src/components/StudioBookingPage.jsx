@@ -207,8 +207,7 @@ export default function StudioBookingPage(props) {
 
   const saveStudios = useCallback(async (nextStudios) => {
     setStudios(nextStudios);
-    await storageSet("studios", nextStudios);
-    syncAllStudios(nextStudios).catch(() => {});
+    await syncAllStudios(nextStudios);
   }, [setStudios]);
 
   const saveBookings = useCallback(async (nextBookings) => {

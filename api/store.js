@@ -112,6 +112,7 @@ const STAFF_ONLY_KEYS = new Set([
 const RETIRED_KEYS = new Set([
   "lecturers", // Stage 7-C — public.lecturers is source of truth
   "lessons",   // Stage 8-C — public.lessons is source of truth
+  "studios",   // Stage 9-C — public.studios is source of truth
   "studioBookings", // legacy camelCase typo — use studio_bookings instead
 ]);
 
