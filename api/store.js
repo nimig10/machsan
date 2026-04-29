@@ -101,14 +101,33 @@ async function handleGet(req, res) {
 // (studio_bookings is written by public-facing forms without staff auth).
 const STAFF_ONLY_KEYS = new Set([
   "certifications","students","kits","equipment","reservations",
-  "lessons","lecturers","teamMembers","categories","deptHeads",
+  "teamMembers","categories","deptHeads",
   "siteSettings","policies","studios","collegeManager","managerToken",
+]);
+
+// Keys that have been migrated to normalized tables. Any POST attempt
+// is rejected with 410 Gone so legacy clients (or stray code paths) can't
+// resurrect the dead blob. See migrations 035 (lecturers) and
+// 018_stage8c_remove_lessons_blob (lessons).
+const RETIRED_KEYS = new Set([
+  "lecturers", // Stage 7-C — public.lecturers is source of truth
+  "lessons",   // Stage 8-C — public.lessons is source of truth
+  "studioBookings", // legacy camelCase typo — use studio_bookings instead
 ]);
 
 async function handlePost(req, res) {
   const { key, data } = req.body || {};
   if (!key || data === undefined) {
     return res.status(400).json({ error: "Missing key or data" });
+  }
+
+  // ── Retired keys: blob has been replaced by a normalized table ──
+  if (RETIRED_KEYS.has(key)) {
+    return res.status(410).json({
+      error: "retired_key",
+      key,
+      detail: `The "${key}" blob has been replaced by a normalized table. Update the client to use the table API directly.`,
+    });
   }
 
   // ── Auth gate: staff-only keys require staff (checks public.users + staff_members fallback) ──

@@ -414,7 +414,21 @@ export default function StudioBookingPage(props) {
 
   const openViewBookingModal = (booking, studioName) => {
     setCancelMessage("");
-    setModal({ type:"viewBooking", booking, studioName });
+    const kind = getBookingKind(booking);
+    const canEdit = kind === "team" &&
+      (role === "admin" || (currentUser?.id && String(booking.teamMemberId) === String(currentUser.id)));
+    if (canEdit) {
+      setModal({ type:"viewBooking", booking, studioName,
+        teamEditing: true,
+        teamDate: booking.date,
+        teamStudioId: String(booking.studioId || ""),
+        teamStartTime: booking.startTime,
+        teamEndTime: booking.endTime,
+        teamNotes: booking.notes || "",
+      });
+    } else {
+      setModal({ type:"viewBooking", booking, studioName });
+    }
   };
 
   const closeModal = () => {
@@ -468,6 +482,46 @@ export default function StudioBookingPage(props) {
       closeModal();
     } catch {
       showToast("error", "שגיאה בשמירת השיעור");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveTeamBookingEdit = async () => {
+    const booking = modal?.booking;
+    if (!booking) return;
+    const newDate = modal.teamDate || booking.date;
+    const newStudioId = modal.teamStudioId || booking.studioId;
+    const newStart = modal.teamStartTime || booking.startTime;
+    const newEnd = modal.teamEndTime || booking.endTime;
+    const newNotes = modal.teamNotes !== undefined ? modal.teamNotes : (booking.notes || "");
+    if (!newStart || !newEnd || newStart >= newEnd) {
+      showToast("error", "שעת סיום חייבת להיות אחרי שעת התחלה");
+      return;
+    }
+    const conflict = activeBookings.find(b =>
+      b.id !== booking.id &&
+      sameStudioId(b.studioId, newStudioId) &&
+      b.date === newDate &&
+      !b.isNight &&
+      !(newEnd <= (b.startTime || "00:00") || newStart >= (b.endTime || "23:59"))
+    );
+    if (conflict) {
+      showToast("error", getConflictMessage(conflict, newDate));
+      return;
+    }
+    const updated = bookings.map(b =>
+      b.id === booking.id
+        ? { ...b, date: newDate, studioId: newStudioId, startTime: newStart, endTime: newEnd, notes: newNotes }
+        : b
+    );
+    setSaving(true);
+    try {
+      await saveBookings(updated);
+      showToast("success", "הקביעה עודכנה");
+      closeModal();
+    } catch {
+      showToast("error", "שגיאה בשמירת הקביעה");
     } finally {
       setSaving(false);
     }
@@ -718,7 +772,7 @@ export default function StudioBookingPage(props) {
         id: Date.now() + newBookings.length,
         bookingKind: "team",
         ownerType: "team",
-        teamMemberId: selectedMember?.id ?? null,
+        teamMemberId: memberId,
         teamMemberName: memberName,
         studentName: memberName,
         studioId: sid,
@@ -763,6 +817,10 @@ export default function StudioBookingPage(props) {
   };
 
   const canDeleteBooking = (booking) => role === "admin" && getBookingKind(booking) !== "lesson";
+
+  const canEditTeamBooking = (booking) =>
+    getBookingKind(booking) === "team" &&
+    (role === "admin" || (currentUser?.id && String(booking.teamMemberId) === String(currentUser.id)));
 
   const SectionHeader = ({ label, color, count, icon }) => {
     if (count === 0) return null;
@@ -1185,6 +1243,7 @@ export default function StudioBookingPage(props) {
           const booking = modal.booking;
           const kind = getBookingKind(booking);
           const isEditingLesson = modal.lessonEditing;
+          const isEditingTeam = modal.teamEditing;
           return (
             <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"space-between", width:"100%" }}>
               <div style={{ display:"flex", gap:8 }}>
@@ -1198,8 +1257,11 @@ export default function StudioBookingPage(props) {
                 {kind === "lesson" && onNavigateToLesson && booking.lesson_id && (
                   <button className="btn btn-secondary btn-sm" style={{ color:LESSON_COLOR, borderColor:LESSON_COLOR, display:"inline-flex", alignItems:"center", gap:4 }} onClick={() => { closeModal(); onNavigateToLesson(booking.lesson_id); }}><Video size={12} strokeWidth={1.75}/> עריכת קורס</button>
                 )}
+                {kind === "team" && isEditingTeam && (
+                  <button className="btn btn-primary btn-sm" disabled={saving} onClick={saveTeamBookingEdit}>{saving ? "שומר..." : "💾 שמור שינויים"}</button>
+                )}
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={closeModal}>{isEditingLesson ? "בטל" : "סגור"}</button>
+              <button className="btn btn-secondary btn-sm" onClick={closeModal}>{(isEditingLesson || isEditingTeam) ? "בטל" : "סגור"}</button>
             </div>
           );
         })()}>
@@ -1208,6 +1270,7 @@ export default function StudioBookingPage(props) {
             const kind = getBookingKind(booking);
             const color = getBookingColor(booking);
             const isEditingLesson = modal.lessonEditing;
+            const isEditingTeam = modal.teamEditing;
             const classroomStudios = studios.filter(s => s.isClassroom || s.classroomOnly);
             return (
               <div style={{ display:"flex", flexDirection:"column", gap:10, direction:"rtl" }}>
@@ -1222,7 +1285,44 @@ export default function StudioBookingPage(props) {
                 </>}
                 {kind === "team" && <Row label="איש צוות" value={booking.teamMemberName || booking.studentName} />}
                 {booking.isNight && kind !== "lesson" && <Row label="זמן" value={<span style={{ color:NIGHT_COLOR, fontWeight:700 }}>קביעת לילה</span>} />}
-                {booking.notes && <Row label="הערות" value={booking.notes} />}
+                {!isEditingTeam && booking.notes && <Row label="הערות" value={booking.notes} />}
+
+                {/* ── Team booking editor ── */}
+                {kind === "team" && isEditingTeam && (
+                  <div style={{ background:"rgba(155,89,182,0.08)", border:"1px solid rgba(155,89,182,0.25)", borderRadius:8, padding:"12px 14px", display:"flex", flexDirection:"column", gap:10 }}>
+                    <div style={{ fontWeight:700, fontSize:13, color:"#9b59b6", display:"flex", alignItems:"center", gap:4 }}><Pencil size={12} strokeWidth={1.75}/> עריכת קביעת צוות</div>
+                    <div style={{ display:"flex", gap:8 }}>
+                      <label style={{ ...labelStyle, flex:1 }}>
+                        תאריך
+                        <input type="date" className="form-input" value={modal.teamDate || ""} onChange={e => setModal(prev => ({ ...prev, teamDate: e.target.value }))} />
+                      </label>
+                      <label style={{ ...labelStyle, flex:1 }}>
+                        חדר
+                        <select className="form-input" value={modal.teamStudioId || ""} onChange={e => setModal(prev => ({ ...prev, teamStudioId: e.target.value }))}>
+                          {studios.filter(s => !s.isDisabled && !s.classroomOnly).map(s => <option key={String(s.id)} value={String(s.id)}>{s.name}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                    <div style={{ display:"flex", gap:8 }}>
+                      <label style={{ ...labelStyle, flex:1 }}>
+                        שעת התחלה
+                        <select className="form-input" value={modal.teamStartTime || ""} onChange={e => setModal(prev => ({ ...prev, teamStartTime: e.target.value }))}>
+                          {DAY_BOOKING_HOURS.map(t => <option key={t}>{t}</option>)}
+                        </select>
+                      </label>
+                      <label style={{ ...labelStyle, flex:1 }}>
+                        שעת סיום
+                        <select className="form-input" value={modal.teamEndTime || ""} onChange={e => setModal(prev => ({ ...prev, teamEndTime: e.target.value }))}>
+                          {DAY_HOURS.map(t => <option key={t}>{t}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                    <label style={labelStyle}>
+                      הערות
+                      <textarea className="form-input" rows={2} value={modal.teamNotes || ""} onChange={e => setModal(prev => ({ ...prev, teamNotes: e.target.value }))} />
+                    </label>
+                  </div>
+                )}
 
                 {/* ── Lesson booking editor ── */}
                 {kind === "lesson" && isEditingLesson && (
