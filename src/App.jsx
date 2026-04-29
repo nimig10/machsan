@@ -28,6 +28,7 @@ import { supabase } from "./supabaseClient.js";
 import { loadCertificationsFromTables } from "./utils/studentsApi.js";
 import { syncAllLecturers, loadLecturersFromTable } from "./utils/lecturersApi.js";
 import { syncAllLessons, loadLessonsFromTable } from "./utils/lessonsApi.js";
+import { loadStudiosFromTable } from "./utils/studiosApi.js";
 
 // Stage 7 step 5: replace `storageGet("lecturers")` with the table loader,
 // wrapped in the same { value, source } envelope every other loader uses.
@@ -49,6 +50,17 @@ async function loadLessonsWrapped() {
     return { value: Array.isArray(value) ? value : [], source: "table" };
   } catch (err) {
     console.warn("[loadLessonsWrapped]", err);
+    return { value: [], source: "error" };
+  }
+}
+
+// Stage 9 Session B: replace `storageGet("studios")` with the table loader.
+async function loadStudiosWrapped() {
+  try {
+    const value = await loadStudiosFromTable();
+    return { value: Array.isArray(value) ? value : [], source: "table" };
+  } catch (err) {
+    console.warn("[loadStudiosWrapped]", err);
     return { value: [], source: "error" };
   }
 }
@@ -5638,7 +5650,7 @@ export default function App() {
         loadLessonsWrapped(), // Stage 8 Session B step 5: read from public.lessons
         loadLecturersWrapped(),
         storageGet("kits"),
-        storageGet("studios"),
+        loadStudiosWrapped(), // Stage 9 Session B: read from public.studios
       ]);
 
       applyLecturerLiveSync("equipment", eqR?.value);
@@ -5881,7 +5893,7 @@ export default function App() {
           storageGet("collegeManager"),
           storageGet("managerToken"),
           storageGet("siteSettings"),
-          storageGet("studios"),
+          loadStudiosWrapped(), // Stage 9 Session B: initial load reads from public.studios
           storageGet("studio_bookings"),
           loadLessonsWrapped(), // Stage 8 Session B step 5: initial load reads from public.lessons
           loadLecturersWrapped(),
