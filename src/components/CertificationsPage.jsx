@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import { Camera, CheckCircle, ClipboardList, GraduationCap, Lightbulb, Mic, Package, Pencil, Search, X } from "lucide-react";
 import { storageSet, cloudinaryThumb, writeEquipmentToDB } from "../utils.js";
 import { dualWriteCertifications, setStudentCertStatus } from "../utils/studentsApi.js";
+import { syncAllStudios } from "../utils/studiosApi.js";
 import { Modal } from "./ui.jsx";
 
 const NIGHT_CERT_ID = "cert_night_studio";
@@ -114,6 +115,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
         });
         setStudios(updatedStudios);
         await storageSet("studios", updatedStudios);
+        syncAllStudios(updatedStudios).catch(() => {});
       }
       showToast("success", `הסמכה "${name}" נוספה`);
       setNewTypeName("");
@@ -132,6 +134,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
         const updatedStudios = studios.map(s => withStudioCertIds(s, getStudioCertIds(s).filter(id => id !== typeId)));
         setStudios(updatedStudios);
         await storageSet("studios", updatedStudios);
+        syncAllStudios(updatedStudios).catch(() => {});
       }
       if (setEquipment && !isStudioType(types.find(t=>t.id===typeId)||{})) {
         const updatedEquipment = equipment.map(eq => eq.certification_id === typeId ? { ...eq, certification_id: "" } : eq);
@@ -289,6 +292,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
         });
         setStudios(updatedStudios);
         await storageSet("studios", updatedStudios);
+        syncAllStudios(updatedStudios).catch(() => {});
       }
       showToast("success", `הסמכה "${name}" עודכנה`);
       setEditCert(null);
