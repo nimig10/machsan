@@ -33,6 +33,7 @@ import { loadStudioBookingsFromTable } from "./utils/studioBookingsApi.js";
 import { buildLessonStudioBookings } from "./utils/lessonBookings.js";
 import { syncAllKits, loadKitsFromTable } from "./utils/kitsApi.js";
 import { syncAllTeamMembers, loadTeamMembersFromTable } from "./utils/teamMembersApi.js";
+import { syncAllCategories, loadCategoriesFromTable, syncLoanTypeFilters, loadLoanTypeFiltersFromTable } from "./utils/categoriesApi.js";
 
 // Stage 7 step 5: replace `storageGet("lecturers")` with the table loader,
 // wrapped in the same { value, source } envelope every other loader uses.
@@ -79,6 +80,33 @@ async function loadStudioBookingsWrapped() {
   } catch (err) {
     console.warn("[loadStudioBookingsWrapped]", err);
     return { value: [], source: "error" };
+  }
+}
+
+// Stage 12 Session B: replace storageGet("categories"/"categoryTypes"/"categoryLoanTypes") with table loaders.
+async function loadCategoriesWrapped() {
+  try {
+    const { categories, categoryTypes } = await loadCategoriesFromTable();
+    return {
+      categories: { value: categories, source: "table" },
+      categoryTypes: { value: categoryTypes, source: "table" },
+    };
+  } catch (err) {
+    console.warn("[loadCategoriesWrapped]", err);
+    return {
+      categories: { value: [], source: "error" },
+      categoryTypes: { value: {}, source: "error" },
+    };
+  }
+}
+
+async function loadLoanTypeFiltersWrapped() {
+  try {
+    const value = await loadLoanTypeFiltersFromTable();
+    return { value, source: "table" };
+  } catch (err) {
+    console.warn("[loadLoanTypeFiltersWrapped]", err);
+    return { value: {}, source: "error" };
   }
 }
 
@@ -1476,9 +1504,9 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     }
     const writeResults = await Promise.all([
       writeEquipmentToDB(newEquipment),
-      ...(setCategories && newCats.length ? [storageSet("categories", newCategories)] : []),
+      ...(setCategories && newCats.length ? [syncAllCategories(newCategories, categoryTypes)] : []),
     ]);
-    if (writeResults.some((result) => !result?.ok)) {
+    if (writeResults.some((result) => result !== undefined && !result?.ok)) {
       setEquipment(previousEquipment);
       if (setCategories && newCats.length) {
         setCategories(previousCategories);
@@ -1512,10 +1540,10 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     const writes = [writeEquipmentToDB(updatedEquipment)];
     if (typeof setCategories === "function" && updatedCategories.length !== (categories || []).length) {
       setCategories(updatedCategories);
-      writes.push(storageSet("categories", updatedCategories));
+      writes.push(syncAllCategories(updatedCategories, categoryTypes));
     }
     const results = await Promise.all(writes);
-    if (results.some((result) => !result?.ok)) {
+    if (results.some((result) => result !== undefined && !result?.ok)) {
       setEquipment(previousEquipment);
       if (typeof setCategories === "function" && updatedCategories.length !== (categories || []).length) {
         setCategories(previousCategories);
@@ -1620,7 +1648,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     setCategories(updatedCats);
     setEquipment(updatedEq);
     setCategoryTypes(updatedTypes);
-    await Promise.all([storageSet("categories", updatedCats), writeEquipmentToDB(updatedEq), storageSet("categoryTypes", updatedTypes)]);
+    await Promise.all([syncAllCategories(updatedCats, updatedTypes), writeEquipmentToDB(updatedEq)]);
     showToast("success", `קטגוריה "${oldName}" עודכנה`);
   };
 
@@ -1638,8 +1666,8 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     const previousTypes = categoryTypes;
     setEquipment(updated);
     setCategoryTypes(updatedTypes);
-    const results = await Promise.all([writeEquipmentToDB(updated), storageSet("categoryTypes", updatedTypes)]);
-    if (results.some((result) => !result?.ok)) {
+    const [equipResult] = await Promise.all([writeEquipmentToDB(updated), syncAllCategories(categories, updatedTypes)]);
+    if (!equipResult?.ok) {
       setEquipment(previousEquipment);
       setCategoryTypes(previousTypes);
       showToast("error", "שגיאה בשמירת סיווג הקטגוריה. השינוי לא נשמר בשרת.");
@@ -1668,8 +1696,9 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   const saveCategoryLoanTypes = async (nextCategoryLoanTypes) => {
     const previousCategoryLoanTypes = categoryLoanTypes;
     setCategoryLoanTypes(nextCategoryLoanTypes);
-    const result = await storageSet("categoryLoanTypes", nextCategoryLoanTypes);
-    if (!result?.ok) {
+    try {
+      await syncLoanTypeFilters(nextCategoryLoanTypes);
+    } catch {
       setCategoryLoanTypes(previousCategoryLoanTypes);
       showToast("error", "שגיאה בשמירת סוגי ההשאלות. השינוי לא נשמר בשרת.");
       return;
@@ -1691,7 +1720,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     setSelectedCats((prev) => prev.filter((category) => category !== categoryName));
     setCategories(updatedCats);
     setCategoryTypes(updatedTypes);
-    await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes)]);
+    await syncAllCategories(updatedCats, updatedTypes);
     showToast("success", `הרובריקה "${categoryName}" נמחקה`);
   };
 
@@ -1987,7 +2016,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
           const updatedTypes={...categoryTypes,...(type!==undefined?{[name]:type}:{})};
           setCategories(updatedCats);
           setCategoryTypes(updatedTypes);
-          await Promise.all([storageSet("categories",updatedCats),storageSet("categoryTypes",updatedTypes)]);
+          await syncAllCategories(updatedCats, updatedTypes);
           showToast("success",`קטגוריה "${name}" נוספה`);
           { const _c = JSON.parse(sessionStorage.getItem("staff_user")||"{}"); logActivity({ user_id: _c.id, user_name: _c.full_name, action: "category_add", entity: "categories", entity_id: name, details: { name, type } }); }
           setModal(null);
@@ -2005,7 +2034,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
             const updatedTypes = {...categoryTypes, ...(action.type !== undefined ? {[action.name]: action.type} : {})};
             setCategories(updatedCats);
             setCategoryTypes(updatedTypes);
-            await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes)]);
+            await syncAllCategories(updatedCats, updatedTypes);
             showToast("success", `קטגוריה "${action.name}" נוספה`);
             { const _c = JSON.parse(sessionStorage.getItem("staff_user")||"{}"); logActivity({ user_id: _c.id, user_name: _c.full_name, action: "category_add", entity: "categories", entity_id: action.name, details: { name: action.name, type: action.type } }); }
           } else if(action.action==="rename") {
@@ -2027,7 +2056,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
             setCategories(updatedCats);
             setEquipment(updatedEq);
             setCategoryTypes(updatedTypes);
-            await Promise.all([storageSet("categories", updatedCats), writeEquipmentToDB(updatedEq), storageSet("categoryTypes", updatedTypes)]);
+            await Promise.all([syncAllCategories(updatedCats, updatedTypes), writeEquipmentToDB(updatedEq)]);
             showToast("success", `קטגוריה עודכנה`);
             { const _c = JSON.parse(sessionStorage.getItem("staff_user")||"{}"); logActivity({ user_id: _c.id, user_name: _c.full_name, action: "category_rename", entity: "categories", entity_id: action.newName, details: { old_name: action.oldName, new_name: action.newName, type: action.type } }); }
           } else if(action.action==="delete") {
@@ -2040,7 +2069,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
             delete updatedTypes[action.name];
             setCategories(updatedCats);
             setCategoryTypes(updatedTypes);
-            await Promise.all([storageSet("categories", updatedCats), storageSet("categoryTypes", updatedTypes)]);
+            await syncAllCategories(updatedCats, updatedTypes);
             showToast("success", `קטגוריה "${action.name}" נמחקה`);
             { const _c = JSON.parse(sessionStorage.getItem("staff_user")||"{}"); logActivity({ user_id: _c.id, user_name: _c.full_name, action: "category_delete", entity: "categories", entity_id: action.name, details: { name: action.name } }); }
           }
@@ -5556,20 +5585,17 @@ export default function App() {
 
   const refreshPublicInventory = async () => {
     try {
-      const [eqR, resR, catsR, catLoanTypesR] = await Promise.all([
+      const [eqR, resR, catsAndTypesR, catLoanTypesR] = await Promise.all([
         (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
         (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
-        storageGet("categories"),
-        storageGet("categoryLoanTypes"),
+        loadCategoriesWrapped(), // Stage 12 Session B
+        loadLoanTypeFiltersWrapped(), // Stage 12 Session B
       ]);
 
-      // eqR/resR are { value, source } objects (Supabase path); catsR/catLoanTypesR
-      // come from storageGet which also returns { value, source }. Extract .value
-      // before passing to applyPublicLiveSync (which expects a plain array/object).
       const eqVal  = eqR?.value  ?? eqR;
       const resVal = resR?.value ?? resR;
-      const catsVal = catsR?.value ?? catsR;
-      const catLoanTypesVal = catLoanTypesR?.value ?? catLoanTypesR;
+      const catsVal = catsAndTypesR?.categories?.value ?? [];
+      const catLoanTypesVal = catLoanTypesR?.value ?? {};
 
       applyPublicLiveSync("equipment", eqVal);
       applyPublicLiveSync("reservations", resVal);
@@ -5876,12 +5902,11 @@ export default function App() {
     (async()=>{
         try {
           historySuspendedRef.current = true;
-          const [eqR, resR, catsR, catTypesR, catLoanTypesR, tmR, ktsR, polR, dhsR, mgrR, mgrTokR, siteSetR, studiosR, studioBkR, lessonsR, lecturersR] = await Promise.all([
+          const [eqR, resR, catsAndTypesR, catLoanTypesR, tmR, ktsR, polR, dhsR, mgrR, mgrTokR, siteSetR, studiosR, studioBkR, lessonsR, lecturersR] = await Promise.all([
             (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
           (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
-          storageGet("categories"),
-          storageGet("categoryTypes"),
-          storageGet("categoryLoanTypes"),
+          loadCategoriesWrapped(), // Stage 12 Session B: read from public.categories
+          loadLoanTypeFiltersWrapped(), // Stage 12 Session B: read from public.loan_type_filters
           loadTeamMembersWrapped(), // Stage 11 Session B: read from public.team_members
           loadKitsWrapped(), // Stage 11 Session B: read from public.kits
           storageGet("policies"),
@@ -5897,8 +5922,8 @@ export default function App() {
           // Extract values and sources
           const eq = eqR.value, eqSrc = eqR.source;
           const res = resR.value, resSrc = resR.source;
-          const cats = catsR.value, catsSrc = catsR.source;
-          const catTypes = catTypesR.value;
+          const cats = catsAndTypesR.categories.value, catsSrc = catsAndTypesR.categories.source;
+          const catTypes = catsAndTypesR.categoryTypes.value;
           const catLoanTypes = catLoanTypesR.value;
           const tm = tmR.value, tmSrc = tmR.source;
           const kts = ktsR.value, ktsSrc = ktsR.source;
@@ -5990,7 +6015,7 @@ export default function App() {
         // "cache" = network failed, fell back to localStorage → NEVER overwrite DB
         // equipment blob write removed (Stage 5) — equipment lives in Supabase tables only
         // reservations blob init removed (Stage 5) — Supabase is source of truth
-        if(!cats && catsSrc === "supabase_empty") await storageSet("categories",   DEFAULT_CATEGORIES);
+        // categories: Stage 12-C — reads come from public.categories table, blob retired.
         // teamMembers + kits: Stage 11-C — reads come from normalized tables, blob retired.
         if(!pol && polSrc === "supabase_empty")   await storageSet("policies",        { פרטית:"", הפקה:"", סאונד:"", לילה:"" });
         // certifications blob init removed (Stage 6) — normalized tables are source of truth
@@ -6023,15 +6048,14 @@ export default function App() {
     const ctrl = new AbortController();
     refreshAbortRef.current = ctrl;
     try {
-      const [resR, bookingsR, lecturersR, certsR, catsR, catTypesR] = await Promise.all([
+      const [resR, bookingsR, lecturersR, certsR, catsAndTypesR] = await Promise.all([
         (supabase.from("reservations_new").select("*, reservation_items(*)").abortSignal(ctrl.signal).then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
         loadStudioBookingsWrapped(), // Stage 10 Session B: poll from public.studio_bookings
         // Stage 7 step 5: read lecturers from the normalized table (was blob).
         loadLecturersWrapped(),
         // Stage 6: read certifications from normalized tables, not the deleted blob.
         loadCertificationsFromTables().then(v => ({ value: v, source: "tables" })).catch(() => ({ value: null, source: "error" })),
-        storageGet("categories", ctrl.signal),
-        storageGet("categoryTypes", ctrl.signal),
+        loadCategoriesWrapped(), // Stage 12 Session B
       ]);
       if (ctrl.signal.aborted) return false;
       // Equipment is refreshed via realtime debounce (600ms), not by polling.
@@ -6074,11 +6098,11 @@ export default function App() {
       if (!certSaveInFlightRef.current && certsR?.value && typeof certsR.value === "object" && !dataEquals(certificationsRef.current, certsR.value)) {
         _setCertifications(certsR.value);
       }
-      if (Array.isArray(catsR?.value) && catsR.value.length > 0 && !dataEquals(categoriesRef.current, catsR.value)) {
-        _setCategories(catsR.value);
+      if (Array.isArray(catsAndTypesR?.categories?.value) && catsAndTypesR.categories.value.length > 0 && !dataEquals(categoriesRef.current, catsAndTypesR.categories.value)) {
+        _setCategories(catsAndTypesR.categories.value);
       }
-      if (catTypesR?.value && typeof catTypesR.value === "object" && !Array.isArray(catTypesR.value) && !dataEquals(categoryTypesRef.current, catTypesR.value)) {
-        _setCategoryTypes(catTypesR.value);
+      if (catsAndTypesR?.categoryTypes?.value && typeof catsAndTypesR.categoryTypes.value === "object" && !Array.isArray(catsAndTypesR.categoryTypes.value) && !dataEquals(categoryTypesRef.current, catsAndTypesR.categoryTypes.value)) {
+        _setCategoryTypes(catsAndTypesR.categoryTypes.value);
       }
       // Return true if at least one response came from supabase (network is up)
       return [resR, bookingsR, lecturersR, certsR].some(r => r?.source === "supabase");
@@ -6253,6 +6277,39 @@ export default function App() {
                 const value = await loadTeamMembersFromTable();
                 if (Array.isArray(value) && !dataEquals(teamMembersRef.current, value)) _setTeamMembers(value);
               } catch (err) { console.warn("team_members realtime refetch failed", err); }
+            }, 400);
+          };
+        })(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "categories" },
+        (() => {
+          let t = null;
+          return () => {
+            clearTimeout(t);
+            t = setTimeout(async () => {
+              try {
+                const { categories: cats, categoryTypes: types } = await loadCategoriesFromTable();
+                if (Array.isArray(cats) && !dataEquals(categoriesRef.current, cats)) _setCategories(cats);
+                if (!dataEquals(categoryTypesRef.current, types)) _setCategoryTypes(types);
+              } catch (err) { console.warn("categories realtime refetch failed", err); }
+            }, 400);
+          };
+        })(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "loan_type_filters" },
+        (() => {
+          let t = null;
+          return () => {
+            clearTimeout(t);
+            t = setTimeout(async () => {
+              try {
+                const value = await loadLoanTypeFiltersFromTable();
+                if (!dataEquals(categoryLoanTypesRef.current, value)) _setCategoryLoanTypes(value);
+              } catch (err) { console.warn("loan_type_filters realtime refetch failed", err); }
             }, 400);
           };
         })(),

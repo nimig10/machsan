@@ -118,6 +118,9 @@ const RETIRED_KEYS = new Set([
   "kits",             // Stage 11-C — public.kits is source of truth
   "teamMembers",      // Stage 11-C — public.team_members is source of truth
   "reservations",     // blob was already empty (Stage 5); retire formally
+  "categories",       // Stage 12-C — public.categories is source of truth
+  "categoryTypes",    // Stage 12-C — merged into public.categories
+  "categoryLoanTypes",// Stage 12-C — public.loan_type_filters is source of truth
 ]);
 
 async function handlePost(req, res) {
