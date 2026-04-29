@@ -4043,7 +4043,7 @@ function StudentKitForm({ initial, onDone, kits, setKits, equipment, categories,
   );
 }
 
-function KitsPage({ kits, setKits, equipment, categories, showToast, reservations=[], setReservations, lessons=[], lecturers=[] }) {
+function KitsPage({ kits, setKits, equipment, categories, showToast, reservations=[], setReservations, lessons=[], setLessons, lecturers=[] }) {
   const [mode, setMode] = useState(null); // null | "create" | "edit"
   const [editTarget, setEditTarget] = useState(null);
   const [loanTypeFilter, setLoanTypeFilter] = useState([]); // empty = show all
@@ -4065,14 +4065,113 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
 
   const del = async (id, name) => {
     const prevKit = kits.find(k=>k.id===id);
+    if (!prevKit) return;
+
+    // ─── Materialize virtual lesson reservations BEFORE deleting the kit ───
+    // Lesson reservations linked to a kit (course-level lesson.kitId or
+    // session-level schedule[].kitId) are virtual: they're computed each render
+    // by buildLessonReservations() rather than persisted. Deleting the kit
+    // would silently make them disappear. To honor the policy "kit deletion
+    // never affects existing reservations", we persist them as REAL rows
+    // (lesson_auto=false, no lesson_kit_id) BEFORE removing the kit.
+    const linkedLessons = lessons.filter(l =>
+      String(l?.kitId) === String(id) ||
+      (Array.isArray(l?.schedule) && l.schedule.some(s => String(s?.kitId) === String(id)))
+    );
+    const { reservations: virtuals } = buildLessonReservations(linkedLessons, [prevKit]);
+    if (virtuals.length > 0) {
+      const ok = window.confirm(
+        `מחיקת הערכה "${name}" תעבד ${virtuals.length} בקשות שיעור וירטואליות לבקשות אמיתיות שיישמרו במערכת. האם להמשיך?`
+      );
+      if (!ok) return;
+    }
+
+    let materialized = 0;
+    let materializeFailed = 0;
+    for (const v of virtuals) {
+      const realRes = {
+        id: `mat_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
+        loan_type: v.loan_type || "שיעור",
+        booking_kind: "lesson",
+        student_name: v.student_name || "",
+        email: v.email || "",
+        phone: v.phone || "",
+        course: v.course || "",
+        notes: `(שומר ממחיקת ערכה: ${name})`,
+        borrow_date: v.borrow_date,
+        borrow_time: v.borrow_time || "00:00",
+        return_date: v.return_date || v.borrow_date,
+        return_time: v.return_time || "23:59",
+        status: v.status || "מאושר",
+        returned_at: v.returned_at || null,
+        lesson_id: v.lesson_id ? String(v.lesson_id) : null,
+        lesson_auto: false,    // persist (don't strip on poll)
+        lesson_kit_id: null,   // decouple from the soon-to-be-deleted kit
+        overdue_notified: true,
+      };
+      const realItems = (v.items || []).map(it => ({
+        equipment_id: it.equipment_id,
+        quantity: Number(it.quantity) || 0,
+        name: it.name || "",
+      }));
+      const { error } = await supabase.rpc("create_reservation_v2", {
+        p_reservation: realRes,
+        p_items: realItems,
+      });
+      if (error) {
+        console.error("kit_delete materialize error", v.id, error);
+        materializeFailed++;
+      } else {
+        materialized++;
+      }
+    }
+
+    // Clear kitId references on linked lessons (course + session levels) so
+    // the UI doesn't show dangling pointers after the kit is gone.
+    if (linkedLessons.length > 0 && setLessons) {
+      const updatedLessons = lessons.map(l => {
+        const courseLevelMatch = String(l?.kitId) === String(id);
+        const hasSessionMatch = Array.isArray(l?.schedule) &&
+          l.schedule.some(s => String(s?.kitId) === String(id));
+        if (!courseLevelMatch && !hasSessionMatch) return l;
+        const next = { ...l };
+        if (courseLevelMatch) delete next.kitId;
+        if (Array.isArray(next.schedule)) {
+          next.schedule = next.schedule.map(s => {
+            if (String(s?.kitId) !== String(id)) return s;
+            const { kitId, ...rest } = s;
+            return rest;
+          });
+        }
+        return next;
+      });
+      setLessons(updatedLessons);
+      try { await storageSet("lessons", updatedLessons); } catch {}
+    }
+
+    // Now safe to remove the kit itself.
     const updated = kits.filter(k=>k.id!==id);
     setKits(updated);
-    // Note: existing reservations (student loans + lesson meetings) retain their
-    // snapshotted equipment items regardless of whether the source kit still exists.
-    // Kits are a UX shortcut for equipment selection — deleting the preset must not
-    // retroactively alter already-submitted reservations.
     await storageSet("kits", updated);
-    showToast("success", `ערכה "${name}" נמחקה`);
+
+    // Refresh reservations from DB so the materialized rows show up immediately.
+    try {
+      const { data: fresh } = await supabase
+        .from("reservations_new")
+        .select("*, reservation_items(*)");
+      if (Array.isArray(fresh) && setReservations) {
+        setReservations(fresh.map(r => ({ ...r, items: r.reservation_items || [] })));
+      }
+    } catch (e) { console.error("kit_delete refresh error:", e); }
+
+    if (materializeFailed > 0) {
+      showToast("error", `ערכה "${name}" נמחקה. ${materialized} בקשות שומרו, ${materializeFailed} נכשלו.`);
+    } else if (materialized > 0) {
+      showToast("success", `ערכה "${name}" נמחקה. ${materialized} בקשות שיעור שומרו כבקשות אמיתיות.`);
+    } else {
+      showToast("success", `ערכה "${name}" נמחקה`);
+    }
+
     // Audit log — without this, the 2026-04-16 silent-delete incident left no
     // trace. A logged "kit_delete" tells us who clicked the button and when.
     try {
@@ -4087,6 +4186,8 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
           name,
           loanTypes: prevKit?.loanTypes || [],
           item_count: (prevKit?.items||[]).length,
+          materialized_reservations: materialized,
+          materialize_failed: materializeFailed,
         },
       }).catch(err => console.error("kit_delete log failed:", err));
     } catch (e) { console.error("kit_delete log setup failed:", e); }
@@ -6591,7 +6692,7 @@ export default function App() {
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}
                 initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} siteSettings={siteSettings} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports} lessons={lessons} setLessons={setLessons}/></div>
               <div style={{display:page==="team"?"block":"none"}}><TeamPage teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/></div>
-              <div style={{display:page==="kits"?"block":"none"}}><KitsPage kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons} lecturers={lecturers}/></div>
+              <div style={{display:page==="kits"?"block":"none"}}><KitsPage kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons} setLessons={setLessons} lecturers={lecturers}/></div>
               <div style={{display:page==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} lecturers={lecturers} setLecturers={setLecturers} siteSettings={siteSettings} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length
                 ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean)
                 : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
