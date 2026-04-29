@@ -592,9 +592,7 @@ export function LecturerPortal({
       });
       const updatedLesson = { ...lesson, studentStatuses: cleanMap };
       const updatedLessons = lessons.map((l) => String(l.id) === String(lesson.id) ? updatedLesson : l);
-      await storageSet("lessons", updatedLessons);
-      // Stage 8 Session A dual-write
-      syncAllLessons(updatedLessons).catch(err => console.warn("[lessonsApi dual-write]", err));
+      await syncAllLessons(updatedLessons);
       if (setLessons) setLessons(updatedLessons);
       showToast && showToast("success", "סטטוסי התלמידים נשמרו");
       setStudentListLessonId(null);

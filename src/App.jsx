@@ -4159,9 +4159,7 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
         return next;
       });
       setLessons(updatedLessons);
-      try { await storageSet("lessons", updatedLessons); } catch {}
-      // Stage 8 Session A dual-write
-      syncAllLessons(updatedLessons).catch(err => console.warn("[lessonsApi dual-write]", err));
+      await syncAllLessons(updatedLessons);
     }
 
     // Now safe to remove the kit itself.
@@ -5957,9 +5955,7 @@ export default function App() {
           _setLessons(updatedLessons);
           const { data: { session: initSession2 } } = await supabase.auth.getSession();
           if (initSession2) {
-            await storageSet("lessons", updatedLessons);
-            // Stage 8 Session A dual-write
-            syncAllLessons(updatedLessons).catch(err => console.warn("[lessonsApi dual-write]", err));
+            await syncAllLessons(updatedLessons);
           }
         }
         _setLecturers(loadedLecturers);

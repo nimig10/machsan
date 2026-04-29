@@ -463,9 +463,7 @@ export default function StudioBookingPage(props) {
     setSaving(true);
     try {
       setLessons(updatedLessons);
-      await storageSet("lessons", updatedLessons);
-      // Stage 8 Session A dual-write
-      syncAllLessons(updatedLessons).catch(err => console.warn("[lessonsApi dual-write]", err));
+      await syncAllLessons(updatedLessons);
       showToast("success", "השיעור עודכן");
       closeModal();
     } catch {

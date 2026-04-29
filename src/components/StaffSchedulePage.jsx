@@ -473,8 +473,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
       return { ...l, schedule: (l.schedule || []).map(s => s.date === sessionDate ? { ...s, ...updates } : s) };
     });
     setLessons(updated);
-    await storageSet("lessons", updated);
-    syncAllLessons(updated).catch(err => console.warn("[lessonsApi dual-write]", err));
+    await syncAllLessons(updated);
     showToast("success", "השיעור עודכן");
     return true;
   };
@@ -485,8 +484,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
       return { ...l, schedule: (l.schedule || []).filter(s => s.date !== sessionDate) };
     });
     setLessons(updated);
-    await storageSet("lessons", updated);
-    syncAllLessons(updated).catch(err => console.warn("[lessonsApi dual-write]", err));
+    await syncAllLessons(updated);
     showToast("success", "השיעור נמחק מיום זה");
   };
 

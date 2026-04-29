@@ -1,6 +1,7 @@
 // PublicDisplayPage.jsx — public display screen for daily schedule & room bookings
 import { useState, useEffect, useMemo, useRef } from "react";
 import { storageGet } from "../utils.js";
+import { listLessons } from "../utils/lessonsApi.js";
 import { BookOpen, GraduationCap, Mic } from "lucide-react";
 
 const HE_DAYS   = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
@@ -37,7 +38,7 @@ export function PublicDisplayPage() {
   // ── Load data ─────────────────────────────────────────────────────────────
   const loadData = async () => {
     const [lsns, bkgs, stds, settings] = await Promise.all([
-      storageGet("lessons"),
+      listLessons(),
       storageGet("studio_bookings"),
       storageGet("studios"),
       storageGet("siteSettings"),
