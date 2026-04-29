@@ -101,14 +101,36 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Stage 7 step 4: lecturers come from the normalized table; lessons +
-    // siteSettings still live in the blob (Stages 8/9). Shape stays compatible
-    // (id/email/fullName/...) so the lecturer lookup further down is unchanged.
-    const [lessons, lecturersResp, siteSettings] = await Promise.all([
-      readStoreKey("lessons"),
+    // Stage 8 Session B: lessons now come from public.lessons table.
+    // Lecturers (Stage 7) + siteSettings (still in blob) unchanged.
+    // We map table rows back to legacy blob shape so the rest of this
+    // handler stays untouched until Session C cleanup.
+    const [lessonsResp, lecturersResp, siteSettings] = await Promise.all([
+      fetch(`${SB_URL}/rest/v1/lessons?select=*&order=created_at.asc`, { headers: SERVICE_HEADERS }),
       fetch(`${SB_URL}/rest/v1/lecturers?select=id,full_name,email,phone,is_active`, { headers: SERVICE_HEADERS }),
       readStoreKey("siteSettings"),
     ]);
+
+    let lessons = null;
+    if (lessonsResp?.ok) {
+      const rows = await lessonsResp.json();
+      lessons = (Array.isArray(rows) ? rows : []).map((r) => ({
+        id:                       r.id,
+        name:                     r.name ?? "",
+        track:                    r.track ?? "",
+        lecturerId:               r.lecturer_id ?? null,
+        instructorName:           r.instructor_name ?? "",
+        instructorPhone:          r.instructor_phone ?? "",
+        instructorEmail:          r.instructor_email ?? "",
+        description:              r.description ?? "",
+        studioId:                 r.studio_id ?? null,
+        certificateTemplateType:  r.certificate_template_type ?? "",
+        lecturerNotifiedAt7d:     r.lecturer_notified_at_7d ?? null,
+        schedule:                 Array.isArray(r.schedule) ? r.schedule : [],
+        studentStatuses:          r.student_statuses ?? {},
+        created_at:               r.created_at,
+      }));
+    }
 
     let lecturers = null;
     if (lecturersResp?.ok) {
@@ -195,9 +217,19 @@ export default async function handler(req, res) {
 
         // Mark sent so we don't email twice. We update the local copy and
         // flush to the store at the very end (single write).
-        updatedLessons[i] = { ...lesson, lecturerNotifiedAt7d: new Date().toISOString() };
+        const notifyTs = new Date().toISOString();
+        updatedLessons[i] = { ...lesson, lecturerNotifiedAt7d: notifyTs };
         mutated = true;
         sent++;
+        // Stage 8 Session B: also patch the table directly so it doesn't
+        // drift from the blob between cron runs (the bulk blob write at the
+        // end of the loop is the legacy primary; this row-level PATCH keeps
+        // public.lessons in sync). Best-effort, non-blocking.
+        fetch(`${SB_URL}/rest/v1/lessons?id=eq.${encodeURIComponent(lesson.id)}`, {
+          method: "PATCH",
+          headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
+          body: JSON.stringify({ lecturer_notified_at_7d: notifyTs }),
+        }).catch(err => console.warn("notify-course-end-7days lessons table sync:", err.message));
         console.log(`notify-course-end-7days: emailed ${email} for lesson "${lesson.name}" (ends ${lastDate})`);
       } catch (err) {
         console.error(`notify-course-end-7days: error for lesson ${lesson.id}:`, err.message);

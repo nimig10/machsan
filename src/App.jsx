@@ -27,7 +27,7 @@ import { useInstallPrompt } from "./components/InstallPrompt.jsx";
 import { supabase } from "./supabaseClient.js";
 import { loadCertificationsFromTables } from "./utils/studentsApi.js";
 import { syncAllLecturers, loadLecturersFromTable } from "./utils/lecturersApi.js";
-import { syncAllLessons } from "./utils/lessonsApi.js";
+import { syncAllLessons, loadLessonsFromTable } from "./utils/lessonsApi.js";
 
 // Stage 7 step 5: replace `storageGet("lecturers")` with the table loader,
 // wrapped in the same { value, source } envelope every other loader uses.
@@ -37,6 +37,18 @@ async function loadLecturersWrapped() {
     return { value: Array.isArray(value) ? value : [], source: "table" };
   } catch (err) {
     console.warn("[loadLecturersWrapped]", err);
+    return { value: [], source: "error" };
+  }
+}
+
+// Stage 8 Session B step 5: replace `storageGet("lessons")` with the table
+// loader. Same envelope shape so existing { value, source } consumers work.
+async function loadLessonsWrapped() {
+  try {
+    const value = await loadLessonsFromTable();
+    return { value: Array.isArray(value) ? value : [], source: "table" };
+  } catch (err) {
+    console.warn("[loadLessonsWrapped]", err);
     return { value: [], source: "error" };
   }
 }
@@ -5625,7 +5637,7 @@ export default function App() {
       const [eqR, resR, lessonsR, lecturersR, kitsR, studiosR] = await Promise.all([
         (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
         (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
-        storageGet("lessons"),
+        loadLessonsWrapped(), // Stage 8 Session B step 5: read from public.lessons
         loadLecturersWrapped(),
         storageGet("kits"),
         storageGet("studios"),
@@ -5866,7 +5878,7 @@ export default function App() {
           storageGet("siteSettings"),
           storageGet("studios"),
           storageGet("studio_bookings"),
-          storageGet("lessons"),
+          loadLessonsWrapped(), // Stage 8 Session B step 5: initial load reads from public.lessons
           loadLecturersWrapped(),
           ]);
           // Extract values and sources
