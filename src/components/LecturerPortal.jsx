@@ -730,39 +730,16 @@ export function LecturerPortal({
       }
     }
 
-    const currentKit = editorContext.currentKit;
-    const nextKitId = currentKit?.id || createLessonKitId();
-    const nextKit = {
-      ...(currentKit || {}),
-      id: nextKitId,
-      loanTypes: ["שיעור"],
-      name: draftName.trim(),
-      description: draftDescription.trim(),
-      items: selectedItems.map((item) => ({
-        equipment_id: item.equipment_id,
-        quantity: Number(item.quantity) || 0,
-        name: equipment.find((candidate) => String(candidate.id) === String(item.equipment_id))?.name || item.name || "",
-      })),
-    };
-
-    const nextKits = currentKit
-      ? kits.map((kit) => (String(kit.id) === String(nextKitId) ? nextKit : kit))
-      : [...kits, nextKit];
-
-    const nextLessons = lessons.map((lesson) => {
-      if (String(lesson.id) !== String(editorContext.lesson.id)) return lesson;
-      if (editorContext.type === "course") {
-        return { ...lesson, kitId: nextKitId };
-      }
-      return {
-        ...lesson,
-        schedule: (lesson.schedule || []).map((session, index) => {
-          if (getSessionUid(session, index) !== editorContext.session._lecturerUid) return session;
-          const { cancelledRequest, ...rest } = session || {};
-          return { ...rest, kitId: nextKitId };
-        }),
-      };
-    });
+    // Lecturers do NOT create or modify kits — only warehouse staff manage kits
+    // in the "ערכות" admin tab. The session-save flow now writes a single
+    // reservation_items row directly. The course-save flow already worked this
+    // way (see api/lecturer-kit.js course branch). We still build a per-meeting
+    // payload below for the request body.
+    const sessionItemsPayload = selectedItems.map((item) => ({
+      equipment_id: item.equipment_id,
+      quantity: Number(item.quantity) || 0,
+      name: equipment.find((candidate) => String(candidate.id) === String(item.equipment_id))?.name || item.name || "",
+    }));
 
     setSaving(true);
     setEditorError("");
@@ -823,17 +800,29 @@ export function LecturerPortal({
         method: "POST",
         headers: authHeaders,
         body: JSON.stringify({
-          kit: nextKit,
-          lessonId: editorContext.lesson.id,
-          sessionUid: editorContext.session._lecturerUid,
           kitType: "session",
+          lessonId: editorContext.lesson.id,
+          session: {
+            date: editorContext.session.date,
+            startTime: editorContext.session.startTime || "",
+            endTime: editorContext.session.endTime || "",
+          },
+          items: sessionItemsPayload,
+          description: draftDescription.trim(),
+          lecturer: {
+            name: currentLecturer.fullName || editorContext.lesson.instructorName || "",
+            email: String(currentLecturer.email || editorContext.lesson.instructorEmail || "").trim(),
+            phone: String(currentLecturer.phone || editorContext.lesson.instructorPhone || "").trim(),
+            course: editorContext.lesson.name || "",
+          },
         }),
       });
       if (!result.ok) {
         const err = await result.text();
         console.error("lecturer-kit error", err);
         setSaving(false);
-        setEditorError("שמירת ההשאלה נכשלה. נסה שוב.");
+        const isStock = result.status === 409;
+        setEditorError(isStock ? "אין מספיק מלאי לפריטים שנבחרו." : "שמירת ההשאלה נכשלה. נסה שוב.");
         return;
       }
     } catch (e) {
@@ -843,8 +832,6 @@ export function LecturerPortal({
       return;
     }
 
-    setKits(nextKits);
-    setLessons(nextLessons);
     setSaving(false);
     setEditorState(null);
     showToast("success", "השאלת המפגש נשמרה.");
@@ -1195,9 +1182,20 @@ export function LecturerPortal({
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {sessions.map((session) => {
-                      const sessionKit = hasLinkedValue(session.kitId)
-                        ? lessonKits.find((kit) => String(kit.id) === String(session.kitId)) || null
-                        : null;
+                      // Lecturer-created meeting reservation = a non-auto reservation row
+                      // for this lesson on this session date. We no longer track this via
+                      // session.kitId (lecturers don't create kits anymore).
+                      const sessionReservation = (reservations || []).find(r =>
+                        r.lesson_auto === false &&
+                        String(r.lesson_id || "") === String(lesson.id) &&
+                        r.borrow_date === session.date &&
+                        Array.isArray(r.items) && r.items.length > 0
+                      );
+                      const sessionKit = sessionReservation
+                        ? { name: `${(sessionReservation.items || []).length} פריטים` }
+                        : (hasLinkedValue(session.kitId)
+                          ? lessonKits.find((kit) => String(kit.id) === String(session.kitId)) || null
+                          : null);
                       const inheritedKit = !sessionKit && courseKit ? courseKit : null;
                       const isPast = session._isPast;
                       return (

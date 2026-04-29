@@ -1,6 +1,9 @@
 // lecturer-kit.js — dedicated endpoint for lecturers to save lesson loans.
 //
-// Session type: creates a kit in the kits store + links it to the session.
+// Session type: creates a single reservation_items row for the session.
+//               Lecturers do NOT create or modify kits — kits are managed by
+//               warehouse staff in the "ערכות" admin tab. Re-saving overwrites
+//               the previous reservation for the same session (delete + create).
 // Course type:  creates individual reservation_items per session (no kit created).
 //
 // Requires authenticated user whose email matches a lecturer in the store.
@@ -139,42 +142,71 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, created: ids.length, ids });
   }
 
-  // ── Session type: create/update kit + link to lesson ──
-  const { kit, sessionUid } = req.body;
-  if (!kit) return res.status(400).json({ error: "Missing kit" });
-
-  const [kits, lessons] = await Promise.all([readStoreKey("kits"), readStoreKey("lessons")]);
-  if (!Array.isArray(kits)) return res.status(503).json({ error: "Could not load kits" });
-  if (!Array.isArray(lessons)) return res.status(503).json({ error: "Could not load lessons" });
-
-  const kitId = String(kit.id);
-  const existingKit = kits.find((k) => String(k.id) === kitId);
-  const nextKits = existingKit
-    ? kits.map((k) => (String(k.id) === kitId ? kit : k))
-    : [...kits, kit];
-
-  const nextLessons = lessons.map((lesson) => {
-    if (String(lesson.id) !== String(lessonId)) return lesson;
-    return {
-      ...lesson,
-      schedule: (lesson.schedule || []).map((session, index) =>
-        getSessionUid(session, index) === sessionUid ? { ...session, kitId } : session
-      ),
-    };
-  });
-
-  const kitsRes = await writeStoreKey("kits", nextKits);
-  if (!kitsRes.ok) {
-    const text = await kitsRes.text();
-    return res.status(kitsRes.status).json({ error: "Failed to save kit", detail: text });
+  // ── Session type: create a single reservation, no kit ──
+  // Lecturer flow: each meeting reservation is one reservation_items row keyed
+  // by (lesson_id, borrow_date, lesson_auto=false). Re-saving deletes the
+  // previous reservation for the same session before creating a new one so
+  // there's never a stale duplicate.
+  const { session, items, description, lecturer } = req.body;
+  if (!session?.date) return res.status(400).json({ error: "Missing session.date" });
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: "Missing items" });
   }
 
-  const lessonsRes = await writeStoreKey("lessons", nextLessons);
-  if (!lessonsRes.ok) {
-    await writeStoreKey("kits", kits);
-    const text = await lessonsRes.text();
-    return res.status(lessonsRes.status).json({ error: "Failed to link lesson, kit rolled back", detail: text });
+  // Find any existing non-auto reservation for this session date (replace, not append).
+  try {
+    const existingRes = await fetch(
+      `${SB_URL}/rest/v1/reservations_new?lesson_id=eq.${encodeURIComponent(String(lessonId))}&borrow_date=eq.${encodeURIComponent(session.date)}&lesson_auto=eq.false&select=id`,
+      { headers: SERVICE_HEADERS },
+    );
+    if (existingRes.ok) {
+      const existingRows = await existingRes.json();
+      if (Array.isArray(existingRows)) {
+        for (const row of existingRows) {
+          await fetch(`${SB_URL}/rest/v1/rpc/delete_reservation_v1`, {
+            method: "POST",
+            headers: RPC_HEADERS,
+            body: JSON.stringify({ p_reservation_id: String(row.id) }),
+          }).catch(() => {});
+        }
+      }
+    }
+  } catch {
+    // Best-effort cleanup; if it fails we still attempt to create the new row.
   }
 
-  return res.status(200).json({ ok: true });
+  const reservationId = String(Date.now()) + "_" + Math.random().toString(36).slice(2, 7);
+  const returnTs = new Date(`${session.date}T${session.endTime || "23:59"}:00`).getTime();
+  const isPast = Number.isFinite(returnTs) && Date.now() >= returnTs;
+  const reservation = {
+    id: reservationId,
+    loan_type: "שיעור",
+    booking_kind: "lesson",
+    student_name: lecturer?.name || "",
+    email: lecturer?.email || "",
+    phone: lecturer?.phone || "",
+    course: lecturer?.course || "",
+    notes: description || "",
+    borrow_date: session.date,
+    borrow_time: session.startTime || "00:00",
+    return_date: session.date,
+    return_time: session.endTime || "23:59",
+    status: isPast ? "הוחזר" : "מאושר",
+    returned_at: isPast ? new Date(returnTs).toISOString() : null,
+    lesson_id: String(lessonId),
+    lesson_auto: false,
+    overdue_notified: true,
+  };
+
+  const createRes = await createReservation(reservation, items);
+  if (!createRes.ok) {
+    const text = await createRes.text();
+    const isStock = /not enough units/i.test(text);
+    return res.status(isStock ? 409 : createRes.status).json({
+      error: isStock ? "not_enough_stock" : "rpc_error",
+      detail: text,
+    });
+  }
+
+  return res.status(200).json({ ok: true, reservationId });
 }
