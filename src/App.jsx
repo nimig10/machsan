@@ -6314,7 +6314,10 @@ export default function App() {
       ];
       if (!dataEquals(nextStudioBookings, currentStudioBookings)) {
         _setStudioBookings(nextStudioBookings);
-        void storageSet("studio_bookings", nextStudioBookings);
+        // Local-only: lesson studio bookings are regenerated on every load
+        // from lessons, so persisting the full blob here is unnecessary and
+        // triggers shrink_guard for users with a partial view (e.g. students
+        // whose lessons array is filtered/empty).
       }
       return;
     }
@@ -6357,7 +6360,10 @@ export default function App() {
 
     if (!dataEquals(nextStudioBookings, currentStudioBookings)) {
       _setStudioBookings(nextStudioBookings);
-      void storageSet("studio_bookings", nextStudioBookings);
+      // Local-only: same rationale as the reservations branch above —
+      // lesson_auto bookings are regenerated from lessons on every load,
+      // so persisting the full blob is unnecessary and triggers
+      // shrink_guard for users with a filtered view of lessons.
     }
   }, [loading, lessons, kits]); // intentionally excludes reservations/studioBookings
 
