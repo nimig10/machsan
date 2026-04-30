@@ -262,7 +262,7 @@ async function keepAlive() {
     if (lastPing && now - Number(lastPing) < FOUR_DAYS) return;
     const ac = new AbortController();
     const tid = setTimeout(() => ac.abort(), 4000);
-    await fetch(`/api/store?key=equipment`, { signal: ac.signal });
+    await fetch(`/api/store?key=certifications`, { signal: ac.signal });
     clearTimeout(tid);
     localStorage.setItem("sb_last_ping", String(now));
     console.log("Supabase keep-alive ping sent");
@@ -270,8 +270,8 @@ async function keepAlive() {
 }
 setTimeout(keepAlive, 3000); // רץ 3 שניות אחרי טעינת הדף
 
-// Stage 13: stale backups for retired keys (kits, teamMembers, reservations) cleaned in cleanup migration.
-const BACKUP_KEYS = new Set(["equipment","certifications"]);
+// certifications remains in store; equipment moved to public.equipment (Stage ~6).
+const BACKUP_KEYS = new Set(["certifications"]);
 const BACKUP_COOLDOWN = 60 * 60 * 1000; // max once per hour per key
 
 async function autoBackup(key) {
@@ -344,10 +344,8 @@ async function storageSet(key, value) {
 
 // ─── DB DIAGNOSTICS (accessible from browser console) ────────────────────────
 window.dbDiag = async () => {
-  // Stage 13: only `equipment` and `certifications` remain as store blobs (and not for long).
-  const storeKeys = ["equipment", "certifications"];
-  // Tables that replaced the legacy blobs — list rows for each.
   const tables = [
+    "equipment", "equipment_units",
     "reservations_new", "reservation_items",
     "categories", "loan_type_filters",
     "team_members", "kits",
@@ -359,21 +357,13 @@ window.dbDiag = async () => {
   ];
   console.log("Supabase DB Diagnostic Report");
   console.log("=".repeat(50));
-  console.log("── store blobs ──");
-  for (const key of storeKeys) {
-    try {
-      const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data,updated_at`, { headers: await getSbAuthHeaders() });
-      const json = await res.json();
-      if (json.length > 0) {
-        const d = json[0].data;
-        const count = Array.isArray(d) ? d.length : (typeof d === "object" ? Object.keys(d).length : 1);
-        const units = key === "equipment" && Array.isArray(d) ? d.reduce((s,e) => s + (Array.isArray(e.units) ? e.units.length : (e.quantity||0)), 0) : "";
-        console.log(`[OK] ${key}: ${count} items${units ? ` (${units} units)` : ""} — updated: ${json[0].updated_at}`);
-      } else {
-        console.log(`[WARN] ${key}: EMPTY (not in DB)`);
-      }
-    } catch(e) { console.log(`[ERR] ${key}: ERROR — ${e.message}`); }
-  }
+  console.log("── store (legacy — should only have backup_equipment) ──");
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/store?select=key,updated_at`, { headers: await getSbAuthHeaders() });
+    const rows = await res.json();
+    rows.forEach(r => console.log(`  ${r.key} (updated: ${r.updated_at})`));
+    if (!rows.length) console.log("  (empty)");
+  } catch(e) { console.log(`  ERROR: ${e.message}`); }
   console.log("── tables ──");
   for (const t of tables) {
     try {
@@ -385,15 +375,11 @@ window.dbDiag = async () => {
   }
 };
 window.dbExport = async () => {
-  const keys = ["equipment","certifications"];
   const data = {};
-  for (const key of keys) {
-    try {
-      const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data`, { headers: await getSbAuthHeaders() });
-      const json = await res.json();
-      data[key] = json.length > 0 ? json[0].data : null;
-    } catch(e) { data[key] = `ERROR: ${e.message}`; }
-  }
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/equipment?select=*`, { headers: await getSbAuthHeaders() });
+    data.equipment = await res.json();
+  } catch(e) { data.equipment = `ERROR: ${e.message}`; }
   console.log("Full DB Export (copy this JSON):");
   console.log(JSON.stringify(data, null, 2));
   return data;
@@ -408,29 +394,21 @@ window.dbImport = async (data) => {
   console.log("Reload the page to see changes");
 };
 window.dbBackups = async () => {
-  const keys = ["equipment","certifications"];
-  console.log("Backup Status:");
-  for (const key of keys) {
-    try {
-      const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.backup_${key}&select=data,updated_at`, { headers: await getSbAuthHeaders() });
-      const json = await res.json();
-      if (json.length > 0) {
-        const d = json[0].data;
-        const count = Array.isArray(d) ? d.length : 0;
-        console.log(`[OK] backup_${key}: ${count} items — saved: ${json[0].updated_at}`);
-      } else {
-        console.log(`[WARN] backup_${key}: no backup yet`);
-      }
-    } catch(e) { console.log(`[ERR] backup_${key}: ERROR`); }
-  }
+  console.log("Backup Status (store snapshots):");
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/store?key=like.backup_*&select=key,updated_at`, { headers: await getSbAuthHeaders() });
+    const rows = await res.json();
+    rows.forEach(r => console.log(`[OK] ${r.key} — saved: ${r.updated_at}`));
+    if (!rows.length) console.log("  (no backups)");
+  } catch(e) { console.log(`ERROR: ${e.message}`); }
 };
 window.dbRestoreFromBackup = async (key) => {
-  if (!key) { console.error("Usage: dbRestoreFromBackup('equipment')"); return; }
-  const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.backup_${key}&select=data`, { headers: await getSbAuthHeaders() });
+  if (key !== "equipment") { console.error("Only 'equipment' backups are stored in the store table"); return; }
+  const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.backup_equipment&select=data`, { headers: await getSbAuthHeaders() });
   const json = await res.json();
-  if (!json.length || !json[0].data) { console.error(`No backup found for ${key}`); return; }
-  const r = await storageSet(key, json[0].data);
-  console.log(r.ok ? `[OK] ${key} restored from backup (${json[0].data.length} items)` : `[ERR] Failed: ${r.error}`);
+  if (!json.length || !json[0].data) { console.error("No backup_equipment found"); return; }
+  const r = await writeEquipmentToDB(json[0].data);
+  console.log(r.ok ? `[OK] equipment restored from backup (${json[0].data.length} items)` : `[ERR] Failed: ${r.error}`);
   console.log("Reload the page to see changes");
 };
 
@@ -5859,15 +5837,14 @@ export default function App() {
       const snapshot = lastEntry.snapshot;
       const currentState = getUndoSnapshot();
 
-      // Stage 13: only `equipment` and `reservations` are still legacy blobs in the store.
-      // Everything else is normalized — restore via the table APIs.
-      const blobKeys = ["equipment", "reservations"];
-
+      // reservations is the only remaining legacy blob written via storageSet.
+      // equipment is normalized — restore via writeEquipmentToDB.
       const promises = [];
-      for (const key of blobKeys) {
-        if (snapshot[key] !== undefined && !dataEquals(currentState[key], snapshot[key])) {
-          promises.push(storageSet(key, snapshot[key]));
-        }
+      if (snapshot.reservations !== undefined && !dataEquals(currentState.reservations, snapshot.reservations)) {
+        promises.push(storageSet("reservations", snapshot.reservations));
+      }
+      if (snapshot.equipment !== undefined && !dataEquals(currentState.equipment, snapshot.equipment)) {
+        promises.push(writeEquipmentToDB(snapshot.equipment));
       }
       // Categories + loan_type_filters (Stage 12)
       if (snapshot.categories !== undefined && !dataEquals(currentState.categories, snapshot.categories)) {

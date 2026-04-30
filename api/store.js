@@ -97,10 +97,9 @@ async function handleGet(req, res) {
 }
 
 // Keys that may only be written by staff (admin/warehouse).
-// Stage 13: only `equipment` and `certifications` remain as legacy blobs in
-// the store; everything else has moved to dedicated tables (see RETIRED_KEYS).
+// certifications is the last active store blob; equipment writes go via /api/sync-equipment.
 const STAFF_ONLY_KEYS = new Set([
-  "equipment", "certifications", "students",
+  "equipment", "certifications",
 ]);
 
 // Keys that have been migrated to normalized tables. Any POST attempt
