@@ -15,24 +15,21 @@ const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 // Is the caller a dept head, staff, or admin?
 // Staff/admin is resolved from public.users (resolveUserRole).
-// Dept heads live in the store.deptHeads JSON blob — match by email.
+// Dept heads live in public.dept_heads (Stage 13) — match by email.
 async function isAuthorizedApprover(req) {
   const role = await resolveUserRole(req);
   if (!role || role.role === "anon") return false;
   if (role.role === "staff") return true;
   if (!role.email) return false;
   try {
+    const emailEnc = encodeURIComponent(role.email);
     const r = await fetch(
-      `${SB_URL}/rest/v1/store?key=eq.deptHeads&select=data`,
+      `${SB_URL}/rest/v1/dept_heads?email=eq.${emailEnc}&select=id&limit=1`,
       { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } }
     );
     if (!r.ok) return false;
     const rows = await r.json();
-    const list = Array.isArray(rows) && rows[0]?.data;
-    if (!Array.isArray(list)) return false;
-    return list.some(dh =>
-      dh?.email && String(dh.email).toLowerCase().trim() === role.email
-    );
+    return Array.isArray(rows) && rows.length > 0;
   } catch { return false; }
 }
 

@@ -1,9 +1,9 @@
 // PublicDisplayPage.jsx — public display screen for daily schedule & room bookings
 import { useState, useEffect, useMemo, useRef } from "react";
-import { storageGet } from "../utils.js";
 import { listLessons } from "../utils/lessonsApi.js";
 import { listStudios } from "../utils/studiosApi.js";
 import { listStudioBookings } from "../utils/studioBookingsApi.js";
+import { loadSiteSettingsFromTable } from "../utils/siteSettingsApi.js";
 import { buildLessonStudioBookings } from "../utils/lessonBookings.js";
 import { BookOpen, GraduationCap, Mic } from "lucide-react";
 
@@ -44,7 +44,7 @@ export function PublicDisplayPage() {
       listLessons(),
       listStudioBookings(),
       listStudios(),
-      storageGet("siteSettings"),
+      loadSiteSettingsFromTable().catch(() => ({})),
     ]);
     const lessons = Array.isArray(lsns) ? lsns : [];
     setLessons(lessons);

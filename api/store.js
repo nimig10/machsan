@@ -97,12 +97,10 @@ async function handleGet(req, res) {
 }
 
 // Keys that may only be written by staff (admin/warehouse).
-// All other keys are allowed for any authenticated user or even anon
-// (studio_bookings is written by public-facing forms without staff auth).
+// Stage 13: only `equipment` and `certifications` remain as legacy blobs in
+// the store; everything else has moved to dedicated tables (see RETIRED_KEYS).
 const STAFF_ONLY_KEYS = new Set([
-  "certifications","students","kits","equipment","reservations",
-  "teamMembers","categories","deptHeads",
-  "siteSettings","policies","studios","collegeManager","managerToken",
+  "equipment", "certifications", "students",
 ]);
 
 // Keys that have been migrated to normalized tables. Any POST attempt
@@ -121,6 +119,13 @@ const RETIRED_KEYS = new Set([
   "categories",       // Stage 12-C — public.categories is source of truth
   "categoryTypes",    // Stage 12-C — merged into public.categories
   "categoryLoanTypes",// Stage 12-C — public.loan_type_filters is source of truth
+  "policies",         // Stage 13-C — public.policies + public.policy_assets
+  "siteSettings",     // Stage 13-C — public.site_settings
+  "collegeManager",   // Stage 13-C — public.college_manager
+  "deptHeads",        // Stage 13-C — public.dept_heads
+  "managerToken",     // Stage 13-C — folded into public.site_settings
+  "deptHead",         // Stage 13-C — dead legacy singular form
+  "calendarToken",    // Stage 13-C — dead/removed feature
 ]);
 
 async function handlePost(req, res) {

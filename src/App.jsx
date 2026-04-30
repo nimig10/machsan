@@ -34,6 +34,10 @@ import { buildLessonStudioBookings } from "./utils/lessonBookings.js";
 import { syncAllKits, loadKitsFromTable } from "./utils/kitsApi.js";
 import { syncAllTeamMembers, loadTeamMembersFromTable } from "./utils/teamMembersApi.js";
 import { syncAllCategories, loadCategoriesFromTable, syncLoanTypeFilters, loadLoanTypeFiltersFromTable } from "./utils/categoriesApi.js";
+import { loadPoliciesFromTable, syncAllPolicies } from "./utils/policiesApi.js";
+import { loadSiteSettingsFromTable, syncAllSiteSettings, setSetting as setSiteSetting } from "./utils/siteSettingsApi.js";
+import { loadCollegeManagerFromTable, saveCollegeManager } from "./utils/collegeManagerApi.js";
+import { loadDeptHeadsFromTable, syncAllDeptHeads, upsertDeptHead, deleteDeptHead } from "./utils/deptHeadsApi.js";
 
 // Stage 7 step 5: replace `storageGet("lecturers")` with the table loader,
 // wrapped in the same { value, source } envelope every other loader uses.
@@ -132,6 +136,50 @@ async function loadTeamMembersWrapped() {
   }
 }
 
+// Stage 13 Session B: replace storageGet("policies") with table loader.
+async function loadPoliciesWrapped() {
+  try {
+    const value = await loadPoliciesFromTable();
+    return { value: value && typeof value === "object" ? value : {}, source: "table" };
+  } catch (err) {
+    console.warn("[loadPoliciesWrapped]", err);
+    return { value: {}, source: "error" };
+  }
+}
+
+// Stage 13 Session B: replace storageGet("siteSettings") with table loader.
+async function loadSiteSettingsWrapped() {
+  try {
+    const value = await loadSiteSettingsFromTable();
+    return { value: value && typeof value === "object" ? value : {}, source: "table" };
+  } catch (err) {
+    console.warn("[loadSiteSettingsWrapped]", err);
+    return { value: {}, source: "error" };
+  }
+}
+
+// Stage 13 Session B: replace storageGet("collegeManager") with table loader.
+async function loadCollegeManagerWrapped() {
+  try {
+    const value = await loadCollegeManagerFromTable();
+    return { value: value && typeof value === "object" ? value : { name: "", email: "" }, source: "table" };
+  } catch (err) {
+    console.warn("[loadCollegeManagerWrapped]", err);
+    return { value: { name: "", email: "" }, source: "error" };
+  }
+}
+
+// Stage 13 Session B: replace storageGet("deptHeads") with table loader.
+async function loadDeptHeadsWrapped() {
+  try {
+    const value = await loadDeptHeadsFromTable();
+    return { value: Array.isArray(value) ? value : [], source: "table" };
+  } catch (err) {
+    console.warn("[loadDeptHeadsWrapped]", err);
+    return { value: [], source: "error" };
+  }
+}
+
 // ─── SUPABASE AUTH: strip PKCE / magic-link params early ─────────────────────
 // supabase-js auto-detects ?code= (PKCE) and #access_token= (implicit) on
 // createClient, but the URL params can linger on slow loads. We call getSession
@@ -222,7 +270,8 @@ async function keepAlive() {
 }
 setTimeout(keepAlive, 3000); // רץ 3 שניות אחרי טעינת הדף
 
-const BACKUP_KEYS = new Set(["equipment","reservations","teamMembers","kits","certifications"]);
+// Stage 13: stale backups for retired keys (kits, teamMembers, reservations) cleaned in cleanup migration.
+const BACKUP_KEYS = new Set(["equipment","certifications"]);
 const BACKUP_COOLDOWN = 60 * 60 * 1000; // max once per hour per key
 
 async function autoBackup(key) {
@@ -295,10 +344,23 @@ async function storageSet(key, value) {
 
 // ─── DB DIAGNOSTICS (accessible from browser console) ────────────────────────
 window.dbDiag = async () => {
-  const keys = ["equipment","reservations","categories","categoryTypes","categoryLoanTypes","teamMembers","kits","policies","certifications","deptHeads","collegeManager","managerToken","siteSettings"];
+  // Stage 13: only `equipment` and `certifications` remain as store blobs (and not for long).
+  const storeKeys = ["equipment", "certifications"];
+  // Tables that replaced the legacy blobs — list rows for each.
+  const tables = [
+    "reservations_new", "reservation_items",
+    "categories", "loan_type_filters",
+    "team_members", "kits",
+    "policies", "policy_assets",
+    "site_settings", "college_manager", "dept_heads",
+    "studios", "studio_bookings",
+    "lessons", "lecturers",
+    "students", "tracks", "certification_types", "student_certifications",
+  ];
   console.log("Supabase DB Diagnostic Report");
   console.log("=".repeat(50));
-  for (const key of keys) {
+  console.log("── store blobs ──");
+  for (const key of storeKeys) {
     try {
       const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.${key}&select=data,updated_at`, { headers: await getSbAuthHeaders() });
       const json = await res.json();
@@ -312,9 +374,18 @@ window.dbDiag = async () => {
       }
     } catch(e) { console.log(`[ERR] ${key}: ERROR — ${e.message}`); }
   }
+  console.log("── tables ──");
+  for (const t of tables) {
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/${t}?select=*&limit=1`, { headers: { ...(await getSbAuthHeaders()), "Prefer": "count=exact" } });
+      const cr = res.headers.get("content-range") || "";
+      const total = cr.split("/")[1] || "?";
+      console.log(`[OK] ${t}: ${total} rows`);
+    } catch(e) { console.log(`[ERR] ${t}: ERROR — ${e.message}`); }
+  }
 };
 window.dbExport = async () => {
-  const keys = ["equipment","reservations","teamMembers","kits","certifications"];
+  const keys = ["equipment","certifications"];
   const data = {};
   for (const key of keys) {
     try {
@@ -337,7 +408,7 @@ window.dbImport = async (data) => {
   console.log("Reload the page to see changes");
 };
 window.dbBackups = async () => {
-  const keys = ["equipment","reservations","teamMembers","kits","certifications"];
+  const keys = ["equipment","certifications"];
   console.log("Backup Status:");
   for (const key of keys) {
     try {
@@ -3109,7 +3180,7 @@ function PoliciesPage({ policies, setPolicies, showToast }) {
     setSaving(true);
     setPolicies(toSave);
     setDraft(toSave);
-    const r = await storageSet("policies", toSave);
+    const r = await syncAllPolicies(toSave);
     setSaving(false);
     if(r.ok) showToast("success", "הנהלים נשמרו בהצלחה");
     else showToast("error", "שגיאה בשמירת הנהלים");
@@ -3432,7 +3503,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
     setMgrSaving(true);
     const updated = { name: mgrForm.name.trim(), email: mgrForm.email.toLowerCase().trim() };
     setCollegeManager(updated);
-    const r = await storageSet("collegeManager", updated);
+    const r = await saveCollegeManager(updated);
     setMgrSaving(false);
     if(r.ok) showToast("success","פרטי מנהל המכללה נשמרו");
     else showToast("error","שגיאה בשמירה");
@@ -3447,14 +3518,15 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
     if(!name||!email||!isValidEmailAddress(email)) { showToast("error","שם ומייל תקני חובה"); return; }
     if(dhForm.loanTypes.length===0) { showToast("error","יש לסמן לפחות סוג השאלה אחד"); return; }
     setDhSaving(true);
-    const updated = [...deptHeads, { id:`dh_${Date.now()}`, name, email, role:dhForm.role.trim(), loanTypes:dhForm.loanTypes }];
+    const newDh = { id:`dh_${Date.now()}`, name, email, role:dhForm.role.trim(), loanTypes:dhForm.loanTypes };
+    const updated = [...deptHeads, newDh];
     setDeptHeads(updated);
-    const r = await storageSet("deptHeads", updated);
+    const r = await upsertDeptHead(newDh, updated.length - 1);
     setDhSaving(false);
     if(r.ok) {
       showToast("success", `${name} נוסף/ה כראש מחלקה`);
       const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
-      logActivity({ user_id: caller.id, user_name: caller.full_name, action: "dept_head_add", entity: "deptHeads", entity_id: String(updated[updated.length-1].id), details: { name, email, role: dhForm.role } });
+      logActivity({ user_id: caller.id, user_name: caller.full_name, action: "dept_head_add", entity: "deptHeads", entity_id: String(newDh.id), details: { name, email, role: dhForm.role } });
       setDhForm(emptyDhForm); setAddingDh(false);
     }
     else showToast("error","שגיאה בשמירה");
@@ -3465,9 +3537,11 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
     const email = editDhForm.email.toLowerCase().trim();
     if(!name||!email||!isValidEmailAddress(email)) { showToast("error","שם ומייל תקני חובה"); return; }
     setDhSaving(true);
-    const updated = deptHeads.map(dh=>dh.id===editDh.id ? {...dh,name,email,role:editDhForm.role.trim(),loanTypes:editDhForm.loanTypes} : dh);
+    const updatedDh = { ...editDh, name, email, role:editDhForm.role.trim(), loanTypes:editDhForm.loanTypes };
+    const updated = deptHeads.map(dh=>dh.id===editDh.id ? updatedDh : dh);
     setDeptHeads(updated);
-    const r = await storageSet("deptHeads", updated);
+    const idx = updated.findIndex(dh => dh.id === editDh.id);
+    const r = await upsertDeptHead(updatedDh, idx >= 0 ? idx : 0);
     setDhSaving(false);
     if(r.ok) {
       showToast("success","פרטי ראש המחלקה עודכנו");
@@ -3482,7 +3556,7 @@ function TeamPage({ teamMembers, setTeamMembers, deptHeads=[], setDeptHeads, col
     const target = deptHeads.find(dh=>dh.id===id);
     const updated = deptHeads.filter(dh=>dh.id!==id);
     setDeptHeads(updated);
-    await storageSet("deptHeads", updated);
+    await deleteDeptHead(id);
     showToast("success","ראש המחלקה הוסר");
     const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
     logActivity({ user_id: caller.id, user_name: caller.full_name, action: "dept_head_delete", entity: "deptHeads", entity_id: String(id), details: { name: target?.name, email: target?.email } });
@@ -5011,7 +5085,7 @@ function SettingsPage({ siteSettings, setSiteSettings, showToast, settingsRole =
     setSiteSettings(draft);
     try { localStorage.setItem("cache_siteSettings", JSON.stringify(draft)); } catch {}
     try { const tc=document.getElementById("theme-color-meta"); if(tc&&draft.accentColor) tc.setAttribute("content",draft.accentColor); } catch {}
-    await storageSet("siteSettings", draft);
+    await syncAllSiteSettings(draft);
     setSaving(false);
     showToast("success", "ההגדרות נשמרו");
   };
@@ -5785,17 +5859,42 @@ export default function App() {
       const snapshot = lastEntry.snapshot;
       const currentState = getUndoSnapshot();
 
-      const keysToUpdate = [
-        "equipment", "reservations", "categories", "categoryTypes", "categoryLoanTypes",
-        "teamMembers", "deptHeads", "collegeManager", "kits", "policies",
-        "certifications", "siteSettings", "studios", "studio_bookings"
-      ];
+      // Stage 13: only `equipment` and `reservations` are still legacy blobs in the store.
+      // Everything else is normalized — restore via the table APIs.
+      const blobKeys = ["equipment", "reservations"];
 
       const promises = [];
-      for (const key of keysToUpdate) {
+      for (const key of blobKeys) {
         if (snapshot[key] !== undefined && !dataEquals(currentState[key], snapshot[key])) {
           promises.push(storageSet(key, snapshot[key]));
         }
+      }
+      // Categories + loan_type_filters (Stage 12)
+      if (snapshot.categories !== undefined && !dataEquals(currentState.categories, snapshot.categories)) {
+        promises.push(syncAllCategories(snapshot.categories, snapshot.categoryTypes || {}));
+      }
+      if (snapshot.categoryLoanTypes !== undefined && !dataEquals(currentState.categoryLoanTypes, snapshot.categoryLoanTypes)) {
+        promises.push(syncLoanTypeFilters(snapshot.categoryLoanTypes));
+      }
+      // Team members + kits (Stage 11)
+      if (snapshot.teamMembers !== undefined && !dataEquals(currentState.teamMembers, snapshot.teamMembers)) {
+        promises.push(syncAllTeamMembers(snapshot.teamMembers));
+      }
+      if (snapshot.kits !== undefined && !dataEquals(currentState.kits, snapshot.kits)) {
+        promises.push(syncAllKits(snapshot.kits));
+      }
+      // Stage 13: policies / siteSettings / collegeManager / deptHeads
+      if (snapshot.policies !== undefined && !dataEquals(currentState.policies, snapshot.policies)) {
+        promises.push(syncAllPolicies(snapshot.policies));
+      }
+      if (snapshot.siteSettings !== undefined && !dataEquals(currentState.siteSettings, snapshot.siteSettings)) {
+        promises.push(syncAllSiteSettings(snapshot.siteSettings));
+      }
+      if (snapshot.collegeManager !== undefined && !dataEquals(currentState.collegeManager, snapshot.collegeManager)) {
+        promises.push(saveCollegeManager(snapshot.collegeManager));
+      }
+      if (snapshot.deptHeads !== undefined && !dataEquals(currentState.deptHeads, snapshot.deptHeads)) {
+        promises.push(syncAllDeptHeads(snapshot.deptHeads));
       }
       // Lessons + lecturers are normalized — restore via the table API.
       if (snapshot.lessons !== undefined && !dataEquals(currentState.lessons, snapshot.lessons)) {
@@ -5902,18 +6001,17 @@ export default function App() {
     (async()=>{
         try {
           historySuspendedRef.current = true;
-          const [eqR, resR, catsAndTypesR, catLoanTypesR, tmR, ktsR, polR, dhsR, mgrR, mgrTokR, siteSetR, studiosR, studioBkR, lessonsR, lecturersR] = await Promise.all([
+          const [eqR, resR, catsAndTypesR, catLoanTypesR, tmR, ktsR, polR, dhsR, mgrR, siteSetR, studiosR, studioBkR, lessonsR, lecturersR] = await Promise.all([
             (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
           (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
           loadCategoriesWrapped(), // Stage 12 Session B: read from public.categories
           loadLoanTypeFiltersWrapped(), // Stage 12 Session B: read from public.loan_type_filters
           loadTeamMembersWrapped(), // Stage 11 Session B: read from public.team_members
           loadKitsWrapped(), // Stage 11 Session B: read from public.kits
-          storageGet("policies"),
-          storageGet("deptHeads"),
-          storageGet("collegeManager"),
-          storageGet("managerToken"),
-          storageGet("siteSettings"),
+          loadPoliciesWrapped(),         // Stage 13 Session B: read from public.policies + policy_assets
+          loadDeptHeadsWrapped(),        // Stage 13 Session B: read from public.dept_heads
+          loadCollegeManagerWrapped(),   // Stage 13 Session B: read from public.college_manager
+          loadSiteSettingsWrapped(),     // Stage 13 Session B: read from public.site_settings (incl. managerToken)
           loadStudiosWrapped(), // Stage 9 Session B: initial load reads from public.studios
           loadStudioBookingsWrapped(), // Stage 10 Session B: read from public.studio_bookings
           loadLessonsWrapped(), // Stage 8 Session B step 5: initial load reads from public.lessons
@@ -5930,8 +6028,9 @@ export default function App() {
           const pol = polR.value, polSrc = polR.source;
           const dhs = dhsR.value, dhsSrc = dhsR.source;
           const mgr = mgrR.value, mgrSrc = mgrR.source;
-          const mgrTok = mgrTokR.value, mgrTokSrc = mgrTokR.source;
           const siteSet = siteSetR.value;
+          // Stage 13 Session B: managerToken now lives in site_settings table.
+          const mgrTok = (siteSet && typeof siteSet === "object") ? (siteSet.managerToken ?? "") : "";
           const stds = studiosR.value;
           const stdBk = studioBkR.value;
 
@@ -6017,15 +6116,14 @@ export default function App() {
         // reservations blob init removed (Stage 5) — Supabase is source of truth
         // categories: Stage 12-C — reads come from public.categories table, blob retired.
         // teamMembers + kits: Stage 11-C — reads come from normalized tables, blob retired.
-        if(!pol && polSrc === "supabase_empty")   await storageSet("policies",        { פרטית:"", הפקה:"", סאונד:"", לילה:"" });
-        // certifications blob init removed (Stage 6) — normalized tables are source of truth
-        if(!dhs && dhsSrc === "supabase_empty")     await storageSet("deptHeads",       []);
-        if(!mgrTok && mgrTokSrc === "supabase_empty") {
-          const tok = "mgr_"+Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10);
-          await storageSet("managerToken", tok);
+        // Stage 13 Session B: policies / deptHeads / collegeManager / managerToken
+        // are now normalized tables with their own defaults; no init-time blob writes needed.
+        // managerToken: if missing in site_settings (fresh install), generate one and persist to the table.
+        if (!mgrTok) {
+          const tok = "mgr_" + Math.random().toString(36).slice(2,10) + Math.random().toString(36).slice(2,10);
+          try { await setSiteSetting("managerToken", tok); } catch (err) { console.warn("[init managerToken]", err); }
           setManagerToken(tok);
         }
-        if(!mgr && mgrSrc === "supabase_empty") await storageSet("collegeManager", { name:"", email:"" });
         // reservations blob write removed (Stage 5) — normalization is in-memory only
         // Warn if network failed and no cache
         if(eqSrc === "cache" && !eq) showToast("error", "⚠️ לא ניתן לטעון ציוד — בדוק חיבור");
@@ -6310,6 +6408,93 @@ export default function App() {
                 const value = await loadLoanTypeFiltersFromTable();
                 if (!dataEquals(categoryLoanTypesRef.current, value)) _setCategoryLoanTypes(value);
               } catch (err) { console.warn("loan_type_filters realtime refetch failed", err); }
+            }, 400);
+          };
+        })(),
+      )
+      // Stage 13 Session B: live-sync policies + policy_assets into local state.
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "policies" },
+        (() => {
+          let t = null;
+          return () => {
+            clearTimeout(t);
+            t = setTimeout(async () => {
+              try {
+                const value = await loadPoliciesFromTable();
+                if (value && typeof value === "object" && !dataEquals(policiesRef.current, value)) _setPolicies(value);
+              } catch (err) { console.warn("policies realtime refetch failed", err); }
+            }, 400);
+          };
+        })(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "policy_assets" },
+        (() => {
+          let t = null;
+          return () => {
+            clearTimeout(t);
+            t = setTimeout(async () => {
+              try {
+                const value = await loadPoliciesFromTable();
+                if (value && typeof value === "object" && !dataEquals(policiesRef.current, value)) _setPolicies(value);
+              } catch (err) { console.warn("policy_assets realtime refetch failed", err); }
+            }, 400);
+          };
+        })(),
+      )
+      // Stage 13 Session B: live-sync site_settings (incl. managerToken).
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "site_settings" },
+        (() => {
+          let t = null;
+          return () => {
+            clearTimeout(t);
+            t = setTimeout(async () => {
+              try {
+                const value = await loadSiteSettingsFromTable();
+                if (value && typeof value === "object" && !dataEquals(siteSettingsRef.current, value)) {
+                  _setSiteSettings(value);
+                  if (value.managerToken && value.managerToken !== managerToken) setManagerToken(value.managerToken);
+                }
+              } catch (err) { console.warn("site_settings realtime refetch failed", err); }
+            }, 400);
+          };
+        })(),
+      )
+      // Stage 13 Session B: live-sync college_manager.
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "college_manager" },
+        (() => {
+          let t = null;
+          return () => {
+            clearTimeout(t);
+            t = setTimeout(async () => {
+              try {
+                const value = await loadCollegeManagerFromTable();
+                if (value && !dataEquals(collegeManagerRef.current, value)) _setCollegeManager(value);
+              } catch (err) { console.warn("college_manager realtime refetch failed", err); }
+            }, 400);
+          };
+        })(),
+      )
+      // Stage 13 Session B: live-sync dept_heads.
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "dept_heads" },
+        (() => {
+          let t = null;
+          return () => {
+            clearTimeout(t);
+            t = setTimeout(async () => {
+              try {
+                const value = await loadDeptHeadsFromTable();
+                if (Array.isArray(value) && !dataEquals(deptHeadsRef.current, value)) _setDeptHeads(value);
+              } catch (err) { console.warn("dept_heads realtime refetch failed", err); }
             }, 400);
           };
         })(),
@@ -6746,7 +6931,7 @@ export default function App() {
                 <span className="topbar-title" style={{flex:1}}>הגדרות מערכת</span>
               </div>
             </div>
-            <SystemSettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} storageSet={storageSet}/>
+            <SystemSettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast}/>
           </div>
         </div>
       )}

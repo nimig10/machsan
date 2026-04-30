@@ -3,6 +3,8 @@ import { useState, useEffect } from "react";
 import { Modal } from "./ui.jsx";
 import { storageSet, storageGet, isValidEmailAddress, logActivity, getAuthToken } from "../utils.js";
 import { syncAllTeamMembers } from "../utils/teamMembersApi.js";
+import { saveCollegeManager } from "../utils/collegeManagerApi.js";
+import { upsertDeptHead, deleteDeptHead } from "../utils/deptHeadsApi.js";
 import { BookOpen, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Mic, Package, Settings, Shield, X } from "lucide-react";
 
 const WAREHOUSE_SECTIONS = [
@@ -403,7 +405,7 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
     setMgrSaving(true);
     const updated = { name: mgrForm.name.trim(), email: mgrForm.email.toLowerCase().trim() };
     setCollegeManager(updated);
-    const r = await storageSet("collegeManager", updated);
+    const r = await saveCollegeManager(updated);
     setMgrSaving(false);
     if (r.ok) showToast("success", "פרטי מנהל המכללה נשמרו");
     else showToast("error", "שגיאה בשמירה");
@@ -420,9 +422,10 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
     // Check for duplicate lecturer
     if ((deptHeads||[]).some(dh => dh.lecturerId === dhForm.lecturerId)) { showToast("error","מרצה זה כבר מוגדר כראש מחלקה"); return; }
     setDhSaving(true);
-    const updated = [...(deptHeads||[]), { id:`dh_${Date.now()}`, name, email, role:dhForm.role.trim(), loanTypes:dhForm.loanTypes, lecturerId:dhForm.lecturerId }];
+    const newDh = { id:`dh_${Date.now()}`, name, email, role:dhForm.role.trim(), loanTypes:dhForm.loanTypes, lecturerId:dhForm.lecturerId };
+    const updated = [...(deptHeads||[]), newDh];
     setDeptHeads(updated);
-    const r = await storageSet("deptHeads", updated);
+    const r = await upsertDeptHead(newDh, updated.length - 1);
     setDhSaving(false);
     if (r.ok) { showToast("success", `${name} נוסף/ה כראש מחלקה`); setDhForm(emptyDhForm); setDhLecturerInput(""); setAddingDh(false); }
     else showToast("error","שגיאה בשמירה");
@@ -435,9 +438,11 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
     // Check for duplicate lecturer (excluding current)
     if ((deptHeads||[]).some(dh => dh.id!==editDh.id && dh.lecturerId === editDhForm.lecturerId)) { showToast("error","מרצה זה כבר מוגדר כראש מחלקה"); return; }
     setDhSaving(true);
-    const updated = (deptHeads||[]).map(dh => dh.id===editDh.id ? {...dh,name,email,role:editDhForm.role.trim(),loanTypes:editDhForm.loanTypes,lecturerId:editDhForm.lecturerId} : dh);
+    const updatedDh = {...editDh,name,email,role:editDhForm.role.trim(),loanTypes:editDhForm.loanTypes,lecturerId:editDhForm.lecturerId};
+    const updated = (deptHeads||[]).map(dh => dh.id===editDh.id ? updatedDh : dh);
     setDeptHeads(updated);
-    const r = await storageSet("deptHeads", updated);
+    const idx = updated.findIndex(dh => dh.id === editDh.id);
+    const r = await upsertDeptHead(updatedDh, idx >= 0 ? idx : 0);
     setDhSaving(false);
     if (r.ok) { showToast("success","פרטי ראש המחלקה עודכנו"); setEditDh(null); }
     else showToast("error","שגיאה בשמירה");
@@ -445,7 +450,8 @@ function LegacyTeamTab({ teamMembers, setTeamMembers, deptHeads, setDeptHeads, c
 
   const delDh = async (id) => {
     const updated = (deptHeads||[]).filter(dh => dh.id!==id);
-    setDeptHeads(updated); await storageSet("deptHeads", updated);
+    setDeptHeads(updated);
+    await deleteDeptHead(id);
     showToast("success","ראש המחלקה הוסר");
   };
 

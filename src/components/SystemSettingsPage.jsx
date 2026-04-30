@@ -1,8 +1,9 @@
 // SystemSettingsPage.jsx — global system settings (admin only)
 import { useState } from "react";
 import { Camera, Film, Mic } from "lucide-react";
+import { syncAllSiteSettings } from "../utils/siteSettingsApi.js";
 
-export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast, storageSet }) {
+export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast }) {
   const [draft, setDraft] = useState({ aiMaxRequests: 5, publicDisplayInterval: 18, ...siteSettings });
   const [saving, setSaving] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
@@ -35,7 +36,7 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast, s
   const save = async () => {
     setSaving(true);
     setSiteSettings(draft);
-    await storageSet("siteSettings", draft);
+    await syncAllSiteSettings(draft);
     setSaving(false);
     showToast("success", "ההגדרות נשמרו");
   };

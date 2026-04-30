@@ -286,7 +286,9 @@ export async function storageSet(key, value) {
 
   try {
     // v3 auth flow marker — for debugging cached bundles
-    const STAFF_KEYS = new Set(["kits","equipment","reservations","lessons","lecturers","teamMembers","categories","deptHeads","siteSettings","policies","studios","certifications","students","collegeManager","managerToken"]);
+    // Stage 13: most keys are now normalized into dedicated tables (RETIRED_KEYS in api/store.js).
+    // The legacy storageSet path is kept only for the few blobs that still live in store.
+    const STAFF_KEYS = new Set(["equipment","certifications","students"]);
     const isStaffKey = STAFF_KEYS.has(key);
 
     // Token retrieval — completely lock-free, bypasses Supabase JS client.

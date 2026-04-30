@@ -5,6 +5,7 @@ import { storageSet, lsGet, getAuthToken } from "../utils.js";
 import { syncAllLessons } from "../utils/lessonsApi.js";
 import { syncAllStudios } from "../utils/studiosApi.js";
 import { syncAllStudioBookings } from "../utils/studioBookingsApi.js";
+import { syncAllSiteSettings } from "../utils/siteSettingsApi.js";
 import { Modal } from "./ui.jsx";
 
 const DAY_HOURS = (() => { const h = []; for (let hr = 9; hr <= 21; hr++) for (let m = 0; m < 60; m += 15) { if (hr === 21 && m > 30) break; h.push(`${String(hr).padStart(2,"0")}:${String(m).padStart(2,"0")}`); } return h; })();
@@ -220,7 +221,7 @@ export default function StudioBookingPage(props) {
 
   const saveSiteSettings = useCallback(async (nextSettings) => {
     setSiteSettings(nextSettings);
-    await storageSet("siteSettings", nextSettings);
+    await syncAllSiteSettings(nextSettings);
   }, [setSiteSettings]);
 
   const teamMemberOptions = useMemo(() => {
