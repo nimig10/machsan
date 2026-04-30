@@ -1,7 +1,7 @@
 import { supabase } from '../supabaseClient.js';
 import { useState, useEffect } from "react";
 import { Modal } from "./ui.jsx";
-import { storageSet, storageGet, isValidEmailAddress, logActivity, getAuthToken } from "../utils.js";
+import { isValidEmailAddress, logActivity, getAuthToken } from "../utils.js";
 import { syncAllTeamMembers } from "../utils/teamMembersApi.js";
 import { saveCollegeManager } from "../utils/collegeManagerApi.js";
 import { upsertDeptHead, deleteDeptHead } from "../utils/deptHeadsApi.js";

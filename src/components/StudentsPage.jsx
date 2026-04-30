@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from '../supabaseClient.js';
 import { CheckCircle, ClipboardList, Clock, Film, GraduationCap, Headphones, LayoutDashboard, Lightbulb, Package, Pencil, Plus, Search, X } from "lucide-react";
-import { storageSet, logActivity } from "../utils.js";
+import { logActivity } from "../utils.js";
 import { dualWriteCertifications, listStudents } from "../utils/studentsApi.js";
 import { syncAllStudioBookings } from "../utils/studioBookingsApi.js";
 import { Modal } from "./ui.jsx";

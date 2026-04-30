@@ -1,7 +1,6 @@
 // LecturersPage.jsx — central lecturers management
 import { useEffect, useState, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
-import { storageSet } from "../utils.js";
 import {
   dualWriteLecturer,
   deleteLecturer as deleteLecturerRow,

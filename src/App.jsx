@@ -5837,12 +5837,11 @@ export default function App() {
       const snapshot = lastEntry.snapshot;
       const currentState = getUndoSnapshot();
 
-      // reservations is the only remaining legacy blob written via storageSet.
-      // equipment is normalized — restore via writeEquipmentToDB.
+      // reservations are normalized into reservations_new + reservation_items
+      // (relational). A full-snapshot restore is non-trivial — undo currently
+      // restores only the local React state for reservations, not the DB.
+      // equipment is restored to DB via writeEquipmentToDB.
       const promises = [];
-      if (snapshot.reservations !== undefined && !dataEquals(currentState.reservations, snapshot.reservations)) {
-        promises.push(storageSet("reservations", snapshot.reservations));
-      }
       if (snapshot.equipment !== undefined && !dataEquals(currentState.equipment, snapshot.equipment)) {
         promises.push(writeEquipmentToDB(snapshot.equipment));
       }

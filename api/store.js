@@ -96,16 +96,9 @@ async function handleGet(req, res) {
   }
 }
 
-// Keys that may only be written by staff (admin/warehouse).
-// certifications is the last active store blob; equipment writes go via /api/sync-equipment.
-const STAFF_ONLY_KEYS = new Set([
-  "equipment", "certifications",
-]);
-
-// Keys that have been migrated to normalized tables. Any POST attempt
-// is rejected with 410 Gone so legacy clients (or stray code paths) can't
-// resurrect the dead blob. See migrations 035 (lecturers) and
-// 018_stage8c_remove_lessons_blob (lessons).
+// All blob keys are now retired — every domain entity has its own table.
+// Any POST attempt is rejected with 410 Gone so legacy clients (or stray code
+// paths) can't resurrect the dead blob.
 const RETIRED_KEYS = new Set([
   "lecturers",        // Stage 7-C — public.lecturers is source of truth
   "lessons",          // Stage 8-C — public.lessons is source of truth
@@ -114,7 +107,7 @@ const RETIRED_KEYS = new Set([
   "studioBookings",   // legacy camelCase typo — already retired
   "kits",             // Stage 11-C — public.kits is source of truth
   "teamMembers",      // Stage 11-C — public.team_members is source of truth
-  "reservations",     // blob was already empty (Stage 5); retire formally
+  "reservations",     // public.reservations_new + reservation_items
   "categories",       // Stage 12-C — public.categories is source of truth
   "categoryTypes",    // Stage 12-C — merged into public.categories
   "categoryLoanTypes",// Stage 12-C — public.loan_type_filters is source of truth
@@ -125,6 +118,10 @@ const RETIRED_KEYS = new Set([
   "managerToken",     // Stage 13-C — folded into public.site_settings
   "deptHead",         // Stage 13-C — dead legacy singular form
   "calendarToken",    // Stage 13-C — dead/removed feature
+  "equipment",        // public.equipment + equipment_units (writes via /api/sync-equipment)
+  "certifications",   // public.certification_types + student_certifications + tracks
+  "students",         // public.students table
+  "backup_certifications", // stale auto-backup of retired blob
 ]);
 
 async function handlePost(req, res) {
@@ -142,8 +139,10 @@ async function handlePost(req, res) {
     });
   }
 
-  // ── Auth gate: staff-only keys require staff (checks public.users + staff_members fallback) ──
-  if (STAFF_ONLY_KEYS.has(key)) {
+  // ── Auth gate: any non-retired write must come from staff ──
+  // (Currently only `backup_*` keys reach this code path; we still want
+  // a real auth check rather than letting anon callers write to store.)
+  {
     const staff = await requireStaff(req, res);
     if (!staff) return; // requireStaff already sent 401/403
   }

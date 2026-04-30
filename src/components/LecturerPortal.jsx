@@ -1,6 +1,6 @@
 import { supabase } from '../supabaseClient.js';
 import { useEffect, useMemo, useRef, useState } from "react";
-import { formatDate, getAvailable, normalizeName, storageSet, storageGet, updateReservationStatus, getAuthToken } from "../utils.js";
+import { formatDate, getAvailable, normalizeName, updateReservationStatus, getAuthToken } from "../utils.js";
 import { listStudents } from "../utils/studentsApi.js";
 import { syncAllLessons } from "../utils/lessonsApi.js";
 import { statusBadge } from "./ui.jsx";

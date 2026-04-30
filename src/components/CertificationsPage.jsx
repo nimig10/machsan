@@ -1,7 +1,7 @@
 // CertificationsPage.jsx — certifications management with equipment/studio modes
 import { useRef, useState } from "react";
 import { Camera, CheckCircle, ClipboardList, GraduationCap, Lightbulb, Mic, Package, Pencil, Search, X } from "lucide-react";
-import { storageSet, cloudinaryThumb, writeEquipmentToDB } from "../utils.js";
+import { cloudinaryThumb, writeEquipmentToDB } from "../utils.js";
 import { dualWriteCertifications, setStudentCertStatus } from "../utils/studentsApi.js";
 import { syncAllStudios } from "../utils/studiosApi.js";
 import { Modal } from "./ui.jsx";

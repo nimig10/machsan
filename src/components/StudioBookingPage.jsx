@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { BookOpen, Calendar, ClipboardList, Film, GraduationCap, Mic, Pencil, Shield, User, Video, X } from "lucide-react";
-import { storageSet, lsGet, getAuthToken } from "../utils.js";
+import { lsGet, getAuthToken } from "../utils.js";
 import { syncAllLessons } from "../utils/lessonsApi.js";
 import { syncAllStudios } from "../utils/studiosApi.js";
 import { syncAllStudioBookings } from "../utils/studioBookingsApi.js";

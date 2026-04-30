@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient.js';
-import { getAvailable, formatLocalDateInput, storageGet, getAuthToken } from '../utils.js';
+import { getAvailable, formatLocalDateInput, getAuthToken } from '../utils.js';
 
 const fetchWithRetry = async (url, options, maxRetries = 5) => {
   const delays = [1000, 2000, 5000, 10000, 20000];

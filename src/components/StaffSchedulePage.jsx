@@ -1,7 +1,7 @@
 // StaffSchedulePage.jsx — Staff weekly schedule + daily activity summary
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
 import { Modal } from "./ui.jsx";
-import { storageSet, getAuthToken } from "../utils.js";
+import { getAuthToken } from "../utils.js";
 import { syncAllLessons } from "../utils/lessonsApi.js";
 import { BookOpen, Calendar, Check, ClipboardList, Package, Shield, X } from "lucide-react";
 
