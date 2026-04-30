@@ -23,36 +23,47 @@
 - יש גם פרויקט Vercel בשם "app" — מיותר, להתעלם/למחוק
 - Supabase project: `wxkyqgwwraojnbmyyfco` (name: "MACHSAN CAMERA")
 
-## 🗄️ מבנה נתונים (Supabase)
+## 🗄️ מבנה נתונים (Supabase) — Tables-only (post Stage 13)
 
-### טבלת `store` — JSONB key/value
-לוב האפליקציה. כל ישות מאוחסנת כשורה עם `key` ו-`data` (JSONB):
+**אין יותר `public.store`** — הטבלה והכל סביבה (`store_snapshots`, `store_shrink_guard`, `kits_content_guard`, `is_protected_store_key`, `prune_store_snapshots`, DDL guard event triggers) הוסרו במיגרציה `20260430220000_drop_store_table_and_guards`. לא נשארו blobs בDB.
 
-| key | סוג | תוכן |
-|---|---|---|
-| `kits` | array | קיטים של ציוד לשיעורים |
-| `reservations` | array (ריק כרגע — עבר ל-`reservation_items`) | השאלות |
-| `equipment` | array | יחידות ציוד |
-| `lessons` | array | שיעורים/קורסים |
-| `lecturers` | array | מרצים |
-| `studios` | array | אולפנים |
-| `studio_bookings` | array | הזמנות אולפנים |
-| `categories` | array | קטגוריות ציוד |
-| `teamMembers` | array | צוות |
-| `certifications` | object | `{types, students, trackSettings, tracks}` — הסמכות + תלמידים + מסלולים |
-| `policies`, `siteSettings`, `deptHeads` | object | הגדרות |
+כל ישות חיה בטבלה ייעודית עם RLS + realtime:
 
-### טבלאות נוספות
-- `reservation_items` — reservations עברו לכאן (Stage 5, הקומיט `1939e73`)
-- `staff_members` (ישן) + `public.users` (חדש) — שתי מערכות auth במקביל
-- `activity_logs` — תיעוד פעולות (עמודות: `id, created_at, user_id, user_name, action, entity, entity_id, details`)
-- `store_snapshots` — היסטוריית גיבויים אוטומטית של store (מיגרציה 011)
-- `equipment_reports`, `auth_entity_map`, `staff_schedule_*`
+| ישות | טבלה(ות) | API util |
+|------|----------|----------|
+| ציוד | `equipment` + `equipment_units` | `writeEquipmentToDB` ב-`utils.js` (RPC) |
+| השאלות | `reservations_new` + `reservation_items` | `createReservation`, `updateReservationStatus` |
+| קיטים | `kits` | `kitsApi.js` |
+| צוות | `team_members` | `teamMembersApi.js` |
+| קטגוריות + סינון | `categories` + `loan_type_filters` | `categoriesApi.js` |
+| מרצים | `lecturers` | `lecturersApi.js` |
+| שיעורים | `lessons` | `lessonsApi.js` |
+| אולפנים | `studios` | `studiosApi.js` |
+| הזמנות אולפנים | `studio_bookings` | `studioBookingsApi.js` |
+| מדיניות | `policies` + `policy_assets` | `policiesApi.js` |
+| הגדרות אתר | `site_settings` (כולל `managerToken`) | `siteSettingsApi.js` |
+| מנהל מכללה | `college_manager` | `collegeManagerApi.js` |
+| ראשי מחלקה | `dept_heads` | `deptHeadsApi.js` |
+| סטודנטים + הסמכות | `students` + `certification_types` + `student_certifications` + `tracks` | `studentsApi.js` |
 
-## 🛡️ הגנות DB קריטיות (נבנו ב-2026-04)
-- **`store_shrink_guard` trigger** (מיגרציה 011) — חוסם כתיבה שמצמצמת מערך מוגן ביותר מ-10% + שורה. שומר snapshot אוטומטית.
-- **`is_protected_store_key()`** — פונקציה שמחזירה את רשימת המפתחות המוגנים. **אירוע קריטי ב-2026-04-19**: הפונקציה נדרסה ידנית ב-SQL Editor (על ידי AI או אדם) לרשימה מצומצמת → איבדנו 122 תלמידים + 12 סוגי הסמכות. שוחזרו מ-snapshot 234. מיגרציה 016_restore_protected_key_list החזירה את הרשימה, מיגרציה 017_lock_guard_functions חוסמת DROP של פונקציות guard.
-- **`kits_content_guard` trigger** (מיגרציה 016/017) — חוסם מחיקת תוכן של 2+ קיטים בו-זמנית.
+טבלאות נוספות (לא ישויות domain): `staff_members` (ישן) + `public.users` (חדש), `activity_logs`, `equipment_reports`, `auth_entity_map`, `staff_schedule_*`.
+
+## ✅ Pattern לפיצ'ר חדש (חובה)
+כל ישות חדשה חייבת להיווצר לפי הפטרן הזה. אסור — חזרתית, עם guard ב-ESLint — ליצור JSONB blob חדש או להשתמש ב-`storageGet/storageSet`/`api/store`.
+
+1. **מיגרציה ב-`supabase/migrations/`** — `CREATE TABLE` עם עמודות מפורשות, `created_at`/`updated_at`, `touch_updated_at` trigger, `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`, ושלוש policies סטנדרטיות:
+   - `service_role_all_<table>` — `FOR ALL TO service_role USING (true) WITH CHECK (true)`
+   - `staff_all_<table>` — `FOR ALL TO authenticated USING (public.is_staff_member()) WITH CHECK (public.is_staff_member())`
+   - `anon_read_<table>` — `FOR SELECT TO anon, authenticated USING (true)` (רק אם הטבלה מוצגת לציבור)
+   - `ALTER PUBLICATION supabase_realtime ADD TABLE public.<table>` (אם צריך realtime)
+2. **API util ב-`src/utils/<entity>Api.js`** עם singleton supabase client (`import { supabase } from "../supabaseClient.js"`). חתימות סטנדרטיות: `list<Entity>()`, `upsert<Entity>(row)`, `delete<Entity>(id)`, `syncAll<Entity>(arr)`. עיין ב-`kitsApi.js`/`teamMembersApi.js` כתבניות.
+3. **App.jsx wrapper** ב-pattern של `loadKitsWrapped` — try/catch + source flag.
+4. **Realtime channel** ב-App.jsx (אם הטבלה מתעדכנת בריצה) עם 400ms debounce.
+5. **JSONB מותר רק** עבור value heterogeneous (כמו `site_settings.value`) או metadata חופשי קטן. לא להשתמש בJSONB כדי לאחסן מערכי domain רחב.
+
+## 🛡️ Guardrails חיים
+- **ESLint** ב-`eslint.config.js` חוסם: `storageGet(...)`, `storageSet(...)`, `supabase.from('store'...)`, `from('store_snapshots'...)`, `/api/store`. כל ניסיון להוסיף קוד כזה נכשל ב-`npm run lint`.
+- **Supabase**: הטבלה `public.store` לא קיימת בDB. כל מי שינסה לקרוא/לכתוב יקבל שגיאת relation does not exist.
 
 ## 🔐 Auth + זרימות
 
@@ -80,42 +91,32 @@
 - **CertificationsPage** (`src/components/CertificationsPage.jsx`) — עריכת סוגי הסמכה ציוד/אולפן.
 - **StudentsPage** (`src/components/StudentsPage.jsx`) — ניהול תלמידים + מסלולים.
 
-## 🔄 כתיבה ל-store — `storageSet()`
-ב-`src/utils.js:174`. הזרימה:
-1. Client קורא `storageSet("kits", newArray)`
-2. בודק sanity (מינימום פריטים) + Hebrew corruption
-3. גיבוי מקומי אוטומטי למפתחות קריטיים
-4. שולח JWT auth token (תוקן היום)
-5. POST ל-`/api/store` (Vercel)
-6. `/api/store` (`api/store.js`) — עם auth gate חדש: `STAFF_ONLY_KEYS` דורש staff; `studio_bookings` פתוח
-7. כותב ל-Supabase עם `SERVICE_ROLE_KEY`
-8. Trigger `store_shrink_guard` בודק ומשמור snapshot
+## 🔄 כתיבה לDB — Pattern החדש
+כל ישות נכתבת דרך API util ייעודי שלה. דוגמא:
+```js
+import { syncAllKits, upsertKit, deleteKit } from "../utils/kitsApi.js";
+await upsertKit({ id, name, items });          // single row upsert
+await syncAllKits(arr);                         // batch upsert + delete-missing
+await deleteKit(id);                            // single row delete
+```
+תחת המנוע: כל util משתמש ב-singleton `supabase` client → `supabase.from("<table>").upsert(...)` → RLS בודקת `is_staff_member()` → realtime בערוץ הטבלה משדר ל-tabs אחרים.
+
+**אסור**:
+- ❌ `storageGet`, `storageSet` (הוסרו, ESLint יחסום)
+- ❌ `fetch("/api/store")` (הendpoint נמחק)
+- ❌ `supabase.from("store")` (הטבלה לא קיימת)
+- ❌ JSONB column חדש למערכי domain (השתמש בטבלה ייעודית)
 
 ## 🔥 נקודות חולשה/סיכון
-1. **שתי מערכות auth במקביל** (`public.users` + `staff_members`) — קל לטעות איזו טבלה לבדוק.
-2. **כל הנתונים ב-JSONB** — קל למחוק הכל בפעולה אחת. `store_shrink_guard` ההגנה היחידה.
-3. **PublicForm מקבלת `certifications` מלא כ-state** — אם הטעינה חלקית והיא קוראת `storageSet("certifications", state)`, תכתוב cache ריק. זה מה שקרה ב-04-19.
-4. **אין bundler protection** — מישהו עם גישה ל-SQL Editor יכול לדרוס פונקציות (טופל חלקית במיגרציה 017).
-5. **פרויקט "app" ב-Vercel מיותר** — צורך build minutes כפולים בכל push.
+1. **שתי מערכות auth במקביל** (`public.users` + `staff_members`) — `requireStaff` עם fallback מטפל; nimig10@gmail.com כבר ב-public.users.
+2. **פרויקט "app" ב-Vercel מיותר** — צורך build minutes כפולים בכל push.
+3. **App.jsx ענק** (~7,000 שורות) — tech debt ארוך טווח, לא חסם.
 
-## 📝 ההיסטוריה האחרונה של הסשן
-- תחילה: verify של commit `1939e73`.
-- הסרתי dead code (`PublicForm_REMOVED`, `CertificationsPage_REMOVED`) — ~1,100 שורות מ-App.jsx.
-- תיקנתי password reset בעברית + פונט כפתור במייל.
-- **אסון 04-19**: 122 תלמידים נעלמו. שיחזרתי מ-snapshot 234. גיליתי ש-`is_protected_store_key` נדרסה ידנית.
-- מיגרציה `016_restore_protected_key_list` — החזרתי את רשימת המפתחות המוגנים.
-- מיגרציה `017_lock_guard_functions` — DDL event trigger שחוסם DROP של פונקציות guard.
-- תיקון `api/store.js` — הוספתי auth gate עם `requireStaff`. `STAFF_ONLY_KEYS` מוגדר. `studio_bookings` נשאר פתוח.
-- תיקון `utils.js` — `storageSet` שולח עכשיו `Authorization: Bearer <token>`.
-- תיקון `StudentsPage.jsx` — client-side shrink guard (רק students >10% או types→0).
-- **Commit אחרון**: `0f39158` — "fix(auth): use requireStaff for store writes".
-
-## 🎯 צעדים הבאים מומלצים
-1. **לבדוק שהתיקון עובד**: אחרי הדיפלוי של `0f39158` — לערוך תלמיד ולראות שאין יותר 401.
-2. **למחוק פרויקט Vercel "app"** (Settings → Advanced → Delete).
-3. **לאחד את מערכות ה-auth** — להעביר את `nimig10@gmail.com` ל-`public.users` עם `is_admin=true`.
-4. **Refactor PublicForm** — להפסיק לשלוח את `certifications` המלא כ-state; להשתמש ב-patches.
-5. **לצמצם את App.jsx** — עדיין 7,381 שורות, ניתן לפצל ל-pages/hooks.
+## 🎯 צעדים הבאים מומלצים (post Stage 13)
+1. **למחוק פרויקט Vercel "app"** (Settings → Advanced → Delete) — מיותר.
+2. **לאחד מערכות auth סופית** — להוציא את `staff_members` מהקוד (nimig10 כבר ב-public.users).
+3. **לצמצם את App.jsx** (~7,000 שורות) — לפצל ל-pages/hooks.
+4. **Storage לPDF** — `policy_assets` כרגע Base64 ב-TEXT; העברה ל-Supabase Storage תעשה למערכת יותר נקייה ארכיטקטונית.
 
 ## 🛠️ כלים זמינים
 - **Supabase MCP** — `execute_sql`, `apply_migration`, `list_migrations`, `list_projects`

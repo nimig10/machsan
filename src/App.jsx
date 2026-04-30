@@ -216,131 +216,11 @@ function lsSet(key, value) {
 function lsRemove(key) {
   try { localStorage.removeItem(`cache_${key}`); } catch {}
 }
-function restoreCacheValue(key, value) {
-  if (value === null || value === undefined) {
-    lsRemove(key);
-    return;
-  }
-  lsSet(key, value);
-}
 
-// storageGet returns { value, source }
-//   source: "supabase" — row found in DB
-//   source: "supabase_empty" — DB responded OK but key doesn't exist (first-time)
-//   source: "cache" — network/fetch failed, fell back to localStorage
-async function storageGet(key, signal) {
-  try {
-    const token = await getAuthToken();
-    const headers = { "Content-Type": "application/json" };
-    if (token) headers.Authorization = `Bearer ${token}`;
-    const res  = await fetch(`/api/store?key=${encodeURIComponent(key)}`, { headers, signal });
-    if (!res.ok) {
-      console.warn("storageGet HTTP error", key, res.status);
-      return { value: lsGet(key), source: "cache" };
-    }
-    const json = await res.json();
-    if (json && json.data != null) {
-      lsSet(key, json.data);
-      return { value: json.data, source: "supabase" };
-    }
-    // DB responded OK but no row — this is a genuine first-time setup
-    return { value: null, source: "supabase_empty" };
-  } catch(e) {
-    if (e.name === "AbortError") return { value: null, source: "aborted" };
-    console.warn("storageGet error", key, e);
-    return { value: lsGet(key), source: "cache" };
-  }
-}
-
-// ─── SUPABASE KEEP-ALIVE PING ─────────────────────────────────────────────────
-// מונע כניסה ל-pause אחרי 7 ימי חוסר שימוש
-async function keepAlive() {
-  try {
-    const lastPing = localStorage.getItem("sb_last_ping");
-    const now = Date.now();
-    const FOUR_DAYS = 4 * 24 * 60 * 60 * 1000;
-    if (lastPing && now - Number(lastPing) < FOUR_DAYS) return;
-    const ac = new AbortController();
-    const tid = setTimeout(() => ac.abort(), 4000);
-    await fetch(`/api/store?key=certifications`, { signal: ac.signal });
-    clearTimeout(tid);
-    localStorage.setItem("sb_last_ping", String(now));
-    console.log("Supabase keep-alive ping sent");
-  } catch(e) { /* silent */ }
-}
-setTimeout(keepAlive, 3000); // רץ 3 שניות אחרי טעינת הדף
-
-// certifications remains in store; equipment moved to public.equipment (Stage ~6).
-const BACKUP_KEYS = new Set(["certifications"]);
-const BACKUP_COOLDOWN = 60 * 60 * 1000; // max once per hour per key
-
-async function autoBackup(key) {
-  if (!BACKUP_KEYS.has(key)) return;
-  const lastKey = `backup_last_${key}`;
-  const last = Number(localStorage.getItem(lastKey) || 0);
-  if (Date.now() - last < BACKUP_COOLDOWN) return;
-  try {
-    const token = await getAuthToken();
-    const headers = {};
-    if (token) headers.Authorization = `Bearer ${token}`;
-    const r = await fetch(`/api/store?key=${encodeURIComponent(key)}`, { headers });
-    const json = await r.json();
-    if (json && json.data != null) {
-      const old = json.data;
-      if (Array.isArray(old) && old.length > 0) {
-        await fetch("/api/store", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ key: `backup_${key}`, data: old }),
-        });
-        localStorage.setItem(lastKey, String(Date.now()));
-        console.log(`Backup saved: backup_${key} (${old.length} items)`);
-      }
-    }
-  } catch(e) { /* silent — don't block the actual write */ }
-}
-
-async function storageSet(key, value) {
-  const previousCachedValue = lsGet(key);
-  lsSet(key, value); // cache immediately
-  try {
-    await autoBackup(key);
-    const token = await getValidTokenDirect();
-    const headers = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-    const res = await fetch("/api/store", {
-      method:  "POST",
-      headers,
-      body:    JSON.stringify({ key, data: value }),
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      console.warn("storageSet error", key, err);
-      // Shrink guard → local state is stale. Refresh cache from DB and
-      // tell the app to re-render from truth instead of from our stale view.
-      if (/shrink_guard_blocked/i.test(err)) {
-        try {
-          const { value: fresh } = await storageGet(key);
-          if (fresh != null) {
-            lsSet(key, fresh);
-            window.dispatchEvent(new CustomEvent("storage-stale-refresh", { detail: { key, fresh } }));
-          }
-        } catch {}
-        return { ok: false, error: "shrink_guard_blocked", stale: true };
-      }
-      restoreCacheValue(key, previousCachedValue);
-      return { ok: false, error: err };
-    }
-    // mirror functions removed (Stage 5) — equipment + reservations write directly to Supabase
-    return { ok: true };
-  } catch(e) {
-    console.error("storageSet network error", key, e);
-    restoreCacheValue(key, previousCachedValue);
-    return { ok: false, error: e.message };
-  }
-}
-
-// writeEquipmentToDB is exported from utils.js (Stage 5)
+// All blob plumbing removed — public.store and public.store_snapshots were
+// dropped in migration 20260430220000. Every entity now lives in its own
+// dedicated table; reads/writes go through src/utils/<entity>Api.js or a
+// dedicated /api/* endpoint (createReservation, sync-equipment, etc.).
 
 // ─── DB DIAGNOSTICS (accessible from browser console) ────────────────────────
 window.dbDiag = async () => {
@@ -357,14 +237,6 @@ window.dbDiag = async () => {
   ];
   console.log("Supabase DB Diagnostic Report");
   console.log("=".repeat(50));
-  console.log("── store (legacy — should only have backup_equipment) ──");
-  try {
-    const res = await fetch(`${SB_URL}/rest/v1/store?select=key,updated_at`, { headers: await getSbAuthHeaders() });
-    const rows = await res.json();
-    rows.forEach(r => console.log(`  ${r.key} (updated: ${r.updated_at})`));
-    if (!rows.length) console.log("  (empty)");
-  } catch(e) { console.log(`  ERROR: ${e.message}`); }
-  console.log("── tables ──");
   for (const t of tables) {
     try {
       const res = await fetch(`${SB_URL}/rest/v1/${t}?select=*&limit=1`, { headers: { ...(await getSbAuthHeaders()), "Prefer": "count=exact" } });
@@ -383,33 +255,6 @@ window.dbExport = async () => {
   console.log("Full DB Export (copy this JSON):");
   console.log(JSON.stringify(data, null, 2));
   return data;
-};
-window.dbImport = async (data) => {
-  if (!data || typeof data !== "object") { console.error("Usage: dbImport({equipment:[...], reservations:[...]})"); return; }
-  for (const [key, value] of Object.entries(data)) {
-    if (value == null) continue;
-    const r = await storageSet(key, value);
-    console.log(r.ok ? `[OK] ${key} restored` : `[ERR] ${key} failed: ${r.error}`);
-  }
-  console.log("Reload the page to see changes");
-};
-window.dbBackups = async () => {
-  console.log("Backup Status (store snapshots):");
-  try {
-    const res = await fetch(`${SB_URL}/rest/v1/store?key=like.backup_*&select=key,updated_at`, { headers: await getSbAuthHeaders() });
-    const rows = await res.json();
-    rows.forEach(r => console.log(`[OK] ${r.key} — saved: ${r.updated_at}`));
-    if (!rows.length) console.log("  (no backups)");
-  } catch(e) { console.log(`ERROR: ${e.message}`); }
-};
-window.dbRestoreFromBackup = async (key) => {
-  if (key !== "equipment") { console.error("Only 'equipment' backups are stored in the store table"); return; }
-  const res = await fetch(`${SB_URL}/rest/v1/store?key=eq.backup_equipment&select=data`, { headers: await getSbAuthHeaders() });
-  const json = await res.json();
-  if (!json.length || !json[0].data) { console.error("No backup_equipment found"); return; }
-  const r = await writeEquipmentToDB(json[0].data);
-  console.log(r.ok ? `[OK] equipment restored from backup (${json[0].data.length} items)` : `[ERR] Failed: ${r.error}`);
-  console.log("Reload the page to see changes");
 };
 
 // ─── INITIAL DATA ─────────────────────────────────────────────────────────────
