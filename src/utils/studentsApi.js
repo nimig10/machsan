@@ -223,17 +223,20 @@ export async function syncCertificationTypes(types) {
 export async function syncTracks(tracks, trackSettings) {
   try {
     const byName = new Map();
+    // Three valid track_type values: 'sound', 'cinema', or null ("ללא סיווג").
+    // Anything else (empty string, undefined) → null.
+    const normalizeTrackType = (v) => (v === "sound" || v === "cinema") ? v : null;
     for (const t of tracks ?? []) {
       if (!t?.name) continue;
       byName.set(t.name, {
         name: t.name,
-        track_type: t.trackType === "sound" ? "sound" : "cinema",
+        track_type: normalizeTrackType(t.trackType),
         loan_types: byName.get(t.name)?.loan_types ?? [],
       });
     }
     for (const t of trackSettings ?? []) {
       if (!t?.name) continue;
-      const existing = byName.get(t.name) ?? { name: t.name, track_type: "cinema", loan_types: [] };
+      const existing = byName.get(t.name) ?? { name: t.name, track_type: null, loan_types: [] };
       existing.loan_types = Array.isArray(t.loanTypes) ? t.loanTypes : [];
       byName.set(t.name, existing);
     }
@@ -307,7 +310,10 @@ export async function loadCertificationsFromTables() {
 
   const tracks = (tracksRes.data ?? []).map(t => ({
     name: t.name,
-    trackType: t.track_type ?? "cinema",
+    // null = "ללא סיווג" — preserve as empty string so the UI <select> matches
+    // the "" option. Don't fall back to "cinema" — that's how this bug got
+    // here in the first place.
+    trackType: t.track_type ?? "",
   }));
 
   const trackSettings = (tracksRes.data ?? []).map(t => ({
