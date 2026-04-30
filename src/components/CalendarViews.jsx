@@ -1,11 +1,11 @@
 import { supabase } from '../supabaseClient.js';
 // CalendarViews.jsx — DeptHeadCalendarPage and ManagerCalendarPage
 import { useState } from "react";
-import { BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Film, Mic, Package, Phone, User, Video, X } from "lucide-react";
+import { BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Film, Mic, Package, Phone, Shield, User, Video, X } from "lucide-react";
 import { CalendarGrid } from "./CalendarGrid.jsx";
-import { formatDate, today, cloudinaryThumb, getAuthToken, getLoanTypeColor } from "../utils.js";
+import { formatDate, today, cloudinaryThumb, getAuthToken, getLoanTypeColor, normalizeName } from "../utils.js";
 
-export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equipment=[], siteSettings={} }) {
+export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equipment=[], siteSettings={}, certifications={types:[],students:[]} }) {
   const [localRes, setLocalRes]   = useState(initialReservations);
   const [calDate, setCalDate]     = useState(new Date());
   const [statusF, setStatusF]     = useState([]);   // empty = all
@@ -160,30 +160,54 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
                     {r.crew_sound_name&&<div style={{fontSize:13,color:"var(--text2)"}}><Mic size={16} strokeWidth={1.75} /> סאונד: {r.crew_sound_name}</div>}
                   </div>
                   {/* ציוד מבוקש */}
-                  {r.items?.length>0&&(
-                    <div>
-                      <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>ציוד מבוקש</div>
-                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                        {r.items.map((item,idx)=>{
-                          const eq = equipment.find(e=>e.name===item.name);
-                          return (
-                            <div key={idx} style={{display:"flex",alignItems:"center",gap:12,background:"var(--surface2)",borderRadius:8,padding:"10px 12px",border:"1px solid var(--border)"}}>
-                              <div style={{width:56,height:56,borderRadius:8,overflow:"hidden",background:"var(--surface)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid var(--border)"}}>
-                                {eq?.image
-                                  ? <img src={cloudinaryThumb(eq.image)} alt={item.name} style={{width:"100%",height:"100%",objectFit:"contain"}}/>
-                                  : <Package size={24} strokeWidth={1.75} />}
+                  {r.items?.length>0&&(() => {
+                    // Production cert reminder for the dept-head: flag any item
+                    // whose required cert is held by neither the photographer
+                    // nor the sound person on this reservation. Match by full
+                    // name (phone is optional / tie-breaker only).
+                    const isProduction = r.loan_type === "הפקה";
+                    const findStudentByName = (name) => {
+                      const n = normalizeName(name || "");
+                      if (!n) return null;
+                      return (certifications?.students || []).find(s => normalizeName(s.name) === n) || null;
+                    };
+                    const photogRec = isProduction ? findStudentByName(r.crew_photographer_name) : null;
+                    const soundRec  = isProduction && r.crew_sound_name ? findStudentByName(r.crew_sound_name) : null;
+                    const photogCertsR = photogRec?.certs || {};
+                    const soundCertsR  = soundRec?.certs  || {};
+                    return (
+                      <div>
+                        <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>ציוד מבוקש</div>
+                        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                          {r.items.map((item,idx)=>{
+                            const eq = equipment.find(e=>e.name===item.name) || equipment.find(e=>String(e.id)===String(item.equipment_id));
+                            const needsCert = isProduction && eq?.certification_id &&
+                              photogCertsR[eq.certification_id] !== "עבר" &&
+                              soundCertsR[eq.certification_id] !== "עבר";
+                            return (
+                              <div key={idx} style={{display:"flex",alignItems:"center",gap:12,background:"var(--surface2)",borderRadius:8,padding:"10px 12px",border:"1px solid var(--border)"}}>
+                                <div style={{width:56,height:56,borderRadius:8,overflow:"hidden",background:"var(--surface)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid var(--border)"}}>
+                                  {eq?.image
+                                    ? <img src={cloudinaryThumb(eq.image)} alt={item.name} style={{width:"100%",height:"100%",objectFit:"contain"}}/>
+                                    : <Package size={24} strokeWidth={1.75} />}
+                                </div>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontWeight:800,fontSize:14}}>{item.name}</div>
+                                  {eq?.description&&<div style={{fontSize:11,color:"var(--text3)",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{eq.description}</div>}
+                                  {needsCert && (
+                                    <div style={{marginTop:6,display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,color:"#f59e0b",background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.35)",borderRadius:6,padding:"2px 8px"}}>
+                                      <Shield size={10} strokeWidth={2} /> דרושה הסמכה
+                                    </div>
+                                  )}
+                                </div>
+                                <div style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:8,padding:"5px 14px",fontSize:15,fontWeight:900,color:"var(--accent)",flexShrink:0}}>×{item.quantity}</div>
                               </div>
-                              <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontWeight:800,fontSize:14}}>{item.name}</div>
-                                {eq?.description&&<div style={{fontSize:11,color:"var(--text3)",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{eq.description}</div>}
-                              </div>
-                              <div style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:8,padding:"5px 14px",fontSize:15,fontWeight:900,color:"var(--accent)",flexShrink:0}}>×{item.quantity}</div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                   {(r.status==="אישור ראש מחלקה"||r.status==="ממתין לאישור ראש המחלקה")&&(
                     <div style={{marginTop:14}}>
                       <button

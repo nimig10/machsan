@@ -40,7 +40,7 @@
 //     existing storageGet("reservations") path. This endpoint is the
 //     source of truth; the JSON blob is a cache.
 
-import { requireStaff } from "./_auth-helper.js";
+import { requireStaff, resolveUserRole } from "./_auth-helper.js";
 
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -57,13 +57,45 @@ const ALLOWED_STATUSES = new Set([
   "פעילה",
 ]);
 
+// Dept-heads (lecturers with a row in public.dept_heads) approve their step
+// of the chain — they forward "אישור ראש מחלקה" → "ממתין" or reject it.
+// They must NOT be able to flip a reservation to "מאושר" or "פעילה" —
+// that's the warehouse's job.
+const DEPT_HEAD_ALLOWED_STATUSES = new Set(["ממתין", "נדחה"]);
+
+async function isDeptHead(email) {
+  if (!email) return false;
+  try {
+    const r = await fetch(
+      `${SB_URL}/rest/v1/dept_heads?email=eq.${encodeURIComponent(email)}&select=id&limit=1`,
+      { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } }
+    );
+    if (!r.ok) return false;
+    const rows = await r.json();
+    return Array.isArray(rows) && rows.length > 0;
+  } catch { return false; }
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ ok: false, error: "Method not allowed" });
   }
 
-  const staff = await requireStaff(req, res);
-  if (!staff) return;
+  // Two accepted callers:
+  //   1) staff (admin / warehouse) — full status transitions
+  //   2) dept-head (row in public.dept_heads) — limited to "ממתין"/"נדחה"
+  const role = await resolveUserRole(req);
+  let caller = null;
+  if (role.role === "staff") {
+    caller = { kind: "staff", email: role.email };
+  } else if (role.role === "user" && role.email && (await isDeptHead(role.email))) {
+    caller = { kind: "dept_head", email: role.email };
+  } else {
+    // Fall back to legacy staff_members lookup for callers not yet in public.users
+    const staff = await requireStaff(req, res);
+    if (!staff) return;
+    caller = { kind: "staff", email: staff.email };
+  }
 
   const { id, status, returned_at } = req.body || {};
 
@@ -72,6 +104,9 @@ export default async function handler(req, res) {
   }
   if (!status || !ALLOWED_STATUSES.has(status)) {
     return res.status(400).json({ ok: false, error: "Missing or invalid status" });
+  }
+  if (caller.kind === "dept_head" && !DEPT_HEAD_ALLOWED_STATUSES.has(status)) {
+    return res.status(403).json({ ok: false, error: "Forbidden", detail: "dept_head can only set 'ממתין' or 'נדחה'" });
   }
   if (returned_at != null && typeof returned_at !== "string") {
     return res.status(400).json({ ok: false, error: "returned_at must be an ISO string" });

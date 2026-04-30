@@ -4,7 +4,7 @@ import { formatDate, getAvailable, normalizeName, updateReservationStatus, getAu
 import { listStudents } from "../utils/studentsApi.js";
 import { syncAllLessons } from "../utils/lessonsApi.js";
 import { statusBadge } from "./ui.jsx";
-import { Backpack, BookOpen, Calendar, CheckCircle, Film, GraduationCap, Info, Mic, Minus, Package, X, XCircle } from "lucide-react";
+import { Backpack, BookOpen, Calendar, CheckCircle, Film, GraduationCap, Info, Mic, Minus, Package, Shield, X, XCircle } from "lucide-react";
 import { DeptHeadCalendarPage } from "./CalendarViews.jsx";
 
 function hasLinkedValue(value) {
@@ -1065,21 +1065,44 @@ export function LecturerPortal({
                                 <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{res.production_reason}</div>
                               </div>
                             )}
-                            {Array.isArray(res.items) && res.items.length > 0 && (
-                              <div style={{ marginTop: 8 }}>
-                                <div style={{ fontSize: 11, fontWeight: 800, color: "var(--text3)", marginBottom: 4 }}>ציוד מבוקש:</div>
-                                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                                  {res.items.map((item, idx) => {
-                                    const eq = equipment.find(e => String(e.id) === String(item.equipment_id));
-                                    return (
-                                      <span key={idx} style={{ background: "rgba(155,89,182,0.1)", border: "1px solid rgba(155,89,182,0.25)", borderRadius: 999, padding: "3px 10px", fontSize: 11, fontWeight: 700, color: "#9b59b6" }}>
-                                        {eq?.name || item.name || "פריט"} ×{item.quantity}
-                                      </span>
-                                    );
-                                  })}
+                            {Array.isArray(res.items) && res.items.length > 0 && (() => {
+                              // Production cert reminder for the dept-head: flag items
+                              // whose required certification is held by neither the
+                              // photographer nor the sound person on this reservation.
+                              const isProduction = res.loan_type === "הפקה";
+                              const findStudentByName = (name) => {
+                                const n = normalizeName(name || "");
+                                if (!n) return null;
+                                return studentsFromTable.find(s => normalizeName(s.name) === n) || null;
+                              };
+                              const photogRec = isProduction ? findStudentByName(res.crew_photographer_name) : null;
+                              const soundRec = isProduction && res.crew_sound_name ? findStudentByName(res.crew_sound_name) : null;
+                              const photogCertsR = photogRec?.certs || {};
+                              const soundCertsR = soundRec?.certs || {};
+                              return (
+                                <div style={{ marginTop: 8 }}>
+                                  <div style={{ fontSize: 11, fontWeight: 800, color: "var(--text3)", marginBottom: 4 }}>ציוד מבוקש:</div>
+                                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                    {res.items.map((item, idx) => {
+                                      const eq = equipment.find(e => String(e.id) === String(item.equipment_id));
+                                      const needsCert = isProduction && eq?.certification_id &&
+                                        photogCertsR[eq.certification_id] !== "עבר" &&
+                                        soundCertsR[eq.certification_id] !== "עבר";
+                                      return (
+                                        <span key={idx} style={{ display:"inline-flex", alignItems:"center", gap:6, background: "rgba(155,89,182,0.1)", border: "1px solid rgba(155,89,182,0.25)", borderRadius: 999, padding: "3px 10px", fontSize: 11, fontWeight: 700, color: "#9b59b6" }}>
+                                          {eq?.name || item.name || "פריט"} ×{item.quantity}
+                                          {needsCert && (
+                                            <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize:10, fontWeight:700, color:"#f59e0b", background:"rgba(245,158,11,0.12)", border:"1px solid rgba(245,158,11,0.35)", borderRadius:6, padding:"1px 6px" }}>
+                                              <Shield size={10} strokeWidth={2} /> דרושה הסמכה
+                                            </span>
+                                          )}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
-                              </div>
-                            )}
+                              );
+                            })()}
                           </div>
                           <div style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "flex-start" }}>
                             <button
@@ -1248,6 +1271,7 @@ export function LecturerPortal({
               kits={kits}
               equipment={equipment}
               siteSettings={siteSettings}
+              certifications={{ types: certifications?.types || [], students: studentsFromTable }}
             />
           </div>
         )}

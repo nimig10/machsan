@@ -1,6 +1,6 @@
 // DashboardPage.jsx — admin dashboard page
 import { useState } from "react";
-import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, syncReservationStatusToBlob, getLoanTypeColor } from "../utils.js";
+import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, syncReservationStatusToBlob, getLoanTypeColor, normalizeName } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import { Activity, AlertTriangle, ArrowUpFromLine, Briefcase, Calendar, Camera, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Layers, Mic, Package, RefreshCw, Shield, User, Wrench, X, XCircle } from "lucide-react";
@@ -12,7 +12,7 @@ function getDayName(dateStr) {
   return HE_DAYS[d.getDay()] || "";
 }
 
-export function DashboardPage({ equipment, reservations, setReservations, showToast, siteSettings = {}, equipmentReports = [] }) {
+export function DashboardPage({ equipment, reservations, setReservations, showToast, siteSettings = {}, equipmentReports = [], certifications = { types: [], students: [] } }) {
   const todayStr = today();
   const nowMs = Date.now();
 
@@ -496,11 +496,27 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
               <div>
                 <div style={{fontWeight:800,fontSize:14,marginBottom:10}}>ציוד ({dashViewRes.items?.length||0} פריטים)</div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {dashViewRes.items?.map((i,j)=>{
+                  {(() => {
+                    // Production cert reminder: per-item flag when neither
+                    // photographer nor sound holds the required certification.
+                    const isProduction = dashViewRes.loan_type === "הפקה";
+                    const findStudentByName = (name) => {
+                      const n = normalizeName(name || "");
+                      if (!n) return null;
+                      return (certifications?.students || []).find(s => normalizeName(s.name) === n) || null;
+                    };
+                    const photogRec = isProduction ? findStudentByName(dashViewRes.crew_photographer_name) : null;
+                    const soundRec = isProduction && dashViewRes.crew_sound_name ? findStudentByName(dashViewRes.crew_sound_name) : null;
+                    const photogCertsR = photogRec?.certs || {};
+                    const soundCertsR = soundRec?.certs || {};
+                    return dashViewRes.items?.map((i,j)=>{
                     const eq = equipment.find(e=>e.id==i.equipment_id);
                     const hasReport = equipmentReports.some(rp=>rp.equipment_id===String(i.equipment_id)&&rp.reservation_id===String(dashViewRes.id)&&rp.status==="open");
                     const img = eq?.image || eq?.img || "";
                     const showImg = img && (img.startsWith("data:") || img.startsWith("http"));
+                    const needsCert = isProduction && eq?.certification_id &&
+                      photogCertsR[eq.certification_id] !== "עבר" &&
+                      soundCertsR[eq.certification_id] !== "עבר";
                     return (
                       <div key={j} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:hasReport?"rgba(231,76,60,0.08)":"var(--surface2)",borderRadius:12,border:hasReport?"1px solid rgba(231,76,60,0.3)":"1px solid var(--border)"}}>
                         {/* Equipment image */}
@@ -516,12 +532,18 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                             {eq?.name||i.name||"?"}
                           </div>
                           {eq?.category&&<div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>{eq.category}</div>}
+                          {needsCert && (
+                            <div style={{marginTop:6,display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,color:"#f59e0b",background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.35)",borderRadius:6,padding:"2px 8px"}}>
+                              <Shield size={10} strokeWidth={2} /> דרושה הסמכה
+                            </div>
+                          )}
                         </div>
                         {/* Quantity */}
                         <div style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:8,padding:"5px 14px",fontSize:16,fontWeight:900,color:"var(--accent)",flexShrink:0}}>×{i.quantity}</div>
                       </div>
                     );
-                  })}
+                  });
+                  })()}
                 </div>
               </div>
               {/* Return button for approved/overdue requests */}
@@ -552,7 +574,36 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                 </div>
               )}
               {/* Approve button for pending requests — with conflict checking */}
-              {dashViewRes.status==="ממתין" && setReservations && (
+              {dashViewRes.status==="ממתין" && setReservations && (() => {
+                // Production cert gate — neither photographer nor sound is certified
+                // for at least one cert-required item → hide the approve button and
+                // show an amber "דרושה הסמכה לפני אישור" label instead.
+                const isProduction = dashViewRes.loan_type === "הפקה";
+                const findStudentByName = (name) => {
+                  const n = normalizeName(name || "");
+                  if (!n) return null;
+                  return (certifications?.students || []).find(s => normalizeName(s.name) === n) || null;
+                };
+                const photogRecApprove = isProduction ? findStudentByName(dashViewRes.crew_photographer_name) : null;
+                const soundRecApprove = isProduction && dashViewRes.crew_sound_name ? findStudentByName(dashViewRes.crew_sound_name) : null;
+                const photogCertsApprove = photogRecApprove?.certs || {};
+                const soundCertsApprove = soundRecApprove?.certs || {};
+                const certBlocked = isProduction && (dashViewRes.items || []).some(it => {
+                  const eq = equipment.find(e => String(e.id) === String(it.equipment_id));
+                  if (!eq?.certification_id) return false;
+                  return photogCertsApprove[eq.certification_id] !== "עבר" &&
+                         soundCertsApprove[eq.certification_id] !== "עבר";
+                });
+                if (certBlocked) {
+                  return (
+                    <div style={{borderTop:"1px solid var(--border)",paddingTop:14,display:"flex",justifyContent:"center"}}>
+                      <span title="לא ניתן לאשר — הצלם/איש סאונד טרם הוסמכו על הציוד המבוקש" style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:13,fontWeight:700,color:"#f59e0b",background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.4)",borderRadius:8,padding:"8px 14px"}}>
+                        <Shield size={14} strokeWidth={2}/> דרושה הסמכה לפני אישור
+                      </span>
+                    </div>
+                  );
+                }
+                return (
                 <div style={{borderTop:"1px solid var(--border)",paddingTop:14,display:"flex",justifyContent:"center"}}>
                   <button className="btn btn-primary" style={{background:"var(--green)",borderColor:"var(--green)",fontSize:14,padding:"10px 32px"}}
                     disabled={approvingId===dashViewRes.id}
@@ -617,7 +668,8 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                     {approvingId===dashViewRes.id ? <><Clock size={16} strokeWidth={1.75} /> מאשר...</> : <><CheckCircle size={16} strokeWidth={1.75} /> אשר בקשה</>}
                   </button>
                 </div>
-              )}
+                );
+              })()}
             </div>
           </div>
         </div>

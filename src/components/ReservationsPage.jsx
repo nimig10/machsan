@@ -7,7 +7,57 @@ import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
 import { syncAllLessons } from "../utils/lessonsApi.js";
 import { listKits, syncAllKits } from "../utils/kitsApi.js";
-import { AlertTriangle, BookOpen, Briefcase, Camera, Calendar, CheckCircle, ClipboardList, Clock, FileText, Film, Mic, Package, Pencil, RotateCcw, Save, Trash2, User, X, XCircle } from "lucide-react";
+import { AlertTriangle, BookOpen, Briefcase, Camera, Calendar, CheckCircle, ClipboardList, Clock, FileText, Film, Mic, Package, Pencil, RotateCcw, Save, Shield, Trash2, User, X, XCircle } from "lucide-react";
+
+// ── Production Certification Gate ─────────────────────────────────────────
+// Given a "הפקה" reservation, return the items whose required certification
+// is not held by either the photographer OR the sound person.
+// Returns []: nothing blocks approval. Returns [...]: array of blockers
+// — each `{ equipment_name, certification_name }` — to display in a modal.
+// Match crew member to a student record by full name (name is the source of
+// truth). Phone is optional and used only as a tie-breaker when multiple
+// students share the same normalized name.
+function matchByNamePhone(students, name, phone) {
+  const normalizeP = (p) => String(p || "").replace(/[^0-9]/g, "");
+  const normN = normalizeName(name || "");
+  if (!normN) return null;
+  const byName = students.filter(s => normalizeName(s.name) === normN);
+  if (byName.length === 0) return null;
+  if (byName.length === 1) return byName[0];
+  const normP = normalizeP(phone || "");
+  if (normP) {
+    const exact = byName.find(s => normalizeP(s.phone) === normP);
+    if (exact) return exact;
+  }
+  return byName[0];
+}
+
+function getProductionCertBlockers(reservation, equipment, certificationsState) {
+  if (reservation?.loan_type !== "הפקה") return [];
+  const students = certificationsState?.students || [];
+  const certTypes = certificationsState?.types || [];
+  const photog = matchByNamePhone(students, reservation.crew_photographer_name, reservation.crew_photographer_phone);
+  const sound  = reservation.crew_sound_name
+    ? matchByNamePhone(students, reservation.crew_sound_name, reservation.crew_sound_phone)
+    : null;
+  const photogCerts = photog?.certs || {};
+  const soundCerts  = sound?.certs  || {};
+  const blockers = [];
+  for (const item of (reservation.items || [])) {
+    const eq = equipment.find(e => String(e.id) === String(item.equipment_id));
+    if (!eq?.certification_id) continue;
+    const certId = eq.certification_id;
+    const ok = photogCerts[certId] === "עבר" || soundCerts[certId] === "עבר";
+    if (!ok) {
+      const certType = certTypes.find(c => c.id === certId);
+      blockers.push({
+        equipment_name: eq.name,
+        certification_name: certType?.name || certId,
+      });
+    }
+  }
+  return blockers;
+}
 
 // ── Staff Loan Form (module-scope component) ──
 // איש צוות יוצר לעצמו בקשת השאלה. הטופס מזהה אוטומטית את המשתמש המחובר
@@ -243,6 +293,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
   const [editing, setEditing]   = useState(null);
   const [approvalConflict, setApprovalConflict] = useState(null);
   const [consecutiveWarning, setConsecutiveWarning] = useState(null); // {reservation, warnings}
+  const [certBlockerModal, setCertBlockerModal] = useState(null); // {reservation, blockers}
   const [busyIds, setBusyIds] = useState(() => new Set());
   const [showManualForm, setShowManualForm] = useState(false);
   const [overdueEmailText, setOverdueEmailText] = useState("");
@@ -495,6 +546,13 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
   };
 
   const approveReservation = async (reservationToApprove, skipConsecutiveCheck=false) => {
+    // 0) Production cert gate — block if photographer/sound aren't certified for any of the requested items
+    const certBlockers = getProductionCertBlockers(reservationToApprove, equipment, certifications);
+    if (certBlockers.length) {
+      setCertBlockerModal({ reservation: reservationToApprove, blockers: certBlockers });
+      return false;
+    }
+
     // 1) Hard block — not enough inventory (overdue / overlapping)
     const conflicts = getReservationApprovalConflicts(reservationToApprove, reservations, equipment);
     if (conflicts.length) {
@@ -716,7 +774,15 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
               <div className="res-card-actions" onClick={e=>e.stopPropagation()}>
                 <button className="btn btn-secondary btn-sm" onClick={()=>exportPDF(r)}><><FileText size={14} strokeWidth={1.75} /> PDF</></button>
                 {(r.status==="ממתין"||r.status==="מאושר"||r.status==="נדחה"||r.status==="באיחור")&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}><><Pencil size={14} strokeWidth={1.75} /> עריכת בקשה</></button>}
-                {r.status==="ממתין"&&<><button className="btn btn-success btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"מאושר")}>{busyIds.has(r.id)?<Clock size={14} strokeWidth={1.75} />:<><CheckCircle size={14} strokeWidth={1.75} /> אשר</>}</button><button className="btn btn-danger btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"נדחה")}><XCircle size={14} strokeWidth={1.75} /> דחה</button></>}
+                {r.status==="ממתין"&&(() => {
+                  const certBlocked = getProductionCertBlockers(r, equipment, certifications).length > 0;
+                  return (<>
+                    {certBlocked
+                      ? <span title="לא ניתן לאשר — הצלם/איש סאונד טרם הוסמכו על הציוד המבוקש" style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:700,color:"#f59e0b",background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.4)",borderRadius:6,padding:"4px 10px"}}><Shield size={12} strokeWidth={2}/> דרושה הסמכה לפני אישור</span>
+                      : <button className="btn btn-success btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"מאושר")}>{busyIds.has(r.id)?<Clock size={14} strokeWidth={1.75} />:<><CheckCircle size={14} strokeWidth={1.75} /> אשר</>}</button>}
+                    <button className="btn btn-danger btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"נדחה")}><XCircle size={14} strokeWidth={1.75} /> דחה</button>
+                  </>);
+                })()}
                 {(getEffectiveStatus(r)==="פעילה"||getEffectiveStatus(r)==="באיחור")&&<button className="btn btn-secondary btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"הוחזר")}><><RotateCcw size={14} strokeWidth={1.75} /> הוחזר</></button>}
                 <button className="btn btn-danger btn-sm" onClick={()=>deleteReservation(r.id)}><Trash2 size={14} strokeWidth={1.75} /></button>
               </div>
@@ -911,12 +977,54 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
         </Modal>
       )}
 
+      {certBlockerModal && (
+        <Modal
+          title={`⛔ לא ניתן לאשר את הבקשה של ${certBlockerModal.reservation.student_name}`}
+          onClose={()=>setCertBlockerModal(null)}
+          size="modal-lg"
+          footer={<button className="btn btn-secondary" onClick={()=>setCertBlockerModal(null)}>סגור</button>}
+        >
+          <div style={{background:"rgba(231,76,60,0.1)",border:"2px solid rgba(231,76,60,0.45)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16,display:"flex",gap:12,alignItems:"flex-start"}}>
+            <span style={{fontSize:22,lineHeight:1}}>⛔</span>
+            <div style={{fontSize:14,color:"var(--text)",lineHeight:1.5}}>
+              <strong style={{color:"var(--red)"}}>לא ניתן לאשר את בקשת ההשאלה</strong>
+              <div style={{marginTop:4}}>הצלם/איש הסאונד טרם הוסמכו בפועל על הציוד המבוקש.</div>
+            </div>
+          </div>
+          <div style={{fontWeight:700,fontSize:14,marginBottom:8,color:"var(--text)"}}>פריטים שדורשים הסמכה שטרם הושגה:</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {certBlockerModal.blockers.map((b, idx) => (
+              <div key={idx} style={{background:"var(--surface2)",border:"1px solid rgba(231,76,60,0.28)",borderRadius:"var(--r-sm)",padding:12,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:10,alignItems:"center"}}>
+                <div style={{fontWeight:700,fontSize:14}}>{b.equipment_name}</div>
+                <div style={{fontSize:12,color:"var(--text2)"}}>דרושה הסמכת <strong style={{color:"var(--accent)"}}>{b.certification_name}</strong></div>
+              </div>
+            ))}
+          </div>
+          <div className="highlight-box" style={{marginTop:16,fontSize:13,color:"var(--text2)"}}>
+            רק לאחר שהצלם של ההפקה או איש הסאונד יעברו את ההסמכה ב<strong>"הסמכת ציוד"</strong>, ניתן יהיה לאשר את הבקשה.
+          </div>
+        </Modal>
+      )}
+
       {selected && (
         <Modal title={<><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> בקשה — {selected.student_name}</>} onClose={()=>{setSelected(null);setOverdueEmailText("");}} size="modal-lg"
           footer={<>
             {(selected.status==="ממתין"||selected.status==="מאושר"||selected.status==="נדחה"||selected.status==="באיחור")&&<button className="btn btn-secondary" onClick={()=>{setEditing(selected);setSelected(null);setOverdueEmailText("");}}>✏️ עריכת בקשה</button>}
-            {selected.status==="ממתין"&&<><button className="btn btn-success" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"מאושר")}>{busyIds.has(selected.id)?<><Clock size={14} strokeWidth={1.75} /> מאשר...</>:<><CheckCircle size={14} strokeWidth={1.75} /> אשר</>}</button><button className="btn btn-danger" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"נדחה")}><XCircle size={14} strokeWidth={1.75} /> דחה</button></>}
-            {selected.status==="נדחה"&&<button className="btn btn-success" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"מאושר")}>{busyIds.has(selected.id)?<><Clock size={14} strokeWidth={1.75} /> מאשר...</>:<><CheckCircle size={14} strokeWidth={1.75} /> אשר בקשה</>}</button>}
+            {selected.status==="ממתין"&&(() => {
+              const certBlocked = getProductionCertBlockers(selected, equipment, certifications).length > 0;
+              return (<>
+                {certBlocked
+                  ? <span title="לא ניתן לאשר — הצלם/איש סאונד טרם הוסמכו על הציוד המבוקש" style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:13,fontWeight:700,color:"#f59e0b",background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.4)",borderRadius:8,padding:"8px 14px"}}><Shield size={14} strokeWidth={2}/> דרושה הסמכה לפני אישור</span>
+                  : <button className="btn btn-success" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"מאושר")}>{busyIds.has(selected.id)?<><Clock size={14} strokeWidth={1.75} /> מאשר...</>:<><CheckCircle size={14} strokeWidth={1.75} /> אשר</>}</button>}
+                <button className="btn btn-danger" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"נדחה")}><XCircle size={14} strokeWidth={1.75} /> דחה</button>
+              </>);
+            })()}
+            {selected.status==="נדחה"&&(() => {
+              const certBlocked = getProductionCertBlockers(selected, equipment, certifications).length > 0;
+              return certBlocked
+                ? <span title="לא ניתן לאשר — הצלם/איש סאונד טרם הוסמכו על הציוד המבוקש" style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:13,fontWeight:700,color:"#f59e0b",background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.4)",borderRadius:8,padding:"8px 14px"}}><Shield size={14} strokeWidth={2}/> דרושה הסמכה לפני אישור</span>
+                : <button className="btn btn-success" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"מאושר")}>{busyIds.has(selected.id)?<><Clock size={14} strokeWidth={1.75} /> מאשר...</>:<><CheckCircle size={14} strokeWidth={1.75} /> אשר בקשה</>}</button>;
+            })()}
             {(getEffectiveStatus(selected)==="פעילה"||getEffectiveStatus(selected)==="באיחור")&&<button className="btn btn-secondary" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"הוחזר")}>🔄 סמן כהוחזר</button>}
             <button className="btn btn-secondary" onClick={()=>exportPDF(selected)}>📄 ייצא PDF</button>
             <button className="btn btn-danger" onClick={()=>deleteReservation(selected.id)}>🗑️ מחק</button>
@@ -970,16 +1078,40 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
             <div>
               <div className="form-section-title">ציוד מבוקש ({selected.items?.length||0} פריטים)</div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {selected.items?.map((item,i)=>{
-                  const hasReport=equipmentReports.some(rp=>rp.equipment_id===String(item.equipment_id)&&rp.reservation_id===String(selected.id)&&rp.status==="open");
-                  return (<div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:hasReport?"rgba(231,76,60,0.06)":"var(--surface2)",borderRadius:"var(--r-sm)",border:hasReport?"1px solid rgba(231,76,60,0.3)":"1px solid var(--border)"}}>
-                    <EqImg id={item.equipment_id} size={32}/>
-                    <div style={{flex:1}}>
-                      <div style={{fontWeight:700,fontSize:14}}>{eqName(item.equipment_id)}{hasReport&&<span style={{color:"#e74c3c",fontSize:12,marginRight:6}}>⚠️ דיווח תקלה</span>}</div>
-                      <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>כמות: <strong style={{color:"var(--accent)"}}>{item.quantity}</strong></div>
-                    </div>
-                  </div>);
-                })}
+                {(() => {
+                  // Production cert reminder for warehouse staff in the expanded
+                  // reservation card. Match crew to a student record by full name
+                  // (phone is optional / tie-breaker only) and flag any item whose
+                  // required certification is held by neither photographer nor sound.
+                  const isProduction = selected.loan_type === "הפקה";
+                  const photogRec = isProduction
+                    ? matchByNamePhone(certifications?.students || [], selected.crew_photographer_name, selected.crew_photographer_phone)
+                    : null;
+                  const soundRec = isProduction && selected.crew_sound_name
+                    ? matchByNamePhone(certifications?.students || [], selected.crew_sound_name, selected.crew_sound_phone)
+                    : null;
+                  const photogCertsR = photogRec?.certs || {};
+                  const soundCertsR = soundRec?.certs || {};
+                  return selected.items?.map((item,i)=>{
+                    const hasReport=equipmentReports.some(rp=>rp.equipment_id===String(item.equipment_id)&&rp.reservation_id===String(selected.id)&&rp.status==="open");
+                    const eq = equipment.find(e => String(e.id) === String(item.equipment_id));
+                    const needsCert = isProduction && eq?.certification_id &&
+                      photogCertsR[eq.certification_id] !== "עבר" &&
+                      soundCertsR[eq.certification_id] !== "עבר";
+                    return (<div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:hasReport?"rgba(231,76,60,0.06)":"var(--surface2)",borderRadius:"var(--r-sm)",border:hasReport?"1px solid rgba(231,76,60,0.3)":"1px solid var(--border)"}}>
+                      <EqImg id={item.equipment_id} size={32}/>
+                      <div style={{flex:1}}>
+                        <div style={{fontWeight:700,fontSize:14}}>{eqName(item.equipment_id)}{hasReport&&<span style={{color:"#e74c3c",fontSize:12,marginRight:6}}>⚠️ דיווח תקלה</span>}</div>
+                        <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>כמות: <strong style={{color:"var(--accent)"}}>{item.quantity}</strong></div>
+                        {needsCert && (
+                          <div style={{marginTop:6,display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,color:"#f59e0b",background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.35)",borderRadius:6,padding:"2px 8px"}}>
+                            <Shield size={10} strokeWidth={2} /> דרושה הסמכה
+                          </div>
+                        )}
+                      </div>
+                    </div>);
+                  });
+                })()}
               </div>
             </div>
           </div>

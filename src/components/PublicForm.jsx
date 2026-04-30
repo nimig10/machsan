@@ -231,7 +231,7 @@ function PublicMiniCalendar({ reservations, lessons=[], initialLoanType="הכל"
 
   const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:<Package size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"פרטית",label:"פרטית",icon:<User size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"הפקה",label:"הפקה",icon:<Film size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"סאונד",label:"סאונד",icon:<Mic size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"קולנוע יומית",label:"קולנוע יומית",icon:<Camera size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"שיעור",label:"שיעור",icon:<Film size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"צוות",label:"איש צוות",icon:<Briefcase size={12} strokeWidth={1.75} color="var(--accent)" />}];
   const activeRes = reservations.filter(r=>
-    (r.status==="מאושר"||r.status==="פעילה"||r.status==="באיחור") && r.borrow_date && r.return_date &&
+    (r.status==="מאושר"||r.status==="פעילה"||r.status==="באיחור"||r.status==="ממתין") && r.borrow_date && r.return_date &&
     (loanTypeF==="הכל" || r.loan_type===loanTypeF) &&
     // Exclude reservations linked to a deleted lesson (orphaned lesson_id)
     (!r.lesson_id || lessonIdSet.has(String(r.lesson_id)))
@@ -431,7 +431,7 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
 }
 
 // ─── STEP 3 EQUIPMENT SELECTOR ───────────────────────────────────────────────
-function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equipment, setItems, getItem, setQty, canBorrowEq=()=>true, studentRecord, certificationTypes=[], categoryLoanTypes={} }) {
+function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equipment, setItems, getItem, setQty, canBorrowEq=()=>true, crewIsCertifiedForEq=()=>true, studentRecord, certificationTypes=[], categoryLoanTypes={} }) {
   const [activeKit, setActiveKit] = useState(null);
   const [kitDropOpen, setKitDropOpen] = useState(false);
   const kitDropRef = useRef(null);
@@ -629,6 +629,12 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
                       {activeKit&&kitEntry&&<span style={{color:"var(--accent)",marginRight:6,fontWeight:700}}>· מקס׳ בערכה: {kitMax}</span>}
                     </div>
                     {eq.notes&&<div style={{marginTop:4,fontSize:11,color:"var(--yellow)",fontWeight:600,display:"flex",alignItems:"flex-start",gap:4,lineHeight:1.4}}><Info size={11} strokeWidth={2} style={{flexShrink:0,marginTop:1}}/>{eq.notes}</div>}
+                    {loanType==="הפקה" && !crewIsCertifiedForEq(eq) && (
+                      <div style={{marginTop:4,fontSize:11,color:"#f59e0b",fontWeight:700,display:"flex",alignItems:"flex-start",gap:4,lineHeight:1.4}}>
+                        <Shield size={11} strokeWidth={2} style={{flexShrink:0,marginTop:1}}/>
+                        דרושה הסמכה לפני אישור
+                      </div>
+                    )}
                   </div>
                   {!canBorrowEq(eq)
                     ? <div style={{fontSize:11,color:"var(--yellow)",fontWeight:700,textAlign:"center",maxWidth:120,lineHeight:1.3,padding:"4px 6px",background:"rgba(241,196,15,0.12)",borderRadius:6,border:"1px solid rgba(241,196,15,0.3)"}}>
@@ -2308,12 +2314,11 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const nameOk = isProductionLoan
     ? !!(form.student_first_name && form.student_last_name)
     : !!(form.student_first_name && form.student_last_name);
-  // Photographer: שם פרטי + שם משפחה + טלפון — all required.
-  const photographerOk = !!(form.crew_photographer_first_name && form.crew_photographer_last_name && form.crew_photographer_phone);
-  // Sound tech: optional whole-block, but all-or-none — if the user typed
-  // anything (first/last/phone), must fill all three.
-  const soundAnyFilled = !!(form.crew_sound_first_name || form.crew_sound_last_name || form.crew_sound_phone);
-  const soundOk = !soundAnyFilled || (form.crew_sound_first_name && form.crew_sound_last_name && form.crew_sound_phone);
+  // Photographer: שם פרטי + שם משפחה חובה. טלפון רשות (לא נדרש לאימות הסמכה).
+  const photographerOk = !!(form.crew_photographer_first_name && form.crew_photographer_last_name);
+  // Sound tech: optional block — שם פרטי+שם משפחה כשניהם או אף אחד.
+  const soundAnyFilled = !!(form.crew_sound_first_name || form.crew_sound_last_name);
+  const soundOk = !soundAnyFilled || (form.crew_sound_first_name && form.crew_sound_last_name);
   const ok1 = nameOk && form.email && form.phone && form.course && form.loan_type &&
     (!isProductionLoan || (photographerOk && soundOk));
 
@@ -2321,13 +2326,28 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const normalizePhone = (p) => (p||"").replace(/[^0-9]/g,"");
   const matchCertificationStudentByNamePhone = (name, phone) => {
     const normalizedName = normalizeName(name);
+    if (!normalizedName) return null;
     const normalizedPhone = normalizePhone(phone);
-    if (!normalizedName || !normalizedPhone) return null;
-    return studentsFromTable.find(s =>
-      normalizeName(s.name) === normalizedName &&
-      normalizePhone(s.phone) === normalizedPhone
-    ) || null;
+    // Production crew matching: name is the source of truth. Phone is used only
+    // as a tie-breaker when two students share the same normalized name.
+    const byName = studentsFromTable.filter(s => normalizeName(s.name) === normalizedName);
+    if (byName.length === 0) return null;
+    if (byName.length === 1) return byName[0];
+    if (normalizedPhone) {
+      const exact = byName.find(s => normalizePhone(s.phone) === normalizedPhone);
+      if (exact) return exact;
+    }
+    return byName[0];
   };
+  // Cross-reference crew names against the students table (name is source of truth).
+  // False only when both name fields are filled but no student record matches — catches typos.
+  const photographerExistsInSystem = !photographerOk ||
+    !!matchCertificationStudentByNamePhone(form.crew_photographer_name, form.crew_photographer_phone);
+  const soundBothFilled = !!(form.crew_sound_first_name && form.crew_sound_last_name);
+  const soundExistsInSystem = !soundBothFilled ||
+    !!matchCertificationStudentByNamePhone(form.crew_sound_name, form.crew_sound_phone);
+  // ok1 extended: also block "המשך" when crew name is typed but doesn't match any student.
+  const ok1WithCrew = ok1 && (!isProductionLoan || (photographerExistsInSystem && soundExistsInSystem));
   const studentRecord = (() => {
     if (!loggedInStudent) return null;
     const students = studentsFromTable;
@@ -2356,26 +2376,33 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   // Returns true if student/crew is allowed to borrow this equipment
   const canBorrowEq = (eq) => {
     if (!eq.certification_id) return true; // ללא הסמכה
+    // "קולנוע יומית" — מבטל את מערכת ההסמכות לחלוטין: סטודנט יכול להתנסות
+    // בכל הציוד שמוגדר לסוג ההשאלה הזה (לפי פאנל הסיווג), בלי שום בדיקת הסמכה.
+    if (form.loan_type === "קולנוע יומית") return true;
     const certId = eq.certification_id;
-    // For production: pass if photographer OR sound person has cert
-    if (isProductionLoan) {
-      return crewPhotographerCerts[certId]==="עבר" || crewSoundCerts[certId]==="עבר";
-    }
+    // For production: always selectable in the form (warning label shown if crew
+    // not certified). Final enforcement is at staff approval time.
+    if (isProductionLoan) return true;
     return studentCerts[certId] === "עבר";
+  };
+  // Helper for the production-loan warning label in the equipment grid.
+  // Returns true if the crew (photographer OR sound) is certified for this eq.
+  const crewIsCertifiedForEq = (eq) => {
+    if (!eq?.certification_id) return true;
+    if (!isProductionLoan) return true;
+    const certId = eq.certification_id;
+    return crewPhotographerCerts[certId] === "עבר" ||
+           crewSoundCerts[certId] === "עבר";
   };
   const canBorrowEqForForm = (candidateForm, eq) => {
     if (!eq?.certification_id) return true;
-    const certId = eq.certification_id;
     const candidateLoanType = normalizeSmartLoanType(candidateForm?.loan_type);
-    if (candidateLoanType === "הפקה") {
-      const candidatePhotographerRecord = matchCertificationStudentByNamePhone(candidateForm?.crew_photographer_name, candidateForm?.crew_photographer_phone);
-      const candidateSoundRecord = candidateForm?.crew_sound_name
-        ? matchCertificationStudentByNamePhone(candidateForm?.crew_sound_name, candidateForm?.crew_sound_phone)
-        : null;
-      const candidatePhotographerCerts = candidatePhotographerRecord?.certs || {};
-      const candidateSoundCerts = candidateSoundRecord?.certs || {};
-      return candidatePhotographerCerts[certId] === "עבר" || candidateSoundCerts[certId] === "עבר";
-    }
+    // Cinema-daily bypasses certification entirely.
+    if (candidateLoanType === "קולנוע יומית") return true;
+    // Production: form-level check is informational only — the real gate is at
+    // staff approval. Always allow at form level.
+    if (candidateLoanType === "הפקה") return true;
+    const certId = eq.certification_id;
     return studentCerts[certId] === "עבר";
   };
   const privateLoanLimitedQty = form.loan_type==="פרטית" ? getPrivateLoanLimitedQty(items, equipment) : 0;
@@ -2387,7 +2414,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const pastLoanTimeError = getPastLoanTimeError(form);
   const ok2 = !!form.borrow_date && !!form.return_date && hasTimes && !returnBeforeBorrow && !tooSoon && !cinemaTooSoon && !tooLong && !borrowWeekend && !returnWeekend && !timeOrderError && !pastLoanTimeError && (!isSoundLoan || !!form.studio_booking_id);
   const ok3 = items.some(item => Number(item.quantity) > 0);
-  const canSubmit = !!ok1 && !!ok2 && !!ok3 && !privateLoanLimitExceeded && !!agreed;
+  const canSubmit = !!ok1WithCrew && !!ok2 && !!ok3 && !privateLoanLimitExceeded && !!agreed;
 
   const availEq = useMemo(()=>{
     if(!form.borrow_date||!form.return_date) return [];
@@ -2435,7 +2462,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 
   const canAccessStep = (targetStep) => {
     if (targetStep <= 3) return true;
-    if (targetStep === 4) return !!ok1 && !!ok2 && !!ok3 && !privateLoanLimitExceeded;
+    if (targetStep === 4) return !!ok1WithCrew && !!ok2 && !!ok3 && !privateLoanLimitExceeded;
     return false;
   };
 
@@ -2826,14 +2853,19 @@ ${inventory}
       setStep(2);
       return;
     }
-    if (!ok1 || !ok2 || !ok3 || privateLoanLimitExceeded) {
+    if (!ok1WithCrew || !ok2 || !ok3 || privateLoanLimitExceeded) {
       if (privateLoanLimitExceeded) {
         showToast("error", "שים לב אין לחרוג מ-4 פריטים בהשאלה פרטית");
         setStep(3);
         return;
       }
+      if (ok1 && !ok1WithCrew) {
+        showToast("error", "לא ניתן לשלוח בקשה — הצלם/איש הסאונד אינם רשומים במערכת. בדוק/י את האיות.");
+        setStep(1);
+        return;
+      }
       showToast("error", "לא ניתן לשלוח בקשה לפני השלמת כל שלבי הטופס, כולל תאריכים, שעות ובחירת ציוד.");
-      if (!ok1) setStep(1);
+      if (!ok1WithCrew) setStep(1);
       else if (!ok2) setStep(2);
       else setStep(3);
       return;
@@ -3231,7 +3263,7 @@ ${inventory}
           {/* Clickable tab navigation — always free to navigate, validation only on submit */}
             <div style={{display:"flex",gap:4,marginTop:20,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4}}>
               {[{n:1,l:"פרטים",icon:<User size={14} strokeWidth={1.75} />},{n:2,l:"תאריכים",icon:<Calendar size={14} strokeWidth={1.75} />},{n:3,l:"ציוד",icon:<Package size={14} strokeWidth={1.75} />},{n:4,l:"אישור",icon:<CheckCircle size={14} strokeWidth={1.75} />}].map(s=>{
-              const done = (s.n===1 && ok1) || (s.n===2 && ok2) || (s.n===3 && ok3) || (s.n===4 && canSubmit);
+              const done = (s.n===1 && ok1WithCrew) || (s.n===2 && ok2) || (s.n===3 && ok3) || (s.n===4 && canSubmit);
               const locked = s.n===4 && !canAccessStep(s.n);
               return (
                 <button key={s.n} type="button"
@@ -3317,10 +3349,15 @@ ${inventory}
                   <div className="form-group"><label className="form-label">שם פרטי *</label><input className="form-input" placeholder="שם פרטי" name="crew_photographer_first_name" autoComplete="given-name" value={form.crew_photographer_first_name} onChange={e=>setCrewPhotographerFirst(e.target.value)}/></div>
                   <div className="form-group"><label className="form-label">שם משפחה *</label><input className="form-input" placeholder="שם משפחה" name="crew_photographer_last_name" autoComplete="family-name" value={form.crew_photographer_last_name} onChange={e=>setCrewPhotographerLast(e.target.value)}/></div>
                 </div>
+                {photographerOk && !photographerExistsInSystem && (
+                  <div style={{color:"#e74c3c",fontSize:12,marginTop:4,padding:"6px 10px",background:"rgba(231,76,60,0.1)",borderRadius:6,border:"1px solid rgba(231,76,60,0.3)"}}>
+                    ⚠️ הצלם אינו רשום במערכת כסטודנט — בדוק/י את האיות
+                  </div>
+                )}
                 <div className="form-group" style={{marginTop:8}}>
-                  <label className="form-label">טלפון * <span style={{color:"var(--red)",fontSize:11,fontWeight:700}}>חובה</span></label>
+                  <label className="form-label">טלפון <span style={{color:"var(--text3)",fontSize:11}}>רשות</span></label>
                   <input className="form-input" placeholder="05x-xxxxxxx" name="crew_photographer_phone" autoComplete="tel" value={form.crew_photographer_phone} onChange={e=>set("crew_photographer_phone",e.target.value)}/>
-                  <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>המערכת מצליבה את הנתונים לפי הסמכות הציוד של הצלם</div>
+                  <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>המערכת מאמתת את הסמכות הציוד של הצלם לפי השם המלא</div>
                 </div>
               </div>
               <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"16px",marginBottom:16}}>
@@ -3329,10 +3366,15 @@ ${inventory}
                   <div className="form-group"><label className="form-label">שם פרטי</label><input className="form-input" placeholder="שם פרטי" name="crew_sound_first_name" autoComplete="given-name" value={form.crew_sound_first_name} onChange={e=>setCrewSoundFirst(e.target.value)}/></div>
                   <div className="form-group"><label className="form-label">שם משפחה</label><input className="form-input" placeholder="שם משפחה" name="crew_sound_last_name" autoComplete="family-name" value={form.crew_sound_last_name} onChange={e=>setCrewSoundLast(e.target.value)}/></div>
                 </div>
+                {soundBothFilled && !soundExistsInSystem && (
+                  <div style={{color:"#e74c3c",fontSize:12,marginTop:4,padding:"6px 10px",background:"rgba(231,76,60,0.1)",borderRadius:6,border:"1px solid rgba(231,76,60,0.3)"}}>
+                    ⚠️ איש הסאונד אינו רשום במערכת כסטודנט — בדוק/י את האיות
+                  </div>
+                )}
                 <div className="form-group" style={{marginTop:8}}>
-                  <label className="form-label">טלפון</label>
+                  <label className="form-label">טלפון <span style={{color:"var(--text3)",fontSize:11}}>רשות</span></label>
                   <input className="form-input" placeholder="05x-xxxxxxx" name="crew_sound_phone" autoComplete="tel" value={form.crew_sound_phone} onChange={e=>set("crew_sound_phone",e.target.value)}/>
-                  <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>אם איש הסאונד רשום במערכת, ציוד שהוא מוסמך עליו יהיה זמין — בדיוק כמו הצלם</div>
+                  <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>אם איש הסאונד רשום במערכת, המערכת תאמת את הסמכותיו לפי השם המלא</div>
                 </div>
               </div>
             {/* ── סיבת ההפקה ── */}
@@ -3355,7 +3397,7 @@ ${inventory}
             )}
             </>)}
 
-            <button className="btn btn-primary" disabled={!ok1} onClick={()=>setStep(2)}>{isSoundLoan ? "המשך ← שיוך קביעת חדר" : "המשך ← תאריכים"}</button>
+            <button className="btn btn-primary" disabled={!ok1WithCrew} onClick={()=>setStep(2)}>{isSoundLoan ? "המשך ← שיוך קביעת חדר" : "המשך ← תאריכים"}</button>
           </>}
 
           {step===2 && <>
@@ -3489,6 +3531,7 @@ ${inventory}
             getItem={getItem}
             setQty={setQty}
             canBorrowEq={canBorrowEq}
+            crewIsCertifiedForEq={crewIsCertifiedForEq}
             studentRecord={studentRecord}
             certificationTypes={certifications.types||[]}
             categoryLoanTypes={categoryLoanTypes}
@@ -3714,25 +3757,50 @@ ${inventory}
                     <div style={{fontWeight:700,fontSize:13}}>
                       <Calendar size={14} strokeWidth={1.75} color="var(--accent)" style={{flexShrink:0}} /> {fmtDate(r.borrow_date)}{r.borrow_time&&<span style={{color:"var(--accent)",marginRight:4}}> {r.borrow_time}</span>} ← {fmtDate(r.return_date)}{r.return_time&&<span style={{color:"var(--accent)",marginRight:4}}> {r.return_time}</span>}
                     </div>
-                    <div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>{r.loan_type&&<span style={{marginLeft:8}}>{r.loan_type}</span>}{r.items?.length||0} פריטים</div>
+                    <div style={{fontSize:13,color:"var(--text)",marginTop:4,fontWeight:700}}>{r.loan_type&&<span style={{marginLeft:8,color:"var(--accent)"}}>{r.loan_type}</span>}{r.items?.length||0} פריטים</div>
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
                     <span style={{background:sBg(st),color:sColor(st),border:`1px solid ${sBorder(st)}`,borderRadius:100,padding:"2px 10px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{st}</span>
                     <span style={{fontSize:13,color:"var(--text3)",display:"inline-block",transform:isExp?"rotate(180deg)":"rotate(0deg)",transition:"transform 0.2s"}}>▾</span>
                   </div>
                 </div>
-                {isExp&&<div style={{padding:"12px 14px",borderTop:`1px solid ${sBorder(st)}`,display:"flex",flexDirection:"column",gap:10}}>
+                {isExp&&(() => {
+                  // Production-cert reminder: for "הפקה" reservations, mark each
+                  // equipment item that requires a cert which neither the
+                  // photographer nor the sound person currently holds. The label
+                  // disappears automatically once they pass that cert.
+                  const isProduction = r.loan_type === "הפקה";
+                  const photogRec = isProduction
+                    ? matchCertificationStudentByNamePhone(r.crew_photographer_name, r.crew_photographer_phone)
+                    : null;
+                  const soundRec = isProduction && r.crew_sound_name
+                    ? matchCertificationStudentByNamePhone(r.crew_sound_name, r.crew_sound_phone)
+                    : null;
+                  const photogResCerts = photogRec?.certs || {};
+                  const soundResCerts = soundRec?.certs || {};
+                  return (<div style={{padding:"12px 14px",borderTop:`1px solid ${sBorder(st)}`,display:"flex",flexDirection:"column",gap:10}}>
                   {(r.items||[]).map((item,i)=>{
                     const eq=equipment.find(e=>String(e.id)===String(item.equipment_id));
                     const img=eq?.image;
                     const rKey=`${item.equipment_id}:${r.id}`;
                     const alreadyReported=reportedItems.has(rKey);
+                    const needsCert = isProduction && eq?.certification_id &&
+                      photogResCerts[eq.certification_id] !== "עבר" &&
+                      soundResCerts[eq.certification_id] !== "עבר";
                     return (<div key={i}>
                       <div style={{display:"flex",alignItems:"center",gap:10}}>
                         {img?.startsWith("data:")||img?.startsWith("http")
                           ?<img src={img} alt="" style={{width:38,height:38,objectFit:"cover",borderRadius:6,flexShrink:0}}/>
                           :<span style={{fontSize:30,flexShrink:0}}>{img||<Package size={30} strokeWidth={1.75} color="var(--accent)" />}</span>}
-                        <div style={{flex:1}}><div style={{fontWeight:700,fontSize:13}}>{eq?.name||item.name||"פריט"}</div><div style={{fontSize:11,color:"var(--text3)"}}>כמות: {item.quantity}</div></div>
+                        <div style={{flex:1}}>
+                          <div style={{fontWeight:700,fontSize:13}}>{eq?.name||item.name||"פריט"}</div>
+                          <div style={{fontSize:13,color:"var(--text)",fontWeight:700,marginTop:2}}>כמות: <span style={{color:"var(--accent)"}}>{item.quantity}</span></div>
+                          {needsCert && (
+                            <div style={{marginTop:4,display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,color:"#f59e0b",background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.35)",borderRadius:6,padding:"2px 8px"}}>
+                              <Shield size={10} strokeWidth={2} /> דרושה הסמכה
+                            </div>
+                          )}
+                        </div>
                         {st==="פעילה"&&<div style={{flexShrink:0}}>
                           {alreadyReported
                             ?<span style={{fontSize:10,color:"var(--text3)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}><CheckCircle size={10} strokeWidth={1.75} /> דווח</span>
@@ -3741,7 +3809,8 @@ ${inventory}
                       </div>
                     </div>);
                   })}
-                </div>}
+                </div>);
+                })()}
               </div>);
             });
           })()}
