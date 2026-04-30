@@ -1680,30 +1680,21 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   // auth account). To keep login resilient we wipe both potential
   // collisions, then insert.
   const upsertAuthEntityMap = async (authUserId, entityType, entityId, email) => {
-    const normalizedEmail = email.toLowerCase().trim();
+    // authUserId is unused — the RPC pulls it from auth.uid() server-side so a
+    // user can't pretend to link someone else's auth account. We keep the param
+    // for API compatibility with the call sites.
+    void authUserId;
     try {
-      // Clean any stale row pointing entityType/entityId at a different auth_user
-      // (rare — only when the same student/lecturer record gets reassigned across
-      // accounts). Skip the matching auth_user_id row so we don't fight the upsert.
-      await supabase
-        .from("auth_entity_map")
-        .delete()
-        .eq("entity_type", entityType)
-        .eq("entity_id", entityId)
-        .neq("auth_user_id", authUserId);
-      // Upsert on auth_user_id unique key — eliminates the DELETE+INSERT race
-      // that two parallel tabs trigger (23505 duplicate key).
-      const { error } = await supabase
-        .from("auth_entity_map")
-        .upsert(
-          {
-            auth_user_id: authUserId,
-            entity_type: entityType,
-            entity_id: entityId,
-            email: normalizedEmail,
-          },
-          { onConflict: "auth_user_id" },
-        );
+      // Atomic SECURITY DEFINER RPC: cleans the stale row (entity already mapped
+      // to a different auth_user_id, e.g. after password reset) AND inserts the
+      // new mapping in one transaction. The plain client-side DELETE+UPSERT
+      // version was returning 409 because RLS silently denied the DELETE step
+      // (no DELETE policy on auth_entity_map), leaving the stale row in place.
+      const { error } = await supabase.rpc("link_auth_to_entity", {
+        p_entity_type: entityType,
+        p_entity_id: entityId,
+        p_email: email,
+      });
       if (error) throw error;
     } catch (err) {
       console.warn("upsertAuthEntityMap failed:", err);
