@@ -667,6 +667,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
 function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, submit, onBack, policies, loanType, canSubmit }) {
   const [showPolicies, setShowPolicies] = useState(false);
   const [scrolledToBottom, setScrolledToBottom] = useState(false);
+  const policyScrollRef = useRef(null);
 
   const policyText = (policies && policies[loanType]) || "";
   const hasPolicies = policyText.trim().length > 0;
@@ -677,6 +678,22 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
       setScrolledToBottom(true);
     }
   };
+
+  // If the policy text is short enough to fit in the viewport without scrolling
+  // (common for short loan types like "קולנוע יומית"), the onScroll event never
+  // fires and the user gets stuck — the approve button stays disabled forever.
+  // Detect "no scroll needed" right after the modal renders and unblock.
+  useEffect(() => {
+    if (!showPolicies) return;
+    const id = requestAnimationFrame(() => {
+      const el = policyScrollRef.current;
+      if (!el) return;
+      if (el.scrollHeight <= el.clientHeight + 20) {
+        setScrolledToBottom(true);
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [showPolicies, policyText]);
 
   return (
     <>
@@ -725,7 +742,7 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
             <button className="btn btn-secondary btn-sm" onClick={()=>setShowPolicies(false)}><X size={16} strokeWidth={1.75} color="var(--text3)" /> סגור</button>
           </div>
           {/* Scrollable body */}
-          <div onScroll={handleScroll} style={{flex:1,overflowY:"auto",padding:"24px 20px",background:"var(--surface2)",fontSize:15,lineHeight:1.9,color:"var(--text)"}}>
+          <div ref={policyScrollRef} onScroll={handleScroll} style={{flex:1,overflowY:"auto",padding:"24px 20px",background:"var(--surface2)",fontSize:15,lineHeight:1.9,color:"var(--text)"}}>
             <div className="policy-content" dangerouslySetInnerHTML={{__html: policyHtml(policyText)}} />
             {/* bottom anchor */}
             <div style={{height:60,display:"flex",alignItems:"center",justifyContent:"center",marginTop:24}}>
