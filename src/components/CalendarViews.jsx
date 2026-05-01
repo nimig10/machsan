@@ -3,38 +3,15 @@ import { supabase } from '../supabaseClient.js';
 import { useState } from "react";
 import { BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Film, Mic, Package, Phone, Shield, User, Video, X } from "lucide-react";
 import { CalendarGrid } from "./CalendarGrid.jsx";
-import { formatDate, today, cloudinaryThumb, getAuthToken, getLoanTypeColor, normalizeName } from "../utils.js";
+import { formatDate, today, cloudinaryThumb, getLoanTypeColor, normalizeName } from "../utils.js";
 
 export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equipment=[], siteSettings={}, certifications={types:[],students:[]} }) {
-  const [localRes, setLocalRes]   = useState(initialReservations);
   const [calDate, setCalDate]     = useState(new Date());
   const [statusF, setStatusF]     = useState([]);   // empty = all
   const [loanTypeF, setLoanTypeF] = useState("הכל");
   const [selected, setSelected]   = useState(null);
-  const [approving, setApproving] = useState(null); // reservation id being approved
 
-  const approveReservation = async (r) => {
-    setApproving(r.id);
-    try {
-      // In-app dept-head approval — authenticates with the Supabase session
-      // JWT instead of an email signed token. /api/approve-production accepts
-      // either (see api/approve-production.js).
-      const token = await getAuthToken();
-      const res = await fetch(`/api/approve-production?id=${r.id}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (res.ok) {
-        // Update local state immediately
-        setLocalRes(prev => prev.map(x => x.id===r.id ? {...x, status:"ממתין"} : x));
-        setSelected(null);
-      }
-    } catch(e) {
-      console.error("approve error", e);
-    }
-    setApproving(null);
-  };
-
-  const reservations = localRes;
+  const reservations = initialReservations;
   const yr = calDate.getFullYear();
   const mo = calDate.getMonth();
   const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
@@ -208,16 +185,6 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
                       </div>
                     );
                   })()}
-                  {(r.status==="אישור ראש מחלקה"||r.status==="ממתין לאישור ראש המחלקה")&&(
-                    <div style={{marginTop:14}}>
-                      <button
-                        onClick={e=>{e.stopPropagation();approveReservation(r);}}
-                        disabled={approving===r.id}
-                        style={{padding:"10px 24px",borderRadius:"var(--r-sm)",border:"none",background:"#9b59b6",color:"#fff",fontWeight:900,fontSize:14,cursor:"pointer",opacity:approving===r.id?0.6:1,display:"flex",alignItems:"center",gap:8}}>
-                        {approving===r.id ? <><Clock size={16} strokeWidth={1.75} /> מאשר...</> : <><CheckCircle size={16} strokeWidth={1.75} /> אשר הפקה — העבר לממתין</>}
-                      </button>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
