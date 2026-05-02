@@ -75,6 +75,13 @@ export default async function handler(req, res) {
     if (!staffId || !date || !shiftType) {
       return res.status(400).json({ error: "Missing required fields (staffId, date, shiftType)" });
     }
+    // Ownership check — non-admins can only edit their own preferences. Mirrors
+    // the check in delete-preference below; the absence of this check here let
+    // any authenticated staff member overwrite another staff member's row by
+    // submitting a different staffId in the body.
+    if (callerRole !== "admin" && staffId !== callerStaffId) {
+      return res.status(403).json({ error: "Not authorized to edit another staff member's preference" });
+    }
     const shiftErr = validateShiftType(shiftType, startTime, endTime);
     if (shiftErr) return res.status(400).json({ error: shiftErr });
     if (note && note.length > 250) {

@@ -567,12 +567,23 @@ async function handleUpdateStudentCredentials(req, res) {
     });
   }
 
+  // Build the response from the values we just persisted. Earlier revisions of
+  // this function tried to reach into a `students` array + `meIdx` from the
+  // legacy blob path; both were undefined here, which threw a 500 *after* the
+  // DB and auth updates had already succeeded — leaving the user thinking the
+  // change failed even though it persisted.
+  const updatedStudent = {
+    id: me.id,
+    name: nextName,
+    email: nextEmail,
+    phone: phoneProvided ? (nextPhone || null) : (me.phone ?? null),
+  };
   return res.status(200).json({
     ok: true,
     student: updatedStudent,
     emailChanged:    nextEmail !== currentEmail,
     passwordChanged: !!(password && String(password).length >= 6),
-    phoneChanged:    phoneProvided && (students[meIdx]?.phone || "") !== nextPhone,
+    phoneChanged:    phoneProvided && ((me.phone || "") !== nextPhone),
   });
 }
 
