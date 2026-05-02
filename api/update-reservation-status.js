@@ -1,28 +1,14 @@
 // update-reservation-status.js — atomic status change for reservations.
 //
 // PURPOSE:
-//   Stage 1 of the admin-side race-condition fix. Every admin / lecturer
-//   page currently does fetch-list → mutate → storageSet("reservations",
-//   fullList). That flow has three real risks:
-//     1) A concurrent public-form submit can be silently overwritten by
-//        the admin's full-list write (last writer wins).
-//     2) Transition into the "currently out of warehouse" window
-//        (status='מאושר' with borrow_date+time passed, or 'פעילה',
-//        or 'באיחור') does not refresh available_units, so the
-//        cached counter drifts from what the mirror would compute.
-//     3) Two admins clicking "approve" on the same request at the same
-//        time both succeed, both email the student, both write the DB.
-//
-//   This endpoint routes the change through the atomic RPC
-//   update_reservation_status_v1 (migration 009), which:
-//     * takes FOR UPDATE on the reservations_new row (serializes #3),
+//   Routes status changes through the atomic RPC update_reservation_status_v1
+//   (migration 009), which:
+//     * takes FOR UPDATE on the reservations_new row (serializes concurrent
+//       admin clicks on the same request),
 //     * updates status + returned_at in a single transaction,
 //     * recomputes available_units for every equipment_id referenced
-//       by the reservation, using the same formula as the mirror
-//       (fixes #2).
-//
-//   Item #1 is fixed at the JSON-blob level by migration 007's
-//   60-second grace period in sync_reservations_from_json.
+//       by the reservation in the same transaction (no cache drift on
+//       transitions into the "currently out of warehouse" window).
 //
 // PROTOCOL:
 //   POST /api/update-reservation-status

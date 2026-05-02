@@ -64,6 +64,7 @@
 ## 🛡️ Guardrails חיים
 - **ESLint** ב-`eslint.config.js` חוסם: `storageGet(...)`, `storageSet(...)`, `supabase.from('store'...)`, `from('store_snapshots'...)`, `/api/store`. כל ניסיון להוסיף קוד כזה נכשל ב-`npm run lint`.
 - **Supabase**: הטבלה `public.store` לא קיימת בDB. כל מי שינסה לקרוא/לכתוב יקבל שגיאת relation does not exist.
+- נכון ל-2026-05-02: כל RPCs/triggers/tables של עידן ה-blob נמחקו לחלוטין (migrations `20260430220000` + `20260502000000`). RPCs פעילות שעדיין מתפקדות: `sync_equipment_from_json` (write path לציוד דרך `/api/sync-equipment`), ו-`create_reservation_v2`/`update_reservation_status_v1`/`delete_reservation_v1`/`create_lesson_reservations_v1` להזמנות — כולן כותבות אך ורק לטבלאות מנורמלות.
 
 ## 🔐 Auth + זרימות
 

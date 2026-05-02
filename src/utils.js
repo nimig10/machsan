@@ -799,8 +799,12 @@ export function getConsecutiveBookingWarnings(targetReservation, reservations, e
   return warnings;
 }
 
-// ─── EQUIPMENT DB WRITE (Stage 5) ────────────────────────────────────────────
-// Direct Supabase write via /api/sync-equipment — replaces storageSet("equipment")
+// ─── EQUIPMENT DB WRITE ──────────────────────────────────────────────────────
+// Primary write path for equipment via /api/sync-equipment. The endpoint
+// forwards to the sync_equipment_from_json RPC, which upserts the
+// equipment + equipment_units tables atomically. Single source of truth —
+// public.store was retired 2026-04-30.
+//
 // Exposes an in-flight counter so equipment refresh / realtime listeners can
 // skip updates while a write is pending (prevents overwriting local state with
 // DB state that hasn't yet caught up to the in-flight write).

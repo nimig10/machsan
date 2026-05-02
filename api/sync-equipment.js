@@ -1,8 +1,8 @@
-// sync-equipment.js — dual-write mirror for equipment.
-// Called from storageSet after a successful write to store. Mirrors the full
-// equipment array into the normalized tables (equipment + equipment_units)
-// via the sync_equipment_from_json RPC. Never blocks the main write —
-// failures are logged, not surfaced to the user.
+// sync-equipment.js — primary equipment write path.
+// Accepts the full equipment array from writeEquipmentToDB() and forwards it
+// to the sync_equipment_from_json RPC, which upserts equipment +
+// equipment_units atomically. Single source of truth — public.store was
+// retired 2026-04-30, so this is no longer a mirror.
 
 import { requireStaff } from "./_auth-helper.js";
 

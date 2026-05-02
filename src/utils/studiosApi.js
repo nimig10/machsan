@@ -1,10 +1,8 @@
-// studiosApi.js — Stage 9 normalized read/write path for the public.studios
-// table. During Session A this module is a dual-write target only — every
-// existing storageSet("studios", arr) call is followed by syncAllStudios(arr),
-// but reads still flow through store.studios blob. Sessions B/C will swap
-// consumers over.
+// studiosApi.js — read/write path for the public.studios table. Single
+// source of truth (public.store was retired 2026-04-30). All reads and writes
+// flow exclusively through this module via the supabase client.
 //
-// Returns rows in the SAME shape as the legacy blob:
+// Returns rows in the SAME shape used historically by the app:
 //   {
 //     id, name, type, image, description,
 //     isClassroom, isDisabled, classroomOnly, requiresApproval,
