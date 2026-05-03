@@ -229,7 +229,7 @@ function PublicMiniCalendar({ reservations, lessons=[], initialLoanType="הכל"
   for(let d=1;d<=new Date(yr,mo+1,0).getDate();d++) days.push(new Date(yr,mo,d));
   while(days.length<42) days.push(null);
 
-  const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:<Package size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"ממתין",label:"השאלות בהמתנה",icon:<Clock size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"פרטית",label:"פרטית",icon:<User size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"הפקה",label:"הפקה",icon:<Film size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"סאונד",label:"סאונד",icon:<Mic size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"קולנוע יומית",label:"קולנוע יומית",icon:<Camera size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"שיעור",label:"שיעור",icon:<Film size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"צוות",label:"איש צוות",icon:<Briefcase size={12} strokeWidth={1.75} color="var(--accent)" />}];
+  const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:<Package size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"פרטית",label:"פרטית",icon:<User size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"הפקה",label:"הפקה",icon:<Film size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"סאונד",label:"סאונד",icon:<Mic size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"קולנוע יומית",label:"קולנוע יומית",icon:<Camera size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"שיעור",label:"שיעור",icon:<Film size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"צוות",label:"איש צוות",icon:<Briefcase size={12} strokeWidth={1.75} color="var(--accent)" />}];
   const isPendingFilter = loanTypeF === "ממתין";
   const activeRes = reservations.filter(r=>
     (isPendingFilter
@@ -267,11 +267,24 @@ function PublicMiniCalendar({ reservations, lessons=[], initialLoanType="הכל"
           <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo+1,1))}>›</button>
         </div>
       </div>
+      {/* Status filter — pending only (own row, above loan-type chips) */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
+        {(() => {
+          const isActive = isPendingFilter;
+          const [bg, fg] = ["var(--accent-glow)", "var(--accent)"];
+          return (
+            <button type="button" onClick={()=>setLoanTypeF(isPendingFilter ? "הכל" : "ממתין")}
+              style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${isActive?bg:"var(--border)"}`,background:isActive?bg:"transparent",color:isActive?fg:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>
+              <Clock size={12} strokeWidth={1.75} color="var(--accent)" /> השאלות בהמתנה
+            </button>
+          );
+        })()}
+      </div>
       {/* Loan type filter chips — colored by loan type */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
         {LOAN_FILTERS.map(f=>{
           const isActive = loanTypeF===f.key;
-          const [bg, fg] = (f.key === "הכל" || f.key === "ממתין") ? ["var(--accent-glow)", "var(--accent)"] : getLoanTypeColor(f.key);
+          const [bg, fg] = f.key === "הכל" ? ["var(--accent-glow)", "var(--accent)"] : getLoanTypeColor(f.key);
           return (
             <button key={f.key} type="button" onClick={()=>setLoanTypeF(f.key)}
               style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${isActive?bg:"var(--border)"}`,background:isActive?bg:"transparent",color:isActive?fg:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>
