@@ -4991,20 +4991,20 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
         </>
       )}
       {studioInfoPanel && (
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}
           onClick={e=>e.target===e.currentTarget&&setStudioInfoPanel(null)}>
-          <div style={{width:"100%",maxWidth:400,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl",overflow:"hidden"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",borderBottom:"1px solid var(--border)",background:"var(--surface2)"}}>
+          <div style={{width:"100%",maxWidth:880,maxHeight:"92vh",background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl",overflow:"hidden",display:"flex",flexDirection:"column"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",flexShrink:0}}>
               <div style={{fontWeight:900,fontSize:16}}>{studioInfoPanel.name}</div>
               <button className="btn btn-secondary btn-sm" onClick={()=>setStudioInfoPanel(null)}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>
             </div>
-            <div style={{padding:"20px",display:"flex",flexDirection:"column",alignItems:"center",gap:16}}>
+            <div style={{padding:"20px",display:"flex",flexDirection:"column",alignItems:"center",gap:16,overflowY:"auto",flex:1}}>
               {studioInfoPanel.image?.startsWith("http") || studioInfoPanel.image?.startsWith("data:")
-                ? <img src={studioInfoPanel.image} alt={studioInfoPanel.name} style={{width:"100%",maxHeight:220,objectFit:"cover",borderRadius:10}}/>
-                : <div style={{fontSize:72,lineHeight:1}}>{studioInfoPanel.image||<Mic size={72} strokeWidth={1.75} color="var(--accent)" />}</div>
+                ? <img src={studioInfoPanel.image} alt={studioInfoPanel.name} style={{width:"100%",maxHeight:"70vh",objectFit:"contain",borderRadius:10,background:"#000",imageRendering:"auto"}}/>
+                : <div style={{fontSize:96,lineHeight:1}}>{studioInfoPanel.image||<Mic size={96} strokeWidth={1.75} color="var(--accent)" />}</div>
               }
               {studioInfoPanel.description
-                ? <p style={{fontSize:14,color:"var(--text)",lineHeight:1.7,textAlign:"right",margin:0,whiteSpace:"pre-wrap"}}>{studioInfoPanel.description}</p>
+                ? <p style={{fontSize:14,color:"var(--text)",lineHeight:1.7,textAlign:"right",margin:0,whiteSpace:"pre-wrap",alignSelf:"stretch"}}>{studioInfoPanel.description}</p>
                 : <p style={{fontSize:13,color:"var(--text3)",margin:0}}>אין תיאור לחדר זה.</p>
               }
             </div>
