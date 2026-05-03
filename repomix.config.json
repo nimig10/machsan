@@ -25,7 +25,11 @@
       "*.woff",
       "*.woff2",
       "*.ttf",
-      "database.types1.ts"
+      "database.types1.ts",
+      "API MAIL.txt",
+      "*.api-key",
+      "*.secret",
+      "secrets/**"
     ]
   },
   "security": {

@@ -37,3 +37,11 @@ dist-ssr
 supabase/.temp/
 supabase/.branches/
 .env*.local
+
+# Secret-bearing dumps & API key files (never commit)
+API MAIL.txt
+*.api-key
+*.secret
+secrets/
+repomix-output.xml
+context/codebase.xml

@@ -7,9 +7,15 @@ const express      = require("express");
 const cors         = require("cors");
 const nodemailer   = require("nodemailer");
 
-// ← שנה את שני השדות האלה בלבד:
-const GMAIL_USER = "camera.obscura.media@gmail.com";
-const GMAIL_PASS = "ajwj isti gmel oabo";
+// Credentials come from environment variables (.env / Vercel env).
+// Never hardcode an App Password here — the file is committed to git.
+const GMAIL_USER = process.env.GMAIL_USER;
+const GMAIL_PASS = process.env.GMAIL_PASS;
+
+if (!GMAIL_USER || !GMAIL_PASS) {
+  console.error("❌ Missing GMAIL_USER / GMAIL_PASS env vars — refusing to start.");
+  process.exit(1);
+}
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
