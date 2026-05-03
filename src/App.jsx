@@ -6077,18 +6077,30 @@ export default function App() {
     if (loading || isPublicFormView || isLecturerPortalView) return undefined;
     const channel = supabase
       .channel("store-live-sync")
+      // Reservations realtime — postgres_changes on the normalized
+      // reservations_new table (publication added in migration
+      // 20260503140000). A delete/insert/update in any tab is broadcast to
+      // every connected client within ~1s, so a stale "deleted" row no
+      // longer lingers in another admin tab waiting for the 15s poll.
+      // Debounce because INSERT of a multi-item reservation also fires
+      // N events on reservation_items right after; one trailing refetch
+      // handles the whole burst.
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "store" },
-        (payload) => {
-          try {
-            const row = payload.new || payload.old;
-            const key = row?.key;
-            const data = payload.new?.data;
-            if (!key || data === undefined) return;
-            if (key === "reservations") {
-              if (Array.isArray(data)) {
-                const normalized = normalizeReservationsForArchive(data);
+        { event: "*", schema: "public", table: "reservations_new" },
+        (() => {
+          let t = null;
+          return () => {
+            clearTimeout(t);
+            t = setTimeout(async () => {
+              try {
+                const { data: rows } = await supabase
+                  .from("reservations_new")
+                  .select("*, reservation_items(*)");
+                if (!Array.isArray(rows)) return;
+                const normalized = normalizeReservationsForArchive(
+                  rows.map(r => ({ ...r, items: r.reservation_items || [] }))
+                );
                 const { reservations: genLesson, linkedKitIds } =
                   buildLessonReservations(lessonsRef.current, kitsRef.current);
                 const merged = [
@@ -6102,17 +6114,50 @@ export default function App() {
                 if (!dataEquals(reservationsRef.current, merged)) {
                   _setReservations(merged);
                 }
+              } catch (err) {
+                console.warn("reservations_new realtime refetch failed", err);
               }
-            }
-            // Stage 7 cleanup: lecturers no longer ride the store-row realtime
-            // channel — table updates fall back to the polling refresh.
-            // Stage 10 cleanup: studio_bookings moved off the store-row channel
-            // — see the dedicated realtime subscription on public.studio_bookings
-            // below.
-          } catch (err) {
-            console.warn("store realtime payload handler failed", err);
-          }
-        },
+            }, 400);
+          };
+        })(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "reservation_items" },
+        (() => {
+          // Items can change without the parent reservation row changing
+          // (e.g. quantity edit). Same debounced refetch.
+          let t = null;
+          return () => {
+            clearTimeout(t);
+            t = setTimeout(async () => {
+              try {
+                const { data: rows } = await supabase
+                  .from("reservations_new")
+                  .select("*, reservation_items(*)");
+                if (!Array.isArray(rows)) return;
+                const normalized = normalizeReservationsForArchive(
+                  rows.map(r => ({ ...r, items: r.reservation_items || [] }))
+                );
+                const { reservations: genLesson, linkedKitIds } =
+                  buildLessonReservations(lessonsRef.current, kitsRef.current);
+                const merged = [
+                  ...normalized.filter(r => {
+                    if (r.lesson_auto === true) return false;
+                    if (hasLinkedValue(r.lesson_kit_id) && linkedKitIds.has(String(r.lesson_kit_id))) return false;
+                    return true;
+                  }),
+                  ...genLesson,
+                ];
+                if (!dataEquals(reservationsRef.current, merged)) {
+                  _setReservations(merged);
+                }
+              } catch (err) {
+                console.warn("reservation_items realtime refetch failed", err);
+              }
+            }, 400);
+          };
+        })(),
       )
       .on(
         "postgres_changes",
@@ -6408,12 +6453,51 @@ export default function App() {
       void refreshLecturerData();
     }, 60000);
 
+    // Realtime subscription on reservations_new (publication added in
+    // migration 20260503140000). Without this, a warehouse delete is only
+    // reflected for the lecturer after the 60s poll fires — long enough
+    // for a dept-head to click "approve" on a stale row that no longer
+    // exists. With this, a delete propagates within ~1s.
+    let lecturerRtChannel = null;
+    let lecturerRtDebounce = null;
+    try {
+      lecturerRtChannel = supabase
+        .channel("lecturer-reservations-live")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "reservations_new" },
+          () => {
+            clearTimeout(lecturerRtDebounce);
+            lecturerRtDebounce = setTimeout(() => void refreshLecturerData(), 400);
+          },
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "reservation_items" },
+          () => {
+            clearTimeout(lecturerRtDebounce);
+            lecturerRtDebounce = setTimeout(() => void refreshLecturerData(), 400);
+          },
+        )
+        .subscribe((status) => {
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            console.warn("lecturer reservations realtime channel:", status);
+          }
+        });
+    } catch (err) {
+      console.warn("lecturer realtime subscription failed:", err);
+    }
+
     window.addEventListener("focus", handleFocus);
     window.addEventListener("storage", handleStorage);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       window.clearInterval(intervalId);
+      clearTimeout(lecturerRtDebounce);
+      if (lecturerRtChannel) {
+        try { supabase.removeChannel(lecturerRtChannel); } catch {}
+      }
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("storage", handleStorage);
       document.removeEventListener("visibilitychange", handleVisibilityChange);

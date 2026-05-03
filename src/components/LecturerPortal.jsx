@@ -196,6 +196,20 @@ export function LecturerPortal({
       const rpcResult = await updateReservationStatus(res.id, newStatus);
       if (!rpcResult.ok) {
         console.error("changeDhStatus RPC failed:", rpcResult);
+        // The reservation was deleted by warehouse staff while this
+        // session held a stale copy. Pull the fresh list so the row
+        // disappears from the lecturer's pending queue immediately,
+        // and show a clear message instead of a generic error.
+        if (rpcResult.error === "not_found") {
+          try {
+            const freshRes = await (supabase.from("reservations_new").select("*, reservation_items(*)").then(r => (r.data || []).map(row => ({ ...row, items: row.reservation_items || [] }))));
+            if (setReservations && Array.isArray(freshRes)) setReservations(freshRes);
+          } catch (refreshErr) {
+            console.warn("changeDhStatus stale-refresh failed:", refreshErr);
+          }
+          showToast("info", "הבקשה כבר אינה קיימת — צוות המחסן הסיר אותה");
+          return;
+        }
         showToast("error", "שגיאה בעדכון הסטטוס בשרת");
         return;
       }
