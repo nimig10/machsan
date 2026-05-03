@@ -1052,7 +1052,8 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
         />
       ) : (
         <>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+          {/* Row 1 — חיפוש + פילטרים נשלפים (מיון + טווח זמן) */}
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,flexWrap:"wrap"}}>
             <div className="search-bar" style={{flex:1,minWidth:180}}><span><Search size={16} strokeWidth={1.75} color="var(--text3)" /></span>
               <input placeholder="חיפוש קורס או מרצה..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
             <div style={{display:"flex",gap:6,alignItems:"center"}}>
@@ -1067,50 +1068,51 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                 <option value="urgency">⚡ דחיפות</option>
               </select>
             </div>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-              {/* פילטר זמן — היום / השבוע / החודש */}
-              <select
-                className="form-select"
-                style={{minWidth:120,fontSize:12,padding:"6px 8px",fontWeight:700,borderColor:timeFilter!=="all"?"#4ade80":"var(--border)",color:timeFilter!=="all"?"#4ade80":"var(--text2)"}}
-                value={timeFilter}
-                onChange={e=>setTimeFilter(e.target.value)}
-              >
-                <option value="all">הכל</option>
-                <option value="today">📍 היום</option>
-                <option value="week">🗓️ השבוע</option>
-                <option value="month">📅 החודש</option>
-              </select>
-              <button
-                type="button"
-                onClick={() => { setArchiveView(v => !v); setSearch(""); setTrackFilter([]); }}
-                style={{
-                  padding: "6px 14px", borderRadius: 20, fontWeight: 700, fontSize: 13, cursor: "pointer",
-                  border: `2px solid ${archiveView ? "#e67e22" : "var(--border)"}`,
-                  background: archiveView ? "rgba(230,126,34,0.14)" : "transparent",
-                  color: archiveView ? "#e67e22" : "var(--text3)",
-                  display: "inline-flex", alignItems: "center", gap: 6,
-                }}
-              >
-                <Package size={16} strokeWidth={1.75} /> ארכיון
-                {archivedCount > 0 && (
-                  <span style={{ background: archiveView ? "#e67e22" : "rgba(230,126,34,0.25)", color: archiveView ? "#fff" : "#e67e22", borderRadius: 20, padding: "1px 7px", fontSize: 11, fontWeight: 800 }}>
-                    {archivedCount}
-                  </span>
-                )}
-              </button>
-              <input ref={aiImportInputRef} type="file" accept=".csv,.xlsx,.xls" style={{display:"none"}} onChange={importLessonsSmartAI} disabled={aiImporting}/>
-              <button className="btn btn-primary" style={{display:"inline-flex",alignItems:"center",gap:6}} onClick={()=>aiImportInputRef.current?.click()} disabled={aiImporting}>
-                {aiImporting ? "מפענח את קובץ האקסל..." : "✨ ייבוא אקסל חכם (AI)"}
-              </button>
-              <input ref={importInputRef} type="file" accept=".csv,.tsv,.xlsx,.xls" style={{display:"none"}} onChange={importLessonsXL} disabled={xlImporting}/>
-              <button className="btn btn-secondary" onClick={()=>importInputRef.current?.click()} disabled={xlImporting}>{xlImporting ? "מייבא..." : "ייבוא XL"}</button>
-              {import.meta.env.DEV && (
-                <button className="btn btn-secondary" onClick={runStage8Backfill} disabled={stage8Backfilling} title="Sync store.lessons blob → public.lessons table (dev only)">
-                  {stage8Backfilling ? "מסנכרן..." : "🔁 Stage 8 Backfill"}
-                </button>
+            {/* פילטר זמן — היום / השבוע / החודש */}
+            <select
+              className="form-select"
+              style={{minWidth:120,fontSize:12,padding:"6px 8px",fontWeight:700,borderColor:timeFilter!=="all"?"#4ade80":"var(--border)",color:timeFilter!=="all"?"#4ade80":"var(--text2)"}}
+              value={timeFilter}
+              onChange={e=>setTimeFilter(e.target.value)}
+            >
+              <option value="all">הכל</option>
+              <option value="today">📍 היום</option>
+              <option value="week">🗓️ השבוע</option>
+              <option value="month">📅 החודש</option>
+            </select>
+          </div>
+          {/* Row 2 — לחצני פעולה */}
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:12}}>
+            <button
+              type="button"
+              onClick={() => { setArchiveView(v => !v); setSearch(""); setTrackFilter([]); }}
+              style={{
+                padding: "6px 14px", borderRadius: 20, fontWeight: 700, fontSize: 13, cursor: "pointer",
+                border: `2px solid ${archiveView ? "#e67e22" : "var(--border)"}`,
+                background: archiveView ? "rgba(230,126,34,0.14)" : "transparent",
+                color: archiveView ? "#e67e22" : "var(--text3)",
+                display: "inline-flex", alignItems: "center", gap: 6,
+              }}
+            >
+              <Package size={16} strokeWidth={1.75} /> ארכיון
+              {archivedCount > 0 && (
+                <span style={{ background: archiveView ? "#e67e22" : "rgba(230,126,34,0.25)", color: archiveView ? "#fff" : "#e67e22", borderRadius: 20, padding: "1px 7px", fontSize: 11, fontWeight: 800 }}>
+                  {archivedCount}
+                </span>
               )}
-              <button className="btn btn-primary" onClick={()=>{setMode("add");setEditTarget(null);}}>➕ קורס חדש</button>
-            </div>
+            </button>
+            <input ref={aiImportInputRef} type="file" accept=".csv,.xlsx,.xls" style={{display:"none"}} onChange={importLessonsSmartAI} disabled={aiImporting}/>
+            <button className="btn btn-primary" style={{display:"inline-flex",alignItems:"center",gap:6}} onClick={()=>aiImportInputRef.current?.click()} disabled={aiImporting}>
+              {aiImporting ? "מפענח את קובץ האקסל..." : "✨ ייבוא אקסל חכם (AI)"}
+            </button>
+            <input ref={importInputRef} type="file" accept=".csv,.tsv,.xlsx,.xls" style={{display:"none"}} onChange={importLessonsXL} disabled={xlImporting}/>
+            <button className="btn btn-secondary" onClick={()=>importInputRef.current?.click()} disabled={xlImporting}>{xlImporting ? "מייבא..." : "ייבוא XL"}</button>
+            {import.meta.env.DEV && (
+              <button className="btn btn-secondary" onClick={runStage8Backfill} disabled={stage8Backfilling} title="Sync store.lessons blob → public.lessons table (dev only)">
+                {stage8Backfilling ? "מסנכרן..." : "🔁 Stage 8 Backfill"}
+              </button>
+            )}
+            <button className="btn btn-primary" onClick={()=>{setMode("add");setEditTarget(null);}}>➕ קורס חדש</button>
           </div>
 
           {allTrackFilters.length > 1 && (
