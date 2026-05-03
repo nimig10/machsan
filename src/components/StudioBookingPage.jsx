@@ -544,7 +544,10 @@ export default function StudioBookingPage(props) {
 
   const uploadToCloudinary = async (file) => {
     if (!file.type.startsWith("image/")) throw new Error("נא לבחור קובץ תמונה בלבד");
-    // Resize + compress: 500x500 max, JPEG 70% (~30-60KB per image)
+    // Resize + compress: 1200x1200 max, JPEG 82% (~150-300KB per image).
+    // Bumped from 500x500 / Q70 (~30-60KB) so the room photo stays sharp
+    // when shown in the enlarged info modal (up to 880px wide). DB cost is
+    // unchanged — only the Cloudinary URL string is stored in studios.image.
     const dataUrl = await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error("Image load timeout (10s)")), 10000);
       const blobUrl = URL.createObjectURL(file);
@@ -552,7 +555,7 @@ export default function StudioBookingPage(props) {
       img.onload = () => {
         clearTimeout(timeout);
         URL.revokeObjectURL(blobUrl);
-        const MAX = 500;
+        const MAX = 1200;
         let w = img.width, h = img.height;
         if (w > MAX || h > MAX) {
           if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
@@ -564,7 +567,7 @@ export default function StudioBookingPage(props) {
         ctx.fillStyle = "#FFFFFF";
         ctx.fillRect(0, 0, w, h);
         ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/jpeg", 0.70));
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
       };
       img.onerror = () => { clearTimeout(timeout); URL.revokeObjectURL(blobUrl); reject(new Error("Failed to load image")); };
       img.src = blobUrl;
