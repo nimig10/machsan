@@ -226,7 +226,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const [trackFilter, setTrackFilter] = useState([]);
   const [sortMode, setSortMode] = useState("recent"); // "recent" | "urgency"
   const [archiveView, setArchiveView] = useState(false);
-  const [timeFilter, setTimeFilter] = useState("all"); // "all" | "week" | "month"
+  const [timeFilter, setTimeFilter] = useState("all"); // "all" | "today" | "week" | "month"
 
   // Stage 6 step 5c: students used by studentsInTrack and the conflict-email
   // lookup come from public.students via studentsApi. Falls back to
@@ -477,7 +477,11 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     return lastDate < today();
   };
 
-  // חישוב טווח השבוע הנוכחי (ראשון–שבת) והחודש הנוכחי
+  // חישוב טווחי זמן: היום / השבוע (ראשון–שבת) / החודש הנוכחי
+  const getTodayRange = () => {
+    const today = formatLocalDateInput(new Date());
+    return { start: today, end: today };
+  };
   const getWeekRange = () => {
     const now = new Date();
     const day = now.getDay(); // 0=ראשון
@@ -501,6 +505,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     const matchesTrack = allTracksSelected || trackFilter.includes(trackLabel);
     const matchesArchive = archiveView ? isArchived(lesson) : !isArchived(lesson);
     const matchesTime = timeFilter === "all" ||
+      (timeFilter === "today" && lessonHasSessionInRange(lesson, getTodayRange())) ||
       (timeFilter === "week" && lessonHasSessionInRange(lesson, getWeekRange())) ||
       (timeFilter === "month" && lessonHasSessionInRange(lesson, getMonthRange()));
     return matchesSearch && matchesTrack && matchesArchive && matchesTime;
@@ -1052,34 +1057,29 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
               <input placeholder="חיפוש קורס או מרצה..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
             <div style={{display:"flex",gap:6,alignItems:"center"}}>
               <span style={{fontSize:12,color:"var(--text3)",fontWeight:700}}>מיון:</span>
-              {[{val:"recent",label:<><Clock size={11} strokeWidth={1.75}/> קבלה</>},{val:"urgency",label:"⚡ דחיפות"}].map(opt=>(
-                <button key={opt.val} type="button" onClick={()=>setSortMode(opt.val)}
-                  style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${sortMode===opt.val?"#f5a623":"var(--border)"}`,background:sortMode===opt.val?"rgba(245,166,35,0.14)":"transparent",color:sortMode===opt.val?"#f5a623":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
-                  {opt.label}
-                </button>
-              ))}
+              <select
+                className="form-select"
+                style={{minWidth:130,fontSize:12,padding:"6px 8px",fontWeight:700,borderColor:sortMode!=="recent"?"#f5a623":"var(--border)",color:sortMode!=="recent"?"#f5a623":"var(--text2)"}}
+                value={sortMode}
+                onChange={e=>setSortMode(e.target.value)}
+              >
+                <option value="recent">🕐 קבלה</option>
+                <option value="urgency">⚡ דחיפות</option>
+              </select>
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-              {/* פילטר זמן — השבוע / החודש */}
-              {[
-                { val: "all",   label: "הכל" },
-                { val: "week",  label: <><Calendar size={16} strokeWidth={1.75} /> השבוע</> },
-                { val: "month", label: "🗓️ החודש" },
-              ].map(opt => (
-                <button
-                  key={opt.val}
-                  type="button"
-                  onClick={() => setTimeFilter(opt.val)}
-                  style={{
-                    padding: "5px 13px", borderRadius: 20, fontWeight: 700, fontSize: 12, cursor: "pointer",
-                    border: `2px solid ${timeFilter === opt.val ? "#4ade80" : "var(--border)"}`,
-                    background: timeFilter === opt.val ? "rgba(74,222,128,0.14)" : "transparent",
-                    color: timeFilter === opt.val ? "#4ade80" : "var(--text3)",
-                  }}
-                >
-                  {opt.label}
-                </button>
-              ))}
+              {/* פילטר זמן — היום / השבוע / החודש */}
+              <select
+                className="form-select"
+                style={{minWidth:120,fontSize:12,padding:"6px 8px",fontWeight:700,borderColor:timeFilter!=="all"?"#4ade80":"var(--border)",color:timeFilter!=="all"?"#4ade80":"var(--text2)"}}
+                value={timeFilter}
+                onChange={e=>setTimeFilter(e.target.value)}
+              >
+                <option value="all">הכל</option>
+                <option value="today">📍 היום</option>
+                <option value="week">🗓️ השבוע</option>
+                <option value="month">📅 החודש</option>
+              </select>
               <button
                 type="button"
                 onClick={() => { setArchiveView(v => !v); setSearch(""); setTrackFilter([]); }}
