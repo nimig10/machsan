@@ -1325,8 +1325,24 @@ export function LecturerPortal({
             </div>
 
             <div className="form-group" style={{ marginBottom: 16 }}>
-              <label className="form-label">הערות</label>
-              <textarea className="form-textarea" rows={2} value={draftDescription} onChange={(event) => setDraftDescription(event.target.value)} placeholder="הערות אופציונליות למרצה/לצוות" />
+              <label className="form-label">הערות לצוות המחסן</label>
+              <textarea
+                className="form-textarea"
+                rows={2}
+                value={draftDescription}
+                onChange={(event) => setDraftDescription(event.target.value)}
+                placeholder="הערות אופציונליות לצוות המחסן"
+                ref={(el) => {
+                  if (!el) return;
+                  // Auto-grow: collapse to a 2-row baseline first so the
+                  // height shrinks back when the lecturer deletes text,
+                  // then expand to fit the full content. minHeight via CSS
+                  // keeps the placeholder visible when empty.
+                  el.style.height = "auto";
+                  el.style.height = `${el.scrollHeight}px`;
+                }}
+                style={{ minHeight: 56, resize: "none", overflow: "hidden" }}
+              />
             </div>
 
             {lessonKits.length > 0 && (
