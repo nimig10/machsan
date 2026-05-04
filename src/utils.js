@@ -687,7 +687,12 @@ export function getAvailable(eqId, borrowDate, returnDate, reservations, equipme
   for (const res of reservations) {
     if (res.id === excludeId) continue;
     const effStatus = getEffectiveStatus(res);
-    if (!["ממתין","אישור ראש מחלקה","מאושר","פעילה","באיחור"].includes(effStatus)) continue;
+    // Only "מאושר" / "פעילה" / "באיחור" actually tie up inventory.
+    // Pending requests ("ממתין", "אישור ראש מחלקה") are tentative — the equipment
+    // isn't yet allocated, so they MUST NOT block other lecturers/students from
+    // requesting the same equipment for the same window. Staff sees pending
+    // overlaps via getReservationApprovalConflicts at approval time.
+    if (!["מאושר","פעילה","באיחור"].includes(effStatus)) continue;
     const resStart = toDateTime(res.borrow_date, res.borrow_time || "00:00");
     // Overdue items are physically out of the warehouse — block every future request regardless of return_date
     const resEnd = effStatus === "באיחור" ? FAR_FUTURE : toDateTime(res.return_date, res.return_time || "23:59");
