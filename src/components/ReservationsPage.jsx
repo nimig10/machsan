@@ -7,7 +7,7 @@ import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
 import { syncAllLessons } from "../utils/lessonsApi.js";
 import { listKits, syncAllKits } from "../utils/kitsApi.js";
-import { AlertTriangle, BookOpen, Briefcase, Camera, Calendar, CheckCircle, ClipboardList, Clock, FileText, Film, Mic, Package, Pencil, RotateCcw, Save, Shield, Trash2, User, X, XCircle } from "lucide-react";
+import { AlertTriangle, BookOpen, Briefcase, Camera, Calendar, CheckCircle, ClipboardList, Clock, FileText, Film, MessageSquare, Mic, Package, Pencil, RotateCcw, Save, Shield, Trash2, User, X, XCircle } from "lucide-react";
 
 // ── Production Certification Gate ─────────────────────────────────────────
 // Given a "הפקה" reservation, return the items whose required certification
@@ -752,6 +752,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
                   {equipmentReports.some(rp=>rp.reservation_id===String(r.id)&&rp.status==="open")&&<AlertTriangle size={14} strokeWidth={1.75} color="#e74c3c" title="דיווח תקלה פתוח" />}
+                  {r.lecturer_notes && <MessageSquare size={14} strokeWidth={2} color="#4fb3ec" title={`הערה מהמרצה: ${r.lecturer_notes}`} />}
                   {statusBadge(getEffectiveStatus(r))}
                   <span style={{fontSize:11,color:"var(--text3)"}}>{formatDate(r.created_at)}</span>
                 </div>
@@ -1115,6 +1116,15 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
               </div>
             </div>
           </div>
+          {/* Lecturer note (lesson loans only — set by the lecturer in the portal) */}
+          {selected.lecturer_notes && (
+            <div style={{marginTop:20,background:"rgba(52,152,219,0.07)",border:"1px solid rgba(52,152,219,0.3)",borderRadius:"var(--r)",padding:16}}>
+              <div style={{fontWeight:800,fontSize:13,color:"#4fb3ec",marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+                <MessageSquare size={14} strokeWidth={2} /> הערה מהמרצה
+              </div>
+              <div style={{fontSize:13,color:"var(--text)",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{selected.lecturer_notes}</div>
+            </div>
+          )}
           {/* Overdue manual email area */}
           {selected.status==="באיחור" && (
             <div style={{marginTop:20,background:"rgba(230,126,34,0.08)",border:"1px solid rgba(230,126,34,0.3)",borderRadius:"var(--r)",padding:16}}>

@@ -422,7 +422,12 @@ export function LecturerPortal({
     // The lecturer doesn't set this manually anymore — the field was removed
     // from the modal because it always boils down to the same template.
     setDraftName(buildDefaultKitName(editorContext.lesson, editorContext.type, editorContext.session));
-    setDraftDescription(String(sourceKit?.description || "").trim());
+    // Prefer the note saved on the actual reservation so re-opening the
+    // editor shows what the lecturer last wrote (and lets them update it).
+    // Fall back to the kit description for a fresh editor.
+    setDraftDescription(
+      String(realReservation?.lecturer_notes || sourceKit?.description || "").trim(),
+    );
     setDraftItems(
       (itemSource?.items || [])
         .filter((item) => Number(item?.quantity) > 0)

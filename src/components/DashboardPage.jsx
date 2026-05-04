@@ -3,7 +3,7 @@ import { useState } from "react";
 import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, syncReservationStatusToBlob, getLoanTypeColor, normalizeName } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
-import { Activity, AlertTriangle, ArrowUpFromLine, Briefcase, Calendar, Camera, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Layers, Mic, Package, RefreshCw, Shield, User, Wrench, X, XCircle } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUpFromLine, Briefcase, Calendar, Camera, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Layers, MessageSquare, Mic, Package, RefreshCw, Shield, User, Wrench, X, XCircle } from "lucide-react";
 
 const HE_DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 function getDayName(dateStr) {
@@ -351,6 +351,11 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontWeight:700,fontSize:13,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
                         {tag}{r.course||r.student_name}
+                        {r.lecturer_notes && (
+                          <span title={`הערה מהמרצה: ${r.lecturer_notes}`} style={{display:"inline-flex",alignItems:"center",gap:3,background:"rgba(52,152,219,0.18)",border:"1px solid rgba(52,152,219,0.5)",color:"#4fb3ec",borderRadius:20,padding:"1px 7px",fontSize:10,fontWeight:800}}>
+                            <MessageSquare size={10} strokeWidth={2.2} /> הערה
+                          </span>
+                        )}
                       </div>
                       {r.student_name&&r.student_name!==r.course&&(
                         <div style={{fontSize:12,fontWeight:700,color:"#9b59b6",marginTop:3,display:"flex",alignItems:"center",gap:4}}>
@@ -490,6 +495,15 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                 <div style={{background:"rgba(245,166,35,0.07)",border:"1px solid rgba(245,166,35,0.25)",borderRadius:10,padding:"12px 14px"}}>
                   <div style={{fontSize:11,fontWeight:800,color:"var(--accent)",marginBottom:6}}>📝 סיבת ההפקה</div>
                   <div style={{fontSize:13,color:"var(--text)",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{dashViewRes.production_reason}</div>
+                </div>
+              )}
+              {/* Lecturer note (lesson loans only — set by the lecturer in the portal) */}
+              {dashViewRes.lecturer_notes&&(
+                <div style={{background:"rgba(52,152,219,0.07)",border:"1px solid rgba(52,152,219,0.3)",borderRadius:10,padding:"12px 14px"}}>
+                  <div style={{fontSize:11,fontWeight:800,color:"#4fb3ec",marginBottom:6,display:"flex",alignItems:"center",gap:5}}>
+                    <MessageSquare size={12} strokeWidth={2} /> הערה מהמרצה
+                  </div>
+                  <div style={{fontSize:13,color:"var(--text)",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{dashViewRes.lecturer_notes}</div>
                 </div>
               )}
               {/* Items with images */}
