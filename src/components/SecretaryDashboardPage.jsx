@@ -251,17 +251,17 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
     <div className="page">
 
       {/* ── Stats ── */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
+      <div style={{display:"grid",gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4,1fr)",gap:isMobile?10:12,marginBottom:isMobile?16:20}}>
         {[
-          { icon:<Users size={26} strokeWidth={1.75} color="var(--accent)" />, value: students.length, label:"סטודנטים" },
-          { icon:<GraduationCap size={26} strokeWidth={1.75} color="var(--accent)" />,   value: tracks.length,       label:"מסלולים" },
-          { icon:<Mic size={26} strokeWidth={1.75} color="var(--accent)" />,  value:(studios||[]).length, label:"חדרים" },
-          { icon:<Film size={26} strokeWidth={1.75} color="var(--accent)" />, value: todayLessons.length, label:"שיעורים היום" },
+          { icon:<Users size={isMobile?22:26} strokeWidth={1.75} color="var(--accent)" />, value: students.length, label:"סטודנטים" },
+          { icon:<GraduationCap size={isMobile?22:26} strokeWidth={1.75} color="var(--accent)" />,   value: tracks.length,       label:"מסלולים" },
+          { icon:<Mic size={isMobile?22:26} strokeWidth={1.75} color="var(--accent)" />,  value:(studios||[]).length, label:"חדרים" },
+          { icon:<Film size={isMobile?22:26} strokeWidth={1.75} color="var(--accent)" />, value: todayLessons.length, label:"שיעורים היום" },
         ].map(s => (
-          <div key={s.label} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"14px 16px",textAlign:"center"}}>
-            <div style={{fontSize:26,marginBottom:4}}>{s.icon}</div>
-            <div style={{fontSize:28,fontWeight:900,color:"var(--accent)"}}>{s.value}</div>
-            <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>{s.label}</div>
+          <div key={s.label} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:isMobile?"10px 8px":"14px 16px",textAlign:"center"}}>
+            <div style={{fontSize:isMobile?22:26,marginBottom:4}}>{s.icon}</div>
+            <div style={{fontSize:isMobile?22:28,fontWeight:900,color:"var(--accent)",lineHeight:1.1}}>{s.value}</div>
+            <div style={{fontSize:isMobile?11:12,color:"var(--text3)",marginTop:2}}>{s.label}</div>
           </div>
         ))}
       </div>
@@ -414,11 +414,11 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
             <button className="btn btn-secondary btn-sm" onClick={() => shiftDayView(-1)}>‹</button>
           </div>
         </div>
-        <div style={{padding:"0 16px 16px",overflowX:"auto"}}>
+        <div style={{padding:"0 16px 16px",overflowX:"auto"}} className="no-swipe-nav">
           {dayViewRows.length === 0 ? (
             <div style={{color:"var(--text3)",fontSize:13,padding:"16px 0",textAlign:"center"}}>אין קביעות ביום זה</div>
           ) : (
-            <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:12,tableLayout:"fixed",minWidth:480,direction:"rtl"}}>
+            <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:12,tableLayout:"fixed",minWidth:isMobile?420:480,direction:"rtl"}}>
               <thead>
                 <tr>
                   <th style={{width:90,padding:"8px 10px",textAlign:"right",fontWeight:700,color:"var(--text2)",borderBottom:"2px solid var(--border)",whiteSpace:"nowrap"}}>שעה</th>

@@ -933,12 +933,12 @@ const css = `
     .nav { display:flex; flex-direction:row; padding:0; flex:1; overflow-x:auto; scroll-behavior:smooth; scrollbar-width:none; }
     .nav::-webkit-scrollbar { display:none; }
     .nav-section { display:none; }
-    .nav-item { flex:0 0 auto; min-width:54px; max-width:72px; flex-direction:column; gap:1px; padding:4px 2px; font-size:9px; border-right:none; border-top:3px solid transparent; justify-content:center; text-align:center; margin:0; }
+    .nav-item { flex:0 0 auto; min-width:54px; max-width:72px; flex-direction:column; gap:1px; padding:4px 2px; font-size:9px; border-right:none; border-top:3px solid transparent; justify-content:center; text-align:center; margin:0; scroll-snap-align:center; }
     .nav-label { display:block; font-size:8px; line-height:1.1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:0 2px; color:var(--text3); }
     .nav-item.active { border-right-color:transparent; border-top-color:var(--accent); background:var(--accent-glow); }
     .nav-item .icon { font-size:18px; width:auto; }
     .sidebar > div:last-child { display:none; }
-    .main { margin-right:0; padding-bottom:68px; }
+    .main { margin-right:0; padding-bottom:68px; touch-action:pan-y; }
     .cert-desktop { display:none !important; }
     .cert-mobile  { display:flex !important; }
     .topbar { padding:6px 10px; min-height:48px; height:auto !important; flex-wrap:wrap; gap:4px; align-items:flex-start; }
@@ -971,9 +971,34 @@ const css = `
     .cal-event { font-size:9px; padding:2px 4px; }
     .calendar-nav { min-width:0; width:100%; justify-content:space-between; }
     .calendar-month-label { width:auto; flex:1; }
+    /* Tighter toolbars / actions */
+    .btn { padding:7px 11px; font-size:12px; }
+    .btn-sm { padding:5px 9px; font-size:11px; }
+    .topbar-title { font-size:14px; line-height:1.25; }
+    /* When .flex-between holds a search-bar + actions row, stack them vertically */
+    .toolbar-stack { flex-direction:column !important; align-items:stretch !important; }
+    .toolbar-stack > * { width:100%; }
+    .toolbar-stack .search-bar { width:100% !important; min-width:0 !important; flex:initial !important; }
+    .toolbar-stack .toolbar-actions { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-start !important; }
+    .toolbar-stack .toolbar-actions .btn { flex:1 1 calc(50% - 6px); min-width:0; padding:8px 10px; font-size:12px; }
+    .toolbar-stack .toolbar-actions .btn.btn-full { flex-basis:100%; }
+    /* Subview pill rows scroll horizontally if too many */
+    .subview-pills { display:flex; gap:6px; flex-wrap:nowrap !important; overflow-x:auto; scrollbar-width:none; padding-bottom:4px; -webkit-overflow-scrolling:touch; }
+    .subview-pills::-webkit-scrollbar { display:none; }
+    .subview-pills > * { flex:0 0 auto; }
+    /* Filter pills row — wrap as before but tighter */
+    .filter-pills { gap:4px !important; }
+    .filter-pills button { padding:5px 10px !important; font-size:11px !important; }
+    /* Form selects shrink reasonably */
+    .form-select { font-size:12px; padding:6px 8px; }
+    /* Cards padding tighter */
+    .card-header { padding:12px 14px; }
+    /* Page padding already 16 */
   }
   @media (max-width:400px) {
     .eq-grid { grid-template-columns:1fr; }
+    .nav-item { min-width:50px; max-width:64px; }
+    .toolbar-stack .toolbar-actions .btn { flex:1 1 100%; }
   }
   @media (min-width:769px) {
     .app { font-size: var(--admin-fs, 14px); }
@@ -1650,16 +1675,16 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   return (
     <div className="page">
       {/* Sub-view tabs */}
-      <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+      <div className="subview-pills no-swipe-nav" style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
         {[
           {id:"active",label:<><Package size={14} strokeWidth={1.75}/> ציוד פעיל</>,badge:null},
           {id:"damaged",label:<><Wrench size={14} strokeWidth={1.75}/> ציוד בדיקה</>,badge:damagedCount||null},
           {id:"reports",label:<><ClipboardList size={14} strokeWidth={1.75}/> דיווחי סטודנטים</>,badge:eqReports.filter(r=>r.status==="open").length||null},
         ].map(t=>(
           <button key={t.id} onClick={()=>setEqSubView(t.id)}
-            style={{padding:"8px 18px",borderRadius:8,border:`2px solid ${eqSubView===t.id?"var(--accent)":"var(--border)"}`,
+            style={{padding:"8px 16px",borderRadius:8,border:`2px solid ${eqSubView===t.id?"var(--accent)":"var(--border)"}`,
               background:eqSubView===t.id?"var(--accent)22":"transparent",color:eqSubView===t.id?"var(--accent)":"var(--text2)",
-              fontWeight:800,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+              fontWeight:800,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
             {t.label}
             {t.badge!=null && <span style={{background:eqSubView===t.id?"var(--accent)":"var(--text3)",color:"#000",borderRadius:20,padding:"0 7px",fontSize:11,fontWeight:900}}>{t.badge}</span>}
           </button>
@@ -1708,9 +1733,9 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
 
       {/* Active equipment sub-view */}
       {eqSubView==="active" && <>
-      <div className="flex-between mb-4">
+      <div className="flex-between mb-4 toolbar-stack">
         <div className="search-bar"><span><Search size={14} strokeWidth={1.75} color="var(--text3)"/></span><input placeholder="חיפוש ציוד..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
-        <div className="flex gap-2" style={{flexWrap:"wrap",justifyContent:"flex-end"}}>
+        <div className="flex gap-2 toolbar-actions" style={{flexWrap:"wrap",justifyContent:"flex-end"}}>
           <button className="btn btn-secondary" onClick={downloadTemplate} title="הורד תבנית Excel">📥 תבנית</button>
           <button className="btn btn-secondary" onClick={()=>csvInputRef.current?.click()}>📤 ייבוא Excel</button>
           <input ref={csvInputRef} type="file" accept=".xlsx,.xls" style={{display:"none"}} onChange={handleExcelImport}/>
@@ -1719,8 +1744,8 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
             existingCategories={existingCategories}
             onImportSuccess={handleAiEquipmentImport}
           />
-          <button className="btn btn-primary" onClick={()=>setModal({type:"loan-types"})}>🗂️ סיווג לסוגי ההשאלות</button>
-          <button className="btn btn-primary" onClick={()=>setModal({type:"add"})}>➕ הוסף ציוד</button>
+          <button className="btn btn-primary btn-full" onClick={()=>setModal({type:"loan-types"})}>🗂️ סיווג לסוגי ההשאלות</button>
+          <button className="btn btn-primary btn-full" onClick={()=>setModal({type:"add"})}>➕ הוסף ציוד</button>
         </div>
       </div>
 
@@ -5395,6 +5420,18 @@ export default function App() {
   const [secretaryPage, setSecretaryPage] = useState(() => sessionStorage.getItem("secretary_page") || "dashboard");
   const [editLessonId, setEditLessonId] = useState(null);
   const [warehousePage, setWarehousePage] = useState(() => sessionStorage.getItem("warehouse_page") || "dashboard");
+
+  // Mobile sidebar: scroll the active nav-item into view when the active tab changes,
+  // so on phones with many tabs the user always sees the highlighted tab.
+  useEffect(() => {
+    if (typeof window === "undefined" || window.innerWidth >= 769) return;
+    const t = setTimeout(() => {
+      document.querySelectorAll(".sidebar .nav .nav-item.active").forEach(el => {
+        try { el.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" }); } catch (_e) { /* older browsers */ }
+      });
+    }, 80);
+    return () => clearTimeout(t);
+  }, [page, secretaryPage]);
   const [undoStack, setUndoStack]     = useState([]);
   // Reservations filter state (in AdminApp so topbar can render them)
   const [resSearch, setResSearch]       = useState("");
