@@ -36,19 +36,23 @@ async function readStoreKey(key) {
   return rows?.[0]?.data ?? null;
 }
 
-// Stage 7 step 4: verify caller email against the normalized lecturers table.
-// Replaces the previous full-blob read for the lecturer-eligibility check;
-// case-insensitive match against the lecturers_email_lower_idx UNIQUE index.
+// Verify caller email against the normalized lecturers table.
+// Goes through a SECURITY DEFINER RPC with a JSON body so emails
+// containing "+" (Gmail subaddressing) aren't mangled by the URL
+// query-string parser — the previous version used PostgREST's
+// /rest/v1/lecturers?email=ilike.<encoded> path, which sometimes
+// turned "%2B" back into a literal " " and broke the lookup.
 async function isKnownLecturerEmail(email) {
   const normalized = String(email || "").trim().toLowerCase();
   if (!normalized) return false;
-  const r = await fetch(
-    `${SB_URL}/rest/v1/lecturers?select=id&email=ilike.${encodeURIComponent(normalized)}&limit=1`,
-    { headers: SERVICE_HEADERS }
-  );
+  const r = await fetch(`${SB_URL}/rest/v1/rpc/is_known_lecturer_email`, {
+    method: "POST",
+    headers: RPC_HEADERS,
+    body: JSON.stringify({ p_email: normalized }),
+  });
   if (!r.ok) return false;
-  const rows = await r.json();
-  return Array.isArray(rows) && rows.length > 0;
+  const result = await r.json();
+  return result === true;
 }
 
 async function writeStoreKey(key, data) {
