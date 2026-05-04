@@ -38,7 +38,7 @@ import { loadPoliciesFromTable, syncAllPolicies } from "./utils/policiesApi.js";
 import { loadSiteSettingsFromTable, syncAllSiteSettings, setSetting as setSiteSetting } from "./utils/siteSettingsApi.js";
 import { loadCollegeManagerFromTable, saveCollegeManager } from "./utils/collegeManagerApi.js";
 import { loadDeptHeadsFromTable, syncAllDeptHeads, upsertDeptHead, deleteDeptHead } from "./utils/deptHeadsApi.js";
-import { pendingReservationDeletes } from "./pendingDeletes.js";
+import { pendingReservationDeletes, unmarkReservationDeleting } from "./pendingDeletes.js";
 
 // Stage 7 step 5: replace `storageGet("lecturers")` with the table loader,
 // wrapped in the same { value, source } envelope every other loader uses.
@@ -5685,10 +5685,61 @@ export default function App() {
       const snapshot = lastEntry.snapshot;
       const currentState = getUndoSnapshot();
 
-      // reservations are normalized into reservations_new + reservation_items
-      // (relational). A full-snapshot restore is non-trivial — undo currently
-      // restores only the local React state for reservations, not the DB.
-      // equipment is restored to DB via writeEquipmentToDB.
+      // Reservations live in reservations_new + reservation_items (relational).
+      // Diff snapshot vs current and call the matching RPC for each delta:
+      //   - id in snapshot but not in current  → /api/restore-reservation
+      //   - id in current  but not in snapshot → /api/delete-reservation
+      // Status changes / item edits are not handled — they're rare and the
+      // local restore (_setReservations below) covers them until next poll.
+      // lesson_auto rows are virtual — never written to DB, skipped here.
+      try {
+        const snapshotRes = Array.isArray(snapshot.reservations) ? snapshot.reservations : [];
+        const currentRes  = Array.isArray(currentState.reservations) ? currentState.reservations : [];
+        const snapshotById = new Map(snapshotRes.filter(r => !r.lesson_auto).map(r => [String(r.id), r]));
+        const currentById  = new Map(currentRes.filter(r => !r.lesson_auto).map(r => [String(r.id), r]));
+        const token = await getAuthToken().catch(() => null);
+        const authHeaders = { "Content-Type": "application/json" };
+        if (token) authHeaders["Authorization"] = `Bearer ${token}`;
+
+        const toRestore = [];
+        for (const [id, r] of snapshotById) {
+          if (!currentById.has(id)) toRestore.push(r);
+        }
+        const toDelete = [];
+        for (const [id] of currentById) {
+          if (!snapshotById.has(id)) toDelete.push(id);
+        }
+
+        // Run sequentially — small N, and serial output is easier to reason
+        // about if any single call fails partway.
+        for (const r of toRestore) {
+          await fetch("/api/restore-reservation", {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({
+              reservation: r,
+              items: Array.isArray(r.items) ? r.items.map(i => ({
+                equipment_id: i.equipment_id,
+                name: i.name,
+                quantity: Number(i.quantity) || 1,
+                unit_id: i.unit_id,
+              })) : [],
+            }),
+          }).catch(err => console.error("undo restore-reservation failed", id, err));
+          // Clear any pendingDeletes guard so the row is allowed back into refetches.
+          unmarkReservationDeleting(String(r.id), 0);
+        }
+        for (const id of toDelete) {
+          await fetch("/api/delete-reservation", {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({ id: String(id) }),
+          }).catch(err => console.error("undo delete-reservation failed", id, err));
+        }
+      } catch (err) {
+        console.error("undo: reservation diff failed", err);
+      }
+
       const promises = [];
       if (snapshot.equipment !== undefined && !dataEquals(currentState.equipment, snapshot.equipment)) {
         promises.push(writeEquipmentToDB(snapshot.equipment));
