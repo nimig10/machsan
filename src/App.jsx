@@ -38,6 +38,7 @@ import { loadPoliciesFromTable, syncAllPolicies } from "./utils/policiesApi.js";
 import { loadSiteSettingsFromTable, syncAllSiteSettings, setSetting as setSiteSetting } from "./utils/siteSettingsApi.js";
 import { loadCollegeManagerFromTable, saveCollegeManager } from "./utils/collegeManagerApi.js";
 import { loadDeptHeadsFromTable, syncAllDeptHeads, upsertDeptHead, deleteDeptHead } from "./utils/deptHeadsApi.js";
+import { pendingReservationDeletes } from "./pendingDeletes.js";
 
 // Stage 7 step 5: replace `storageGet("lecturers")` with the table loader,
 // wrapped in the same { value, source } envelope every other loader uses.
@@ -5458,6 +5459,7 @@ export default function App() {
         buildLessonReservations(lessonsRef.current, kitsRef.current);
       const merged = [
         ...normalizedDbRes.filter((r) => {
+          if (pendingReservationDeletes.has(String(r.id))) return false;
           if (r.lesson_auto === true) return false;
           if (hasLinkedValue(r.lesson_kit_id) && linkedKitIds.has(String(r.lesson_kit_id))) return false;
           return true;
@@ -5535,6 +5537,7 @@ export default function App() {
         buildLessonReservations(lessonsRef.current, kitsRef.current);
       const merged = [
         ...normalizedDbRes.filter((r) => {
+          if (pendingReservationDeletes.has(String(r.id))) return false;
           if (r.lesson_auto === true) return false;
           if (hasLinkedValue(r.lesson_kit_id) && linkedKitIds.has(String(r.lesson_kit_id))) return false;
           return true;
@@ -5989,8 +5992,11 @@ export default function App() {
         // Lesson_auto rows are authoritative from buildLessonReservations, never from DB.
         // Always strip them from fetched data — even when no virtuals are generated this cycle
         // (otherwise stale DB rows for deleted kits/lessons leak through).
+        // Also drop ids that are mid-delete (optimistic UI in ReservationsPage)
+        // so a poll mid-RPC can't briefly re-insert the trashed row.
         const merged = [
           ...normalized.filter(r => {
+            if (pendingReservationDeletes.has(String(r.id))) return false;
             if (r.lesson_auto === true) return false;
             if (hasLinkedValue(r.lesson_kit_id) && linkedKitIds.has(String(r.lesson_kit_id))) return false;
             return true;
@@ -6105,6 +6111,7 @@ export default function App() {
                   buildLessonReservations(lessonsRef.current, kitsRef.current);
                 const merged = [
                   ...normalized.filter(r => {
+                    if (pendingReservationDeletes.has(String(r.id))) return false;
                     if (r.lesson_auto === true) return false;
                     if (hasLinkedValue(r.lesson_kit_id) && linkedKitIds.has(String(r.lesson_kit_id))) return false;
                     return true;
@@ -6143,6 +6150,7 @@ export default function App() {
                   buildLessonReservations(lessonsRef.current, kitsRef.current);
                 const merged = [
                   ...normalized.filter(r => {
+                    if (pendingReservationDeletes.has(String(r.id))) return false;
                     if (r.lesson_auto === true) return false;
                     if (hasLinkedValue(r.lesson_kit_id) && linkedKitIds.has(String(r.lesson_kit_id))) return false;
                     return true;

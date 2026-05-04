@@ -7,6 +7,7 @@ import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
 import { syncAllLessons } from "../utils/lessonsApi.js";
 import { listKits, syncAllKits } from "../utils/kitsApi.js";
+import { markReservationDeleting, unmarkReservationDeleting } from "../pendingDeletes.js";
 import { AlertTriangle, BookOpen, Briefcase, Camera, Calendar, CheckCircle, ClipboardList, Clock, FileText, Film, MessageSquare, Mic, Package, Pencil, RotateCcw, Save, Shield, Trash2, User, X, XCircle } from "lucide-react";
 
 // ── Production Certification Gate ─────────────────────────────────────────
@@ -452,13 +453,11 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
 
     const updated = reservations.filter(r => r.id !== id);
     // Optimistic UI — close modal + toast immediately, persist atomically via RPC.
-    // The old path used fire-and-forget storageSet('reservations', list),
-    // which took 2–14s across backup-write + real-write + mirror. During that
-    // window, the 3-min poll or realtime listener could see the stale row and
-    // briefly re-insert the card ("trash-button flicker"). `deleteReservation`
-    // (utils.js → /api/delete-reservation → delete_reservation_v1) runs the
-    // normalized delete + JSON strip + available_units recompute in one txn,
-    // so any subsequent listener sees the consistent post-delete state.
+    // markReservationDeleting + matching filter in App.jsx's refetch handlers
+    // guarantee the row stays gone even if a poll/realtime tick lands between
+    // the optimistic setState and the API completing — the previous path
+    // could still flicker if any unrelated refetch fired in that window.
+    markReservationDeleting(id);
     setReservations(updated);
     setSelected(null);
     showToast("success", "הבקשה נמחקה");
@@ -467,10 +466,16 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
     if (!rpc.ok) {
       console.error("deleteReservation RPC failed:", rpc);
       showToast("error", "המחיקה נכשלה בשרת — הפריט עלול לחזור לאחר ריענון");
+      // Cancel the guard immediately so the next refetch can legitimately
+      // surface the row (since the DB still has it).
+      unmarkReservationDeleting(id, 0);
       // Revert optimistic removal so the UI matches server truth on next poll.
       if (res) setReservations(prev => prev.some(r => r.id === id) ? prev : [...prev, res]);
       return;
     }
+    // Delayed unmark: the realtime DELETE event triggered by our own RPC
+    // arrives shortly after; we want it to skip the refetch path too.
+    unmarkReservationDeleting(id);
     logActivity({ user_id: caller.id, user_name: caller.full_name, action: "reservation_delete", entity: "reservation", entity_id: String(id), details: { student: res?.student_name, loan_type: res?.loan_type, rpc_source: rpc.source } })
       .then(logId => onLogCreated(logId))
       .catch(err => console.error("delete reservation log failed:", err));
