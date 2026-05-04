@@ -267,7 +267,7 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
       </div>
 
       {/* ── Tracks + Today ── */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:16,marginBottom:20}}>
+      <div style={{display:"grid",gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit,minmax(260px,1fr))",gap:isMobile?12:16,marginBottom:isMobile?14:20}}>
 
         {/* Tracks */}
         <div className="card">

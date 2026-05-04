@@ -761,6 +761,13 @@ const css = `
   [data-theme="light"] .item-row { background:#f9fafb; border-color:#d4d8de; }
   [data-theme="light"] .item-row:hover { background:#f0f2f5; }
   html, body, #root { width:100%; min-height:100%; }
+  html, body { overflow-x:clip; }
+  /* Use dynamic viewport height where supported so Android Chrome's collapsing
+     URL bar doesn't shift fixed bottom UI off-screen. */
+  @supports (height: 100dvh) {
+    .app { min-height:100dvh; }
+    .main { min-height:100dvh; }
+  }
   #root {
     max-width:none !important;
     margin:0 !important;
@@ -931,7 +938,8 @@ const css = `
   }
   /* ── MOBILE ── */
   @media (max-width:768px) {
-    .sidebar { position:fixed; bottom:0; top:auto; right:0; left:0; width:100%; flex-direction:row; height:60px; border-left:none; border-top:1px solid var(--border); z-index:200; }
+    /* Hard-pin the bottom nav to the viewport bottom; respect Android/iOS safe-areas. */
+    .sidebar { position:fixed !important; bottom:0 !important; top:auto !important; right:0 !important; left:0 !important; width:100% !important; flex-direction:row; height:calc(60px + env(safe-area-inset-bottom,0px)); padding-bottom:env(safe-area-inset-bottom,0px); border-left:none; border-top:1px solid var(--border); z-index:9000; box-shadow:0 -2px 14px rgba(0,0,0,0.55); transform:none !important; will-change:auto; }
     .sidebar-logo { display:none; }
     .nav { display:flex; flex-direction:row; padding:0; flex:1; overflow-x:auto; scroll-behavior:smooth; scrollbar-width:none; }
     .nav::-webkit-scrollbar { display:none; }
@@ -941,7 +949,7 @@ const css = `
     .nav-item.active { border-right-color:transparent; border-top-color:var(--accent); background:var(--accent-glow); }
     .nav-item .icon { font-size:18px; width:auto; }
     .sidebar > div:last-child { display:none; }
-    .main { margin-right:0; padding-bottom:68px; touch-action:pan-y; }
+    .main { margin-right:0; padding-bottom:calc(68px + env(safe-area-inset-bottom,0px)); touch-action:pan-y; min-width:0; max-width:100%; overflow-x:hidden; }
     .cert-desktop { display:none !important; }
     .cert-mobile  { display:flex !important; }
     .topbar { padding:6px 10px; min-height:48px; height:auto !important; flex-wrap:wrap; gap:4px; align-items:flex-start; }
@@ -994,14 +1002,42 @@ const css = `
     .filter-pills button { padding:5px 10px !important; font-size:11px !important; }
     /* Form selects shrink reasonably */
     .form-select { font-size:12px; padding:6px 8px; }
-    /* Cards padding tighter */
-    .card-header { padding:12px 14px; }
-    /* Page padding already 16 */
+    /* Cards padding tighter + wrap header content so long titles + action buttons don't get clipped */
+    .card-header { padding:12px 14px; flex-wrap:wrap; gap:8px; }
+    .card { padding:14px; }
+    /* Pages get a bit of breathing room and never produce horizontal overflow */
+    .page { padding:14px; max-width:100%; overflow-x:hidden; }
+    /* Avoid the topbar collapsing oddly */
+    .topbar { padding:8px 12px; min-height:54px; flex-wrap:wrap; }
   }
   @media (max-width:400px) {
     .eq-grid { grid-template-columns:1fr; }
-    .nav-item { min-width:50px; max-width:64px; }
+    .nav-item { min-width:46px; max-width:60px; padding:4px 1px; }
+    .nav-label { font-size:7.5px; }
     .toolbar-stack .toolbar-actions .btn { flex:1 1 100%; }
+    .page { padding:12px; }
+    .card { padding:12px; }
+    .topbar { padding:6px 10px; }
+  }
+  /* Foldables / very narrow phones (e.g. Galaxy Fold closed ~280px) */
+  @media (max-width:340px) {
+    .stats-grid { grid-template-columns:1fr; }
+    .nav-item { min-width:42px; max-width:54px; }
+    .nav-label { display:none; }
+    .nav-item .icon { font-size:20px; }
+  }
+  /* Small tablet / large phone (landscape phones, small tablets) */
+  @media (min-width:600px) and (max-width:768px) {
+    .stats-grid { grid-template-columns:repeat(3,1fr); }
+    .eq-grid { grid-template-columns:repeat(3,1fr); }
+    .toolbar-stack { flex-direction:row !important; }
+    .toolbar-stack .search-bar { width:auto !important; flex:1 1 220px !important; }
+  }
+  /* Large mobiles in landscape orientation */
+  @media (max-width:768px) and (orientation:landscape) {
+    .sidebar { height:calc(56px + env(safe-area-inset-bottom,0px)); }
+    .main { padding-bottom:calc(64px + env(safe-area-inset-bottom,0px)); }
+    .stats-grid { grid-template-columns:repeat(4,1fr); }
   }
   @media (min-width:769px) {
     .app { font-size: var(--admin-fs, 14px); }
