@@ -1031,6 +1031,18 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
             <button className="btn btn-danger" onClick={()=>deleteReservation(selected.id)}>🗑️ מחק</button>
             <button className="btn btn-secondary" onClick={()=>{setSelected(null);setOverdueEmailText("");}}>סגור</button>
           </>}>
+          {/* Lecturer note (lesson loans only — set by the lecturer in the portal).
+              Hoisted to the top of the modal so warehouse staff see it before
+              even scanning the equipment list — it's the highest-signal piece
+              of context for preparing a lesson loan. */}
+          {selected.lecturer_notes && (
+            <div style={{marginBottom:16,background:"rgba(52,152,219,0.07)",border:"1px solid rgba(52,152,219,0.3)",borderRadius:"var(--r)",padding:16}}>
+              <div style={{fontWeight:800,fontSize:13,color:"#4fb3ec",marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+                <MessageSquare size={14} strokeWidth={2} /> הערה מהמרצה
+              </div>
+              <div style={{fontSize:13,color:"var(--text)",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{selected.lecturer_notes}</div>
+            </div>
+          )}
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:20}}>
             <div>
               <div className="form-section-title">פרטי סטודנט</div>
@@ -1043,33 +1055,44 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
               </div>
               <div style={{marginTop:16,background:"var(--accent-glow)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:"var(--r-sm)",padding:14}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,fontSize:13}}>
-                  <span style={{color:"var(--text3)"}}><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> תאריך השאלה</span>
+                  <span style={{color:"var(--accent)",fontWeight:700,display:"flex",alignItems:"center",gap:5}}><Calendar size={14} strokeWidth={2} color="var(--accent)" /> תאריך השאלה</span>
                   <span style={{display:"flex",alignItems:"center",gap:6}}>
-                    <strong>{formatDate(selected.borrow_date)}</strong>
+                    <strong style={{color:"var(--text)"}}>{formatDate(selected.borrow_date)}</strong>
                     {selected.borrow_time&&<span style={{background:"var(--surface)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:6,padding:"1px 8px",fontSize:12,fontWeight:800,color:"var(--accent)"}}>{selected.borrow_time}</span>}
                   </span>
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:13}}>
-                  <span style={{color:"var(--text3)"}}>🔄 תאריך החזרה</span>
+                  <span style={{color:"var(--accent)",fontWeight:700}}>🔄 תאריך החזרה</span>
                   <span style={{display:"flex",alignItems:"center",gap:6}}>
-                    <strong>{formatDate(selected.return_date)}</strong>
+                    <strong style={{color:"var(--text)"}}>{formatDate(selected.return_date)}</strong>
                     {selected.return_time&&<span style={{background:"var(--surface)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:6,padding:"1px 8px",fontSize:12,fontWeight:800,color:"var(--accent)"}}>{selected.return_time}</span>}
                   </span>
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginTop:8,paddingTop:8,borderTop:"1px solid rgba(245,166,35,0.15)"}}>
-                  <span style={{color:"var(--text3)"}}>⏱️ משך ההשאלה</span>
-                  <strong>{getLoanDurationDays(selected.borrow_date, selected.return_date)} ימים</strong>
+                  <span style={{color:"var(--accent)",fontWeight:700}}>⏱️ משך ההשאלה</span>
+                  <strong style={{color:"var(--text)"}}>{getLoanDurationDays(selected.borrow_date, selected.return_date)} ימים</strong>
                 </div>
-                {(selected.created_at||selected.id)&&(
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginTop:8,paddingTop:8,borderTop:"1px solid rgba(245,166,35,0.15)",color:"var(--text3)"}}>
-                    <span>📨 נשלח למערכת</span>
-                    <span style={{fontWeight:700,color:"var(--text2)"}}>{(()=>{
-                      if(selected.submitted_at) return selected.submitted_at;
+                {(selected.created_at||selected.submitted_at||selected.id)&&(
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginTop:8,paddingTop:8,borderTop:"1px solid rgba(245,166,35,0.15)"}}>
+                    <span style={{color:"var(--accent)",fontWeight:700}}>📨 נשלח למערכת</span>
+                    <span style={{fontWeight:700,color:"var(--text)"}}>{(()=>{
+                      // Render any timestamp-y value (ISO, epoch, plain date) as
+                      // a Hebrew date-time. The previous code did
+                      // `created_at.split("-").reverse().join("/")` which
+                      // mangled full ISO strings into "04T13:11:59.../05/2026".
+                      const fmt = (d) => d.toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"});
+                      const tryDate = (v) => {
+                        if (!v) return null;
+                        const d = new Date(v);
+                        return isNaN(d.getTime()) ? null : d;
+                      };
+                      const fromSubmitted = tryDate(selected.submitted_at);
+                      if (fromSubmitted) return fmt(fromSubmitted);
                       const idNum = Number(selected.id);
-                      if(!isNaN(idNum) && idNum > 1000000000000) {
-                        return new Date(idNum).toLocaleString("he-IL",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jerusalem"});
-                      }
-                      return selected.created_at ? `${selected.created_at.split("-").reverse().join("/")}` : "לא ידוע";
+                      if (!isNaN(idNum) && idNum > 1000000000000) return fmt(new Date(idNum));
+                      const fromCreated = tryDate(selected.created_at);
+                      if (fromCreated) return fmt(fromCreated);
+                      return "לא ידוע";
                     })()}</span>
                   </div>
                 )}
@@ -1116,15 +1139,6 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
               </div>
             </div>
           </div>
-          {/* Lecturer note (lesson loans only — set by the lecturer in the portal) */}
-          {selected.lecturer_notes && (
-            <div style={{marginTop:20,background:"rgba(52,152,219,0.07)",border:"1px solid rgba(52,152,219,0.3)",borderRadius:"var(--r)",padding:16}}>
-              <div style={{fontWeight:800,fontSize:13,color:"#4fb3ec",marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
-                <MessageSquare size={14} strokeWidth={2} /> הערה מהמרצה
-              </div>
-              <div style={{fontSize:13,color:"var(--text)",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{selected.lecturer_notes}</div>
-            </div>
-          )}
           {/* Overdue manual email area */}
           {selected.status==="באיחור" && (
             <div style={{marginTop:20,background:"rgba(230,126,34,0.08)",border:"1px solid rgba(230,126,34,0.3)",borderRadius:"var(--r)",padding:16}}>
