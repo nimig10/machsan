@@ -221,6 +221,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const [pendingLesson, setPendingLesson] = useState(null);
   const [conflicts, setConflicts] = useState([]);
   const [conflictSending, setConflictSending] = useState(false);
+  const [lecturerConflicts, setLecturerConflicts] = useState([]); // [{lessonA, lessonB, lecturerName, date, timeA, timeB}]
   const [detailTarget, setDetailTarget] = useState(null); // course detail modal
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState([]);
@@ -363,6 +364,89 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     return found;
   };
 
+  // Lecturer-level identity: prefer lecturerId; else fall back to normalized
+  // instructor name. A "lecturer" the system knows about cannot be in two
+  // courses at the same time — humans don't fork.
+  const lecturerKey = (lesson) => {
+    const id = String(lesson?.lecturerId || "").trim();
+    if (id) return `id:${id}`;
+    const name = String(lesson?.instructorName || "").trim().toLowerCase();
+    return name ? `name:${name}` : null;
+  };
+
+  // Single-lesson check (manual save). Returns first overlap found, or null.
+  const findLecturerConflict = (lesson, lessonsList = lessons) => {
+    const key = lecturerKey(lesson);
+    if (!key) return null;
+    for (const session of (lesson.schedule || [])) {
+      if (!session?.date) continue;
+      const sS = session.startTime || "00:00", sE = session.endTime || "23:59";
+      for (const other of lessonsList) {
+        if (other.id === lesson.id) continue;
+        if (lecturerKey(other) !== key) continue;
+        for (const os of (other.schedule || [])) {
+          if (os.date !== session.date) continue;
+          const oS = os.startTime || "00:00", oE = os.endTime || "23:59";
+          if (oS < sE && sS < oE) {
+            return {
+              lessonName: other.name || "(ללא שם)",
+              lecturerName: lesson.instructorName || other.instructorName || "המרצה",
+              date: os.date,
+              startTime: oS,
+              endTime: oE,
+            };
+          }
+        }
+      }
+    }
+    return null;
+  };
+
+  // Cross-lesson sweep used after bulk imports — every pair of lessons that
+  // share a lecturer key on the same date with overlapping windows is a
+  // conflict. Deduped by (lessonA, lessonB, date).
+  const findLecturerConflictsAcross = (lessonsList) => {
+    const buckets = new Map(); // `${key}|${date}` -> [{lesson, session}]
+    for (const l of (lessonsList || [])) {
+      const key = lecturerKey(l);
+      if (!key) continue;
+      for (const s of (l.schedule || [])) {
+        if (!s?.date) continue;
+        const bk = `${key}|${s.date}`;
+        if (!buckets.has(bk)) buckets.set(bk, []);
+        buckets.get(bk).push({ lesson: l, session: s });
+      }
+    }
+    const conflicts = [];
+    const seen = new Set();
+    for (const arr of buckets.values()) {
+      if (arr.length < 2) continue;
+      for (let i = 0; i < arr.length; i++) {
+        for (let j = i + 1; j < arr.length; j++) {
+          const a = arr[i], b = arr[j];
+          if (a.lesson.id === b.lesson.id) continue;
+          const aS = a.session.startTime || "00:00", aE = a.session.endTime || "23:59";
+          const bS = b.session.startTime || "00:00", bE = b.session.endTime || "23:59";
+          if (aS < bE && bS < aE) {
+            const ids = [String(a.lesson.id), String(b.lesson.id)].sort();
+            const dedupeKey = `${ids[0]}__${ids[1]}|${a.session.date}|${aS}-${aE}|${bS}-${bE}`;
+            if (seen.has(dedupeKey)) continue;
+            seen.add(dedupeKey);
+            conflicts.push({
+              lessonA: a.lesson.name || "(ללא שם)",
+              lessonB: b.lesson.name || "(ללא שם)",
+              lecturerName: a.lesson.instructorName || b.lesson.instructorName || "מרצה",
+              date: a.session.date,
+              timeA: `${aS}–${aE}`,
+              timeB: `${bS}–${bE}`,
+            });
+          }
+        }
+      }
+    }
+    return conflicts;
+  };
+
   const findLessonConflict = (lesson) => {
     for (const session of (lesson.schedule || [])) {
       const stId = String(session.studioId || lesson.studioId || "");
@@ -387,6 +471,18 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   };
 
   const save = async (lesson) => {
+    const lecConflict = findLecturerConflict(lesson);
+    if (lecConflict) {
+      setLecturerConflicts([{
+        lessonA: lesson.name || "(ללא שם)",
+        lessonB: lecConflict.lessonName,
+        lecturerName: lecConflict.lecturerName,
+        date: lecConflict.date,
+        timeA: `${lesson.schedule?.find(s => s.date === lecConflict.date && (s.startTime||"00:00") < lecConflict.endTime && lecConflict.startTime < (s.endTime||"23:59"))?.startTime || ""}–${lesson.schedule?.find(s => s.date === lecConflict.date && (s.startTime||"00:00") < lecConflict.endTime && lecConflict.startTime < (s.endTime||"23:59"))?.endTime || ""}`,
+        timeB: `${lecConflict.startTime}–${lecConflict.endTime}`,
+      }]);
+      return;
+    }
     const lessonConflict = findLessonConflict(lesson);
     if (lessonConflict) {
       showToast("error", `פעולה נחסמה: החדר "${lessonConflict.studioName}" כבר תפוס בשעות אלו. הקביעה הקיימת שמפריעה: "${lessonConflict.lessonName}" בין השעות ${lessonConflict.startTime} ל-${lessonConflict.endTime}`);
@@ -692,6 +788,13 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
         addedCount += 1;
       });
 
+      const lecConflicts = findLecturerConflictsAcross(updatedLessons);
+      if (lecConflicts.length > 0) {
+        setLecturerConflicts(lecConflicts);
+        setXlImporting(false);
+        return;
+      }
+
       const synced = await syncImportedLecturers(updatedLessons);
       setLessons(synced);
       await syncAllLessons(synced);
@@ -973,6 +1076,14 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             addedCount += 1;
           });
 
+          const lecConflicts = findLecturerConflictsAcross(updatedLessons);
+          if (lecConflicts.length > 0) {
+            setLecturerConflicts(lecConflicts);
+            setAiImporting(false);
+            if (input) input.value = null;
+            return;
+          }
+
           const synced = await syncImportedLecturers(updatedLessons);
           setLessons(synced);
           await syncAllLessons(synced);
@@ -1004,6 +1115,43 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
   return (
     <div className="page">
+      {lecturerConflicts.length > 0 && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:4100,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}>
+          <div style={{width:"100%",maxWidth:560,background:"var(--surface)",borderRadius:16,border:"1px solid rgba(231,76,60,0.5)",direction:"rtl",maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
+            <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"rgba(231,76,60,0.08)",borderRadius:"16px 16px 0 0"}}>
+              <div style={{fontWeight:900,fontSize:17,color:"var(--red)"}}>⚠️ פעולה לא אפשרית — מרצה אינו יכול ללמד שני קורסים במקביל</div>
+              <div style={{fontSize:13,color:"var(--text2)",marginTop:6,lineHeight:1.5}}>
+                {lecturerConflicts.length === 1
+                  ? "נמצאה התנגשות בלוח הזמנים של המרצה. יש לתקן את שעות אחד הקורסים לפני השמירה / הייבוא."
+                  : `נמצאו ${lecturerConflicts.length} התנגשויות בלוח הזמנים של מרצים. יש לתקן את שעות הקורסים בקובץ הייבוא ולנסות שוב — לא בוצעה כל כתיבה למסד הנתונים.`}
+              </div>
+            </div>
+            <div style={{overflowY:"auto",flex:1,padding:"16px 20px",display:"flex",flexDirection:"column",gap:10}}>
+              {lecturerConflicts.map((c, i) => (
+                <div key={i} style={{background:"var(--surface2)",borderRadius:10,padding:"12px 14px",border:"1px solid rgba(231,76,60,0.2)"}}>
+                  <div style={{fontWeight:800,fontSize:14,marginBottom:6,display:"flex",alignItems:"center",gap:6}}>
+                    <User size={14} strokeWidth={1.75}/> {c.lecturerName}
+                  </div>
+                  <div style={{fontSize:12,color:"var(--text2)",marginBottom:4,display:"flex",alignItems:"center",gap:4}}>
+                    <Calendar size={14} strokeWidth={1.75}/> {c.date}
+                  </div>
+                  <div style={{fontSize:12,color:"var(--text2)",display:"flex",alignItems:"center",gap:4,marginBottom:2}}>
+                    <BookOpen size={14} strokeWidth={1.75}/> "{c.lessonA}" — <Clock size={12} strokeWidth={1.75}/> {c.timeA}
+                  </div>
+                  <div style={{fontSize:12,color:"var(--text2)",display:"flex",alignItems:"center",gap:4}}>
+                    <BookOpen size={14} strokeWidth={1.75}/> "{c.lessonB}" — <Clock size={12} strokeWidth={1.75}/> {c.timeB}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{padding:"14px 20px",borderTop:"1px solid var(--border)",display:"flex",gap:10,justifyContent:"flex-end"}}>
+              <button className="btn btn-secondary" onClick={()=>setLecturerConflicts([])}>
+                <X size={16} strokeWidth={1.75}/> סגור
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {conflicts.length > 0 && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:4000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}>
           <div style={{width:"100%",maxWidth:520,background:"var(--surface)",borderRadius:16,border:"1px solid rgba(231,76,60,0.5)",direction:"rtl",maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
@@ -1166,8 +1314,8 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                     <div style={{background:"rgba(155,89,182,0.07)",border:"1px solid rgba(155,89,182,0.2)",borderRadius:10,padding:"12px 14px"}}>
                       <div style={{fontWeight:800,fontSize:12,color:"#9b59b6",marginBottom:8}}>פרטי מרצה</div>
                       {detailTarget.instructorName && <div style={{fontSize:13,fontWeight:700}}>{detailTarget.instructorName}</div>}
-                      {detailTarget.instructorPhone && <div style={{fontSize:12,color:"var(--text3)",marginTop:2,display:"flex",alignItems:"center",gap:4}}><Phone size={11} strokeWidth={1.75}/> {detailTarget.instructorPhone}</div>}
-                      {detailTarget.instructorEmail && <div style={{fontSize:12,color:"var(--text3)",marginTop:2,display:"flex",alignItems:"center",gap:4}}><Mail size={11} strokeWidth={1.75}/> {detailTarget.instructorEmail}</div>}
+                      {detailTarget.instructorPhone && <div style={{fontSize:14,fontWeight:700,color:"var(--text)",marginTop:6,display:"flex",alignItems:"center",gap:6}}><Phone size={14} strokeWidth={2}/> {detailTarget.instructorPhone}</div>}
+                      {detailTarget.instructorEmail && <div style={{fontSize:14,fontWeight:700,color:"var(--text)",marginTop:4,display:"flex",alignItems:"center",gap:6,wordBreak:"break-all"}}><Mail size={14} strokeWidth={2}/> {detailTarget.instructorEmail}</div>}
                     </div>
                   )}
                   {/* Studio/Kit */}
@@ -1187,9 +1335,9 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                           {[...(detailTarget.schedule||[])].sort((a,b)=>a.date.localeCompare(b.date)).map((s,i)=>{
                             const isPast = s.date < today();
                             return (
-                              <div key={i} style={{display:"flex",gap:8,alignItems:"center",padding:"6px 10px",borderRadius:8,background:isPast?"rgba(0,0,0,0.1)":"rgba(46,204,113,0.07)",opacity:isPast?0.55:1}}>
-                                <span style={{fontSize:12,fontWeight:700,minWidth:90}}>{s.date}</span>
-                                {s.startTime && <span style={{fontSize:12,color:"var(--text3)"}}>{s.startTime}{s.endTime?`–${s.endTime}`:""}</span>}
+                              <div key={i} style={{display:"flex",gap:10,alignItems:"center",padding:"8px 12px",borderRadius:8,background:isPast?"rgba(0,0,0,0.1)":"rgba(46,204,113,0.07)",opacity:isPast?0.55:1}}>
+                                <span style={{fontSize:13,fontWeight:800,minWidth:92}}>{s.date}</span>
+                                {s.startTime && <span style={{fontSize:14,fontWeight:800,color:"var(--green)",letterSpacing:0.3,fontVariantNumeric:"tabular-nums"}}>{s.startTime}{s.endTime?`–${s.endTime}`:""}</span>}
                                 {s.topic && <span style={{fontSize:12,color:"var(--text2)",flex:1}}>· {s.topic}</span>}
                                 {isPast && <span style={{fontSize:10,color:"var(--text3)"}}>עבר</span>}
                               </div>
