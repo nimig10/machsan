@@ -760,8 +760,14 @@ const css = `
   [data-theme="light"] .chip { background:#ebedf0; border-color:#d4d8de; color:#333; }
   [data-theme="light"] .item-row { background:#f9fafb; border-color:#d4d8de; }
   [data-theme="light"] .item-row:hover { background:#f0f2f5; }
-  html, body, #root { width:100%; min-height:100%; }
-  html, body { overflow-x:clip; }
+  html, body, #root { width:100%; min-height:100%; max-width:100%; }
+  /* iOS Safari < 16 doesn't support overflow:clip — keep overflow:hidden as
+     fallback. overscroll-behavior-x:none kills the iOS horizontal rubber-band
+     so a left/right swipe on the page no longer drags the whole viewport
+     sideways. Children that legitimately scroll horizontally (.table-wrap,
+     .subview-pills, etc.) already have overflow-x:auto + their own
+     touch-action and aren't affected. */
+  html, body { overflow-x:hidden; overflow-x:clip; overscroll-behavior-x:none; }
   /* Use dynamic viewport height where supported so Android Chrome's collapsing
      URL bar doesn't shift fixed bottom UI off-screen. */
   @supports (height: 100dvh) {
@@ -774,7 +780,7 @@ const css = `
     padding:0 !important;
     text-align:initial !important;
   }
-  body { font-family:'Heebo',sans-serif; background:var(--bg); color:var(--text); direction:rtl; min-height:100vh; overflow-x:clip; overflow-y:scroll; scrollbar-gutter:stable; }
+  body { font-family:'Heebo',sans-serif; background:var(--bg); color:var(--text); direction:rtl; min-height:100vh; overflow-x:hidden; overflow-x:clip; overscroll-behavior-x:none; overflow-y:scroll; scrollbar-gutter:stable; max-width:100%; }
   .app { display:flex; min-height:100vh; }
   .sidebar { width:240px; min-width:240px; background:var(--surface); border-left:1px solid var(--border); display:flex; flex-direction:column; position:fixed; right:0; top:0; bottom:0; z-index:100; }
   .sidebar-logo { padding:24px 20px 20px; border-bottom:1px solid var(--border); }
