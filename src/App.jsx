@@ -762,12 +762,16 @@ const css = `
   [data-theme="light"] .item-row:hover { background:#f0f2f5; }
   html, body, #root { width:100%; min-height:100%; max-width:100%; }
   /* iOS Safari < 16 doesn't support overflow:clip — keep overflow:hidden as
-     fallback. overscroll-behavior-x:none kills the iOS horizontal rubber-band
-     so a left/right swipe on the page no longer drags the whole viewport
-     sideways. Children that legitimately scroll horizontally (.table-wrap,
-     .subview-pills, etc.) already have overflow-x:auto + their own
-     touch-action and aren't affected. */
-  html, body { overflow-x:hidden; overflow-x:clip; overscroll-behavior-x:none; }
+     fallback. overscroll-behavior-x:none kills the iOS Safari 16+ horizontal
+     rubber-band. touch-action:pan-y is the catch-all for older iOS — it tells
+     the browser the only legitimate gesture on body is vertical scroll, so
+     left/right swipes are not eaten by the page. Horizontally-scrollable
+     children re-enable horizontal panning explicitly via .h-scroll below. */
+  html, body { overflow-x:hidden; overflow-x:clip; overscroll-behavior-x:none; touch-action:pan-y; }
+  /* Opt-in: any container that genuinely needs horizontal touch scrolling
+     (mobile bottom nav, sub-tab pills, wide tables). Without this they're
+     dead-on-touch because of the body-level pan-y above. */
+  .nav, .subview-pills, .table-wrap { touch-action:pan-x pan-y; }
   /* Use dynamic viewport height where supported so Android Chrome's collapsing
      URL bar doesn't shift fixed bottom UI off-screen. */
   @supports (height: 100dvh) {
@@ -775,13 +779,22 @@ const css = `
     .main { min-height:100dvh; }
   }
   #root {
-    max-width:none !important;
+    max-width:100% !important;
+    width:100% !important;
+    overflow-x:hidden !important;
     margin:0 !important;
     padding:0 !important;
     text-align:initial !important;
   }
-  body { font-family:'Heebo',sans-serif; background:var(--bg); color:var(--text); direction:rtl; min-height:100vh; overflow-x:hidden; overflow-x:clip; overscroll-behavior-x:none; overflow-y:scroll; scrollbar-gutter:stable; max-width:100%; }
-  .app { display:flex; min-height:100vh; }
+  body { font-family:'Heebo',sans-serif; background:var(--bg); color:var(--text); direction:rtl; min-height:100vh; overflow-x:hidden; overflow-x:clip; overscroll-behavior-x:none; overflow-y:scroll; scrollbar-gutter:stable; max-width:100%; width:100%; }
+  /* .app is the flex container holding sidebar+main. Without its own
+     overflow guard, a misbehaving descendant (e.g. .calendar-card with
+     a 520px min-width on a 375px iPhone) can push the row past the
+     viewport, and iOS Safari then lets you pan the whole page sideways
+     because the overflow-x on body/#root is clipped *visually* but the
+     touch surface still extends. Clip it here too so iOS has nothing
+     to grab onto. */
+  .app { display:flex; min-height:100vh; max-width:100%; overflow-x:hidden; }
   .sidebar { width:240px; min-width:240px; background:var(--surface); border-left:1px solid var(--border); display:flex; flex-direction:column; position:fixed; right:0; top:0; bottom:0; z-index:100; }
   .sidebar-logo { padding:24px 20px 20px; border-bottom:1px solid var(--border); }
   .sidebar-logo .app-name { font-size:20px; font-weight:900; color:var(--accent); line-height:1.1; }
@@ -875,7 +888,11 @@ const css = `
   .toast-info    { border-right:3px solid var(--blue); }
   .cal-headers { display:grid; grid-template-columns:repeat(7,1fr); gap:1px; margin-bottom:2px; }
   .dashboard-bottom-grid { display:grid; grid-template-columns:minmax(320px,1fr) minmax(520px,640px); gap:16px; align-items:start; }
-  .calendar-card { width:100%; min-width:520px; }
+  /* min-width:520px keeps the calendar grid readable on desktop. On phones
+     it would force 145px of horizontal overflow on a 375px screen, so cap
+     at viewport width when narrow. The grid columns are auto-fr so they'll
+     squeeze to fit. */
+  .calendar-card { width:100%; min-width:min(520px,100%); }
   .cal-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:6px; width:100%; }
   .cal-day-header { text-align:center; font-size:11px; font-weight:700; color:var(--text3); padding:8px 4px; min-height:28px; }
   .cal-day { min-height:88px; background:var(--surface2); border-radius:var(--r-sm); padding:6px; border:1px solid var(--border); width:100%; overflow:hidden; }
@@ -2362,7 +2379,7 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
       {showInfo&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:4000,display:"flex",flexDirection:"column",alignItems:"center",direction:"rtl"}}>
           {/* Inner panel — max width so text doesn't stretch too far */}
-          <div style={{width:"100%",maxWidth:"min(900px,100vw)",height:"100%",display:"flex",flexDirection:"column",background:"var(--bg)"}}>
+          <div style={{width:"100%",maxWidth:"min(900px,100%)",height:"100%",display:"flex",flexDirection:"column",background:"var(--bg)"}}>
 
             {/* Header */}
             <div style={{padding:"14px 18px",background:"var(--surface)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:10,flexShrink:0,flexWrap:"wrap"}}>

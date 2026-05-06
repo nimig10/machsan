@@ -334,7 +334,7 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
       {showInfo&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:4000,display:"flex",flexDirection:"column",alignItems:"center",direction:"rtl"}}>
           {/* Inner panel — max width so text doesn't stretch too far */}
-          <div style={{width:"100%",maxWidth:"min(900px,100vw)",height:"100%",display:"flex",flexDirection:"column",background:"var(--bg)"}}>
+          <div style={{width:"100%",maxWidth:"min(900px,100%)",height:"100%",display:"flex",flexDirection:"column",background:"var(--bg)"}}>
 
             {/* Header */}
             <div style={{padding:"14px 18px",background:"var(--surface)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:10,flexShrink:0,flexWrap:"wrap"}}>
