@@ -859,12 +859,22 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
       }
     };
   }, [activeVideo]);
+  // Each label is a flex row with the icon at flex-shrink:0 and the text
+  // at min-width:0 + ellipsis. This keeps the strip from overflowing the
+  // viewport on small screens — the longest label ("מדריך") gets clipped
+  // instead of pushing siblings off-screen.
+  const tabLabel = (Icon, text) => (
+    <span style={{display:"flex",alignItems:"center",gap:4,minWidth:0,maxWidth:"100%"}}>
+      <Icon size={15} strokeWidth={1.75} color="var(--accent)" style={{flexShrink:0}} />
+      <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{text}</span>
+    </span>
+  );
   const tabs = [
-    { id:"equipment", label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><Package size={16} strokeWidth={1.75} color="var(--accent)" /> ציוד</span> },
-    { id:"policies",  label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> נהלים</span> },
-    { id:"kits",      label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><Backpack size={16} strokeWidth={1.75} color="var(--accent)" /> ערכות</span> },
-    { id:"userGuide", label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><BookOpen size={16} strokeWidth={1.75} color="var(--accent)" /> המדריך למשתמש</span> },
-    { id:"contact",   label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><Phone size={16} strokeWidth={1.75} color="var(--accent)" /> צוות</span> },
+    { id:"equipment", label: tabLabel(Package, "ציוד") },
+    { id:"policies",  label: tabLabel(ClipboardList, "נהלים") },
+    { id:"kits",      label: tabLabel(Backpack, "ערכות") },
+    { id:"userGuide", label: tabLabel(BookOpen, "מדריך") },
+    { id:"contact",   label: tabLabel(Phone, "צוות") },
   ];
   const LOAN_ICONS = { "פרטית":<User size={12} strokeWidth={1.75} color="var(--accent)" />,"הפקה":<Film size={12} strokeWidth={1.75} color="var(--accent)" />,"סאונד":<Mic size={12} strokeWidth={1.75} color="var(--accent)" />,"קולנוע יומית":<Camera size={12} strokeWidth={1.75} color="var(--accent)" />,"לילה":<Moon size={12} strokeWidth={1.75} color="var(--accent)" /> };
   const allCats = [...new Set((equipment||[]).map(e=>e.category).filter(Boolean))];
@@ -881,7 +891,11 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
         onTouchEnd={e=>{
           const dx = e.changedTouches[0].clientX - swipeRef.current.x;
           const dy = e.changedTouches[0].clientY - swipeRef.current.y;
-          if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+          // Stricter than before — was 45px / 1.2× ratio; users complained
+          // that vertical scrolls with mild horizontal drift triggered an
+          // accidental tab change. Now needs ≥70px horizontal AND ≥2× more
+          // horizontal than vertical motion.
+          if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 2) return;
           const ids = tabs.map(t=>t.id);
           const cur = ids.indexOf(tab);
           if (dx > 0 && cur > 0)                   { setTab(ids[cur-1]); setSelectedEq(null); }
@@ -890,7 +904,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
       >
 
         {/* Header */}
-        <div className="info-panel-header" style={{padding:"clamp(12px,3vw,18px) clamp(14px,4vw,28px)",background:"var(--surface2)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+        <div className="info-panel-header" style={{paddingTop:"max(clamp(12px,3vw,18px), env(safe-area-inset-top))",paddingBottom:"clamp(12px,3vw,18px)",paddingInlineStart:"max(clamp(14px,4vw,28px), env(safe-area-inset-right))",paddingInlineEnd:"max(clamp(14px,4vw,28px), env(safe-area-inset-left))",background:"var(--surface2)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
           <div style={{flex:1,minWidth:0}}>
             <div className="info-panel-title" style={{fontWeight:900,fontSize:"clamp(15px,4.5vw,22px)",color:"var(--accent)",display:"flex",alignItems:"center",gap:8,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><Info size={20} strokeWidth={1.75} color="var(--accent)" style={{flexShrink:0}} /> <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>מידע כללי</span></div>
           </div>
