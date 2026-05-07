@@ -1,5 +1,5 @@
 // PublicForm.jsx — public loan request form
-import { AlertTriangle, Backpack, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mic, Minus, Moon, Package, Pencil, Phone, Save, Search, Settings, Shield, User, X, XCircle } from "lucide-react";
+import { AlertTriangle, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mic, Minus, Moon, Package, Pencil, Phone, Save, Search, Settings, Shield, User, X, XCircle } from "lucide-react";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR } from "../utils.js";
 import { supabase } from "../supabaseClient.js";
@@ -810,13 +810,28 @@ async function downloadCommitmentPdf(base64, compressed, name) {
   URL.revokeObjectURL(url);
 }
 
-function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColor, commitmentPdf, commitmentPdfCompressed, commitmentPdfName, certifications }) {
+// Convert a YouTube or Google Drive share URL into an embeddable iframe src.
+// Returns null for unsupported hosts so the caller can render a fallback.
+function videoEmbedSrc(rawUrl) {
+  const url = String(rawUrl || "").trim();
+  if (!url) return null;
+  // YouTube watch / share / embed / shorts
+  let m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+  if (m) return `https://www.youtube.com/embed/${m[1]}`;
+  // Google Drive file share link
+  m = url.match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)/);
+  if (m) return `https://drive.google.com/file/d/${m[1]}/preview`;
+  return null;
+}
+
+function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColor, commitmentPdf, commitmentPdfCompressed, commitmentPdfName, certifications, userGuideVideos = [] }) {
   const [tab, setTab] = useState("policies");
   const [selectedEq, setSelectedEq] = useState(null);  // equipment detail view
   const [infoCatFilter, setInfoCatFilter] = useState([]); // multi-select
   const swipeRef = useRef({ x: 0, y: 0 });
   const tabs = [
     { id:"equipment", label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><Package size={16} strokeWidth={1.75} color="var(--accent)" /> ציוד</span> },
+    { id:"userGuide", label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><BookOpen size={16} strokeWidth={1.75} color="var(--accent)" /> המדריך למשתמש</span> },
     { id:"policies",  label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> נהלים</span> },
     { id:"kits",      label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><Backpack size={16} strokeWidth={1.75} color="var(--accent)" /> ערכות</span> },
     { id:"contact",   label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><Phone size={16} strokeWidth={1.75} color="var(--accent)" /> צוות</span> },
@@ -951,6 +966,59 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                 </div>
               </div>
               <style>{`@media(max-width:600px){.info-detail-row{flex-direction:column!important;}}`}</style>
+            </div>
+          )}
+
+          {/* ── USER GUIDE TAB ── */}
+          {tab==="userGuide" && (
+            <div style={{maxWidth:820,margin:"0 auto"}}>
+              {(userGuideVideos || []).length === 0 ? (
+                <div style={{textAlign:"center",color:"var(--text3)",fontSize:14,padding:"40px 0",lineHeight:1.6}}>
+                  <BookOpen size={36} strokeWidth={1.5} color="var(--text3)" style={{marginBottom:10}}/>
+                  <div>המדריך למשתמש בהכנה — חזרו בקרוב.</div>
+                </div>
+              ) : (
+                <div style={{display:"flex",flexDirection:"column",gap:22}}>
+                  {(userGuideVideos || []).map((v) => {
+                    const src = videoEmbedSrc(v.url);
+                    // Per-video orientation. Vertical (story/shorts) needs a
+                    // capped width on desktop and a 9:16 padding-bottom; landscape
+                    // is the standard 16:9 full-width player. Both lock the
+                    // aspect ratio with padding-bottom so there's never any
+                    // horizontal overflow on a phone.
+                    const isVertical = v.orientation === "vertical";
+                    const wrapperMaxWidth = isVertical ? 380 : "100%";
+                    const aspectPadding = isVertical ? "177.78%" : "56.25%";
+                    return (
+                      <div key={v.id} style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:16}}>
+                        {src ? (
+                          <div style={{width:"100%",maxWidth:wrapperMaxWidth,margin:"0 auto"}}>
+                            <div style={{position:"relative",paddingBottom:aspectPadding,height:0,borderRadius:8,overflow:"hidden",background:"#000"}}>
+                              <iframe
+                                src={src}
+                                title={v.description || "user guide video"}
+                                loading="lazy"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                                style={{position:"absolute",inset:0,width:"100%",height:"100%",border:0}}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{padding:"14px 12px",borderRadius:8,background:"rgba(231,76,60,0.08)",border:"1px solid rgba(231,76,60,0.25)",color:"var(--text3)",fontSize:13,lineHeight:1.6}}>
+                            לא ניתן להציג סרטון מהמקור הזה. נתמכים רק קישורי YouTube ו-Google Drive.
+                          </div>
+                        )}
+                        {v.description && (
+                          <div style={{marginTop:12,fontSize:14,lineHeight:1.7,color:"var(--text2)",whiteSpace:"pre-wrap"}}>
+                            {v.description}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -1450,10 +1518,13 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   useEffect(() => {
     if (loggedInStudent) sessionStorage.setItem("public_view", publicView);
     if (loggedInStudent && publicView === "daily") loadDailySchedule();
-    // Stage 10 fix: auto-load studios on mount/view-change so reloads with
-    // public_view="studios"|"my-bookings" populate the calendar (was empty
-    // until the user clicked the tab again).
-    if (loggedInStudent && (publicView === "studios" || publicView === "my-bookings")) {
+    // Auto-load studios+bookings whenever a student is logged in. Previously
+    // we only loaded for the "studios" / "my-bookings" tabs, but the loan
+    // form (default tab) ALSO needs studioBookings — specifically the sound
+    // loan "שיוך לקביעת חדר" dropdown reads from `studioBookings`. Without
+    // this, a student who logs in and goes straight to "השאלת סאונד" sees
+    // an empty dropdown until they manually switch to קביעת חדרים and back.
+    if (loggedInStudent) {
       loadStudiosData();
     }
     if (loggedInStudent && publicView === "my-bookings") loadReservationsData();
@@ -1464,7 +1535,9 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   // student) create/update/delete bookings. Debounced to absorb bursts.
   useEffect(() => {
     if (!loggedInStudent) return undefined;
-    if (publicView !== "studios" && publicView !== "my-bookings") return undefined;
+    // Listen on every view a logged-in student can be in — including the
+    // default loan form, which now consumes studioBookings for the sound
+    // loan booking dropdown.
     let debounceTimer = null;
     const channel = supabase
       .channel("public-form-studio-bookings")
@@ -2437,7 +2510,15 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const returnBeforeBorrow = form.borrow_date && form.return_date && parseLocalDate(form.return_date) < parseLocalDate(form.borrow_date);
   const hasTimes = !!form.borrow_time && !!form.return_time;
   const pastLoanTimeError = getPastLoanTimeError(form);
-  const ok2 = !!form.borrow_date && !!form.return_date && hasTimes && !returnBeforeBorrow && !tooSoon && !cinemaTooSoon && !tooLong && !borrowWeekend && !returnWeekend && !timeOrderError && !pastLoanTimeError && (!isSoundLoan || !!form.studio_booking_id);
+  // Sound loan: equipment must be requested at least 3 hours before the
+  // start of the studio session it's tied to. (Only relevant for sound —
+  // private/production/cinema loans use their own lead-time rules above.)
+  const SOUND_MIN_LEAD_TIME_MS = 3 * 60 * 60 * 1000;
+  const soundLeadMs = (isSoundLoan && form.studio_booking_id && form.borrow_date && form.borrow_time)
+    ? (toDateTime(form.borrow_date, form.borrow_time) - Date.now())
+    : null;
+  const soundLeadTooShort = soundLeadMs !== null && soundLeadMs < SOUND_MIN_LEAD_TIME_MS;
+  const ok2 = !!form.borrow_date && !!form.return_date && hasTimes && !returnBeforeBorrow && !tooSoon && !cinemaTooSoon && !tooLong && !borrowWeekend && !returnWeekend && !timeOrderError && !pastLoanTimeError && !soundLeadTooShort && (!isSoundLoan || !!form.studio_booking_id);
   const ok3 = items.some(item => Number(item.quantity) > 0);
   const canSubmit = !!ok1WithCrew && !!ok2 && !!ok3 && !privateLoanLimitExceeded && !!agreed;
 
@@ -3500,12 +3581,21 @@ ${inventory}
               </>
             ) : isSoundLoan ? (
               form.studio_booking_id && form.borrow_date ? (
-                <div style={{background:"rgba(76,217,100,0.08)",border:"1px solid rgba(76,217,100,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>
-                  <CheckCircle size={16} strokeWidth={1.75} /> <strong>מועד ההשאלה נקבע לפי קביעת החדר:</strong>{" "}
-                  {form.borrow_date === form.return_date
-                    ? `${formatDate(form.borrow_date)} · ${form.borrow_time}–${form.return_time}`
-                    : `${formatDate(form.borrow_date)} ${form.borrow_time} עד ${formatDate(form.return_date)} ${form.return_time}`}
-                </div>
+                <>
+                  {soundLeadTooShort ? (
+                    <div style={{background:"rgba(231,76,60,0.12)",border:"2px solid rgba(231,76,60,0.55)",borderRadius:"var(--r-sm)",padding:"14px 18px",marginBottom:16,fontSize:13,fontWeight:700,color:"var(--red)",display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:18}}>⚠️</span>
+                      <span>שים לב יש לשריין את הציוד כ-3 שעות לפני תחילת הסשן.</span>
+                    </div>
+                  ) : (
+                    <div style={{background:"rgba(76,217,100,0.08)",border:"1px solid rgba(76,217,100,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>
+                      <CheckCircle size={16} strokeWidth={1.75} /> <strong>מועד ההשאלה נקבע לפי קביעת החדר:</strong>{" "}
+                      {form.borrow_date === form.return_date
+                        ? `${formatDate(form.borrow_date)} · ${form.borrow_time}–${form.return_time}`
+                        : `${formatDate(form.borrow_date)} ${form.borrow_time} עד ${formatDate(form.return_date)} ${form.return_time}`}
+                    </div>
+                  )}
+                </>
               ) : null
             ) : (
               <>
@@ -3889,7 +3979,7 @@ ${inventory}
         </div>
       </div>
     </div>}
-    {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor} commitmentPdf={policies.commitmentPdf} commitmentPdfCompressed={policies.commitmentPdfCompressed} commitmentPdfName={policies.commitmentPdfName} certifications={certifications}/>}
+    {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor} commitmentPdf={policies.commitmentPdf} commitmentPdfCompressed={policies.commitmentPdfCompressed} commitmentPdfName={policies.commitmentPdfName} certifications={certifications} userGuideVideos={Array.isArray(siteSettings.userGuideVideos) ? siteSettings.userGuideVideos : []}/>}
     {showAccountSettings && loggedInStudent && (
       <AccountSettingsModal
         student={loggedInStudent}
