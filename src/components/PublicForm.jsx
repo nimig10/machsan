@@ -892,7 +892,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
         {/* Header */}
         <div className="info-panel-header" style={{padding:"clamp(12px,3vw,18px) clamp(14px,4vw,28px)",background:"var(--surface2)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
           <div style={{flex:1,minWidth:0}}>
-            <div className="info-panel-title" style={{fontWeight:900,fontSize:"clamp(14px,4vw,20px)",color:"var(--accent)",display:"flex",alignItems:"center",gap:6,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><Info size={18} strokeWidth={1.75} color="var(--accent)" style={{flexShrink:0}} /> <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>מידע כללי — מחסן ציוד קמרה אובסקורה וסאונד</span></div>
+            <div className="info-panel-title" style={{fontWeight:900,fontSize:"clamp(15px,4.5vw,22px)",color:"var(--accent)",display:"flex",alignItems:"center",gap:8,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><Info size={20} strokeWidth={1.75} color="var(--accent)" style={{flexShrink:0}} /> <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>מידע כללי</span></div>
           </div>
           <button className="btn btn-secondary btn-sm" onClick={onClose} style={{fontSize:13,padding:"6px 12px",display:"inline-flex",alignItems:"center",gap:4,flexShrink:0,whiteSpace:"nowrap"}}><X size={16} strokeWidth={1.75} color="var(--text3)" /> סגור</button>
         </div>
@@ -3433,7 +3433,7 @@ ${inventory}
     <div className="form-page" style={{"--accent": siteSettings.accentColor||"#f5a623","--accent2": siteSettings.accentColor||"#f5a623","--accent-glow":`${siteSettings.accentColor||"#f5a623"}2e`}} onTouchStart={handleFormSwipeStart} onTouchEnd={handleFormSwipeEnd}>
       <div className="form-card">
         <div className="form-card-header" style={{position:"relative"}}>
-          <button type="button" onClick={async()=>{ await syncInventory(); setShowInfoPanel(true); }}
+          <button type="button" onClick={()=>{ setShowInfoPanel(true); void syncInventory(); }}
             title="מידע כללי, נהלים וערכות"
             style={{position:"absolute",top:14,left:14,width:42,height:42,borderRadius:"50%",border:"none",background:"transparent",padding:0,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,color:"var(--accent)",opacity:0.9,transition:"opacity 0.15s"}}
             onMouseEnter={e=>e.currentTarget.style.opacity=1}
