@@ -167,6 +167,9 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
           <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14, lineHeight: 1.5 }}>
             כאן אפשר להוסיף סרטוני הדרכה שיופיעו בטאב "המדריך למשתמש" שב"מידע כללי" של הטופס הציבורי. הסרטונים יוטמעו אוטומטית כשהם מ-YouTube או מ-Google Drive. הוסיפו את הקישור (URL) ופיסקת תיאור קצרה לכל סרטון.
           </div>
+          <div style={{ fontSize: 12, color: "var(--warning,#f59e0b)", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.4)", borderRadius: 8, padding: "10px 12px", marginBottom: 14, lineHeight: 1.6 }}>
+            <strong>⚠️ חשוב — סרטוני Google Drive:</strong> הקובץ חייב להיות משותף עם <strong>"כל מי שיש לו את הקישור" (Anyone with the link)</strong> בהרשאת צפייה. אחרת התלמידים יקבלו 403 ולא יוכלו לראות את הסרטון. לבדוק: לחצו ימני על הקובץ ב-Drive → שיתוף → גישה כללית → "כל מי שיש לו את הקישור".
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {(draft.userGuideVideos || []).length === 0 && (
               <div style={{ padding: "12px 14px", borderRadius: 8, background: "var(--surface2)", border: "1px dashed var(--border)", fontSize: 13, color: "var(--text3)" }}>
