@@ -900,7 +900,8 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
         <div className="info-panel-tabs" style={{display:"flex",gap:0,borderBottom:"2px solid var(--border)",flexShrink:0}}>
           {tabs.map(t=>(
             <button key={t.id} type="button" onClick={()=>{setTab(t.id);setSelectedEq(null);}}
-              style={{flex:1,minWidth:0,padding:"12px 4px",border:"none",borderBottom:`3px solid ${tab===t.id?"var(--accent)":"transparent"}`,background:tab===t.id?"rgba(245,166,35,0.05)":"transparent",color:tab===t.id?"var(--accent)":"var(--text2)",fontWeight:tab===t.id?800:500,fontSize:"clamp(11px,2.8vw,15px)",cursor:"pointer",transition:"all 0.15s",overflow:"hidden",textOverflow:"ellipsis"}}>
+              onFocus={e=>e.currentTarget.blur()}
+              style={{flex:1,minWidth:0,padding:"12px 4px",border:"none",outline:"none",borderBottom:`3px solid ${tab===t.id?"var(--accent)":"transparent"}`,background:tab===t.id?"rgba(245,166,35,0.05)":"transparent",color:tab===t.id?"var(--accent)":"var(--text2)",fontWeight:tab===t.id?800:500,fontSize:"clamp(11px,2.8vw,15px)",cursor:"pointer",transition:"all 0.15s",overflow:"hidden",textOverflow:"ellipsis",WebkitTapHighlightColor:"transparent"}}>
               {t.label}
             </button>
           ))}
