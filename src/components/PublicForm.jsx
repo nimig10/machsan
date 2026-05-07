@@ -835,16 +835,24 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
   // When the player overlay opens, try to request native browser fullscreen
   // on the wrapper. Falls back gracefully — the overlay itself already covers
   // the viewport so the experience is fullscreen-like even without the API.
+  // Also locks body scroll so the underlying InfoPanel doesn't scroll on iOS
+  // while the overlay is open (touchmove escape on iOS Safari).
   useEffect(() => {
     if (!activeVideo) return;
     const el = videoOverlayRef.current;
     if (el && el.requestFullscreen) {
       el.requestFullscreen().catch(() => { /* user gesture / iframe denied — overlay still fills viewport */ });
     }
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
     const onKey = (e) => { if (e.key === "Escape") setActiveVideo(null); };
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
       }
@@ -1169,7 +1177,10 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
             onClick={() => setActiveVideo(null)}
             aria-label="סגור"
             style={{
-              position: "fixed", top: 16, left: 16, zIndex: 6010,
+              position: "fixed",
+              top: "max(16px, env(safe-area-inset-top))",
+              left: "max(16px, env(safe-area-inset-left))",
+              zIndex: 6010,
               background: accentColor || "#f5a623",
               color: "#0a0c10",
               border: "2px solid #fff",
