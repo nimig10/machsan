@@ -191,7 +191,7 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
                     onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; }}>
                     <div style={{ fontSize: 12, fontWeight: 800, color: "var(--accent)", flexShrink: 0 }}>סרטון {idx + 1}</div>
                     <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {v.description || (v.url ? v.url : <span style={{ color: "var(--text3)", fontStyle: "italic" }}>סרטון ריק — לחץ לעריכה</span>)}
+                      {v.title || v.description || (v.url ? v.url : <span style={{ color: "var(--text3)", fontStyle: "italic" }}>סרטון ריק — לחץ לעריכה</span>)}
                     </div>
                     <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text3)", flexShrink: 0 }}>{orientationLabel}</span>
                     <button type="button" className="btn btn-secondary"
@@ -216,6 +216,19 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
                       style={{ fontSize: 12, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 4 }}>
                       <Trash2 size={12} strokeWidth={1.75} /> הסר
                     </button>
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 4 }}>כותרת הסרטון</label>
+                    <input
+                      type="text"
+                      placeholder="לדוגמה: איך לקבוע חדר ולהשאיל ציוד סאונד"
+                      value={v.title || ""}
+                      onChange={e => {
+                        const next = e.target.value;
+                        setDraft(p => ({ ...p, userGuideVideos: (p.userGuideVideos || []).map(x => x.id === v.id ? { ...x, title: next } : x) }));
+                      }}
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13 }}
+                    />
                   </div>
                   <div>
                     <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 4 }}>קישור (YouTube / Google Drive)</label>
@@ -296,7 +309,7 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
               const newId = `video_${Date.now()}_${(draft.userGuideVideos || []).length}`;
               setDraft(p => ({
                 ...p,
-                userGuideVideos: [...(p.userGuideVideos || []), { id: newId, url: "", description: "", orientation: "landscape" }],
+                userGuideVideos: [...(p.userGuideVideos || []), { id: newId, title: "", url: "", description: "", orientation: "landscape" }],
               }));
               // Newly-added videos start expanded so the user immediately
               // gets the URL/description fields.

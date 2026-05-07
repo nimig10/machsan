@@ -1008,7 +1008,12 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                           <div style={{width:38,height:38,borderRadius:10,background:"var(--accent)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                             <BookOpen size={18} strokeWidth={2} />
                           </div>
-                          <div style={{fontSize:15,fontWeight:800,color:"var(--text)"}}>סרטון {idx+1}</div>
+                          <div style={{display:"flex",flexDirection:"column",minWidth:0,flex:1}}>
+                            <div style={{fontSize:11,fontWeight:700,color:"var(--text3)",letterSpacing:0.3}}>סרטון {idx+1}</div>
+                            <div style={{fontSize:16,fontWeight:900,color:"var(--text)",lineHeight:1.3,wordBreak:"break-word"}}>
+                              {v.title || "ללא כותרת"}
+                            </div>
+                          </div>
                         </div>
                         {v.description && (
                           <div style={{fontSize:14,lineHeight:1.7,color:"var(--text2)",whiteSpace:"pre-wrap"}}>
