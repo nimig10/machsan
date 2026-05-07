@@ -852,9 +852,9 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
   }, [activeVideo]);
   const tabs = [
     { id:"equipment", label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><Package size={16} strokeWidth={1.75} color="var(--accent)" /> ציוד</span> },
-    { id:"userGuide", label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><BookOpen size={16} strokeWidth={1.75} color="var(--accent)" /> המדריך למשתמש</span> },
     { id:"policies",  label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> נהלים</span> },
     { id:"kits",      label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><Backpack size={16} strokeWidth={1.75} color="var(--accent)" /> ערכות</span> },
+    { id:"userGuide", label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><BookOpen size={16} strokeWidth={1.75} color="var(--accent)" /> המדריך למשתמש</span> },
     { id:"contact",   label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><Phone size={16} strokeWidth={1.75} color="var(--accent)" /> צוות</span> },
   ];
   const LOAN_ICONS = { "פרטית":<User size={12} strokeWidth={1.75} color="var(--accent)" />,"הפקה":<Film size={12} strokeWidth={1.75} color="var(--accent)" />,"סאונד":<Mic size={12} strokeWidth={1.75} color="var(--accent)" />,"קולנוע יומית":<Camera size={12} strokeWidth={1.75} color="var(--accent)" />,"לילה":<Moon size={12} strokeWidth={1.75} color="var(--accent)" /> };
