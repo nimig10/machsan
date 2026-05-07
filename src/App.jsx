@@ -5583,6 +5583,13 @@ export default function App() {
 
   const refreshPublicInventory = async () => {
     try {
+      // Pre-warm the auth session so the four parallel calls below don't all
+      // race for the navigator auth-token lock (caused noisy
+      // "Lock not released within 5000ms" warnings + AbortErrors when
+      // Strict Mode double-mounted the effect in dev). Once getSession()
+      // resolves, the in-memory token cache is warm and subsequent
+      // _getAccessToken() calls skip the lock entirely.
+      try { await supabase.auth.getSession(); } catch { /* anonymous session — fine */ }
       const [eqR, resR, catsAndTypesR, catLoanTypesR] = await Promise.all([
         (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
         (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
