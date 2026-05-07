@@ -1113,7 +1113,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                         <div style={{display:"flex",flexDirection:"column",gap:14}}>
                           {[...groups.entries()].map(([cat, rows]) => (
                             <div key={cat} style={{display:"flex",flexDirection:"column",gap:6}}>
-                              <div style={{fontSize:11,fontWeight:800,color:"var(--accent)",letterSpacing:0.4,padding:"4px 10px",background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:999,alignSelf:"flex-start"}}>{cat}</div>
+                              <div style={{fontSize:13,fontWeight:800,color:"var(--accent)",padding:"2px 0",alignSelf:"flex-start"}}>{cat}</div>
                               <div style={{display:"flex",flexDirection:"column",gap:6}}>
                                 {rows.map(({item, eq}, j) => {
                                   const isImg = eq?.image?.startsWith("data:") || eq?.image?.startsWith("http");
