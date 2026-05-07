@@ -828,7 +828,28 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
   const [tab, setTab] = useState("policies");
   const [selectedEq, setSelectedEq] = useState(null);  // equipment detail view
   const [infoCatFilter, setInfoCatFilter] = useState([]); // multi-select
+  const [activeVideo, setActiveVideo] = useState(null); // currently playing video (fullscreen overlay)
+  const videoOverlayRef = useRef(null);
   const swipeRef = useRef({ x: 0, y: 0 });
+
+  // When the player overlay opens, try to request native browser fullscreen
+  // on the wrapper. Falls back gracefully — the overlay itself already covers
+  // the viewport so the experience is fullscreen-like even without the API.
+  useEffect(() => {
+    if (!activeVideo) return;
+    const el = videoOverlayRef.current;
+    if (el && el.requestFullscreen) {
+      el.requestFullscreen().catch(() => { /* user gesture / iframe denied — overlay still fills viewport */ });
+    }
+    const onKey = (e) => { if (e.key === "Escape") setActiveVideo(null); };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    };
+  }, [activeVideo]);
   const tabs = [
     { id:"equipment", label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><Package size={16} strokeWidth={1.75} color="var(--accent)" /> ציוד</span> },
     { id:"userGuide", label:<span style={{display:"inline-flex",alignItems:"center",gap:4}}><BookOpen size={16} strokeWidth={1.75} color="var(--accent)" /> המדריך למשתמש</span> },
@@ -978,40 +999,34 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                   <div>המדריך למשתמש בהכנה — חזרו בקרוב.</div>
                 </div>
               ) : (
-                <div style={{display:"flex",flexDirection:"column",gap:22}}>
-                  {(userGuideVideos || []).map((v) => {
+                <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                  {(userGuideVideos || []).map((v, idx) => {
                     const src = videoEmbedSrc(v.url);
-                    // Per-video orientation. Vertical (story/shorts) needs a
-                    // capped width on desktop and a 9:16 padding-bottom; landscape
-                    // is the standard 16:9 full-width player. Both lock the
-                    // aspect ratio with padding-bottom so there's never any
-                    // horizontal overflow on a phone.
-                    const isVertical = v.orientation === "vertical";
-                    const wrapperMaxWidth = isVertical ? 380 : "100%";
-                    const aspectPadding = isVertical ? "177.78%" : "56.25%";
                     return (
-                      <div key={v.id} style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:16}}>
-                        {src ? (
-                          <div style={{width:"100%",maxWidth:wrapperMaxWidth,margin:"0 auto"}}>
-                            <div style={{position:"relative",paddingBottom:aspectPadding,height:0,borderRadius:8,overflow:"hidden",background:"#000"}}>
-                              <iframe
-                                src={src}
-                                title={v.description || "user guide video"}
-                                loading="lazy"
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                allowFullScreen
-                                style={{position:"absolute",inset:0,width:"100%",height:"100%",border:0}}
-                              />
-                            </div>
+                      <div key={v.id} style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:16,display:"flex",flexDirection:"column",gap:12}}>
+                        <div style={{display:"flex",alignItems:"center",gap:10}}>
+                          <div style={{width:38,height:38,borderRadius:10,background:"var(--accent)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                            <BookOpen size={18} strokeWidth={2} />
                           </div>
-                        ) : (
-                          <div style={{padding:"14px 12px",borderRadius:8,background:"rgba(231,76,60,0.08)",border:"1px solid rgba(231,76,60,0.25)",color:"var(--text3)",fontSize:13,lineHeight:1.6}}>
-                            לא ניתן להציג סרטון מהמקור הזה. נתמכים רק קישורי YouTube ו-Google Drive.
+                          <div style={{fontSize:15,fontWeight:800,color:"var(--text)"}}>סרטון {idx+1}</div>
+                        </div>
+                        {v.description && (
+                          <div style={{fontSize:14,lineHeight:1.7,color:"var(--text2)",whiteSpace:"pre-wrap"}}>
+                            {v.description}
                           </div>
                         )}
-                        {v.description && (
-                          <div style={{marginTop:12,fontSize:14,lineHeight:1.7,color:"var(--text2)",whiteSpace:"pre-wrap"}}>
-                            {v.description}
+                        {src ? (
+                          <button
+                            type="button"
+                            onClick={() => setActiveVideo({ ...v, src })}
+                            className="btn btn-primary"
+                            style={{alignSelf:"flex-start",fontSize:14,padding:"10px 18px",display:"inline-flex",alignItems:"center",gap:8}}
+                          >
+                            <span style={{fontSize:16,lineHeight:1}}>▶</span> צפה במדריך
+                          </button>
+                        ) : (
+                          <div style={{padding:"10px 12px",borderRadius:8,background:"rgba(231,76,60,0.08)",border:"1px solid rgba(231,76,60,0.25)",color:"var(--text3)",fontSize:13,lineHeight:1.6}}>
+                            לא ניתן להציג סרטון מהמקור הזה. נתמכים רק קישורי YouTube ו-Google Drive.
                           </div>
                         )}
                       </div>
@@ -1114,6 +1129,52 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
 
         </div>
       </div>
+
+      {/* ── FULLSCREEN VIDEO PLAYER OVERLAY ── */}
+      {activeVideo && (
+        <div
+          ref={videoOverlayRef}
+          onClick={(e) => { if (e.target === e.currentTarget) setActiveVideo(null); }}
+          style={{
+            position: "fixed", inset: 0, background: "#000",
+            zIndex: 6000, display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 0,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setActiveVideo(null)}
+            aria-label="סגור"
+            style={{
+              position: "absolute", top: 14, left: 14, zIndex: 6010,
+              background: "rgba(0,0,0,0.65)", color: "#fff", border: "1px solid rgba(255,255,255,0.3)",
+              borderRadius: 999, width: 42, height: 42, display: "flex", alignItems: "center",
+              justifyContent: "center", cursor: "pointer", fontSize: 20, lineHeight: 1, fontWeight: 700,
+            }}
+          >
+            <X size={20} strokeWidth={2} color="#fff" />
+          </button>
+          {(() => {
+            const isVertical = activeVideo.orientation === "vertical";
+            // Vertical: cap width by viewport height * 9/16 so the 9:16 frame
+            // fits in the viewport. Landscape: cap height by viewport width * 9/16.
+            const wrapStyle = isVertical
+              ? { height: "100vh", aspectRatio: "9 / 16", maxWidth: "100vw" }
+              : { width: "100vw", aspectRatio: "16 / 9", maxHeight: "100vh" };
+            return (
+              <div style={{ ...wrapStyle, background: "#000", position: "relative" }}>
+                <iframe
+                  src={activeVideo.src}
+                  title={activeVideo.description || "user guide video"}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }}
+                />
+              </div>
+            );
+          })()}
+        </div>
+      )}
     </div>
   );
 }
