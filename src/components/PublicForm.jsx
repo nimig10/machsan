@@ -1088,25 +1088,43 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                       <div style={{fontSize:14,color:"var(--text2)",marginBottom:14,lineHeight:1.7,background:"var(--surface)",borderRadius:"var(--r-sm)",padding:"10px 14px",border:"1px solid var(--border)"}}>{kit.description}</div>
                     )}
                     <div style={{fontSize:12,fontWeight:700,color:"var(--text3)",marginBottom:8,letterSpacing:0.5,textTransform:"uppercase"}}>פריטים בערכה:</div>
-                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                      {(kit.items||[]).map((item,j)=>{
-                        const eq = equipment.find(e=>e.id==item.equipment_id);
-                        const isImg = eq?.image?.startsWith("data:")||eq?.image?.startsWith("http");
-                        return (
-                          <div key={j} style={{display:"flex",alignItems:"center",gap:12,background:"var(--surface)",borderRadius:"var(--r-sm)",padding:"10px 14px",border:"1px solid var(--border)"}}>
-                            <div style={{width:40,height:40,flexShrink:0,borderRadius:6,overflow:"hidden",background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                              {isImg ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{fontSize:22}}>{eq?.image||<Package size={22} strokeWidth={1.75} color="var(--accent)" />}</span>}
+                    {(() => {
+                      // Group items by category. Items whose equipment row is
+                      // missing a category land in "ללא קטגוריה". Order of
+                      // appearance follows first-seen-in-kit order so the
+                      // admin's mental model is preserved.
+                      const groups = new Map();
+                      (kit.items||[]).forEach(item => {
+                        const eq = equipment.find(e => e.id == item.equipment_id);
+                        const cat = (eq?.category && String(eq.category).trim()) || "ללא קטגוריה";
+                        if (!groups.has(cat)) groups.set(cat, []);
+                        groups.get(cat).push({ item, eq });
+                      });
+                      if (groups.size === 0) return <div style={{color:"var(--text3)",fontSize:13}}>אין פריטים בערכה זו</div>;
+                      return (
+                        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                          {[...groups.entries()].map(([cat, rows]) => (
+                            <div key={cat} style={{display:"flex",flexDirection:"column",gap:6}}>
+                              <div style={{fontSize:11,fontWeight:800,color:"var(--accent)",letterSpacing:0.4,padding:"4px 10px",background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:999,alignSelf:"flex-start"}}>{cat}</div>
+                              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                                {rows.map(({item, eq}, j) => {
+                                  const isImg = eq?.image?.startsWith("data:") || eq?.image?.startsWith("http");
+                                  return (
+                                    <div key={j} style={{display:"flex",alignItems:"center",gap:10,background:"var(--surface)",borderRadius:"var(--r-sm)",padding:"8px 12px",border:"1px solid var(--border)"}}>
+                                      <div style={{width:36,height:36,flexShrink:0,borderRadius:6,overflow:"hidden",background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                        {isImg ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{fontSize:20}}>{eq?.image||<Package size={20} strokeWidth={1.75} color="var(--accent)" />}</span>}
+                                      </div>
+                                      <div style={{flex:1,fontWeight:700,fontSize:14,minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>{item.name}</div>
+                                      <span style={{background:"var(--surface2)",border:"1px solid var(--accent)",borderRadius:8,padding:"2px 10px",fontWeight:900,color:"var(--accent)",fontSize:13,flexShrink:0}}>×{item.quantity}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
-                            <div style={{flex:1}}>
-                              <div style={{fontWeight:700,fontSize:14}}>{item.name}</div>
-                              {eq?.description&&<div style={{fontSize:12,color:"var(--text3)",marginTop:2,lineHeight:1.5}}>{eq.description}</div>}
-                            </div>
-                            <span style={{background:"var(--surface2)",border:"1px solid var(--accent)",borderRadius:8,padding:"3px 12px",fontWeight:900,color:"var(--accent)",fontSize:14,flexShrink:0}}>×{item.quantity}</span>
-                          </div>
-                        );
-                      })}
-                      {(kit.items||[]).length===0&&<div style={{color:"var(--text3)",fontSize:13}}>אין פריטים בערכה זו</div>}
-                    </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 ))
               }
