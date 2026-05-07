@@ -2401,7 +2401,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     }));
   };
 
-  const minDays = form.loan_type==="פרטית" ? 2 : form.loan_type==="סאונד" ? 0 : form.loan_type==="קולנוע יומית" ? 0 : form.loan_type==="הפקה" ? 9 : 7;
+  const minDays = form.loan_type==="פרטית" ? 1 : form.loan_type==="סאונד" ? 0 : form.loan_type==="קולנוע יומית" ? 0 : form.loan_type==="הפקה" ? 9 : 7;
   const isCinemaLoan = form.loan_type==="קולנוע יומית";
   const isWeekend = (dateStr) => {
     if(!dateStr) return false;
@@ -2438,7 +2438,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 
     const candidateIsCinema = loanType === "קולנוע יומית";
     const candidateIsSound = loanType === "סאונד";
-    const candidateMinDays = loanType === "פרטית" ? 2 : candidateIsSound ? 0 : candidateIsCinema ? 0 : 7;
+    const candidateMinDays = loanType === "פרטית" ? 1 : candidateIsSound ? 0 : candidateIsCinema ? 0 : 7;
     const candidateMinDate = (() => {
       const date = new Date();
       date.setDate(date.getDate() + (candidateIsCinema ? 1 : candidateMinDays));
@@ -2458,7 +2458,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     }
     if (!candidateIsSound && !candidateIsCinema && borrowDate < candidateMinDate) {
       if (loanType === "פרטית") {
-        return `הבקשה שפוענחה מנוגדת לנהלי המכללה: השאלה פרטית דורשת התראה של 48 שעות לפחות. התאריך המוקדם ביותר האפשרי הוא ${formatDate(candidateMinDate)}.`;
+        return `הבקשה שפוענחה מנוגדת לנהלי המכללה: השאלה פרטית דורשת התראה של 24 שעות לפחות. התאריך המוקדם ביותר האפשרי הוא ${formatDate(candidateMinDate)}.`;
       }
       return `הבקשה שפוענחה מנוגדת לנהלי המכללה: סוג ההשאלה ${loanType} דורש התראה של שבוע לפחות. התאריך המוקדם ביותר האפשרי הוא ${formatDate(candidateMinDate)}.`;
     }
@@ -3807,7 +3807,7 @@ ${inventory}
               </>
             )}
             {!isSoundLoan && (borrowWeekend||(returnWeekend&&!isCinemaLoan)) && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 המחסן אינו פעיל בימים שישי ושבת. נא לבחור ימים א׳–ה׳ בלבד.</div>}
-            {!isSoundLoan && tooSoon && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 {form.loan_type==="פרטית"?"השאלה פרטית דורשת התראה של 48 שעות לפחות.":form.loan_type==="הפקה"?"השאלת הפקה דורשת הגשה 9 ימים מראש לפחות.":"נדרשת התראה של שבוע לפחות."} תאריך מוקדם ביותר: <strong>{formatDate(minDate)}</strong></div>}
+            {!isSoundLoan && tooSoon && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 {form.loan_type==="פרטית"?"השאלה פרטית דורשת התראה של 24 שעות לפחות.":form.loan_type==="הפקה"?"השאלת הפקה דורשת הגשה 9 ימים מראש לפחות.":"נדרשת התראה של שבוע לפחות."} תאריך מוקדם ביותר: <strong>{formatDate(minDate)}</strong></div>}
             {cinemaTooSoon && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 השאלת קולנוע יומית דורשת הזמנה של 24 שעות מראש. תאריך מוקדם ביותר: <strong>{formatDate(minDate)}</strong></div>}
             {!isSoundLoan && tooLong && !isCinemaLoan && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 לא ניתן להשלים את התהליך כי זמן ההשאלה חורג מנהלי המכללה. משך מקסימלי: <strong>{maxDays} ימים</strong></div>}
             {!isSoundLoan && returnBeforeBorrow && !isCinemaLoan && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 זמנים לא נכונים — תאריך החזרה חייב להיות אחרי תאריך ההשאלה.</div>}
