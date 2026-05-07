@@ -815,8 +815,9 @@ async function downloadCommitmentPdf(base64, compressed, name) {
 function videoEmbedSrc(rawUrl) {
   const url = String(rawUrl || "").trim();
   if (!url) return null;
-  // YouTube watch / share / embed / shorts
-  let m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+  // YouTube — covers watch?v= / share / embed / shorts / live / v
+  // (includes m.youtube.com / music.youtube.com because we don't anchor to start)
+  let m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
   if (m) return `https://www.youtube.com/embed/${m[1]}`;
   // Google Drive file share link
   m = url.match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)/);
@@ -926,7 +927,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                   {infoCatFilter.length>0&&<button type="button" onClick={()=>setInfoCatFilter([])} style={{padding:"5px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}><X size={12} strokeWidth={1.75} color="var(--text3)" /> הכל</button>}
                 </div>
               )}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:14}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(220px,100%),1fr))",gap:14}}>
                 {visibleEq.length===0
                   ? <div style={{color:"var(--text3)",fontSize:13,padding:"24px 0",gridColumn:"1/-1",textAlign:"center"}}>אין ציוד להצגה</div>
                   : visibleEq.map(eq=>{
@@ -1026,7 +1027,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                           </div>
                         </div>
                         {v.description && (
-                          <div style={{fontSize:14,lineHeight:1.7,color:"var(--text2)",whiteSpace:"pre-wrap"}}>
+                          <div style={{fontSize:14,lineHeight:1.7,color:"var(--text2)",whiteSpace:"pre-wrap",overflowWrap:"anywhere",wordBreak:"break-word"}}>
                             {v.description}
                           </div>
                         )}
@@ -1039,11 +1040,12 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                           >
                             <span style={{fontSize:16,lineHeight:1}}>▶</span> צפה במדריך
                           </button>
-                        ) : (
+                        ) : (v.url && v.url.trim()) ? (
+                          // URL was provided but couldn't be parsed — bad host or typo
                           <div style={{padding:"10px 12px",borderRadius:8,background:"rgba(231,76,60,0.08)",border:"1px solid rgba(231,76,60,0.25)",color:"var(--text3)",fontSize:13,lineHeight:1.6}}>
                             לא ניתן להציג סרטון מהמקור הזה. נתמכים רק קישורי YouTube ו-Google Drive.
                           </div>
-                        )}
+                        ) : null /* empty URL — admin hasn't pasted yet, render no button/error */ }
                       </div>
                     );
                   })}
