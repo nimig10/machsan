@@ -810,6 +810,27 @@ async function downloadCommitmentPdf(base64, compressed, name) {
   URL.revokeObjectURL(url);
 }
 
+// ── Form-draft persistence (survives refresh, dies with the tab) ────────────
+// Stored in sessionStorage so it doesn't outlive the browser session — that
+// keeps shared/library devices safe and prevents stale drafts from sitting
+// around for weeks. Key is bumped if the form shape ever changes
+// incompatibly. Cleared on submit-success and on logout.
+const FORM_DRAFT_KEY = "public_form_draft_v1";
+function readFormDraft() {
+  try {
+    const raw = sessionStorage.getItem(FORM_DRAFT_KEY);
+    if (!raw) return null;
+    const draft = JSON.parse(raw);
+    return draft && typeof draft === "object" ? draft : null;
+  } catch { return null; }
+}
+function writeFormDraft(draft) {
+  try { sessionStorage.setItem(FORM_DRAFT_KEY, JSON.stringify(draft)); } catch { /* quota — ignore */ }
+}
+function clearFormDraft() {
+  try { sessionStorage.removeItem(FORM_DRAFT_KEY); } catch { /* ignore */ }
+}
+
 // Convert a YouTube or Google Drive share URL into an embeddable iframe src.
 // Returns null for unsupported hosts so the caller can render a fallback.
 function videoEmbedSrc(rawUrl) {
@@ -1476,7 +1497,14 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const initialStep = initialParams.get("calendar")==="1"
     ? 2
     : (Number.isInteger(initialStepParam) && initialStepParam >= 1 && initialStepParam <= 4 ? initialStepParam : 1);
-  const [step, setStep]       = useState(initialStep);
+  // Read the saved draft once at mount so step / form / items / agreed all
+  // start from the user's last edits if they refreshed the page mid-form.
+  const _initialDraft = readFormDraft();
+  const [step, setStep]       = useState(() => {
+    const d = _initialDraft;
+    if (d && Number.isInteger(d.step) && d.step >= 1 && d.step <= 4) return d.step;
+    return initialStep;
+  });
   const [showAccountSettings, setShowAccountSettings] = useState(false);
 
   // Stage 6 step 5d/7: every read of certifications.students in this file
@@ -1497,12 +1525,36 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   }, []);
   const studentsFromTable = tableStudents ?? (certifications?.students || []);
   const swipeTouchRef = useRef(null);
-  const [form, setForm]       = useState({student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_first_name:"",crew_photographer_last_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_first_name:"",crew_sound_last_name:"",crew_sound_phone:"",production_reason:""});
-  const [items, setItems]     = useState([]);
-  const [agreed, setAgreed]   = useState(false);
+  const [form, setForm]       = useState(() => {
+    const base = {student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_first_name:"",crew_photographer_last_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_first_name:"",crew_sound_last_name:"",crew_sound_phone:"",production_reason:""};
+    const d = _initialDraft;
+    if (d && d.form && typeof d.form === "object") {
+      // URL ?loan=... wins over draft so links always do what they say.
+      const merged = { ...base, ...d.form };
+      if (initialLoanType) merged.loan_type = initialLoanType;
+      return merged;
+    }
+    return base;
+  });
+  const [items, setItems]     = useState(() => {
+    const d = _initialDraft;
+    return d && Array.isArray(d.items) ? d.items : [];
+  });
+  const [agreed, setAgreed]   = useState(() => {
+    const d = _initialDraft;
+    return !!(d && d.agreed === true);
+  });
   const [done, setDone]       = useState(false);
   const [emailError, setEmailError] = useState(false);
   const [submitting, setSub]  = useState(false);
+
+  // Persist the draft on every change while the form is in-progress. We skip
+  // when the form has been submitted (done=true) or while submitting so the
+  // success handler can clear the draft cleanly without a useEffect race.
+  useEffect(() => {
+    if (done || submitting) return;
+    writeFormDraft({ form, items, step, agreed });
+  }, [form, items, step, agreed, done, submitting]);
   const [showInfoPanel, setShowInfoPanel] = useState(false);
   const [loggedInStudent, setLoggedInStudent] = useState(() => {
     try { const s = sessionStorage.getItem("public_student"); return s ? JSON.parse(s) : null; } catch { return null; }
@@ -3201,10 +3253,11 @@ ${inventory}
     sendEmail(newRes).catch(err => console.error("sendEmail background error:", err));
     setSub(false);
     setDone(true);
+    clearFormDraft();
     showToast("success","הבקשה נשלחה בהצלחה!");
   };
 
-  const reset = () => { setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_first_name:"",crew_photographer_last_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_first_name:"",crew_sound_last_name:"",crew_sound_phone:"",production_reason:""}); setItems([]); setAgreed(false); };
+  const reset = () => { clearFormDraft(); setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_first_name:"",crew_photographer_last_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_first_name:"",crew_sound_last_name:"",crew_sound_phone:"",production_reason:""}); setItems([]); setAgreed(false); };
 
   const VIEWS = ["equipment", "studios", "daily", "my-bookings"];
   const handleFormSwipeStart = (e) => {
@@ -3707,7 +3760,16 @@ ${inventory}
             ) : isSoundLoan ? (
               form.studio_booking_id && form.borrow_date ? (
                 <>
-                  {soundLeadTooShort ? (
+                  {(borrowWeekend || returnWeekend) ? (
+                    // Sound-loan booking falls on Friday/Saturday — warehouse is
+                    // closed those days so the equipment can't be picked up or
+                    // returned. ok2 is already blocked via borrowWeekend, this
+                    // surfaces the reason clearly to the student.
+                    <div style={{background:"rgba(231,76,60,0.12)",border:"2px solid rgba(231,76,60,0.55)",borderRadius:"var(--r-sm)",padding:"14px 18px",marginBottom:16,fontSize:13,fontWeight:700,color:"var(--red)",display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:18}}>🚫</span>
+                      <span>שים לב המחסן סגור בימי שישי ושבת לכן לא ניתן להשאיל ציוד.</span>
+                    </div>
+                  ) : soundLeadTooShort ? (
                     <div style={{background:"rgba(231,76,60,0.12)",border:"2px solid rgba(231,76,60,0.55)",borderRadius:"var(--r-sm)",padding:"14px 18px",marginBottom:16,fontSize:13,fontWeight:700,color:"var(--red)",display:"flex",alignItems:"center",gap:8}}>
                       <span style={{fontSize:18}}>⚠️</span>
                       <span>שים לב יש לשריין את הציוד כ-3 שעות לפני תחילת הסשן.</span>
@@ -4058,7 +4120,7 @@ ${inventory}
         <div style={{padding:"16px 24px",borderTop:"1px solid var(--border)",textAlign:"center"}}>
           <button
             type="button"
-            onClick={() => { supabase.auth.signOut().catch(()=>{}); setLoggedInStudent(null); setAuthView("login"); setLoginEmail(""); setLoginPassword(""); sessionStorage.removeItem("public_view"); sessionStorage.removeItem("public_student_roles"); sessionStorage.removeItem("active_role"); }}
+            onClick={() => { supabase.auth.signOut().catch(()=>{}); setLoggedInStudent(null); setAuthView("login"); setLoginEmail(""); setLoginPassword(""); sessionStorage.removeItem("public_view"); sessionStorage.removeItem("public_student_roles"); sessionStorage.removeItem("active_role"); clearFormDraft(); }}
             style={{background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.4)",color:"#e74c3c",fontSize:13,cursor:"pointer",padding:"8px 20px",borderRadius:8,transition:"all 0.15s",fontWeight:600}}
             onMouseEnter={e=>{e.currentTarget.style.background="rgba(231,76,60,0.22)";e.currentTarget.style.borderColor="#e74c3c";}}
             onMouseLeave={e=>{e.currentTarget.style.background="rgba(231,76,60,0.12)";e.currentTarget.style.borderColor="rgba(231,76,60,0.4)";}}
