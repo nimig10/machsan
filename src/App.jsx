@@ -820,6 +820,13 @@ const css = `
   .stat-label { font-size:12px; color:var(--text2); margin-bottom:8px; font-weight:500; }
   .stat-value { font-size:32px; font-weight:900; line-height:1; }
   .stat-icon { position:absolute; left:16px; top:16px; font-size:24px; opacity:0.25; }
+  /* Global button reset — kill the white focus ring after click and the
+     gray Android tap-flash. We don't rely on default focus rings since
+     all interactive elements in this app have explicit hover/active
+     visual states. */
+  button { -webkit-tap-highlight-color: transparent; }
+  button:focus { outline: none; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:var(--r-sm); font-family:'Heebo',sans-serif; font-size:13px; font-weight:600; cursor:pointer; border:none; transition:all 0.15s; white-space:nowrap; }
   .btn-primary { background:var(--accent); color:#0a0c10; }
   .btn-primary:hover { background:var(--accent2); transform:translateY(-1px); }
