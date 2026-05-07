@@ -874,7 +874,8 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:5000,display:"flex",alignItems:"stretch",justifyContent:"center",padding:"0",direction:"rtl","--accent":accentColor||"#f5a623","--accent2":accentColor||"#f5a623","--accent-glow":`${accentColor||"#f5a623"}2e`}}>
       <div
-        style={{width:"100%",maxWidth:1100,background:"var(--surface)",display:"flex",flexDirection:"column",height:"100%",margin:"0 auto",borderLeft:"1px solid var(--border)",borderRight:"1px solid var(--border)"}}
+        className="info-panel-box"
+        style={{width:"100%",maxWidth:1100,background:"var(--surface)",display:"flex",flexDirection:"column",height:"100%",margin:"0 auto",borderLeft:"1px solid var(--border)",borderRight:"1px solid var(--border)",overflowX:"hidden"}}
         onTouchStart={e=>{ swipeRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }}
         onTouchEnd={e=>{
           const dx = e.changedTouches[0].clientX - swipeRef.current.x;
@@ -888,25 +889,25 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
       >
 
         {/* Header */}
-        <div style={{padding:"18px 28px",background:"var(--surface2)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
-          <div style={{flex:1}}>
-            <div style={{fontWeight:900,fontSize:20,color:"var(--accent)",display:"flex",alignItems:"center",gap:6}}><Info size={20} strokeWidth={1.75} color="var(--accent)" /> מידע כללי — מחסן ציוד קמרה אובסקורה וסאונד</div>
+        <div className="info-panel-header" style={{padding:"clamp(12px,3vw,18px) clamp(14px,4vw,28px)",background:"var(--surface2)",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div className="info-panel-title" style={{fontWeight:900,fontSize:"clamp(14px,4vw,20px)",color:"var(--accent)",display:"flex",alignItems:"center",gap:6,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><Info size={18} strokeWidth={1.75} color="var(--accent)" style={{flexShrink:0}} /> <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>מידע כללי — מחסן ציוד קמרה אובסקורה וסאונד</span></div>
           </div>
-          <button className="btn btn-secondary btn-sm" onClick={onClose} style={{fontSize:14,padding:"8px 18px",display:"inline-flex",alignItems:"center",gap:4}}><X size={16} strokeWidth={1.75} color="var(--text3)" /> סגור</button>
+          <button className="btn btn-secondary btn-sm" onClick={onClose} style={{fontSize:13,padding:"6px 12px",display:"inline-flex",alignItems:"center",gap:4,flexShrink:0,whiteSpace:"nowrap"}}><X size={16} strokeWidth={1.75} color="var(--text3)" /> סגור</button>
         </div>
 
         {/* Tabs */}
-        <div style={{display:"flex",gap:0,borderBottom:"2px solid var(--border)",flexShrink:0}}>
+        <div className="info-panel-tabs" style={{display:"flex",gap:0,borderBottom:"2px solid var(--border)",flexShrink:0}}>
           {tabs.map(t=>(
             <button key={t.id} type="button" onClick={()=>{setTab(t.id);setSelectedEq(null);}}
-              style={{flex:1,padding:"14px 8px",border:"none",borderBottom:`3px solid ${tab===t.id?"var(--accent)":"transparent"}`,background:tab===t.id?"rgba(245,166,35,0.05)":"transparent",color:tab===t.id?"var(--accent)":"var(--text2)",fontWeight:tab===t.id?800:500,fontSize:15,cursor:"pointer",transition:"all 0.15s"}}>
+              style={{flex:1,minWidth:0,padding:"12px 4px",border:"none",borderBottom:`3px solid ${tab===t.id?"var(--accent)":"transparent"}`,background:tab===t.id?"rgba(245,166,35,0.05)":"transparent",color:tab===t.id?"var(--accent)":"var(--text2)",fontWeight:tab===t.id?800:500,fontSize:"clamp(11px,2.8vw,15px)",cursor:"pointer",transition:"all 0.15s",overflow:"hidden",textOverflow:"ellipsis"}}>
               {t.label}
             </button>
           ))}
         </div>
 
         {/* Content */}
-        <div style={{flex:1,minHeight:0,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:"24px 28px"}}>
+        <div className="info-panel-content" style={{flex:1,minHeight:0,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",padding:"clamp(14px,4vw,24px) clamp(12px,4vw,28px)"}}>
 
           {/* ── EQUIPMENT TAB ── */}
           {tab==="equipment" && !selectedEq && (
@@ -1141,16 +1142,16 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
 
           {/* ── CONTACT TAB ── */}
           {tab==="contact" && (
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:14,maxWidth:900,margin:"0 auto"}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(260px,100%),1fr))",gap:12,maxWidth:900,margin:"0 auto"}}>
               {(teamMembers||[]).length===0
                 ? <div style={{textAlign:"center",color:"var(--text3)",fontSize:14,padding:"40px 0",gridColumn:"1/-1"}}>אין אנשי צוות מוגדרים</div>
                 : (teamMembers||[]).map(m=>(
-                  <div key={m.id} style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"18px 20px",display:"flex",gap:14,alignItems:"flex-start"}}>
-                    <div style={{width:48,height:48,borderRadius:"50%",background:"linear-gradient(135deg,var(--accent),rgba(245,166,35,0.5))",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:900,flexShrink:0,color:"#000"}}>{m.name?.[0]||"?"}</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontWeight:800,fontSize:15,marginBottom:4}}>{m.name}</div>
-                      {m.phone&&<div style={{fontSize:13,color:"var(--text2)",marginBottom:2}}>📞 {m.phone}</div>}
-                      <div style={{fontSize:12,color:"var(--text3)",wordBreak:"break-all"}}>✉️ {m.email}</div>
+                  <div key={m.id} style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"14px 16px",display:"flex",gap:12,alignItems:"flex-start",minWidth:0,maxWidth:"100%",overflow:"hidden"}}>
+                    <div style={{width:44,height:44,borderRadius:"50%",background:"linear-gradient(135deg,var(--accent),rgba(245,166,35,0.5))",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:900,flexShrink:0,color:"#000"}}>{m.name?.[0]||"?"}</div>
+                    <div style={{flex:1,minWidth:0,overflow:"hidden"}}>
+                      <div style={{fontWeight:800,fontSize:15,marginBottom:4,overflowWrap:"anywhere"}}>{m.name}</div>
+                      {m.phone&&<div style={{fontSize:13,color:"var(--text2)",marginBottom:2,overflowWrap:"anywhere"}}>📞 {m.phone}</div>}
+                      <div style={{fontSize:12,color:"var(--text3)",overflowWrap:"anywhere",wordBreak:"break-word"}}>✉️ {m.email}</div>
                     </div>
                   </div>
                 ))
