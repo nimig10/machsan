@@ -242,37 +242,65 @@ function handleLegacy(req, res, callerRole) {
       });
       if (!result.ok) return res.status(result.status).json({ error: "Failed to update" });
 
-      // Sync changes (email / password / name) to Supabase auth + public.users.
-      // Email sync is critical: without it, an admin's email change leaves the
-      // auth account pinned to the old address → user cannot log in.
-      if (email) {
-        const normEmail = normalizeEmail(email);
-        let authUser = await findAuthUserByEmail(normEmail);
-        if (!authUser && prevEmail && prevEmail !== normEmail) {
+      // ── Mirror to Supabase auth + public.users ──
+      // Bug fix: previously this whole block was gated on `if (email)`, so
+      // updating only permissions (or only role) would NEVER reach public.users
+      // — and App.jsx reads permissions from public.users on every login.
+      // Result: the admin's permission edits silently vanished from the user's
+      // perspective until an email change forced a sync. Now we resolve the
+      // auth user by email regardless (using the new email if provided, else
+      // the current one we just read into prevEmail above), and always patch
+      // the public.users row with whatever subset of fields changed.
+      let syncEmail = email ? normalizeEmail(email) : prevEmail;
+      if (!syncEmail) {
+        const cur = await sbFetch(`staff_members?id=eq.${id}&select=email`);
+        if (Array.isArray(cur.data) && cur.data[0]?.email) {
+          syncEmail = normalizeEmail(cur.data[0].email);
+        }
+      }
+      if (syncEmail) {
+        let authUser = await findAuthUserByEmail(syncEmail);
+        if (!authUser && prevEmail && prevEmail !== syncEmail) {
           authUser = await findAuthUserByEmail(prevEmail);
         }
         if (authUser) {
-          const authUpdate = {};
-          if (password) authUpdate.password = password;
-          if (normEmail && normalizeEmail(authUser.email || "") !== normEmail) {
-            authUpdate.email = normEmail;
-            authUpdate.email_confirm = true;
+          // Auth-side updates only when email/password/full_name actually change.
+          if (email || password || full_name) {
+            const authUpdate = {};
+            if (password) authUpdate.password = password;
+            if (email && normalizeEmail(authUser.email || "") !== syncEmail) {
+              authUpdate.email = syncEmail;
+              authUpdate.email_confirm = true;
+            }
+            if (full_name) authUpdate.user_metadata = { ...(authUser.user_metadata || {}), full_name: full_name.trim() };
+            if (Object.keys(authUpdate).length) {
+              await fetch(`${SB_URL}/auth/v1/admin/users/${authUser.id}`, {
+                method: "PUT", headers,
+                body: JSON.stringify(authUpdate),
+              }).catch(() => {});
+            }
           }
-          if (full_name) authUpdate.user_metadata = { ...(authUser.user_metadata || {}), full_name: full_name.trim() };
-          if (Object.keys(authUpdate).length) {
-            await fetch(`${SB_URL}/auth/v1/admin/users/${authUser.id}`, {
-              method: "PUT", headers,
-              body: JSON.stringify(authUpdate),
+          // Public.users mirror — sync everything that might have changed.
+          // role drives is_admin/is_warehouse: admin sees both views by default,
+          // staff sees only what permissions.views allows but must have at
+          // least is_warehouse=true to clear the App.jsx auth gate.
+          const publicUpdate = { updated_at: new Date().toISOString() };
+          if (email)              publicUpdate.email        = syncEmail;
+          if (full_name)          publicUpdate.full_name    = full_name.trim();
+          if (role !== undefined) {
+            publicUpdate.is_admin     = role === "admin";
+            publicUpdate.is_warehouse = role !== "admin"; // staff role gates on permissions.views
+          }
+          if (permissions !== undefined) {
+            publicUpdate.permissions = { ...DEFAULT_PERMISSIONS, ...permissions };
+          }
+          // Only patch if there's something beyond the timestamp.
+          if (Object.keys(publicUpdate).length > 1) {
+            await sbFetch(`users?id=eq.${authUser.id}`, {
+              method: "PATCH",
+              body: JSON.stringify(publicUpdate),
             }).catch(() => {});
           }
-          // Mirror onto public.users (keyed by auth user id)
-          const publicUpdate = { updated_at: new Date().toISOString() };
-          if (normEmail) publicUpdate.email = normEmail;
-          if (full_name) publicUpdate.full_name = full_name.trim();
-          await sbFetch(`users?id=eq.${authUser.id}`, {
-            method: "PATCH",
-            body: JSON.stringify(publicUpdate),
-          }).catch(() => {});
         }
       }
 
