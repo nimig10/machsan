@@ -1151,13 +1151,25 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
             onClick={() => setActiveVideo(null)}
             aria-label="סגור"
             style={{
-              position: "absolute", top: 14, left: 14, zIndex: 6010,
-              background: "rgba(0,0,0,0.65)", color: "#fff", border: "1px solid rgba(255,255,255,0.3)",
-              borderRadius: 999, width: 42, height: 42, display: "flex", alignItems: "center",
-              justifyContent: "center", cursor: "pointer", fontSize: 20, lineHeight: 1, fontWeight: 700,
+              position: "fixed", top: 16, left: 16, zIndex: 6010,
+              background: accentColor || "#f5a623",
+              color: "#0a0c10",
+              border: "2px solid #fff",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.6)",
+              borderRadius: 999,
+              padding: "10px 18px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              cursor: "pointer",
+              fontSize: 15,
+              fontWeight: 900,
+              lineHeight: 1,
+              fontFamily: "inherit",
             }}
           >
-            <X size={20} strokeWidth={2} color="#fff" />
+            <X size={20} strokeWidth={2.5} color="#0a0c10" />
+            <span>סגור</span>
           </button>
           {(() => {
             const isVertical = activeVideo.orientation === "vertical";
