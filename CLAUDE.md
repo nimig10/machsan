@@ -23,6 +23,28 @@
 - יש גם פרויקט Vercel בשם "app" — מיותר, להתעלם/למחוק
 - Supabase project: `wxkyqgwwraojnbmyyfco` (name: "MACHSAN CAMERA")
 
+## 🔀 שני מסדי נתונים — prod ו-dev (חובה לכבד)
+
+**תמיד יש שני DBs נפרדים. לעולם לא לערבב ביניהם.**
+
+| סביבה | Supabase project_ref | Dashboard | מתי בשימוש |
+|-------|----------------------|-----------|-------------|
+| **Production** | `wxkyqgwwraojnbmyyfco` (name: `MACHSAN CAMERA`, branch `main`) | https://supabase.com/dashboard/project/wxkyqgwwraojnbmyyfco | רק כשהקוד ב-`main` רץ ב-`app.camera.org.il` |
+| **Development** | `mhvujejdlmtowypjdhjd` (branch name: `develop`, parent = prod) | https://supabase.com/dashboard/project/mhvujejdlmtowypjdhjd | localhost (`.env.local`) + Vercel Preview של feature branches |
+
+**זרימת עבודה קבועה (חובה — תמיד בודקים בלוקאל לפני פרוד):**
+1. **שלב 1 — Localhost על dev DB**: עבודה לוקאלית על `http://localhost:5174` (port נעול ב-`vite.config.js`). `.env.local` מצביע על **dev** (`mhvujejdlmtowypjdhjd`). כל מיגרציה / כתיבה / SQL-טסט הולך לשם. לא מעלים שום שינוי לפני שעבר בדיקה כאן.
+2. **שלב 2 — Vercel Preview על dev DB**: push ל-feature branch → Preview משתמש באותו dev DB. שלב נוסף לבדיקה (במיוחד ל-PWA / mobile).
+3. **שלב 3 — Production**: רק אחרי merge ל-`main` → הקוד ב-prod רץ מול **prod DB**. מיגרציות ל-prod נעשות אך ורק כשמבצעים merge מסודר או דרך `apply_migration` MCP על הפרויקט הראשי במודע.
+
+**אסור לדלג על שלב 1.** כל פיצ'ר חדש או תיקון, ולו הקטן ביותר, נבדק בלוקאל על port 5174 + dev DB לפני שמעלים אותו.
+
+**כללים:**
+- כברירת מחדל, כל `execute_sql`/`apply_migration` דרך MCP יעבוד על **dev** (`mhvujejdlmtowypjdhjd`) — אלא אם המשתמש ביקש במפורש לכתוב לפרוד.
+- כשמשתמשים ב-Supabase MCP, חובה לוודא שה-`project_id` שמועבר תואם לסביבה הנכונה.
+- אסור לרוץ מיגרציה הרסנית (`DROP`, `DELETE` רחב, שינוי schema) מול prod בלי אישור מפורש של המשתמש לסשן הנוכחי.
+- אם רואים שגיאה / נתונים חסרים — קודם לוודא לאיזה DB מחוברים, ולא להניח שהבעיה בקוד.
+
 ## 🗄️ מבנה נתונים (Supabase) — Tables-only (post Stage 13)
 
 **אין יותר `public.store`** — הטבלה והכל סביבה (`store_snapshots`, `store_shrink_guard`, `kits_content_guard`, `is_protected_store_key`, `prune_store_snapshots`, DDL guard event triggers) הוסרו במיגרציה `20260430220000_drop_store_table_and_guards`. לא נשארו blobs בDB.

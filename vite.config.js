@@ -5,12 +5,16 @@ import devApi from './scripts/vite-api-plugin.mjs'
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: {
+    port: 5174,
+    strictPort: true,
+  },
   // Certificate generation uses dynamic imports (see LessonsPage.jsx).
   // Force Vite to pre-bundle these CommonJS-shaped deps so the first
   // visit to the certificates flow doesn't fail with
   // "Failed to resolve import 'docxtemplater'" etc.
   optimizeDeps: {
-    include: ['pizzip', 'docxtemplater', 'jszip', 'file-saver'],
+    include: ['pizzip', 'docxtemplater', 'jszip', 'file-saver', 'lottie-react'],
   },
   plugins: [
     react(),

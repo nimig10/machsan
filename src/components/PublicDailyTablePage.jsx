@@ -1,5 +1,5 @@
 // PublicDailyTablePage.jsx — public display of today's combined schedule as a table
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { listLessons } from "../utils/lessonsApi.js";
 import { listStudios } from "../utils/studiosApi.js";
 import { listStudioBookings } from "../utils/studioBookingsApi.js";
@@ -36,10 +36,31 @@ function injectHeeboFont() {
 }
 
 export function PublicDailyTablePage() {
-  const [lessons,  setLessons]  = useState([]);
-  const [bookings, setBookings] = useState([]);
-  const [studios,  setStudios]  = useState([]);
-  const [settings, setSettings] = useState({});
+  const [lessons,       setLessons]      = useState([]);
+  const [bookings,      setBookings]     = useState([]);
+  const [studios,       setStudios]      = useState([]);
+  const [settings,      setSettings]     = useState({});
+  const lottieRef = useRef(null);
+
+  useEffect(() => {
+    let anim;
+    Promise.all([
+      import("lottie-web"),
+      fetch("/D1.json").then(r => r.json()),
+    ]).then(([mod, data]) => {
+      const lottie = mod.default ?? mod;
+      if (!lottieRef.current) return;
+      lottieRef.current.innerHTML = "";
+      anim = lottie.loadAnimation({
+        container: lottieRef.current,
+        renderer: "svg",
+        loop: true,
+        autoplay: true,
+        animationData: data,
+      });
+    }).catch(() => {});
+    return () => { anim?.destroy(); if (lottieRef.current) lottieRef.current.innerHTML = ""; };
+  }, []);
   const today = todayStr();
 
   const loadData = async () => {
@@ -132,6 +153,7 @@ export function PublicDailyTablePage() {
 
   return (
     <div style={{minHeight:"100vh",background:"#0a0a0a",color:"#f5f5f5",direction:"rtl",fontFamily:"'Heebo', system-ui, -apple-system, sans-serif",padding:"1.1vh 1.7vw"}}>
+      <div ref={lottieRef} style={{position:"fixed",bottom:0,left:0,width:"18vw",pointerEvents:"none",zIndex:10}} />
       <div style={{maxWidth:"90vw",margin:"0 auto"}}>
         {/* Header */}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"0.7vh",marginBottom:"1.3vh",paddingBottom:"0.9vh",borderBottom:`2px solid ${accent}`}}>
