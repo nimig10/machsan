@@ -112,6 +112,13 @@ export default async function handler(req, res) {
 
   // LIST-MINE — student fetches their own reports for active reservations.
   // Auth required: the caller must own (by email) every reservation_id passed in.
+  //
+  // NOTE: we deliberately do NOT put the user's email into the PostgREST URL
+  // query (e.g. `email=ilike.foo`). Some proxies decode "%2B" back to "+" and
+  // then form-decode "+" to space, which breaks ownership filtering for emails
+  // like nimig10+s50@gmail.com — the same class of bug that motivated the
+  // 20260504160000_is_known_lecturer_email_rpc.sql migration. Instead we fetch
+  // reservations by id and filter ownership in JS.
   if (action === "list-mine") {
     const user = await requireUser(req, res);
     if (!user) return;
@@ -121,9 +128,13 @@ export default async function handler(req, res) {
     }
     const ids = reservation_ids.map(id => encodeURIComponent(id)).join(",");
     const owned = await sbFetch(
-      `reservations_new?id=in.(${ids})&email=ilike.${encodeURIComponent(user.email)}&select=id`
+      `reservations_new?id=in.(${ids})&select=id,email`
     );
-    const ownedIds = (owned.data || []).map(r => r.id);
+    if (!owned.ok) return res.status(500).json([]);
+    const userEmailLc = String(user.email || "").toLowerCase();
+    const ownedIds = (owned.data || [])
+      .filter(r => String(r.email || "").toLowerCase() === userEmailLc)
+      .map(r => r.id);
     if (ownedIds.length === 0) return res.status(200).json([]);
     const ownedEnc = ownedIds.map(id => encodeURIComponent(id)).join(",");
     const result = await sbFetch(
