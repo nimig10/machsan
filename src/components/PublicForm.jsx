@@ -695,6 +695,65 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
   );
 }
 
+// ─── CERTIFICATIONS STATUS PANEL ─────────────────────────────────────────────
+// Display-only modal listing certifications + pass/fail status for the logged-in
+// student. Same component is used for both equipment certs (filtered by
+// category !== "studio") and studio certs (filtered by category === "studio"
+// AND only certs attached to studios visible to the student's track).
+function CertificationsStatusPanel({ open, onClose, title, certs }) {
+  if (!open) return null;
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ maxWidth: 480 }}>
+        <div className="modal-header">
+          <span className="modal-title" style={{ display:"inline-flex", alignItems:"center", gap:6 }}>
+            <Shield size={16} strokeWidth={1.75}/> {title}
+          </span>
+          <button className="btn btn-secondary btn-sm btn-icon" onClick={onClose}>
+            <X size={16} strokeWidth={1.75} color="var(--text3)"/>
+          </button>
+        </div>
+        <div className="modal-body" style={{ direction:"rtl", maxHeight:"60vh", overflowY:"auto" }}>
+          {certs.length === 0 ? (
+            <div style={{ fontSize:13, color:"var(--text3)", textAlign:"center", padding:"16px 0" }}>
+              אין הסמכות רלוונטיות
+            </div>
+          ) : (
+            <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+              {certs.map(c => {
+                const passed = c.status === "עבר";
+                const isNight = c.id === "cert_night_studio";
+                return (
+                  <div key={c.id} style={{
+                    display:"flex", alignItems:"center", justifyContent:"space-between",
+                    padding:"8px 12px", borderRadius:"var(--r-sm)",
+                    background:"var(--surface2)", border:"1px solid var(--border)",
+                    gap:8,
+                  }}>
+                    <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:13, fontWeight:600, color:"var(--text)" }}>
+                      {isNight && <Moon size={14} strokeWidth={1.75} color="#2196f3"/>}
+                      {c.name}
+                    </span>
+                    <span style={{
+                      display:"inline-flex", alignItems:"center", gap:4,
+                      padding:"3px 10px", borderRadius:12, fontSize:11, fontWeight:800, flexShrink:0,
+                      background: passed ? "rgba(22,163,74,0.16)" : "rgba(107,114,128,0.18)",
+                      color: passed ? "#16a34a" : "var(--text3)",
+                    }}>
+                      {passed ? <CheckCircle size={12} strokeWidth={2}/> : <XCircle size={12} strokeWidth={2}/>}
+                      {c.status || "לא עבר"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── STEP 3 EQUIPMENT SELECTOR ───────────────────────────────────────────────
 function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equipment, setItems, getItem, setQty, canBorrowEq=()=>true, crewIsCertifiedForEq=()=>true, studentRecord, certificationTypes=[], categoryLoanTypes={} }) {
   const [activeKit, setActiveKit] = useState(null);
@@ -702,6 +761,21 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
   const kitDropRef = useRef(null);
   const [selectedCats, setSelectedCats] = useState([]); // multi-select, empty = all
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
+  const [equipCertsOpen, setEquipCertsOpen] = useState(false);
+
+  // Build list of equipment certifications + the student's pass/fail status
+  // for the modal. Excludes studio certs (`category === "studio"`) AND the
+  // global night-studio cert which sometimes carries a non-"studio" category
+  // in the data — both live in the studios page.
+  const equipCertsList = useMemo(() => (
+    (certificationTypes || [])
+      .filter(t => (t.category || "") !== "studio" && t.id !== "cert_night_studio")
+      .map(t => ({
+        id: t.id,
+        name: t.name,
+        status: (studentRecord?.certs || {})[t.id] || "לא עבר",
+      }))
+  ), [certificationTypes, studentRecord]);
 
   useEffect(() => {
     if (!kitDropOpen) return;
@@ -866,6 +940,18 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
         </div>
       )}
 
+      {/* ── My equipment-certifications status (display-only) ── */}
+      <div style={{marginBottom:16}}>
+        <button type="button" onClick={()=>setEquipCertsOpen(true)} style={{
+          width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+          padding:"10px 14px", borderRadius:"var(--r-sm)", border:"1px solid var(--border)",
+          background:"var(--surface2)", color:"var(--text)", fontWeight:700, fontSize:13,
+          cursor:"pointer",
+        }}>
+          <Shield size={14} strokeWidth={1.75} color="var(--accent)"/> סטטוס הסמכות בציוד שלי
+        </button>
+      </div>
+
       {/* ── Equipment list ── */}
       {filteredCategories.map(c=>{
         let catEq = visibleAvailEq.filter(e=>e.category===c);
@@ -924,6 +1010,13 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
           </div>
         );
       })}
+
+      <CertificationsStatusPanel
+        open={equipCertsOpen}
+        onClose={()=>setEquipCertsOpen(false)}
+        title="סטטוס הסמכות בציוד שלי"
+        certs={equipCertsList}
+      />
     </>
   );
 }
@@ -4798,6 +4891,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
   const [showAiAssistant, setShowAiAssistant] = useState(false);
   const [smartBookingPrompt, setSmartBookingPrompt] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [studioCertsOpen, setStudioCertsOpen] = useState(false);
 
   const DAY_HOURS = (() => { const h = []; for (let hr = 9; hr <= 21; hr++) for (let m = 0; m < 60; m += 15) { if (hr === 21 && m > 30) break; h.push(`${String(hr).padStart(2,"0")}:${String(m).padStart(2,"0")}`); } return h; })();
   const DAY_BOOKING_HOURS = DAY_HOURS.filter(t => t < "21:30");
@@ -4857,6 +4951,21 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     if (Array.isArray(studio?.studioCertIds)) return studio.studioCertIds.filter(Boolean);
     return studio?.studioCertId ? [studio.studioCertId] : [];
   };
+
+  // Studio certs visible to this student: certs attached to studios they can
+  // see (track-filtered upstream into the `studios` prop) PLUS the global
+  // night cert (`cert_night_studio`), which gates after-hours bookings across
+  // all studios and isn't on any single studio's studioCertId. We filter by
+  // id-membership only (not by `category`) because in some data the night
+  // cert isn't marked with category="studio". Display-only.
+  const studioCertsList = (() => {
+    const relevantCertIds = new Set();
+    (studios || []).forEach(studio => getStudioCertIds(studio).forEach(id => relevantCertIds.add(id)));
+    relevantCertIds.add("cert_night_studio");
+    return (certifications?.types || [])
+      .filter(t => relevantCertIds.has(t.id))
+      .map(t => ({ id: t.id, name: t.name, status: (studentRecord?.certs || {})[t.id] || "לא עבר" }));
+  })();
   const isStudioDisabled = (studioId) => {
     const studio = studios.find(s => sameStudioId(s.id, studioId));
     return Boolean(studio?.isDisabled);
@@ -5625,7 +5734,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
               <div style={{fontSize:11,color:"var(--text3)"}}>רק שעות עתידיות שעדיין לא הסתיימו נספרות בבנק.</div>
             </div>
           </div>
-          <div style={{display:"flex",justifyContent:"center",marginTop:6}}>
+          <div style={{display:"flex",justifyContent:"center",marginTop:6,gap:8,flexWrap:"wrap"}}>
             <button
               type="button"
               className="btn btn-primary"
@@ -5633,6 +5742,13 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
               style={{display:"inline-flex",alignItems:"center",gap:6}}
             >
               ✨ קביעת חדר חכמה
+            </button>
+            <button
+              type="button"
+              onClick={()=>setStudioCertsOpen(true)}
+              style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:"var(--r-sm)",border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",fontWeight:700,fontSize:13,cursor:"pointer"}}
+            >
+              <Shield size={14} strokeWidth={1.75} color="var(--accent)"/> סטטוס הסמכות החדרים שלי
             </button>
           </div>
         </div>
@@ -5860,6 +5976,13 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
           </div>
         </div>
       )}
+
+      <CertificationsStatusPanel
+        open={studioCertsOpen}
+        onClose={()=>setStudioCertsOpen(false)}
+        title="סטטוס הסמכות החדרים שלי"
+        certs={studioCertsList}
+      />
     </div>
   );
 }
