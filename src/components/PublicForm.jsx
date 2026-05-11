@@ -1,5 +1,5 @@
 // PublicForm.jsx — public loan request form
-import { AlertTriangle, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mail, Mic, Minus, Moon, Package, Pencil, Phone, Save, Search, Settings, Shield, ShieldCheck, User, X, XCircle } from "lucide-react";
+import { AlertTriangle, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mail, Mic, Minus, Moon, Package, Pencil, Phone, Save, School, Search, Settings, Shield, ShieldCheck, User, X, XCircle } from "lucide-react";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR } from "../utils.js";
 import { supabase } from "../supabaseClient.js";
@@ -4402,8 +4402,8 @@ ${inventory}
                               </div>
                             )}
                             {s.studioName && (
-                              <div style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700,color:"#9b59b6",background:"rgba(155,89,182,0.14)",borderRadius:20,padding:"2px 10px",border:"1px solid rgba(155,89,182,0.35)"}}>
-                                <BookOpen size={14} strokeWidth={1.75} color="#9b59b6" /> {s.studioName}
+                              <div style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700,color:"var(--text2)",background:"var(--surface3)",borderRadius:20,padding:"2px 10px",border:"1px solid var(--border)"}}>
+                                <School size={14} strokeWidth={1.75} color="var(--accent)" /> כיתת לימוד: {s.studioName}
                               </div>
                             )}
                           </div>
