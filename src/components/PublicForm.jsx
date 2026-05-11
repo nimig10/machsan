@@ -4389,23 +4389,20 @@ ${inventory}
                         )}
                         {/* שם מרצה — גדול וברור */}
                         {s.instructorName && (
-                          <div style={{fontWeight:700,fontSize:15,color:"var(--text2)",marginBottom:s.track||s.topic?4:0}}>
+                          <div style={{fontWeight:700,fontSize:15,color:"var(--text2)",marginBottom:s.studioName?2:s.track||s.topic?4:0}}>
                             👤 {s.instructorName}
                           </div>
                         )}
-                        {/* מסלול + שיוך כיתה */}
-                        {(s.track || s.studioName) && (
-                          <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"center",marginBottom:s.topic?4:0}}>
-                            {s.track && (
-                              <div style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700,color:"var(--accent)",background:"var(--accent-glow)",borderRadius:20,padding:"2px 10px"}}>
-                                <GraduationCap size={14} strokeWidth={1.75} color="var(--accent)" /> {s.track}
-                              </div>
-                            )}
-                            {s.studioName && (
-                              <div style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700,color:"var(--text2)",background:"var(--surface3)",borderRadius:20,padding:"2px 10px",border:"1px solid var(--border)"}}>
-                                <School size={14} strokeWidth={1.75} color="var(--accent)" /> כיתת לימוד: {s.studioName}
-                              </div>
-                            )}
+                        {/* שיוך כיתה — טקסט פשוט מתחת למרצה */}
+                        {s.studioName && (
+                          <div style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:15,fontWeight:700,color:"var(--text2)",marginBottom:s.track||s.topic?4:0}}>
+                            <School size={15} strokeWidth={1.75} color="var(--accent)" /> כיתת לימוד: {s.studioName}
+                          </div>
+                        )}
+                        {/* מסלול */}
+                        {s.track && (
+                          <div style={{display:"inline-block",fontSize:12,fontWeight:700,color:"var(--accent)",background:"var(--accent-glow)",borderRadius:20,padding:"2px 10px",marginBottom:s.topic?4:0}}>
+                            <GraduationCap size={14} strokeWidth={1.75} color="var(--accent)" /> {s.track}
                           </div>
                         )}
                         {/* נושא */}
