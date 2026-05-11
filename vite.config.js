@@ -8,6 +8,7 @@ export default defineConfig({
   server: {
     port: 5174,
     strictPort: true,
+    host: true,
   },
   // Certificate generation uses dynamic imports (see LessonsPage.jsx).
   // Force Vite to pre-bundle these CommonJS-shaped deps so the first

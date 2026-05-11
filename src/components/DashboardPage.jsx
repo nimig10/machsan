@@ -67,10 +67,23 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
   const HE_D = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
 
   const days = [];
+  const outOfMonthDays = [];
   const startOffset = new Date(yr,mo,1).getDay();
-  for(let i=0;i<startOffset;i++) days.push(null);
-  for(let d=1;d<=new Date(yr,mo+1,0).getDate();d++) days.push(new Date(yr,mo,d));
-  while(days.length<42) days.push(null);
+  const prevMonthLastDay = new Date(yr,mo,0).getDate();
+  for(let i=0;i<startOffset;i++) {
+    days.push(null);
+    outOfMonthDays.push(new Date(yr,mo-1,prevMonthLastDay-(startOffset-1-i)));
+  }
+  const lastDay = new Date(yr,mo+1,0).getDate();
+  for(let d=1;d<=lastDay;d++) {
+    days.push(new Date(yr,mo,d));
+    outOfMonthDays.push(null);
+  }
+  let nextDay = 1;
+  while(days.length<42) {
+    days.push(null);
+    outOfMonthDays.push(new Date(yr,mo+1,nextDay++));
+  }
 
   const DASHBOARD_CAL_STATUSES = ["ממתין","מאושר","פעילה","נדחה","באיחור","אישור ראש מחלקה"];
   const CAL_LOAN_TYPES = [
@@ -427,7 +440,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4,direction:"rtl"}}>
             {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,color:"var(--text3)",padding:"4px 0"}}>{d}</div>)}
           </div>
-          <CalendarGrid days={days} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={90} fontSize={10} lessonIds={lessonResIds}/>
+          <CalendarGrid days={days} outOfMonthDays={outOfMonthDays} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={90} fontSize={10} lessonIds={lessonResIds}/>
         </div>
       </div>
 
@@ -443,7 +456,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
             <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4,direction:"rtl"}}>
               {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:13,fontWeight:700,color:"var(--text3)",padding:"6px 0"}}>{d}</div>)}
             </div>
-            <CalendarGrid days={days} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={130} fontSize={13} lessonIds={lessonResIds}/>
+            <CalendarGrid days={days} outOfMonthDays={outOfMonthDays} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={130} fontSize={13} lessonIds={lessonResIds}/>
           </div>
         </div>
       )}

@@ -1,5 +1,5 @@
 // PublicForm.jsx — public loan request form
-import { AlertTriangle, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mic, Minus, Moon, Package, Pencil, Phone, Save, Search, Settings, Shield, User, X, XCircle } from "lucide-react";
+import { AlertTriangle, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mail, Mic, Minus, Moon, Package, Pencil, Phone, Save, Search, Settings, Shield, ShieldCheck, User, X, XCircle } from "lucide-react";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR } from "../utils.js";
 import { supabase } from "../supabaseClient.js";
@@ -201,7 +201,7 @@ function getFutureStudioBookingHours(booking, now = new Date(), nightStartTime =
   return Math.max(0, (interval.end.getTime() - futureStart.getTime()) / 3600000);
 }
 
-function PublicMiniCalendar({ reservations, lessons=[], initialLoanType="הכל", previewStart="", previewEnd="", previewName="", borrowDate="" }) {
+function PublicMiniCalendar({ reservations, lessons=[], initialLoanType="הכל", previewStart="", previewEnd="", previewName="", borrowDate="", onActiveStateChange }) {
   const lessonIdSet = useMemo(() => new Set((lessons||[]).map(l => String(l.id))), [lessons]);
   const [calDate, setCalDate] = useState(() => {
     const d = borrowDate ? parseLocalDate(borrowDate) : null;
@@ -217,6 +217,12 @@ function PublicMiniCalendar({ reservations, lessons=[], initialLoanType="הכל"
       ? new Date(d.getFullYear(), d.getMonth(), 1)
       : prev);
   }, [borrowDate]);
+  // Display-only: report current filter+month to parent so it can mirror them in the "Active equipment lists" panel below.
+  useEffect(() => {
+    if (typeof onActiveStateChange === "function") {
+      onActiveStateChange({ loanTypeF, calDate });
+    }
+  }, [loanTypeF, calDate, onActiveStateChange]);
   const yr = calDate.getFullYear();
   const mo = calDate.getMonth();
   const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
@@ -224,19 +230,39 @@ function PublicMiniCalendar({ reservations, lessons=[], initialLoanType="הכל"
   const todayStr = today();
 
   const days = [];
+  const outOfMonthDays = [];
   const startOffset = new Date(yr,mo,1).getDay();
-  for(let i=0;i<startOffset;i++) days.push(null);
-  for(let d=1;d<=new Date(yr,mo+1,0).getDate();d++) days.push(new Date(yr,mo,d));
-  while(days.length<42) days.push(null);
+  const prevMonthLastDay = new Date(yr,mo,0).getDate();
+  for(let i=0;i<startOffset;i++) {
+    days.push(null);
+    outOfMonthDays.push(new Date(yr,mo-1,prevMonthLastDay-(startOffset-1-i)));
+  }
+  const lastDay = new Date(yr,mo+1,0).getDate();
+  for(let d=1;d<=lastDay;d++) {
+    days.push(new Date(yr,mo,d));
+    outOfMonthDays.push(null);
+  }
+  let nextDay = 1;
+  while(days.length<42) {
+    days.push(null);
+    outOfMonthDays.push(new Date(yr,mo+1,nextDay++));
+  }
 
   const LOAN_FILTERS = [{key:"הכל",label:"הכל",icon:<Package size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"פרטית",label:"פרטית",icon:<User size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"הפקה",label:"הפקה",icon:<Film size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"סאונד",label:"סאונד",icon:<Mic size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"קולנוע יומית",label:"קולנוע יומית",icon:<Camera size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"שיעור",label:"שיעור",icon:<Film size={12} strokeWidth={1.75} color="var(--accent)" />},{key:"צוות",label:"איש צוות",icon:<Briefcase size={12} strokeWidth={1.75} color="var(--accent)" />}];
-  const isPendingFilter = loanTypeF === "ממתין";
+  const isPendingFilter  = loanTypeF === "ממתין";
+  const isDeptHeadFilter = loanTypeF === "אישור ראש מחלקה";
+  const isOverdueFilter  = loanTypeF === "באיחור";
+  const isStatusFilter   = isPendingFilter || isDeptHeadFilter || isOverdueFilter;
   const activeRes = reservations.filter(r=>
     (isPendingFilter
       ? r.status==="ממתין"
+      : isDeptHeadFilter
+      ? r.status==="אישור ראש מחלקה"
+      : isOverdueFilter
+      ? r.status==="באיחור"
       : (r.status==="מאושר"||r.status==="פעילה"||r.status==="באיחור"||r.status==="ממתין")) &&
     r.borrow_date && r.return_date &&
-    (loanTypeF==="הכל" || isPendingFilter || r.loan_type===loanTypeF) &&
+    (loanTypeF==="הכל" || isStatusFilter || r.loan_type===loanTypeF) &&
     // Exclude reservations linked to a deleted lesson (orphaned lesson_id)
     (!r.lesson_id || lessonIdSet.has(String(r.lesson_id)))
   );
@@ -267,15 +293,37 @@ function PublicMiniCalendar({ reservations, lessons=[], initialLoanType="הכל"
           <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setCalDate(new Date(yr,mo+1,1))}>›</button>
         </div>
       </div>
-      {/* Status filter — pending only (own row, above loan-type chips) */}
+      {/* Status filters — pending / dept-head / overdue (display-only). When active, the calendar (and the panel below) shows only that status. */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
         {(() => {
           const isActive = isPendingFilter;
           const [bg, fg] = ["var(--accent-glow)", "var(--accent)"];
           return (
             <button type="button" onClick={()=>setLoanTypeF(isPendingFilter ? "הכל" : "ממתין")}
-              style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${isActive?bg:"var(--border)"}`,background:isActive?bg:"transparent",color:isActive?fg:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>
+              style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${isActive?bg:"var(--border)"}`,background:isActive?bg:"transparent",color:isActive?fg:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>
               <Clock size={12} strokeWidth={1.75} color="var(--accent)" /> השאלות בהמתנה
+            </button>
+          );
+        })()}
+        {(() => {
+          const isActive = isDeptHeadFilter;
+          const accent = "#7c3aed";
+          const bg = isActive ? "rgba(124,58,237,0.18)" : "transparent";
+          return (
+            <button type="button" onClick={()=>setLoanTypeF(isDeptHeadFilter ? "הכל" : "אישור ראש מחלקה")}
+              style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${isActive?accent:"var(--border)"}`,background:bg,color:isActive?accent:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>
+              <ShieldCheck size={12} strokeWidth={1.75} color={accent} /> באישור ראש מחלקה
+            </button>
+          );
+        })()}
+        {(() => {
+          const isActive = isOverdueFilter;
+          const accent = "#dc2626";
+          const bg = isActive ? "rgba(220,38,38,0.16)" : "transparent";
+          return (
+            <button type="button" onClick={()=>setLoanTypeF(isOverdueFilter ? "הכל" : "באיחור")}
+              style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${isActive?accent:"var(--border)"}`,background:bg,color:isActive?accent:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>
+              <AlertTriangle size={12} strokeWidth={1.75} color={accent} /> השאלה באיחור
             </button>
           );
         })()}
@@ -297,9 +345,204 @@ function PublicMiniCalendar({ reservations, lessons=[], initialLoanType="הכל"
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
           {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,color:"var(--text3)",padding:"4px 0"}}>{d}</div>)}
         </div>
-        <CalendarGrid days={days} activeRes={allRes} colorMap={colorMap} todayStr={todayStr} cellHeight={80} fontSize={10} previewId="__preview__"/>
+        <CalendarGrid days={days} outOfMonthDays={outOfMonthDays} activeRes={allRes} colorMap={colorMap} todayStr={todayStr} cellHeight={80} fontSize={10} previewId="__preview__"/>
         {activeRes.length===0&&<div style={{textAlign:"center",fontSize:12,color:"var(--text3)",padding:"8px 0"}}>אין השאלות פעילות</div>}
       </div>
+    </div>
+  );
+}
+
+// ─── ACTIVE EQUIPMENT LISTS PANEL ────────────────────────────────────────────
+// Display-only collapsible panel rendered below the step-2 nav buttons.
+// Mirrors PublicMiniCalendar's current filter+month, then shows the equipment
+// lists of those reservations so students can coordinate directly with whoever
+// is currently holding equipment they need.
+function ActiveListsPanel({ reservations=[], lessons=[], equipment=[], calSnapshot, open, setOpen }) {
+  const lessonIdSet = useMemo(() => new Set((lessons||[]).map(l => String(l.id))), [lessons]);
+  const equipById   = useMemo(() => {
+    const m = new Map();
+    (equipment||[]).forEach(e => m.set(String(e.id), e));
+    return m;
+  }, [equipment]);
+
+  const { loanTypeF = "הכל", calDate = new Date() } = calSnapshot || {};
+  const isPendingFilter  = loanTypeF === "ממתין";
+  const isDeptHeadFilter = loanTypeF === "אישור ראש מחלקה";
+  const isOverdueFilter  = loanTypeF === "באיחור";
+  const isStatusFilter   = isPendingFilter || isDeptHeadFilter || isOverdueFilter;
+
+  const monthStart = new Date(calDate.getFullYear(), calDate.getMonth(), 1);
+  const monthEnd   = new Date(calDate.getFullYear(), calDate.getMonth() + 1, 0);
+  const toISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  const monthStartStr = toISO(monthStart);
+  const monthEndStr   = toISO(monthEnd);
+
+  const panelRes = (reservations||[]).filter(r =>
+    (isPendingFilter
+      ? r.status === "ממתין"
+      : isDeptHeadFilter
+      ? r.status === "אישור ראש מחלקה"
+      : isOverdueFilter
+      ? r.status === "באיחור"
+      : (r.status === "מאושר" || r.status === "פעילה" || r.status === "באיחור" || r.status === "ממתין")) &&
+    r.borrow_date && r.return_date &&
+    (loanTypeF === "הכל" || isStatusFilter || r.loan_type === loanTypeF) &&
+    (!r.lesson_id || lessonIdSet.has(String(r.lesson_id))) &&
+    r.borrow_date <= monthEndStr && r.return_date >= monthStartStr
+  ).sort((a, b) => (a.borrow_date < b.borrow_date ? -1 : a.borrow_date > b.borrow_date ? 1 : 0));
+
+  const count = panelRes.length;
+  const empty = count === 0;
+
+  return (
+    <div style={{marginTop:12}}>
+      <button
+        type="button"
+        onClick={() => !empty && setOpen(v => !v)}
+        disabled={empty}
+        style={{
+          width:"100%",
+          padding:"10px 14px",
+          borderRadius:"var(--r)",
+          border:"1px solid var(--border)",
+          background: empty ? "var(--surface2)" : "var(--surface)",
+          color: empty ? "var(--text3)" : "var(--text2)",
+          cursor: empty ? "not-allowed" : "pointer",
+          opacity: empty ? 0.65 : 1,
+          fontWeight:700,
+          fontSize:13,
+          display:"flex",
+          alignItems:"center",
+          justifyContent:"space-between",
+          gap:8,
+          direction:"rtl",
+        }}
+      >
+        <span style={{display:"inline-flex",alignItems:"center",gap:6}}>
+          <ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" />
+          רשימות ציוד פעילות
+          <span style={{color:"var(--text3)",fontWeight:600}}>{empty ? "(אין לחודש זה)" : `(${count})`}</span>
+        </span>
+        {!empty && <span style={{fontSize:12,color:"var(--text3)"}}>{open ? "▲" : "▼"}</span>}
+      </button>
+
+      {open && !empty && (
+        <div style={{
+          marginTop:8,
+          maxHeight:"60vh",
+          overflowY:"auto",
+          background:"var(--surface2)",
+          borderRadius:"var(--r)",
+          border:"1px solid var(--border)",
+          padding:8,
+          direction:"rtl",
+          display:"flex",
+          flexDirection:"column",
+          gap:8,
+        }}>
+          {panelRes.map(r => (
+            <ActiveLoanCard key={r.id} reservation={r} equipById={equipById} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const STATUS_BADGE_COLORS = {
+  "מאושר":            { bg:"rgba(22,163,74,0.16)",  fg:"#16a34a" },
+  "פעילה":            { bg:"rgba(37,99,235,0.16)",  fg:"#2563eb" },
+  "באיחור":           { bg:"rgba(220,38,38,0.16)",  fg:"#dc2626" },
+  "ממתין":            { bg:"rgba(107,114,128,0.18)",fg:"#6b7280" },
+  "אישור ראש מחלקה":  { bg:"rgba(124,58,237,0.18)",fg:"#7c3aed" },
+};
+
+function ActiveLoanCard({ reservation, equipById }) {
+  const r = reservation;
+  const [open, setOpen] = useState(false);
+  const badge = STATUS_BADGE_COLORS[r.status] || { bg:"var(--surface)", fg:"var(--text3)" };
+  const loanTypeColor = r.loan_type ? getLoanTypeColor(r.loan_type) : ["var(--surface2)","var(--text3)"];
+  const items = Array.isArray(r.items) ? r.items : [];
+  const requesterName = (r.student_name || r.requester_name || r.email || "ללא שם").trim();
+  return (
+    <div style={{
+      background:"var(--surface)",
+      border:"1px solid var(--border)",
+      borderRadius:"var(--r)",
+      fontSize:14,
+      color:"var(--text2)",
+      direction:"rtl",
+    }}>
+      {/* Header — clickable div (not a <button>, which mis-renders nested flex divs in some browsers and clips children) */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setOpen(v => !v)}
+        onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(v => !v); } }}
+        style={{padding:"10px 12px",cursor:"pointer",userSelect:"none"}}
+      >
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8,marginBottom:6}}>
+          <div style={{display:"inline-flex",alignItems:"center",gap:8,minWidth:0,flexWrap:"wrap"}}>
+            <span style={{fontSize:12,color:"var(--text3)"}}>{open ? "▲" : "▼"}</span>
+            <strong style={{fontSize:14,color:"var(--text)"}}>{requesterName}</strong>
+            {r.email && (
+              <a href={`mailto:${r.email}`} style={{display:"inline-flex",alignItems:"center",gap:3,color:"#2563eb",fontSize:11,textDecoration:"none"}} onClick={e => e.stopPropagation()}>
+                <Mail size={12} strokeWidth={1.75} /> {r.email}
+              </a>
+            )}
+          </div>
+          <span style={{padding:"3px 10px",borderRadius:12,background:badge.bg,color:badge.fg,fontWeight:800,fontSize:11}}>{r.status}</span>
+        </div>
+
+        <div style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:8,padding:"6px 9px",background:"var(--surface2)",borderRadius:"var(--r-sm)"}}>
+          <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700,color:"var(--text)"}}>
+            <Calendar size={13} strokeWidth={1.75} color="var(--accent)" />
+            {formatDate(r.borrow_date)}{r.borrow_time ? ` · ${r.borrow_time}` : ""}
+            <span style={{color:"var(--text3)",fontWeight:400,margin:"0 3px"}}>←</span>
+            {formatDate(r.return_date)}{r.return_time ? ` · ${r.return_time}` : ""}
+          </span>
+          {r.loan_type && (
+            <span style={{padding:"2px 8px",borderRadius:10,background:loanTypeColor[0],color:loanTypeColor[1],fontSize:10,fontWeight:800,border:`1px solid ${loanTypeColor[1]}`}}>
+              {r.loan_type}
+            </span>
+          )}
+          <span style={{marginRight:"auto",fontSize:10,color:"var(--text3)",fontWeight:600}}>
+            {items.length > 0 ? `${items.length} פריטים` : "ללא פריטים"}
+          </span>
+        </div>
+      </div>
+
+      {/* Items list — collapsible. Uses border-top to clearly attach to the card, not free-floating rows. */}
+      {open && (
+        <div style={{padding:"4px 12px 12px 12px",borderTop:"1px dashed var(--border)",marginTop:2}}>
+          {items.length > 0 ? (
+            <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:8}}>
+              {items.map((it, idx) => {
+                const eq   = equipById.get(String(it.equipment_id));
+                const name = eq?.name || it.name || `פריט ${it.equipment_id}`;
+                const qty  = Number(it.quantity) || 1;
+                const img  = eq?.image || "";
+                const isImg = img && (img.startsWith("data:") || img.startsWith("http"));
+                return (
+                  <div key={it.id ?? `${it.equipment_id}-${idx}`} style={{display:"flex",alignItems:"center",gap:8,padding:"3px 5px",borderRadius:"var(--r-sm)",border:"1px solid var(--border)",background:"transparent"}}>
+                    <div style={{width:26,height:26,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"var(--surface2)",borderRadius:5,overflow:"hidden"}}>
+                      {isImg
+                        ? <img src={cloudinaryThumb(img)} alt={name} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                        : img
+                          ? <span style={{fontSize:15}}>{img}</span>
+                          : <Package size={15} strokeWidth={1.75} color="var(--text3)"/>}
+                    </div>
+                    <span style={{flex:1,fontSize:12,color:"var(--text)",fontWeight:600}}>{name}</span>
+                    <span style={{fontSize:12,fontWeight:800,color:"var(--accent)",padding:"1px 7px",borderRadius:7,background:"var(--accent-glow)"}}>× {qty}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{fontSize:11,color:"var(--text3)",fontStyle:"italic",padding:"6px 0"}}>אין פריטים ברשימה</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1547,6 +1790,9 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [done, setDone]       = useState(false);
   const [emailError, setEmailError] = useState(false);
   const [submitting, setSub]  = useState(false);
+  // Active equipment lists panel (step 2) — display-only mirror of PublicMiniCalendar's filter+month.
+  const [activeListsOpen, setActiveListsOpen] = useState(false);
+  const [calSnapshot, setCalSnapshot] = useState({ loanTypeF: "הכל", calDate: new Date() });
 
   // Persist the draft on every change while the form is in-progress. We skip
   // when the form has been submitted (done=true) or while submitting so the
@@ -1603,10 +1849,12 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [editingBooking, setEditingBooking] = useState(null); // {id, studioId, date, startTime, endTime, isNight}
   const [editBookingSaving, setEditBookingSaving] = useState(false);
   // Equipment reports state
-  const [reportModal, setReportModal] = useState(null); // {equipmentId, equipmentName, reservationId}
+  const [reportModal, setReportModal] = useState(null); // {equipmentId, equipmentName, reservationId, reportId?, reportStatus?}
   const [reportContent, setReportContent] = useState("");
   const [reportSending, setReportSending] = useState(false);
   const [reportedItems, setReportedItems] = useState(new Set()); // "eqId:resId" keys
+  // myReports: persistent state loaded from DB. Lets the student see + edit their reports across refreshes.
+  const [myReports, setMyReports] = useState(() => new Map()); // key "eqId:resId" → {id, content, status}
   // Student-side item removal from own pending/approved reservations.
   const [removingItemsForResId, setRemovingItemsForResId] = useState(null); // string|null — which card is in remove-mode
   const [confirmRemoveItem, setConfirmRemoveItem] = useState(null); // {reservationId, itemId, itemName, isLastInReservation}
@@ -1800,7 +2048,35 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 
   const loadReservationsData = async () => {
     const res = await (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] }))));
-    if (Array.isArray(res)) setReservations(res);
+    if (Array.isArray(res)) {
+      setReservations(res);
+      loadMyReports(res);
+    }
+  };
+
+  // Pull the student's own equipment reports for their active reservations so the
+  // "ערוך דיווח" button survives page refresh (the prior reportedItems Set only
+  // tracked clicks within the current session).
+  const loadMyReports = async (reservationsList) => {
+    if (!loggedInStudent?.email) { setMyReports(new Map()); return; }
+    const activeIds = (reservationsList || []).filter(r => r.status === "פעילה").map(r => String(r.id));
+    if (activeIds.length === 0) { setMyReports(new Map()); return; }
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+      const res = await fetch("/api/equipment-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "list-mine", reservation_ids: activeIds }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const m = new Map();
+      (Array.isArray(data) ? data : []).forEach(rep => {
+        m.set(`${rep.equipment_id}:${rep.reservation_id}`, { id: rep.id, content: rep.content || "", status: rep.status || "open" });
+      });
+      setMyReports(m);
+    } catch {}
   };
 
   // Student-side: decrement / remove an item, or cancel the whole reservation.
@@ -3874,9 +4150,18 @@ ${inventory}
             {ok2 && !isSoundLoan && <div className="highlight-box" style={{display:"flex",alignItems:"center",gap:6}}>{isCinemaLoan ? <>🎥 השאלת קולנוע יומית · {formatDate(form.borrow_date)} · {form.borrow_time}–{form.return_time}</> : <><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> השאלה ל-{loanDays} ימים · איסוף {form.borrow_time} · החזרה {form.return_time}</>}</div>}
 
             {/* Mini calendar — approved reservations */}
-            <PublicMiniCalendar reservations={reservations} lessons={lessons} initialLoanType="הכל" previewStart={form.borrow_date} previewEnd={form.return_date} previewName={form.student_name||"הבקשה שלך"} borrowDate={form.borrow_date}/>
+            <PublicMiniCalendar reservations={reservations} lessons={lessons} initialLoanType="הכל" previewStart={form.borrow_date} previewEnd={form.return_date} previewName={form.student_name||"הבקשה שלך"} borrowDate={form.borrow_date} onActiveStateChange={setCalSnapshot}/>
 
             <div className="flex gap-2"><button className="btn btn-secondary" onClick={()=>setStep(1)}>← חזור</button><button className="btn btn-primary" disabled={!ok2} onClick={()=>setStep(3)}>המשך ← ציוד</button></div>
+
+            <ActiveListsPanel
+              reservations={reservations}
+              lessons={lessons}
+              equipment={equipment}
+              calSnapshot={calSnapshot}
+              open={activeListsOpen}
+              setOpen={setActiveListsOpen}
+            />
           </>}
 
           {step===3 && <Step3Equipment
@@ -4233,9 +4518,16 @@ ${inventory}
                           )}
                         </div>
                         {st==="פעילה"&&<div style={{flexShrink:0}}>
-                          {alreadyReported
-                            ?<span style={{fontSize:10,color:"var(--text3)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}><CheckCircle size={10} strokeWidth={1.75} /> דווח</span>
-                            :<button onClick={async(e)=>{e.stopPropagation();try{const res=await fetch("/api/equipment-report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"check-duplicate",equipment_id:String(item.equipment_id),reservation_id:String(r.id)})});const d=await res.json();if(d.exists){setReportedItems(p=>new Set([...p,rKey]));showToast("info","כבר נשלח דיווח על פריט זה");return;}}catch{}setReportModal({equipmentId:String(item.equipment_id),equipmentName:eq?.name||item.name||"פריט",reservationId:String(r.id)});setReportContent("");}} style={{background:"rgba(231,76,60,0.12)",color:"#e74c3c",border:"1px solid rgba(231,76,60,0.3)",borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:3}}><AlertTriangle size={10} strokeWidth={1.75} /> דווח תקלה</button>}
+                          {(() => {
+                            const existing = myReports.get(rKey);
+                            if (existing) {
+                              return <button onClick={(e)=>{e.stopPropagation();setReportModal({equipmentId:String(item.equipment_id),equipmentName:eq?.name||item.name||"פריט",reservationId:String(r.id),reportId:existing.id,reportStatus:existing.status});setReportContent(existing.content||"");}} style={{background:"rgba(245,158,11,0.12)",color:"#f59e0b",border:"1px solid rgba(245,158,11,0.35)",borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:3}}><Pencil size={10} strokeWidth={1.75} /> ערוך דיווח</button>;
+                            }
+                            if (alreadyReported) {
+                              return <span style={{fontSize:10,color:"var(--text3)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}><CheckCircle size={10} strokeWidth={1.75} /> דווח</span>;
+                            }
+                            return <button onClick={async(e)=>{e.stopPropagation();try{const res=await fetch("/api/equipment-report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"check-duplicate",equipment_id:String(item.equipment_id),reservation_id:String(r.id)})});const d=await res.json();if(d.exists){setReportedItems(p=>new Set([...p,rKey]));showToast("info","כבר נשלח דיווח על פריט זה");loadMyReports(reservations);return;}}catch{}setReportModal({equipmentId:String(item.equipment_id),equipmentName:eq?.name||item.name||"פריט",reservationId:String(r.id)});setReportContent("");}} style={{background:"rgba(231,76,60,0.12)",color:"#e74c3c",border:"1px solid rgba(231,76,60,0.3)",borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:3}}><AlertTriangle size={10} strokeWidth={1.75} /> דווח תקלה</button>;
+                          })()}
                         </div>}
                       </div>
                     </div>);
@@ -4321,26 +4613,47 @@ ${inventory}
     })()}
     {reportModal&&<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setReportModal(null)}>
       <div className="modal" style={{maxWidth:420}}>
-        <div className="modal-header"><span className="modal-title" style={{display:"inline-flex",alignItems:"center",gap:4}}><AlertTriangle size={16} strokeWidth={1.75} /> דיווח על תקלה</span><button className="btn btn-secondary btn-sm btn-icon" onClick={()=>setReportModal(null)}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button></div>
+        <div className="modal-header"><span className="modal-title" style={{display:"inline-flex",alignItems:"center",gap:4}}><AlertTriangle size={16} strokeWidth={1.75} /> {reportModal.reportId ? "עריכת דיווח על תקלה" : "דיווח על תקלה"}</span><button className="btn btn-secondary btn-sm btn-icon" onClick={()=>setReportModal(null)}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button></div>
         <div className="modal-body" style={{direction:"rtl"}}>
-          <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>פריט: {reportModal.equipmentName}</div>
+          <div style={{fontWeight:700,fontSize:14,marginBottom:8,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            <span>פריט: {reportModal.equipmentName}</span>
+            {reportModal.reportStatus === "handled" && (
+              <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,background:"rgba(107,114,128,0.18)",color:"#6b7280",display:"inline-flex",alignItems:"center",gap:3}}>
+                <CheckCircle size={10} strokeWidth={1.75}/> סומן כטופל ע״י המחסנאי
+              </span>
+            )}
+          </div>
           <div style={{marginBottom:6,fontWeight:700,fontSize:12,color:"var(--text2)"}}>תאר את התקלה:</div>
           <textarea value={reportContent} onChange={e=>{if(e.target.value.length<=400)setReportContent(e.target.value);}} placeholder="תאר את מצב הפריט..." rows={4} style={{width:"100%",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,padding:10,color:"var(--text)",fontSize:13,resize:"vertical",fontFamily:"inherit"}}/>
           <div style={{textAlign:"left",fontSize:11,color:reportContent.length>380?"var(--red)":"var(--text3)",marginTop:4}}>{reportContent.length}/400</div>
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={()=>setReportModal(null)}>ביטול</button>
-          <button className="btn btn-primary" disabled={reportSending||!reportContent.trim()} style={{background:"#e74c3c",borderColor:"#e74c3c"}} onClick={async()=>{
+          <button className="btn btn-primary" disabled={reportSending||!reportContent.trim()} style={{background:reportModal.reportId?"#f59e0b":"#e74c3c",borderColor:reportModal.reportId?"#f59e0b":"#e74c3c"}} onClick={async()=>{
             setReportSending(true);
             try{
-              const res=await fetch("/api/equipment-report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"create",equipment_id:reportModal.equipmentId,student_name:loggedInStudent?.name||"",reservation_id:reportModal.reservationId,content:reportContent.trim()})});
-              const d=await res.json();
-              if(d.error==="duplicate"){showToast("info","כבר נשלח דיווח על פריט זה");setReportedItems(p=>new Set([...p,`${reportModal.equipmentId}:${reportModal.reservationId}`]));}
-              else if(d.ok){showToast("success","הדיווח נשלח בהצלחה");setReportedItems(p=>new Set([...p,`${reportModal.equipmentId}:${reportModal.reservationId}`]));}
-              else{showToast("error","שגיאה בשליחת הדיווח");}
+              const isEdit = !!reportModal.reportId;
+              const token  = isEdit ? await getAuthToken() : null;
+              const body   = isEdit
+                ? { action:"update", id:reportModal.reportId, content:reportContent.trim() }
+                : { action:"create", equipment_id:reportModal.equipmentId, student_name:loggedInStudent?.name||"", reservation_id:reportModal.reservationId, content:reportContent.trim() };
+              const res = await fetch("/api/equipment-report",{
+                method:"POST",
+                headers:{"Content-Type":"application/json", ...(isEdit && token ? { Authorization:`Bearer ${token}` } : {})},
+                body:JSON.stringify(body),
+              });
+              const d = await res.json().catch(()=>({}));
+              if (isEdit) {
+                if (d.ok) { showToast("success","הדיווח עודכן"); await loadMyReports(reservations); }
+                else { showToast("error", res.status===403?"אין הרשאה":res.status===409?"ההזמנה כבר לא פעילה":"שגיאה בעדכון"); }
+              } else {
+                if (d.error==="duplicate") { showToast("info","כבר נשלח דיווח על פריט זה"); setReportedItems(p=>new Set([...p,`${reportModal.equipmentId}:${reportModal.reservationId}`])); await loadMyReports(reservations); }
+                else if (d.ok) { showToast("success","הדיווח נשלח בהצלחה"); setReportedItems(p=>new Set([...p,`${reportModal.equipmentId}:${reportModal.reservationId}`])); await loadMyReports(reservations); }
+                else { showToast("error","שגיאה בשליחת הדיווח"); }
+              }
             }catch{showToast("error","שגיאה בשליחת הדיווח");}
             setReportSending(false);setReportModal(null);
-          }}>{reportSending?"שולח...":"📨 שלח דיווח"}</button>
+          }}>{reportSending?"שולח...":(reportModal.reportId?"💾 שמור שינויים":"📨 שלח דיווח")}</button>
         </div>
       </div>
     </div>}

@@ -1,7 +1,7 @@
 // CalendarGrid.jsx — calendar grid component
 import { dateToLocal } from "../utils.js";
 
-export function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=110, fontSize=11, previewId="", lessonIds=null }) {
+export function CalendarGrid({ days, outOfMonthDays=[], activeRes, colorMap, todayStr, cellHeight=110, fontSize=11, previewId="", lessonIds=null }) {
   // Split days into weeks of 7
   const weeks = [];
   for(let i=0;i<days.length;i+=7) weeks.push(days.slice(i,i+7));
@@ -53,15 +53,18 @@ export function CalendarGrid({ days, activeRes, colorMap, todayStr, cellHeight=1
             {/* Background cells */}
             <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,height:"100%",position:"absolute",inset:0}}>
               {week.map((d,di)=>{
+                const absoluteIdx = wi*7 + di;
+                const ghost = !d && outOfMonthDays[absoluteIdx];
                 const isToday=d&&dateToLocal(d)===todayStr;
                 return (
                   <div key={di} style={{
                     background:"var(--surface2)",borderRadius:6,
                     border:`1px solid ${isToday?"var(--accent)":"var(--border)"}`,
                     padding:"5px 6px",overflow:"hidden",
-                    opacity:!d?0.2:1,
+                    opacity:!d?(ghost?0.45:0.2):1,
                   }}>
                     {d&&<div style={{fontSize:13,fontWeight:isToday?900:700,color:isToday?"var(--accent)":"var(--text2)"}}>{d.getDate()}</div>}
+                    {!d&&ghost&&<div style={{fontSize:13,fontWeight:500,color:"var(--text3)"}}>{ghost.getDate()}</div>}
                   </div>
                 );
               })}
