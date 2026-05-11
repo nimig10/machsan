@@ -1855,6 +1855,9 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [reportedItems, setReportedItems] = useState(new Set()); // "eqId:resId" keys
   // myReports: persistent state loaded from DB. Lets the student see + edit their reports across refreshes.
   const [myReports, setMyReports] = useState(() => new Map()); // key "eqId:resId" → {id, content, status}
+  // Clear the modal textarea when the modal is dismissed — otherwise the next
+  // open (e.g. "דווח תקלה" on a different item) shows the previous report's text.
+  useEffect(() => { if (!reportModal) setReportContent(""); }, [reportModal]);
   // Student-side item removal from own pending/approved reservations.
   const [removingItemsForResId, setRemovingItemsForResId] = useState(null); // string|null — which card is in remove-mode
   const [confirmRemoveItem, setConfirmRemoveItem] = useState(null); // {reservationId, itemId, itemName, isLastInReservation}
