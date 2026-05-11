@@ -1867,6 +1867,10 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [removingItemsForResId, setRemovingItemsForResId] = useState(null); // string|null — which card is in remove-mode
   const [confirmRemoveItem, setConfirmRemoveItem] = useState(null); // {reservationId, itemId, itemName, isLastInReservation}
   const [busyItemIds, setBusyItemIds] = useState(() => new Set()); // Set of item IDs currently in-flight (cancel_reservation uses res-id sentinel)
+  // Synchronous in-flight guard. busyItemIds is React state — there's a render lag
+  // between setState and `disabled` reflecting on the DOM, so a fast double-click
+  // can fire onClick twice. The ref updates immediately and blocks the second call.
+  const inflightModifyRef = useRef(new Set());
   const fmtDate = (d) => { if (!d) return ""; const [y,m,dd] = d.split("-"); return `${dd}.${m}.${y}`; };
   const [showEquipmentAiModal, setShowEquipmentAiModal] = useState(false);
   const [equipmentAiPrompt, setEquipmentAiPrompt] = useState("");
@@ -2093,6 +2097,12 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   // (no rollback flicker — server is the source of truth either way).
   const callModifyReservationItem = async ({ reservation_id, item_id, action }) => {
     const busyKey = action === "cancel_reservation" ? `res:${reservation_id}` : Number(item_id);
+    // Sync guard against rapid double-clicks before React can re-render
+    // `disabled` from busyItemIds. Without this, a hammered button can fire
+    // the same RPC twice — second call hits "item not found" once the first
+    // already removed the row.
+    if (inflightModifyRef.current.has(busyKey)) return null;
+    inflightModifyRef.current.add(busyKey);
     setBusyItemIds(prev => { const next = new Set(prev); next.add(busyKey); return next; });
     setReservations(prev => prev.map(r => {
       if (String(r.id) !== String(reservation_id)) return r;
@@ -2137,6 +2147,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       showToast("error", "שגיאת רשת");
       return null;
     } finally {
+      inflightModifyRef.current.delete(busyKey);
       setBusyItemIds(prev => { const next = new Set(prev); next.delete(busyKey); return next; });
     }
   };
@@ -4468,7 +4479,7 @@ ${inventory}
                     const needsCert = isProduction && eq?.certification_id &&
                       photogResCerts[eq.certification_id] !== "עבר" &&
                       soundResCerts[eq.certification_id] !== "עבר";
-                    return (<div key={i}>
+                    return (<div key={item.id ?? `${item.equipment_id}:${i}`}>
                       <div style={{display:"flex",alignItems:"center",gap:10}}>
                         {img?.startsWith("data:")||img?.startsWith("http")
                           ?<img src={img} alt="" style={{width:38,height:38,objectFit:"cover",borderRadius:6,flexShrink:0}}/>
