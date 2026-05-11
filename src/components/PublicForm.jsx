@@ -420,7 +420,7 @@ function ActiveListsPanel({ reservations=[], lessons=[], equipment=[], calSnapsh
       >
         <span style={{display:"inline-flex",alignItems:"center",gap:6}}>
           <ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" />
-          רשימות ציוד פעילות
+          רשימות ציוד
           <span style={{color:"var(--text3)",fontWeight:600}}>{empty ? "(אין לחודש זה)" : `(${count})`}</span>
         </span>
         {!empty && <span style={{fontSize:12,color:"var(--text3)"}}>{open ? "▲" : "▼"}</span>}
@@ -485,6 +485,11 @@ function ActiveLoanCard({ reservation, equipById }) {
           <div style={{display:"inline-flex",alignItems:"center",gap:8,minWidth:0,flexWrap:"wrap"}}>
             <span style={{fontSize:12,color:"var(--text3)"}}>{open ? "▲" : "▼"}</span>
             <strong style={{fontSize:14,color:"var(--text)"}}>{requesterName}</strong>
+            {r.course && (
+              <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:11,fontWeight:700,color:"var(--text3)",background:"rgba(255,255,255,0.04)",border:"1px solid var(--border)",padding:"1px 7px",borderRadius:10}}>
+                <GraduationCap size={11} strokeWidth={1.75} /> {r.course}
+              </span>
+            )}
             {r.email && (
               <a href={`mailto:${r.email}`} style={{display:"inline-flex",alignItems:"center",gap:3,color:"#2563eb",fontSize:11,textDecoration:"none"}} onClick={e => e.stopPropagation()}>
                 <Mail size={12} strokeWidth={1.75} /> {r.email}
