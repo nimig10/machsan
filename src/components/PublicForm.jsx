@@ -1607,6 +1607,10 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [reportContent, setReportContent] = useState("");
   const [reportSending, setReportSending] = useState(false);
   const [reportedItems, setReportedItems] = useState(new Set()); // "eqId:resId" keys
+  // Student-side item removal from own pending/approved reservations.
+  const [removingItemsForResId, setRemovingItemsForResId] = useState(null); // string|null — which card is in remove-mode
+  const [confirmRemoveItem, setConfirmRemoveItem] = useState(null); // {reservationId, itemId, itemName, isLastInReservation}
+  const [busyItemIds, setBusyItemIds] = useState(() => new Set()); // Set of item IDs currently in-flight (cancel_reservation uses res-id sentinel)
   const fmtDate = (d) => { if (!d) return ""; const [y,m,dd] = d.split("-"); return `${dd}.${m}.${y}`; };
   const [showEquipmentAiModal, setShowEquipmentAiModal] = useState(false);
   const [equipmentAiPrompt, setEquipmentAiPrompt] = useState("");
@@ -1797,6 +1801,64 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const loadReservationsData = async () => {
     const res = await (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] }))));
     if (Array.isArray(res)) setReservations(res);
+  };
+
+  // Student-side: decrement / remove an item, or cancel the whole reservation.
+  // The server (student_modify_reservation_item_v1) enforces ownership + status.
+  // UX: optimistic update — apply locally immediately, roll back on failure.
+  const callModifyReservationItem = async ({ reservation_id, item_id, action }) => {
+    const busyKey = action === "cancel_reservation" ? `res:${reservation_id}` : Number(item_id);
+    setBusyItemIds(prev => { const next = new Set(prev); next.add(busyKey); return next; });
+    let rolledBack = null;
+    setReservations(prev => {
+      rolledBack = prev;
+      return prev.map(r => {
+        if (String(r.id) !== String(reservation_id)) return r;
+        if (action === "cancel_reservation") return { ...r, status: "בוטל" };
+        const items = (r.items || []).map(it => {
+          if (Number(it.id) !== Number(item_id)) return it;
+          if (action === "decrement") return { ...it, quantity: Math.max(1, Number(it.quantity || 1) - 1) };
+          return null;
+        }).filter(Boolean);
+        return { ...r, items };
+      });
+    });
+    try {
+      const token = await getAuthToken();
+      const res = await fetch("/api/student-modify-reservation-items", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ reservation_id, item_id, action }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // State diverged from DB (e.g., parallel admin session). Reload
+        // directly — no rollback flicker, the fresh data overwrites the
+        // optimistic state.
+        if (body?.error === "stale_state") {
+          await loadReservationsData();
+          showToast("info", "ההזמנה התעדכנה — בדוק את הכמות העדכנית");
+          return null;
+        }
+        if (rolledBack) setReservations(rolledBack);
+        const msg = res.status === 401 ? "התחבר מחדש"
+                  : res.status === 403 ? "אין הרשאה"
+                  : res.status === 409 ? "ההזמנה לא ניתנת לעריכה"
+                  : "שגיאה בעדכון";
+        showToast("error", msg);
+        return null;
+      }
+      return body;
+    } catch {
+      if (rolledBack) setReservations(rolledBack);
+      showToast("error", "שגיאת רשת");
+      return null;
+    } finally {
+      setBusyItemIds(prev => { const next = new Set(prev); next.delete(busyKey); return next; });
+    }
   };
 
   const loadDailySchedule = async () => {
@@ -3718,8 +3780,8 @@ ${inventory}
                     const studio = visibleStudios?.find(s=>String(s.id)===String(grp.studioId)) || studios?.find(s=>String(s.id)===String(grp.studioId));
                     const hasNight = grp.bookings.some(b=>b.isNight);
                     const timeLabel = grp.isMultiDay
-                      ? `${grp.startDate} ${grp.startTime||""} – ${grp.endDate} ${grp.endTime||""}`
-                      : `${grp.startDate} · ${grp.startTime||""}–${grp.endTime||""}`;
+                      ? `${fmtDate(grp.startDate)} ${grp.startTime||""} – ${fmtDate(grp.endDate)} ${grp.endTime||""}`
+                      : `${fmtDate(grp.startDate)} · ${grp.startTime||""}–${grp.endTime||""}`;
                     const icon = hasNight ? "🌙" : "☀️";
                     return <option key={grp.primaryId} value={grp.primaryId}>{icon} {studio?.name||"חדר"} · {timeLabel}</option>;
                   })}
@@ -4063,6 +4125,34 @@ ${inventory}
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
                     <span style={{background:sBg(st),color:sColor(st),border:`1px solid ${sBorder(st)}`,borderRadius:100,padding:"2px 10px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{st}</span>
+                    {(st==="ממתין"||st==="מאושר")&&r.loan_type!=="שיעור"&&r.booking_kind!=="lesson"&&(()=>{
+                      const inRemoveMode=removingItemsForResId===r.id;
+                      return (<button
+                        onClick={e=>{
+                          e.stopPropagation();
+                          if(inRemoveMode){
+                            setRemovingItemsForResId(null);
+                          } else {
+                            setRemovingItemsForResId(r.id);
+                            if(!isExp) setExpandedResId(r.id);
+                          }
+                        }}
+                        style={{
+                          background:inRemoveMode?"rgba(231,76,60,0.14)":"var(--accent)",
+                          color:inRemoveMode?"#e74c3c":"#000",
+                          border:inRemoveMode?"1px solid rgba(231,76,60,0.4)":"none",
+                          borderRadius:4,
+                          padding:inRemoveMode?"3px 9px":"4px 10px",
+                          fontSize:11,
+                          fontWeight:700,
+                          cursor:"pointer",
+                          whiteSpace:"nowrap",
+                          display:"inline-flex",
+                          alignItems:"center",
+                          gap:3,
+                        }}
+                      >{inRemoveMode?"סיים":"החסרת פריטים"}</button>);
+                    })()}
                     <span style={{fontSize:13,color:"var(--text3)",display:"inline-block",transform:isExp?"rotate(180deg)":"rotate(0deg)",transition:"transform 0.2s"}}>▾</span>
                   </div>
                 </div>
@@ -4096,7 +4186,50 @@ ${inventory}
                           :<span style={{fontSize:30,flexShrink:0}}>{img||<Package size={30} strokeWidth={1.75} color="var(--accent)" />}</span>}
                         <div style={{flex:1}}>
                           <div style={{fontWeight:700,fontSize:13}}>{eq?.name||item.name||"פריט"}</div>
-                          <div style={{fontSize:13,color:"var(--text)",fontWeight:700,marginTop:2}}>כמות: <span style={{color:"var(--accent)"}}>{item.quantity}</span></div>
+                          <div style={{fontSize:13,color:"var(--text)",fontWeight:700,marginTop:2,display:"flex",alignItems:"center",gap:8}}>
+                            <span>כמות: <span style={{color:"var(--accent)"}}>{item.quantity}</span></span>
+                            {removingItemsForResId===r.id&&(st==="ממתין"||st==="מאושר")&&r.loan_type!=="שיעור"&&r.booking_kind!=="lesson"&&(()=>{
+                              const itemBusy=busyItemIds.has(Number(item.id));
+                              return (<button
+                                disabled={itemBusy}
+                                onClick={async e=>{
+                                  e.stopPropagation();
+                                  if(itemBusy) return;
+                                  const itemName=eq?.name||item.name||"פריט";
+                                  const qty=Number(item.quantity)||1;
+                                  const isLastInReservation=(r.items||[]).length===1;
+                                  if(qty>1){
+                                    await callModifyReservationItem({reservation_id:String(r.id),item_id:Number(item.id),action:"decrement"});
+                                  } else {
+                                    setConfirmRemoveItem({
+                                      reservationId:String(r.id),
+                                      itemId:Number(item.id),
+                                      itemName,
+                                      isLastInReservation,
+                                    });
+                                  }
+                                }}
+                                style={{
+                                  background:"rgba(231,76,60,0.14)",
+                                  color:"#e74c3c",
+                                  border:"1px solid rgba(231,76,60,0.4)",
+                                  borderRadius:6,
+                                  width:22,
+                                  height:22,
+                                  padding:0,
+                                  fontSize:14,
+                                  fontWeight:700,
+                                  cursor:itemBusy?"not-allowed":"pointer",
+                                  display:"inline-flex",
+                                  alignItems:"center",
+                                  justifyContent:"center",
+                                  opacity:itemBusy?0.45:1,
+                                  lineHeight:1,
+                                }}
+                                title="הורד יחידה"
+                              ><Minus size={14} strokeWidth={2.5}/></button>);
+                            })()}
+                          </div>
                           {needsCert && (
                             <div style={{marginTop:4,display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,color:"#f59e0b",background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.35)",borderRadius:6,padding:"2px 8px"}}>
                               <Shield size={10} strokeWidth={2} /> דרושה הסמכה
@@ -4141,6 +4274,55 @@ ${inventory}
         </div>
       </div>
     </div>
+    {confirmRemoveItem&&(()=>{
+      const modalBusy=busyItemIds.has(confirmRemoveItem.isLastInReservation?`res:${confirmRemoveItem.reservationId}`:Number(confirmRemoveItem.itemId));
+      return (<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&!modalBusy&&setConfirmRemoveItem(null)}>
+      <div className="modal" style={{maxWidth:420}}>
+        <div className="modal-header">
+          <span className="modal-title" style={{display:"inline-flex",alignItems:"center",gap:6}}>
+            <AlertTriangle size={16} strokeWidth={1.75} color={confirmRemoveItem.isLastInReservation?"#e74c3c":"#f59e0b"}/>
+            {confirmRemoveItem.isLastInReservation?"ביטול הזמנה":"הסרת פריט"}
+          </span>
+          <button className="btn btn-secondary btn-sm btn-icon" disabled={modalBusy} onClick={()=>setConfirmRemoveItem(null)}>
+            <X size={16} strokeWidth={1.75} color="var(--text3)"/>
+          </button>
+        </div>
+        <div className="modal-body" style={{direction:"rtl"}}>
+          {confirmRemoveItem.isLastInReservation
+            ? <div style={{fontSize:14,lineHeight:1.6}}>
+                <span style={{fontWeight:700}}>{confirmRemoveItem.itemName}</span> הוא הפריט האחרון בהזמנה.
+                <br/>הסרתו תבטל את כל ההזמנה. האם להמשיך?
+              </div>
+            : <div style={{fontSize:14,lineHeight:1.6}}>
+                האם אתה רוצה להוריד את הפריט <span style={{fontWeight:700}}>{confirmRemoveItem.itemName}</span> מהרשימה?
+              </div>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" disabled={modalBusy} onClick={()=>setConfirmRemoveItem(null)}>
+            {confirmRemoveItem.isLastInReservation?"השאר את ההזמנה":"ביטול"}
+          </button>
+          <button
+            className="btn btn-primary"
+            disabled={modalBusy}
+            style={{background:"#e74c3c",borderColor:"#e74c3c"}}
+            onClick={async()=>{
+              const c=confirmRemoveItem;
+              const result=await callModifyReservationItem({
+                reservation_id:c.reservationId,
+                item_id:c.itemId,
+                action:c.isLastInReservation?"cancel_reservation":"remove",
+              });
+              if(result){
+                showToast("success", c.isLastInReservation?"ההזמנה בוטלה":"הפריט הוסר");
+                if(c.isLastInReservation) setRemovingItemsForResId(null);
+              }
+              setConfirmRemoveItem(null);
+            }}
+          >{modalBusy?"מעדכן...":confirmRemoveItem.isLastInReservation?"בטל את ההזמנה":"הסר פריט"}</button>
+        </div>
+      </div>
+    </div>);
+    })()}
     {reportModal&&<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setReportModal(null)}>
       <div className="modal" style={{maxWidth:420}}>
         <div className="modal-header"><span className="modal-title" style={{display:"inline-flex",alignItems:"center",gap:4}}><AlertTriangle size={16} strokeWidth={1.75} /> דיווח על תקלה</span><button className="btn btn-secondary btn-sm btn-icon" onClick={()=>setReportModal(null)}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button></div>
