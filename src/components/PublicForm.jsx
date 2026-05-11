@@ -1805,24 +1805,21 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 
   // Student-side: decrement / remove an item, or cancel the whole reservation.
   // The server (student_modify_reservation_item_v1) enforces ownership + status.
-  // UX: optimistic update — apply locally immediately, roll back on failure.
+  // UX: optimistic update on success path; on failure always re-sync from DB
+  // (no rollback flicker — server is the source of truth either way).
   const callModifyReservationItem = async ({ reservation_id, item_id, action }) => {
     const busyKey = action === "cancel_reservation" ? `res:${reservation_id}` : Number(item_id);
     setBusyItemIds(prev => { const next = new Set(prev); next.add(busyKey); return next; });
-    let rolledBack = null;
-    setReservations(prev => {
-      rolledBack = prev;
-      return prev.map(r => {
-        if (String(r.id) !== String(reservation_id)) return r;
-        if (action === "cancel_reservation") return { ...r, status: "בוטל" };
-        const items = (r.items || []).map(it => {
-          if (Number(it.id) !== Number(item_id)) return it;
-          if (action === "decrement") return { ...it, quantity: Math.max(1, Number(it.quantity || 1) - 1) };
-          return null;
-        }).filter(Boolean);
-        return { ...r, items };
-      });
-    });
+    setReservations(prev => prev.map(r => {
+      if (String(r.id) !== String(reservation_id)) return r;
+      if (action === "cancel_reservation") return { ...r, status: "בוטל" };
+      const items = (r.items || []).map(it => {
+        if (Number(it.id) !== Number(item_id)) return it;
+        if (action === "decrement") return { ...it, quantity: Math.max(1, Number(it.quantity || 1) - 1) };
+        return null;
+      }).filter(Boolean);
+      return { ...r, items };
+    }));
     try {
       const token = await getAuthToken();
       const res = await fetch("/api/student-modify-reservation-items", {
@@ -1835,25 +1832,24 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        // State diverged from DB (e.g., parallel admin session). Reload
-        // directly — no rollback flicker, the fresh data overwrites the
-        // optimistic state.
+        // Server is the source of truth — re-sync from DB instead of rolling
+        // back. Avoids the qty=3→2→3 flicker when API errors out.
+        await loadReservationsData();
         if (body?.error === "stale_state") {
-          await loadReservationsData();
           showToast("info", "ההזמנה התעדכנה — בדוק את הכמות העדכנית");
-          return null;
+        } else {
+          const msg = res.status === 401 ? "התחבר מחדש"
+                    : res.status === 403 ? "אין הרשאה"
+                    : res.status === 404 ? "השרת לא מוכן — נסה שוב"
+                    : res.status === 409 ? "ההזמנה לא ניתנת לעריכה"
+                    : "שגיאה בעדכון";
+          showToast("error", msg);
         }
-        if (rolledBack) setReservations(rolledBack);
-        const msg = res.status === 401 ? "התחבר מחדש"
-                  : res.status === 403 ? "אין הרשאה"
-                  : res.status === 409 ? "ההזמנה לא ניתנת לעריכה"
-                  : "שגיאה בעדכון";
-        showToast("error", msg);
         return null;
       }
       return body;
     } catch {
-      if (rolledBack) setReservations(rolledBack);
+      await loadReservationsData();
       showToast("error", "שגיאת רשת");
       return null;
     } finally {
