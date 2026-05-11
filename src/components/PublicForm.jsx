@@ -4335,7 +4335,8 @@ ${inventory}
             dailyLessons.forEach(lesson => {
               (lesson.schedule||[]).forEach(s => {
                 if (s.date === targetDate) {
-                  allSessions.push({ lessonName: lesson.name||"", instructorName: lesson.instructorName||"", topic: s.topic||"", startTime: s.startTime||"", endTime: s.endTime||"", track: lesson.track||"" });
+                  const studioObj = (studios || []).find(st => String(st.id) === String(lesson.studioId));
+                  allSessions.push({ lessonName: lesson.name||"", instructorName: lesson.instructorName||"", topic: s.topic||"", startTime: s.startTime||"", endTime: s.endTime||"", track: lesson.track||"", studioName: studioObj?.name || "" });
                 }
               });
             });
@@ -4392,10 +4393,19 @@ ${inventory}
                             👤 {s.instructorName}
                           </div>
                         )}
-                        {/* מסלול */}
-                        {s.track && (
-                          <div style={{display:"inline-block",fontSize:12,fontWeight:700,color:"var(--accent)",background:"var(--accent-glow)",borderRadius:20,padding:"2px 10px",marginBottom:s.topic?4:0}}>
-                            <GraduationCap size={14} strokeWidth={1.75} color="var(--accent)" /> {s.track}
+                        {/* מסלול + שיוך כיתה */}
+                        {(s.track || s.studioName) && (
+                          <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"center",marginBottom:s.topic?4:0}}>
+                            {s.track && (
+                              <div style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700,color:"var(--accent)",background:"var(--accent-glow)",borderRadius:20,padding:"2px 10px"}}>
+                                <GraduationCap size={14} strokeWidth={1.75} color="var(--accent)" /> {s.track}
+                              </div>
+                            )}
+                            {s.studioName && (
+                              <div style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700,color:"#9b59b6",background:"rgba(155,89,182,0.14)",borderRadius:20,padding:"2px 10px",border:"1px solid rgba(155,89,182,0.35)"}}>
+                                <BookOpen size={14} strokeWidth={1.75} color="#9b59b6" /> {s.studioName}
+                              </div>
+                            )}
                           </div>
                         )}
                         {/* נושא */}
