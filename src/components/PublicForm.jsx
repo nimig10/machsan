@@ -4393,9 +4393,9 @@ ${inventory}
                             👤 {s.instructorName}
                           </div>
                         )}
-                        {/* שיוך כיתה — טקסט פשוט מתחת למרצה */}
+                        {/* שיוך כיתה — טקסט פשוט מתחת למרצה, על שורה משלו */}
                         {s.studioName && (
-                          <div style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:15,fontWeight:700,color:"var(--text2)",marginBottom:s.track||s.topic?4:0}}>
+                          <div style={{display:"flex",alignItems:"center",gap:4,fontSize:15,fontWeight:700,color:"var(--text2)",marginBottom:s.track||s.topic?4:0}}>
                             <School size={15} strokeWidth={1.75} color="var(--accent)" /> כיתת לימוד: {s.studioName}
                           </div>
                         )}
