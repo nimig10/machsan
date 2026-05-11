@@ -491,9 +491,9 @@ function ActiveLoanCard({ reservation, equipById }) {
               </span>
             )}
             {r.email && (
-              <a href={`mailto:${r.email}`} style={{display:"inline-flex",alignItems:"center",gap:3,color:"#2563eb",fontSize:11,textDecoration:"none"}} onClick={e => e.stopPropagation()}>
+              <span style={{display:"inline-flex",alignItems:"center",gap:3,color:"#2563eb",fontSize:11,cursor:"default"}}>
                 <Mail size={12} strokeWidth={1.75} /> {r.email}
-              </a>
+              </span>
             )}
           </div>
           <span style={{padding:"3px 10px",borderRadius:12,background:badge.bg,color:badge.fg,fontWeight:800,fontSize:11}}>{r.status}</span>
