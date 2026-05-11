@@ -19,10 +19,23 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
   const todayStr = today();
 
   const days = [];
+  const outOfMonthDays = [];
   const startOffset = new Date(yr,mo,1).getDay();
-  for(let i=0;i<startOffset;i++) days.push(null);
-  for(let d=1;d<=new Date(yr,mo+1,0).getDate();d++) days.push(new Date(yr,mo,d));
-  while(days.length<42) days.push(null);
+  const prevMonthLastDay = new Date(yr,mo,0).getDate();
+  for(let i=0;i<startOffset;i++) {
+    days.push(null);
+    outOfMonthDays.push(new Date(yr,mo-1,prevMonthLastDay-(startOffset-1-i)));
+  }
+  const lastDay = new Date(yr,mo+1,0).getDate();
+  for(let d=1;d<=lastDay;d++) {
+    days.push(new Date(yr,mo,d));
+    outOfMonthDays.push(null);
+  }
+  let nextDay = 1;
+  while(days.length<42) {
+    days.push(null);
+    outOfMonthDays.push(new Date(yr,mo+1,nextDay++));
+  }
 
   const STATUS_OPTIONS = ["ממתין","אישור ראש מחלקה","מאושר","נדחה"];
   const STATUS_COLORS  = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","אישור ראש מחלקה":"#9b59b6" };
@@ -103,7 +116,7 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
           {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,color:"var(--text3)",padding:"4px 0"}}>{d}</div>)}
         </div>
-        <CalendarGrid days={days} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={90} fontSize={10}/>
+        <CalendarGrid days={days} outOfMonthDays={outOfMonthDays} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={90} fontSize={10}/>
       </div>
 
       {/* Reservations list */}
@@ -238,10 +251,23 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
   const todayStr = today();
 
   const days = [];
+  const outOfMonthDays = [];
   const startOffset = new Date(yr,mo,1).getDay();
-  for(let i=0;i<startOffset;i++) days.push(null);
-  for(let d=1;d<=new Date(yr,mo+1,0).getDate();d++) days.push(new Date(yr,mo,d));
-  while(days.length<42) days.push(null);
+  const prevMonthLastDay = new Date(yr,mo,0).getDate();
+  for(let i=0;i<startOffset;i++) {
+    days.push(null);
+    outOfMonthDays.push(new Date(yr,mo-1,prevMonthLastDay-(startOffset-1-i)));
+  }
+  const lastDay = new Date(yr,mo+1,0).getDate();
+  for(let d=1;d<=lastDay;d++) {
+    days.push(new Date(yr,mo,d));
+    outOfMonthDays.push(null);
+  }
+  let nextDay = 1;
+  while(days.length<42) {
+    days.push(null);
+    outOfMonthDays.push(new Date(yr,mo+1,nextDay++));
+  }
 
   const activeRes = localRes.filter(r =>
     r.status !== "הוחזר" && r.borrow_date && r.return_date &&
@@ -326,7 +352,7 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
           {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,color:"var(--text3)",padding:"4px 0"}}>{d}</div>)}
         </div>
-        <CalendarGrid days={days} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={90} fontSize={10}/>
+        <CalendarGrid days={days} outOfMonthDays={outOfMonthDays} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={90} fontSize={10}/>
       </div>
 
       {/* Reservations list */}

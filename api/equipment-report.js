@@ -1,5 +1,5 @@
 // equipment-report.js — submit + manage equipment reports
-import { requireStaff } from "./_auth-helper.js";
+import { requireStaff, requireUser } from "./_auth-helper.js";
 
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -108,6 +108,68 @@ export default async function handler(req, res) {
       { method: "PATCH", body: JSON.stringify({ status: "handled" }) }
     );
     return res.status(result.ok ? 200 : 500).json({ ok: result.ok });
+  }
+
+  // LIST-MINE — student fetches their own reports for active reservations.
+  // Auth required: the caller must own (by email) every reservation_id passed in.
+  if (action === "list-mine") {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const { reservation_ids } = req.body || {};
+    if (!Array.isArray(reservation_ids) || reservation_ids.length === 0) {
+      return res.status(200).json([]);
+    }
+    const ids = reservation_ids.map(id => encodeURIComponent(id)).join(",");
+    const owned = await sbFetch(
+      `reservations_new?id=in.(${ids})&email=ilike.${encodeURIComponent(user.email)}&select=id`
+    );
+    const ownedIds = (owned.data || []).map(r => r.id);
+    if (ownedIds.length === 0) return res.status(200).json([]);
+    const ownedEnc = ownedIds.map(id => encodeURIComponent(id)).join(",");
+    const result = await sbFetch(
+      `equipment_reports?reservation_id=in.(${ownedEnc})&order=created_at.desc`
+    );
+    return res.status(200).json(result.data || []);
+  }
+
+  // UPDATE — student edits the content of their own report.
+  // Auth required. Reservation must belong to caller AND be status='פעילה'.
+  // We deliberately don't touch the report's status — that stays the warehouse's call.
+  if (action === "update") {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const { id, content } = req.body || {};
+    if (!id || !content || !String(content).trim()) {
+      return res.status(400).json({ error: "Missing fields" });
+    }
+    if (String(content).length > 400) {
+      return res.status(400).json({ error: "Content too long (max 400 chars)" });
+    }
+    const r = await sbFetch(
+      `equipment_reports?id=eq.${encodeURIComponent(id)}&select=reservation_id`
+    );
+    if (!r.ok || !Array.isArray(r.data) || !r.data[0]) {
+      return res.status(404).json({ error: "not_found" });
+    }
+    const reservationId = r.data[0].reservation_id;
+    const own = await sbFetch(
+      `reservations_new?id=eq.${encodeURIComponent(reservationId)}&select=email,status`
+    );
+    if (!own.ok || !Array.isArray(own.data) || !own.data[0]) {
+      return res.status(404).json({ error: "reservation_not_found" });
+    }
+    const owner = own.data[0];
+    if (String(owner.email || "").toLowerCase() !== user.email.toLowerCase()) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+    if (owner.status !== "פעילה") {
+      return res.status(409).json({ error: "reservation_not_active" });
+    }
+    const upd = await sbFetch(
+      `equipment_reports?id=eq.${encodeURIComponent(id)}`,
+      { method: "PATCH", body: JSON.stringify({ content: String(content).trim() }) }
+    );
+    return res.status(upd.ok ? 200 : 500).json({ ok: upd.ok });
   }
 
   return res.status(400).json({ error: "Unknown action" });
