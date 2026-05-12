@@ -2206,17 +2206,22 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 
   // Student-side: decrement / remove an item, or cancel the whole reservation.
   // The server (student_modify_reservation_item_v1) enforces ownership + status.
-  // UX: optimistic update on success path; on failure always re-sync from DB
-  // (no rollback flicker — server is the source of truth either way).
+  // UX: optimistic update for instant feedback; on failure, revert only the
+  // affected reservation/item — NOT the whole list — to avoid full-page
+  // flicker. The reservations_new realtime channel in App.jsx will catch up
+  // any other drift naturally.
   const callModifyReservationItem = async ({ reservation_id, item_id, action }) => {
     const busyKey = action === "cancel_reservation" ? `res:${reservation_id}` : Number(item_id);
-    // Sync guard against rapid double-clicks before React can re-render
-    // `disabled` from busyItemIds. Without this, a hammered button can fire
-    // the same RPC twice — second call hits "item not found" once the first
-    // already removed the row.
     if (inflightModifyRef.current.has(busyKey)) return null;
     inflightModifyRef.current.add(busyKey);
     setBusyItemIds(prev => { const next = new Set(prev); next.add(busyKey); return next; });
+
+    // Snapshot the current reservation (deep-enough copy of items) before the
+    // optimistic update, so we can revert THIS reservation only if the server
+    // rejects the action. Avoids loadReservationsData() global re-fetch.
+    const snapshotRes = (reservations || []).find(r => String(r.id) === String(reservation_id));
+    const snapshotItems = snapshotRes ? (snapshotRes.items || []).map(it => ({ ...it })) : null;
+
     if (action === "cancel_reservation") {
       // Hard delete on the server (migration 20260512120000) — drop the
       // reservation from local state entirely, not just flip status.
@@ -2232,6 +2237,23 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
         return { ...r, items };
       }));
     }
+
+    const revertLocal = () => {
+      if (action === "cancel_reservation") {
+        // Restore the whole reservation if it was wiped optimistically
+        if (snapshotRes) {
+          setReservations(prev => {
+            if (prev.some(r => String(r.id) === String(reservation_id))) return prev;
+            return [...prev, { ...snapshotRes, items: snapshotItems || [] }];
+          });
+        }
+      } else if (snapshotItems) {
+        setReservations(prev => prev.map(r => (
+          String(r.id) === String(reservation_id) ? { ...r, items: snapshotItems } : r
+        )));
+      }
+    };
+
     try {
       const token = await getAuthToken();
       const res = await fetch("/api/student-modify-reservation-items", {
@@ -2244,9 +2266,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        // Server is the source of truth — re-sync from DB instead of rolling
-        // back. Avoids the qty=3→2→3 flicker when API errors out.
-        await loadReservationsData();
+        revertLocal();
         if (body?.error === "stale_state") {
           showToast("info", "ההזמנה התעדכנה — בדוק את הכמות העדכנית");
         } else {
@@ -2261,7 +2281,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       }
       return body;
     } catch {
-      await loadReservationsData();
+      revertLocal();
       showToast("error", "שגיאת רשת");
       return null;
     } finally {
