@@ -18,6 +18,7 @@ import { SecretaryDashboardPage } from "./components/SecretaryDashboardPage.jsx"
 import { PublicDisplayPage } from "./components/PublicDisplayPage.jsx";
 import { PublicDailyTablePage } from "./components/PublicDailyTablePage.jsx";
 import { StaffHub } from "./components/StaffHub.jsx";
+import { UserGuideVideosPage } from "./components/UserGuideVideosPage.jsx";
 import { StaffManagementPage } from "./components/StaffManagementPage.jsx";
 import { SystemSettingsPage } from "./components/SystemSettingsPage.jsx";
 import { ActivityLogsPage } from "./components/ActivityLogsPage.jsx";
@@ -7010,6 +7011,22 @@ export default function App() {
               </div>
             </div>
             <SystemSettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast}/>
+          </div>
+        </div>
+      )}
+
+      {/* ── המדריך למשתמש — צוות (all staff) ──
+          UserGuideVideosPage has its own header + "חזרה ל-Staff Hub" button,
+          so we skip the topbar wrapper that the other admin views use. */}
+      {isAdmin && authed && staffView === "user-guide" && (
+        <div className="app" style={{"--accent":siteSettings.adminAccentColor||"#f5a623","--accent-glow":`${siteSettings.adminAccentColor||"#f5a623"}2e`,"--admin-fs":`${siteSettings.adminFontSize||14}px`}}>
+          <div className="main" style={{marginRight:0,width:"100%"}}>
+            <UserGuideVideosPage
+              title="המדריך למשתמש — צוות"
+              videos={Array.isArray(siteSettings?.staffUserGuideVideos) ? siteSettings.staffUserGuideVideos : []}
+              accentColor={siteSettings?.accentColor}
+              onBack={()=>setStaffView("hub")}
+            />
           </div>
         </div>
       )}

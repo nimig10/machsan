@@ -54,6 +54,141 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
     showToast("success", "ההגדרות נשמרו");
   };
 
+  // Renders one audience-specific video-management panel (students / staff /
+  // lecturers). Each panel reads + writes its own JSON array on `draft` so
+  // the three lists stay independent.
+  const renderVideoPanel = ({ draftKey, title, description }) => {
+    const list = draft[draftKey] || [];
+    const setList = (updater) => setDraft(p => ({ ...p, [draftKey]: updater(p[draftKey] || []) }));
+    return (
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-header"><div className="card-title"><Video size={16} strokeWidth={1.75} color="var(--accent)" style={{ verticalAlign: "middle", marginLeft: 6 }} /> {title}</div></div>
+        <div style={{ padding: "16px 20px" }}>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14, lineHeight: 1.5 }}>
+            {description} הסרטונים יוטמעו אוטומטית כשהם מ-YouTube או מ-Google Drive. הוסיפו את הקישור (URL) ופיסקת תיאור קצרה לכל סרטון.
+          </div>
+          <div style={{ fontSize: 12, color: "var(--warning,#f59e0b)", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.4)", borderRadius: 8, padding: "10px 12px", marginBottom: 14, lineHeight: 1.6 }}>
+            <strong>⚠️ חשוב — סרטוני Google Drive:</strong> הקובץ חייב להיות משותף עם <strong>"כל מי שיש לו את הקישור" (Anyone with the link)</strong> בהרשאת צפייה. אחרת המשתמשים יקבלו 403 ולא יוכלו לראות את הסרטון. לבדוק: לחצו ימני על הקובץ ב-Drive → שיתוף → גישה כללית → "כל מי שיש לו את הקישור".
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {list.length === 0 && (
+              <div style={{ padding: "12px 14px", borderRadius: 8, background: "var(--surface2)", border: "1px dashed var(--border)", fontSize: 13, color: "var(--text3)" }}>
+                עדיין אין סרטונים. לחצו על "הוסף סרטון" כדי להתחיל.
+              </div>
+            )}
+            {list.map((v, idx) => {
+              const isOpen = openVideoIds.has(v.id);
+              const orientationLabel = v.orientation === "vertical" ? "📱 אנכי" : "🖥️ אופקי";
+              if (!isOpen) {
+                return (
+                  <div key={v.id}
+                    onClick={() => toggleVideoOpen(v.id)}
+                    style={{ padding: "10px 14px", borderRadius: 10, background: "var(--surface2)", border: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", transition: "border-color 0.15s, background 0.15s" }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--accent)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "var(--accent)", flexShrink: 0 }}>סרטון {idx + 1}</div>
+                    <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {v.title || v.description || (v.url ? v.url : <span style={{ color: "var(--text3)", fontStyle: "italic" }}>סרטון ריק — לחץ לעריכה</span>)}
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text3)", flexShrink: 0 }}>{orientationLabel}</span>
+                    <button type="button" className="btn btn-secondary"
+                      onClick={e => { e.stopPropagation(); setList(arr => arr.filter(x => x.id !== v.id)); closeVideo(v.id); }}
+                      style={{ fontSize: 12, padding: "4px 8px", display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0 }}
+                      title="הסר סרטון">
+                      <Trash2 size={12} strokeWidth={1.75} />
+                    </button>
+                    <ChevronDown size={16} strokeWidth={1.75} color="var(--text3)" />
+                  </div>
+                );
+              }
+              return (
+                <div key={v.id} style={{ padding: "12px 14px", borderRadius: 10, background: "var(--surface2)", border: "1px solid var(--accent)", display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div onClick={() => toggleVideoOpen(v.id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer" }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "var(--accent)", display: "flex", alignItems: "center", gap: 6 }}>
+                      <ChevronUp size={14} strokeWidth={1.75} color="var(--accent)" />
+                      סרטון {idx + 1}
+                    </div>
+                    <button type="button" className="btn btn-secondary"
+                      onClick={e => { e.stopPropagation(); setList(arr => arr.filter(x => x.id !== v.id)); closeVideo(v.id); }}
+                      style={{ fontSize: 12, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <Trash2 size={12} strokeWidth={1.75} /> הסר
+                    </button>
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 4 }}>כותרת הסרטון</label>
+                    <input
+                      type="text"
+                      placeholder="לדוגמה: איך לקבוע חדר ולהשאיל ציוד סאונד"
+                      value={v.title || ""}
+                      onChange={e => { const next = e.target.value; setList(arr => arr.map(x => x.id === v.id ? { ...x, title: next } : x)); }}
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 4 }}>קישור (YouTube / Google Drive)</label>
+                    <input
+                      type="url"
+                      placeholder="https://www.youtube.com/watch?v=... או https://drive.google.com/file/d/.../view"
+                      value={v.url || ""}
+                      onChange={e => { const next = e.target.value; setList(arr => arr.map(x => x.id === v.id ? { ...x, url: next } : x)); }}
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, direction: "ltr", textAlign: "left" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 4 }}>תיאור קצר</label>
+                    <textarea
+                      rows={3}
+                      placeholder="לדוגמה: איך לקבוע חדר ולהשאיל ציוד סאונד"
+                      value={v.description || ""}
+                      onChange={e => { const next = e.target.value; setList(arr => arr.map(x => x.id === v.id ? { ...x, description: next } : x)); }}
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit", resize: "vertical" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 4 }}>פורמט הסרטון</label>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {[
+                        { key: "landscape", label: "🖥️ אופקי 16:9", hint: "סרטון רגיל" },
+                        { key: "vertical",  label: "📱 אנכי 9:16",  hint: "story / shorts" },
+                      ].map(opt => {
+                        const isActive = (v.orientation || "landscape") === opt.key;
+                        return (
+                          <button
+                            type="button"
+                            key={opt.key}
+                            onClick={() => setList(arr => arr.map(x => x.id === v.id ? { ...x, orientation: opt.key } : x))}
+                            style={{ flex: "0 1 auto", padding: "8px 14px", borderRadius: 8, border: `2px solid ${isActive ? "var(--accent)" : "var(--border)"}`, background: isActive ? "var(--accent-glow)" : "var(--surface)", color: isActive ? "var(--accent)" : "var(--text2)", fontWeight: isActive ? 800 : 600, fontSize: 12, cursor: "pointer", display: "inline-flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
+                            <span>{opt.label}</span>
+                            <span style={{ fontSize: 10, fontWeight: 500, color: isActive ? "var(--accent)" : "var(--text3)" }}>{opt.hint}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 4 }}>
+                    <button type="button" className="btn btn-primary" onClick={() => closeVideo(v.id)}
+                      style={{ fontSize: 13, padding: "8px 18px", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <Save size={14} strokeWidth={1.75} /> שמור וסגור
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <button type="button" className="btn btn-secondary"
+            onClick={() => {
+              const newId = `video_${Date.now()}_${list.length}`;
+              setList(arr => [...arr, { id: newId, title: "", url: "", description: "", orientation: "landscape" }]);
+              setOpenVideoIds(prev => { const next = new Set(prev); next.add(newId); return next; });
+            }}
+            style={{ marginTop: 14, fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Plus size={14} strokeWidth={1.75} /> הוסף סרטון
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="page">
 
@@ -157,169 +292,27 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
         </div>
       </div>
 
-      {/* User Guide Videos — admin-managed list, surfaced in the public
-          "מידע כללי" → "המדריך למשתמש" tab. URLs are YouTube or Drive;
-          PublicForm has a videoEmbedSrc helper that turns them into iframe
-          src URLs and falls back to a friendly message for unsupported hosts. */}
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div className="card-header"><div className="card-title"><Video size={16} strokeWidth={1.75} color="var(--accent)" style={{ verticalAlign: "middle", marginLeft: 6 }} /> המדריך למשתמש — סרטוני הדרכה</div></div>
-        <div style={{ padding: "16px 20px" }}>
-          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14, lineHeight: 1.5 }}>
-            כאן אפשר להוסיף סרטוני הדרכה שיופיעו בטאב "המדריך למשתמש" שב"מידע כללי" של הטופס הציבורי. הסרטונים יוטמעו אוטומטית כשהם מ-YouTube או מ-Google Drive. הוסיפו את הקישור (URL) ופיסקת תיאור קצרה לכל סרטון.
-          </div>
-          <div style={{ fontSize: 12, color: "var(--warning,#f59e0b)", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.4)", borderRadius: 8, padding: "10px 12px", marginBottom: 14, lineHeight: 1.6 }}>
-            <strong>⚠️ חשוב — סרטוני Google Drive:</strong> הקובץ חייב להיות משותף עם <strong>"כל מי שיש לו את הקישור" (Anyone with the link)</strong> בהרשאת צפייה. אחרת התלמידים יקבלו 403 ולא יוכלו לראות את הסרטון. לבדוק: לחצו ימני על הקובץ ב-Drive → שיתוף → גישה כללית → "כל מי שיש לו את הקישור".
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {(draft.userGuideVideos || []).length === 0 && (
-              <div style={{ padding: "12px 14px", borderRadius: 8, background: "var(--surface2)", border: "1px dashed var(--border)", fontSize: 13, color: "var(--text3)" }}>
-                עדיין אין סרטונים. לחצו על "הוסף סרטון" כדי להתחיל.
-              </div>
-            )}
-            {(draft.userGuideVideos || []).map((v, idx) => {
-              const isOpen = openVideoIds.has(v.id);
-              const orientationLabel = v.orientation === "vertical" ? "📱 אנכי" : "🖥️ אופקי";
-              if (!isOpen) {
-                // Collapsed row — single click anywhere on the row reopens
-                // the editor. Trash button is stop-propagation so it doesn't
-                // accidentally toggle the row open while removing.
-                return (
-                  <div key={v.id}
-                    onClick={() => toggleVideoOpen(v.id)}
-                    style={{ padding: "10px 14px", borderRadius: 10, background: "var(--surface2)", border: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", transition: "border-color 0.15s, background 0.15s" }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--accent)"; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; }}>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: "var(--accent)", flexShrink: 0 }}>סרטון {idx + 1}</div>
-                    <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {v.title || v.description || (v.url ? v.url : <span style={{ color: "var(--text3)", fontStyle: "italic" }}>סרטון ריק — לחץ לעריכה</span>)}
-                    </div>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text3)", flexShrink: 0 }}>{orientationLabel}</span>
-                    <button type="button" className="btn btn-secondary"
-                      onClick={e => { e.stopPropagation(); setDraft(p => ({ ...p, userGuideVideos: (p.userGuideVideos || []).filter(x => x.id !== v.id) })); closeVideo(v.id); }}
-                      style={{ fontSize: 12, padding: "4px 8px", display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0 }}
-                      title="הסר סרטון">
-                      <Trash2 size={12} strokeWidth={1.75} />
-                    </button>
-                    <ChevronDown size={16} strokeWidth={1.75} color="var(--text3)" />
-                  </div>
-                );
-              }
-              return (
-                <div key={v.id} style={{ padding: "12px 14px", borderRadius: 10, background: "var(--surface2)", border: "1px solid var(--accent)", display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div onClick={() => toggleVideoOpen(v.id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer" }}>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: "var(--accent)", display: "flex", alignItems: "center", gap: 6 }}>
-                      <ChevronUp size={14} strokeWidth={1.75} color="var(--accent)" />
-                      סרטון {idx + 1}
-                    </div>
-                    <button type="button" className="btn btn-secondary"
-                      onClick={e => { e.stopPropagation(); setDraft(p => ({ ...p, userGuideVideos: (p.userGuideVideos || []).filter(x => x.id !== v.id) })); closeVideo(v.id); }}
-                      style={{ fontSize: 12, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 4 }}>
-                      <Trash2 size={12} strokeWidth={1.75} /> הסר
-                    </button>
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 4 }}>כותרת הסרטון</label>
-                    <input
-                      type="text"
-                      placeholder="לדוגמה: איך לקבוע חדר ולהשאיל ציוד סאונד"
-                      value={v.title || ""}
-                      onChange={e => {
-                        const next = e.target.value;
-                        setDraft(p => ({ ...p, userGuideVideos: (p.userGuideVideos || []).map(x => x.id === v.id ? { ...x, title: next } : x) }));
-                      }}
-                      style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13 }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 4 }}>קישור (YouTube / Google Drive)</label>
-                    <input
-                      type="url"
-                      placeholder="https://www.youtube.com/watch?v=... או https://drive.google.com/file/d/.../view"
-                      value={v.url || ""}
-                      onChange={e => {
-                        const next = e.target.value;
-                        setDraft(p => ({ ...p, userGuideVideos: (p.userGuideVideos || []).map(x => x.id === v.id ? { ...x, url: next } : x) }));
-                      }}
-                      style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, direction: "ltr", textAlign: "left" }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 4 }}>תיאור קצר</label>
-                    <textarea
-                      rows={3}
-                      placeholder="לדוגמה: איך לקבוע חדר ולהשאיל ציוד סאונד"
-                      value={v.description || ""}
-                      onChange={e => {
-                        const next = e.target.value;
-                        setDraft(p => ({ ...p, userGuideVideos: (p.userGuideVideos || []).map(x => x.id === v.id ? { ...x, description: next } : x) }));
-                      }}
-                      style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit", resize: "vertical" }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 4 }}>פורמט הסרטון</label>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {[
-                        { key: "landscape", label: "🖥️ אופקי 16:9", hint: "סרטון רגיל" },
-                        { key: "vertical",  label: "📱 אנכי 9:16",  hint: "story / shorts" },
-                      ].map(opt => {
-                        const isActive = (v.orientation || "landscape") === opt.key;
-                        return (
-                          <button
-                            type="button"
-                            key={opt.key}
-                            onClick={() => setDraft(p => ({ ...p, userGuideVideos: (p.userGuideVideos || []).map(x => x.id === v.id ? { ...x, orientation: opt.key } : x) }))}
-                            style={{
-                              flex: "0 1 auto",
-                              padding: "8px 14px",
-                              borderRadius: 8,
-                              border: `2px solid ${isActive ? "var(--accent)" : "var(--border)"}`,
-                              background: isActive ? "var(--accent-glow)" : "var(--surface)",
-                              color: isActive ? "var(--accent)" : "var(--text2)",
-                              fontWeight: isActive ? 800 : 600,
-                              fontSize: 12,
-                              cursor: "pointer",
-                              display: "inline-flex",
-                              flexDirection: "column",
-                              alignItems: "flex-start",
-                              gap: 2,
-                            }}>
-                            <span>{opt.label}</span>
-                            <span style={{ fontSize: 10, fontWeight: 500, color: isActive ? "var(--accent)" : "var(--text3)" }}>{opt.hint}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 4 }}>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={() => closeVideo(v.id)}
-                      style={{ fontSize: 13, padding: "8px 18px", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                      <Save size={14} strokeWidth={1.75} /> שמור וסגור
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <button type="button" className="btn btn-secondary"
-            onClick={() => {
-              const newId = `video_${Date.now()}_${(draft.userGuideVideos || []).length}`;
-              setDraft(p => ({
-                ...p,
-                userGuideVideos: [...(p.userGuideVideos || []), { id: newId, title: "", url: "", description: "", orientation: "landscape" }],
-              }));
-              // Newly-added videos start expanded so the user immediately
-              // gets the URL/description fields.
-              setOpenVideoIds(prev => { const next = new Set(prev); next.add(newId); return next; });
-            }}
-            style={{ marginTop: 14, fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <Plus size={14} strokeWidth={1.75} /> הוסף סרטון
-          </button>
-        </div>
-      </div>
+      {/* User Guide Videos — three independent panels, one per audience:
+          - userGuideVideos          → students (PublicForm "המדריך למשתמש" tab)
+          - staffUserGuideVideos     → staff (Staff Hub button)
+          - lecturerUserGuideVideos  → lecturers (LecturerPortal button)
+          URLs are YouTube or Drive; UserGuideVideosModal embeds them via
+          videoEmbedSrc and respects per-video orientation (landscape/vertical). */}
+      {renderVideoPanel({
+        draftKey: "userGuideVideos",
+        title: "המדריך למשתמש — סטודנטים (מערכת הפניות)",
+        description: "סרטונים שיופיעו בטאב \"המדריך למשתמש\" שב\"מידע כללי\" של הטופס הציבורי — קהל היעד: סטודנטים.",
+      })}
+      {renderVideoPanel({
+        draftKey: "staffUserGuideVideos",
+        title: "המדריך למשתמש — צוות (Staff Hub)",
+        description: "סרטונים שיופיעו בלחצן \"המדריך למשתמש\" ב-Staff Hub — קהל היעד: צוות / אדמין.",
+      })}
+      {renderVideoPanel({
+        draftKey: "lecturerUserGuideVideos",
+        title: "המדריך למשתמש — מרצים (פורטל מרצה)",
+        description: "סרטונים שיופיעו בלחצן \"המדריך למשתמש\" בפורטל המרצה — קהל היעד: מרצים וראשי מחלקה.",
+      })}
 
       {/* AI */}
       <div className="card" style={{ marginBottom: 20 }}>

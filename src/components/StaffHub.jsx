@@ -181,6 +181,30 @@ export function StaffHub({ user, logo, onNavigate, onLogout, canInstall = false,
           )}
 
           <button
+            type="button"
+            onClick={() => onNavigate("user-guide")}
+            onMouseEnter={() => setHovered("user-guide")}
+            onMouseLeave={() => setHovered(null)}
+            style={{
+              marginTop: 16,
+              padding: "8px 20px",
+              border: `1.5px solid ${hovered === "user-guide" ? "var(--accent)" : "var(--border)"}`,
+              borderRadius: 8,
+              background: hovered === "user-guide" ? "rgba(245,166,35,0.12)" : "var(--surface)",
+              color: hovered === "user-guide" ? "var(--accent)" : "var(--text2)",
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 600,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              transition: "all 0.2s",
+            }}
+          >
+            <BookOpen size={16} strokeWidth={1.75} /> המדריך למשתמש
+          </button>
+
+          <button
             onClick={onLogout}
             style={{
               marginTop: 16,
