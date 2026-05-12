@@ -1,5 +1,5 @@
 // PublicForm.jsx — public loan request form
-import { AlertTriangle, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mail, Mic, Minus, Moon, Package, Pencil, Phone, Save, School, Search, Settings, Shield, ShieldCheck, User, X, XCircle } from "lucide-react";
+import { AlertTriangle, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mail, Mic, Minus, Moon, Package, Pencil, Phone, Save, School, Search, Settings, Shield, ShieldCheck, Trash2, User, X, XCircle } from "lucide-react";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR } from "../utils.js";
 import { supabase } from "../supabaseClient.js";
@@ -1978,6 +1978,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   // Student-side item removal from own pending/approved reservations.
   const [removingItemsForResId, setRemovingItemsForResId] = useState(null); // string|null — which card is in remove-mode
   const [confirmRemoveItem, setConfirmRemoveItem] = useState(null); // {reservationId, itemId, itemName, isLastInReservation}
+  const [confirmCancelReservation, setConfirmCancelReservation] = useState(null); // {reservationId} — explicit "cancel whole request" flow
   const [busyItemIds, setBusyItemIds] = useState(() => new Set()); // Set of item IDs currently in-flight (cancel_reservation uses res-id sentinel)
   // Synchronous in-flight guard. busyItemIds is React state — there's a render lag
   // between setState and `disabled` reflecting on the DOM, so a fast double-click
@@ -2216,16 +2217,21 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     if (inflightModifyRef.current.has(busyKey)) return null;
     inflightModifyRef.current.add(busyKey);
     setBusyItemIds(prev => { const next = new Set(prev); next.add(busyKey); return next; });
-    setReservations(prev => prev.map(r => {
-      if (String(r.id) !== String(reservation_id)) return r;
-      if (action === "cancel_reservation") return { ...r, status: "בוטל" };
-      const items = (r.items || []).map(it => {
-        if (Number(it.id) !== Number(item_id)) return it;
-        if (action === "decrement") return { ...it, quantity: Math.max(1, Number(it.quantity || 1) - 1) };
-        return null;
-      }).filter(Boolean);
-      return { ...r, items };
-    }));
+    if (action === "cancel_reservation") {
+      // Hard delete on the server (migration 20260512120000) — drop the
+      // reservation from local state entirely, not just flip status.
+      setReservations(prev => prev.filter(r => String(r.id) !== String(reservation_id)));
+    } else {
+      setReservations(prev => prev.map(r => {
+        if (String(r.id) !== String(reservation_id)) return r;
+        const items = (r.items || []).map(it => {
+          if (Number(it.id) !== Number(item_id)) return it;
+          if (action === "decrement") return { ...it, quantity: Math.max(1, Number(it.quantity || 1) - 1) };
+          return null;
+        }).filter(Boolean);
+        return { ...r, items };
+      }));
+    }
     try {
       const token = await getAuthToken();
       const res = await fetch("/api/student-modify-reservation-items", {
@@ -4083,7 +4089,7 @@ ${inventory}
             </div>
             <div className="grid-2">
               <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" name="phone" autoComplete="tel" value={form.phone} onChange={e=>set("phone",e.target.value)}/></div>
-              <div className="form-group"><label className="form-label">אימייל *</label><input type="email" className="form-input" name="email" autoComplete="email" value={form.email} onChange={e=>set("email",e.target.value)}/></div>
+              <div className="form-group"><label className="form-label">אימייל *{loggedInStudent?.email&&<span style={{fontSize:11,fontWeight:600,color:"var(--text3)",marginRight:6}}>(מהחשבון שלך)</span>}</label><input type="email" className="form-input" name="email" autoComplete="email" value={form.email} onChange={e=>set("email",e.target.value)} readOnly={!!loggedInStudent?.email} style={loggedInStudent?.email?{opacity:0.7,cursor:"not-allowed"}:undefined}/></div>
             </div>
             <div className="grid-2">
               <div className="form-group"><label className="form-label">קורס / כיתה *</label><input className="form-input" value={form.course} onChange={e=>set("course",e.target.value)}/></div>
@@ -4670,6 +4676,32 @@ ${inventory}
                       </div>
                     </div>);
                   })}
+                  {removingItemsForResId===r.id && (r.items?.length||0)>0 && (
+                    <button
+                      type="button"
+                      disabled={busyItemIds.has(`res:${r.id}`)}
+                      onClick={e=>{e.stopPropagation();setConfirmCancelReservation({reservationId:String(r.id)});}}
+                      style={{
+                        marginTop:8,
+                        alignSelf:"stretch",
+                        padding:"12px 18px",
+                        border:"1.5px solid #e74c3c",
+                        borderRadius:10,
+                        background:"rgba(231,76,60,0.12)",
+                        color:"#e74c3c",
+                        fontWeight:800,
+                        fontSize:14,
+                        cursor:busyItemIds.has(`res:${r.id}`)?"not-allowed":"pointer",
+                        opacity:busyItemIds.has(`res:${r.id}`)?0.6:1,
+                        display:"inline-flex",
+                        alignItems:"center",
+                        justifyContent:"center",
+                        gap:8,
+                      }}
+                    >
+                      <Trash2 size={16} strokeWidth={1.75} /> ביטול הבקשה
+                    </button>
+                  )}
                 </div>);
                 })()}
               </div>);
@@ -4748,6 +4780,48 @@ ${inventory}
         </div>
       </div>
     </div>);
+    })()}
+    {confirmCancelReservation && (() => {
+      const modalBusy = busyItemIds.has(`res:${confirmCancelReservation.reservationId}`);
+      return (<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&!modalBusy&&setConfirmCancelReservation(null)}>
+        <div className="modal" style={{maxWidth:420}}>
+          <div className="modal-header">
+            <span className="modal-title" style={{display:"inline-flex",alignItems:"center",gap:6}}>
+              <AlertTriangle size={16} strokeWidth={1.75} color="#e74c3c"/>
+              ביטול הבקשה
+            </span>
+            <button className="btn btn-secondary btn-sm btn-icon" disabled={modalBusy} onClick={()=>setConfirmCancelReservation(null)}>
+              <X size={16} strokeWidth={1.75} color="var(--text3)"/>
+            </button>
+          </div>
+          <div className="modal-body" style={{direction:"rtl",fontSize:14,lineHeight:1.6}}>
+            האם אתה בטוח שאתה רוצה לבטל את בקשת ההשאלה?
+          </div>
+          <div className="modal-footer">
+            <button className="btn btn-secondary" disabled={modalBusy} onClick={()=>setConfirmCancelReservation(null)}>
+              חזרה
+            </button>
+            <button
+              className="btn btn-primary"
+              disabled={modalBusy}
+              style={{background:"#e74c3c",borderColor:"#e74c3c"}}
+              onClick={async()=>{
+                const c=confirmCancelReservation;
+                const result=await callModifyReservationItem({
+                  reservation_id:c.reservationId,
+                  item_id:0,
+                  action:"cancel_reservation",
+                });
+                if(result){
+                  showToast("success","הבקשה בוטלה");
+                  setRemovingItemsForResId(null);
+                }
+                setConfirmCancelReservation(null);
+              }}
+            >{modalBusy?"מבטל...":"ביטול"}</button>
+          </div>
+        </div>
+      </div>);
     })()}
     {reportModal&&<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setReportModal(null)}>
       <div className="modal" style={{maxWidth:420}}>
