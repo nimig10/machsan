@@ -1191,7 +1191,7 @@ function videoEmbedSrc(rawUrl) {
   return null;
 }
 
-function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColor, commitmentPdf, commitmentPdfCompressed, commitmentPdfName, certifications, userGuideVideos = [] }) {
+function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColor, commitmentPdf, commitmentPdfCompressed, commitmentPdfName, certifications, userGuideVideos = [], userGuidePdf = null }) {
   const [tab, setTab] = useState("policies");
   const [selectedEq, setSelectedEq] = useState(null);  // equipment detail view
   const [infoCatFilter, setInfoCatFilter] = useState([]); // multi-select
@@ -1236,8 +1236,8 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
     </span>
   );
   const tabs = [
-    { id:"equipment", label: tabLabel(Package, "ציוד") },
     { id:"policies",  label: tabLabel(ClipboardList, "נהלים") },
+    { id:"equipment", label: tabLabel(Package, "ציוד") },
     { id:"kits",      label: tabLabel(Backpack, "ערכות") },
     { id:"userGuide", label: tabLabel(BookOpen, "מדריך") },
     { id:"contact",   label: tabLabel(Phone, "צוות") },
@@ -1384,7 +1384,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
           {/* ── USER GUIDE TAB ── */}
           {tab==="userGuide" && (
             <div style={{maxWidth:820,margin:"0 auto"}}>
-              {(userGuideVideos || []).length === 0 ? (
+              {(userGuideVideos || []).length === 0 && !userGuidePdf ? (
                 <div style={{textAlign:"center",color:"var(--text3)",fontSize:14,padding:"40px 0",lineHeight:1.6}}>
                   <BookOpen size={36} strokeWidth={1.5} color="var(--text3)" style={{marginBottom:10}}/>
                   <div>המדריך למשתמש בהכנה — חזרו בקרוב.</div>
@@ -1429,6 +1429,21 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                       </div>
                     );
                   })}
+                  {userGuidePdf && userGuidePdf.data_base64 && (
+                    <button type="button"
+                      onClick={()=>{
+                        const bin = atob(userGuidePdf.data_base64);
+                        const bytes = new Uint8Array(bin.length);
+                        for (let i=0; i<bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                        const url = URL.createObjectURL(new Blob([bytes], { type:"application/pdf" }));
+                        const a = document.createElement("a");
+                        a.href = url; a.download = userGuidePdf.filename || "הוראות-הפעלה.pdf"; a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      style={{alignSelf:"flex-start",marginTop:4,background:accentColor||"var(--accent)",color:"#0a0c10",border:"none",borderRadius:10,padding:"12px 22px",fontWeight:900,fontSize:14,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:8}}>
+                      📄 ⬇ הוראות הפעלה לסטודנט
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1441,7 +1456,7 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
                 <div style={{marginBottom:24,padding:"16px 20px",background:"rgba(245,166,35,0.07)",border:"2px solid var(--accent)",borderRadius:"var(--r)",display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
                   <div style={{flex:1,minWidth:180}}>
                     <div style={{fontWeight:800,fontSize:14,color:"var(--accent)",marginBottom:4}}>📄 מסמך התחייבות — נהלי השאלת ציוד</div>
-                    <div style={{fontSize:12,color:"var(--text3)",lineHeight:1.6}}>הורד, הדפס וחתום על המסמך לפני השאלה ראשונה. ניתן לחתום גם דיגיטלית.</div>
+                    <div style={{fontSize:13,color:"var(--text)",lineHeight:1.6,fontWeight:700}}>הורד, הדפס וחתום על המסמך לפני השאלה ראשונה. ניתן לחתום גם דיגיטלית.</div>
                   </div>
                   <button type="button"
                     onClick={()=>downloadCommitmentPdf(commitmentPdf, commitmentPdfCompressed, commitmentPdfName)}
@@ -1834,7 +1849,7 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
 }
 
 // ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
-export function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], siteSettings={}, categoryLoanTypes={}, refreshInventory=async()=>({}), lecturers=[], lessons=[], canInstall=false, onInstall=()=>{} }) {
+export function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], siteSettings={}, categoryLoanTypes={}, refreshInventory=async()=>({}), lecturers=[], lessons=[], canInstall=false, onInstall=()=>{}, userGuidePdf=null }) {
   const initialParams = new URLSearchParams(window.location.search);
   const initialLoanTypeParam = initialParams.get("loan_type");
   const initialStepParam = Number(initialParams.get("step"));
@@ -4780,7 +4795,7 @@ ${inventory}
         </div>
       </div>
     </div>}
-    {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor} commitmentPdf={policies.commitmentPdf} commitmentPdfCompressed={policies.commitmentPdfCompressed} commitmentPdfName={policies.commitmentPdfName} certifications={certifications} userGuideVideos={Array.isArray(siteSettings.userGuideVideos) ? siteSettings.userGuideVideos : []}/>}
+    {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor} commitmentPdf={policies.commitmentPdf} commitmentPdfCompressed={policies.commitmentPdfCompressed} commitmentPdfName={policies.commitmentPdfName} certifications={certifications} userGuideVideos={Array.isArray(siteSettings.userGuideVideos) ? siteSettings.userGuideVideos : []} userGuidePdf={userGuidePdf}/>}
     {showAccountSettings && loggedInStudent && (
       <AccountSettingsModal
         student={loggedInStudent}

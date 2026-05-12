@@ -93,6 +93,7 @@ export function LecturerPortal({
   showToast,
   siteSettings = {},
   deptHeads = [],
+  userGuidePdf = null,
   onLogout,
 }) {
   const [loggedInLecturer, setLoggedInLecturer] = useState(() => {
@@ -980,6 +981,8 @@ export function LecturerPortal({
                 <button
                   type="button"
                   onClick={() => { setArchiveView((v) => !v); setCourseFilter("הכל"); setSearch(""); }}
+                  onMouseEnter={(e) => { if (!archiveView) { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--accent)"; } }}
+                  onMouseLeave={(e) => { if (!archiveView) { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text2)"; } }}
                   style={{
                     padding: "8px 16px",
                     borderRadius: 20,
@@ -1722,6 +1725,8 @@ export function LecturerPortal({
         title="המדריך למשתמש — מרצים"
         videos={lecturerGuideVideos}
         accentColor={siteSettings?.accentColor}
+        pdfAsset={userGuidePdf}
+        pdfButtonLabel="הוראות הפעלה למרצה"
       />
     </div>
   );

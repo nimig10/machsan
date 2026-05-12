@@ -3,7 +3,17 @@
 // regular in-app page with a "back to Staff Hub" header at the top and the
 // video cards laid out one under the other.
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, ChevronRight, X } from "lucide-react";
+import { BookOpen, ChevronRight, FileText, X } from "lucide-react";
+
+function downloadPdfFromBase64(base64, filename) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = filename || "user-guide.pdf"; a.click();
+  URL.revokeObjectURL(url);
+}
 
 function videoEmbedSrc(rawUrl) {
   const url = String(rawUrl || "").trim();
@@ -15,7 +25,7 @@ function videoEmbedSrc(rawUrl) {
   return null;
 }
 
-export function UserGuideVideosPage({ title = "המדריך למשתמש", videos = [], onBack, accentColor }) {
+export function UserGuideVideosPage({ title = "המדריך למשתמש", videos = [], onBack, accentColor, pdfAsset = null, pdfButtonLabel = "הוראות הפעלה" }) {
   const [activeVideo, setActiveVideo] = useState(null);
   const overlayRef = useRef(null);
 
@@ -49,7 +59,7 @@ export function UserGuideVideosPage({ title = "המדריך למשתמש", video
       </div>
 
       {/* Video cards */}
-      {(videos || []).length === 0 ? (
+      {(videos || []).length === 0 && !pdfAsset ? (
         <div style={{ textAlign: "center", color: "var(--text3)", fontSize: 14, padding: "60px 0", lineHeight: 1.6, background: "var(--surface)", borderRadius: "var(--r)", border: "1px solid var(--border)" }}>
           <BookOpen size={48} strokeWidth={1.5} color="var(--text3)" style={{ marginBottom: 12 }} />
           <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text2)" }}>המדריך למשתמש בהכנה</div>
@@ -94,6 +104,29 @@ export function UserGuideVideosPage({ title = "המדריך למשתמש", video
               </div>
             );
           })}
+          {pdfAsset && pdfAsset.data_base64 && (
+            <button
+              type="button"
+              onClick={() => downloadPdfFromBase64(pdfAsset.data_base64, pdfAsset.filename)}
+              style={{
+                alignSelf: "flex-start",
+                marginTop: 8,
+                background: accentColor || "var(--accent)",
+                color: "#0a0c10",
+                border: "none",
+                borderRadius: 10,
+                padding: "12px 22px",
+                fontWeight: 900,
+                fontSize: 14,
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <FileText size={16} strokeWidth={2} /> ⬇ {pdfButtonLabel}
+            </button>
+          )}
         </div>
       )}
 

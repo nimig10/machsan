@@ -1,13 +1,57 @@
 // SystemSettingsPage.jsx — global system settings (admin only)
-import { useState } from "react";
-import { Camera, Film, Mic, Video, Trash2, Plus, ChevronDown, ChevronUp, Save } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Camera, FileText, Film, Mic, Video, Trash2, Plus, ChevronDown, ChevronUp, Save } from "lucide-react";
 import { syncAllSiteSettings } from "../utils/siteSettingsApi.js";
+import { USER_GUIDE_SLOTS, loadUserGuideAsset, upsertUserGuideAsset, deleteUserGuideAsset } from "../utils/userGuideAssetsApi.js";
+
+const PDF_MAX_BYTES = 5 * 1024 * 1024; // 5MB
 
 export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast }) {
   const [draft, setDraft] = useState({ aiMaxRequests: 5, publicDisplayInterval: 18, ...siteSettings });
   const [saving, setSaving] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   const [soundLogoUploading, setSoundLogoUploading] = useState(false);
+  // PDF user-guide assets — keyed by slot. `pdfDrafts` holds the editable state;
+  // `pdfInitial` is the snapshot at mount used to diff on save (upsert/delete).
+  const [pdfDrafts, setPdfDrafts] = useState({});
+  const [pdfInitial, setPdfInitial] = useState({});
+  const [pdfUploading, setPdfUploading] = useState({});
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const entries = await Promise.all(
+          Object.values(USER_GUIDE_SLOTS).map(async (slot) => [slot, await loadUserGuideAsset(slot)])
+        );
+        if (cancelled) return;
+        const map = Object.fromEntries(entries);
+        setPdfDrafts(map);
+        setPdfInitial(map);
+      } catch (err) {
+        console.warn("[SystemSettingsPage] load user-guide PDFs failed", err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handlePdfUpload = (slot, file) => {
+    if (!file) return;
+    if (file.type !== "application/pdf") { showToast("error", "רק קבצי PDF נתמכים"); return; }
+    if (file.size > PDF_MAX_BYTES) { showToast("error", "הקובץ גדול מדי — עד 5MB"); return; }
+    setPdfUploading(p => ({ ...p, [slot]: true }));
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = String(ev.target?.result || "");
+      const base64 = dataUrl.split(",")[1] || "";
+      setPdfDrafts(p => ({ ...p, [slot]: { filename: file.name, data_base64: base64 } }));
+      setPdfUploading(p => ({ ...p, [slot]: false }));
+    };
+    reader.onerror = () => { showToast("error", "שגיאה בקריאת הקובץ"); setPdfUploading(p => ({ ...p, [slot]: false })); };
+    reader.readAsDataURL(file);
+  };
+
+  const removePdf = (slot) => setPdfDrafts(p => ({ ...p, [slot]: null }));
   // Track which video editors are open. Existing videos load collapsed (a
   // compact row); newly-added or just-saved videos collapse too. Adding a
   // new video opens it automatically. The "save" button collapses the row.
@@ -49,17 +93,41 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
   const save = async () => {
     setSaving(true);
     setSiteSettings(draft);
-    await syncAllSiteSettings(draft);
-    setSaving(false);
-    showToast("success", "ההגדרות נשמרו");
+    try {
+      await syncAllSiteSettings(draft);
+      // Diff PDF drafts vs initial — upsert when content changed, delete when cleared.
+      const slots = Object.values(USER_GUIDE_SLOTS);
+      await Promise.all(slots.map(async (slot) => {
+        const next = pdfDrafts[slot] || null;
+        const prev = pdfInitial[slot] || null;
+        const sameBase64 = (next?.data_base64 || null) === (prev?.data_base64 || null);
+        const sameName = (next?.filename || null) === (prev?.filename || null);
+        if (sameBase64 && sameName) return;
+        if (next && next.data_base64) {
+          await upsertUserGuideAsset(slot, { filename: next.filename, data_base64: next.data_base64 });
+        } else if (prev) {
+          await deleteUserGuideAsset(slot);
+        }
+      }));
+      setPdfInitial(pdfDrafts);
+      showToast("success", "ההגדרות נשמרו");
+    } catch (err) {
+      console.warn("[SystemSettingsPage.save]", err);
+      showToast("error", "שגיאה בשמירת PDF — נסה שוב");
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Renders one audience-specific video-management panel (students / staff /
   // lecturers). Each panel reads + writes its own JSON array on `draft` so
-  // the three lists stay independent.
-  const renderVideoPanel = ({ draftKey, title, description }) => {
+  // the three lists stay independent. `pdfSlot` (optional) adds a PDF upload
+  // section at the bottom for "הוראות הפעלה" for that audience.
+  const renderVideoPanel = ({ draftKey, title, description, pdfSlot }) => {
     const list = draft[draftKey] || [];
     const setList = (updater) => setDraft(p => ({ ...p, [draftKey]: updater(p[draftKey] || []) }));
+    const pdf = pdfSlot ? pdfDrafts[pdfSlot] : null;
+    const isPdfUploading = pdfSlot ? !!pdfUploading[pdfSlot] : false;
     return (
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-header"><div className="card-title"><Video size={16} strokeWidth={1.75} color="var(--accent)" style={{ verticalAlign: "middle", marginLeft: 6 }} /> {title}</div></div>
@@ -184,6 +252,40 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
             style={{ marginTop: 14, fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}>
             <Plus size={14} strokeWidth={1.75} /> הוסף סרטון
           </button>
+
+          {pdfSlot && (
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                <FileText size={12} strokeWidth={1.75} color="var(--accent)" /> מסמך PDF נלווה (אופציונלי)
+              </div>
+              <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 12, lineHeight: 1.5 }}>
+                אם יועלה — יופיע כפתור "הוראות הפעלה" צהוב ליד הסרטונים בדף של הקהל הזה. עד 5MB.
+              </div>
+              {pdf && pdf.data_base64 ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "10px 14px", borderRadius: 10, background: "var(--surface2)", border: "1px solid var(--border)" }}>
+                  <FileText size={18} strokeWidth={1.75} color="var(--accent)" />
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {pdf.filename || "מסמך"}
+                  </div>
+                  <label className="btn btn-secondary" style={{ cursor: isPdfUploading ? "not-allowed" : "pointer", opacity: isPdfUploading ? 0.6 : 1, fontSize: 12 }}>
+                    {isPdfUploading ? "מעלה..." : "החלף"}
+                    <input type="file" accept="application/pdf" style={{ display: "none" }} disabled={isPdfUploading}
+                      onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; handlePdfUpload(pdfSlot, f); }} />
+                  </label>
+                  <button type="button" className="btn btn-secondary" style={{ fontSize: 12 }}
+                    onClick={() => removePdf(pdfSlot)}>
+                    <Trash2 size={12} strokeWidth={1.75} /> הסר
+                  </button>
+                </div>
+              ) : (
+                <label className="btn btn-secondary" style={{ cursor: isPdfUploading ? "not-allowed" : "pointer", opacity: isPdfUploading ? 0.6 : 1, fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  {isPdfUploading ? "מעלה..." : <><FileText size={14} strokeWidth={1.75} /> העלה מסמך PDF</>}
+                  <input type="file" accept="application/pdf" style={{ display: "none" }} disabled={isPdfUploading}
+                    onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; handlePdfUpload(pdfSlot, f); }} />
+                </label>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -302,16 +404,19 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
         draftKey: "userGuideVideos",
         title: "המדריך למשתמש — סטודנטים (מערכת הפניות)",
         description: "סרטונים שיופיעו בטאב \"המדריך למשתמש\" שב\"מידע כללי\" של הטופס הציבורי — קהל היעד: סטודנטים.",
+        pdfSlot: USER_GUIDE_SLOTS.students,
       })}
       {renderVideoPanel({
         draftKey: "staffUserGuideVideos",
         title: "המדריך למשתמש — צוות (Staff Hub)",
         description: "סרטונים שיופיעו בלחצן \"המדריך למשתמש\" ב-Staff Hub — קהל היעד: צוות / אדמין.",
+        pdfSlot: USER_GUIDE_SLOTS.staff,
       })}
       {renderVideoPanel({
         draftKey: "lecturerUserGuideVideos",
         title: "המדריך למשתמש — מרצים (פורטל מרצה)",
         description: "סרטונים שיופיעו בלחצן \"המדריך למשתמש\" בפורטל המרצה — קהל היעד: מרצים וראשי מחלקה.",
+        pdfSlot: USER_GUIDE_SLOTS.lecturers,
       })}
 
       {/* AI */}
