@@ -460,7 +460,11 @@ const STATUS_BADGE_COLORS = {
 function ActiveLoanCard({ reservation, equipById }) {
   const r = reservation;
   const [open, setOpen] = useState(false);
-  const badge = STATUS_BADGE_COLORS[r.status] || { bg:"var(--surface)", fg:"var(--text3)" };
+  // getEffectiveStatus promotes "מאושר" → "פעילה" once the borrow window starts.
+  // Show the effective status on the badge so an active loan reads "פעילה"
+  // even though the row in reservations_new still stores "מאושר".
+  const effectiveStatus = getEffectiveStatus(r);
+  const badge = STATUS_BADGE_COLORS[effectiveStatus] || { bg:"var(--surface)", fg:"var(--text3)" };
   const loanTypeColor = r.loan_type ? getLoanTypeColor(r.loan_type) : ["var(--surface2)","var(--text3)"];
   const items = Array.isArray(r.items) ? r.items : [];
   const requesterName = (r.student_name || r.requester_name || r.email || "ללא שם").trim();
@@ -496,7 +500,7 @@ function ActiveLoanCard({ reservation, equipById }) {
               </span>
             )}
           </div>
-          <span style={{padding:"3px 10px",borderRadius:12,background:badge.bg,color:badge.fg,fontWeight:800,fontSize:11}}>{r.status}</span>
+          <span style={{padding:"3px 10px",borderRadius:12,background:badge.bg,color:badge.fg,fontWeight:800,fontSize:11}}>{effectiveStatus}</span>
         </div>
 
         <div style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:8,padding:"6px 9px",background:"var(--surface2)",borderRadius:"var(--r-sm)"}}>
