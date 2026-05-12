@@ -18,6 +18,7 @@ import { SecretaryDashboardPage } from "./components/SecretaryDashboardPage.jsx"
 import { PublicDisplayPage } from "./components/PublicDisplayPage.jsx";
 import { PublicDailyTablePage } from "./components/PublicDailyTablePage.jsx";
 import { StaffHub } from "./components/StaffHub.jsx";
+import { UserGuideVideosPage } from "./components/UserGuideVideosPage.jsx";
 import { StaffManagementPage } from "./components/StaffManagementPage.jsx";
 import { SystemSettingsPage } from "./components/SystemSettingsPage.jsx";
 import { ActivityLogsPage } from "./components/ActivityLogsPage.jsx";
@@ -36,6 +37,7 @@ import { syncAllTeamMembers, loadTeamMembersFromTable } from "./utils/teamMember
 import { syncAllCategories, loadCategoriesFromTable, syncLoanTypeFilters, loadLoanTypeFiltersFromTable } from "./utils/categoriesApi.js";
 import { loadPoliciesFromTable, syncAllPolicies } from "./utils/policiesApi.js";
 import { loadSiteSettingsFromTable, syncAllSiteSettings, setSetting as setSiteSetting } from "./utils/siteSettingsApi.js";
+import { USER_GUIDE_SLOTS, loadUserGuideAsset } from "./utils/userGuideAssetsApi.js";
 import { loadCollegeManagerFromTable, saveCollegeManager } from "./utils/collegeManagerApi.js";
 import { loadDeptHeadsFromTable, syncAllDeptHeads, upsertDeptHead, deleteDeptHead } from "./utils/deptHeadsApi.js";
 import { pendingReservationDeletes, unmarkReservationDeleting } from "./pendingDeletes.js";
@@ -5399,6 +5401,10 @@ export default function App() {
   const [policies, _setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"", לילה:"" });
   const [certifications, _setCertifications] = useState({ types:[], students:[] });
   const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14, aiMaxRequests:5, studioFutureHoursLimit:16, publicDisplayInterval:18, userGuideVideos:[] });
+  // PDF user-guide assets per audience — loaded once + refreshed by realtime
+  // when admin uploads/removes from SystemSettingsPage. null = no PDF for that
+  // audience → consumer components hide their download button.
+  const [userGuidePdfs, setUserGuidePdfs] = useState({ students: null, staff: null, lecturers: null });
   const [studios, _setStudios] = useState([]);
   const [studioBookings, _setStudioBookings] = useState([]);
   const [lessons, _setLessons] = useState([]);
@@ -5759,6 +5765,51 @@ export default function App() {
   const setStudioBookings = createTrackedSetter(_setStudioBookings);
   const setLessons = createTrackedSetter(_setLessons);
   const setLecturers = createTrackedSetter(_setLecturers);
+
+  // Load + realtime-track the 3 user-guide PDF assets. Independent of the main
+  // init effect — these are tiny and not blocking. When admin uploads/removes
+  // a PDF in SystemSettingsPage, the policy_assets realtime publication fires
+  // and we reload only the affected slot.
+  useEffect(() => {
+    let cancelled = false;
+    const audienceOf = (slot) => {
+      for (const [k, v] of Object.entries(USER_GUIDE_SLOTS)) if (v === slot) return k;
+      return null;
+    };
+    const reload = async (slot) => {
+      try {
+        const asset = await loadUserGuideAsset(slot);
+        if (cancelled) return;
+        const aud = audienceOf(slot);
+        if (aud) setUserGuidePdfs(p => ({ ...p, [aud]: asset }));
+      } catch (err) { console.warn("[userGuidePdfs] reload", slot, err); }
+    };
+    (async () => {
+      try {
+        const entries = await Promise.all(
+          Object.entries(USER_GUIDE_SLOTS).map(async ([aud, slot]) => [aud, await loadUserGuideAsset(slot)])
+        );
+        if (cancelled) return;
+        setUserGuidePdfs(Object.fromEntries(entries));
+      } catch (err) { console.warn("[userGuidePdfs] initial load", err); }
+    })();
+    const slotSet = new Set(Object.values(USER_GUIDE_SLOTS));
+    let debounceTimer = null;
+    const channel = supabase
+      .channel("user-guide-pdfs")
+      .on("postgres_changes", { event: "*", schema: "public", table: "policy_assets" }, (payload) => {
+        const slot = payload?.new?.slot || payload?.old?.slot;
+        if (!slot || !slotSet.has(slot)) return;
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => reload(slot), 400);
+      })
+      .subscribe();
+    return () => {
+      cancelled = true;
+      if (debounceTimer) clearTimeout(debounceTimer);
+      try { supabase.removeChannel(channel); } catch {}
+    };
+  }, []);
 
   const fetchEquipmentReports = async () => {
     try { const token=await getAuthToken(); const r = await fetch("/api/equipment-report",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({action:"list"})}); const d = await r.json(); if(Array.isArray(d)) setEquipmentReports(d); } catch {}
@@ -6949,6 +7000,7 @@ export default function App() {
               showToast={showToast}
               siteSettings={siteSettings}
               deptHeads={deptHeads}
+              userGuidePdf={userGuidePdfs.lecturers}
               onLogout={async () => {
                 sessionStorage.removeItem("active_role");
                 sessionStorage.removeItem("lecturer_portal_user");
@@ -6960,7 +7012,7 @@ export default function App() {
         </div>
       ) : isPublicFormView && (
         <div className="public-page-shell">
-          {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes} refreshInventory={refreshPublicInventory} lecturers={lecturers} lessons={lessons} canInstall={canInstallPwa} onInstall={installPwa}/>}
+          {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes} refreshInventory={refreshPublicInventory} lecturers={lecturers} lessons={lessons} canInstall={canInstallPwa} onInstall={installPwa} userGuidePdf={userGuidePdfs.students}/>}
         </div>
       )}
 
@@ -7010,6 +7062,24 @@ export default function App() {
               </div>
             </div>
             <SystemSettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast}/>
+          </div>
+        </div>
+      )}
+
+      {/* ── המדריך למשתמש — צוות (all staff) ──
+          UserGuideVideosPage has its own header + "חזרה ל-Staff Hub" button,
+          so we skip the topbar wrapper that the other admin views use. */}
+      {isAdmin && authed && staffView === "user-guide" && (
+        <div className="app" style={{"--accent":siteSettings.adminAccentColor||"#f5a623","--accent-glow":`${siteSettings.adminAccentColor||"#f5a623"}2e`,"--admin-fs":`${siteSettings.adminFontSize||14}px`}}>
+          <div className="main" style={{marginRight:0,width:"100%"}}>
+            <UserGuideVideosPage
+              title="המדריך למשתמש — צוות"
+              videos={Array.isArray(siteSettings?.staffUserGuideVideos) ? siteSettings.staffUserGuideVideos : []}
+              accentColor={siteSettings?.accentColor}
+              onBack={()=>setStaffView("hub")}
+              pdfAsset={userGuidePdfs.staff}
+              pdfButtonLabel="הוראות הפעלה לצוות"
+            />
           </div>
         </div>
       )}

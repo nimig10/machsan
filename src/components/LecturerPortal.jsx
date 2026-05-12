@@ -5,6 +5,7 @@ import { listStudents } from "../utils/studentsApi.js";
 import { syncAllLessons } from "../utils/lessonsApi.js";
 import { statusBadge } from "./ui.jsx";
 import { Backpack, BookOpen, Calendar, CheckCircle, Film, GraduationCap, Info, Mic, Minus, Package, Shield, X, XCircle } from "lucide-react";
+import { UserGuideVideosModal } from "./UserGuideVideosModal.jsx";
 import { DeptHeadCalendarPage } from "./CalendarViews.jsx";
 
 function hasLinkedValue(value) {
@@ -92,6 +93,7 @@ export function LecturerPortal({
   showToast,
   siteSettings = {},
   deptHeads = [],
+  userGuidePdf = null,
   onLogout,
 }) {
   const [loggedInLecturer, setLoggedInLecturer] = useState(() => {
@@ -110,6 +112,8 @@ export function LecturerPortal({
   // here for late submissions (computeStatusWindow keeps the window open
   // post-end).
   const [archiveView, setArchiveView] = useState(false);
+  const [userGuideOpen, setUserGuideOpen] = useState(false);
+  const lecturerGuideVideos = Array.isArray(siteSettings?.lecturerUserGuideVideos) ? siteSettings.lecturerUserGuideVideos : [];
 
   // Stage 6 step 5b: students for getStudentsForLesson() come from
   // public.students via studentsApi. Falls back to certifications.students
@@ -977,6 +981,8 @@ export function LecturerPortal({
                 <button
                   type="button"
                   onClick={() => { setArchiveView((v) => !v); setCourseFilter("הכל"); setSearch(""); }}
+                  onMouseEnter={(e) => { if (!archiveView) { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--accent)"; } }}
+                  onMouseLeave={(e) => { if (!archiveView) { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text2)"; } }}
                   style={{
                     padding: "8px 16px",
                     borderRadius: 20,
@@ -993,6 +999,29 @@ export function LecturerPortal({
                   {archiveView ? "← קורסים פעילים" : `🗂 ארכיון קורסים (${archivedCourseEntries.length})`}
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => setUserGuideOpen(true)}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: 20,
+                  border: "2px solid var(--border)",
+                  background: "var(--surface2)",
+                  color: "var(--text2)",
+                  fontWeight: 800,
+                  fontSize: 13,
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--accent)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text2)"; }}
+                title="צפייה בסרטוני הדרכה למרצים"
+              >
+                <BookOpen size={14} strokeWidth={1.75} /> המדריך למשתמש
+              </button>
               {(() => { try { const r = loggedInLecturer || {}; return r.is_admin || r.is_warehouse; } catch { return false; } })() && (
                 <button
                   className="btn"
@@ -1690,6 +1719,15 @@ export function LecturerPortal({
         );
       })()}
 
+      <UserGuideVideosModal
+        open={userGuideOpen}
+        onClose={() => setUserGuideOpen(false)}
+        title="המדריך למשתמש — מרצים"
+        videos={lecturerGuideVideos}
+        accentColor={siteSettings?.accentColor}
+        pdfAsset={userGuidePdf}
+        pdfButtonLabel="הוראות הפעלה למרצה"
+      />
     </div>
   );
 }
