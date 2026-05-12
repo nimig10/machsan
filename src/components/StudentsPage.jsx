@@ -135,7 +135,26 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
     // Stage 6 step 6: tables are now the source of truth — no more blob write.
     // Skip student sync when only tracks/types changed — avoids 332+ needless DB calls.
     const skipStudents = updatedPatch?.students === undefined;
-    const r = await dualWriteCertifications(updated, { skipStudents });
+    // Surgical diff: when the patch is for a small, identifiable subset of
+    // students (inline edit, add, delete), upsert/delete only those rows. The
+    // previous code path always called syncAllStudents → 168 students × ~5
+    // Supabase calls each = mass ERR_CONNECTION_CLOSED in prod. Threshold of
+    // 10 keeps bulk imports on the full-sync path where it's still cheaper.
+    let studentDiff = null;
+    if (!skipStudents && Array.isArray(students)) {
+      const prevById = new Map(students.map(s => [s.id, s]));
+      const nextById = new Map(nextStudents.map(s => [s.id, s]));
+      const upsertList = [];
+      for (const stu of nextStudents) {
+        const prev = prevById.get(stu.id);
+        if (!prev || JSON.stringify(prev) !== JSON.stringify(stu)) upsertList.push(stu);
+      }
+      const deleteList = students.map(s => s.id).filter(id => !nextById.has(id));
+      if (upsertList.length + deleteList.length <= 10) {
+        studentDiff = { upsert: upsertList, deleteIds: deleteList };
+      }
+    }
+    const r = await dualWriteCertifications(updated, { skipStudents, studentDiff });
     setSaving(false);
     if(!r.ok) showToast("error","שגיאה בשמירה");
     if (r.ok) {

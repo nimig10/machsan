@@ -259,8 +259,24 @@ export async function syncTracks(tracks, trackSettings) {
   }
 }
 
+// Process items in small parallel batches. With ~168 students × ~5 Supabase
+// calls each, firing them all at once (Promise.all on the full list) used to
+// saturate the browser's HTTP/1.1 per-host connection limit and Supabase's
+// connection pool → mass ERR_CONNECTION_CLOSED. Batching of 4 keeps us under
+// every relevant limit while staying fast for normal-size lists.
+async function inBatches(items, fn, batchSize = 4) {
+  const results = [];
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(fn));
+    results.push(...batchResults);
+  }
+  return results;
+}
+
 // Full reconciliation: upsert every student in `nextStudents` and delete any
-// IDs in the table that aren't in the new list. Upserts run in parallel.
+// IDs in the table that aren't in the new list. Upserts run in batches to
+// avoid connection saturation (browser limit + Supabase pool).
 // Surfaces individual failures — caller (UI toast) needs to know if any row failed.
 export async function syncAllStudents(nextStudents) {
   if (!Array.isArray(nextStudents)) return { ok: false, error: "not an array" };
@@ -272,8 +288,8 @@ export async function syncAllStudents(nextStudents) {
 
     const toDelete = (existing ?? []).map(r => r.id).filter(id => !wantIds.has(id));
 
-    const upsertResults = await Promise.all(nextStudents.map(stu => upsertStudent(stu)));
-    const deleteResults = await Promise.all(toDelete.map(id => deleteStudent(id)));
+    const upsertResults = await inBatches(nextStudents, stu => upsertStudent(stu), 4);
+    const deleteResults = await inBatches(toDelete, id => deleteStudent(id), 4);
     const failures = [
       ...upsertResults.filter(r => r?.ok === false),
       ...deleteResults.filter(r => r?.ok === false),
@@ -329,6 +345,30 @@ export async function loadCertificationsFromTables() {
   };
 }
 
+// Surgical: upsert a known subset of students + delete a known subset. Used
+// when the caller can compute exactly which rows changed (e.g. inline edit of
+// one student → 1 upsert instead of N×5 calls). Falls back to the full sync
+// path if the caller can't compute a diff.
+export async function syncStudentsDiff({ upsert = [], deleteIds = [] } = {}) {
+  try {
+    const upsertResults = await inBatches(upsert, stu => upsertStudent(stu), 4);
+    const deleteResults = await inBatches(deleteIds, id => deleteStudent(id), 4);
+    const failures = [
+      ...upsertResults.filter(r => r?.ok === false),
+      ...deleteResults.filter(r => r?.ok === false),
+    ];
+    if (failures.length > 0) {
+      const first = failures[0]?.error || "unknown";
+      console.warn("[studentsApi.syncStudentsDiff] failures:", failures.length, first);
+      return { ok: false, error: `${failures.length} row(s) failed: ${first}`, failures };
+    }
+    return { ok: true, upserted: upsert.length, deleted: deleteIds.length };
+  } catch (err) {
+    console.warn("[studentsApi.syncStudentsDiff]", err);
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
 // ─── Orchestrator ─────────────────────────────────────────────────────────
 //
 // Stage 6 step 6: tables are now the source of truth. Callers no longer write
@@ -336,7 +376,11 @@ export async function loadCertificationsFromTables() {
 // can surface a save error like the old storageSet did.
 //
 // Order matters: types/tracks first (FK targets), then students (FKs into them).
-export async function dualWriteCertifications(certifications, { skipStudents = false } = {}) {
+//
+// `studentDiff` (optional): { upsert: stu[], deleteIds: id[] } — when provided,
+// skip syncAllStudents and only touch those rows. Avoids 168+ unrelated upserts
+// every time the user edits a single student.
+export async function dualWriteCertifications(certifications, { skipStudents = false, studentDiff = null } = {}) {
   if (!certifications) return { ok: false, error: "no payload" };
   const r1 = await syncCertificationTypes(certifications.types);
   const r2 = await syncTracks(certifications.tracks, certifications.trackSettings);
@@ -344,7 +388,9 @@ export async function dualWriteCertifications(certifications, { skipStudents = f
     const ok = r1?.ok !== false && r2?.ok !== false;
     return { ok, types: r1, tracks: r2, students: { ok: true, skipped: true } };
   }
-  const r3 = await syncAllStudents(certifications.students);
+  const r3 = studentDiff
+    ? await syncStudentsDiff(studentDiff)
+    : await syncAllStudents(certifications.students);
   const ok = r1?.ok !== false && r2?.ok !== false && r3?.ok !== false;
   return { ok, types: r1, tracks: r2, students: r3 };
 }
