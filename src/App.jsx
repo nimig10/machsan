@@ -6112,6 +6112,29 @@ export default function App() {
           const name = String(lesson.instructorName || "").trim();
           if (!name) { updatedLessons.push(lesson); continue; }
           const nameLower = name.toLowerCase();
+          const emailLower = String(lesson.instructorEmail || "").trim().toLowerCase();
+          // Email-first dedup. The lecturers table has a UNIQUE index on
+          // lower(email), so two rows can't share an email. If this lesson's
+          // instructor email already belongs to a known lecturer we MUST link
+          // to that row rather than creating a new lecturer — otherwise the
+          // upsert in syncAllLecturers fires INSERT with a fresh UUID and the
+          // DB rejects it with 23505. This was the source of the recurring
+          // "duplicate key value violates unique constraint lecturers_email
+          // _lower_idx" 409 — a lesson listed the instructor as "איציק רוזן"
+          // while the lecturer row was "ד\"ר איציק רוזן", so the legacy
+          // name-only check thought it was a new person.
+          const byEmail = emailLower
+            ? [...loadedLecturers, ...newLecturers].find(l => String(l.email || "").trim().toLowerCase() === emailLower)
+            : null;
+          if (byEmail) {
+            if (!lesson.lecturerId) {
+              updatedLessons.push({ ...lesson, lecturerId: byEmail.id });
+              lessonsChanged = true;
+            } else {
+              updatedLessons.push(lesson);
+            }
+            continue;
+          }
           if (!existingNames.has(nameLower)) {
             const lec = makeLecturer({
               fullName: name,
