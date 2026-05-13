@@ -1928,12 +1928,6 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [loginPassword, setLoginPassword] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
-  // Identity-confirmation modal — after a fresh sign-in we show "מתחבר/ת כ-X"
-  // so autofill/typo cases where the browser pre-filled someone else's email
-  // can't sneak the user into another person's account.
-  // pendingIdentity = { name, onConfirm, onReject } | null
-  const [pendingIdentity, setPendingIdentity] = useState(null);
-  const freshLoginRef = useRef(false);
   // PASSWORD_RECOVERY modal (user clicked reset link from email)
   // The inline <script> in index.html sets window.__isPasswordRecovery = true
   // synchronously before any module loads, so we can pre-arm the ref here and
@@ -2332,7 +2326,6 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
             if (!error2 && data2?.user) {
               clearTimeout(safety);
               routingRef.current = false; // force-unlock mutex (same fix as main success path)
-              freshLoginRef.current = true;
               try { await routeByRoles(data2.session); } catch {}
               setLoginBusy(false);
               return;
@@ -2352,7 +2345,6 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       // frozen until a refresh. Explicit login always takes priority.
       clearTimeout(safety);
       routingRef.current = false;
-      freshLoginRef.current = true;
       try { await routeByRoles(data.session); } catch {}
       setLoginBusy(false);
     } catch {
@@ -2436,39 +2428,6 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       setRecoveryError("שגיאה בתקשורת. נסו שוב.");
       setRecoveryBusy(false);
     }
-  };
-
-  // Identity-confirmation gate. After a fresh sign-in (handleLogin or
-  // onAuthStateChange "SIGNED_IN") `freshLoginRef.current` is true. This helper
-  // pops up a modal showing the resolved full name so the user can reject if
-  // the browser autofilled someone else's email. Returns true if the user
-  // confirms (or no modal was needed for a session-restore path).
-  const confirmIdentityIfFresh = (name) => {
-    if (!freshLoginRef.current) return Promise.resolve(true);
-    freshLoginRef.current = false;
-    return new Promise((resolve) => {
-      setPendingIdentity({
-        name: String(name || "").trim() || "(לא ידוע)",
-        onConfirm: () => { setPendingIdentity(null); resolve(true); },
-        onReject:  () => { setPendingIdentity(null); resolve(false); },
-      });
-    });
-  };
-
-  // Shared handler for the "no, that's not me" path on every role's identity
-  // gate. Signs the user out so their session can't keep them logged in and
-  // surfaces a clear inline error explaining the most common cause (autofill).
-  const handleIdentityRejected = async () => {
-    await supabase.auth.signOut().catch(() => {});
-    setLoggedInStudent(null);
-    try {
-      sessionStorage.removeItem("public_student");
-      sessionStorage.removeItem("public_student_roles");
-      sessionStorage.removeItem("staff_user");
-      sessionStorage.removeItem("lecturer_portal_user");
-      sessionStorage.removeItem("active_role");
-    } catch {}
-    setLoginError("ביטלת את אישור הזהות. בדוק/י שאת/ה מקליד/ה ידנית את המייל שלך (ייתכן שהדפדפן השלים אוטומטית מייל לא שלך) ונסה/י שוב.");
   };
 
   // Helper: upsert auth_entity_map row via authenticated Supabase client.
@@ -2638,11 +2597,6 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 
   // ── Role routing helpers ──────────────────────────────────────────────────
   const routeToStaff = async (userRow, roleFlags) => {
-    const confirmed = await confirmIdentityIfFresh(userRow.full_name || userRow.email);
-    if (!confirmed) {
-      await handleIdentityRejected();
-      return false;
-    }
     const staffUserObj = {
       id: userRow.id,
       full_name: userRow.full_name,
@@ -2664,11 +2618,6 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       (l) => l.isActive !== false && l.email?.toLowerCase().trim() === authEmail,
     );
     if (!matchedLecturer) return false;
-    const confirmed = await confirmIdentityIfFresh(matchedLecturer.fullName || userRow.full_name);
-    if (!confirmed) {
-      await handleIdentityRejected();
-      return false;
-    }
     await upsertAuthEntityMap(authUserId, "lecturer", String(matchedLecturer.id), authEmail);
     try {
       sessionStorage.removeItem("public_student");
@@ -2690,11 +2639,6 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       (s) => s.email?.toLowerCase().trim() === authEmail,
     );
     if (!matchedStudent) return false;
-    const confirmed = await confirmIdentityIfFresh(matchedStudent.name || userRow.full_name);
-    if (!confirmed) {
-      await handleIdentityRejected();
-      return false;
-    }
     await upsertAuthEntityMap(authUserId, "student", String(matchedStudent.id), authEmail);
     try {
       sessionStorage.removeItem("lecturer_portal_user");
@@ -2724,7 +2668,6 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       }
       if (event !== "SIGNED_IN" || !session?.user?.email) return;
       if (recoveryModeRef.current) return;
-      freshLoginRef.current = true;
       // Fire-and-forget. supabase-js awaits this listener inside
       // _notifyAllSubscribers, which is awaited inside signInWithPassword.
       // If routeByRoles blocked here (multiple DB fetches + /api/auth on a
@@ -5064,31 +5007,6 @@ ${inventory}
       </div>
     )}
     <AIChatBot equipment={equipment} reservations={reservations} policies={policies} settings={siteSettings} currentUser={loggedInStudent} refreshInventory={syncInventory} />
-    {pendingIdentity && (
-      <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(0,0,0,0.88)",backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-        <div style={{background:"var(--surface, #161922)",border:"1px solid var(--border)",borderRadius:16,padding:24,maxWidth:440,width:"100%",textAlign:"center",boxShadow:"0 12px 48px rgba(0,0,0,0.5)"}}>
-          <div style={{display:"flex",justifyContent:"center",marginBottom:12,color:"var(--accent)"}}>
-            <Shield size={36} strokeWidth={1.75} />
-          </div>
-          <div style={{fontSize:18,fontWeight:900,marginBottom:14,color:"var(--accent)"}}>אישור זהות</div>
-          <div style={{fontSize:13,color:"var(--text2)",marginBottom:6}}>מתחבר/ת כ:</div>
-          <div style={{fontSize:22,fontWeight:900,marginBottom:18,color:"var(--text)"}}>{pendingIdentity.name}</div>
-          <div style={{fontSize:13,color:"var(--text2)",marginBottom:22,lineHeight:1.55}}>
-            אם זה לא את/ה — סביר שהדפדפן השלים אוטומטית מייל לא שלך. לחץ/י <strong>"לא, זה לא אני"</strong> כדי להתנתק ולנסות שוב.
-          </div>
-          <div style={{display:"flex",gap:10,flexDirection:"row-reverse"}}>
-            <button type="button" className="btn btn-primary" style={{flex:1,padding:"12px 8px",fontSize:14,fontWeight:700}}
-              onClick={()=>pendingIdentity.onConfirm()}>
-              כן, זה אני
-            </button>
-            <button type="button" className="btn" style={{flex:1,padding:"12px 8px",fontSize:14,fontWeight:700,background:"transparent",color:"var(--red,#ef4444)",border:"1px solid var(--red,#ef4444)"}}
-              onClick={()=>pendingIdentity.onReject()}>
-              לא, זה לא אני
-            </button>
-          </div>
-        </div>
-      </div>
-    )}
     </>
   );
 }
