@@ -5065,8 +5065,8 @@ ${inventory}
     )}
     <AIChatBot equipment={equipment} reservations={reservations} policies={policies} settings={siteSettings} currentUser={loggedInStudent} refreshInventory={syncInventory} />
     {pendingIdentity && (
-      <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-        <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:16,padding:24,maxWidth:440,width:"100%",textAlign:"center",boxShadow:"0 12px 48px rgba(0,0,0,0.5)"}}>
+      <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(0,0,0,0.88)",backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+        <div style={{background:"var(--surface, #161922)",border:"1px solid var(--border)",borderRadius:16,padding:24,maxWidth:440,width:"100%",textAlign:"center",boxShadow:"0 12px 48px rgba(0,0,0,0.5)"}}>
           <div style={{display:"flex",justifyContent:"center",marginBottom:12,color:"var(--accent)"}}>
             <Shield size={36} strokeWidth={1.75} />
           </div>
