@@ -8,20 +8,22 @@
 ## 🏗️ מבנה טכני
 
 ### Frontend
-- React + Vite (Hebrew, RTL)
-- כל הקוד ב-`src/` — `src/App.jsx` הוא ה-shell המרכזי (~7,309 שורות) ומכיל את האורקסטרציה (state גלובלי, routing, realtime channels, auth) + מספר דפים שטרם הוצאו (`EquipmentPage`, `KitsPage`, `PoliciesPage`, `ArchivePage`, `TeamPage`, `ManagerCalendarPage`, `SettingsPage`, `DamagedEquipmentPage`, וכמה מודלים)
-- **פיצול לדפים ב-`src/components/` (כבר בוצע ל-~20 דפים)**: `DashboardPage`, `ReservationsPage`, `StudentsPage`, `LessonsPage`, `LecturersPage`, `CertificationsPage`, `StudioBookingPage`, `StaffManagementPage`, `StaffSchedulePage`, `SystemSettingsPage`, `SecretaryDashboardPage`, `ActivityLogsPage`, `PublicForm`, `LecturerPortal`, `StaffHub`, `PublicDisplayPage`, `PublicDailyTablePage`, `UserGuideVideosPage`, `EditReservationModal`, `CalendarGrid`, `CalendarViews`, `AIChatBot`, `InstallPrompt`, `SmartEquipmentImportButton`, `SmartExcelImportButton`, `UserGuideVideosModal`, `ui` (Toast/Modal/Loading/statusBadge)
-- Hooks תחת `src/hooks/` (כרגע: `useNotifications.js`)
+- React + Vite (Hebrew, RTL).
+- `src/App.jsx` הוא ה-shell המרכזי (~7,330 שורות). מכיל orchestration גלובלי: state, routing, realtime channels, auth bootstrap. בנוסף עדיין מוטמעים בו 8 דפים שלא חולצו.
+- 28 רכיבים ב-`src/components/`. הדפים שכבר חולצו (alphabetical):
+  `ActivityLogsPage`, `ArchivePage` *(קובץ קיים אבל לא מיובא — הפעיל הוא inline ב-App.jsx)*, `CertificationsPage`, `DashboardPage`, `EditReservationModal`, `LecturerPortal`, `LecturersPage`, `LessonsPage`, `PublicDailyTablePage`, `PublicDisplayPage`, `PublicForm`, `ReservationsPage`, `SecretaryDashboardPage`, `StaffHub`, `StaffManagementPage`, `StaffSchedulePage`, `StudentsPage`, `StudioBookingPage`, `SystemSettingsPage`, `UserGuideVideosModal`, `UserGuideVideosPage`. רכיבים תומכים: `AIChatBot`, `CalendarGrid`, `CalendarViews`, `InstallPrompt`, `SmartEquipmentImportButton`, `SmartExcelImportButton`, `ui` (Toast/Modal/Loading/StatusBadge).
+- Hooks ב-`src/hooks/`: רק `useNotifications.js` כרגע.
+- API utils ב-`src/utils/`: 13 utils של ישויות + שני utils תומכים (`jewishHolidays.js`, `lessonBookings.js`).
 
 ### Backend
-- Vercel serverless functions ב-`api/` (Node.js)
-- Supabase = Postgres + Auth + RLS
-- Gmail SMTP (nodemailer) שולח מיילים (לא Resend, לא Supabase SMTP)
+- Vercel serverless functions ב-`api/` (Node.js, runtime 22).
+- Supabase = Postgres + Auth + RLS + Realtime.
+- Gmail SMTP (nodemailer) ב-`api/auth.js` שולח מיילים (קישורי password reset). **לא Supabase SMTP, לא Resend.**
 
 ### Deploy
-- GitHub repo: `nimig10/machsan` (main branch)
-- Vercel project: **רק** `machsan` → app.camera.org.il (פרויקט `app` המיותר נמחק; בארגון נשארים גם `kupa-ktana` ו-`sound-academy` שאינם קשורים לפרויקט זה)
-- Supabase project: `wxkyqgwwraojnbmyyfco` (name: "MACHSAN CAMERA")
+- GitHub repo: `nimig10/machsan` (main branch).
+- Vercel project: `machsan` בלבד → `app.camera.org.il` (פרויקטים נוספים בארגון `kupa-ktana` ו-`sound-academy` לא קשורים לפרויקט זה).
+- Supabase project (prod): `wxkyqgwwraojnbmyyfco` (name: "MACHSAN CAMERA").
 
 ## 🔀 שני מסדי נתונים — prod ו-dev (חובה לכבד)
 
@@ -33,25 +35,25 @@
 | **Development** | `mhvujejdlmtowypjdhjd` (branch name: `develop`, parent = prod) | https://supabase.com/dashboard/project/mhvujejdlmtowypjdhjd | localhost (`.env.local`) + Vercel Preview של feature branches |
 
 **זרימת עבודה קבועה (חובה — תמיד בודקים בלוקאל לפני פרוד):**
-1. **שלב 1 — Localhost על dev DB**: עבודה לוקאלית על `http://localhost:5174` (port נעול ב-`vite.config.js`). `.env.local` מצביע על **dev** (`mhvujejdlmtowypjdhjd`). כל מיגרציה / כתיבה / SQL-טסט הולך לשם. לא מעלים שום שינוי לפני שעבר בדיקה כאן.
-2. **שלב 2 — Vercel Preview על dev DB**: push ל-feature branch → Preview משתמש באותו dev DB. שלב נוסף לבדיקה (במיוחד ל-PWA / mobile).
-3. **שלב 3 — Production**: רק אחרי merge ל-`main` → הקוד ב-prod רץ מול **prod DB**. מיגרציות ל-prod נעשות אך ורק כשמבצעים merge מסודר או דרך `apply_migration` MCP על הפרויקט הראשי במודע.
+1. **שלב 1 — Localhost על dev DB**: `http://localhost:5174` (port נעול ב-`vite.config.js`). `.env.local` מצביע על **dev** (`mhvujejdlmtowypjdhjd`). כל מיגרציה / כתיבה / SQL-טסט הולך לשם.
+2. **שלב 2 — Vercel Preview על dev DB**: push ל-feature branch → Preview מתחבר לאותו dev DB. שלב נוסף לבדיקה במיוחד ל-PWA / mobile.
+3. **שלב 3 — Production**: רק אחרי merge ל-`main` הקוד רץ מול **prod DB**. מיגרציות ל-prod נעשות אך ורק כשמבצעים merge מסודר, או דרך `apply_migration` MCP על הפרויקט הראשי במודע.
 
-**אסור לדלג על שלב 1.** כל פיצ'ר חדש או תיקון, ולו הקטן ביותר, נבדק בלוקאל על port 5174 + dev DB לפני שמעלים אותו.
+**אסור לדלג על שלב 1.** כל פיצ'ר/תיקון, אפילו הקטן ביותר, נבדק בלוקאל על port 5174 + dev DB לפני שמעלים.
 
 **כללים:**
-- כברירת מחדל, כל `execute_sql`/`apply_migration` דרך MCP יעבוד על **dev** (`mhvujejdlmtowypjdhjd`) — אלא אם המשתמש ביקש במפורש לכתוב לפרוד.
-- כשמשתמשים ב-Supabase MCP, חובה לוודא שה-`project_id` שמועבר תואם לסביבה הנכונה.
+- כברירת מחדל, כל `execute_sql`/`apply_migration` דרך MCP פועל על **dev** (`mhvujejdlmtowypjdhjd`) — אלא אם המשתמש ביקש במפורש לכתוב לפרוד.
+- כשמשתמשים ב-Supabase MCP, חובה לוודא שה-`project_id` שמועבר תואם לסביבה.
 - אסור לרוץ מיגרציה הרסנית (`DROP`, `DELETE` רחב, שינוי schema) מול prod בלי אישור מפורש של המשתמש לסשן הנוכחי.
-- אם רואים שגיאה / נתונים חסרים — קודם לוודא לאיזה DB מחוברים, ולא להניח שהבעיה בקוד.
+- אם רואים שגיאה / נתונים חסרים — קודם לוודא לאיזה DB מחוברים, לא להניח שהבעיה בקוד.
 
-## 🗄️ מבנה נתונים (Supabase) — Tables-only (post Stage 13)
+## 🗄️ מבנה נתונים (Supabase) — Tables-only
 
-**אין יותר `public.store`** — הטבלה והכל סביבה (`store_snapshots`, `store_shrink_guard`, `kits_content_guard`, `is_protected_store_key`, `prune_store_snapshots`, DDL guard event triggers) הוסרו במיגרציה `20260430220000_drop_store_table_and_guards`. לא נשארו blobs בDB.
+**אין `public.store`** — הוסר ב-`20260430220000_drop_store_table_and_guards` יחד עם כל המנגנון מסביבו (`store_snapshots`, `store_shrink_guard`, `kits_content_guard`, `is_protected_store_key`, `prune_store_snapshots`, DDL guard event triggers). לא נשארו blobs ב-DB.
 
-כל ישות חיה בטבלה ייעודית עם RLS + realtime:
+**29 טבלאות `public` קיימות (verified):**
 
-| ישות | טבלה(ות) | API util |
+| ישות domain | טבלה(ות) | API util |
 |------|----------|----------|
 | ציוד | `equipment` + `equipment_units` | `writeEquipmentToDB` ב-`utils.js` (RPC) |
 | השאלות | `reservations_new` + `reservation_items` | `createReservation`, `updateReservationStatus` |
@@ -62,13 +64,22 @@
 | שיעורים | `lessons` | `lessonsApi.js` |
 | אולפנים | `studios` | `studiosApi.js` |
 | הזמנות אולפנים | `studio_bookings` | `studioBookingsApi.js` |
-| מדיניות | `policies` + `policy_assets` | `policiesApi.js` |
+| מדיניות + נכסי PDF | `policies` + `policy_assets` | `policiesApi.js` |
 | הגדרות אתר | `site_settings` (כולל `managerToken`) | `siteSettingsApi.js` |
 | מנהל מכללה | `college_manager` | `collegeManagerApi.js` |
 | ראשי מחלקה | `dept_heads` | `deptHeadsApi.js` |
 | סטודנטים + הסמכות | `students` + `certification_types` + `student_certifications` + `tracks` | `studentsApi.js` |
 
-טבלאות נוספות (לא ישויות domain): `staff_members` (ישן) + `public.users` (חדש), `activity_logs`, `equipment_reports`, `auth_entity_map`, `staff_schedule_*`.
+טבלאות תומכות (לא domain): `users` (חדש, מראת auth), `staff_members` (ישן, עוד בשימוש fallback), `activity_logs`, `equipment_reports`, `auth_entity_map`, `staff_schedule_assignments`, `staff_schedule_preferences`, `staff_daily_tasks`.
+
+**RPCs פעילות (17 בסה"כ):**
+- כתיבה לציוד: `sync_equipment_from_json`.
+- הזמנות: `create_reservation_v2`, `create_lesson_reservations_v1`, `update_reservation_status_v1`, `delete_reservation_v1`, `restore_reservation_v1`, `student_modify_reservation_item_v1`, `mark_overdue_email_sent`.
+- בדיקות overlap: `assert_reservation_overlap_ok`, `run_reservation_overlap_tests`.
+- Auth helpers: `is_admin`, `is_staff_member`, `is_known_lecturer_email`, `link_auth_to_entity`.
+- Triggers: `touch_updated_at`, `set_updated_at`, `update_users_updated_at`.
+
+**ספירות חיות בפרוד (snapshot):** `auth.users`=100, `public.users`=100, `students`=168, `lecturers`=29, `staff_members`=9. רק ~100 מהדומיין-אנשים יצרו סיסמה ויש להם חשבון auth; השאר עוד לא עברו onboarding.
 
 ## ✅ Pattern לפיצ'ר חדש (חובה)
 כל ישות חדשה חייבת להיווצר לפי הפטרן הזה. אסור — חזרתית, עם guard ב-ESLint — ליצור JSONB blob חדש או להשתמש ב-`storageGet/storageSet`/`api/store`.
@@ -78,46 +89,59 @@
    - `staff_all_<table>` — `FOR ALL TO authenticated USING (public.is_staff_member()) WITH CHECK (public.is_staff_member())`
    - `anon_read_<table>` — `FOR SELECT TO anon, authenticated USING (true)` (רק אם הטבלה מוצגת לציבור)
    - `ALTER PUBLICATION supabase_realtime ADD TABLE public.<table>` (אם צריך realtime)
-2. **API util ב-`src/utils/<entity>Api.js`** עם singleton supabase client (`import { supabase } from "../supabaseClient.js"`). חתימות סטנדרטיות: `list<Entity>()`, `upsert<Entity>(row)`, `delete<Entity>(id)`, `syncAll<Entity>(arr)`. עיין ב-`kitsApi.js`/`teamMembersApi.js` כתבניות.
-3. **App.jsx wrapper** ב-pattern של `loadKitsWrapped` — try/catch + source flag.
-4. **Realtime channel** ב-App.jsx (אם הטבלה מתעדכנת בריצה) עם 400ms debounce.
-5. **JSONB מותר רק** עבור value heterogeneous (כמו `site_settings.value`) או metadata חופשי קטן. לא להשתמש בJSONB כדי לאחסן מערכי domain רחב.
+2. **אינדקסים unique** — אם יש שדה שצריך להיות ייחודי (כמו email), הוסף UNIQUE index ו**ודא שכל ה-dedup בצד הקליינט עובד על אותו שדה**, לא על שדה אחר (ראה הערה על email-first dedup בסעיף "לקחים נלמדו").
+3. **API util ב-`src/utils/<entity>Api.js`** עם singleton supabase client (`import { supabase } from "../supabaseClient.js"`). חתימות סטנדרטיות: `list<Entity>()`, `upsert<Entity>(row)`, `delete<Entity>(id)`, `syncAll<Entity>(arr)`. תבניות: `kitsApi.js`/`teamMembersApi.js`.
+4. **App.jsx wrapper** ב-pattern של `loadKitsWrapped` — try/catch + source flag.
+5. **Realtime channel** ב-App.jsx (אם הטבלה מתעדכנת בריצה) עם 400ms debounce.
+6. **JSONB מותר רק** עבור value heterogeneous (כמו `site_settings.value`) או metadata חופשי קטן. לא לאחסון מערכי domain רחבים.
+
+### Batched writes (חובה לישויות גדולות)
+לישות עם N>~20 שורות (תלמידים, ציוד, מרצים), אסור לעטוף את כל ה-rows ב-`Promise.all` יחיד — זה רווי את ה-HTTP/1.1 per-host limit ויוצר `ERR_CONNECTION_CLOSED` בקנה מידה (ראה `studentsApi.syncAllStudents` עם `inBatches(rows, fn, 4)`). כשהאדמין עורך שורה אחת, לחשב diff מ-prev ל-next ולשלוח רק את ההפרשים (`syncStudentsDiff` + `studentDiff` ב-`dualWriteCertifications`).
 
 ## 🛡️ Guardrails חיים
 - **ESLint** ב-`eslint.config.js` חוסם: `storageGet(...)`, `storageSet(...)`, `supabase.from('store'...)`, `from('store_snapshots'...)`, `/api/store`. כל ניסיון להוסיף קוד כזה נכשל ב-`npm run lint`.
-- **Supabase**: הטבלה `public.store` לא קיימת בDB. כל מי שינסה לקרוא/לכתוב יקבל שגיאת relation does not exist.
-- נכון ל-2026-05-02: כל RPCs/triggers/tables של עידן ה-blob נמחקו לחלוטין (migrations `20260430220000` + `20260502000000`). RPCs פעילות שעדיין מתפקדות: `sync_equipment_from_json` (write path לציוד דרך `/api/sync-equipment`), ו-`create_reservation_v2`/`update_reservation_status_v1`/`delete_reservation_v1`/`create_lesson_reservations_v1` להזמנות — כולן כותבות אך ורק לטבלאות מנורמלות.
+- **Supabase**: הטבלה `public.store` לא קיימת. כל קריאה/כתיבה מקבלת `relation does not exist`.
+- כל RPCs/triggers/tables של עידן ה-blob נמחקו לחלוטין (מיגרציות `20260430220000` + `20260502000000`). פעילות נשארו רק כתיבה לציוד (`sync_equipment_from_json`) וזרימת הזמנות מנורמלת (`create_reservation_v2`, `update_reservation_status_v1`, `delete_reservation_v1`, `create_lesson_reservations_v1`, `restore_reservation_v1`, `student_modify_reservation_item_v1`).
 
 ## 🔐 Auth + זרימות
 
 ### זרימת Login
-- **Password-only** דרך `supabase.auth.signInWithPassword` ב-`handleLogin` ([PublicForm.jsx](src/components/PublicForm.jsx)). **אין magic link login** — הקליינט מוגדר ב-`flowType: "implicit"` (`src/supabaseClient.js`) רק כדי לתמוך בקישורי password-reset (גם מ-in-app browsers כמו WhatsApp/Telegram). `detectSessionInUrl: true` נשאר פעיל מאותה סיבה.
-- **משתמש חדש = "שכחת סיסמה?"**: לתלמיד/מרצה/צוות שעוד אין לו `auth.users` row, ה-onboarding היחיד הוא ללחוץ "שכחת סיסמה?" → השרת (`/api/auth` action `send-reset-email`) שולח קישור איפוס דרך Gmail SMTP → המשתמש פותח את הקישור ויוצר סיסמה → מעכשיו מתחבר רגיל.
-- `auth.users` נוצר רק כשמשתמש יוצר סיסמה בפועל; קיום ב-`students`/`lecturers`/`staff_members` לבדו לא יוצר חשבון auth.
-- **קליינט auth**: `lock: no-op` (`src/supabaseClient.js`) עוקף את navigator.locks למניעת deadlock של `signInWithPassword` תחת Edge tracking-prevention / PWA. ה-auth listener ב-PublicForm עושה `routeByRoles` fire-and-forget — לא לעטוף ב-`await` כי supabase-js מחכה ל-listeners בתוך `_notifyAllSubscribers`.
-- **בעיה ידועה (היסטורית)**: `nimig10@gmail.com` (האדמין) היה רק ב-`staff_members` (טבלה ישנה) ולא ב-`public.users` → `resolveUserRole()` החזיר `"user"`. נכון לקומיט `e4895d2` הזרימה הראשית כבר ב-`public.users`; ה-fallback ב-`requireStaff` עדיין שם למקרי edge.
-- סיסמה מינ׳: 6 תווים (המשתמש דחה 8). קיים מיפוי הודעות שגיאה לעברית ב-`src/components/PublicForm.jsx`.
-- **Supabase setting חובה**: "Prevent use of leaked passwords" = OFF (אחרת HaveIBeenPwned דוחה סיסמאות).
+- **Password-only** דרך `supabase.auth.signInWithPassword` ב-`handleLogin` ([PublicForm.jsx](src/components/PublicForm.jsx)). **אין magic link login.** ה-`flowType: "implicit"` ב-`src/supabaseClient.js` קיים אך ורק כדי שקישורי password-reset יעבדו (כולל in-app browsers כמו WhatsApp/Telegram, איפה ש-PKCE נכשל). `detectSessionInUrl: true` משויך לאותה סיבה.
+- **משתמש חדש = "שכחת סיסמה?"**: לתלמיד/מרצה/צוות שעוד אין לו `auth.users` row, ה-onboarding היחיד — לחיצה על "שכחת סיסמה?" → `/api/auth` action `send-reset-email` שולח קישור איפוס דרך Gmail SMTP → המשתמש פותח את הקישור ויוצר סיסמה → מעכשיו מתחבר רגיל. **`auth.users` נוצר רק כשהמשתמש יוצר סיסמה בפועל**, לא בעצם הקיום שלו ב-`students`/`lecturers`/`staff_members`.
+- **קליינט auth** — `src/supabaseClient.js`:
+  - `lock: async (_, __, fn) => fn()` — bypass של navigator.locks. מספר קריאות `getSession()` מקבילות + `autoRefreshToken` יוצרים deadlock תחת Edge tracking-prevention / PWA standalone. אסור להחזיר.
+  - ה-auth listener ב-PublicForm קורא ל-`routeByRoles(session)` **fire-and-forget** (לא `await`). supabase-js עוטף את כל ה-listeners ב-`Promise.all` בתוך `_notifyAllSubscribers`, שעוטף ב-`signInWithPassword`. אם תעטוף `routeByRoles` ב-`await`, ה-DB-fetches שלו (~5 שאילתות + `/api/auth`) יחסמו את `signInWithPassword` ויעברו את ה-10s safety timer של handleLogin. הותר אחרי תקלה ב-prod.
+- `handleLogin` עצמו כן `await`-ים `routeByRoles` בנפרד אחרי `signInWithPassword`, אז הזרימה לא נשברה.
+- סיסמה מינ׳: 6 תווים (המשתמש דחה 8). מיפוי הודעות שגיאה לעברית ב-`src/components/PublicForm.jsx`.
+- **Supabase setting חובה**: "Prevent use of leaked passwords" = **OFF** (אחרת HaveIBeenPwned דוחה סיסמאות סבירות).
+
+### Identity confirmation modal — הוסר
+הייתה בעבר מודאל "אישור זהות" שהוצג בכל login כדי להגן מפני autofill. הוסר לחלוטין בקומיט `bd3742c` — `public.users.email` כבר FK-bound ל-auth session, ו-RLS בודקת זהות בכל קריאה. אסור להחזיר את ה-modal הזה — הוא יצר חוסר אמון אצל המשתמשים בלי להוסיף הגנה מעבר למה ש-Supabase Auth + RLS כבר אוכפים.
 
 ### API auth helper: `api/_auth-helper.js`
 - `requireStaff(req, res)` — צריך staff (public.users OR staff_members fallback)
 - `requireAdmin(req, res)` — צריך admin
 - `requireUser(req, res)` — כל משתמש מאומת
-- `resolveUserRole(req)` — מחזיר `{role: "staff"|"user"|"anon"}` רק מ-public.users (בלי fallback!)
+- `resolveUserRole(req)` — מחזיר `{role: "staff"|"user"|"anon"}` רק מ-public.users (בלי fallback)
 
 ### Email
-נשלח דרך Gmail SMTP עם nodemailer ב-`api/auth.js` (פונקציה `buildResetEmail`).
-לא דרך Supabase SMTP. לא דרך Resend.
+Gmail SMTP + nodemailer ב-`api/auth.js`. `buildResetEmail` בונה את גוף ה-HTML של קישור איפוס.
 
-## 🧩 דפים עיקריים ב-App.jsx
-- **אדמיניסטרציה**: ניהול חדרים, הסמכת אולפן, שיעורים, מרצים, סטודנטים (הרובריקה שהייתה פגומה), נהלים, הגדרות.
-- **מחסנאי**: ניהול השאלות, ציוד, קיטים, צוות, קטגוריות, הסמכות ציוד.
-- **PublicForm** (`src/components/PublicForm.jsx`) — הטופס הציבורי להשאלות + הזמנת אולפנים. משתמשי התלמידים/מרצים.
-- **LecturerPortal** (`src/components/LecturerPortal.jsx`) — פורטל מרצים.
-- **CertificationsPage** (`src/components/CertificationsPage.jsx`) — עריכת סוגי הסמכה ציוד/אולפן.
-- **StudentsPage** (`src/components/StudentsPage.jsx`) — ניהול תלמידים + מסלולים.
+## 🧩 דפים שעוד inline ב-App.jsx
+8 דפים עוד לא חולצו. שורות מאומתות:
 
-## 🔄 כתיבה לDB — Pattern החדש
+| דף | מיקום ב-App.jsx | ~שורות |
+|------|----------------|---------|
+| `EquipmentPage` | 1400–3006 | ~1,600 |
+| `PoliciesPage` | 3006–3210 | ~200 |
+| `ArchivePage` | 3210–3408 | ~200 (קיים `src/components/ArchivePage.jsx` נטוש — 213 שורות, לא מיובא) |
+| `TeamPage` | 3408–4094 | ~690 |
+| `KitsPage` | 4094–4467 | ~370 |
+| `ManagerCalendarPage` | 4467–4947 | ~480 |
+| `SettingsPage` | 4947–5178 | ~230 |
+| `DamagedEquipmentPage` | 5178+ | ~200 |
+
+## 🔄 כתיבה ל-DB — Pattern החדש
 כל ישות נכתבת דרך API util ייעודי שלה. דוגמא:
 ```js
 import { syncAllKits, upsertKit, deleteKit } from "../utils/kitsApi.js";
@@ -125,36 +149,37 @@ await upsertKit({ id, name, items });          // single row upsert
 await syncAllKits(arr);                         // batch upsert + delete-missing
 await deleteKit(id);                            // single row delete
 ```
-תחת המנוע: כל util משתמש ב-singleton `supabase` client → `supabase.from("<table>").upsert(...)` → RLS בודקת `is_staff_member()` → realtime בערוץ הטבלה משדר ל-tabs אחרים.
+תחת המכסה: כל util משתמש ב-singleton `supabase` client → `supabase.from("<table>").upsert(...)` → RLS בודקת `is_staff_member()` → realtime בערוץ הטבלה משדר ל-tabs אחרים.
 
 **אסור**:
 - ❌ `storageGet`, `storageSet` (הוסרו, ESLint יחסום)
 - ❌ `fetch("/api/store")` (הendpoint נמחק)
 - ❌ `supabase.from("store")` (הטבלה לא קיימת)
 - ❌ JSONB column חדש למערכי domain (השתמש בטבלה ייעודית)
+- ❌ `Promise.all` ענק ב-bulk upsert של ישות גדולה (השתמש ב-`inBatches`)
 
-## 🔥 נקודות חולשה/סיכון
-1. **שתי מערכות auth במקביל** (`public.users` + `staff_members`) — הזרימה הראשית כבר ב-`public.users`, אבל `requireStaff`/`requireAdmin` ב-[api/_auth-helper.js:81-87](api/_auth-helper.js#L81-L87) עדיין מחזיקים fallback ל-`staff_members` (legacy) למקרים שלא היגרו. הטבלה הישנה עוד קיימת ו-15 קבצים מתייחסים אליה.
-2. **App.jsx עדיין ~7.3k שורות** — מכיל את ה-shell + state גלובלי + ~8 דפים שטרם חולצו (`EquipmentPage`, `KitsPage`, `PoliciesPage`, `ArchivePage`, `TeamPage`, `ManagerCalendarPage`, `SettingsPage`, `DamagedEquipmentPage`). tech debt, לא חסם.
-3. **`policy_assets` מאחסן PDF כ-Base64 ב-TEXT** — לא חסם אבל לא ארכיטקטונית נקי; כל קריאת מדיניות מושכת את כל ה-blob.
+## 🎓 לקחים נלמדו (anti-regressions)
+1. **Email-first dedup ב-`lecturers`**: ה-bootstrap ב-App.jsx מחלץ מרצים אוטומטית משיעורים. ה-dedup חייב לבדוק `lower(email)` **לפני** `lower(name)`, כי הטבלה מחזיקה UNIQUE index על `lower(email)`. dedup לפי שם בלבד יוצר UUID חדש אם השם נכתב מעט אחרת ("איציק רוזן" vs "ד\"ר איציק רוזן") → 23505.
+2. **navigator.locks deadlock**: אסור להחזיר את `lock` ל-default ב-`supabaseClient.js`. ראה הסעיף Auth.
+3. **listener fire-and-forget**: אסור להחזיר `await` ל-`routeByRoles` בתוך ה-onAuthStateChange listener. ראה הסעיף Auth.
+4. **Identity-confirmation modal**: אסור להחזיר. ראה הסעיף Identity confirmation.
 
-## 🎯 צעדים הבאים מומלצים (post Stage 13)
+## 🔥 נקודות חולשה / סיכון
+1. **שתי מערכות auth במקביל** (`public.users` + `staff_members`) — הזרימה הראשית כבר ב-`public.users`, אבל `requireStaff`/`requireAdmin` ב-[api/_auth-helper.js](api/_auth-helper.js) עדיין מחזיקים fallback ל-`staff_members`. **9 קבצים** עדיין מתייחסים ל-`staff_members` (5 ב-`api/`, 3 ב-`src/components/`, 1 ב-migration ראשונית).
+2. **App.jsx ~7.3k שורות** — 8 דפים inline (ראה טבלה). tech debt, לא חסם.
+3. **`policy_assets` מאחסן PDF כ-Base64 ב-TEXT** — כל קריאת מדיניות מושכת את כל ה-blob. ארכיטקטונית לא נקי, לא חסם.
+4. **20 חשבונות auth "orphan"** — לא תואמים students/lecturers/staff. רובם seed/test (`@ggmail.com` typos, `nimig10+sN` test users, `demoacademy.co.il`). לא מסכנים — `routeByRoles` דוחה אותם — אבל מומלץ ניקיון בעתיד.
 
-**✅ כבר בוצעו:**
-- מחיקת פרויקט Vercel "app" המיותר.
-- חילוץ ~20 דפים ראשיים מ-App.jsx ל-`src/components/` (Dashboard, Reservations, Students, Lessons, Lecturers, Certifications, StudioBooking, StaffManagement, StaffSchedule, SystemSettings, SecretaryDashboard, ActivityLogs, PublicForm, LecturerPortal, StaffHub, ועוד).
-- העברת הזרימה הראשית של auth ל-`public.users` (nimig10@gmail.com + שאר הצוות כבר שם; הקומיט `e4895d2` מסנכרן עריכת permissions ל-public.users).
-
-**עדיין פתוח:**
-1. **לסגור את `staff_members` סופית** — להסיר את ה-fallback מ-`api/_auth-helper.js` (`requireStaff`/`requireAdmin`), לעבור על 15 הקבצים שמתייחסים לטבלה, ולמחוק את הטבלה במיגרציה. דרושה ודאות שכל המשתמשים הקיימים היגרו ל-`public.users`.
-2. **לסיים את פיצול App.jsx** — להוציא את ה-8 דפים הנותרים (`EquipmentPage` ~700 שורות, `TeamPage` ~460, `ManagerCalendarPage` ~370, `KitsPage` ~370, `SettingsPage` ~230, `PoliciesPage` ~200, `ArchivePage` ~200, `DamagedEquipmentPage`). שאיפה: App.jsx <2k שורות (רק shell/state/routing).
+## 🎯 צעדים הבאים מומלצים
+1. **לסגור את `staff_members` סופית** — להסיר את ה-fallback מ-`api/_auth-helper.js` (`requireStaff`/`requireAdmin`), לעבור על 9 הקבצים שמתייחסים לטבלה, ולמחוק את הטבלה במיגרציה. דרושה ודאות שכל המשתמשים הקיימים היגרו ל-`public.users` (כרגע 100/100 ✓).
+2. **לסיים את פיצול App.jsx** — להוציא את 8 הדפים הנותרים. אחרי החילוץ — למחוק את `src/components/ArchivePage.jsx` הנטוש או להחליף בו את ה-inline. שאיפה: App.jsx < 2k שורות (shell/state/routing בלבד).
 3. **`policy_assets` ל-Supabase Storage** — להחליף את `data_base64` (TEXT) ב-bucket עם signed URL; טעינת מדיניות תוכל למשוך URL בלבד במקום blob.
+4. **ניקיון auth orphans** — למחוק ~14 חשבונות seed ישנים ב-`auth.users` שאין להם entity תואם, אם רוצים schema נקי.
 
 ## 🛠️ כלים זמינים
-- **Supabase MCP** — `execute_sql`, `apply_migration`, `list_migrations`, `list_projects`
-- **Vercel MCP** — `list_projects`, `get_project`, `list_deployments`, `deploy_to_vercel`
-- **Git + GitHub CLI** (`gh`) — גישה מלאה ל-repo
-- **Claude Preview** — לבדיקת UI ב-browser
+- **Supabase MCP** — `execute_sql`, `apply_migration`, `list_migrations`, `list_projects`.
+- **Vercel MCP** — `list_projects`, `get_project`, `list_deployments`, `deploy_to_vercel`.
+- **Git + GitHub CLI** (`gh`) — גישה מלאה ל-repo.
 
 ---
-*ההקשר המלא של הקוד נמצא ב-repo עצמו, והמצב הנוכחי ב-DB. כל העבודה commited + pushed.*
+*ההקשר המלא של הקוד נמצא ב-repo, והמצב הנוכחי ב-DB. כל העבודה committed + pushed.*
