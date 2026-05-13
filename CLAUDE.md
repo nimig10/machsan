@@ -91,9 +91,12 @@
 ## 🔐 Auth + זרימות
 
 ### זרימת Login
-- Supabase Auth (email+password או magic link)
-- **בעיה ידועה**: `nimig10@gmail.com` (האדמין) נמצא ב-`staff_members` (טבלה ישנה) אבל לא ב-`public.users` → `resolveUserRole()` מחזיר `"user"`. לכן `/api/store` POST משתמש ב-`requireStaff` שיש לו fallback לטבלה הישנה.
-- סיסמה מינ׳: 6 תווים (המשתמש דחה 8). קיים מיפוי הודעות שגיאה לעברית ב-`src/components/PublicForm.jsx:1444`.
+- **Password-only** דרך `supabase.auth.signInWithPassword` ב-`handleLogin` ([PublicForm.jsx](src/components/PublicForm.jsx)). **אין magic link login** — הקליינט מוגדר ב-`flowType: "implicit"` (`src/supabaseClient.js`) רק כדי לתמוך בקישורי password-reset (גם מ-in-app browsers כמו WhatsApp/Telegram). `detectSessionInUrl: true` נשאר פעיל מאותה סיבה.
+- **משתמש חדש = "שכחת סיסמה?"**: לתלמיד/מרצה/צוות שעוד אין לו `auth.users` row, ה-onboarding היחיד הוא ללחוץ "שכחת סיסמה?" → השרת (`/api/auth` action `send-reset-email`) שולח קישור איפוס דרך Gmail SMTP → המשתמש פותח את הקישור ויוצר סיסמה → מעכשיו מתחבר רגיל.
+- `auth.users` נוצר רק כשמשתמש יוצר סיסמה בפועל; קיום ב-`students`/`lecturers`/`staff_members` לבדו לא יוצר חשבון auth.
+- **קליינט auth**: `lock: no-op` (`src/supabaseClient.js`) עוקף את navigator.locks למניעת deadlock של `signInWithPassword` תחת Edge tracking-prevention / PWA. ה-auth listener ב-PublicForm עושה `routeByRoles` fire-and-forget — לא לעטוף ב-`await` כי supabase-js מחכה ל-listeners בתוך `_notifyAllSubscribers`.
+- **בעיה ידועה (היסטורית)**: `nimig10@gmail.com` (האדמין) היה רק ב-`staff_members` (טבלה ישנה) ולא ב-`public.users` → `resolveUserRole()` החזיר `"user"`. נכון לקומיט `e4895d2` הזרימה הראשית כבר ב-`public.users`; ה-fallback ב-`requireStaff` עדיין שם למקרי edge.
+- סיסמה מינ׳: 6 תווים (המשתמש דחה 8). קיים מיפוי הודעות שגיאה לעברית ב-`src/components/PublicForm.jsx`.
 - **Supabase setting חובה**: "Prevent use of leaked passwords" = OFF (אחרת HaveIBeenPwned דוחה סיסמאות).
 
 ### API auth helper: `api/_auth-helper.js`
