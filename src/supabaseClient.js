@@ -7,12 +7,22 @@ const SB_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
 // in the URL hash. This lets the link work even when opened in a different
 // browser than the one that initiated the reset (e.g. WhatsApp/Telegram
 // in-app browsers), where PKCE's code_verifier would be missing.
+//
+// lock: no-op — bypass navigator.locks. Multiple module-level + mount-time
+// getSession() calls (App.jsx:191, PublicForm.jsx mount checks) plus the
+// autoRefreshToken background tick all contend for the same auth lock. Under
+// Edge's tracking-prevention or in PWA standalone mode the lock can deadlock,
+// causing signInWithPassword to hang past the 10s safety timeout and surface
+// "זמן התגובה חרג מהצפוי". Cross-tab session sync still works via the
+// localStorage storage-event path; the only thing we lose is cross-tab refresh
+// coordination, which supabase-js handles gracefully via reuse-detection.
 export const supabase = createClient(SB_URL, SB_ANON, {
   auth: {
     flowType: "implicit",
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
+    lock: async (_name, _acquireTimeout, fn) => fn(),
   },
 });
 
