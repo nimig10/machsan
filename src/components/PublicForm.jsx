@@ -2715,7 +2715,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   // Uses routeByRolesLatest ref to always call the latest version with
   // current certifications/lecturers (avoids stale closure).
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "PASSWORD_RECOVERY") {
         recoveryModeRef.current = true;
         setRecoveryMode(true);
@@ -2725,7 +2725,19 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       if (event !== "SIGNED_IN" || !session?.user?.email) return;
       if (recoveryModeRef.current) return;
       freshLoginRef.current = true;
-      await routeByRolesLatest.current(session);
+      // Fire-and-forget. supabase-js awaits this listener inside
+      // _notifyAllSubscribers, which is awaited inside signInWithPassword.
+      // If routeByRoles blocked here (multiple DB fetches + /api/auth on a
+      // fresh-after-logout login), signInWithPassword would not resolve
+      // within handleLogin's 10s safety, surfacing
+      // "זמן התגובה חרג מהצפוי" even though the auth itself succeeded.
+      // handleLogin's success path calls routeByRoles itself after
+      // signInWithPassword returns, so dropping the await here doesn't lose
+      // routing for the password flow. For magic-link / recovery paths the
+      // route still runs — just asynchronously, on its own time.
+      routeByRolesLatest.current(session).catch(err => {
+        console.warn("[auth listener] routeByRoles failed:", err);
+      });
     });
 
     return () => subscription.unsubscribe();
