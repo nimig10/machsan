@@ -9,8 +9,9 @@
 
 ### Frontend
 - React + Vite (Hebrew, RTL)
-- כל הקוד ב-`src/` — `src/App.jsx` הוא הענק המרכזי (~7,381 שורות)
-- רכיבים עיקריים ב-`src/components/`
+- כל הקוד ב-`src/` — `src/App.jsx` הוא ה-shell המרכזי (~7,309 שורות) ומכיל את האורקסטרציה (state גלובלי, routing, realtime channels, auth) + מספר דפים שטרם הוצאו (`EquipmentPage`, `KitsPage`, `PoliciesPage`, `ArchivePage`, `TeamPage`, `ManagerCalendarPage`, `SettingsPage`, `DamagedEquipmentPage`, וכמה מודלים)
+- **פיצול לדפים ב-`src/components/` (כבר בוצע ל-~20 דפים)**: `DashboardPage`, `ReservationsPage`, `StudentsPage`, `LessonsPage`, `LecturersPage`, `CertificationsPage`, `StudioBookingPage`, `StaffManagementPage`, `StaffSchedulePage`, `SystemSettingsPage`, `SecretaryDashboardPage`, `ActivityLogsPage`, `PublicForm`, `LecturerPortal`, `StaffHub`, `PublicDisplayPage`, `PublicDailyTablePage`, `UserGuideVideosPage`, `EditReservationModal`, `CalendarGrid`, `CalendarViews`, `AIChatBot`, `InstallPrompt`, `SmartEquipmentImportButton`, `SmartExcelImportButton`, `UserGuideVideosModal`, `ui` (Toast/Modal/Loading/statusBadge)
+- Hooks תחת `src/hooks/` (כרגע: `useNotifications.js`)
 
 ### Backend
 - Vercel serverless functions ב-`api/` (Node.js)
@@ -19,8 +20,7 @@
 
 ### Deploy
 - GitHub repo: `nimig10/machsan` (main branch)
-- Vercel project: "machsan" → app.camera.org.il
-- יש גם פרויקט Vercel בשם "app" — מיותר, להתעלם/למחוק
+- Vercel project: **רק** `machsan` → app.camera.org.il (פרויקט `app` המיותר נמחק; בארגון נשארים גם `kupa-ktana` ו-`sound-academy` שאינם קשורים לפרויקט זה)
 - Supabase project: `wxkyqgwwraojnbmyyfco` (name: "MACHSAN CAMERA")
 
 ## 🔀 שני מסדי נתונים — prod ו-dev (חובה לכבד)
@@ -131,15 +131,21 @@ await deleteKit(id);                            // single row delete
 - ❌ JSONB column חדש למערכי domain (השתמש בטבלה ייעודית)
 
 ## 🔥 נקודות חולשה/סיכון
-1. **שתי מערכות auth במקביל** (`public.users` + `staff_members`) — `requireStaff` עם fallback מטפל; nimig10@gmail.com כבר ב-public.users.
-2. **פרויקט "app" ב-Vercel מיותר** — צורך build minutes כפולים בכל push.
-3. **App.jsx ענק** (~7,000 שורות) — tech debt ארוך טווח, לא חסם.
+1. **שתי מערכות auth במקביל** (`public.users` + `staff_members`) — הזרימה הראשית כבר ב-`public.users`, אבל `requireStaff`/`requireAdmin` ב-[api/_auth-helper.js:81-87](api/_auth-helper.js#L81-L87) עדיין מחזיקים fallback ל-`staff_members` (legacy) למקרים שלא היגרו. הטבלה הישנה עוד קיימת ו-15 קבצים מתייחסים אליה.
+2. **App.jsx עדיין ~7.3k שורות** — מכיל את ה-shell + state גלובלי + ~8 דפים שטרם חולצו (`EquipmentPage`, `KitsPage`, `PoliciesPage`, `ArchivePage`, `TeamPage`, `ManagerCalendarPage`, `SettingsPage`, `DamagedEquipmentPage`). tech debt, לא חסם.
+3. **`policy_assets` מאחסן PDF כ-Base64 ב-TEXT** — לא חסם אבל לא ארכיטקטונית נקי; כל קריאת מדיניות מושכת את כל ה-blob.
 
 ## 🎯 צעדים הבאים מומלצים (post Stage 13)
-1. **למחוק פרויקט Vercel "app"** (Settings → Advanced → Delete) — מיותר.
-2. **לאחד מערכות auth סופית** — להוציא את `staff_members` מהקוד (nimig10 כבר ב-public.users).
-3. **לצמצם את App.jsx** (~7,000 שורות) — לפצל ל-pages/hooks.
-4. **Storage לPDF** — `policy_assets` כרגע Base64 ב-TEXT; העברה ל-Supabase Storage תעשה למערכת יותר נקייה ארכיטקטונית.
+
+**✅ כבר בוצעו:**
+- מחיקת פרויקט Vercel "app" המיותר.
+- חילוץ ~20 דפים ראשיים מ-App.jsx ל-`src/components/` (Dashboard, Reservations, Students, Lessons, Lecturers, Certifications, StudioBooking, StaffManagement, StaffSchedule, SystemSettings, SecretaryDashboard, ActivityLogs, PublicForm, LecturerPortal, StaffHub, ועוד).
+- העברת הזרימה הראשית של auth ל-`public.users` (nimig10@gmail.com + שאר הצוות כבר שם; הקומיט `e4895d2` מסנכרן עריכת permissions ל-public.users).
+
+**עדיין פתוח:**
+1. **לסגור את `staff_members` סופית** — להסיר את ה-fallback מ-`api/_auth-helper.js` (`requireStaff`/`requireAdmin`), לעבור על 15 הקבצים שמתייחסים לטבלה, ולמחוק את הטבלה במיגרציה. דרושה ודאות שכל המשתמשים הקיימים היגרו ל-`public.users`.
+2. **לסיים את פיצול App.jsx** — להוציא את ה-8 דפים הנותרים (`EquipmentPage` ~700 שורות, `TeamPage` ~460, `ManagerCalendarPage` ~370, `KitsPage` ~370, `SettingsPage` ~230, `PoliciesPage` ~200, `ArchivePage` ~200, `DamagedEquipmentPage`). שאיפה: App.jsx <2k שורות (רק shell/state/routing).
+3. **`policy_assets` ל-Supabase Storage** — להחליף את `data_base64` (TEXT) ב-bucket עם signed URL; טעינת מדיניות תוכל למשוך URL בלבד במקום blob.
 
 ## 🛠️ כלים זמינים
 - **Supabase MCP** — `execute_sql`, `apply_migration`, `list_migrations`, `list_projects`
