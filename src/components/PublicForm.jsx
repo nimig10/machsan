@@ -12,6 +12,7 @@ import { useNotifications } from "../hooks/useNotifications.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import AIChatBot from "./AIChatBot.jsx";
 import { ProductionsPage } from "./ProductionsPage.jsx";
+import { StudentHub } from "./StudentHub.jsx";
 
 const SMART_LOAN_TYPES = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
 
@@ -1956,6 +1957,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     }
   });
   const [publicView, setPublicView] = useState(() => sessionStorage.getItem("public_view") || "equipment"); // "equipment" | "studios" | "daily"
+  const [studentApp, setStudentApp]   = useState(() => sessionStorage.getItem("student_app") || "hub"); // "hub" | "forms" | "productions"
   const [dailyLessons, setDailyLessons] = useState([]);
   const [dailyDayOffset, setDailyDayOffset] = useState(0);
   const [dailyMyLessons, setDailyMyLessons] = useState(false);
@@ -2069,6 +2071,10 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       sessionStorage.removeItem("public_view");
     }
   }, [loggedInStudent]);
+
+  useEffect(() => {
+    if (loggedInStudent) sessionStorage.setItem("student_app", studentApp);
+  }, [studentApp, loggedInStudent]);
 
   useEffect(() => {
     if (loggedInStudent) sessionStorage.setItem("public_view", publicView);
@@ -3763,7 +3769,7 @@ ${inventory}
 
   const reset = () => { clearFormDraft(); setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_first_name:"",crew_photographer_last_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_first_name:"",crew_sound_last_name:"",crew_sound_phone:"",production_reason:""}); setItems([]); setAgreed(false); };
 
-  const VIEWS = ["equipment", "studios", "daily", "my-bookings", "productions"];
+  const VIEWS = ["equipment", "studios", "daily", "my-bookings"];
   const handleFormSwipeStart = (e) => {
     const touch = e.touches[0];
     const blocked = !!e.target.closest('[data-no-swipe]');
@@ -3999,6 +4005,101 @@ ${inventory}
     </div>
   );
 
+  // ── Student Hub: landing screen after login ──
+  // Mirrors the StaffHub pattern. Forms and productions live as separate
+  // "apps" so the PublicForm tab strip can stay focused on the loan flow.
+  if (loggedInStudent && studentApp === "hub") {
+    const pendingProductionRequests = (productions || [])
+      .filter(p => String(p.directorEmail || "").toLowerCase() === String(loggedInStudent.email || "").toLowerCase())
+      .reduce((acc, p) => acc + (p.crew || []).filter(c => c.status === "invited" && c.invitedBy === "self").length, 0);
+
+    return (
+      <>
+        <StudentHub
+          student={loggedInStudent}
+          logo={siteSettings.logo}
+          canInstall={canInstall}
+          onInstall={onInstall}
+          pendingProductionRequests={pendingProductionRequests}
+          onSelectApp={(key) => setStudentApp(key)}
+          onOpenAccountSettings={() => setShowAccountSettings(true)}
+          onOpenUserGuide={userGuidePdf ? () => {
+            const link = document.createElement("a");
+            link.href = userGuidePdf.url; link.download = userGuidePdf.filename || "user-guide.pdf";
+            link.click();
+          } : null}
+          onLogout={() => {
+            supabase.auth.signOut().catch(()=>{});
+            setLoggedInStudent(null);
+            setAuthView("login"); setLoginEmail(""); setLoginPassword("");
+            sessionStorage.removeItem("public_view"); sessionStorage.removeItem("student_app");
+            sessionStorage.removeItem("public_student_roles"); sessionStorage.removeItem("active_role");
+            clearFormDraft();
+          }}
+        />
+        {showAccountSettings && loggedInStudent && (
+          <AccountSettingsModal
+            student={loggedInStudent}
+            accentColor={siteSettings.accentColor}
+            showToast={showToast}
+            onClose={() => setShowAccountSettings(false)}
+            onSaved={(updatedStudent) => {
+              setLoggedInStudent(prev => prev ? { ...prev, ...updatedStudent } : prev);
+              setShowAccountSettings(false);
+              showToast("success","הפרופיל עודכן");
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
+  // ── Productions app: full-screen view, NOT a tab inside PublicForm ──
+  if (loggedInStudent && studentApp === "productions") {
+    return (
+      <>
+        <div style={{minHeight:"100dvh",background:"var(--bg)",direction:"rtl"}}>
+          <div style={{
+            display:"flex", alignItems:"center", justifyContent:"space-between",
+            padding:"14px 20px", borderBottom:"1px solid var(--border)",
+            background:"var(--surface)", position:"sticky", top:0, zIndex:5,
+          }}>
+            <button
+              type="button"
+              onClick={() => setStudentApp("hub")}
+              style={{
+                padding:"8px 16px", border:"1px solid var(--border)",
+                borderRadius:8, background:"var(--surface2)", color:"var(--text2)",
+                cursor:"pointer", fontSize:14, fontWeight:600,
+                display:"flex", alignItems:"center", gap:6,
+              }}>
+              ← תפריט ראשי
+            </button>
+            <div style={{fontSize:18, fontWeight:900, color:"var(--accent)"}}>לוח הפקות</div>
+            <div style={{width:96}} />
+          </div>
+          <div style={{padding:"20px 0"}}>
+            <ProductionsPage
+              productions={productions}
+              currentStudent={loggedInStudent}
+              students={(certifications?.students || [])}
+              reservations={reservations}
+              showToast={(msg, type="info") => showToast(type, msg)}
+              refresh={refreshProductions}
+              onOpenLoanForm={(p) => {
+                setForm(f => ({ ...f, loan_type: "הפקה", project_name: p?.title || f.project_name }));
+                setStudentApp("forms");
+                setPublicView("equipment");
+                setStep(2);
+                showToast("info", `הופנית להשאלת ציוד עבור: ${p?.title || ""}`);
+              }}
+            />
+          </div>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
     <div className="form-page" style={{"--accent": siteSettings.accentColor||"#f5a623","--accent2": siteSettings.accentColor||"#f5a623","--accent-glow":`${siteSettings.accentColor||"#f5a623"}2e`}} onTouchStart={handleFormSwipeStart} onTouchEnd={handleFormSwipeEnd}>
@@ -4029,17 +4130,27 @@ ${inventory}
             </svg>
           </button>
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",paddingInline:"24px"}}>
+            <button
+              type="button"
+              onClick={() => setStudentApp("hub")}
+              style={{
+                marginBottom: 8,
+                padding: "4px 12px",
+                border: "1px solid var(--border)", borderRadius: 16,
+                background: "var(--surface2)", color: "var(--text2)",
+                cursor: "pointer", fontSize: 12, fontWeight: 600,
+                display: "inline-flex", alignItems: "center", gap: 4,
+              }}>← תפריט ראשי</button>
             <div style={{fontSize:"clamp(15px,4.5vw,22px)",fontWeight:900,color:"var(--accent)"}}>מערכת הפניות</div>
             <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>שלום, {loggedInStudent.name}</div>
           </div>
           {/* ── View toggle: equipment vs studios ── */}
-          <div style={{display:"flex",gap:3,marginTop:16,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:3,marginTop:16,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4}}>
             {[
               {view:"equipment", icon:<Package size={18} strokeWidth={1.75}/>, label:"השאלת\nציוד", onClick:()=>setPublicView("equipment")},
               {view:"studios", icon:<Mic size={18} strokeWidth={1.75}/>, label:"קביעת\nחדרים", onClick:()=>{setPublicView("studios");loadStudiosData();}},
               {view:"daily", icon:<Calendar size={18} strokeWidth={1.75}/>, label:"לוז\nיומי", onClick:()=>{setPublicView("daily");setDailyDayOffset(0);loadDailySchedule();}},
               {view:"my-bookings", icon:<ClipboardList size={18} strokeWidth={1.75}/>, label:"ההזמנות\nשלי", onClick:()=>{setPublicView("my-bookings");loadStudiosData();loadReservationsData();}},
-              {view:"productions", icon:<Film size={18} strokeWidth={1.75}/>, label:"לוח\nהפקות", onClick:()=>setPublicView("productions")},
             ].map(({view,icon,label,onClick})=>(
               <button key={view} type="button" onClick={onClick}
                 style={{flex:1,minWidth:0,padding:"8px 2px",borderRadius:6,border:"none",background:publicView===view?"var(--accent)":"transparent",color:publicView===view?"#000":"var(--text2)",fontWeight:800,fontSize:"clamp(10px,2.8vw,13px)",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,lineHeight:1.25,whiteSpace:"pre-line",textAlign:"center"}}>
@@ -4741,22 +4852,6 @@ ${inventory}
               </div>);
             });
           })()}
-        </div>}
-        {publicView==="productions" && <div className="form-card-body" style={{direction:"rtl"}}>
-          <ProductionsPage
-            productions={productions}
-            currentStudent={loggedInStudent}
-            students={(certifications?.students || [])}
-            reservations={reservations}
-            showToast={(msg, type="info") => showToast(type, msg)}
-            refresh={refreshProductions}
-            onOpenLoanForm={(p) => {
-              setForm(f => ({ ...f, loan_type: "הפקה", project_name: p?.title || f.project_name }));
-              setPublicView("equipment");
-              setStep(2);
-              showToast("info", `הופנית להשאלת ציוד עבור: ${p?.title || ""}`);
-            }}
-          />
         </div>}
         <div style={{padding:"16px 24px",borderTop:"1px solid var(--border)",textAlign:"center"}}>
           <button
