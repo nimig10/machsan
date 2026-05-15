@@ -7106,7 +7106,7 @@ export default function App() {
         </div>
       ) : isPublicFormView && (
         <div className="public-page-shell">
-          {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes} refreshInventory={refreshPublicInventory} lecturers={lecturers} lessons={lessons} canInstall={canInstallPwa} onInstall={installPwa} userGuidePdf={userGuidePdfs.students}/>}
+          {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes} refreshInventory={refreshPublicInventory} lecturers={lecturers} lessons={lessons} canInstall={canInstallPwa} onInstall={installPwa} userGuidePdf={userGuidePdfs.students} productions={productions} refreshProductions={async () => { const v = await listProductions({ onlyPublished: false }); _setProductions(Array.isArray(v) ? v : []); }}/>}
         </div>
       )}
 

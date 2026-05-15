@@ -11,6 +11,7 @@ import { buildLessonStudioBookings } from "../utils/lessonBookings.js";
 import { useNotifications } from "../hooks/useNotifications.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import AIChatBot from "./AIChatBot.jsx";
+import { ProductionsPage } from "./ProductionsPage.jsx";
 
 const SMART_LOAN_TYPES = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
 
@@ -1849,7 +1850,7 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
 }
 
 // ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
-export function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], siteSettings={}, categoryLoanTypes={}, refreshInventory=async()=>({}), lecturers=[], lessons=[], canInstall=false, onInstall=()=>{}, userGuidePdf=null }) {
+export function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], siteSettings={}, categoryLoanTypes={}, refreshInventory=async()=>({}), lecturers=[], lessons=[], canInstall=false, onInstall=()=>{}, userGuidePdf=null, productions=[], refreshProductions=async()=>{} }) {
   const initialParams = new URLSearchParams(window.location.search);
   const initialLoanTypeParam = initialParams.get("loan_type");
   const initialStepParam = Number(initialParams.get("step"));
@@ -3762,7 +3763,7 @@ ${inventory}
 
   const reset = () => { clearFormDraft(); setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_first_name:"",crew_photographer_last_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_first_name:"",crew_sound_last_name:"",crew_sound_phone:"",production_reason:""}); setItems([]); setAgreed(false); };
 
-  const VIEWS = ["equipment", "studios", "daily", "my-bookings"];
+  const VIEWS = ["equipment", "studios", "daily", "my-bookings", "productions"];
   const handleFormSwipeStart = (e) => {
     const touch = e.touches[0];
     const blocked = !!e.target.closest('[data-no-swipe]');
@@ -4032,12 +4033,13 @@ ${inventory}
             <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>שלום, {loggedInStudent.name}</div>
           </div>
           {/* ── View toggle: equipment vs studios ── */}
-          <div style={{display:"flex",gap:3,marginTop:16,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4}}>
+          <div style={{display:"flex",gap:3,marginTop:16,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4,flexWrap:"wrap"}}>
             {[
               {view:"equipment", icon:<Package size={18} strokeWidth={1.75}/>, label:"השאלת\nציוד", onClick:()=>setPublicView("equipment")},
               {view:"studios", icon:<Mic size={18} strokeWidth={1.75}/>, label:"קביעת\nחדרים", onClick:()=>{setPublicView("studios");loadStudiosData();}},
               {view:"daily", icon:<Calendar size={18} strokeWidth={1.75}/>, label:"לוז\nיומי", onClick:()=>{setPublicView("daily");setDailyDayOffset(0);loadDailySchedule();}},
               {view:"my-bookings", icon:<ClipboardList size={18} strokeWidth={1.75}/>, label:"ההזמנות\nשלי", onClick:()=>{setPublicView("my-bookings");loadStudiosData();loadReservationsData();}},
+              {view:"productions", icon:<Film size={18} strokeWidth={1.75}/>, label:"לוח\nהפקות", onClick:()=>setPublicView("productions")},
             ].map(({view,icon,label,onClick})=>(
               <button key={view} type="button" onClick={onClick}
                 style={{flex:1,minWidth:0,padding:"8px 2px",borderRadius:6,border:"none",background:publicView===view?"var(--accent)":"transparent",color:publicView===view?"#000":"var(--text2)",fontWeight:800,fontSize:"clamp(10px,2.8vw,13px)",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,lineHeight:1.25,whiteSpace:"pre-line",textAlign:"center"}}>
@@ -4739,6 +4741,22 @@ ${inventory}
               </div>);
             });
           })()}
+        </div>}
+        {publicView==="productions" && <div className="form-card-body" style={{direction:"rtl"}}>
+          <ProductionsPage
+            productions={productions}
+            currentStudent={loggedInStudent}
+            students={(certifications?.students || [])}
+            reservations={reservations}
+            showToast={(msg, type="info") => showToast(type, msg)}
+            refresh={refreshProductions}
+            onOpenLoanForm={(p) => {
+              setForm(f => ({ ...f, loan_type: "הפקה", project_name: p?.title || f.project_name }));
+              setPublicView("equipment");
+              setStep(2);
+              showToast("info", `הופנית להשאלת ציוד עבור: ${p?.title || ""}`);
+            }}
+          />
         </div>}
         <div style={{padding:"16px 24px",borderTop:"1px solid var(--border)",textAlign:"center"}}>
           <button
