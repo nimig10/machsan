@@ -85,11 +85,17 @@ export async function getValidTokenDirect() {
 }
 
 // ─── ACTIVITY LOGGING ────────────────────────────────────────────────────────
+// Sends a Bearer token when a Supabase session is active. The server enforces
+// that user_id matches the JWT — anonymous callers are limited to a narrow
+// allowlist of pre-auth session events (login_failed, password_reset_requested).
 export async function logActivity({ user_id, user_name, action, entity, entity_id, details }) {
   try {
+    const headers = { "Content-Type": "application/json" };
+    const token = await getAuthToken().catch(() => null);
+    if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch("/api/activity-log", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ action: "write", user_id, user_name, activity: action, entity, entity_id, details }),
     });
     const data = await res.json();

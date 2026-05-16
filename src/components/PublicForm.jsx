@@ -1849,7 +1849,7 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
 }
 
 // ─── PUBLIC FORM ──────────────────────────────────────────────────────────────
-export function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], siteSettings={}, categoryLoanTypes={}, refreshInventory=async()=>({}), lecturers=[], lessons=[], canInstall=false, onInstall=()=>{}, userGuidePdf=null }) {
+export function PublicForm({ equipment, reservations, setReservations, showToast, categories=DEFAULT_CATEGORIES, kits=[], teamMembers=[], policies={}, certifications={types:[],students:[]}, deptHeads=[], siteSettings={}, categoryLoanTypes={}, refreshInventory=async()=>({}), lecturers=[], lessons=[], canInstall=false, onInstall=()=>{}, userGuidePdf=null, initialSession=null }) {
   const initialParams = new URLSearchParams(window.location.search);
   const initialLoanTypeParam = initialParams.get("loan_type");
   const initialStepParam = Number(initialParams.get("step"));
@@ -1928,6 +1928,19 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [loginPassword, setLoginPassword] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
+  // Tracks whether the current sign-in attempt arrived via Google OAuth.
+  // Set when the URL contains ?oauth=google (App.jsx strips this after).
+  // Read by routeByRolesCore to surface a more helpful Hebrew error when the
+  // Google email doesn't match any registered student/lecturer/staff.
+  const wasOAuthLoginRef = useRef(false);
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("oauth") === "google") {
+        wasOAuthLoginRef.current = true;
+      }
+    } catch {}
+  }, []);
   // PASSWORD_RECOVERY modal (user clicked reset link from email)
   // The inline <script> in index.html sets window.__isPasswordRecovery = true
   // synchronously before any module loads, so we can pre-arm the ref here and
@@ -2303,6 +2316,25 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     setLoginBusy(true);
     setLoginError("");
 
+    // Rate limit: block the login attempt before hitting Supabase if the email
+    // or IP exceeded the per-window threshold. Failure here is "fail open" —
+    // if the check itself errors we let the attempt proceed (Supabase's own
+    // throttle is the last line of defense).
+    try {
+      const rl = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "check-rate-limit", email }),
+      });
+      if (rl.status === 429) {
+        const body = await rl.json().catch(() => ({}));
+        const mins = body?.retryAfterMin || 15;
+        setLoginError(`נסיונות התחברות רבים מדי. נסה/י שוב בעוד ${mins} דקות.`);
+        setLoginBusy(false);
+        return;
+      }
+    } catch {}
+
     // Safety net: guarantee the button unfreezes even if something below hangs.
     const safety = setTimeout(() => {
       setLoginBusy(false);
@@ -2326,6 +2358,8 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
             if (!error2 && data2?.user) {
               clearTimeout(safety);
               routingRef.current = false; // force-unlock mutex (same fix as main success path)
+              recordLoginAttempt(email, true);
+              logActivity({ action: "login", entity: "session", details: { email, method: "password_provisioned" } });
               try { await routeByRoles(data2.session); } catch {}
               setLoginBusy(false);
               return;
@@ -2333,6 +2367,8 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
           }
         } catch {}
         clearTimeout(safety);
+        recordLoginAttempt(email, false);
+        logActivity({ action: "login_failed", entity: "session", details: { email, reason: "invalid_credentials" } });
         setLoginError("אימייל או סיסמה שגויים. אם זו הכניסה הראשונה שלך, לחץ/י על \"שכחת סיסמה?\" ליצירת סיסמה.");
         setLoginBusy(false);
         return;
@@ -2345,10 +2381,61 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       // frozen until a refresh. Explicit login always takes priority.
       clearTimeout(safety);
       routingRef.current = false;
+      recordLoginAttempt(email, true);
+      logActivity({ action: "login", entity: "session", details: { email, method: "password" } });
       try { await routeByRoles(data.session); } catch {}
       setLoginBusy(false);
     } catch {
       clearTimeout(safety);
+      setLoginError("שגיאה בתקשורת. נסו שוב.");
+      setLoginBusy(false);
+    }
+  };
+
+  // Fire-and-forget tally for the in-memory rate limiter. Successful logins
+  // reset the email bucket; failed attempts add to it.
+  const recordLoginAttempt = (email, success) => {
+    fetch("/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "record-login-attempt", email, success }),
+    }).catch(() => {});
+  };
+
+  // ── Google OAuth login ──────────────────────────────────────────────────────
+  // Additive — does NOT replace email+password. Triggers a top-level redirect
+  // to Google's consent page; on return, Supabase's detectSessionInUrl finishes
+  // the exchange, onAuthStateChange fires SIGNED_IN, and the existing
+  // routeByRoles flow handles role resolution by email.
+  //
+  // In-app browsers (WhatsApp/Telegram/Facebook/Instagram WebViews) block
+  // third-party OAuth redirects, so we suppress the button entirely in those
+  // contexts — see the render-time check below.
+  const isInAppBrowser = () =>
+    typeof navigator !== "undefined"
+      && /(FBAN|FBAV|Instagram|WhatsApp|Telegram|Line)/i.test(navigator.userAgent);
+
+  const handleGoogleLogin = async () => {
+    if (isInAppBrowser()) {
+      setLoginError("הכניסה דרך Google אינה זמינה בדפדפן הזה. פתח/י את הקישור ב-Chrome/Safari.");
+      return;
+    }
+    setLoginBusy(true);
+    setLoginError("");
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin + "/?oauth=google",
+          queryParams: { prompt: "select_account" },
+        },
+      });
+      if (error) {
+        setLoginError("התחברות דרך Google נכשלה. נסה/י שוב.");
+        setLoginBusy(false);
+      }
+      // Success → browser navigates to Google; no further client work here.
+    } catch {
       setLoginError("שגיאה בתקשורת. נסו שוב.");
       setLoginBusy(false);
     }
@@ -2712,9 +2799,18 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 
   // Check for existing session on mount (e.g. after magic link redirect).
   // Mount-only — uses ref to avoid stale closure, routingRef prevents races.
+  //
+  // Phase 2 fast path: when App.jsx passes an `initialSession` (it already
+  // resolved supabase.auth.getSession() in the boot gate), we route the user
+  // immediately without the 300ms wait — eliminates the login-form flash on
+  // PWA cold-start. Otherwise fall back to the legacy delayed check.
   useEffect(() => {
     if (loggedInStudent) return;
     if (recoveryModeRef.current || recoveryMode) return;
+    if (initialSession?.user?.email) {
+      routeByRolesLatest.current(initialSession);
+      return undefined;
+    }
     // Small delay: give onAuthStateChange a chance to fire first (it's the
     // primary handler). This is a fallback for cases where the listener
     // misses the event (e.g. session already existed before subscription).

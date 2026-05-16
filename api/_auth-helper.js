@@ -95,6 +95,17 @@ export async function requireStaff(req, res) {
   return null;
 }
 
+// Verify the request JWT and return { id, email } if valid, or null if absent
+// or invalid — WITHOUT sending any response. Use for endpoints that accept
+// both authenticated and anonymous callers but need to know which one this is.
+export async function getAuthUserOptional(req) {
+  const authHeader = req.headers.authorization || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const authUser = await verifyToken(token);
+  if (!authUser) return null;
+  return { id: authUser.id, email: String(authUser.email || "").toLowerCase() };
+}
+
 // Verify the request JWT and return the auth user object (any role).
 // Use this for endpoints that should be reachable by any authenticated
 // user — staff, lecturer, or student — but not by anonymous callers.

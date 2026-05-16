@@ -120,6 +120,80 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+// ── login rate limiting ───────────────────────────────────────────────────────
+// In-memory sliding-window throttle per email + per IP. Persistent serverless
+// instances on Vercel share this state across invocations within the same
+// instance; cold starts reset it. The goal is brute-force friction at app
+// level on top of Supabase's own throttle, not strict accounting.
+const RATE_WINDOW_MS = 15 * 60 * 1000;
+const EMAIL_MAX_ATTEMPTS = 5;
+const IP_MAX_ATTEMPTS = 20;
+const _rateBuckets = { email: new Map(), ip: new Map() };
+
+function trimBucket(arr) {
+  const cutoff = Date.now() - RATE_WINDOW_MS;
+  while (arr.length && arr[0] < cutoff) arr.shift();
+}
+
+function getRateState(bucket, key) {
+  if (!key) return { count: 0, retryAfterSec: 0 };
+  let arr = bucket.get(key);
+  if (!arr) { arr = []; bucket.set(key, arr); }
+  trimBucket(arr);
+  return arr;
+}
+
+function clientIp(req) {
+  const xff = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return xff || req.socket?.remoteAddress || "unknown";
+}
+
+async function handleCheckRateLimit(req, res) {
+  const email = normalizeEmail(req.body?.email);
+  const ip = clientIp(req);
+  const now = Date.now();
+
+  const emailArr = getRateState(_rateBuckets.email, email);
+  const ipArr = getRateState(_rateBuckets.ip, ip);
+
+  const emailExceeded = email && emailArr.length >= EMAIL_MAX_ATTEMPTS;
+  const ipExceeded = ipArr.length >= IP_MAX_ATTEMPTS;
+
+  if (emailExceeded || ipExceeded) {
+    const oldest = Math.min(emailArr[0] ?? Infinity, ipArr[0] ?? Infinity);
+    const retryAfterSec = Math.max(1, Math.ceil((oldest + RATE_WINDOW_MS - now) / 1000));
+    res.setHeader("Retry-After", String(retryAfterSec));
+    return res.status(429).json({
+      error: "rate_limited",
+      reason: emailExceeded ? "email" : "ip",
+      retryAfterSec,
+      retryAfterMin: Math.ceil(retryAfterSec / 60),
+    });
+  }
+  return res.status(200).json({ ok: true });
+}
+
+async function handleRecordLoginAttempt(req, res) {
+  const email = normalizeEmail(req.body?.email);
+  const ip = clientIp(req);
+  const success = !!req.body?.success;
+  const now = Date.now();
+
+  // Only failed attempts count toward the limit — successful login resets
+  // the email bucket so a returning user isn't penalized for past typos.
+  if (success) {
+    if (email) _rateBuckets.email.delete(email);
+  } else {
+    if (email) {
+      const arr = getRateState(_rateBuckets.email, email);
+      arr.push(now);
+    }
+    const ipArr = getRateState(_rateBuckets.ip, ip);
+    ipArr.push(now);
+  }
+  return res.status(200).json({ ok: true });
+}
+
 // ── staff-login ───────────────────────────────────────────────────────────────
 
 async function handleStaffLogin(req, res) {
@@ -992,6 +1066,8 @@ export default async function handler(req, res) {
     if (resolvedAction === "sync-student-auth")      return await handleSyncStudentAuth(req, res);
     if (resolvedAction === "sync-lecturer-auth")     return await handleSyncLecturerAuth(req, res);
     if (resolvedAction === "delete-student-auth")    return await handleDeleteStudentAuth(req, res);
+    if (resolvedAction === "check-rate-limit")       return await handleCheckRateLimit(req, res);
+    if (resolvedAction === "record-login-attempt")   return await handleRecordLoginAttempt(req, res);
     return res.status(400).json({ error: "Missing or unknown action" });
   } catch (err) {
     console.error("Auth error:", err);

@@ -191,7 +191,7 @@ async function loadDeptHeadsWrapped() {
 supabase.auth.getSession().then(() => {
   const url = new URL(window.location.href);
   let dirty = false;
-  for (const p of ["code", "error", "error_code", "error_description", "reset"]) {
+  for (const p of ["code", "error", "error_code", "error_description", "reset", "oauth"]) {
     if (url.searchParams.has(p)) { url.searchParams.delete(p); dirty = true; }
   }
   if (window.location.hash.includes("access_token")) {
@@ -5422,6 +5422,31 @@ export default function App() {
     // If we already have staffUser from sessionStorage, no need to wait
     try { return !!sessionStorage.getItem("staff_user"); } catch { return false; }
   });
+
+  // Boot-time session gate (Phase 2 of auth UX upgrade):
+  // Supabase already persists the session in localStorage, but sessionStorage —
+  // which holds role state (staff_user, lecturer_portal_user, public_student) —
+  // is cleared on browser/PWA cold-start. Without this gate, a returning PWA
+  // user briefly sees the login form before PublicForm's 300ms mount effect
+  // notices the stored Supabase session and routes them away. We resolve the
+  // session before the login form ever renders. The 2.5s fallback prevents a
+  // dead Supabase host from locking the app on a loader forever.
+  const [sessionBootChecked, setSessionBootChecked] = useState(false);
+  const [bootSession, setBootSession] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    const fallback = setTimeout(() => { if (!cancelled) setSessionBootChecked(true); }, 2500);
+    supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      setBootSession(data?.session ?? null);
+      setSessionBootChecked(true);
+      clearTimeout(fallback);
+    }).catch(() => {
+      if (!cancelled) setSessionBootChecked(true);
+      clearTimeout(fallback);
+    });
+    return () => { cancelled = true; clearTimeout(fallback); };
+  }, []);
   // Validate staffUser against the live Supabase session on every /admin mount,
   // and re-validate whenever the auth state changes (login as student in PublicForm,
   // logout in another tab, etc). Without this, a stale sessionStorage.staff_user
@@ -5489,6 +5514,23 @@ export default function App() {
     }, 4 * 60 * 1000);
     return () => { cancelled = true; subscription?.unsubscribe?.(); clearInterval(refreshInterval); };
   }, [isAdmin]);
+
+  // PWA visibility refresh (Phase 2.3): when the installed PWA is brought back
+  // from background after a long suspend, the JWT may have expired but the
+  // refresh token is still valid. Refresh proactively on visibilitychange so
+  // the first API call after wake-up doesn't 401.
+  useEffect(() => {
+    const isStandalone = window.matchMedia?.("(display-mode: standalone)")?.matches
+      || window.navigator.standalone;
+    if (!isStandalone) return undefined;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        supabase.auth.refreshSession().catch(() => {});
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
   const [staffView, setStaffView] = useState(() => sessionStorage.getItem("staff_view") || "hub"); // hub | warehouse | administration | staff-management
   const authed = !!staffUser;
   const isMainAdmin = isAdmin && authed;
@@ -5833,9 +5875,12 @@ export default function App() {
 
   const deleteActivityLog = async (logId) => {
     try {
+      const token = await getAuthToken().catch(() => null);
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
       await fetch("/api/activity-log", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ action: "delete", id: logId }),
       });
     } catch {}
@@ -7035,7 +7080,7 @@ export default function App() {
         </div>
       ) : isPublicFormView && (
         <div className="public-page-shell">
-          {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes} refreshInventory={refreshPublicInventory} lecturers={lecturers} lessons={lessons} canInstall={canInstallPwa} onInstall={installPwa} userGuidePdf={userGuidePdfs.students}/>}
+          {(!loadingDone || !sessionBootChecked) ? <Loading ready={!loading && sessionBootChecked} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes} refreshInventory={refreshPublicInventory} lecturers={lecturers} lessons={lessons} canInstall={canInstallPwa} onInstall={installPwa} userGuidePdf={userGuidePdfs.students} initialSession={bootSession}/>}
         </div>
       )}
 
