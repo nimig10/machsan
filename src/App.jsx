@@ -905,7 +905,8 @@ const css = `
   .eq-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:16px; }
   .eq-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:18px; transition:all 0.2s; }
   .eq-card:hover { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
-  .toast-container { position:fixed; bottom:24px; left:24px; z-index:9999; display:flex; flex-direction:column; gap:8px; }
+  .toast-container { position:fixed; bottom:24px; left:24px; z-index:20000; display:flex; flex-direction:column; gap:8px; pointer-events:none; }
+  .toast-container .toast { pointer-events:auto; }
   .toast { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-sm); padding:12px 18px; font-size:13px; font-weight:500; display:flex; align-items:center; gap:10px; min-width:260px; box-shadow:0 8px 24px rgba(0,0,0,0.4); animation:slideUp 0.2s; }
   .toast-success { border-right:3px solid var(--green); }
   .toast-error   { border-right:3px solid var(--red); }

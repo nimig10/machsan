@@ -24,12 +24,39 @@ function crewRowToBlob(r) {
   return {
     id:           r.id,
     role:         r.role,
+    roleLabel:    r.role_label ?? null,
     studentId:    r.student_id ?? null,
     freeTextName: r.free_text_name ?? null,
     status:       r.status,
     invitedBy:    r.invited_by,
     crewEmail:    r.crew_email ?? null,
     notes:        r.notes ?? "",
+  };
+}
+
+function slotRowToBlob(r) {
+  if (!r) return null;
+  return {
+    id:        r.id,
+    role:      r.role,
+    roleLabel: r.role_label ?? null,
+    quantity:  r.quantity ?? 1,
+    sortOrder: r.sort_order ?? 0,
+  };
+}
+
+function slotBlobToRow(productionId, s, sortOrder) {
+  if (!s?.id || !s?.role) return null;
+  if (!["photographer","sound","custom"].includes(s.role)) return null;
+  if (s.role === "custom" && !String(s.roleLabel || "").trim()) return null;
+  const qty = Math.max(1, Math.min(20, Number(s.quantity) || 1));
+  return {
+    id:            String(s.id),
+    production_id: String(productionId),
+    role:          s.role,
+    role_label:    s.role === "custom" ? String(s.roleLabel).trim().slice(0, 40) : null,
+    quantity:      qty,
+    sort_order:    Number.isFinite(sortOrder) ? sortOrder : 0,
   };
 }
 
@@ -43,6 +70,8 @@ function productionRowToBlob(r) {
     directorEmail:      r.director_email,
     directorName:       r.director_name,
     directorPhone:      r.director_phone ?? "",
+    driveUrl:           r.drive_url ?? "",
+    color:              r.color ?? null,
     status:             r.status,
     publishedAt:        r.published_at,
     createdAt:          r.created_at,
@@ -53,6 +82,9 @@ function productionRowToBlob(r) {
     crew: Array.isArray(r.production_crew)
       ? r.production_crew.map(crewRowToBlob).filter(Boolean)
       : [],
+    slots: Array.isArray(r.production_slots)
+      ? r.production_slots.map(slotRowToBlob).filter(Boolean).sort((a,b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+      : [],
   };
 }
 
@@ -60,6 +92,7 @@ function productionBlobToRow(p) {
   if (!p?.id) return null;
   const title = String(p.title || "").trim();
   if (!title) return null;
+  const driveUrl = String(p.driveUrl || "").trim();
   return {
     id:                  String(p.id),
     title,
@@ -68,6 +101,8 @@ function productionBlobToRow(p) {
     director_email:      String(p.directorEmail || "").toLowerCase(),
     director_name:       String(p.directorName || ""),
     director_phone:      p.directorPhone ? String(p.directorPhone) : null,
+    drive_url:           driveUrl || null,
+    color:               p.color && /^#[0-9a-fA-F]{6}$/.test(p.color) ? p.color : null,
     status:              p.status || "draft",
     published_at:        p.publishedAt ?? null,
   };
@@ -93,6 +128,7 @@ function crewBlobToRow(productionId, c) {
     id:              String(c.id),
     production_id:   String(productionId),
     role:            c.role,
+    role_label:      c.role === "custom" && c.roleLabel ? String(c.roleLabel).trim().slice(0, 40) : null,
     student_id:      c.studentId ? String(c.studentId) : null,
     free_text_name:  c.freeTextName ? String(c.freeTextName) : null,
     status:          c.status || "invited",
@@ -104,7 +140,7 @@ function crewBlobToRow(productionId, c) {
 
 // ─── read path ─────────────────────────────────────────────────────────────
 
-const FULL_SELECT = "*, production_dates(*), production_crew(*)";
+const FULL_SELECT = "*, production_dates(*), production_crew(*), production_slots(*)";
 
 export async function listProductions(opts = {}) {
   const { onlyPublished = false, directorEmail = null, crewEmail = null } = opts;
@@ -154,7 +190,9 @@ export async function upsertProduction(blob) {
   const prodRow = productionBlobToRow(blob);
   if (!prodRow) return { ok: false, error: "missing id or title" };
 
+  let step = "productions";
   try {
+    step = "productions";
     const { error: pErr } = await supabase
       .from("productions")
       .upsert(prodRow, { onConflict: "id" });
@@ -165,6 +203,7 @@ export async function upsertProduction(blob) {
       .filter(Boolean);
     const wantedDateIds = new Set(wantedDates.map(d => d.id));
 
+    step = "production_dates:list";
     const { data: existingDates, error: dlErr } = await supabase
       .from("production_dates")
       .select("id")
@@ -176,12 +215,14 @@ export async function upsertProduction(blob) {
       .filter(id => !wantedDateIds.has(id));
 
     if (wantedDates.length > 0) {
+      step = "production_dates:upsert";
       const { error: dUpErr } = await supabase
         .from("production_dates")
         .upsert(wantedDates, { onConflict: "id" });
       if (dUpErr) throw dUpErr;
     }
     for (const id of datesToDelete) {
+      step = `production_dates:delete:${id}`;
       const { error: dDelErr } = await supabase
         .from("production_dates")
         .delete()
@@ -189,11 +230,45 @@ export async function upsertProduction(blob) {
       if (dDelErr) throw dDelErr;
     }
 
+    // ─── production_slots ───────────────────────────────────────────────────
+    const wantedSlots = (Array.isArray(blob.slots) ? blob.slots : [])
+      .map((s, idx) => slotBlobToRow(blob.id, s, idx))
+      .filter(Boolean);
+    const wantedSlotIds = new Set(wantedSlots.map(s => s.id));
+
+    step = "production_slots:list";
+    const { data: existingSlots, error: slErr } = await supabase
+      .from("production_slots")
+      .select("id")
+      .eq("production_id", blob.id);
+    if (slErr) throw slErr;
+
+    const slotsToDelete = (existingSlots ?? [])
+      .map(r => r.id)
+      .filter(id => !wantedSlotIds.has(id));
+
+    if (wantedSlots.length > 0) {
+      step = "production_slots:upsert";
+      const { error: sUpErr } = await supabase
+        .from("production_slots")
+        .upsert(wantedSlots, { onConflict: "id" });
+      if (sUpErr) throw sUpErr;
+    }
+    for (const id of slotsToDelete) {
+      step = `production_slots:delete:${id}`;
+      const { error: sDelErr } = await supabase
+        .from("production_slots")
+        .delete()
+        .eq("id", id);
+      if (sDelErr) throw sDelErr;
+    }
+
     const wantedCrew = (Array.isArray(blob.crew) ? blob.crew : [])
       .map(c => crewBlobToRow(blob.id, c))
       .filter(Boolean);
     const wantedCrewIds = new Set(wantedCrew.map(c => c.id));
 
+    step = "production_crew:list";
     const { data: existingCrew, error: clErr } = await supabase
       .from("production_crew")
       .select("id")
@@ -205,12 +280,14 @@ export async function upsertProduction(blob) {
       .filter(id => !wantedCrewIds.has(id));
 
     if (wantedCrew.length > 0) {
+      step = "production_crew:upsert";
       const { error: cUpErr } = await supabase
         .from("production_crew")
         .upsert(wantedCrew, { onConflict: "id" });
       if (cUpErr) throw cUpErr;
     }
     for (const id of crewToDelete) {
+      step = `production_crew:delete:${id}`;
       const { error: cDelErr } = await supabase
         .from("production_crew")
         .delete()
@@ -220,8 +297,8 @@ export async function upsertProduction(blob) {
 
     return { ok: true };
   } catch (err) {
-    console.warn("[productionsApi.upsertProduction]", blob?.id, err);
-    return { ok: false, error: err?.message || String(err) };
+    console.error(`[productionsApi.upsertProduction] step=${step} id=${blob?.id}`, err);
+    return { ok: false, error: `[${step}] ${err?.message || String(err)}` };
   }
 }
 
@@ -235,6 +312,7 @@ export async function publishProduction(id) {
     if (error) throw error;
     return { ok: true };
   } catch (err) {
+    console.error("[productionsApi.publishProduction]", id, err);
     return { ok: false, error: err?.message || String(err) };
   }
 }
@@ -260,6 +338,7 @@ export async function requestJoinProduction(productionId, role, blob) {
       id:              `pc_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
       production_id:   String(productionId),
       role,
+      role_label:      role === "custom" && blob?.roleLabel ? String(blob.roleLabel).trim().slice(0, 40) : null,
       student_id:      blob?.studentId ? String(blob.studentId) : null,
       free_text_name:  blob?.freeTextName ? String(blob.freeTextName) : null,
       status:          "invited",
@@ -271,6 +350,22 @@ export async function requestJoinProduction(productionId, role, blob) {
     if (row.role === "photographer" || row.role === "sound") {
       if (!row.student_id) return { ok: false, error: "photographer/sound requires student_id" };
     }
+    if (row.role === "custom" && !row.role_label) {
+      return { ok: false, error: "custom role requires roleLabel" };
+    }
+
+    // One student = one role per production (across all roles).
+    if (row.student_id) {
+      const { data: crewRows, error: crErr } = await supabase
+        .from("production_crew").select("status, student_id")
+        .eq("production_id", row.production_id);
+      if (crErr) throw crErr;
+      const dup = (crewRows || []).some(c => c.status !== "rejected" && String(c.student_id || "") === String(row.student_id));
+      if (dup) {
+        return { ok: false, error: "סטודנט כבר משויך לתפקיד אחר בהפקה הזו" };
+      }
+    }
+
     const { error } = await supabase.from("production_crew").insert(row);
     if (error) throw error;
     return { ok: true, id: row.id };

@@ -262,7 +262,7 @@ function PublicMiniCalendar({ reservations, lessons=[], initialLoanType="הכל"
       ? r.status==="אישור ראש מחלקה"
       : isOverdueFilter
       ? r.status==="באיחור"
-      : (r.status==="מאושר"||r.status==="פעילה"||r.status==="באיחור"||r.status==="ממתין")) &&
+      : (r.status==="מאושר"||r.status==="פעילה"||r.status==="באיחור"||r.status==="ממתין"||r.status==="אישור ראש מחלקה")) &&
     r.borrow_date && r.return_date &&
     (loanTypeF==="הכל" || isStatusFilter || r.loan_type===loanTypeF) &&
     // Exclude reservations linked to a deleted lesson (orphaned lesson_id)
@@ -386,7 +386,7 @@ function ActiveListsPanel({ reservations=[], lessons=[], equipment=[], calSnapsh
       ? r.status === "אישור ראש מחלקה"
       : isOverdueFilter
       ? r.status === "באיחור"
-      : (r.status === "מאושר" || r.status === "פעילה" || r.status === "באיחור" || r.status === "ממתין")) &&
+      : (r.status === "מאושר" || r.status === "פעילה" || r.status === "באיחור" || r.status === "ממתין" || r.status === "אישור ראש מחלקה")) &&
     r.borrow_date && r.return_date &&
     (loanTypeF === "הכל" || isStatusFilter || r.loan_type === loanTypeF) &&
     (!r.lesson_id || lessonIdSet.has(String(r.lesson_id))) &&
@@ -1888,7 +1888,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const studentsFromTable = tableStudents ?? (certifications?.students || []);
   const swipeTouchRef = useRef(null);
   const [form, setForm]       = useState(() => {
-    const base = {student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_first_name:"",crew_photographer_last_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_first_name:"",crew_sound_last_name:"",crew_sound_phone:"",production_reason:""};
+    const base = {student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:initialLoanType,sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_first_name:"",crew_photographer_last_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_first_name:"",crew_sound_last_name:"",crew_sound_phone:"",production_reason:"",production_id:"",production_date_id:""};
     const d = _initialDraft;
     if (d && d.form && typeof d.form === "object") {
       // URL ?loan=... wins over draft so links always do what they say.
@@ -2911,7 +2911,9 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     }));
   };
 
-  const minDays = form.loan_type==="פרטית" ? 1 : form.loan_type==="סאונד" ? 0 : form.loan_type==="קולנוע יומית" ? 0 : form.loan_type==="הפקה" ? 9 : 7;
+  // "9-day notice" for הפקה is INCLUSIVE — counting both the submission day
+  // and the borrow day — so the calendar gap is 8 days. Mirrored in ProductionEditor.minShootISO().
+  const minDays = form.loan_type==="פרטית" ? 1 : form.loan_type==="סאונד" ? 0 : form.loan_type==="קולנוע יומית" ? 0 : form.loan_type==="הפקה" ? 8 : 7;
   const isCinemaLoan = form.loan_type==="קולנוע יומית";
   const isWeekend = (dateStr) => {
     if(!dateStr) return false;
@@ -3105,7 +3107,23 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const soundAnyFilled = !!(form.crew_sound_first_name || form.crew_sound_last_name);
   const soundOk = !soundAnyFilled || (form.crew_sound_first_name && form.crew_sound_last_name);
   const ok1 = nameOk && form.email && form.phone && form.course && form.loan_type &&
-    (!isProductionLoan || (photographerOk && soundOk));
+    (!isProductionLoan || !!form.production_id);
+
+  // Production loan now requires picking a production the student owns (director).
+  // Listed: published productions where directorEmail matches the logged-in student
+  // AND the production has an approved photographer (required for any equipment loan).
+  const myProductions = useMemo(() => {
+    const em = String(loggedInStudent?.email || "").toLowerCase();
+    if (!em) return [];
+    return (productions || []).filter(p =>
+      p?.status === "published"
+      && String(p?.directorEmail || "").toLowerCase() === em
+      && (p.crew || []).some(c => c.role === "photographer" && c.status === "approved" && c.studentId)
+    );
+  }, [productions, loggedInStudent]);
+  const selectedProduction = useMemo(() =>
+    form.production_id ? (productions || []).find(p => p.id === form.production_id) || null : null,
+    [productions, form.production_id]);
 
   // ── Certification lookup ──
   const normalizePhone = (p) => (p||"").replace(/[^0-9]/g,"");
@@ -3132,7 +3150,11 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const soundExistsInSystem = !soundBothFilled ||
     !!matchCertificationStudentByNamePhone(form.crew_sound_name, form.crew_sound_phone);
   // ok1 extended: also block "המשך" when crew name is typed but doesn't match any student.
-  const ok1WithCrew = ok1 && (!isProductionLoan || (photographerExistsInSystem && soundExistsInSystem));
+  // For production loans: crew is sourced from the production itself (already validated at publish),
+  // so we skip the typo-cross-check that the legacy free-text crew flow needed.
+  const ok1WithCrew = isProductionLoan
+    ? ok1
+    : ok1 && (photographerExistsInSystem && soundExistsInSystem);
   const studentRecord = (() => {
     if (!loggedInStudent) return null;
     const students = studentsFromTable;
@@ -4087,7 +4109,33 @@ ${inventory}
               showToast={(msg, type="info") => showToast(type, msg)}
               refresh={refreshProductions}
               onOpenLoanForm={(p) => {
-                setForm(f => ({ ...f, loan_type: "הפקה", project_name: p?.title || f.project_name }));
+                const photog = (p?.crew || []).find(c => c.role === "photographer" && c.status === "approved");
+                const sound = (p?.crew || []).find(c => c.role === "sound" && c.status === "approved");
+                const studentsList = certifications?.students || [];
+                const photogStu = studentsList.find(s => String(s.id) === String(photog?.studentId));
+                const soundStu = studentsList.find(s => String(s.id) === String(sound?.studentId));
+                const splitName = (name) => {
+                  const parts = String(name || "").trim().split(/\s+/);
+                  return { first: parts[0] || "", last: parts.slice(1).join(" ") };
+                };
+                const photogParts = splitName(photogStu?.name);
+                const soundParts = splitName(soundStu?.name);
+                setForm(f => ({
+                  ...f,
+                  loan_type: "הפקה",
+                  project_name: p?.title || f.project_name,
+                  production_id: p?.id || "",
+                  production_date_id: p?.dates?.length === 1 ? p.dates[0].id : "",
+                  production_reason: p?.description || "",
+                  crew_photographer_first_name: photogParts.first,
+                  crew_photographer_last_name:  photogParts.last,
+                  crew_photographer_name: photogStu?.name || "",
+                  crew_photographer_phone: photogStu?.phone || "",
+                  crew_sound_first_name: soundParts.first,
+                  crew_sound_last_name:  soundParts.last,
+                  crew_sound_name: soundStu?.name || "",
+                  crew_sound_phone: soundStu?.phone || "",
+                }));
                 setStudentApp("forms");
                 setPublicView("equipment");
                 setStep(2);
@@ -4222,79 +4270,142 @@ ${inventory}
                 </div>
               ))}
             </div>
-            <div className="form-section-title">{isProductionLoan ? "פרטי ההפקה" : "פרטי הסטודנט"}</div>
-            {isProductionLoan && (
-              <div style={{background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.25)",borderRadius:"var(--r-sm)",padding:"10px 14px",fontSize:12,color:"var(--text2)",marginBottom:14}}>
-                <Lightbulb size={16} strokeWidth={1.75} /> <strong>במאי ההפקה</strong> הוא האחראי הראשי על קבלתו והחזרתו התקינה של הציוד
-              </div>
-            )}
-            <div className="grid-2">
-              <div className="form-group"><label className="form-label">{isProductionLoan?"שם פרטי של במאי ההפקה *":"שם פרטי *"}</label><input className="form-input" name="student_first_name" autoComplete="given-name" value={form.student_first_name} onChange={e=>setStudentFirstName(e.target.value)}/></div>
-              <div className="form-group"><label className="form-label">{isProductionLoan?"שם משפחה של במאי ההפקה *":"שם משפחה *"}</label><input className="form-input" name="student_last_name" autoComplete="family-name" value={form.student_last_name} onChange={e=>setStudentLastName(e.target.value)}/></div>
-            </div>
-            <div className="grid-2">
-              <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" name="phone" autoComplete="tel" value={form.phone} onChange={e=>set("phone",e.target.value)}/></div>
-              <div className="form-group"><label className="form-label">אימייל *{loggedInStudent?.email&&<span style={{fontSize:11,fontWeight:600,color:"var(--text3)",marginRight:6}}>(מהחשבון שלך)</span>}</label><input type="email" className="form-input" name="email" autoComplete="email" value={form.email} onChange={e=>set("email",e.target.value)} readOnly={!!loggedInStudent?.email} style={loggedInStudent?.email?{opacity:0.7,cursor:"not-allowed"}:undefined}/></div>
-            </div>
-            <div className="grid-2">
-              <div className="form-group"><label className="form-label">קורס / כיתה *</label><input className="form-input" value={form.course} onChange={e=>set("course",e.target.value)}/></div>
-              <div className="form-group"><label className="form-label">שם הפרויקט</label><input className="form-input" value={form.project_name} onChange={e=>set("project_name",e.target.value)}/></div>
-            </div>
-
-            {isProductionLoan && (<>
-              <div className="form-section-title" style={{marginTop:20}}>פרטי צוות ההפקה</div>
-              <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"16px",marginBottom:16}}>
-                <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>🎥 צלם ההפקה <span style={{color:"var(--red)",fontSize:11}}>* חובה</span></div>
-                <div className="grid-2">
-                  <div className="form-group"><label className="form-label">שם פרטי *</label><input className="form-input" placeholder="שם פרטי" name="crew_photographer_first_name" autoComplete="given-name" value={form.crew_photographer_first_name} onChange={e=>setCrewPhotographerFirst(e.target.value)}/></div>
-                  <div className="form-group"><label className="form-label">שם משפחה *</label><input className="form-input" placeholder="שם משפחה" name="crew_photographer_last_name" autoComplete="family-name" value={form.crew_photographer_last_name} onChange={e=>setCrewPhotographerLast(e.target.value)}/></div>
-                </div>
-                {photographerOk && !photographerExistsInSystem && (
-                  <div style={{color:"#e74c3c",fontSize:12,marginTop:4,padding:"6px 10px",background:"rgba(231,76,60,0.1)",borderRadius:6,border:"1px solid rgba(231,76,60,0.3)"}}>
-                    ⚠️ הצלם אינו רשום במערכת כסטודנט — בדוק/י את האיות
-                  </div>
-                )}
-                <div className="form-group" style={{marginTop:8}}>
-                  <label className="form-label">טלפון <span style={{color:"var(--text3)",fontSize:11}}>רשות</span></label>
-                  <input className="form-input" placeholder="05x-xxxxxxx" name="crew_photographer_phone" autoComplete="tel" value={form.crew_photographer_phone} onChange={e=>set("crew_photographer_phone",e.target.value)}/>
-                  <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>המערכת מאמתת את הסמכות הציוד של הצלם לפי השם המלא</div>
+            {isProductionLoan ? (
+              // For production loans, the director's identity is taken from the
+              // logged-in session — no manual inputs. The other identity fields
+              // (course, phone) are also auto-filled by applyStudentIdentity on login.
+              <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"12px 14px",marginBottom:14,fontSize:13,color:"var(--text)",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                <span style={{fontSize:18}}>👤</span>
+                <div>
+                  <div style={{fontWeight:700}}>{(form.student_first_name + " " + form.student_last_name).trim() || loggedInStudent?.name || "—"}</div>
+                  <div style={{fontSize:12,color:"var(--text3)"}}>{form.email || loggedInStudent?.email || ""}</div>
                 </div>
               </div>
-              <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"16px",marginBottom:16}}>
-                <div style={{fontWeight:700,fontSize:13,marginBottom:10,display:"flex",alignItems:"center",gap:4}}><Mic size={14} strokeWidth={1.75} color="var(--accent)" /> איש הסאונד <span style={{color:"var(--text3)",fontSize:11}}>רשות</span></div>
-                <div className="grid-2">
-                  <div className="form-group"><label className="form-label">שם פרטי</label><input className="form-input" placeholder="שם פרטי" name="crew_sound_first_name" autoComplete="given-name" value={form.crew_sound_first_name} onChange={e=>setCrewSoundFirst(e.target.value)}/></div>
-                  <div className="form-group"><label className="form-label">שם משפחה</label><input className="form-input" placeholder="שם משפחה" name="crew_sound_last_name" autoComplete="family-name" value={form.crew_sound_last_name} onChange={e=>setCrewSoundLast(e.target.value)}/></div>
-                </div>
-                {soundBothFilled && !soundExistsInSystem && (
-                  <div style={{color:"#e74c3c",fontSize:12,marginTop:4,padding:"6px 10px",background:"rgba(231,76,60,0.1)",borderRadius:6,border:"1px solid rgba(231,76,60,0.3)"}}>
-                    ⚠️ איש הסאונד אינו רשום במערכת כסטודנט — בדוק/י את האיות
-                  </div>
-                )}
-                <div className="form-group" style={{marginTop:8}}>
-                  <label className="form-label">טלפון <span style={{color:"var(--text3)",fontSize:11}}>רשות</span></label>
-                  <input className="form-input" placeholder="05x-xxxxxxx" name="crew_sound_phone" autoComplete="tel" value={form.crew_sound_phone} onChange={e=>set("crew_sound_phone",e.target.value)}/>
-                  <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>אם איש הסאונד רשום במערכת, המערכת תאמת את הסמכותיו לפי השם המלא</div>
-                </div>
-              </div>
-            {/* ── סיבת ההפקה ── */}
-            {isProductionLoan && (
+            ) : (
               <>
-                <div className="form-section-title" style={{marginTop:20}}>סיבת ההפקה</div>
-                <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"16px",marginBottom:16}}>
-                  <div style={{fontSize:13,color:"var(--text2)",marginBottom:10}}>📝 פרט/י בקצרה מדוע ההפקה רלוונטית ללמידה שלך. ההסבר יועבר לאישור ראש המחלקה.</div>
-                  <textarea
-                    className="form-input"
-                    placeholder="לדוגמה: הפקת סרט גמר בקורס צילום קולנועי — נדרש ציוד צילום לתרגיל הצילום הסופי..."
-                    value={form.production_reason}
-                    onChange={e => set("production_reason", e.target.value.slice(0, 750))}
-                    rows={4}
-                    style={{resize:"vertical",minHeight:90}}
-                  />
-                  <div style={{fontSize:11,color:"var(--text3)",marginTop:4,textAlign:"left"}}>{form.production_reason.length}/750</div>
+                <div className="form-section-title">פרטי הסטודנט</div>
+                <div className="grid-2">
+                  <div className="form-group"><label className="form-label">שם פרטי *</label><input className="form-input" name="student_first_name" autoComplete="given-name" value={form.student_first_name} onChange={e=>setStudentFirstName(e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label">שם משפחה *</label><input className="form-input" name="student_last_name" autoComplete="family-name" value={form.student_last_name} onChange={e=>setStudentLastName(e.target.value)}/></div>
+                </div>
+                <div className="grid-2">
+                  <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" name="phone" autoComplete="tel" value={form.phone} onChange={e=>set("phone",e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label">אימייל *{loggedInStudent?.email&&<span style={{fontSize:11,fontWeight:600,color:"var(--text3)",marginRight:6}}>(מהחשבון שלך)</span>}</label><input type="email" className="form-input" name="email" autoComplete="email" value={form.email} onChange={e=>set("email",e.target.value)} readOnly={!!loggedInStudent?.email} style={loggedInStudent?.email?{opacity:0.7,cursor:"not-allowed"}:undefined}/></div>
+                </div>
+                <div className="grid-2">
+                  <div className="form-group"><label className="form-label">קורס / כיתה *</label><input className="form-input" value={form.course} onChange={e=>set("course",e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label">שם הפרויקט</label><input className="form-input" value={form.project_name} onChange={e=>set("project_name",e.target.value)}/></div>
                 </div>
               </>
             )}
+
+            {isProductionLoan && (<>
+              <div className="form-section-title" style={{marginTop:20}}>בחירת הפקה</div>
+              {myProductions.length === 0 ? (
+                <div style={{background:"rgba(245,166,35,0.1)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:"var(--r)",padding:"20px",marginBottom:16,textAlign:"center"}}>
+                  <div style={{fontSize:15,fontWeight:700,color:"var(--accent)",marginBottom:12}}>
+                    <Film size={20} strokeWidth={1.75} style={{verticalAlign:"middle",marginInlineEnd:6}}/>
+                    אין לך הפקה מוכנה להשאלת ציוד
+                  </div>
+                  <div style={{fontSize:14,color:"var(--text)",marginBottom:14,lineHeight:1.7,textAlign:"right"}}>
+                    כדי להגיש בקשת השאלת ציוד להפקה — יש להקים אותה קודם בלוח ההפקות:
+                    <ul style={{margin:"8px 0 0",paddingInlineStart:22,fontSize:13}}>
+                      <li>תאריכי צילום</li>
+                      <li><strong style={{color:"var(--accent)"}}>צלם ראשי רשום ומאושר</strong> (חובה)</li>
+                      <li>איש סאונד (אופציונלי)</li>
+                      <li>שאר הצוות (אופציונלי)</li>
+                    </ul>
+                  </div>
+                  <div style={{fontSize:13,color:"#e74c3c",fontWeight:700,marginBottom:14,padding:"8px 12px",background:"rgba(231,76,60,0.1)",border:"1px solid #e74c3c",borderRadius:6,lineHeight:1.5}}>
+                    ⏱ נוהל המחסן: הפקה חייבת להיות מוקמת ורשימת ציוד מוגשת לפחות <strong>9 ימים מראש</strong> (כולל היום).
+                  </div>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => setStudentApp("productions")}>
+                    מעבר ללוח הפקות
+                  </button>
+                </div>
+              ) : (
+                <div style={{background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",padding:"16px",marginBottom:16}}>
+                  <div className="form-group">
+                    <label className="form-label">הפקה *</label>
+                    <select className="form-select" value={form.production_id || ""}
+                      onChange={e => {
+                        const picked = myProductions.find(p => p.id === e.target.value);
+                        if (!picked) {
+                          setForm(f => ({ ...f, production_id: "", production_date_id: "" }));
+                          return;
+                        }
+                        const studentsList = certifications?.students || [];
+                        const photog = (picked.crew || []).find(c => c.role === "photographer" && c.status === "approved");
+                        const sound = (picked.crew || []).find(c => c.role === "sound" && c.status === "approved");
+                        const photogStu = studentsList.find(s => String(s.id) === String(photog?.studentId));
+                        const soundStu = studentsList.find(s => String(s.id) === String(sound?.studentId));
+                        const splitName = (name) => {
+                          const parts = String(name || "").trim().split(/\s+/);
+                          return { first: parts[0] || "", last: parts.slice(1).join(" ") };
+                        };
+                        const pp = splitName(photogStu?.name);
+                        const sp = splitName(soundStu?.name);
+                        setForm(f => ({
+                          ...f,
+                          production_id: picked.id,
+                          production_date_id: picked.dates?.length === 1 ? picked.dates[0].id : "",
+                          project_name: picked.title || "",
+                          production_reason: picked.description || "",
+                          crew_photographer_first_name: pp.first,
+                          crew_photographer_last_name:  pp.last,
+                          crew_photographer_name: photogStu?.name || "",
+                          crew_photographer_phone: photogStu?.phone || "",
+                          crew_sound_first_name: sp.first,
+                          crew_sound_last_name:  sp.last,
+                          crew_sound_name: soundStu?.name || "",
+                          crew_sound_phone: soundStu?.phone || "",
+                        }));
+                      }}>
+                      <option value="">— בחר הפקה —</option>
+                      {myProductions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                    </select>
+                  </div>
+                  {selectedProduction && (() => {
+                    const studentsList = certifications?.students || [];
+                    const photog = (selectedProduction.crew || []).find(c => c.role === "photographer" && c.status === "approved");
+                    const sound = (selectedProduction.crew || []).find(c => c.role === "sound" && c.status === "approved");
+                    const photogStu = studentsList.find(s => String(s.id) === String(photog?.studentId));
+                    const soundStu = studentsList.find(s => String(s.id) === String(sound?.studentId));
+                    const fmtDate = (d) => { try { return new Date(d).toLocaleDateString("he-IL", { day:"2-digit", month:"2-digit", year:"numeric" }); } catch { return d; } };
+                    return (
+                      <div style={{marginTop:12,background:"var(--surface)",borderRadius:6,padding:12,fontSize:13,lineHeight:1.7}}>
+                        <div style={{fontWeight:700,fontSize:14,marginBottom:6,color:"var(--accent)"}}>{selectedProduction.title}</div>
+                        <div><strong>במאי:</strong> {selectedProduction.directorName || "—"}</div>
+                        <div><strong>צלם:</strong> {photogStu?.name || photog?.freeTextName || "—"}</div>
+                        <div><strong>סאונדמן:</strong> {soundStu?.name || sound?.freeTextName || "—"}</div>
+                        <div style={{marginTop:6}}><strong>תאריכי צילום:</strong></div>
+                        <ul style={{margin:"4px 0",paddingInlineStart:20}}>
+                          {(selectedProduction.dates || []).map(d => (
+                            <li key={d.id}>
+                              {fmtDate(d.startDate)} {d.startTime} – {d.startDate === d.endDate ? "" : fmtDate(d.endDate) + " "}{d.endTime}
+                              {d.note ? <span style={{color:"var(--text3)"}}> ({d.note})</span> : null}
+                            </li>
+                          ))}
+                        </ul>
+                        {selectedProduction.description && (
+                          <div style={{marginTop:8,padding:"8px 10px",background:"var(--surface2)",borderRadius:4,fontSize:12,color:"var(--text2)",whiteSpace:"pre-wrap"}}>
+                            {selectedProduction.description}
+                          </div>
+                        )}
+                        {selectedProduction.driveUrl && (
+                          <a href={selectedProduction.driveUrl} target="_blank" rel="noopener noreferrer"
+                            style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:8,padding:"4px 10px",borderRadius:4,border:"1px solid var(--accent)",color:"var(--accent)",textDecoration:"none",fontSize:12,fontWeight:700}}>
+                            📄 קישור לתסריט/סינופסיס
+                          </a>
+                        )}
+                        <div style={{marginTop:8,fontSize:11,color:"var(--text3)"}}>
+                          🔒 פרטי הצוות והתיאור מוגדרים בלוח ההפקות ולא ניתנים לעריכה כאן.
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </>)}
 
             <button className="btn btn-primary" disabled={!ok1WithCrew} onClick={()=>setStep(2)}>{isSoundLoan ? "המשך ← שיוך קביעת חדר" : "המשך ← תאריכים"}</button>
@@ -4400,6 +4511,54 @@ ${inventory}
                   )}
                 </>
               ) : null
+            ) : isProductionLoan && selectedProduction && (selectedProduction.dates || []).length > 0 ? (
+              <>
+                <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:14}}>
+                  <div style={{fontSize:13,fontWeight:700,color:"var(--accent)",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+                    <Calendar size={14} strokeWidth={1.75}/> תאריכי הצילום של ההפקה
+                  </div>
+                  <div style={{fontSize:12,color:"var(--text2)",marginBottom:12,lineHeight:1.5}}>
+                    בחר/י את התאריך שעבורו תוגש רשימת ציוד. התאריכים והשעות נקבעו מראש בלוח ההפקות ולא ניתנים לעריכה כאן.
+                  </div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {selectedProduction.dates.map(d => {
+                      const isActive = form.borrow_date === d.startDate && form.return_date === d.endDate
+                        && form.borrow_time === d.startTime && form.return_time === d.endTime;
+                      const fmtCh = (s) => { try { return new Date(s + "T00:00:00").toLocaleDateString("he-IL", { day:"2-digit", month:"2-digit" }); } catch { return s; } };
+                      const dateLabel = d.startDate === d.endDate
+                        ? fmtCh(d.startDate)
+                        : `${fmtCh(d.startDate)} – ${fmtCh(d.endDate)}`;
+                      return (
+                        <button key={d.id} type="button" onClick={() => {
+                          setForm(prev => ({
+                            ...prev,
+                            borrow_date: d.startDate,
+                            return_date: d.endDate,
+                            borrow_time: d.startTime || "",
+                            return_time: d.endTime || "",
+                            production_date_id: d.id,
+                          }));
+                        }} style={{
+                          display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+                          padding:"8px 16px", borderRadius:8,
+                          border:`2px solid ${isActive ? "var(--accent)" : "var(--border)"}`,
+                          background: isActive ? "var(--accent-glow)" : "transparent",
+                          color: isActive ? "var(--accent)" : "var(--text2)",
+                          fontWeight:700, cursor:"pointer", minWidth:130,
+                        }}>
+                          <span style={{fontSize:13}}>{isActive ? "✓ " : ""}{dateLabel}</span>
+                          <span style={{fontSize:11,opacity:0.85}}>{d.startTime}–{d.endTime}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {form.borrow_date && form.borrow_time && (
+                    <div style={{marginTop:14,padding:"10px 12px",background:"var(--surface)",border:"1px solid var(--accent)",borderRadius:6,fontSize:13,color:"var(--text)"}}>
+                      🔒 <strong>נבחר:</strong> השאלה ב-{(() => { try { return new Date(form.borrow_date + "T00:00:00").toLocaleDateString("he-IL"); } catch { return form.borrow_date; } })()} {form.borrow_time} · החזרה ב-{(() => { try { return new Date(form.return_date + "T00:00:00").toLocaleDateString("he-IL"); } catch { return form.return_date; } })()} {form.return_time}
+                    </div>
+                  )}
+                </div>
+              </>
             ) : (
               <>
                 <div className="grid-2">

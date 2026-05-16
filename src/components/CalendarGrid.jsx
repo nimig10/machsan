@@ -1,23 +1,32 @@
 // CalendarGrid.jsx — calendar grid component
 import { dateToLocal } from "../utils.js";
 
-export function CalendarGrid({ days, outOfMonthDays=[], activeRes, colorMap, todayStr, cellHeight=110, fontSize=11, previewId="", lessonIds=null }) {
-  // Split days into weeks of 7
+export function CalendarGrid({ days, outOfMonthDays=[], activeRes, colorMap, todayStr, cellHeight=110, fontSize=11, previewId="", lessonIds=null, onBarClick=null }) {
+  // Split days + ghost dates into parallel weeks. Each cell has EITHER an
+  // in-month date or a ghost date — we work with the union ("effective" date)
+  // so that bars stretch onto ghost cells too. Without this, an event that
+  // straddles a month boundary disappears on the prev/next-month padding cells.
   const weeks = [];
-  for(let i=0;i<days.length;i+=7) weeks.push(days.slice(i,i+7));
+  const ghostWeeks = [];
+  for(let i=0;i<days.length;i+=7) {
+    weeks.push(days.slice(i,i+7));
+    ghostWeeks.push((outOfMonthDays || []).slice(i,i+7));
+  }
 
-  // For each week, compute event bars with slot assignment (no overlaps)
-  const getWeekBars = (week) => {
-    const weekStart = week.find(d=>d);
-    const weekEnd   = [...week].reverse().find(d=>d);
-    if(!weekStart||!weekEnd) return [];
-    const wsStr = dateToLocal(weekStart);
-    const weStr = dateToLocal(weekEnd);
+  // For each week, compute event bars with slot assignment (no overlaps).
+  // Returns { bars, effective } so the renderer can resolve per-column dates.
+  const getWeekBars = (week, ghostWeek) => {
+    const effective = week.map((d, i) => d || ghostWeek[i] || null);
+    const firstDate = effective.find(d => d);
+    const lastDate  = [...effective].reverse().find(d => d);
+    if (!firstDate || !lastDate) return { bars: [], effective };
+    const wsStr = dateToLocal(firstDate);
+    const weStr = dateToLocal(lastDate);
 
     // events overlapping this week, sorted by borrow_date then by id (insertion order)
     const evts = activeRes
       .filter(r => r.borrow_date<=weStr && r.return_date>=wsStr)
-      .sort((a,b) => a.borrow_date<b.borrow_date?-1:a.borrow_date>b.borrow_date?1:Number(a.id)-Number(b.id));
+      .sort((a,b) => a.borrow_date<b.borrow_date?-1:a.borrow_date>b.borrow_date?1:String(a.id).localeCompare(String(b.id)));
 
     // slot assignment: each slot tracks the last ec used
     // A bar can go into slot S only if slotEnd[S] < sc (columns don't overlap)
@@ -25,17 +34,18 @@ export function CalendarGrid({ days, outOfMonthDays=[], activeRes, colorMap, tod
     const bars = [];
     evts.forEach(r=>{
       const [bg,color] = colorMap[r.id]||["rgba(52,152,219,0.38)","#5dade2"];
-      const startCol = week.findIndex(d=>d && dateToLocal(d)>=r.borrow_date);
-      const endColRaw= week.findLastIndex(d=>d && dateToLocal(d)<=r.return_date);
+      const startCol = effective.findIndex(d => d && dateToLocal(d) >= r.borrow_date);
+      const endColRaw= effective.findLastIndex(d => d && dateToLocal(d) <= r.return_date);
       const sc = startCol<0?0:startCol;
       const ec = endColRaw<0?6:endColRaw;
       // find lowest slot where this bar fits (no column overlap)
       let slot=0;
       while(slotEnd[slot]!==undefined && slotEnd[slot]>=sc) slot++;
       slotEnd[slot]=ec;
-      bars.push({r,bg,color,sc,ec,slot,showName: week[sc]&&dateToLocal(week[sc])>=r.borrow_date});
+      const startCell = effective[sc];
+      bars.push({r,bg,color,sc,ec,slot,showName: !!(startCell && dateToLocal(startCell) >= r.borrow_date)});
     });
-    return bars;
+    return { bars, effective };
   };
 
   const DAY_NUM_H = 22;
@@ -45,7 +55,8 @@ export function CalendarGrid({ days, outOfMonthDays=[], activeRes, colorMap, tod
   return (
     <div style={{direction:"rtl"}}>
       {weeks.map((week,wi)=>{
-        const bars = getWeekBars(week);
+        const ghostWeek = ghostWeeks[wi];
+        const { bars, effective } = getWeekBars(week, ghostWeek);
         const maxSlot = bars.length?Math.max(...bars.map(b=>b.slot)):0;
         const rowH = Math.max(cellHeight, DAY_NUM_H + (maxSlot+1)*(EVENT_H+EVENT_GAP)+8);
         return (
@@ -75,10 +86,14 @@ export function CalendarGrid({ days, outOfMonthDays=[], activeRes, colorMap, tod
               const right = `calc(${b.sc*colW}% + 2px)`;
               const width = `calc(${(b.ec-b.sc+1)*colW}% - 4px)`;
               const top   = DAY_NUM_H + b.slot*(EVENT_H+EVENT_GAP);
-              const isResStart = week[b.sc]&&dateToLocal(week[b.sc])===b.r.borrow_date;
-              const isResEnd   = week[b.ec]&&dateToLocal(week[b.ec])===b.r.return_date;
+              const startCell = effective[b.sc];
+              const endCell   = effective[b.ec];
+              const isResStart = !!(startCell && dateToLocal(startCell) === b.r.borrow_date);
+              const isResEnd   = !!(endCell && dateToLocal(endCell) === b.r.return_date);
               return (
-                <div key={bi} style={{
+                <div key={bi}
+                  onClick={onBarClick ? (e) => { e.stopPropagation(); onBarClick(b.r); } : undefined}
+                  style={{
                   position:"absolute",
                   right, top, width, height:EVENT_H,
                   background:b.bg,
@@ -87,6 +102,7 @@ export function CalendarGrid({ days, outOfMonthDays=[], activeRes, colorMap, tod
                   paddingLeft:isResStart?8:2, paddingRight:isResEnd?6:2,
                   overflow:"hidden",whiteSpace:"nowrap",
                   fontSize, color:b.color, fontWeight:700,
+                  cursor: onBarClick ? "pointer" : "default",
                   zIndex:previewId&&b.r.id===previewId?0:1,
                   outline:previewId&&b.r.id===previewId?"2px dashed rgba(245,166,35,0.7)":
                     (lessonIds&&lessonIds.has(b.r.id))||b.r.loan_type==="שיעור"?"2px dashed rgba(155,89,182,0.8)":"none",
