@@ -60,21 +60,25 @@ function isWeekendISO(dateStr) {
   const d = new Date(`${dateStr}T00:00:00`);
   return d.getDay() === 5 || d.getDay() === 6;
 }
-// Earliest legal shoot date = today + 8 days, skipping Fri/Sat. Mirrors the
-// equipment-loan form rule for loan_type="הפקה". The number 8 comes from the
-// school's "9 days notice" policy where the count is inclusive of both the
-// submission day and the shoot day (16/05 + "9 days" → 24/05).
+// Earliest legal shoot date = today + 7 days, skipping Fri/Sat. Mirrors the
+// equipment-loan form rule for loan_type="הפקה". The number 7 comes from the
+// school's "8 days notice" policy where the count is inclusive of both the
+// submission day and the shoot day (17/05 + "8 days" → 24/05).
 function minShootISO() {
   const d = new Date();
   d.setHours(0,0,0,0);
-  d.setDate(d.getDate() + 8);
+  d.setDate(d.getDate() + 7);
   while (d.getDay() === 5 || d.getDay() === 6) d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0,10);
+  // Use local components — toISOString() shifts to UTC which off-by-ones for IDT (+3).
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 function fmtDeadline(startDate) {
   if (!startDate) return null;
   const d = new Date(startDate);
-  d.setDate(d.getDate() - 8); // 9 days inclusive = 8 calendar days between
+  d.setDate(d.getDate() - 7); // 8 days inclusive = 7 calendar days between
   const today = new Date();
   today.setHours(0,0,0,0);
   const diff = Math.floor((d - today) / (24*3600*1000));
@@ -87,7 +91,21 @@ export function ProductionEditor({ initial, currentStudent, students = [], showT
   const [driveUrl, setDriveUrl]       = useState(initial?.driveUrl || "");
   const [color, setColor]             = useState(initial?.color || DEFAULT_COLOR);
   const [dates, setDates]             = useState(() => Array.isArray(initial?.dates) ? initial.dates : []);
-  const [crew, setCrew]               = useState(() => Array.isArray(initial?.crew) ? initial.crew : []);
+  const [crew, setCrew]               = useState(() => {
+    if (Array.isArray(initial?.crew) && initial.crew.length > 0) return initial.crew;
+    // New production: seed with a photographer row — minimum crew required to take equipment out.
+    return [{
+      id: genId("pc"),
+      role: "photographer",
+      roleLabel: null,
+      studentId: null,
+      freeTextName: null,
+      status: "invited",
+      invitedBy: "director",
+      crewEmail: null,
+      notes: "",
+    }];
+  });
   const [saving, setSaving]           = useState(false);
   const [publishing, setPublishing]   = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
@@ -363,9 +381,11 @@ export function ProductionEditor({ initial, currentStudent, students = [], showT
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             <button className="btn btn-secondary btn-sm" onClick={onClose}>סגירה</button>
-            <button className="btn btn-secondary btn-sm" onClick={onSaveDraft} disabled={saving}>
-              <Save size={14} /> שמור טיוטה
-            </button>
+            {!isPublished && (
+              <button className="btn btn-secondary btn-sm" onClick={onSaveDraft} disabled={saving}>
+                <Save size={14} /> שמור טיוטה
+              </button>
+            )}
             <button className="btn btn-primary btn-sm" onClick={onPublish} disabled={publishing}>
               <Send size={14} /> {isPublished ? "עדכן" : "פרסם"}
             </button>
@@ -464,10 +484,17 @@ export function ProductionEditor({ initial, currentStudent, students = [], showT
         {dates.map((d, idx) => {
           const dl = fmtDeadline(d.startDate);
           const dateLocked = lockedDateIds.has(String(d.id));
-          // Max end date = startDate + 6 days (7-day window incl).
-          const maxEndDate = d.startDate
-            ? new Date(new Date(`${d.startDate}T00:00:00`).getTime() + 6 * 86400000).toISOString().slice(0,10)
-            : undefined;
+          // Max end date = startDate + 6 days (7-day window incl). Use local
+          // components — toISOString() shifts to UTC and off-by-ones in IDT.
+          const addDaysLocalISO = (iso, days) => {
+            const base = new Date(`${iso}T00:00:00`);
+            base.setDate(base.getDate() + days);
+            const y = base.getFullYear();
+            const m = String(base.getMonth() + 1).padStart(2, "0");
+            const day = String(base.getDate()).padStart(2, "0");
+            return `${y}-${m}-${day}`;
+          };
+          const maxEndDate = d.startDate ? addDaysLocalISO(d.startDate, 6) : undefined;
           return (
             <div key={d.id} style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr auto",gap:8,marginBottom:8,padding:8,border:"1px solid var(--border)",borderRadius:6,background:"var(--surface2)"}}>
               <div>
@@ -475,9 +502,9 @@ export function ProductionEditor({ initial, currentStudent, students = [], showT
                 <input type="date" className="form-input" min={minShoot} value={d.startDate} disabled={dateLocked} onChange={e => {
                   const v = e.target.value;
                   if (!v) return;
-                  if (v < minShoot) { showToast?.(`לא ניתן לבחור תאריך לפני ${minShoot} (מינימום 9 ימי עבודה מהיום)`, "error"); return; }
+                  if (v < minShoot) { showToast?.(`לא ניתן לבחור תאריך לפני ${minShoot} (מינימום 8 ימי עבודה מהיום)`, "error"); return; }
                   if (isWeekendISO(v)) { showToast?.("שישי/שבת אינם זמינים — המחסן סגור בסופי שבוע", "error"); return; }
-                  const newMaxEnd = new Date(new Date(`${v}T00:00:00`).getTime() + 6 * 86400000).toISOString().slice(0,10);
+                  const newMaxEnd = addDaysLocalISO(v, 6);
                   let nextEnd = d.endDate || v;
                   if (nextEnd < v) nextEnd = v;
                   else if (nextEnd > newMaxEnd) nextEnd = newMaxEnd;
@@ -581,20 +608,30 @@ export function ProductionEditor({ initial, currentStudent, students = [], showT
         {crew.length === 0 && <p style={{color:"var(--text2)",fontSize:13}}>אין עדיין צוות. הוסיפו תפקיד מהכפתורים למעלה.</p>}
         {crew.map(c => {
           const isError = errorField === `crew:${c.id}`;
-          const selectedStudent = c.studentId
-            ? (sortedStudents.find(s => String(s.id) === String(c.studentId))
-               || (students || []).find(s => String(s.id) === String(c.studentId))
-               || null)
-            : null;
+          const emailLc = String(c.crewEmail || "").toLowerCase();
+          const selectedStudent =
+            (c.studentId
+              ? (sortedStudents.find(s => String(s.id) === String(c.studentId))
+                 || (students || []).find(s => String(s.id) === String(c.studentId)))
+              : null)
+            || (emailLc
+              ? (sortedStudents.find(s => String(s.email || "").toLowerCase() === emailLc)
+                 || (students || []).find(s => String(s.email || "").toLowerCase() === emailLc))
+              : null)
+            || null;
           const displayName = c._typing !== undefined
             ? c._typing
             : (selectedStudent?.name || c.freeTextName || c.crewEmail || "");
           const datalistId = `students-list-${c.id}`;
-          const trackRequirement = c.role === "photographer" ? "קולנוע"
-                                  : c.role === "sound"        ? "סאונד"
-                                  : null;
-          const eligibleStudents = trackRequirement
-            ? sortedStudents.filter(s => String(s.track || "").includes(trackRequirement))
+          // Photographer: cinema students only. Sound: cinema OR sound students
+          // (cinema-track students are also allowed to fill the sound role).
+          const eligibleFilter = c.role === "photographer"
+            ? (s => String(s.track || "").includes("קולנוע"))
+            : c.role === "sound"
+              ? (s => { const t = String(s.track || ""); return t.includes("סאונד") || t.includes("קולנוע"); })
+              : null;
+          const eligibleStudents = eligibleFilter
+            ? sortedStudents.filter(eligibleFilter)
             : sortedStudents;
           return (
             <div key={c.id} style={{display:"grid",gridTemplateColumns:"130px 1fr auto",gap:8,marginBottom:8,padding:8,border: isError ? "2px solid #e74c3c" : "1px solid var(--border)",borderRadius:6,alignItems:"center",background:"var(--surface2)"}}>
@@ -607,7 +644,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], showT
                   autoComplete="off"
                   placeholder={
                     c.role === "photographer" ? "שם סטודנט (הנדסאי קולנוע בלבד)..."
-                    : c.role === "sound"        ? "שם סטודנט (הנדסאי סאונד בלבד)..."
+                    : c.role === "sound"        ? "שם סטודנט (הנדסאי סאונד או קולנוע)..."
                     : "שם סטודנט או טקסט חופשי..."
                   }
                   value={displayName}

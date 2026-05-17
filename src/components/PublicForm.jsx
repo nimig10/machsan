@@ -2911,9 +2911,9 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     }));
   };
 
-  // "9-day notice" for הפקה is INCLUSIVE — counting both the submission day
-  // and the borrow day — so the calendar gap is 8 days. Mirrored in ProductionEditor.minShootISO().
-  const minDays = form.loan_type==="פרטית" ? 1 : form.loan_type==="סאונד" ? 0 : form.loan_type==="קולנוע יומית" ? 0 : form.loan_type==="הפקה" ? 8 : 7;
+  // "8-day notice" for הפקה is INCLUSIVE — counting both the submission day
+  // and the borrow day — so the calendar gap is 7 days. Mirrored in ProductionEditor.minShootISO().
+  const minDays = form.loan_type==="פרטית" ? 1 : form.loan_type==="סאונד" ? 0 : form.loan_type==="קולנוע יומית" ? 0 : form.loan_type==="הפקה" ? 7 : 7;
   const isCinemaLoan = form.loan_type==="קולנוע יומית";
   const isWeekend = (dateStr) => {
     if(!dateStr) return false;
@@ -3227,7 +3227,9 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     ? (toDateTime(form.borrow_date, form.borrow_time) - Date.now())
     : null;
   const soundLeadTooShort = soundLeadMs !== null && soundLeadMs < SOUND_MIN_LEAD_TIME_MS;
-  const ok2 = !!form.borrow_date && !!form.return_date && hasTimes && !returnBeforeBorrow && !tooSoon && !cinemaTooSoon && !tooLong && !borrowWeekend && !returnWeekend && !timeOrderError && !pastLoanTimeError && !soundLeadTooShort && (!isSoundLoan || !!form.studio_booking_id);
+  // For production loans, dates must come from a production_date chip (not free-typed).
+  // Without production_date_id we can't tie a reservation to a specific shoot range.
+  const ok2 = !!form.borrow_date && !!form.return_date && hasTimes && !returnBeforeBorrow && !tooSoon && !cinemaTooSoon && !tooLong && !borrowWeekend && !returnWeekend && !timeOrderError && !pastLoanTimeError && !soundLeadTooShort && (!isSoundLoan || !!form.studio_booking_id) && (!isProductionLoan || !!form.production_date_id);
   const ok3 = items.some(item => Number(item.quantity) > 0);
   const canSubmit = !!ok1WithCrew && !!ok2 && !!ok3 && !privateLoanLimitExceeded && !!agreed;
 
@@ -3276,6 +3278,19 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   };
 
   const canAccessStep = (targetStep) => {
+    if (targetStep === 1) return true;
+    // Production loans: stricter gating — every step after 1 needs a production picked,
+    // and each step also requires the previous one's ok. No free navigation, the rule
+    // is "complete in order" because production-loan fields are tied together (date
+    // ranges are bound to the picked production, crew certs gate equipment, etc.).
+    if (isProductionLoan) {
+      if (!form.production_id) return false;
+      if (targetStep === 2) return !!ok1WithCrew;
+      if (targetStep === 3) return !!ok1WithCrew && !!ok2;
+      if (targetStep === 4) return !!ok1WithCrew && !!ok2 && !!ok3 && !privateLoanLimitExceeded;
+      return false;
+    }
+    // Other loan types: loose flow — steps 1-3 freely navigable, only step 4 gated.
     if (targetStep <= 3) return true;
     if (targetStep === 4) return !!ok1WithCrew && !!ok2 && !!ok3 && !privateLoanLimitExceeded;
     return false;
@@ -3283,8 +3298,9 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 
   const goToStep = (targetStep) => {
     if (targetStep === step) return;
-    if (targetStep <= 3) {
-      setStep(targetStep);
+    // Production loans: hard-block navigation past step 1 without a production picked.
+    if (isProductionLoan && !form.production_id && targetStep > 1) {
+      showToast("error", "יש לבחור הפקה לפני המעבר לשלב הבא");
       return;
     }
     if (canAccessStep(targetStep)) {
@@ -4104,7 +4120,7 @@ ${inventory}
             <ProductionsPage
               productions={productions}
               currentStudent={loggedInStudent}
-              students={(certifications?.students || [])}
+              students={studentsFromTable}
               reservations={reservations}
               showToast={(msg, type="info") => showToast(type, msg)}
               refresh={refreshProductions}
@@ -4317,7 +4333,7 @@ ${inventory}
                     </ul>
                   </div>
                   <div style={{fontSize:13,color:"#e74c3c",fontWeight:700,marginBottom:14,padding:"8px 12px",background:"rgba(231,76,60,0.1)",border:"1px solid #e74c3c",borderRadius:6,lineHeight:1.5}}>
-                    ⏱ נוהל המחסן: הפקה חייבת להיות מוקמת ורשימת ציוד מוגשת לפחות <strong>9 ימים מראש</strong> (כולל היום).
+                    ⏱ נוהל המחסן: הפקה חייבת להיות מוקמת ורשימת ציוד מוגשת לפחות <strong>8 ימים מראש</strong> (כולל היום).
                   </div>
                   <button type="button" className="btn btn-primary btn-sm" onClick={() => setStudentApp("productions")}>
                     מעבר ללוח הפקות
@@ -4582,7 +4598,7 @@ ${inventory}
               </>
             )}
             {!isSoundLoan && (borrowWeekend||(returnWeekend&&!isCinemaLoan)) && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 המחסן אינו פעיל בימים שישי ושבת. נא לבחור ימים א׳–ה׳ בלבד.</div>}
-            {!isSoundLoan && tooSoon && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 {form.loan_type==="פרטית"?"השאלה פרטית דורשת התראה של 24 שעות לפחות.":form.loan_type==="הפקה"?"השאלת הפקה דורשת הגשה 9 ימים מראש לפחות.":"נדרשת התראה של שבוע לפחות."} תאריך מוקדם ביותר: <strong>{formatDate(minDate)}</strong></div>}
+            {!isSoundLoan && tooSoon && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 {form.loan_type==="פרטית"?"השאלה פרטית דורשת התראה של 24 שעות לפחות.":form.loan_type==="הפקה"?"השאלת הפקה דורשת הגשה 8 ימים מראש לפחות.":"נדרשת התראה של שבוע לפחות."} תאריך מוקדם ביותר: <strong>{formatDate(minDate)}</strong></div>}
             {cinemaTooSoon && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 השאלת קולנוע יומית דורשת הזמנה של 24 שעות מראש. תאריך מוקדם ביותר: <strong>{formatDate(minDate)}</strong></div>}
             {!isSoundLoan && tooLong && !isCinemaLoan && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 לא ניתן להשלים את התהליך כי זמן ההשאלה חורג מנהלי המכללה. משך מקסימלי: <strong>{maxDays} ימים</strong></div>}
             {!isSoundLoan && returnBeforeBorrow && !isCinemaLoan && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 זמנים לא נכונים — תאריך החזרה חייב להיות אחרי תאריך ההשאלה.</div>}

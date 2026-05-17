@@ -39,7 +39,7 @@ function pickTextColor(hex) {
 
 // Production status label — intentionally NOT "מאושר" since production publish ≠ loan approval.
 // A production is just publicly visible after publish; equipment loan still goes through
-// dept-head + warehouse approval with the regular 9-day-ahead rule.
+// dept-head + warehouse approval with the regular 8-day-ahead rule.
 function ProductionStatusBadge({ status }) {
   const label = status === "published" ? "מפורסם" : status === "cancelled" ? "מבוטל" : "טיוטה";
   const colorVar = status === "published"
@@ -80,7 +80,7 @@ function nextDateOf(p) {
 }
 
 // Returns { daysToShoot, daysToDeadline, tier } for the EARLIEST upcoming shoot date.
-// Deadline = shoot date − 8 calendar days (inclusive "9 days notice" policy).
+// Deadline = shoot date − 7 calendar days (inclusive "8 days notice" policy).
 //   tier: "safe" (>0d) | "today" (=0) | "overdue" (<0) | "past" (shoot already happened)
 function equipmentDeadline(p) {
   const next = nextDateOf(p);
@@ -89,8 +89,8 @@ function equipmentDeadline(p) {
   const today = new Date();
   today.setHours(0,0,0,0);
   const daysToShoot = Math.floor((shoot - today) / (24*3600*1000));
-  if (daysToShoot < 0) return { daysToShoot, daysToDeadline: daysToShoot + 8, tier: "past", shootDate: next.slice(0,10) };
-  const daysToDeadline = daysToShoot - 8;
+  if (daysToShoot < 0) return { daysToShoot, daysToDeadline: daysToShoot + 7, tier: "past", shootDate: next.slice(0,10) };
+  const daysToDeadline = daysToShoot - 7;
   let tier;
   if (daysToDeadline > 0) tier = "safe";
   else if (daysToDeadline === 0) tier = "today";
@@ -243,8 +243,10 @@ function ProductionDetail({ p, currentStudent, students, onClose, onEdit, onJoin
           </div>
         );
         return inRole.map(c => {
-          const stu = students.find(s => String(s.id) === String(c.studentId));
-          const name = stu?.name || c.freeTextName || "?";
+          const emailLc = String(c.crewEmail || "").toLowerCase();
+          const stu = students.find(s => String(s.id) === String(c.studentId))
+            || (emailLc ? students.find(s => String(s.email || "").toLowerCase() === emailLc) : null);
+          const name = stu?.name || c.freeTextName || c.crewEmail || "?";
           return (
             <div key={c.id} style={{fontSize:13,marginBottom:4,display:"flex",alignItems:"center",gap:6,color:"var(--text)"}}>
               <strong>{ROLE_LABELS[role]}:</strong>
@@ -265,8 +267,10 @@ function ProductionDetail({ p, currentStudent, students, onClose, onEdit, onJoin
       })}
       {/* Custom (free-text) crew roles — display after the 5 standard ones */}
       {(p.crew || []).filter(c => c.role === "custom").map(c => {
-        const stu = students.find(s => String(s.id) === String(c.studentId));
-        const name = stu?.name || c.freeTextName || "?";
+        const emailLc = String(c.crewEmail || "").toLowerCase();
+        const stu = students.find(s => String(s.id) === String(c.studentId))
+          || (emailLc ? students.find(s => String(s.email || "").toLowerCase() === emailLc) : null);
+        const name = stu?.name || c.freeTextName || c.crewEmail || "?";
         return (
           <div key={c.id} style={{fontSize:13,marginBottom:4,display:"flex",alignItems:"center",gap:6,color:"var(--text)"}}>
             <strong>{getRoleLabel(c)}:</strong>
@@ -288,35 +292,70 @@ function ProductionDetail({ p, currentStudent, students, onClose, onEdit, onJoin
 
 function JoinRequestDialog({ p, currentStudent, existingRequest, onClose, onConfirm, showToast }) {
   const isEdit = !!existingRequest;
-  // Cap photographer/sound at N (number of shoot date ranges) — a production
-  // with multiple ranges can have one of each role per range.
-  const dateCount = Math.max(1, (p.dates || []).length);
-  const approvedCount = useMemo(() => {
-    const counts = { photographer: 0, sound: 0 };
-    for (const c of (p.crew || [])) {
-      if (c.status !== "approved") continue;
-      if (c.id === existingRequest?.id) continue; // edit: exclude self
-      if (c.role in counts) counts[c.role]++;
-    }
-    return counts;
+  // Open slots = crew rows the director added with NO student assigned and NO free-text name.
+  // Rows with a studentId or freeTextName are "taken" — even if the status is still "invited".
+  const openSlots = useMemo(() => {
+    return (p.crew || []).filter(c => {
+      if (c.status === "rejected") return false;
+      if (c.id === existingRequest?.id) return false;
+      if (c.studentId) return false;
+      if (c.freeTextName && String(c.freeTextName).trim()) return false;
+      return true;
+    });
   }, [p, existingRequest]);
+
+  // Build dropdown options from open slots:
+  //   • photographer / sound — collapse to one entry per role (director may have left N empty rows)
+  //   • custom — each slot is its own option, identified by id+roleLabel
   const available = useMemo(() => {
-    const list = [];
-    if (approvedCount.photographer < dateCount) list.push("photographer");
-    if (approvedCount.sound < dateCount) list.push("sound");
-    list.push("custom");
-    return list;
-  }, [approvedCount, dateCount]);
-  const [role, setRole] = useState(existingRequest?.role || available[0] || "custom");
-  const [customLabel, setCustomLabel] = useState(existingRequest?.roleLabel || "");
+    const opts = [];
+    const seenStandard = new Set();
+    for (const s of openSlots) {
+      if (s.role === "photographer" || s.role === "sound") {
+        if (!seenStandard.has(s.role)) {
+          opts.push({ value: s.role, label: ROLE_LABELS[s.role] });
+          seenStandard.add(s.role);
+        }
+      } else if (s.role === "custom" && s.roleLabel) {
+        opts.push({ value: `custom:${s.id}`, label: s.roleLabel, customLabel: s.roleLabel });
+      }
+    }
+    // Editing: always keep the user's current role in the list, even if not "open".
+    if (existingRequest) {
+      const r = existingRequest.role;
+      if ((r === "photographer" || r === "sound") && !seenStandard.has(r)) {
+        opts.unshift({ value: r, label: ROLE_LABELS[r] });
+      } else if (r === "custom" && existingRequest.roleLabel) {
+        const key = `custom:${existingRequest.id}`;
+        if (!opts.some(o => o.value === key)) {
+          opts.unshift({ value: key, label: existingRequest.roleLabel, customLabel: existingRequest.roleLabel });
+        }
+      }
+    }
+    return opts;
+  }, [openSlots, existingRequest]);
+
+  const productionFull = available.length === 0;
+  const defaultRole = existingRequest
+    ? (existingRequest.role === "custom" ? `custom:${existingRequest.id}` : existingRequest.role)
+    : (available[0]?.value || "");
+  const [role, setRole] = useState(defaultRole);
   const [notes, setNotes] = useState(existingRequest?.notes || "");
   const [submitting, setSubmitting] = useState(false);
 
   async function submit() {
     if (submitting) return;
-    if (role === "custom" && !customLabel.trim()) {
-      showToast?.("חובה לרשום שם תפקיד עבור 'תפקיד מותאם'", "error");
-      return;
+    if (!role) return;
+    let actualRole = role;
+    let customLabel = null;
+    if (role.startsWith("custom:")) {
+      actualRole = "custom";
+      const chosen = available.find(o => o.value === role);
+      customLabel = chosen?.customLabel || null;
+      if (!customLabel) {
+        showToast?.("התפקיד שנבחר אינו זמין יותר", "error");
+        return;
+      }
     }
     setSubmitting(true);
     if (isEdit) {
@@ -327,9 +366,9 @@ function JoinRequestDialog({ p, currentStudent, existingRequest, onClose, onConf
         return;
       }
     }
-    const res = await requestJoinProduction(p.id, role, {
+    const res = await requestJoinProduction(p.id, actualRole, {
       studentId: currentStudent.id,
-      roleLabel: role === "custom" ? customLabel.trim().slice(0, 40) : null,
+      roleLabel: actualRole === "custom" ? customLabel : null,
       freeTextName: null,
       crewEmail: currentStudent.email,
       notes: notes.trim() || null,
@@ -346,55 +385,53 @@ function JoinRequestDialog({ p, currentStudent, existingRequest, onClose, onConf
   return (
     <Modal title={`${isEdit ? "עריכת" : ""} בקשת הצטרפות להפקה: ${p.title}`} onClose={onClose} footer={
       <div style={{display:"flex",gap:8,justifyContent:"end"}}>
-        <button className="btn btn-secondary btn-sm" onClick={onClose}>ביטול</button>
-        <button className="btn btn-primary btn-sm" disabled={submitting} onClick={submit}>
-          {isEdit ? "עדכן בקשה" : "שלח בקשה"}
-        </button>
+        <button className="btn btn-secondary btn-sm" onClick={onClose}>{productionFull ? "סגירה" : "ביטול"}</button>
+        {!productionFull && (
+          <button className="btn btn-primary btn-sm" disabled={submitting || !role} onClick={submit}>
+            {isEdit ? "עדכן בקשה" : "שלח בקשה"}
+          </button>
+        )}
       </div>
     }>
-      <div style={{marginBottom:12}}>
-        <label className="form-label">תפקיד</label>
-        <select className="form-input" value={role} onChange={e => setRole(e.target.value)}>
-          {available.map(r => (
-            <option key={r} value={r}>
-              {r === "custom" ? "תפקיד מותאם (תיאור חופשי)" : ROLE_LABELS[r]}
-            </option>
-          ))}
-        </select>
-      </div>
-      {role === "custom" && (
-        <div style={{marginBottom:12}}>
-          <label className="form-label" style={{display:"flex",justifyContent:"space-between"}}>
-            <span>שם התפקיד *</span>
-            <span style={{color: customLabel.length >= 40 ? "#e74c3c" : "var(--text3)", fontSize:11}}>{customLabel.length}/40</span>
-          </label>
-          <input
-            className="form-input"
-            maxLength={40}
-            placeholder="לדוגמה: תאורן, צבע, מנהל הפקה"
-            value={customLabel}
-            onChange={e => setCustomLabel(e.target.value.slice(0,40))}
-          />
+      {productionFull ? (
+        <div style={{padding:"24px 12px",textAlign:"center"}}>
+          <div style={{fontSize:32,marginBottom:10}}>🎬</div>
+          <div style={{fontSize:16,fontWeight:700,color:"var(--text)",marginBottom:6}}>ההפקה מלאה</div>
+          <div style={{fontSize:13,color:"var(--text3)",lineHeight:1.6}}>
+            כל התפקידים בהפקה שובצו לסטודנטים ע"י הבמאי.<br/>
+            אין כרגע משבצות פתוחות לבקשות הצטרפות.
+          </div>
         </div>
+      ) : (
+        <>
+          <div style={{marginBottom:12}}>
+            <label className="form-label">תפקיד</label>
+            <select className="form-input" value={role} onChange={e => setRole(e.target.value)}>
+              {available.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{marginBottom:12}}>
+            <label className="form-label" style={{display:"flex",justifyContent:"space-between"}}>
+              <span>הערה לבמאי (אופציונלי)</span>
+              <span style={{color: notes.length >= REQUEST_NOTES_MAX ? "#e74c3c" : "var(--text3)", fontSize:11}}>
+                {notes.length}/{REQUEST_NOTES_MAX}
+              </span>
+            </label>
+            <textarea className="form-input" rows={3} maxLength={REQUEST_NOTES_MAX}
+              value={notes}
+              onChange={e => setNotes(e.target.value.slice(0, REQUEST_NOTES_MAX))}
+              placeholder="מה את/ה רוצה לעשות בפרויקט?"/>
+          </div>
+        </>
       )}
-      <div style={{marginBottom:12}}>
-        <label className="form-label" style={{display:"flex",justifyContent:"space-between"}}>
-          <span>הערה לבמאי (אופציונלי)</span>
-          <span style={{color: notes.length >= REQUEST_NOTES_MAX ? "#e74c3c" : "var(--text3)", fontSize:11}}>
-            {notes.length}/{REQUEST_NOTES_MAX}
-          </span>
-        </label>
-        <textarea className="form-input" rows={3} maxLength={REQUEST_NOTES_MAX}
-          value={notes}
-          onChange={e => setNotes(e.target.value.slice(0, REQUEST_NOTES_MAX))}
-          placeholder="מה את/ה רוצה לעשות בפרויקט?"/>
-      </div>
     </Modal>
   );
 }
 
 export function ProductionsPage({ productions = [], currentStudent, students = [], reservations = [], showToast, onOpenLoanForm, refresh }) {
-  const [tab, setTab]                     = useState("board"); // board | mine | inbox
+  const [tab, setTab]                     = useState("board"); // board | inbox
   const [calDate, setCalDate]             = useState(() => new Date());
   const [editorOpen, setEditorOpen]       = useState(null);    // { initial: ... } | null
   const [detail, setDetail]               = useState(null);
@@ -477,11 +514,6 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
             <Film size={14}/> לוח הפקות {published.length ? `(${published.length})` : ""}
           </button>
           {currentStudent?.id && (
-            <button onClick={() => setTab("mine")} className={tab === "mine" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}>
-              <Users size={14}/> שלי {(myDirectorProds.length + myCrewProds.length) ? `(${myDirectorProds.length + myCrewProds.length})` : ""}
-            </button>
-          )}
-          {currentStudent?.id && (
             <button onClick={() => setTab("inbox")} className={tab === "inbox" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}>
               <Inbox size={14}/> בקשות הפקה {totalRequestsCount ? `(${totalRequestsCount})` : ""}
             </button>
@@ -496,11 +528,46 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
 
       {tab === "board" && (
         <div>
-          {/* Productions list (cards) */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12,marginBottom:24}}>
-            {published.length === 0 ? <p style={{color:"var(--text3)"}}>אין כרגע הפקות מפורסמות</p> :
-              published.map(p => <ProductionCard key={p.id} p={p} onClick={() => setDetail(p)}/>)}
-          </div>
+          {/* "My productions" section — director + crew memberships (deduped). */}
+          {currentStudent?.id && (myDirectorProds.length > 0 || myCrewProds.length > 0) && (() => {
+            const mineIds = new Set();
+            const mineList = [];
+            for (const p of myDirectorProds) { mineIds.add(p.id); mineList.push(p); }
+            for (const p of myCrewProds) if (!mineIds.has(p.id)) { mineIds.add(p.id); mineList.push(p); }
+            return (
+              <div style={{marginBottom:24}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                  <Users size={16} color="var(--accent)"/>
+                  <h3 style={{margin:0,fontSize:15,color:"var(--accent)"}}>ההפקות שלי {mineList.length ? `(${mineList.length})` : ""}</h3>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
+                  {mineList.map(p => <ProductionCard key={p.id} p={p} onClick={() => setDetail(p)}/>)}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* "Public board" — productions I'm NOT a director of and NOT crew on. */}
+          {(() => {
+            const mineIds = new Set([
+              ...myDirectorProds.map(p => p.id),
+              ...myCrewProds.map(p => p.id),
+            ]);
+            const others = published.filter(p => !mineIds.has(p.id));
+            return (
+              <div style={{marginBottom:24}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                  <Film size={16} color="var(--accent)"/>
+                  <h3 style={{margin:0,fontSize:15,color:"var(--accent)"}}>הפקות אחרות {others.length ? `(${others.length})` : ""}</h3>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
+                  {others.length === 0
+                    ? <p style={{color:"var(--text3)",gridColumn:"1/-1"}}>אין כרגע הפקות מפורסמות של סטודנטים אחרים</p>
+                    : others.map(p => <ProductionCard key={p.id} p={p} onClick={() => setDetail(p)}/>)}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Production schedule (monthly calendar) */}
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingTop:10,borderTop:"1px solid var(--border)"}}>
@@ -578,30 +645,6 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
               </div>
             );
           })()}
-        </div>
-      )}
-
-      {tab === "mine" && (
-        <div>
-          {myDirectorProds.length > 0 && (
-            <>
-              <h4 style={{marginTop:0}}>אני במאי/ת</h4>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12,marginBottom:18}}>
-                {myDirectorProds.map(p => <ProductionCard key={p.id} p={p} onClick={() => setDetail(p)}/>)}
-              </div>
-            </>
-          )}
-          {myCrewProds.length > 0 && (
-            <>
-              <h4>אני בצוות</h4>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
-                {myCrewProds.map(p => <ProductionCard key={p.id} p={p} onClick={() => setDetail(p)}/>)}
-              </div>
-            </>
-          )}
-          {myDirectorProds.length === 0 && myCrewProds.length === 0 && (
-            <p style={{color:"var(--text3)"}}>עוד לא הצטרפת לאף הפקה. אפשר ליצור חדשה או להירשם דרך לוח ההפקות.</p>
-          )}
         </div>
       )}
 
