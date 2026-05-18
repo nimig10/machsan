@@ -51,7 +51,7 @@
 
 **אין `public.store`** — הוסר ב-`20260430220000_drop_store_table_and_guards` יחד עם כל המנגנון מסביבו (`store_snapshots`, `store_shrink_guard`, `kits_content_guard`, `is_protected_store_key`, `prune_store_snapshots`, DDL guard event triggers). לא נשארו blobs ב-DB.
 
-**29 טבלאות `public` קיימות (verified):**
+**33 טבלאות `public` קיימות (verified):**
 
 | ישות domain | טבלה(ות) | API util |
 |------|----------|----------|
@@ -69,15 +69,21 @@
 | מנהל מכללה | `college_manager` | `collegeManagerApi.js` |
 | ראשי מחלקה | `dept_heads` | `deptHeadsApi.js` |
 | סטודנטים + הסמכות | `students` + `certification_types` + `student_certifications` + `tracks` | `studentsApi.js` |
+| **לוח הפקות** | `productions` + `production_dates` + `production_crew` + `production_slots` | `productionsApi.js` |
 
 טבלאות תומכות (לא domain): `users` (חדש, מראת auth), `staff_members` (ישן, עוד בשימוש fallback), `activity_logs`, `equipment_reports`, `auth_entity_map`, `staff_schedule_assignments`, `staff_schedule_preferences`, `staff_daily_tasks`.
 
-**RPCs פעילות (17 בסה"כ):**
+`reservations_new` קיבל שתי עמודות FK אופציונליות: `production_id` (→ `productions.id`, ON DELETE SET NULL) ו-`production_date_id` (→ `production_dates.id`, ON DELETE SET NULL). הזמנות שאינן הפקה — שתי העמודות NULL.
+
+`productions` כולל גם `kit_id` (→ `kits.id`, ON DELETE SET NULL). כש-`kit_id` מוגדר, השאלת ההפקה מוגבלת לפריטי הערכה בלבד; NULL = "כללית" (ללא הגבלה).
+
+**RPCs פעילות:**
 - כתיבה לציוד: `sync_equipment_from_json`.
 - הזמנות: `create_reservation_v2`, `create_lesson_reservations_v1`, `update_reservation_status_v1`, `delete_reservation_v1`, `restore_reservation_v1`, `student_modify_reservation_item_v1`, `mark_overdue_email_sent`.
+- **לוח הפקות**: `production_approve_crew_v1`, `production_check_crew_conflict_v1`, `production_crew_change_recheck_v1`, `production_delete_v1`, `crew_is_certified_for_equipment`, `check_director_no_overlap_for_production`, `run_productions_regression_tests` (read-only).
 - בדיקות overlap: `assert_reservation_overlap_ok`, `run_reservation_overlap_tests`.
 - Auth helpers: `is_admin`, `is_staff_member`, `is_known_lecturer_email`, `link_auth_to_entity`.
-- Triggers: `touch_updated_at`, `set_updated_at`, `update_users_updated_at`.
+- Triggers: `touch_updated_at`, `set_updated_at`, `update_users_updated_at`, `production_crew_after_change_trigger`, `production_dates_director_overlap_trg`, `productions_status_director_overlap_trg`, `production_crew_photographer_sound_must_be_student`.
 
 **ספירות חיות בפרוד (snapshot):** `auth.users`=100, `public.users`=100, `students`=168, `lecturers`=29, `staff_members`=9. רק ~100 מהדומיין-אנשים יצרו סיסמה ויש להם חשבון auth; השאר עוד לא עברו onboarding.
 
@@ -115,6 +121,38 @@
 הסיבה: כל עוד הבקשה לא הגיעה לסטטוס `מאושר`, היא לא תופסת מלאי בפועל. רק אישור איש המחסן הופך אותה למחויבת. שני סטודנטים יכולים להחזיק `ממתין` חופפים על אותו פריט — איש המחסן יבחר את מי לאשר.
 
 **Anti-regression**: כל שינוי ב-`create_reservation_v2`, ב-`update_reservation_status_v1`, או ביצירת RPC חדש שעושה overlap-check — חובה לאמת ש-`r.status IN ('מאושר','באיחור','פעילה')` בלבד. ראה `supabase/migrations/20260516160000_create_reservation_v2_pending_not_blocking.sql` — תיקון של רגרסיה שכללה `ממתין` ברשימה החוסמת.
+
+## 🎬 לוח הפקות (Productions Board)
+
+הפיצ'ר נכנס לפרוד ב-2026-05-18 (PR #15). מערכת תכנון הפקות שמהקדם את זרימת השאלת הציוד — הבמאי מפרסם הפקה, מרכיב צוות, ורק אז קופץ לטופס השאלת ציוד דרך bridge ייעודי.
+
+**ארכיטקטורה:**
+- 4 טבלאות: `productions` (parent), `production_dates` (1..N תאריכי צילום), `production_crew` (1..N תפקידי צוות + הזמנות), `production_slots` (תשתית קיימת, לא בשימוש מהקליינט נכון לעכשיו).
+- `reservations_new` קיבל FK אופציונליים: `production_id` + `production_date_id`. הזמנת הפקה מקושרת לטווח תאריכים ספציפי.
+- `productions.kit_id` (אופציונלי): כש-set, השאלת ההפקה תוגבל אך-ורק לפריטי הערכה ההיא. NULL = "כללית" (חופשי).
+
+**זרימה מצומצמת:**
+1. **סטודנט קולנוע מתחבר → StudentHub** (`src/components/StudentHub.jsx`) — מסך נחיתה עם 2 כרטיסים: "מערכת הפניות" / "לוח הפקות".
+2. **לוח הפקות** (`ProductionsPage`) — board (כל ההפקות המפורסמות), inbox (בקשות נכנסות/יוצאות). הסינון לפי שם סטודנט הוא טקסט-חופשי (לא חושף רשימה).
+3. **יצירת הפקה** (`ProductionEditor`) — כותרת, תיאור (800 תווים), Drive URL אופציונלי, צבע, **סוג ההפקה** (כללית / kit), תאריכי צילום (עד 7 ימים לטווח), צוות (פוטוגרף + סאונד חייבים סטודנט רשום; שאר התפקידים יכולים להיות מותאמים אישית או placeholders ריקים).
+4. **בקשת הצטרפות** (`requestJoinProduction`) — סטודנט אחר רואה את ההפקה, בוחר תפקיד פתוח, הבמאי מאשר/דוחה.
+5. **השאלת ציוד להפקה** — מהעורך/Detail modal יש כפתור "השאלת ציוד להפקה" שעובר ל-PublicForm עם `loan_type="הפקה"` + `production_id` ממולאים. בצעד 2 מוצגים chips של תאריכי הצילום (טווחים שכבר הוגשה רשימה עבורם — נסתרים). בצעד 3, אם להפקה יש `kit_id`, התפריט נעול לפריטי הערכה.
+
+**חוקים יחודיים להפקה (לא משפיעים על פרטית/סאונד/קולנוע יומית/שיעור):**
+- **8 ימים מראש (inclusive)** להגשת רשימת ציוד — היום נספר כיום 0, החל מ-PR #15. כל חישוב deadline פר-תאריך-צילום מבוסס על זה.
+- **per-student overlap guard ב-`create_reservation_v2`**: אותו `lower(email)` לא יכול להגיש 2 השאלות פעילות עם חפיפת זמנים (כל סוג השאלה, לא רק הפקה). סטטוסים פעילים = הכל חוץ מ-`בוטל`/`הוחזר`/`נדחה`.
+- **director-overlap guard ב-`productions` + `production_dates` triggers**: אותו `director_student_id` לא יכול להיות במאי של 2 הפקות published עם חפיפת `production_dates`. אישור crew membership של סטודנט בכמה הפקות חופפות **כן מותר** (ההגבלה היחידה היא ברמת הבמאי).
+- **`production_dates_max_7_days`** CHECK constraint: `end_date - start_date <= 6`.
+- **Cert recheck**: אם הצלם או הסאונדמן משתנים על הפקה שכבר יש לה הזמנת ציוד מאושרת, ה-trigger `production_crew_after_change_trigger` מפעיל את `production_crew_change_recheck_v1` שבודק certs בכל פריטי הציוד — אם הצוות החדש לא מוסמך, ההזמנה חוזרת ל-`ממתין`.
+- **`student_modify_reservation_item_v1`** מקבל גם סטטוס `אישור ראש מחלקה` (נוסף ב-PR #15) — אז סטודנט/במאי יכול להסיר פריטים או לבטל את כל ההזמנה גם אחרי שעברה לראש מחלקה.
+
+**גישה לראשי מחלקה**: `LecturerPortal` הוסיף tab שלישי "לוח הפקות" שגלוי רק אם `myDeptHead` קיים. הוא משתמש באותו `ProductionsPage` במצב read-only (`currentStudent={null}` → אין יצירה/עריכה/הצטרפות).
+
+**Anti-regressions:**
+1. **השאלות אחרות לא הושפעו**: כל הלוגיקה החדשה בקליינט מותנית ב-`isProductionLoan` (loan_type==="הפקה"). אם משנים את הזרימה הזאת, חובה לוודא שפרטית/סאונד/קולנוע יומית/שיעור עובדים בדיוק כמו לפני.
+2. **8-day inclusive — אל תחזיר ל-9**: ה-policy מבוסס "today + 7 ימי קלנדר = הכי קרוב". בכל הקבצים שמחשבים `minShootISO`/`minDays`/`fmtDeadline` ל-loan_type הפקה.
+3. **Director overlap trigger דולג כשתאריכים לא משתנים** (מיגרציה `20260518130000`) — אם תחזיר את הבדיקה ב-UPDATE ללא השוואת OLD vs NEW, כל edit על הפקה קיימת ייכשל גם אם החפיפה היא pre-existing.
+4. **Stable productionId via useState** — ב-`ProductionEditor.jsx` חובה לייצב את ה-`productionId` דרך `useState(() => initial?.id || genId("prod"))`, לא `const ... = ...`. אחרת כל retry של publish שנכשל יצר draft חדש (באג שזוהה ב-session-4).
 
 ## 🔐 Auth + זרימות
 
