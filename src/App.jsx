@@ -541,7 +541,7 @@ function getAvailable(eqId, borrowDate, returnDate, reservations, equipment, exc
     // After that buffer, the system assumes the gear is back (or will be) and
     // a future loan can be approved.
     const resEnd = res.status === "באיחור"
-      ? toDateTime(res.return_date, res.return_time || "23:59").getTime() + OVERDUE_BLOCK_BUFFER_MS
+      ? toDateTime(res.return_date, res.return_time || "23:59") + OVERDUE_BLOCK_BUFFER_MS
       : toDateTime(res.return_date, res.return_time || "23:59");
     // Overlap: new period starts before existing ends AND new period ends after existing starts
     if (bStart < resEnd && rEnd > resStart) {
@@ -679,7 +679,7 @@ function getReservationApprovalConflicts(targetReservation, reservations, equipm
       // scheduled return. A new loan starting more than 48h after the overdue
       // return_date is approvable (the gear is expected to be back by then).
       const resEnd = res.status === "באיחור"
-        ? toDateTime(res.return_date, res.return_time || "23:59").getTime() + OVERDUE_BLOCK_BUFFER_MS
+        ? toDateTime(res.return_date, res.return_time || "23:59") + OVERDUE_BLOCK_BUFFER_MS
         : toDateTime(res.return_date, res.return_time || "23:59");
       const overlaps = reqStart < resEnd && reqEnd > resStart;
       if (!overlaps) continue;

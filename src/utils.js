@@ -703,7 +703,7 @@ export function getAvailable(eqId, borrowDate, returnDate, reservations, equipme
     // Overdue items block only within OVERDUE_BLOCK_BUFFER_MS of their scheduled
     // return — a loan starting >48h after the overdue return_date can be approved.
     const resEnd = effStatus === "באיחור"
-      ? toDateTime(res.return_date, res.return_time || "23:59").getTime() + OVERDUE_BLOCK_BUFFER_MS
+      ? toDateTime(res.return_date, res.return_time || "23:59") + OVERDUE_BLOCK_BUFFER_MS
       : toDateTime(res.return_date, res.return_time || "23:59");
     // Overlap: new period starts before existing ends AND new period ends after existing starts
     if (bStart < resEnd && rEnd > resStart) {
@@ -736,7 +736,7 @@ export function getReservationApprovalConflicts(targetReservation, reservations,
       // Overdue items block only within OVERDUE_BLOCK_BUFFER_MS of their scheduled
       // return — a loan starting >48h after the overdue return_date can be approved.
       const resEnd = res.status === "באיחור"
-        ? toDateTime(res.return_date, res.return_time || "23:59").getTime() + OVERDUE_BLOCK_BUFFER_MS
+        ? toDateTime(res.return_date, res.return_time || "23:59") + OVERDUE_BLOCK_BUFFER_MS
         : toDateTime(res.return_date, res.return_time || "23:59");
       const overlaps = reqStart < resEnd && reqEnd > resStart;
       if (!overlaps) continue;
