@@ -33,6 +33,8 @@ import { loadStudiosFromTable } from "./utils/studiosApi.js";
 import { loadStudioBookingsFromTable } from "./utils/studioBookingsApi.js";
 import { buildLessonStudioBookings } from "./utils/lessonBookings.js";
 import { syncAllKits, loadKitsFromTable } from "./utils/kitsApi.js";
+import { listProductions } from "./utils/productionsApi.js";
+import { ProductionsPage } from "./components/ProductionsPage.jsx";
 import { syncAllTeamMembers, loadTeamMembersFromTable } from "./utils/teamMembersApi.js";
 import { syncAllCategories, loadCategoriesFromTable, syncLoanTypeFilters, loadLoanTypeFiltersFromTable } from "./utils/categoriesApi.js";
 import { loadPoliciesFromTable, syncAllPolicies } from "./utils/policiesApi.js";
@@ -124,6 +126,19 @@ async function loadKitsWrapped() {
     return { value: Array.isArray(value) ? value : [], source: "table" };
   } catch (err) {
     console.warn("[loadKitsWrapped]", err);
+    return { value: [], source: "error" };
+  }
+}
+
+// Productions board (לוח הפקות). Returns ALL productions for staff use;
+// the page component filters per-tab. Public/student views call
+// listProductions({ onlyPublished: true }) directly when needed.
+async function loadProductionsWrapped() {
+  try {
+    const value = await listProductions({ onlyPublished: false });
+    return { value: Array.isArray(value) ? value : [], source: "table" };
+  } catch (err) {
+    console.warn("[loadProductionsWrapped]", err);
     return { value: [], source: "error" };
   }
 }
@@ -282,12 +297,12 @@ const SOUND_CATEGORIES = ["מיקרופונים","מקליטי אודיו"];
 const STATUSES    = ["תקין","פגום","בתיקון","נעלם"];
 const PHOTO_CATEGORIES = ["מצלמות","עדשות","תאורה","חצובות","אביזרים","אביזרי צילום","מייצבי מצלמה","גימבלים","רחפנים","מוניטורים"];
 const RESEND_API_KEY = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_RESEND_KEY : "";
-const ADMIN_NAV_PAGES = ["dashboard","reservations","equipment","certifications","studios","lessons","kits","team","students","policies","settings"];
+const ADMIN_NAV_PAGES = ["dashboard","reservations","equipment","certifications","studios","lessons","kits","team","students","productions","policies","settings"];
 // Note: "dashboard" intentionally excluded — from the admin home (סטטוס אדמיניסטרציה)
 // the user must tap a section in the bottom footer; swipe-nav is reserved for
 // moving between actual sections.
-const SECRETARY_NAV_PAGES = ["studios","studio-certifications","lessons","lecturers","students","policies","settings"];
-const WAREHOUSE_NAV_PAGES = ["reservations","equipment","certifications","kits","policies","settings"];
+const SECRETARY_NAV_PAGES = ["studios","studio-certifications","lessons","lecturers","students","productions","policies","settings"];
+const WAREHOUSE_NAV_PAGES = ["reservations","equipment","certifications","kits","productions","policies","settings"];
 const NIMROD_PHONE     = "972521234567"; // ← החלף במספר של נמרוד
 const EMAIL_TYPO_DOMAINS = ["gmai.com","gmial.com","gmail.co","gamil.com","gmaill.com","yahooo.com","yahho.com","outlok.com","hotmai.com","outllook.com"];
 const TERMS = `הסטודנט מתחייב להחזיר את הציוד במועד שנקבע ובמצב תקין.
@@ -890,7 +905,8 @@ const css = `
   .eq-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:16px; }
   .eq-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:18px; transition:all 0.2s; }
   .eq-card:hover { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
-  .toast-container { position:fixed; bottom:24px; left:24px; z-index:9999; display:flex; flex-direction:column; gap:8px; }
+  .toast-container { position:fixed; bottom:24px; left:24px; z-index:20000; display:flex; flex-direction:column; gap:8px; pointer-events:none; }
+  .toast-container .toast { pointer-events:auto; }
   .toast { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-sm); padding:12px 18px; font-size:13px; font-weight:500; display:flex; align-items:center; gap:10px; min-width:260px; box-shadow:0 8px 24px rgba(0,0,0,0.4); animation:slideUp 0.2s; }
   .toast-success { border-right:3px solid var(--green); }
   .toast-error   { border-right:3px solid var(--red); }
@@ -5398,6 +5414,7 @@ export default function App() {
   const [collegeManager, _setCollegeManager] = useState({ name:"", email:"" });
   const [managerToken, setManagerToken]   = useState("");
   const [kits, _setKits]               = useState([]);
+  const [productions, _setProductions] = useState([]);
   const [policies, _setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"", לילה:"" });
   const [certifications, _setCertifications] = useState({ types:[], students:[] });
   const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14, aiMaxRequests:5, studioFutureHoursLimit:16, publicDisplayInterval:18, userGuideVideos:[] });
@@ -5525,6 +5542,7 @@ export default function App() {
   const deptHeadsRef = useRef(deptHeads);
   const collegeManagerRef = useRef(collegeManager);
   const kitsRef = useRef(kits);
+  const productionsRef = useRef(productions);
   const policiesRef = useRef(policies);
   const certificationsRef = useRef(certifications);
   const siteSettingsRef = useRef(siteSettings);
@@ -5548,6 +5566,7 @@ export default function App() {
   deptHeadsRef.current = deptHeads;
   collegeManagerRef.current = collegeManager;
   kitsRef.current = kits;
+  productionsRef.current = productions;
   policiesRef.current = policies;
   certificationsRef.current = certifications;
   siteSettingsRef.current = siteSettings;
@@ -5758,6 +5777,7 @@ export default function App() {
   const setDeptHeads = createTrackedSetter(_setDeptHeads);
   const setCollegeManager = createTrackedSetter(_setCollegeManager);
   const setKits = createTrackedSetter(_setKits);
+  const setProductions = createTrackedSetter(_setProductions);
   const setPolicies = createTrackedSetter(_setPolicies);
   const setCertifications = createTrackedSetter(_setCertifications);
   const setSiteSettings = createTrackedSetter(_setSiteSettings);
@@ -6041,7 +6061,7 @@ export default function App() {
     (async()=>{
         try {
           historySuspendedRef.current = true;
-          const [eqR, resR, catsAndTypesR, catLoanTypesR, tmR, ktsR, polR, dhsR, mgrR, siteSetR, studiosR, studioBkR, lessonsR, lecturersR] = await Promise.all([
+          const [eqR, resR, catsAndTypesR, catLoanTypesR, tmR, ktsR, polR, dhsR, mgrR, siteSetR, studiosR, studioBkR, lessonsR, lecturersR, prodR] = await Promise.all([
             (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
           (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
           loadCategoriesWrapped(), // Stage 12 Session B: read from public.categories
@@ -6056,6 +6076,7 @@ export default function App() {
           loadStudioBookingsWrapped(), // Stage 10 Session B: read from public.studio_bookings
           loadLessonsWrapped(), // Stage 8 Session B step 5: initial load reads from public.lessons
           loadLecturersWrapped(),
+          loadProductionsWrapped(), // Productions board (לוח הפקות)
           ]);
           // Extract values and sources
           const eq = eqR.value, eqSrc = eqR.source;
@@ -6086,6 +6107,7 @@ export default function App() {
           _setCategoryLoanTypes(catLoanTypes || {});
         _setTeamMembers(tm || []);
         _setKits(kts || []);
+        _setProductions(Array.isArray(prodR?.value) ? prodR.value : []);
         _setPolicies(pol || { פרטית:"", הפקה:"", סאונד:"", לילה:"" });
         // Stage 6 step 8: blob deleted — await so tracks/types are set before UI renders.
         _setCertifications(await loadCertificationsFromTables());
@@ -6471,6 +6493,56 @@ export default function App() {
                 const value = await loadKitsFromTable();
                 if (Array.isArray(value) && !dataEquals(kitsRef.current, value)) _setKits(value);
               } catch (err) { console.warn("kits realtime refetch failed", err); }
+            }, 400);
+          };
+        })(),
+      )
+      // Productions board — three tables coalesce through one debounced refetch
+      // since a single editor save triggers an upsert + diffed sub-rows.
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "productions" },
+        (() => {
+          let t = null;
+          return () => {
+            clearTimeout(t);
+            t = setTimeout(async () => {
+              try {
+                const value = await listProductions({ onlyPublished: false });
+                if (Array.isArray(value) && !dataEquals(productionsRef.current, value)) _setProductions(value);
+              } catch (err) { console.warn("productions realtime refetch failed", err); }
+            }, 400);
+          };
+        })(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "production_dates" },
+        (() => {
+          let t = null;
+          return () => {
+            clearTimeout(t);
+            t = setTimeout(async () => {
+              try {
+                const value = await listProductions({ onlyPublished: false });
+                if (Array.isArray(value) && !dataEquals(productionsRef.current, value)) _setProductions(value);
+              } catch (err) { console.warn("production_dates realtime refetch failed", err); }
+            }, 400);
+          };
+        })(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "production_crew" },
+        (() => {
+          let t = null;
+          return () => {
+            clearTimeout(t);
+            t = setTimeout(async () => {
+              try {
+                const value = await listProductions({ onlyPublished: false });
+                if (Array.isArray(value) && !dataEquals(productionsRef.current, value)) _setProductions(value);
+              } catch (err) { console.warn("production_crew realtime refetch failed", err); }
             }, 400);
           };
         })(),
@@ -6927,7 +6999,7 @@ export default function App() {
   const overdueCount = reservations.filter(r=>r.status==="באיחור").length;
   const rejectedCount = reservations.filter(r=>r.status==="נדחה").length;
   const rejected = rejectedCount + overdueCount;
-  const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד מחסן", reservations:"ניהול בקשות", team:"פרטי צוות", kits:"ערכות", lessons:"שיעורים", policies:"נהלים", certifications:"הסמכת ציוד", students:"ניהול סטודנטים", settings:"הגדרות", studios:"לוח חדרים" };
+  const pageTitle = { dashboard:"לוח בקרה", equipment:"ציוד מחסן", reservations:"ניהול בקשות", team:"פרטי צוות", kits:"ערכות", lessons:"שיעורים", policies:"נהלים", certifications:"הסמכת ציוד", students:"ניהול סטודנטים", settings:"הגדרות", studios:"לוח חדרים", productions:"לוח הפקות" };
 
   const handleSwipeTouchStart = (e) => {
     swipeTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, target: e.target };
@@ -7017,6 +7089,7 @@ export default function App() {
               reservations={reservations}
               studios={studios}
               certifications={certifications}
+              productions={productions}
               setLessons={setLessons}
               setKits={setKits}
               setReservations={setReservations}
@@ -7035,7 +7108,7 @@ export default function App() {
         </div>
       ) : isPublicFormView && (
         <div className="public-page-shell">
-          {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes} refreshInventory={refreshPublicInventory} lecturers={lecturers} lessons={lessons} canInstall={canInstallPwa} onInstall={installPwa} userGuidePdf={userGuidePdfs.students}/>}
+          {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <PublicForm equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} categories={categories} kits={kits} teamMembers={teamMembers} policies={policies} certifications={certifications} deptHeads={deptHeads} siteSettings={siteSettings} categoryLoanTypes={categoryLoanTypes} refreshInventory={refreshPublicInventory} lecturers={lecturers} lessons={lessons} canInstall={canInstallPwa} onInstall={installPwa} userGuidePdf={userGuidePdfs.students} productions={productions} refreshProductions={async () => { const v = await listProductions({ onlyPublished: false }); _setProductions(Array.isArray(v) ? v : []); }}/>}
         </div>
       )}
 
@@ -7158,6 +7231,7 @@ export default function App() {
                 {id:"equipment",icon:<Package size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"ציוד",badge:damagedCount||null},
                 {id:"certifications",icon:<GraduationCap size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"הסמכת ציוד"},
                 {id:"kits",icon:<Backpack size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"ערכות"},
+                {id:"productions",icon:<Film size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"לוח הפקות"},
                 {id:"policies",icon:<ClipboardList size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"נהלים"},
                 {id:"settings",icon:<Settings size={20} strokeWidth={1.75} color="var(--accent)"/>,label:"הגדרות"},
               ].filter(n => {
@@ -7235,6 +7309,7 @@ export default function App() {
                 initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} siteSettings={siteSettings} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports} lessons={lessons} setLessons={setLessons}/></div>
               <div style={{display:page==="team"?"block":"none"}}><TeamPage teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/></div>
               <div style={{display:page==="kits"?"block":"none"}}><KitsPage kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons} setLessons={setLessons} lecturers={lecturers}/></div>
+              <div style={{display:page==="productions"?"block":"none"}}><ProductionsPage productions={productions} setProductions={setProductions} currentStudent={null} students={certifications?.students || []} kits={kits} reservations={reservations} showToast={showToast} refresh={async () => { const v = await listProductions({ onlyPublished: false }); _setProductions(Array.isArray(v) ? v : []); }} onOpenLoanForm={() => showToast?.("הטופס פתוח רק לסטודנטים מחוברים", "info")}/></div>
               <div style={{display:page==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} lecturers={lecturers} setLecturers={setLecturers} siteSettings={siteSettings} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length
                 ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean)
                 : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>

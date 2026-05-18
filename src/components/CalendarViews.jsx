@@ -66,7 +66,7 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
           <img src={siteSettings.soundLogo} alt="לוגו סאונד" style={{width:44,height:44,objectFit:"contain",borderRadius:6}}/>
         )}
         <div>
-          <div style={{fontWeight:900,fontSize:20,color:"var(--accent)"}}>לוח השאלות — מבט ראש מחלקה</div>
+          <div style={{fontWeight:900,fontSize:20,color:"var(--accent)"}}>לוח השאלות ציוד — מבט ראש מחלקה</div>
           <div style={{fontSize:12,color:"var(--text3)"}}>קריאה בלבד · כל הסטטוסים</div>
         </div>
       </div>

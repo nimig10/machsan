@@ -103,6 +103,19 @@
 - **Supabase**: הטבלה `public.store` לא קיימת. כל קריאה/כתיבה מקבלת `relation does not exist`.
 - כל RPCs/triggers/tables של עידן ה-blob נמחקו לחלוטין (מיגרציות `20260430220000` + `20260502000000`). פעילות נשארו רק כתיבה לציוד (`sync_equipment_from_json`) וזרימת הזמנות מנורמלת (`create_reservation_v2`, `update_reservation_status_v1`, `delete_reservation_v1`, `create_lesson_reservations_v1`, `restore_reservation_v1`, `student_modify_reservation_item_v1`).
 
+## 🚨 כלל ברזל: סטטוסים שחוסמים מלאי
+
+**רק** ההזמנות בסטטוסים הבאים נספרות כתופסות מלאי / חוסמות בקשות חדשות חופפות:
+- `מאושר` — אישור איש המחסן (הציוד התחייב לבקשה)
+- `באיחור` — הציוד עוד בחוץ אחרי תאריך החזרה
+- `פעילה` — הציוד יצא לסטודנט
+
+**לא חוסמות** (לעולם!): `ממתין`, `אישור ראש מחלקה`, `נדחה`, `הוחזר`, `בוטל`.
+
+הסיבה: כל עוד הבקשה לא הגיעה לסטטוס `מאושר`, היא לא תופסת מלאי בפועל. רק אישור איש המחסן הופך אותה למחויבת. שני סטודנטים יכולים להחזיק `ממתין` חופפים על אותו פריט — איש המחסן יבחר את מי לאשר.
+
+**Anti-regression**: כל שינוי ב-`create_reservation_v2`, ב-`update_reservation_status_v1`, או ביצירת RPC חדש שעושה overlap-check — חובה לאמת ש-`r.status IN ('מאושר','באיחור','פעילה')` בלבד. ראה `supabase/migrations/20260516160000_create_reservation_v2_pending_not_blocking.sql` — תיקון של רגרסיה שכללה `ממתין` ברשימה החוסמת.
+
 ## 🔐 Auth + זרימות
 
 ### זרימת Login
