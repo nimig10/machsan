@@ -127,7 +127,7 @@ export function StudentHub({
                 )}
                 <span style={{ color: opt.color }}>{opt.icon}</span>
                 <span style={{ fontSize: 20, fontWeight: 800, color: "var(--text)" }}>{opt.title}</span>
-                <span style={{ fontSize: 13, color: "var(--text3)", textAlign: "center", lineHeight: 1.4 }}>{opt.desc}</span>
+                <span style={{ fontSize: 14, color: "var(--text2)", fontWeight: 600, textAlign: "center", lineHeight: 1.5 }}>{opt.desc}</span>
               </button>
             ))}
           </div>

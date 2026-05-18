@@ -7089,6 +7089,7 @@ export default function App() {
               reservations={reservations}
               studios={studios}
               certifications={certifications}
+              productions={productions}
               setLessons={setLessons}
               setKits={setKits}
               setReservations={setReservations}
@@ -7308,7 +7309,7 @@ export default function App() {
                 initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} siteSettings={siteSettings} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports} lessons={lessons} setLessons={setLessons}/></div>
               <div style={{display:page==="team"?"block":"none"}}><TeamPage teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/></div>
               <div style={{display:page==="kits"?"block":"none"}}><KitsPage kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons} setLessons={setLessons} lecturers={lecturers}/></div>
-              <div style={{display:page==="productions"?"block":"none"}}><ProductionsPage productions={productions} setProductions={setProductions} currentStudent={null} students={certifications?.students || []} reservations={reservations} showToast={showToast} refresh={async () => { const v = await listProductions({ onlyPublished: false }); _setProductions(Array.isArray(v) ? v : []); }} onOpenLoanForm={() => showToast?.("הטופס פתוח רק לסטודנטים מחוברים", "info")}/></div>
+              <div style={{display:page==="productions"?"block":"none"}}><ProductionsPage productions={productions} setProductions={setProductions} currentStudent={null} students={certifications?.students || []} kits={kits} reservations={reservations} showToast={showToast} refresh={async () => { const v = await listProductions({ onlyPublished: false }); _setProductions(Array.isArray(v) ? v : []); }} onOpenLoanForm={() => showToast?.("הטופס פתוח רק לסטודנטים מחוברים", "info")}/></div>
               <div style={{display:page==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} lecturers={lecturers} setLecturers={setLecturers} siteSettings={siteSettings} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length
                 ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean)
                 : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>

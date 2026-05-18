@@ -85,11 +85,12 @@ function fmtDeadline(startDate) {
   return { date: d.toLocaleDateString("he-IL", { day:"2-digit", month:"2-digit" }), diff };
 }
 
-export function ProductionEditor({ initial, currentStudent, students = [], showToast, onClose, onSaved, onDeleted, onOpenLoanForm, reservations = [] }) {
+export function ProductionEditor({ initial, currentStudent, students = [], kits = [], showToast, onClose, onSaved, onDeleted, onOpenLoanForm, onOpenMyReservations, reservations = [] }) {
   const [title, setTitle]             = useState(initial?.title || "");
   const [description, setDescription] = useState(initial?.description || "");
   const [driveUrl, setDriveUrl]       = useState(initial?.driveUrl || "");
   const [color, setColor]             = useState(initial?.color || DEFAULT_COLOR);
+  const [selectedKitId, setSelectedKitId] = useState(initial?.kitId || "");
   const [dates, setDates]             = useState(() => Array.isArray(initial?.dates) ? initial.dates : []);
   const [crew, setCrew]               = useState(() => {
     if (Array.isArray(initial?.crew) && initial.crew.length > 0) return initial.crew;
@@ -120,7 +121,10 @@ export function ProductionEditor({ initial, currentStudent, students = [], showT
   }, [description]);
 
   const isNew = !initial?.id;
-  const productionId = initial?.id || genId("prod");
+  // IMPORTANT: stabilize productionId across re-renders. If we recompute
+  // `genId("prod")` every render, a failed publish retry would insert a NEW
+  // row each time (root cause of the "3 duplicates created" bug).
+  const [productionId] = useState(() => initial?.id || genId("prod"));
   const isPublished = initial?.status === "published";
   // Live (not persisted) check — uses local crew state so the button reflects
   // edits made in this session even before save.
@@ -140,6 +144,26 @@ export function ProductionEditor({ initial, currentStudent, students = [], showT
     return ids;
   }, [linkedReservations]);
   const anyDateLocked = lockedDateIds.size > 0;
+  const allDatesLocked = dates.length > 0 && dates.every(d => lockedDateIds.has(String(d.id)));
+
+  // Kits filtered to those usable for production loans.
+  const productionKits = useMemo(
+    () => (kits || []).filter(k => Array.isArray(k.loanTypes) && k.loanTypes.includes("הפקה")),
+    [kits]
+  );
+  const selectedKit = useMemo(
+    () => productionKits.find(k => String(k.id) === String(selectedKitId)) || null,
+    [productionKits, selectedKitId]
+  );
+  // Legacy: production was bound to a kit whose loanTypes no longer include "הפקה"
+  // (or the kit was removed from the production-eligible list). Keep it selectable
+  // but flagged so the director knows it's a leftover.
+  const legacyKit = useMemo(() => {
+    if (selectedKit) return null;
+    if (!selectedKitId) return null;
+    return (kits || []).find(k => String(k.id) === String(selectedKitId)) || null;
+  }, [kits, selectedKitId, selectedKit]);
+  const kitFieldLocked = allDatesLocked;
 
   // Director can't be a crew member of their own production.
   const directorEmailLc = String(initial?.directorEmail || currentStudent?.email || "").toLowerCase();
@@ -263,6 +287,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], showT
       description,
       driveUrl:           driveUrl.trim(),
       color,
+      kitId:              selectedKitId || null,
       directorStudentId:  currentStudent?.id,
       directorEmail:      currentStudent?.email,
       directorName:       currentStudent?.name,
@@ -389,15 +414,48 @@ export function ProductionEditor({ initial, currentStudent, students = [], showT
             <button className="btn btn-primary btn-sm" onClick={onPublish} disabled={publishing}>
               <Send size={14} /> {isPublished ? "עדכן" : "פרסם"}
             </button>
-            {!isNew && isPublished && hasApprovedPhotographer && onOpenLoanForm && (
+            {!isNew && isPublished && hasApprovedPhotographer && onOpenLoanForm && !allDatesLocked && (
               <button className="btn btn-primary btn-sm" onClick={onClickLoanForm} disabled={saving}
                 title="שמירה ומעבר לטופס השאלת הציוד">
                 <ExternalLink size={14}/> השאלת ציוד להפקה
               </button>
             )}
+            {!isNew && isPublished && allDatesLocked && onOpenMyReservations && (
+              <button className="btn btn-secondary btn-sm" onClick={onOpenMyReservations}
+                title="הוגשו רשימות לכל הטווחים — מעבר ל'ההזמנות שלי' לעריכה/מחיקה">
+                <ExternalLink size={14}/> מעבר לרשימה
+              </button>
+            )}
           </div>
         </div>
       }>
+      {/* ── סוג ההפקה (kit binding) — first field, sets the equipment scope ── */}
+      <div style={{marginBottom:18}}>
+        <label className="form-label">סוג ההפקה</label>
+        <select
+          className="form-input"
+          value={selectedKitId}
+          onChange={e => setSelectedKitId(e.target.value)}
+          disabled={kitFieldLocked}
+          title={kitFieldLocked ? "לא ניתן לשנות לאחר שהוגשה רשימת ציוד לכל הטווחים" : undefined}
+          style={kitFieldLocked ? {opacity:0.6, cursor:"not-allowed"} : undefined}
+        >
+          <option value="">כללית — ללא הגבלת ציוד</option>
+          {productionKits.map(k => (
+            <option key={k.id} value={k.id}>{k.name}</option>
+          ))}
+          {legacyKit && (
+            <option key={legacyKit.id} value={legacyKit.id}>
+              {legacyKit.name} (לא זמינה יותר)
+            </option>
+          )}
+        </select>
+        <div style={{fontSize:12,color:"var(--text3)",marginTop:6}}>
+          בחירת ערכה מגבילה את הצוות לפריטי ציוד בתוך הערכה בלבד בעת מילוי טופס ההשאלה.
+          {kitFieldLocked && <span style={{color:"#2ecc71",marginInlineStart:6,fontWeight:700}}>🔒 נעול — הוגשה רשימת ציוד לכל הטווחים.</span>}
+        </div>
+      </div>
+
       {/* ── כותרת + תיאור ── */}
       <div style={{marginBottom:18}}>
         <label className="form-label">שם ההפקה</label>
@@ -481,7 +539,9 @@ export function ProductionEditor({ initial, currentStudent, students = [], showT
           </div>
         )}
         {dates.length === 0 && <p style={{color:"var(--text3)",fontSize:13}}>הוסיפו לפחות תאריך אחד</p>}
-        {dates.map((d, idx) => {
+        {dates.map((d, origIdx) => ({d, idx: origIdx}))
+          .sort((a, b) => String(a.d.startDate || "").localeCompare(String(b.d.startDate || "")))
+          .map(({d, idx}) => {
           const dl = fmtDeadline(d.startDate);
           const dateLocked = lockedDateIds.has(String(d.id));
           // Max end date = startDate + 6 days (7-day window incl). Use local
@@ -546,8 +606,15 @@ export function ProductionEditor({ initial, currentStudent, students = [], showT
                 </button>
               </div>
               {dateLocked && (
-                <div style={{gridColumn:"1/-1",fontSize:13,fontWeight:700,color:"#2ecc71",background:"rgba(46,204,113,0.12)",border:"1px solid #2ecc71",borderRadius:6,padding:"6px 10px",marginTop:4,display:"flex",alignItems:"center",gap:6}}>
-                  ✓ 🔒 הבטחת את מקומך — הוגשה רשימת ציוד לטווח הזה
+                <div style={{gridColumn:"1/-1",fontSize:13,fontWeight:700,color:"#2ecc71",background:"rgba(46,204,113,0.12)",border:"1px solid #2ecc71",borderRadius:6,padding:"6px 10px",marginTop:4,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"space-between"}}>
+                  <span>✓ 🔒 הבטחת את מקומך — הוגשה רשימת ציוד לטווח הזה</span>
+                  {onOpenMyReservations && (
+                    <button className="btn btn-secondary btn-sm" style={{padding:"2px 10px",fontSize:12}}
+                      onClick={onOpenMyReservations}
+                      title="מעבר ל'ההזמנות שלי' לעריכה/מחיקה של רשימת הציוד">
+                      <ExternalLink size={12}/> מעבר לרשימה
+                    </button>
+                  )}
                 </div>
               )}
               {!dateLocked && dl && (() => {
@@ -555,7 +622,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], showT
                 if (dl.diff > 0) {
                   text = `${dl.diff} ימים להגשת רשימת הציוד`;
                   if (dl.diff <= 3) { color = "#f5a623"; bg = "rgba(245,166,35,0.12)"; border = "rgba(245,166,35,0.4)"; }
-                  else { color = "var(--text)"; bg = "var(--surface)"; border = "var(--border)"; }
+                  else { color = "#e67e22"; bg = "rgba(230,126,34,0.12)"; border = "rgba(230,126,34,0.4)"; }
                 } else if (dl.diff === 0) {
                   text = "חובה עליך להגיש היום רשימת ציוד";
                   color = "#e74c3c"; bg = "rgba(231,76,60,0.15)"; border = "#e74c3c";
@@ -603,7 +670,8 @@ export function ProductionEditor({ initial, currentStudent, students = [], showT
           </div>
         </div>
         <div style={{fontSize:13,color:"var(--text)",marginBottom:8,lineHeight:1.5,background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:6,padding:"10px 12px"}}>
-          🎥 <strong style={{color:"var(--accent)"}}>צלם ראשי מוסמך ורשום — חובה</strong>. בשלב השאלת הציוד המערכת בודקת הסמכות ציוד של הצלם הראשי ואיש הסאונד (אם קיים) — לא של הבמאי.
+          <div>🎥 <strong style={{color:"var(--accent)"}}>צלם ראשי מוסמך ורשום — חובה</strong>.</div>
+          <div style={{marginTop:4}}>בשלב השאלת הציוד המערכת בודקת הסמכות ציוד של הצלם הראשי ואיש הסאונד (אם קיים) — לא של הבמאי.</div>
         </div>
         {crew.length === 0 && <p style={{color:"var(--text2)",fontSize:13}}>אין עדיין צוות. הוסיפו תפקיד מהכפתורים למעלה.</p>}
         {crew.map(c => {
@@ -673,26 +741,23 @@ export function ProductionEditor({ initial, currentStudent, students = [], showT
                     <option key={s.id} value={s.name}>{s.track ? s.track : ""}</option>
                   ))}
                 </datalist>
-                {c.invitedBy === "self" && c.crewEmail && (
-                  <span style={{fontSize:11,color:"var(--text3)",whiteSpace:"nowrap"}}>· {c.crewEmail}</span>
-                )}
-                {selectedStudent?.track && (
-                  <span style={{
-                    fontSize:12, fontWeight:600, whiteSpace:"nowrap",
-                    color:"var(--accent)",
-                    background:"var(--accent-glow)",
-                    border:"1px solid var(--accent)",
-                    borderRadius:10, padding:"2px 8px",
-                  }}>{selectedStudent.track}</span>
-                )}
                 {(() => {
-                  const statusColor = c.status === "approved" ? "#2ecc71" : c.status === "invited" ? "#f5a623" : "#e74c3c";
-                  const statusLabel = c.status === "approved" ? "מאושר" : c.status === "invited" ? "ממתין" : "נדחה";
+                  const isOpenSlot = !c.studentId && !c.freeTextName && !c.crewEmail;
+                  let statusColor, statusBg, statusLabel;
+                  if (isOpenSlot) {
+                    statusColor = "#3498db"; statusBg = "rgba(52,152,219,0.15)"; statusLabel = "תפקיד פנוי";
+                  } else if (c.status === "approved") {
+                    statusColor = "#2ecc71"; statusBg = "rgba(46,204,113,0.15)"; statusLabel = "מאושר";
+                  } else if (c.status === "invited") {
+                    statusColor = "#f5a623"; statusBg = "rgba(245,166,35,0.15)"; statusLabel = "ממתין";
+                  } else {
+                    statusColor = "#e74c3c"; statusBg = "rgba(231,76,60,0.15)"; statusLabel = "נדחה";
+                  }
                   return (
                     <span style={{
                       fontSize:12, fontWeight:700, whiteSpace:"nowrap",
                       color: statusColor,
-                      background: c.status === "approved" ? "rgba(46,204,113,0.15)" : c.status === "invited" ? "rgba(245,166,35,0.15)" : "rgba(231,76,60,0.15)",
+                      background: statusBg,
                       border: `1px solid ${statusColor}`,
                       borderRadius:10, padding:"2px 8px",
                     }}>{statusLabel}</span>

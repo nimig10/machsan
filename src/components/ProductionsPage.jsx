@@ -79,12 +79,32 @@ function nextDateOf(p) {
   return dates[0];
 }
 
-// Returns { daysToShoot, daysToDeadline, tier } for the EARLIEST upcoming shoot date.
+// Set of date IDs that already have an active equipment-list reservation.
+function submittedDateIds(p, reservations) {
+  const ids = new Set();
+  for (const r of (reservations || [])) {
+    if (!p || r.production_id !== p.id) continue;
+    if (r.status === "בוטל") continue;
+    if (r.production_date_id) ids.add(String(r.production_date_id));
+  }
+  return ids;
+}
+
+// Returns { daysToShoot, daysToDeadline, tier } for the EARLIEST upcoming shoot date
+// that does NOT already have an equipment list submitted.
 // Deadline = shoot date − 7 calendar days (inclusive "8 days notice" policy).
 //   tier: "safe" (>0d) | "today" (=0) | "overdue" (<0) | "past" (shoot already happened)
-function equipmentDeadline(p) {
-  const next = nextDateOf(p);
-  if (!next) return null;
+//         | "all_submitted" (every date range has a reservation attached)
+function equipmentDeadline(p, reservations) {
+  const lockedIds = submittedDateIds(p, reservations);
+  const allDates = (p?.dates || []);
+  if (allDates.length === 0) return null;
+  const pending = allDates.filter(d => !lockedIds.has(String(d.id)));
+  if (pending.length === 0) {
+    return { tier: "all_submitted" };
+  }
+  const sortable = pending.map(d => `${d.startDate}T${d.startTime || "00:00"}`).sort();
+  const next = sortable[0];
   const shoot = new Date(next.slice(0,10) + "T00:00:00");
   const today = new Date();
   today.setHours(0,0,0,0);
@@ -98,27 +118,36 @@ function equipmentDeadline(p) {
   return { daysToShoot, daysToDeadline, tier, shootDate: next.slice(0,10) };
 }
 
-function DeadlineChip({ p }) {
-  const info = equipmentDeadline(p);
+function DeadlineChip({ p, reservations }) {
+  const info = equipmentDeadline(p, reservations);
   if (!info) return null;
   const { daysToShoot, daysToDeadline, tier } = info;
-  let label, color, bg;
-  if (tier === "past") {
+  let label, color, bg, icon;
+  if (tier === "all_submitted") {
+    label = "רשימת ציוד הוגשה";
+    color = "#2ecc71";
+    bg = "rgba(46,204,113,0.12)";
+    icon = "✓";
+  } else if (tier === "past") {
     label = "ההפקה הסתיימה";
     color = "var(--text3)";
     bg = "transparent";
+    icon = "⏱";
   } else if (tier === "safe") {
     label = `${daysToDeadline} ימים עד דדליין רשימת ציוד`;
-    color = "#2ecc71";
-    bg = "rgba(46,204,113,0.12)";
+    color = "#e67e22";
+    bg = "rgba(230,126,34,0.12)";
+    icon = "⏱";
   } else if (tier === "today") {
     label = "היום הוא היום האחרון להגיש רשימת ציוד";
     color = "#f5a623";
     bg = "rgba(245,166,35,0.15)";
+    icon = "⏱";
   } else { // overdue
     label = `עבר הדדליין • נותרו ${daysToShoot} ימים לצילום`;
     color = "#e74c3c";
     bg = "rgba(231,76,60,0.15)";
+    icon = "⏱";
   }
   return (
     <div style={{
@@ -128,14 +157,20 @@ function DeadlineChip({ p }) {
       border:`1px solid ${color}`,
       display:"inline-flex", alignItems:"center", gap:4,
     }}>
-      ⏱ {label}
+      {icon} {label}
     </div>
   );
 }
 
-function ProductionCard({ p, onClick }) {
+function ProductionCard({ p, reservations, onClick }) {
   const next = nextDateOf(p);
-  const approved = (p.crew || []).filter(c => c.status === "approved");
+  // Only show role chips for approved AND filled slots (a placeholder with
+  // no student/email/free-text shouldn't appear on the card even if its
+  // status row is 'approved' by accident).
+  const approved = (p.crew || []).filter(c =>
+    c.status === "approved"
+    && (c.studentId || c.freeTextName || c.crewEmail)
+  );
   const crewByRole = approved.reduce((acc, c) => { acc[c.role] = (acc[c.role] || 0) + 1; return acc; }, {});
   const customApproved = approved.filter(c => c.role === "custom");
   const accentColor = p.color || DEFAULT_PRODUCTION_COLOR;
@@ -157,7 +192,7 @@ function ProductionCard({ p, onClick }) {
       </div>
       <div style={{fontSize:13,color:"var(--text2)",marginBottom:4}}>במאי: {p.directorName}</div>
       {next && <div style={{fontSize:13,color:"var(--text2)",marginBottom:8}}>תאריך קרוב: {fmtDate(next.slice(0,10))}</div>}
-      <div style={{marginBottom:6}}><DeadlineChip p={p}/></div>
+      <div style={{marginBottom:6}}><DeadlineChip p={p} reservations={reservations}/></div>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8,fontSize:11}}>
         {ROLE_ORDER.map(role => crewByRole[role] ? (
           <span key={role} style={{background:"var(--accent-glow)",color:"var(--accent)",padding:"2px 8px",borderRadius:10,border:"1px solid var(--border)"}}>{ROLE_LABELS[role]}</span>
@@ -170,13 +205,28 @@ function ProductionCard({ p, onClick }) {
   );
 }
 
-function ProductionDetail({ p, currentStudent, students, onClose, onEdit, onJoinRequest, onOpenLoanForm }) {
+function ProductionDetail({ p, currentStudent, students, kits = [], reservations = [], onClose, onEdit, onJoinRequest, onOpenLoanForm, onOpenMyReservations }) {
   if (!p) return null;
   const isDirector = currentStudent && p.directorEmail &&
     String(currentStudent.email || "").toLowerCase() === String(p.directorEmail).toLowerCase();
   const myStudentId = currentStudent?.id;
   const alreadyMember = (p.crew || []).some(c => c.studentId === myStudentId || c.crewEmail?.toLowerCase() === String(currentStudent?.email || "").toLowerCase());
   const hasApprovedPhotographer = (p.crew || []).some(c => c.role === "photographer" && c.status === "approved" && c.studentId);
+
+  // Date ranges that already have an active (non-cancelled) equipment reservation
+  // attached. The director must remove the reservation via "ההזמנות שלי" before
+  // submitting a new list for the same range.
+  const lockedDateIds = useMemo(() => {
+    const ids = new Set();
+    for (const r of (reservations || [])) {
+      if (r.production_id !== p.id) continue;
+      if (r.status === "בוטל") continue;
+      if (r.production_date_id) ids.add(String(r.production_date_id));
+    }
+    return ids;
+  }, [reservations, p.id]);
+  const totalDates = (p.dates || []).length;
+  const allDatesLocked = totalDates > 0 && (p.dates || []).every(d => lockedDateIds.has(String(d.id)));
 
   return (
     <Modal title={p.title} onClose={onClose} size="modal-lg" footer={
@@ -192,10 +242,15 @@ function ProductionDetail({ p, currentStudent, students, onClose, onEdit, onJoin
               ⚠ חסר צלם
             </span>
           )}
-          {isDirector && p.status === "published" && hasApprovedPhotographer && (
+          {isDirector && p.status === "published" && hasApprovedPhotographer && !allDatesLocked && (
             <button className="btn btn-primary btn-sm" onClick={() => onOpenLoanForm(p)}>
               <ExternalLink size={14}/> השאלת ציוד להפקה
             </button>
+          )}
+          {isDirector && allDatesLocked && (
+            <span style={{fontSize:12,color:"#2ecc71",fontWeight:700}} title="הוגשו רשימות ציוד לכל הטווחים. כדי להחליף — מחק את הרשימה ב'ההזמנות שלי'">
+              ✓ הוגשו רשימות לכל הטווחים
+            </span>
           )}
           {!isDirector && !alreadyMember && currentStudent?.id && p.status === "published" && (
             <button className="btn btn-primary btn-sm" onClick={() => onJoinRequest(p)}>
@@ -208,11 +263,23 @@ function ProductionDetail({ p, currentStudent, students, onClose, onEdit, onJoin
     }>
       <div style={{marginBottom:14}}>
         <div style={{fontSize:16,fontWeight:700,color:"var(--text)",marginBottom:10}}>
-          <span style={{color:"var(--text3)",fontWeight:500,marginInlineEnd:6}}>במאי:</span>{p.directorName}
+          <span style={{color:"var(--text)",fontWeight:700,marginInlineEnd:6}}>במאי:</span>{p.directorName}
         </div>
-        <DeadlineChip p={p}/>
+        {(() => {
+          const kit = p.kitId ? (kits || []).find(k => String(k.id) === String(p.kitId)) : null;
+          const label = kit ? kit.name : "כללית";
+          return (
+            <div style={{fontSize:14,color:"var(--text)",marginBottom:10}}>
+              <span style={{color:"var(--text)",fontWeight:700,marginInlineEnd:6}}>סוג ההפקה:</span>
+              <span style={{fontWeight:700,color:kit?"#3498db":"var(--text)"}}>{label}</span>
+            </div>
+          );
+        })()}
+        {(p.description || p.driveUrl) && (
+          <h5 style={{margin:"14px 0 6px",color:"var(--accent)"}}>פרטי ההפקה</h5>
+        )}
         {p.description && (
-          <p style={{whiteSpace:"pre-wrap",marginTop:10,fontSize:14,lineHeight:1.5,color:"var(--text)"}}>{p.description}</p>
+          <p style={{whiteSpace:"pre-wrap",marginTop:6,fontSize:14,lineHeight:1.5,color:"var(--text)"}}>{p.description}</p>
         )}
         {p.driveUrl && (
           <a href={p.driveUrl} target="_blank" rel="noopener noreferrer"
@@ -225,67 +292,103 @@ function ProductionDetail({ p, currentStudent, students, onClose, onEdit, onJoin
       <h5 style={{margin:"12px 0 6px",color:"var(--accent)"}}><CalendarIcon size={14} style={{verticalAlign:"middle"}}/> תאריכי צילום</h5>
       {(p.dates || []).length === 0 ? <p style={{color:"var(--text3)",fontSize:13}}>אין תאריכים</p> : (
         <ul style={{margin:0,paddingInlineStart:20,fontSize:13,color:"var(--text)"}}>
-          {p.dates.map(d => (
-            <li key={d.id}>
-              {fmtDate(d.startDate)} {d.startTime} – {d.startDate === d.endDate ? "" : fmtDate(d.endDate) + " "}{d.endTime}
-              {d.note ? <span style={{color:"var(--text3)"}}> — {d.note}</span> : null}
-            </li>
-          ))}
+          {[...p.dates].sort((a, b) => String(a.startDate || "").localeCompare(String(b.startDate || ""))).map(d => {
+            const locked = lockedDateIds.has(String(d.id));
+            // Per-date deadline calculation (only when not yet submitted)
+            let deadlineChip = null;
+              if (!locked) {
+                const shoot = new Date(d.startDate + "T00:00:00");
+                const todayD = new Date(); todayD.setHours(0,0,0,0);
+                const daysToShoot = Math.floor((shoot - todayD) / (24*3600*1000));
+                let txt, c, bg;
+                if (daysToShoot < 0) {
+                  txt = "ההפקה הסתיימה"; c = "var(--text3)"; bg = "transparent";
+                } else {
+                  const daysToDeadline = daysToShoot - 7;
+                  if (daysToDeadline > 3) {
+                    txt = `${daysToDeadline} ימים עד דדליין`; c = "#e67e22"; bg = "rgba(230,126,34,0.12)";
+                  } else if (daysToDeadline > 0) {
+                    txt = `${daysToDeadline} ימים עד דדליין`; c = "#f5a623"; bg = "rgba(245,166,35,0.15)";
+                  } else if (daysToDeadline === 0) {
+                    txt = "היום אחרון להגיש רשימת ציוד"; c = "#f5a623"; bg = "rgba(245,166,35,0.15)";
+                  } else {
+                    txt = `עבר הדדליין (${Math.abs(daysToDeadline)} ימים)`; c = "#e74c3c"; bg = "rgba(231,76,60,0.15)";
+                  }
+                }
+                deadlineChip = (
+                  <span style={{
+                    marginInlineStart:8,
+                    fontSize:11, fontWeight:700,
+                    padding:"2px 8px", borderRadius:6,
+                    color:c, background:bg,
+                    border:`1px solid ${c}`,
+                    display:"inline-flex", alignItems:"center", gap:4,
+                  }}>⏱ {txt}</span>
+                );
+              }
+              return (
+                <li key={d.id} style={{marginBottom:6}}>
+                  <span>
+                    {fmtDate(d.startDate)} {d.startTime} – {d.startDate === d.endDate ? "" : fmtDate(d.endDate) + " "}{d.endTime}
+                    {d.note ? <span style={{color:"var(--text3)"}}> — {d.note}</span> : null}
+                  </span>
+                  {locked && (
+                    <span style={{marginInlineStart:8,display:"inline-flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                      <span style={{fontSize:11,color:"#2ecc71",fontWeight:700,padding:"2px 8px",borderRadius:6,background:"rgba(46,204,113,0.12)",border:"1px solid #2ecc71"}}>✓ הוגשה רשימת ציוד</span>
+                      {isDirector && onOpenMyReservations && (
+                        <button className="btn btn-secondary btn-sm" style={{padding:"2px 8px",fontSize:11}}
+                          onClick={() => onOpenMyReservations()}>
+                          <ExternalLink size={11}/> מעבר לרשימה
+                        </button>
+                      )}
+                    </span>
+                  )}
+                  {deadlineChip}
+                </li>
+              );
+          })}
         </ul>
       )}
 
       <h5 style={{margin:"12px 0 6px",color:"var(--accent)"}}><Users size={14} style={{verticalAlign:"middle"}}/> צוות</h5>
-      {ROLE_ORDER.map(role => {
-        const inRole = (p.crew || []).filter(c => c.role === role);
-        if (inRole.length === 0) return (
-          <div key={role} style={{fontSize:13,marginBottom:4,color:"var(--text)"}}>
-            <strong>{ROLE_LABELS[role]}:</strong> <span style={{color:"var(--text3)"}}>— פנוי —</span>
-          </div>
-        );
-        return inRole.map(c => {
+      {(() => {
+        const renderCrewRow = (c, label) => {
           const emailLc = String(c.crewEmail || "").toLowerCase();
           const stu = students.find(s => String(s.id) === String(c.studentId))
             || (emailLc ? students.find(s => String(s.email || "").toLowerCase() === emailLc) : null);
+          const isOpenSlot = !c.studentId && !c.freeTextName && !c.crewEmail;
           const name = stu?.name || c.freeTextName || c.crewEmail || "?";
+          let badge;
+          if (isOpenSlot) badge = { text: "תפקיד פנוי", color: "#3498db", bg: "rgba(52,152,219,0.15)", border: "rgba(52,152,219,0.45)" };
+          else if (c.status === "approved") badge = { text: "מאושר", color: "#2ecc71", bg: "rgba(46,204,113,0.15)", border: "rgba(46,204,113,0.4)" };
+          else if (c.status === "invited")  badge = { text: "ממתין", color: "#f5a623", bg: "rgba(245,166,35,0.15)", border: "rgba(245,166,35,0.4)" };
+          else                                badge = { text: "נדחה",  color: "#e74c3c", bg: "rgba(231,76,60,0.15)", border: "rgba(231,76,60,0.4)" };
           return (
             <div key={c.id} style={{fontSize:13,marginBottom:4,display:"flex",alignItems:"center",gap:6,color:"var(--text)"}}>
-              <strong>{ROLE_LABELS[role]}:</strong>
+              <strong>{label}:</strong>
               <span>{name}</span>
               <span style={{
-                fontSize:11,
-                padding:"1px 6px",
-                borderRadius:8,
-                border: `1px solid ${c.status === "approved" ? "rgba(46,204,113,0.4)" : c.status === "invited" ? "rgba(245,166,35,0.4)" : "rgba(231,76,60,0.4)"}`,
-                background: c.status === "approved" ? "rgba(46,204,113,0.15)" : c.status === "invited" ? "rgba(245,166,35,0.15)" : "rgba(231,76,60,0.15)",
-                color: c.status === "approved" ? "#2ecc71" : c.status === "invited" ? "#f5a623" : "#e74c3c",
-              }}>
-                {c.status === "approved" ? "מאושר" : c.status === "invited" ? "ממתין" : "נדחה"}
-              </span>
+                fontSize:11, padding:"1px 6px", borderRadius:8,
+                border:`1px solid ${badge.border}`, background:badge.bg, color:badge.color,
+              }}>{badge.text}</span>
             </div>
           );
-        });
-      })}
-      {/* Custom (free-text) crew roles — display after the 5 standard ones */}
-      {(p.crew || []).filter(c => c.role === "custom").map(c => {
-        const emailLc = String(c.crewEmail || "").toLowerCase();
-        const stu = students.find(s => String(s.id) === String(c.studentId))
-          || (emailLc ? students.find(s => String(s.email || "").toLowerCase() === emailLc) : null);
-        const name = stu?.name || c.freeTextName || c.crewEmail || "?";
+        };
         return (
-          <div key={c.id} style={{fontSize:13,marginBottom:4,display:"flex",alignItems:"center",gap:6,color:"var(--text)"}}>
-            <strong>{getRoleLabel(c)}:</strong>
-            <span>{name}</span>
-            <span style={{
-              fontSize:11, padding:"1px 6px", borderRadius:8,
-              border: `1px solid ${c.status === "approved" ? "rgba(46,204,113,0.4)" : c.status === "invited" ? "rgba(245,166,35,0.4)" : "rgba(231,76,60,0.4)"}`,
-              background: c.status === "approved" ? "rgba(46,204,113,0.15)" : c.status === "invited" ? "rgba(245,166,35,0.15)" : "rgba(231,76,60,0.15)",
-              color: c.status === "approved" ? "#2ecc71" : c.status === "invited" ? "#f5a623" : "#e74c3c",
-            }}>
-              {c.status === "approved" ? "מאושר" : c.status === "invited" ? "ממתין" : "נדחה"}
-            </span>
-          </div>
+          <>
+            {ROLE_ORDER.map(role => {
+              const inRole = (p.crew || []).filter(c => c.role === role);
+              if (inRole.length === 0) return (
+                <div key={role} style={{fontSize:13,marginBottom:4,color:"var(--text)"}}>
+                  <strong>{ROLE_LABELS[role]}:</strong> <span style={{color:"var(--text3)"}}>— פנוי —</span>
+                </div>
+              );
+              return inRole.map(c => renderCrewRow(c, ROLE_LABELS[role]));
+            })}
+            {(p.crew || []).filter(c => c.role === "custom").map(c => renderCrewRow(c, getRoleLabel(c)))}
+          </>
         );
-      })}
+      })()}
     </Modal>
   );
 }
@@ -430,12 +533,13 @@ function JoinRequestDialog({ p, currentStudent, existingRequest, onClose, onConf
   );
 }
 
-export function ProductionsPage({ productions = [], currentStudent, students = [], reservations = [], showToast, onOpenLoanForm, refresh }) {
+export function ProductionsPage({ productions = [], currentStudent, students = [], kits = [], reservations = [], showToast, onOpenLoanForm, onOpenMyReservations, refresh }) {
   const [tab, setTab]                     = useState("board"); // board | inbox
   const [calDate, setCalDate]             = useState(() => new Date());
   const [editorOpen, setEditorOpen]       = useState(null);    // { initial: ... } | null
   const [detail, setDetail]               = useState(null);
   const [joinTarget, setJoinTarget]       = useState(null);
+  const [studentFilter, setStudentFilter] = useState("");      // student.id to filter board by
 
   const myEmail = String(currentStudent?.email || "").toLowerCase();
   // Only cinema-track students can create productions. Sound students (and any
@@ -499,7 +603,30 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
 
   const [editRequestTarget, setEditRequestTarget] = useState(null); // { production, crew } | null
 
-  const published = useMemo(() => productions.filter(p => p.status === "published"), [productions]);
+  const allPublished = useMemo(() => productions.filter(p => p.status === "published"), [productions]);
+  const sortedStudentOptions = useMemo(() => {
+    return [...(students || [])]
+      .filter(s => s.name)
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), "he"));
+  }, [students]);
+  const filteredStudent = useMemo(() => {
+    const q = String(studentFilter || "").trim().toLowerCase();
+    if (!q) return null;
+    return sortedStudentOptions.find(s => String(s.name || "").toLowerCase() === q)
+        || sortedStudentOptions.find(s => String(s.name || "").toLowerCase().includes(q))
+        || null;
+  }, [studentFilter, sortedStudentOptions]);
+  function matchesStudentFilter(p) {
+    if (!filteredStudent) return true;
+    const sid = String(filteredStudent.id);
+    const sem = String(filteredStudent.email || "").toLowerCase();
+    if (sem && String(p.directorEmail || "").toLowerCase() === sem) return true;
+    return (p.crew || []).some(c =>
+      String(c.studentId || "") === sid ||
+      (sem && String(c.crewEmail || "").toLowerCase() === sem)
+    );
+  }
+  const published = useMemo(() => allPublished.filter(matchesStudentFilter), [allPublished, filteredStudent]);
 
   function openEditor(initial) {
     setEditorOpen({ initial: initial || null });
@@ -510,13 +637,15 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
     <div style={{padding:"0 20px"}}>
       <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center",justifyContent:"space-between"}}>
         <div style={{display:"flex",gap:6}}>
-          <button onClick={() => setTab("board")} className={tab === "board" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}>
-            <Film size={14}/> לוח הפקות {published.length ? `(${published.length})` : ""}
-          </button>
           {currentStudent?.id && (
-            <button onClick={() => setTab("inbox")} className={tab === "inbox" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}>
-              <Inbox size={14}/> בקשות הפקה {totalRequestsCount ? `(${totalRequestsCount})` : ""}
-            </button>
+            <>
+              <button onClick={() => setTab("board")} className={tab === "board" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}>
+                <Film size={14}/> לוח הפקות {published.length ? `(${published.length})` : ""}
+              </button>
+              <button onClick={() => setTab("inbox")} className={tab === "inbox" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}>
+                <Inbox size={14}/> בקשות הפקה {totalRequestsCount ? `(${totalRequestsCount})` : ""}
+              </button>
+            </>
           )}
         </div>
         {currentStudent?.id && canCreateProductions && (
@@ -528,20 +657,48 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
 
       {tab === "board" && (
         <div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+            <label style={{fontSize:13,color:"var(--text2)",fontWeight:700}}>סינון לפי סטודנט:</label>
+            <input
+              className="form-input"
+              type="text"
+              value={studentFilter}
+              onChange={e => setStudentFilter(e.target.value)}
+              placeholder="הקלד שם סטודנט..."
+              style={{maxWidth:240,fontSize:13}}
+              autoComplete="off"
+            />
+            {studentFilter && (
+              <button className="btn btn-secondary btn-sm" onClick={() => setStudentFilter("")}>
+                <XIcon size={12}/> נקה
+              </button>
+            )}
+            {studentFilter && (
+              filteredStudent ? (
+                <span style={{fontSize:12,color:"var(--text3)"}}>
+                  מציג {published.length} הפקות עם {filteredStudent.name}
+                </span>
+              ) : (
+                <span style={{fontSize:12,color:"#e74c3c"}}>לא נמצא סטודנט בשם זה</span>
+              )
+            )}
+          </div>
           {/* "My productions" section — director + crew memberships (deduped). */}
           {currentStudent?.id && (myDirectorProds.length > 0 || myCrewProds.length > 0) && (() => {
             const mineIds = new Set();
             const mineList = [];
             for (const p of myDirectorProds) { mineIds.add(p.id); mineList.push(p); }
             for (const p of myCrewProds) if (!mineIds.has(p.id)) { mineIds.add(p.id); mineList.push(p); }
+            const visibleMine = mineList.filter(matchesStudentFilter);
+            if (visibleMine.length === 0) return null;
             return (
               <div style={{marginBottom:24}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                   <Users size={16} color="var(--accent)"/>
-                  <h3 style={{margin:0,fontSize:15,color:"var(--accent)"}}>ההפקות שלי {mineList.length ? `(${mineList.length})` : ""}</h3>
+                  <h3 style={{margin:0,fontSize:15,color:"var(--accent)"}}>ההפקות שלי {visibleMine.length ? `(${visibleMine.length})` : ""}</h3>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
-                  {mineList.map(p => <ProductionCard key={p.id} p={p} onClick={() => setDetail(p)}/>)}
+                  {visibleMine.map(p => <ProductionCard key={p.id} p={p} reservations={reservations} onClick={() => setDetail(p)}/>)}
                 </div>
               </div>
             );
@@ -563,7 +720,7 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
                   {others.length === 0
                     ? <p style={{color:"var(--text3)",gridColumn:"1/-1"}}>אין כרגע הפקות מפורסמות של סטודנטים אחרים</p>
-                    : others.map(p => <ProductionCard key={p.id} p={p} onClick={() => setDetail(p)}/>)}
+                    : others.map(p => <ProductionCard key={p.id} p={p} reservations={reservations} onClick={() => setDetail(p)}/>)}
                 </div>
               </div>
             );
@@ -773,12 +930,14 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
           initial={editorOpen.initial}
           currentStudent={currentStudent}
           students={students}
+          kits={kits}
           reservations={reservations}
           showToast={showToast}
           onClose={closeEditor}
           onSaved={() => refresh?.()}
           onDeleted={() => refresh?.()}
           onOpenLoanForm={(blob) => { setEditorOpen(null); onOpenLoanForm?.(blob); }}
+          onOpenMyReservations={() => { setEditorOpen(null); onOpenMyReservations?.(); }}
         />
       )}
 
@@ -787,10 +946,13 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
           p={detail}
           currentStudent={currentStudent}
           students={students}
+          kits={kits}
+          reservations={reservations}
           onClose={() => setDetail(null)}
           onEdit={(p) => { setDetail(null); openEditor(p); }}
           onJoinRequest={(p) => setJoinTarget(p)}
           onOpenLoanForm={(p) => { setDetail(null); onOpenLoanForm?.(p); }}
+          onOpenMyReservations={() => { setDetail(null); onOpenMyReservations?.(); }}
         />
       )}
 

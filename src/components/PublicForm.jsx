@@ -761,7 +761,7 @@ function CertificationsStatusPanel({ open, onClose, title, certs }) {
 }
 
 // ─── STEP 3 EQUIPMENT SELECTOR ───────────────────────────────────────────────
-function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equipment, setItems, getItem, setQty, canBorrowEq=()=>true, crewIsCertifiedForEq=()=>true, studentRecord, certificationTypes=[], categoryLoanTypes={} }) {
+function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equipment, setItems, getItem, setQty, canBorrowEq=()=>true, crewIsCertifiedForEq=()=>true, studentRecord, certificationTypes=[], categoryLoanTypes={}, productions=[], productionId="" }) {
   const [activeKit, setActiveKit] = useState(null);
   const [kitDropOpen, setKitDropOpen] = useState(false);
   const kitDropRef = useRef(null);
@@ -792,6 +792,16 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
 
   const relevantKits = (kits||[]).filter(k => { const lt = k.loanTypes||[]; return lt.length === 0 || lt.includes(loanType); });
 
+  // ── Production-kit gate ──
+  // When loan_type="הפקה" AND the selected production has kit_id, force-activate
+  // that kit and lock the user inside it. All non-production loan types short-circuit.
+  const forcedKit = useMemo(() => {
+    if (loanType !== "הפקה" || !productionId) return null;
+    const p = (productions || []).find(x => String(x.id) === String(productionId));
+    if (!p?.kitId) return null;
+    return (kits || []).find(k => String(k.id) === String(p.kitId)) || null;
+  }, [productions, productionId, kits, loanType]);
+
   const selectKit = (kit) => {
     if (activeKit?.id === kit.id) {
       setActiveKit(null);
@@ -811,6 +821,15 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
     }
     setItems(newItems);
   };
+
+  // Auto-activate the production's kit when a director/crew opens the loan form
+  // for a production with kit_id set. Non-production loans never trigger this.
+  useEffect(() => {
+    if (forcedKit && (!activeKit || String(activeKit.id) !== String(forcedKit.id))) {
+      selectKit(forcedKit);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forcedKit?.id]);
 
   const toggleCat = (cat) => setSelectedCats(prev =>
     prev.includes(cat) ? prev.filter(c=>c!==cat) : [...prev, cat]
@@ -894,28 +913,39 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
         )}
       </div>
 
+      {/* ── Production-kit info banner (only when loan_type=הפקה + production has kit) ── */}
+      {forcedKit && (
+        <div style={{marginBottom:12,padding:"12px 16px",background:"rgba(52,152,219,0.12)",border:"1px solid rgba(52,152,219,0.45)",borderRadius:"var(--r)",color:"#3498db",fontSize:13,fontWeight:700,display:"flex",alignItems:"center",gap:8}}>
+          <Film size={16} strokeWidth={1.75} color="#3498db"/>
+          סוג ההפקה: <span style={{color:"var(--text)"}}>{forcedKit.name}</span> — ניתן לבחור רק ציוד מתוך הערכה הזו.
+        </div>
+      )}
+
       {/* ── Kit selector ── */}
       {relevantKits.length>0 && (
-        <div style={{marginBottom:20,padding:"14px 16px",background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
+        <div style={{marginBottom:20,padding:"14px 16px",background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)",opacity:forcedKit?0.7:1}}>
           <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",marginBottom:10,letterSpacing:0.5,display:"flex",alignItems:"center",gap:6}}>
             <Film size={14} strokeWidth={1.75} color="var(--accent)" /> ערכות מוכנות לסוג השאלה זה
           </div>
           {/* Dropdown trigger */}
           <div ref={kitDropRef} style={{position:"relative"}}>
             <button type="button"
-              onClick={()=>setKitDropOpen(o=>!o)}
-              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderRadius:"var(--r-sm)",border:`1.5px solid ${activeKit?"var(--accent)":"var(--border)"}`,background:"var(--surface3)",cursor:"pointer",color:"var(--text)",fontWeight:600,fontSize:13,gap:8,transition:"border-color 0.15s"}}>
+              disabled={!!forcedKit}
+              onClick={()=>{ if (!forcedKit) setKitDropOpen(o=>!o); }}
+              title={forcedKit ? "סוג הערכה נקבע ע\"י לוח ההפקות ולא ניתן לשינוי כאן" : undefined}
+              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderRadius:"var(--r-sm)",border:`1.5px solid ${activeKit?"var(--accent)":"var(--border)"}`,background:"var(--surface3)",cursor:forcedKit?"not-allowed":"pointer",color:"var(--text)",fontWeight:600,fontSize:13,gap:8,transition:"border-color 0.15s"}}>
               <span style={{display:"flex",alignItems:"center",gap:8}}>
                 <Film size={15} strokeWidth={1.75} color={activeKit?"var(--accent)":"var(--text3)"} />
                 {activeKit ? activeKit.name : <span style={{color:"var(--text3)"}}>ללא ערכה — הוסף ציוד ידנית</span>}
+                {forcedKit && <span style={{fontSize:11,color:"var(--text3)",marginInlineStart:6}}>🔒</span>}
               </span>
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{flexShrink:0,transition:"transform 0.15s",transform:kitDropOpen?"rotate(180deg)":"rotate(0deg)"}}>
                 <path d="M2 4l4 4 4-4" stroke="var(--text3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </button>
-            {kitDropOpen && (
+            {kitDropOpen && !forcedKit && (
               <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,left:0,zIndex:50,background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",boxShadow:"0 8px 24px rgba(0,0,0,0.35)",overflow:"hidden"}}>
-                {/* No kit option */}
+                {/* No kit option — hidden when production has a forced kit */}
                 <div
                   onClick={()=>{ setActiveKit(null); setItems([]); setKitDropOpen(false); }}
                   style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",cursor:"pointer",background:!activeKit?"var(--accent-glow)":"transparent",color:!activeKit?"var(--accent)":"var(--text2)",fontWeight:!activeKit?700:500,fontSize:13,borderBottom:"1px solid var(--border)",transition:"background 0.1s"}}>
@@ -938,7 +968,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
               </div>
             )}
           </div>
-          {activeKit&&(
+          {activeKit && !forcedKit && (
             <div style={{fontSize:11,color:"var(--text3)",marginTop:8}}>
               מציג ציוד ערכת <strong style={{color:"var(--accent)"}}>{activeKit.name}</strong> בלבד
             </div>
@@ -3106,8 +3136,13 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   // Sound tech: optional block — שם פרטי+שם משפחה כשניהם או אף אחד.
   const soundAnyFilled = !!(form.crew_sound_first_name || form.crew_sound_last_name);
   const soundOk = !soundAnyFilled || (form.crew_sound_first_name && form.crew_sound_last_name);
-  const ok1 = nameOk && form.email && form.phone && form.course && form.loan_type &&
-    (!isProductionLoan || !!form.production_id);
+  // For production loans we already know the director from `production_id` and the
+  // logged-in student, so phone+course are not required in step 1 (they can be
+  // pulled from the student record on submit). Keep them required for all other
+  // loan types so the legacy flows are unchanged.
+  const ok1 = isProductionLoan
+    ? (nameOk && form.email && form.loan_type && !!form.production_id)
+    : (nameOk && form.email && form.phone && form.course && form.loan_type);
 
   // Production loan now requires picking a production the student owns (director).
   // Listed: published productions where directorEmail matches the logged-in student
@@ -4113,7 +4148,12 @@ ${inventory}
               }}>
               ← תפריט ראשי
             </button>
-            <div style={{fontSize:18, fontWeight:900, color:"var(--accent)"}}>לוח הפקות</div>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+              <div style={{fontSize:18, fontWeight:900, color:"var(--accent)"}}>לוח הפקות</div>
+              {loggedInStudent?.name && (
+                <div style={{fontSize:12, color:"var(--text3)"}}>שלום, {loggedInStudent.name}</div>
+              )}
+            </div>
             <div style={{width:96}} />
           </div>
           <div style={{padding:"20px 0"}}>
@@ -4121,6 +4161,7 @@ ${inventory}
               productions={productions}
               currentStudent={loggedInStudent}
               students={studentsFromTable}
+              kits={kits}
               reservations={reservations}
               showToast={(msg, type="info") => showToast(type, msg)}
               refresh={refreshProductions}
@@ -4156,6 +4197,12 @@ ${inventory}
                 setPublicView("equipment");
                 setStep(2);
                 showToast("info", `הופנית להשאלת ציוד עבור: ${p?.title || ""}`);
+              }}
+              onOpenMyReservations={() => {
+                setStudentApp("forms");
+                setPublicView("my-bookings");
+                loadStudiosData();
+                loadReservationsData();
               }}
             />
           </div>
@@ -4382,27 +4429,55 @@ ${inventory}
                     </select>
                   </div>
                   {selectedProduction && (() => {
-                    const studentsList = certifications?.students || [];
-                    const photog = (selectedProduction.crew || []).find(c => c.role === "photographer" && c.status === "approved");
-                    const sound = (selectedProduction.crew || []).find(c => c.role === "sound" && c.status === "approved");
-                    const photogStu = studentsList.find(s => String(s.id) === String(photog?.studentId));
-                    const soundStu = studentsList.find(s => String(s.id) === String(sound?.studentId));
+                    const studentsList = studentsFromTable;
+                    const ROLE_LABEL = { photographer: "צלם ראשי", sound: "איש סאונד" };
+                    const approvedCrew = (selectedProduction.crew || []).filter(c => c.status === "approved");
+                    const roleOrder = (r) => r === "photographer" ? 0 : r === "sound" ? 1 : 2;
+                    approvedCrew.sort((a, b) => roleOrder(a.role) - roleOrder(b.role));
                     const fmtDate = (d) => { try { return new Date(d).toLocaleDateString("he-IL", { day:"2-digit", month:"2-digit", year:"numeric" }); } catch { return d; } };
                     return (
                       <div style={{marginTop:12,background:"var(--surface)",borderRadius:6,padding:12,fontSize:13,lineHeight:1.7}}>
                         <div style={{fontWeight:700,fontSize:14,marginBottom:6,color:"var(--accent)"}}>{selectedProduction.title}</div>
                         <div><strong>במאי:</strong> {selectedProduction.directorName || "—"}</div>
-                        <div><strong>צלם:</strong> {photogStu?.name || photog?.freeTextName || "—"}</div>
-                        <div><strong>סאונדמן:</strong> {soundStu?.name || sound?.freeTextName || "—"}</div>
+                        <div style={{marginTop:6}}><strong>צוות מאושר:</strong></div>
+                        {approvedCrew.length === 0 ? (
+                          <div style={{color:"var(--text3)",fontSize:12,marginInlineStart:8}}>— אין עדיין צוות מאושר —</div>
+                        ) : (
+                          <ul style={{margin:"4px 0",paddingInlineStart:20}}>
+                            {approvedCrew.map(c => {
+                              const stu = studentsList.find(s => String(s.id) === String(c.studentId));
+                              const name = stu?.name || c.freeTextName || c.crewEmail || "—";
+                              const label = c.role === "custom" ? (c.roleLabel || "תפקיד") : (ROLE_LABEL[c.role] || c.role);
+                              return <li key={c.id}><strong>{label}:</strong> {name}</li>;
+                            })}
+                          </ul>
+                        )}
                         <div style={{marginTop:6}}><strong>תאריכי צילום:</strong></div>
-                        <ul style={{margin:"4px 0",paddingInlineStart:20}}>
-                          {(selectedProduction.dates || []).map(d => (
-                            <li key={d.id}>
-                              {fmtDate(d.startDate)} {d.startTime} – {d.startDate === d.endDate ? "" : fmtDate(d.endDate) + " "}{d.endTime}
-                              {d.note ? <span style={{color:"var(--text3)"}}> ({d.note})</span> : null}
-                            </li>
-                          ))}
-                        </ul>
+                        {(() => {
+                          const lockedDateIds = new Set(
+                            (reservations || [])
+                              .filter(r => r.production_id === selectedProduction.id && r.status !== "בוטל" && r.production_date_id)
+                              .map(r => String(r.production_date_id))
+                          );
+                          return (
+                            <ul style={{margin:"4px 0",paddingInlineStart:20}}>
+                              {(selectedProduction.dates || []).map(d => {
+                                const locked = lockedDateIds.has(String(d.id));
+                                return (
+                                  <li key={d.id}>
+                                    {fmtDate(d.startDate)} {d.startTime} – {d.startDate === d.endDate ? "" : fmtDate(d.endDate) + " "}{d.endTime}
+                                    {d.note ? <span style={{color:"var(--text3)"}}> ({d.note})</span> : null}
+                                    {locked && (
+                                      <span style={{marginInlineStart:8,fontSize:11,color:"#2ecc71",fontWeight:700}}>
+                                        ✓ הוגשה רשימת ציוד
+                                      </span>
+                                    )}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          );
+                        })()}
                         {selectedProduction.description && (
                           <div style={{marginTop:8,padding:"8px 10px",background:"var(--surface2)",borderRadius:4,fontSize:12,color:"var(--text2)",whiteSpace:"pre-wrap"}}>
                             {selectedProduction.description}
@@ -4529,51 +4604,76 @@ ${inventory}
               ) : null
             ) : isProductionLoan && selectedProduction && (selectedProduction.dates || []).length > 0 ? (
               <>
-                <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:14}}>
-                  <div style={{fontSize:13,fontWeight:700,color:"var(--accent)",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
-                    <Calendar size={14} strokeWidth={1.75}/> תאריכי הצילום של ההפקה
-                  </div>
-                  <div style={{fontSize:12,color:"var(--text2)",marginBottom:12,lineHeight:1.5}}>
-                    בחר/י את התאריך שעבורו תוגש רשימת ציוד. התאריכים והשעות נקבעו מראש בלוח ההפקות ולא ניתנים לעריכה כאן.
-                  </div>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {selectedProduction.dates.map(d => {
-                      const isActive = form.borrow_date === d.startDate && form.return_date === d.endDate
-                        && form.borrow_time === d.startTime && form.return_time === d.endTime;
-                      const fmtCh = (s) => { try { return new Date(s + "T00:00:00").toLocaleDateString("he-IL", { day:"2-digit", month:"2-digit" }); } catch { return s; } };
-                      const dateLabel = d.startDate === d.endDate
-                        ? fmtCh(d.startDate)
-                        : `${fmtCh(d.startDate)} – ${fmtCh(d.endDate)}`;
-                      return (
-                        <button key={d.id} type="button" onClick={() => {
-                          setForm(prev => ({
-                            ...prev,
-                            borrow_date: d.startDate,
-                            return_date: d.endDate,
-                            borrow_time: d.startTime || "",
-                            return_time: d.endTime || "",
-                            production_date_id: d.id,
-                          }));
-                        }} style={{
-                          display:"flex",flexDirection:"column",alignItems:"center",gap:2,
-                          padding:"8px 16px", borderRadius:8,
-                          border:`2px solid ${isActive ? "var(--accent)" : "var(--border)"}`,
-                          background: isActive ? "var(--accent-glow)" : "transparent",
-                          color: isActive ? "var(--accent)" : "var(--text2)",
-                          fontWeight:700, cursor:"pointer", minWidth:130,
-                        }}>
-                          <span style={{fontSize:13}}>{isActive ? "✓ " : ""}{dateLabel}</span>
-                          <span style={{fontSize:11,opacity:0.85}}>{d.startTime}–{d.endTime}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {form.borrow_date && form.borrow_time && (
-                    <div style={{marginTop:14,padding:"10px 12px",background:"var(--surface)",border:"1px solid var(--accent)",borderRadius:6,fontSize:13,color:"var(--text)"}}>
-                      🔒 <strong>נבחר:</strong> השאלה ב-{(() => { try { return new Date(form.borrow_date + "T00:00:00").toLocaleDateString("he-IL"); } catch { return form.borrow_date; } })()} {form.borrow_time} · החזרה ב-{(() => { try { return new Date(form.return_date + "T00:00:00").toLocaleDateString("he-IL"); } catch { return form.return_date; } })()} {form.return_time}
+                {(() => {
+                  const lockedDateIds = new Set(
+                    (reservations || [])
+                      .filter(r => r.production_id === selectedProduction.id && r.status !== "בוטל" && r.production_date_id)
+                      .map(r => String(r.production_date_id))
+                  );
+                  const availableDates = (selectedProduction.dates || []).filter(d => !lockedDateIds.has(String(d.id)));
+                  if (availableDates.length === 0) {
+                    return (
+                      <div style={{background:"rgba(46,204,113,0.08)",border:"1px solid rgba(46,204,113,0.4)",borderRadius:"var(--r-sm)",padding:"16px 18px",marginBottom:14,color:"#2ecc71",fontWeight:700,textAlign:"center"}}>
+                        ✓ הוגשה רשימת ציוד לכל הטווחים בהפקה זו.<br/>
+                        <span style={{fontWeight:400,fontSize:12,color:"var(--text2)"}}>למחיקה/עדכון — עבור ל"ההזמנות שלי".</span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:14}}>
+                      <div style={{fontSize:13,fontWeight:700,color:"var(--accent)",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+                        <Calendar size={14} strokeWidth={1.75}/> תאריכי הצילום של ההפקה
+                      </div>
+                      <div style={{fontSize:12,color:"var(--text2)",marginBottom:12,lineHeight:1.5}}>
+                        בחר/י את התאריך שעבורו תוגש רשימת ציוד. התאריכים והשעות נקבעו מראש בלוח ההפקות ולא ניתנים לעריכה כאן.
+                      </div>
+                      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                        {[...availableDates]
+                          .sort((a, b) => String(a.startDate || "").localeCompare(String(b.startDate || "")))
+                          .map(d => {
+                          const isActive = form.borrow_date === d.startDate && form.return_date === d.endDate
+                            && form.borrow_time === d.startTime && form.return_time === d.endTime;
+                          const fmtCh = (s) => { try { return new Date(s + "T00:00:00").toLocaleDateString("he-IL", { day:"2-digit", month:"2-digit" }); } catch { return s; } };
+                          const trimT = (t) => String(t || "").slice(0,5); // "17:30:00" → "17:30"
+                          return (
+                            <button key={d.id} type="button" onClick={() => {
+                              setForm(prev => ({
+                                ...prev,
+                                borrow_date: d.startDate,
+                                return_date: d.endDate,
+                                borrow_time: d.startTime || "",
+                                return_time: d.endTime || "",
+                                production_date_id: d.id,
+                              }));
+                            }} style={{
+                              display:"flex",flexDirection:"column",alignItems:"stretch",gap:4,
+                              padding:"10px 14px", borderRadius:8,
+                              border:`2px solid ${isActive ? "var(--accent)" : "var(--border)"}`,
+                              background: isActive ? "var(--accent-glow)" : "transparent",
+                              color: isActive ? "var(--accent)" : "var(--text2)",
+                              fontWeight:700, cursor:"pointer", minWidth:170,
+                              textAlign:"start",
+                            }}>
+                              <div style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:12}}>
+                                <span style={{color:"var(--text)",fontWeight:800,letterSpacing:0.3}}>הוצאה:</span>
+                                <span>{fmtCh(d.startDate)} · {trimT(d.startTime)}</span>
+                              </div>
+                              <div style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:12}}>
+                                <span style={{color:"var(--text)",fontWeight:800,letterSpacing:0.3}}>החזרה:</span>
+                                <span>{fmtCh(d.endDate)} · {trimT(d.endTime)}</span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {form.borrow_date && form.borrow_time && (
+                        <div style={{marginTop:14,padding:"10px 12px",background:"var(--surface)",border:"1px solid var(--accent)",borderRadius:6,fontSize:13,color:"var(--text)"}}>
+                          <strong style={{color:"var(--accent)"}}>נבחר טווח להגשה:</strong> השאלה ב-{(() => { try { return new Date(form.borrow_date + "T00:00:00").toLocaleDateString("he-IL"); } catch { return form.borrow_date; } })()} {String(form.borrow_time || "").slice(0,5)} · החזרה ב-{(() => { try { return new Date(form.return_date + "T00:00:00").toLocaleDateString("he-IL"); } catch { return form.return_date; } })()} {String(form.return_time || "").slice(0,5)}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
               </>
             ) : (
               <>
@@ -4604,7 +4704,7 @@ ${inventory}
             {!isSoundLoan && returnBeforeBorrow && !isCinemaLoan && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 זמנים לא נכונים — תאריך החזרה חייב להיות אחרי תאריך ההשאלה.</div>}
             {!isSoundLoan && timeOrderError && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 זמנים לא נכונים — שעת החזרה חייבת להיות אחרי שעת האיסוף באותו יום.</div>}
             {!isSoundLoan && pastLoanTimeError && <div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>🚫 {pastLoanTimeError}</div>}
-            {ok2 && !isSoundLoan && <div className="highlight-box" style={{display:"flex",alignItems:"center",gap:6}}>{isCinemaLoan ? <>🎥 השאלת קולנוע יומית · {formatDate(form.borrow_date)} · {form.borrow_time}–{form.return_time}</> : <><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> השאלה ל-{loanDays} ימים · איסוף {form.borrow_time} · החזרה {form.return_time}</>}</div>}
+            {ok2 && !isSoundLoan && <div className="highlight-box" style={{display:"flex",alignItems:"center",gap:6}}>{isCinemaLoan ? <>🎥 השאלת קולנוע יומית · {formatDate(form.borrow_date)} · {String(form.borrow_time||"").slice(0,5)}–{String(form.return_time||"").slice(0,5)}</> : <><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> השאלה ל-{loanDays} ימים · איסוף {String(form.borrow_time||"").slice(0,5)} · החזרה {String(form.return_time||"").slice(0,5)}</>}</div>}
 
             {/* Mini calendar — approved reservations */}
             <PublicMiniCalendar reservations={reservations} lessons={lessons} initialLoanType="הכל" previewStart={form.borrow_date} previewEnd={form.return_date} previewName={form.student_name||"הבקשה שלך"} borrowDate={form.borrow_date} onActiveStateChange={setCalSnapshot}/>
@@ -4637,6 +4737,8 @@ ${inventory}
             studentRecord={studentRecord}
             certificationTypes={certifications.types||[]}
             categoryLoanTypes={categoryLoanTypes}
+            productions={productions}
+            productionId={form.production_id}
           />}
             {step===3 && <Step3Buttons
               items={items} equipment={equipment}
@@ -4870,7 +4972,7 @@ ${inventory}
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
                     <span style={{background:sBg(st),color:sColor(st),border:`1px solid ${sBorder(st)}`,borderRadius:100,padding:"2px 10px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{st}</span>
-                    {(st==="ממתין"||st==="מאושר")&&r.loan_type!=="שיעור"&&r.booking_kind!=="lesson"&&(()=>{
+                    {(st==="ממתין"||st==="אישור ראש מחלקה"||st==="מאושר")&&r.loan_type!=="שיעור"&&r.booking_kind!=="lesson"&&(()=>{
                       const inRemoveMode=removingItemsForResId===r.id;
                       return (<button
                         onClick={e=>{
@@ -4933,7 +5035,7 @@ ${inventory}
                           <div style={{fontWeight:700,fontSize:13}}>{eq?.name||item.name||"פריט"}</div>
                           <div style={{fontSize:13,color:"var(--text)",fontWeight:700,marginTop:2,display:"flex",alignItems:"center",gap:8}}>
                             <span>כמות: <span style={{color:"var(--accent)"}}>{item.quantity}</span></span>
-                            {removingItemsForResId===r.id&&(st==="ממתין"||st==="מאושר")&&r.loan_type!=="שיעור"&&r.booking_kind!=="lesson"&&(()=>{
+                            {removingItemsForResId===r.id&&(st==="ממתין"||st==="אישור ראש מחלקה"||st==="מאושר")&&r.loan_type!=="שיעור"&&r.booking_kind!=="lesson"&&(()=>{
                               const itemBusy=busyItemIds.has(Number(item.id));
                               return (<button
                                 disabled={itemBusy}

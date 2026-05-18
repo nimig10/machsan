@@ -6,6 +6,7 @@ import { syncAllLessons } from "../utils/lessonsApi.js";
 import { statusBadge } from "./ui.jsx";
 import { Backpack, BookOpen, Calendar, CheckCircle, Film, GraduationCap, Info, Mic, Minus, Package, Shield, X, XCircle } from "lucide-react";
 import { UserGuideVideosModal } from "./UserGuideVideosModal.jsx";
+import { ProductionsPage } from "./ProductionsPage.jsx";
 import { DeptHeadCalendarPage } from "./CalendarViews.jsx";
 
 function hasLinkedValue(value) {
@@ -87,6 +88,7 @@ export function LecturerPortal({
   reservations = [],
   studios = [],
   certifications = { types: [], students: [] },
+  productions = [],
   setLessons,
   setKits,
   setReservations,
@@ -1054,6 +1056,7 @@ export function LecturerPortal({
               {[
                 { id: "courses", label: <><BookOpen size={16} strokeWidth={1.75} color="var(--accent)" /> הקורסים שלי</> },
                 { id: "journal", label: <><GraduationCap size={16} strokeWidth={1.75} color="var(--accent)" /> יומן השאלות תלמידים</> },
+                { id: "productions", label: <><Film size={16} strokeWidth={1.75} color="var(--accent)" /> לוח הפקות</> },
               ].map(tab => {
                 const active = activeTab === tab.id;
                 return (
@@ -1320,6 +1323,22 @@ export function LecturerPortal({
               equipment={equipment}
               siteSettings={siteSettings}
               certifications={{ types: certifications?.types || [], students: studentsFromTable }}
+            />
+          </div>
+        )}
+
+        {/* ── Productions Board (dept-head only) ── */}
+        {myDeptHead && activeTab === "productions" && (
+          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 18, overflow: "hidden", padding: "18px 0" }}>
+            <ProductionsPage
+              productions={productions}
+              currentStudent={null}
+              students={studentsFromTable.length ? studentsFromTable : (certifications?.students || [])}
+              kits={kits}
+              reservations={reservations}
+              showToast={showToast}
+              onOpenLoanForm={() => showToast?.("info", "טופס ההשאלה זמין רק לסטודנטים")}
+              refresh={async () => {}}
             />
           </div>
         )}

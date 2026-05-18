@@ -72,6 +72,7 @@ function productionRowToBlob(r) {
     directorPhone:      r.director_phone ?? "",
     driveUrl:           r.drive_url ?? "",
     color:              r.color ?? null,
+    kitId:              r.kit_id ?? null,
     status:             r.status,
     publishedAt:        r.published_at,
     createdAt:          r.created_at,
@@ -103,6 +104,7 @@ function productionBlobToRow(p) {
     director_phone:      p.directorPhone ? String(p.directorPhone) : null,
     drive_url:           driveUrl || null,
     color:               p.color && /^#[0-9a-fA-F]{6}$/.test(p.color) ? p.color : null,
+    kit_id:              p.kitId ? String(p.kitId) : null,
     status:              p.status || "draft",
     published_at:        p.publishedAt ?? null,
   };
@@ -386,6 +388,35 @@ export async function withdrawJoinRequest(crewId) {
   }
 }
 
+function translateCrewError(rawMsg) {
+  const msg = String(rawMsg || "");
+  // Overlap conflict: parse the JSON array of conflicting productions and format in Hebrew.
+  if (msg.includes("already approved on another production with overlapping dates")) {
+    const jsonMatch = msg.match(/\[\{.*\}\]/);
+    if (jsonMatch) {
+      try {
+        const conflicts = JSON.parse(jsonMatch[0]);
+        const lines = conflicts.map(c => {
+          const title = c.other_title || "הפקה אחרת";
+          const s = (c.start_date || "").split("-").reverse().join("/");
+          const e = (c.end_date || "").split("-").reverse().join("/");
+          const range = s === e ? s : `${s}–${e}`;
+          return `"${title}" (${range})`;
+        });
+        return `כבר מאושר/ת כצוות בהפקה חופפת בתאריכים: ${lines.join(", ")}. אי-אפשר לאשר השתתפות בשתי הפקות חופפות.`;
+      } catch {/* fall through */}
+    }
+    return "כבר מאושר/ת בהפקה אחרת בתאריכים חופפים — אי-אפשר לאשר השתתפות בשתי הפקות חופפות.";
+  }
+  if (msg.includes("caller is neither the director nor the invited student")) {
+    return "רק הבמאי או הסטודנט המוזמן יכולים לאשר/לדחות הזמנה זו.";
+  }
+  if (msg.includes("crew row") && msg.includes("not found")) {
+    return "השורה לא נמצאה — ייתכן שכבר טופלה. רענן את הדף.";
+  }
+  return msg;
+}
+
 export async function approveCrewMember(crewId) {
   if (!crewId) return { ok: false, error: "missing crewId" };
   try {
@@ -396,7 +427,7 @@ export async function approveCrewMember(crewId) {
     if (error) throw error;
     return { ok: true, result: data };
   } catch (err) {
-    return { ok: false, error: err?.message || String(err) };
+    return { ok: false, error: translateCrewError(err?.message || String(err)) };
   }
 }
 
@@ -410,7 +441,7 @@ export async function rejectCrewMember(crewId) {
     if (error) throw error;
     return { ok: true, result: data };
   } catch (err) {
-    return { ok: false, error: err?.message || String(err) };
+    return { ok: false, error: translateCrewError(err?.message || String(err)) };
   }
 }
 
