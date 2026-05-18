@@ -1,5 +1,15 @@
 # מסמך מעבר חשבון — אפליקציית "מחסן קמרה"
 
+## 📦 שינויים אחרונים שעלו לפרוד
+
+- **2026-05-18** — לוח הפקות (PR #15) עלה לפרוד עם 25 מיגרציות.
+  - 4 טבלאות חדשות: `productions`/`production_dates`/`production_crew`/`production_slots` + `productions.kit_id` (FK ל-`kits`).
+  - StudentHub חדש (מסך נחיתה לסטודנט) + tab "לוח הפקות" ב-LecturerPortal לראשי מחלקה.
+  - Per-student overlap guard + director-overlap guard ב-`create_reservation_v2`/`production_dates` triggers.
+  - מדיניות 8 ימי הודעה (inclusive) להגשת רשימת ציוד להפקה (היה 9).
+  - Mobile fixes לעורך ההפקה (crew + dates rows).
+  - **`OVERDUE_BLOCK_BUFFER_MS = 48h`** — הזמנת `באיחור` חוסמת השאלה עתידית רק 48 שעות אחרי `return_date` המתוכנן (במקום לעולם). מוגדר ב-`src/utils.js` + `src/App.jsx`.
+
 ## 🎯 רעיון האפליקציה
 אפליקציית ניהול לבית ספר לקולנוע/סאונד בישראל ("קמרה"). מערכת בעברית עם RTL.
 מטרה: לנהל את מחסן הציוד, אולפני ההקלטה, מסלולי לימוד, תלמידים, מרצים, שיעורים, והקצאות הסמכה.
@@ -9,7 +19,7 @@
 
 ### Frontend
 - React + Vite (Hebrew, RTL).
-- `src/App.jsx` הוא ה-shell המרכזי (~7,330 שורות). מכיל orchestration גלובלי: state, routing, realtime channels, auth bootstrap. בנוסף עדיין מוטמעים בו 8 דפים שלא חולצו.
+- `src/App.jsx` הוא ה-shell המרכזי (~7,420 שורות). מכיל orchestration גלובלי: state, routing, realtime channels, auth bootstrap. בנוסף עדיין מוטמעים בו 8 דפים שלא חולצו.
 - 28 רכיבים ב-`src/components/`. הדפים שכבר חולצו (alphabetical):
   `ActivityLogsPage`, `ArchivePage` *(קובץ קיים אבל לא מיובא — הפעיל הוא inline ב-App.jsx)*, `CertificationsPage`, `DashboardPage`, `EditReservationModal`, `LecturerPortal`, `LecturersPage`, `LessonsPage`, `PublicDailyTablePage`, `PublicDisplayPage`, `PublicForm`, `ReservationsPage`, `SecretaryDashboardPage`, `StaffHub`, `StaffManagementPage`, `StaffSchedulePage`, `StudentsPage`, `StudioBookingPage`, `SystemSettingsPage`, `UserGuideVideosModal`, `UserGuideVideosPage`. רכיבים תומכים: `AIChatBot`, `CalendarGrid`, `CalendarViews`, `InstallPrompt`, `SmartEquipmentImportButton`, `SmartExcelImportButton`, `ui` (Toast/Modal/Loading/StatusBadge).
 - Hooks ב-`src/hooks/`: רק `useNotifications.js` כרגע.
@@ -120,6 +130,12 @@
 
 הסיבה: כל עוד הבקשה לא הגיעה לסטטוס `מאושר`, היא לא תופסת מלאי בפועל. רק אישור איש המחסן הופך אותה למחויבת. שני סטודנטים יכולים להחזיק `ממתין` חופפים על אותו פריט — איש המחסן יבחר את מי לאשר.
 
+### תת-כלל: חלון 48h ל-`באיחור` (2026-05-18)
+
+הזמנת `באיחור` חוסמת השאלות עתידיות **רק כאשר** ה-borrow_date של ההשאלה החדשה נופל בטווח של **48 שעות אחרי** ה-`return_date` המתוכנן של ההזמנה הבאיחור. השאלה שמתחילה מעבר ל-48h — לא חסומה (מניחים שהציוד יחזור).
+
+מימוש: קבוע `OVERDUE_BLOCK_BUFFER_MS = 48 * 60 * 60 * 1000` ב-[src/utils.js](src/utils.js) + [src/App.jsx](src/App.jsx). מוחל ב-4 מקומות: 2 copies של `availableUnitsAt` + 2 copies של `getReservationApprovalConflicts`. ה-overlap check בצד ה-server (`create_reservation_v2`) משתמש בתאריכי ההזמנה הממשיים — לא נחוץ buffer שם.
+
 **Anti-regression**: כל שינוי ב-`create_reservation_v2`, ב-`update_reservation_status_v1`, או ביצירת RPC חדש שעושה overlap-check — חובה לאמת ש-`r.status IN ('מאושר','באיחור','פעילה')` בלבד. ראה `supabase/migrations/20260516160000_create_reservation_v2_pending_not_blocking.sql` — תיקון של רגרסיה שכללה `ממתין` ברשימה החוסמת.
 
 ## 🎬 לוח הפקות (Productions Board)
@@ -214,6 +230,8 @@ await deleteKit(id);                            // single row delete
 2. **navigator.locks deadlock**: אסור להחזיר את `lock` ל-default ב-`supabaseClient.js`. ראה הסעיף Auth.
 3. **listener fire-and-forget**: אסור להחזיר `await` ל-`routeByRoles` בתוך ה-onAuthStateChange listener. ראה הסעיף Auth.
 4. **Identity-confirmation modal**: אסור להחזיר. ראה הסעיף Identity confirmation.
+5. **`FAR_FUTURE` block ל-`באיחור`**: היה bug שחסם **כל** השאלה עתידית כשהיתה הזמנה ב-`באיחור` (טופל ב-2026-05-18). עכשיו ה-block מוגבל ל-48h בלבד (`OVERDUE_BLOCK_BUFFER_MS`). אסור להחזיר ל-`FAR_FUTURE`.
+6. **`toDateTime()` מחזיר timestamp (number), לא Date**: בקוד ב-[src/utils.js](src/utils.js) הפונקציה קוראת `.getTime()` בפנים ומחזירה מספר. אל תקרא ל-`.getTime()` על התוצאה — תקבל TypeError ("getTime is not a function"). נגרם בעבר בסטטוס approval של בקשה.
 
 ## 🔥 נקודות חולשה / סיכון
 1. **שתי מערכות auth במקביל** (`public.users` + `staff_members`) — הזרימה הראשית כבר ב-`public.users`, אבל `requireStaff`/`requireAdmin` ב-[api/_auth-helper.js](api/_auth-helper.js) עדיין מחזיקים fallback ל-`staff_members`. **9 קבצים** עדיין מתייחסים ל-`staff_members` (5 ב-`api/`, 3 ב-`src/components/`, 1 ב-migration ראשונית).
