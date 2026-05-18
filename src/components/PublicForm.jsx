@@ -4134,27 +4134,29 @@ ${inventory}
         <div style={{minHeight:"100dvh",background:"var(--bg)",direction:"rtl"}}>
           <div style={{
             display:"flex", alignItems:"center", justifyContent:"space-between",
-            padding:"14px 20px", borderBottom:"1px solid var(--border)",
+            gap:8,
+            padding:"10px 12px", borderBottom:"1px solid var(--border)",
             background:"var(--surface)", position:"sticky", top:0, zIndex:5,
           }}>
             <button
               type="button"
               onClick={() => setStudentApp("hub")}
               style={{
-                padding:"8px 16px", border:"2px solid var(--accent)",
-                borderRadius:8, background:"var(--accent-glow)", color:"var(--accent)",
-                cursor:"pointer", fontSize:14, fontWeight:800,
-                display:"flex", alignItems:"center", gap:6,
+                padding:"5px 10px", border:"1px solid var(--text2)",
+                borderRadius:6, background:"transparent", color:"var(--text)",
+                cursor:"pointer", fontSize:12, fontWeight:600,
+                display:"flex", alignItems:"center", gap:4, flexShrink:0,
+                whiteSpace:"nowrap",
               }}>
               ← תפריט ראשי
             </button>
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-              <div style={{fontSize:18, fontWeight:900, color:"var(--accent)"}}>לוח הפקות</div>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,minWidth:0,flex:"1 1 auto"}}>
+              <div style={{fontSize:"clamp(15px,4vw,18px)", fontWeight:900, color:"var(--accent)"}}>לוח הפקות</div>
               {loggedInStudent?.name && (
-                <div style={{fontSize:13, color:"var(--text)", fontWeight:700}}>שלום, <span style={{color:"var(--accent)"}}>{loggedInStudent.name}</span></div>
+                <div style={{fontSize:"clamp(11px,3vw,13px)", color:"var(--text)", fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"100%"}}>שלום, <span style={{color:"var(--accent)"}}>{loggedInStudent.name}</span></div>
               )}
             </div>
-            <div style={{width:96}} />
+            <div style={{width:8,flexShrink:0}} />
           </div>
           <div style={{padding:"20px 0"}}>
             <ProductionsPage
@@ -4247,9 +4249,9 @@ ${inventory}
               style={{
                 marginBottom: 8,
                 padding: "6px 16px",
-                border: "2px solid var(--accent)", borderRadius: 16,
-                background: "var(--accent-glow)", color: "var(--accent)",
-                cursor: "pointer", fontSize: 13, fontWeight: 800,
+                border: "1px solid var(--text2)", borderRadius: 16,
+                background: "transparent", color: "var(--text)",
+                cursor: "pointer", fontSize: 13, fontWeight: 600,
                 display: "inline-flex", alignItems: "center", gap: 4,
               }}>← תפריט ראשי</button>
             <div style={{fontSize:"clamp(15px,4.5vw,22px)",fontWeight:900,color:"var(--accent)"}}>מערכת הפניות</div>
