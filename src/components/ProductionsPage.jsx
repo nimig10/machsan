@@ -364,7 +364,7 @@ function ProductionDetail({ p, currentStudent, students, kits = [], reservations
           else if (c.status === "invited")  badge = { text: "ממתין", color: "#f5a623", bg: "rgba(245,166,35,0.15)", border: "rgba(245,166,35,0.4)" };
           else                                badge = { text: "נדחה",  color: "#e74c3c", bg: "rgba(231,76,60,0.15)", border: "rgba(231,76,60,0.4)" };
           return (
-            <div key={c.id} style={{fontSize:13,marginBottom:4,display:"flex",alignItems:"center",gap:6,color:"var(--text)"}}>
+            <div key={c.id} style={{fontSize:13,marginBottom:4,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",color:"var(--text)"}}>
               <strong>{label}:</strong>
               <span>{name}</span>
               <span style={{

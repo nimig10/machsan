@@ -556,8 +556,8 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
           };
           const maxEndDate = d.startDate ? addDaysLocalISO(d.startDate, 6) : undefined;
           return (
-            <div key={d.id} style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr auto",gap:8,marginBottom:8,padding:8,border:"1px solid var(--border)",borderRadius:6,background:"var(--surface2)"}}>
-              <div>
+            <div key={d.id} style={{display:"flex",flexWrap:"wrap",alignItems:"end",gap:8,marginBottom:8,padding:8,border:"1px solid var(--border)",borderRadius:6,background:"var(--surface2)"}}>
+              <div style={{flex:"1 1 130px",minWidth:0}}>
                 <label className="form-label" style={{fontSize:11}}>התחלה (תאריך)</label>
                 <input type="date" className="form-input" min={minShoot} value={d.startDate} disabled={dateLocked} onChange={e => {
                   const v = e.target.value;
@@ -571,13 +571,13 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
                   updateDate(idx, { startDate: v, endDate: nextEnd });
                 }}/>
               </div>
-              <div>
+              <div style={{flex:"1 1 100px",minWidth:0}}>
                 <label className="form-label" style={{fontSize:11}}>התחלה (שעה)</label>
                 <select className="form-input" value={snapToProductionSlot(d.startTime)} disabled={dateLocked} onChange={e => updateDate(idx, { startTime: e.target.value })}>
                   {PRODUCTION_TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
-              <div>
+              <div style={{flex:"1 1 130px",minWidth:0}}>
                 <label className="form-label" style={{fontSize:11}}>סיום (תאריך)</label>
                 <input type="date" className="form-input" min={d.startDate || minShoot} max={maxEndDate} value={d.endDate} disabled={dateLocked} onChange={e => {
                   const v = e.target.value;
@@ -592,13 +592,13 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
                   updateDate(idx, { endDate: v });
                 }}/>
               </div>
-              <div>
+              <div style={{flex:"1 1 100px",minWidth:0}}>
                 <label className="form-label" style={{fontSize:11}}>סיום (שעה)</label>
                 <select className="form-input" value={snapToProductionSlot(d.endTime)} disabled={dateLocked} onChange={e => updateDate(idx, { endTime: e.target.value })}>
                   {PRODUCTION_TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
-              <div style={{display:"flex",alignItems:"end"}}>
+              <div style={{display:"flex",alignItems:"end",flex:"0 0 auto"}}>
                 <button className="btn btn-secondary btn-sm btn-icon" onClick={() => removeDate(idx)}
                   disabled={dateLocked}
                   style={dateLocked ? {opacity:0.4,cursor:"not-allowed"} : undefined}>
@@ -606,7 +606,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
                 </button>
               </div>
               {dateLocked && (
-                <div style={{gridColumn:"1/-1",fontSize:13,fontWeight:700,color:"#2ecc71",background:"rgba(46,204,113,0.12)",border:"1px solid #2ecc71",borderRadius:6,padding:"6px 10px",marginTop:4,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"space-between"}}>
+                <div style={{flex:"1 1 100%",fontSize:13,fontWeight:700,color:"#2ecc71",background:"rgba(46,204,113,0.12)",border:"1px solid #2ecc71",borderRadius:6,padding:"6px 10px",marginTop:4,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"space-between"}}>
                   <span>✓ 🔒 הבטחת את מקומך — הוגשה רשימת ציוד לטווח הזה</span>
                   {onOpenMyReservations && (
                     <button className="btn btn-secondary btn-sm" style={{padding:"2px 10px",fontSize:12}}
@@ -632,7 +632,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
                 }
                 return (
                   <div style={{
-                    gridColumn:"1/-1",
+                    flex:"1 1 100%",
                     fontSize:13, color, fontWeight:700,
                     padding:"6px 10px", borderRadius:6,
                     background:bg, border:`1px solid ${border}`,
@@ -702,9 +702,9 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
             ? sortedStudents.filter(eligibleFilter)
             : sortedStudents;
           return (
-            <div key={c.id} style={{display:"grid",gridTemplateColumns:"130px 1fr auto",gap:8,marginBottom:8,padding:8,border: isError ? "2px solid #e74c3c" : "1px solid var(--border)",borderRadius:6,alignItems:"center",background:"var(--surface2)"}}>
-              <div style={{fontWeight:700}}>{getRoleLabel(c)}</div>
-              <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <div key={c.id} style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8,padding:8,border: isError ? "2px solid #e74c3c" : "1px solid var(--border)",borderRadius:6,alignItems:"center",background:"var(--surface2)"}}>
+              <div style={{fontWeight:700,minWidth:90,flexShrink:0}}>{getRoleLabel(c)}</div>
+              <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",flex:"1 1 200px",minWidth:0}}>
                 <input
                   className="form-input"
                   type="text"
@@ -734,7 +734,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
                     }
                     if (isError) setErrorField(null);
                   }}
-                  style={{minWidth:240,flex:1}}
+                  style={{flex:"1 1 160px",minWidth:0}}
                 />
                 <datalist id={datalistId}>
                   {eligibleStudents.map(s => (

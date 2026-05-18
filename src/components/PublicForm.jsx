@@ -4141,9 +4141,9 @@ ${inventory}
               type="button"
               onClick={() => setStudentApp("hub")}
               style={{
-                padding:"8px 16px", border:"1px solid var(--border)",
-                borderRadius:8, background:"var(--surface2)", color:"var(--text2)",
-                cursor:"pointer", fontSize:14, fontWeight:600,
+                padding:"8px 16px", border:"2px solid var(--accent)",
+                borderRadius:8, background:"var(--accent-glow)", color:"var(--accent)",
+                cursor:"pointer", fontSize:14, fontWeight:800,
                 display:"flex", alignItems:"center", gap:6,
               }}>
               ← תפריט ראשי
@@ -4151,7 +4151,7 @@ ${inventory}
             <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
               <div style={{fontSize:18, fontWeight:900, color:"var(--accent)"}}>לוח הפקות</div>
               {loggedInStudent?.name && (
-                <div style={{fontSize:12, color:"var(--text3)"}}>שלום, {loggedInStudent.name}</div>
+                <div style={{fontSize:13, color:"var(--text)", fontWeight:700}}>שלום, <span style={{color:"var(--accent)"}}>{loggedInStudent.name}</span></div>
               )}
             </div>
             <div style={{width:96}} />
@@ -4246,14 +4246,14 @@ ${inventory}
               onClick={() => setStudentApp("hub")}
               style={{
                 marginBottom: 8,
-                padding: "4px 12px",
-                border: "1px solid var(--border)", borderRadius: 16,
-                background: "var(--surface2)", color: "var(--text2)",
-                cursor: "pointer", fontSize: 12, fontWeight: 600,
+                padding: "6px 16px",
+                border: "2px solid var(--accent)", borderRadius: 16,
+                background: "var(--accent-glow)", color: "var(--accent)",
+                cursor: "pointer", fontSize: 13, fontWeight: 800,
                 display: "inline-flex", alignItems: "center", gap: 4,
               }}>← תפריט ראשי</button>
             <div style={{fontSize:"clamp(15px,4.5vw,22px)",fontWeight:900,color:"var(--accent)"}}>מערכת הפניות</div>
-            <div style={{fontSize:14,color:"var(--text2)",marginTop:4}}>שלום, {loggedInStudent.name}</div>
+            <div style={{fontSize:14,color:"var(--text)",marginTop:4,fontWeight:700}}>שלום, <span style={{color:"var(--accent)"}}>{loggedInStudent.name}</span></div>
           </div>
           {/* ── View toggle: equipment vs studios ── */}
           <div style={{display:"flex",gap:3,marginTop:16,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4}}>
