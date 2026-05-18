@@ -658,6 +658,12 @@ export function normalizeReservationsForArchive(reservations, now = new Date()) 
 
 // Far-future timestamp used for overdue reservations — item is physically missing, blocks all future requests
 export const FAR_FUTURE = new Date("2099-12-31T23:59:00").getTime();
+// באיחור reservations still tie up inventory until the gear is physically
+// returned, but only for a buffer window after the scheduled return date.
+// A new loan whose borrow_date is more than this buffer past the overdue's
+// return_date is allowed (gear is expected back by then). 48h matches the
+// warehouse staff's tolerance for chasing overdue returns.
+export const OVERDUE_BLOCK_BUFFER_MS = 48 * 60 * 60 * 1000;
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 // Ensure each equipment item has a units array
@@ -694,8 +700,11 @@ export function getAvailable(eqId, borrowDate, returnDate, reservations, equipme
     // overlaps via getReservationApprovalConflicts at approval time.
     if (!["מאושר","פעילה","באיחור"].includes(effStatus)) continue;
     const resStart = toDateTime(res.borrow_date, res.borrow_time || "00:00");
-    // Overdue items are physically out of the warehouse — block every future request regardless of return_date
-    const resEnd = effStatus === "באיחור" ? FAR_FUTURE : toDateTime(res.return_date, res.return_time || "23:59");
+    // Overdue items block only within OVERDUE_BLOCK_BUFFER_MS of their scheduled
+    // return — a loan starting >48h after the overdue return_date can be approved.
+    const resEnd = effStatus === "באיחור"
+      ? toDateTime(res.return_date, res.return_time || "23:59").getTime() + OVERDUE_BLOCK_BUFFER_MS
+      : toDateTime(res.return_date, res.return_time || "23:59");
     // Overlap: new period starts before existing ends AND new period ends after existing starts
     if (bStart < resEnd && rEnd > resStart) {
       const item = res.items?.find(i => i.equipment_id == eqId);
@@ -724,8 +733,11 @@ export function getReservationApprovalConflicts(targetReservation, reservations,
       if (res.status !== "מאושר" && res.status !== "באיחור") continue;
 
       const resStart = toDateTime(res.borrow_date, res.borrow_time || "00:00");
-      // Overdue items are physically missing — treat as blocking every future date
-      const resEnd = res.status === "באיחור" ? FAR_FUTURE : toDateTime(res.return_date, res.return_time || "23:59");
+      // Overdue items block only within OVERDUE_BLOCK_BUFFER_MS of their scheduled
+      // return — a loan starting >48h after the overdue return_date can be approved.
+      const resEnd = res.status === "באיחור"
+        ? toDateTime(res.return_date, res.return_time || "23:59").getTime() + OVERDUE_BLOCK_BUFFER_MS
+        : toDateTime(res.return_date, res.return_time || "23:59");
       const overlaps = reqStart < resEnd && reqEnd > resStart;
       if (!overlaps) continue;
 
