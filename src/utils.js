@@ -547,9 +547,8 @@ export function normalizeEquipmentTagFlags(list = [], categoryTypes = {}) {
       normalized.soundOnly = SOUND_CATEGORIES.includes(normalized.category);
       normalized.photoOnly = PHOTO_CATEGORIES.includes(normalized.category);
     }
-    if (typeof normalized.privateLoanUnlimited !== "boolean") {
-      normalized.privateLoanUnlimited = false;
-    }
+    const privateLoanUnlimitedValue = normalized.privateLoanUnlimited ?? normalized.private_loan_unlimited;
+    normalized.privateLoanUnlimited = privateLoanUnlimitedValue === true || privateLoanUnlimitedValue === "true";
     return normalized;
   });
 }

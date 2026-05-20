@@ -421,9 +421,8 @@ function normalizeEquipmentTagFlags(list = [], categoryTypes = {}) {
       normalized.soundOnly = SOUND_CATEGORIES.includes(normalized.category);
       normalized.photoOnly = PHOTO_CATEGORIES.includes(normalized.category);
     }
-    if (typeof normalized.privateLoanUnlimited !== "boolean") {
-      normalized.privateLoanUnlimited = false;
-    }
+    const privateLoanUnlimitedValue = normalized.privateLoanUnlimited ?? normalized.private_loan_unlimited;
+    normalized.privateLoanUnlimited = privateLoanUnlimitedValue === true || privateLoanUnlimitedValue === "true";
     return normalized;
   });
 }
@@ -988,6 +987,8 @@ const css = `
   .recent-request-row:hover { border-color:var(--accent); background:var(--surface2); transform:translateY(-1px); }
   .btn-purple { background:rgba(155,89,182,0.16); color:#d7b9ff; border:1px solid rgba(155,89,182,0.45); }
   .btn-purple:hover { background:rgba(155,89,182,0.26); color:#f3e9ff; }
+  .btn-yellow { background:rgba(241,196,15,0.22); color:var(--yellow); border:1px solid rgba(241,196,15,0.55); box-shadow:0 0 0 2px rgba(241,196,15,0.12); }
+  .btn-yellow:hover { background:rgba(241,196,15,0.32); color:#ffe680; }
   .res-card-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:8px; }
   .res-card-mid { padding:12px 0; border-top:1px solid var(--border); border-bottom:1px solid var(--border); margin-bottom:12px; }
   .res-card-actions { display:flex; gap:6px; flex-wrap:wrap; }
@@ -1954,7 +1955,8 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                   ))}
                   <button
                     type="button"
-                    className={`btn btn-sm ${equipment.filter(e=>e.category===c).every(e=>e.privateLoanUnlimited) ? "btn-purple" : "btn-secondary"}`}
+                    className={`btn btn-sm ${equipment.filter(e=>e.category===c).every(e=>e.privateLoanUnlimited) ? "btn-yellow" : "btn-secondary"}`}
+                    aria-pressed={equipment.filter(e=>e.category===c).every(e=>e.privateLoanUnlimited)}
                     onClick={()=>toggleCategoryPrivateLoanUnlimited(c)}
                   >
                     לא מוגבל בהשאלה פרטית
