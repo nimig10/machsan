@@ -119,14 +119,14 @@ const results = [];
 results.push(
   await runSuite({
     rpc: "run_reservation_overlap_tests",
-    expectedCount: 11,
+    expectedCount: 13,
     columns: overlapCols,
   }),
 );
 results.push(
   await runSuite({
     rpc: "run_productions_regression_tests",
-    expectedCount: 5,
+    expectedCount: 6,
     columns: productionCols,
   }),
 );
