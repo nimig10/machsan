@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// DB smoke tests — runs the existing in-DB regression suites and exits non-zero on any failure.
+// DB smoke tests: runs the existing in-DB regression suites and exits non-zero on any failure.
 // Required env:
 //   SUPABASE_URL                       https://<project-ref>.supabase.co
 //   SUPABASE_SERVICE_ROLE_KEY          service-role key (NEVER prod)
@@ -53,13 +53,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 function truncate(s, n) {
   const str = String(s ?? "");
   if (str.length <= n) return str.padEnd(n, " ");
-  return str.slice(0, n - 1) + "…";
+  return str.slice(0, n - 1) + "...";
 }
 
 function printTable(rows, columns) {
   const header = columns.map((c) => truncate(c.label, c.width)).join("  ");
   console.log(`${BOLD}${header}${RESET}`);
-  console.log(DIM + columns.map((c) => "─".repeat(c.width)).join("  ") + RESET);
+  console.log(DIM + columns.map((c) => "-".repeat(c.width)).join("  ") + RESET);
   for (const row of rows) {
     const line = columns
       .map((c) => {
@@ -76,7 +76,7 @@ function printTable(rows, columns) {
 }
 
 async function runSuite({ rpc, expectedCount, columns }) {
-  console.log(`\n${BOLD}▶ ${rpc}${RESET}`);
+  console.log(`\n${BOLD}> ${rpc}${RESET}`);
   const { data, error } = await supabase.rpc(rpc);
   if (error) {
     console.error(`${RED}RPC error: ${error.message}${RESET}`);
@@ -97,7 +97,7 @@ async function runSuite({ rpc, expectedCount, columns }) {
     );
     failed += Math.max(0, expectedCount - rows.length);
   }
-  console.log(`${DIM}↳ ${passed} passed, ${failed} failed${RESET}`);
+  console.log(`${DIM}-> ${passed} passed, ${failed} failed${RESET}`);
   return { passed, failed, errored: false };
 }
 
@@ -138,8 +138,8 @@ const total = totalPassed + totalFailed;
 
 console.log("");
 if (totalFailed === 0 && !anyErrored) {
-  console.log(`${GREEN}${BOLD}✓ ${totalPassed}/${total} scenarios passed${RESET}`);
+  console.log(`${GREEN}${BOLD}OK ${totalPassed}/${total} scenarios passed${RESET}`);
   process.exit(0);
 }
-console.log(`${RED}${BOLD}✗ ${totalPassed}/${total} passed, ${totalFailed} failed${RESET}`);
+console.log(`${RED}${BOLD}FAIL ${totalPassed}/${total} passed, ${totalFailed} failed${RESET}`);
 process.exit(1);

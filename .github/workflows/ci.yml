@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
           cache: 'npm'
       - run: npm ci
       - run: npm run lint
@@ -38,15 +38,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
           cache: 'npm'
       - name: Check secret presence
         id: check
         shell: bash
         run: |
-          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::SUPABASE_DEV_SERVICE_ROLE_KEY not set — skipping DB smoke"
+            echo "::notice::SUPABASE_DEV_URL or SUPABASE_DEV_SERVICE_ROLE_KEY not set -- skipping DB smoke"
           fi
       - if: steps.check.outputs.skip != 'true'
         run: npm ci

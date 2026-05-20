@@ -52,32 +52,32 @@ export default defineConfig([
       'react-hooks/set-state-in-effect': 'warn',
       'react-hooks/preserve-manual-memoization': 'warn',
 
-      // ── BLOB-FREE GUARDRAIL ──────────────────────────────────────────────
+      // BLOB-FREE GUARDRAIL
       // The legacy public.store JSONB blob was decommissioned (migration
       // 20260430220000). Every domain entity must live in a dedicated table
       // with its own RLS + realtime. These rules block accidental regression.
-      // See CLAUDE.md → "Adding a new feature".
+      // See CLAUDE.md -> "Adding a new feature".
       'no-restricted-syntax': [
         'error',
         {
           selector: "CallExpression[callee.name='storageGet']",
-          message: 'storageGet is removed — use src/utils/<entity>Api.js (e.g. listKits, listLessons) instead.',
+          message: 'storageGet is removed -- use src/utils/<entity>Api.js (e.g. listKits, listLessons) instead.',
         },
         {
           selector: "CallExpression[callee.name='storageSet']",
-          message: 'storageSet is removed — use src/utils/<entity>Api.js (e.g. syncAllKits, upsertLesson) instead.',
+          message: 'storageSet is removed -- use src/utils/<entity>Api.js (e.g. syncAllKits, upsertLesson) instead.',
         },
         {
           selector: "CallExpression[callee.property.name='from'][arguments.0.value='store']",
-          message: "Direct reads from public.store are forbidden — that table no longer exists. Use the entity's API util.",
+          message: "Direct reads from public.store are forbidden -- that table no longer exists. Use the entity's API util.",
         },
         {
           selector: "CallExpression[callee.property.name='from'][arguments.0.value='store_snapshots']",
-          message: 'public.store_snapshots was dropped — read from the entity table directly.',
+          message: 'public.store_snapshots was dropped -- read from the entity table directly.',
         },
         {
           selector: "Literal[value=/\\/api\\/store(\\?|$)/]",
-          message: '/api/store endpoint was deleted — call the entity API util or supabase.from(<table>) directly.',
+          message: '/api/store endpoint was deleted -- call the entity API util or supabase.from(<table>) directly.',
         },
       ],
     },
