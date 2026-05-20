@@ -57,7 +57,7 @@ function toggleArr(arr, val) {
   return arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val];
 }
 
-// ─── Tab: אנשי צוות (staff_members in Supabase) ─────────────────────────────
+// ─── Tab: אנשי צוות (public.users in Supabase) ─────────────────────────────
 function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setReservations }) {
   const [staff, setStaff]       = useState([]);
   const [loading, setLoading]   = useState(true);

@@ -131,10 +131,9 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
   const isAdmin = staffUser?.role === "admin";
   const canEditLessons = isAdmin || !!staffUser?.permissions?.canEditDailyLessons;
   const currentStaffId = staffUser?.id;
-  // staff_members.id for the current user (may differ from users.id due to separate tables)
-  const [myStaffMemberId, setMyStaffMemberId] = useState(null);
-  // Resolved ID to use for schedule operations: staff_members.id preferred, fallback to users.id
-  const effectiveStaffId = myStaffMemberId || currentStaffId;
+  // public.users.id for the current staff user.
+  const [myStaffUserId, setMyStaffUserId] = useState(null);
+  const effectiveStaffId = myStaffUserId || currentStaffId;
 
   const [staffList, setStaffList] = useState([]);
   const [weekOffset, setWeekOffset] = useState(() => { try { return Number(sessionStorage.getItem("sch_weekOffset") || 0); } catch { return 0; } });
@@ -179,12 +178,12 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
         if (res.ok) {
           const list = await res.json();
           setStaffList(list.map(s => ({ id: s.id, name: s.full_name || s.email })));
-          // Resolve current user's staff_members.id by matching email or full_name
+          // Resolve current user's public.users.id by matching email or full_name.
           const myEntry = list.find(s =>
             (staffUser?.email && s.email === staffUser.email) ||
             (staffUser?.full_name && s.full_name === staffUser.full_name)
           );
-          if (myEntry) setMyStaffMemberId(myEntry.id);
+          if (myEntry) setMyStaffUserId(myEntry.id);
         }
       } catch {}
     })();
@@ -443,7 +442,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
   };
   const openNewEditor = (date, defaultShift = "morning") => {
     if (!isAdmin && !canStaffEditDate(date)) return;
-    // Use staff_members.id (effectiveStaffId) to keep consistent with all DB operations
+    // Use public.users.id (effectiveStaffId) to keep consistent with DB operations.
     const sid = String(effectiveStaffId);
     const pref = getPref(sid, date);
     const asgn = getAssign(sid, date);

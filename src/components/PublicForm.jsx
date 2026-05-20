@@ -2349,26 +2349,6 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error || !data?.user) {
-        // Fallback: staff member with valid bcrypt password but no Supabase auth yet
-        // provision=true creates the auth.users + public.users row automatically
-        try {
-          const staffRes = await fetch("/api/auth", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "staff-login", email, password, provision: true }),
-          });
-          if (staffRes.ok) {
-            // Auth account was provisioned — retry Supabase sign-in
-            const { data: data2, error: error2 } = await supabase.auth.signInWithPassword({ email, password });
-            if (!error2 && data2?.user) {
-              clearTimeout(safety);
-              routingRef.current = false; // force-unlock mutex (same fix as main success path)
-              try { await routeByRoles(data2.session); } catch {}
-              setLoginBusy(false);
-              return;
-            }
-          }
-        } catch {}
         clearTimeout(safety);
         setLoginError("אימייל או סיסמה שגויים. אם זו הכניסה הראשונה שלך, לחץ/י על \"שכחת סיסמה?\" ליצירת סיסמה.");
         setLoginBusy(false);
@@ -2533,24 +2513,12 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       const isStudent = freshStudents.some(s => s.email?.toLowerCase().trim() === authEmail)
         || studentsFromTable.some(s => s.email?.toLowerCase().trim() === authEmail);
       const isLecturer = (lecturers || []).some(l => l.isActive !== false && l.email?.toLowerCase().trim() === authEmail);
-      let isStaff = false;
-      if (!isStudent && !isLecturer) {
-        try {
-          const { data: staffRows } = await supabase
-            .from("staff_members")
-            .select("id")
-            .eq("email", authEmail)
-            .limit(1);
-          isStaff = Array.isArray(staffRows) && staffRows.length > 0;
-        } catch {}
-      }
-
       // Final fallback — ask the server (which uses the service-role key and
       // has direct access to the authoritative store data). This protects
       // against the race where certifications/lecturers haven't yet loaded
       // into props when a fast user signs in.
       let eligibleByServer = false;
-      if (!isStudent && !isLecturer && !isStaff) {
+      if (!isStudent && !isLecturer) {
         try {
           const r = await fetch("/api/auth", {
             method: "POST",
@@ -2561,7 +2529,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
         } catch {}
       }
 
-      if (!isStudent && !isLecturer && !isStaff && !eligibleByServer) {
+      if (!isStudent && !isLecturer && !eligibleByServer) {
         setLoginError("המשתמש לא נמצא במערכת. פנה/י למנהל.");
         await supabase.auth.signOut();
         return;
@@ -3646,7 +3614,7 @@ ${inventory}
           }),
         });
       }));
-      // Notify staff_members with matching notifyLoanTypes
+      // Notify staff/admin users with matching notifyLoanTypes
       fetch("/api/notify-staff", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
