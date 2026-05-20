@@ -1,4 +1,4 @@
-// _auth-helper.js — server-side JWT verification for API routes
+// _auth-helper.js - server-side JWT verification for API routes
 // Usage:
 //   const staff = await requireStaff(req, res);
 //   if (!staff) return;   // response already sent
@@ -32,11 +32,10 @@ async function verifyToken(token) {
 
 // Verify the request JWT and look up the caller's staff record.
 // Returns { staffId, role, email } on success.
-// On failure sends 401/403 and returns null — caller must `if (!staff) return`.
+// On failure sends 401/403 and returns null - caller must `if (!staff) return`.
 //
-// Resolution order:
-//   1) public.users (new unified auth) — is_admin / is_warehouse decide role
-//   2) staff_members (legacy) — fallback for rows not yet migrated
+// Staff is resolved only from public.users. The legacy staff auth fallback has
+// been retired; all active staff must have a public.users row.
 export async function requireStaff(req, res) {
   const authHeader = req.headers.authorization || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
@@ -54,7 +53,6 @@ export async function requireStaff(req, res) {
 
   const email = String(authUser.email || "").toLowerCase();
 
-  // 1) Try public.users by auth id (unified system)
   try {
     const r1 = await fetch(
       `${SB_URL}/rest/v1/users?id=eq.${encodeURIComponent(authUser.id)}&select=id,email,is_admin,is_warehouse&limit=1`,
@@ -64,30 +62,8 @@ export async function requireStaff(req, res) {
       const rows = await r1.json();
       const u = rows?.[0];
       if (u && (u.is_admin || u.is_warehouse)) {
-        let staffId = u.id;
-        try {
-          const sr = await fetch(
-            `${SB_URL}/rest/v1/staff_members?email=eq.${encodeURIComponent(email)}&select=id&limit=1`,
-            { headers: SERVICE_HEADERS }
-          );
-          const srows = sr.ok ? await sr.json() : [];
-          if (srows?.[0]?.id) staffId = srows[0].id;
-        } catch {}
-        return { staffId, role: u.is_admin ? "admin" : "staff", email: u.email || email };
+        return { staffId: u.id, role: u.is_admin ? "admin" : "staff", email: u.email || email };
       }
-    }
-  } catch {}
-
-  // 2) Fallback: legacy staff_members by email
-  try {
-    const r2 = await fetch(
-      `${SB_URL}/rest/v1/staff_members?email=eq.${encodeURIComponent(email)}&select=id,role,email&limit=1`,
-      { headers: SERVICE_HEADERS }
-    );
-    if (r2.ok) {
-      const rows = await r2.json();
-      const member = rows?.[0];
-      if (member) return { staffId: member.id, role: member.role, email: member.email };
     }
   } catch {}
 
@@ -97,7 +73,7 @@ export async function requireStaff(req, res) {
 
 // Verify the request JWT and return the auth user object (any role).
 // Use this for endpoints that should be reachable by any authenticated
-// user — staff, lecturer, or student — but not by anonymous callers.
+// user - staff, lecturer, or student - but not by anonymous callers.
 // On failure sends 401 and returns null.
 export async function requireUser(req, res) {
   const authHeader = req.headers.authorization || "";
@@ -112,7 +88,7 @@ export async function requireUser(req, res) {
 
 // Resolve the caller's role for data redaction purposes.
 // Returns one of: "staff" (admin/warehouse), "user" (student/lecturer), "anon".
-// Does not send any response — callers must still enforce access themselves.
+// Does not send any response - callers must still enforce access themselves.
 export async function resolveUserRole(req) {
   const authHeader = req.headers.authorization || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;

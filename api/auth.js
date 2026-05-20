@@ -1,16 +1,11 @@
 // auth.js — unified authentication handler
 //
 // Dispatches based on `action` in request body:
-//   action: "staff-login"            → password-based login for staff_members
-//   action: "ensure-user"            → eligibility check for lecturers/students
+//   action: "ensure-user"            → eligibility check for lecturers/students/staff
 //   action: "update-student-credentials" → student self-service: update own name/email/password
 //   action: "sync-student-auth"      → admin-triggered: sync auth.users with certifications.students
 //   action: "delete-student-auth"    → admin-triggered: remove auth.users row after student deletion
-//
-// Backwards-compatible: requests without an `action` field that include
-// `email` + `password` are treated as "staff-login".
 
-import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 
 const SB_URL         = process.env.SUPABASE_URL;
@@ -120,92 +115,9 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-// ── staff-login ───────────────────────────────────────────────────────────────
-
-async function handleStaffLogin(req, res) {
-  const { email, password, provision } = req.body || {};
-  if (!email || !password) {
-    return res.status(400).json({ error: "Missing email or password" });
-  }
-
-  const normEmail = normalizeEmail(email);
-  const rows = await sbQuery(
-    `staff_members?email=eq.${encodeURIComponent(normEmail)}&select=id,full_name,email,role,password_hash,permissions&limit=1`,
-  );
-
-  if (!rows || rows.length === 0) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  const user  = rows[0];
-  const match = await bcrypt.compare(password, user.password_hash);
-  if (!match) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  // provision=true: migrate staff member to Supabase auth so unified login works
-  if (provision) {
-    const isAdmin = user.role === "admin";
-    let authUserId = null;
-    const existing = await findAuthUserByEmail(normEmail);
-    if (existing) {
-      await fetch(`${SB_URL}/auth/v1/admin/users/${existing.id}`, {
-        method: "PUT",
-        headers: SERVICE_HEADERS,
-        body: JSON.stringify({ password, user_metadata: { full_name: user.full_name } }),
-      }).catch(() => {});
-      authUserId = existing.id;
-    } else {
-      const createRes = await fetch(`${SB_URL}/auth/v1/admin/users`, {
-        method: "POST",
-        headers: SERVICE_HEADERS,
-        body: JSON.stringify({ email: normEmail, password, email_confirm: true, user_metadata: { full_name: user.full_name } }),
-      });
-      if (createRes.ok) authUserId = (await createRes.json()).id;
-    }
-
-    if (authUserId) {
-      // Upsert public.users so routeByRoles can route them
-      const pubExisting = await fetch(`${SB_URL}/rest/v1/users?id=eq.${authUserId}&select=id`, { headers: SERVICE_HEADERS });
-      const pubRows = pubExisting.ok ? await pubExisting.json() : [];
-      if (!Array.isArray(pubRows) || pubRows.length === 0) {
-        await fetch(`${SB_URL}/rest/v1/users`, {
-          method: "POST",
-          headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
-          body: JSON.stringify({
-            id: authUserId, full_name: user.full_name, email: normEmail,
-            is_admin: isAdmin, is_warehouse: !isAdmin,
-            is_student: false, is_lecturer: false,
-            permissions: user.permissions || {},
-          }),
-        }).catch(() => {});
-      } else {
-        await fetch(`${SB_URL}/rest/v1/users?id=eq.${authUserId}`, {
-          method: "PATCH",
-          headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
-          body: JSON.stringify({ is_admin: isAdmin, is_warehouse: !isAdmin, updated_at: new Date().toISOString() }),
-        }).catch(() => {});
-      }
-    }
-  }
-
-  return res.status(200).json({
-    success: true,
-    provisioned: !!provision,
-    user: {
-      id:          user.id,
-      full_name:   user.full_name,
-      email:       user.email,
-      role:        user.role,
-      permissions: user.permissions || {},
-    },
-  });
-}
-
 // ── ensure-user ───────────────────────────────────────────────────────────────
-// Only lecturers (store key "lecturers") and certified students
-// (store key "certifications" → .students[]) are eligible.
-// teamMembers is intentionally excluded.
+// Only active lecturers, students, and staff/admin rows in public.users are
+// eligible. teamMembers is intentionally excluded.
 //
 // This handler is called before client-side signInWithPassword() or
 // resetPasswordForEmail() to verify that the email is registered in the
@@ -230,13 +142,20 @@ async function findEligibleRecord(normalizedEmail) {
     return { role: "student", id: String(studentRow.id), name: String(studentRow.name || "") };
   }
 
-  // Also check staff_members so forgot-password works for staff/admin
-  const staffRows = await sbQuery(
-    `staff_members?email=eq.${encodeURIComponent(normalizedEmail)}&select=id,full_name,role&limit=1`,
+  const userRows = await sbQuery(
+    `users?email=eq.${encodeURIComponent(normalizedEmail)}&select=id,full_name,is_admin,is_warehouse,is_lecturer,is_student&limit=1`,
   );
-  if (Array.isArray(staffRows) && staffRows.length > 0) {
-    const s = staffRows[0];
-    return { role: s.role === "admin" ? "admin" : "staff", id: String(s.id), name: String(s.full_name || "") };
+  if (Array.isArray(userRows) && userRows.length > 0) {
+    const u = userRows[0];
+    if (u.is_admin || u.is_warehouse) {
+      return { role: u.is_admin ? "admin" : "staff", id: String(u.id), name: String(u.full_name || "") };
+    }
+    if (u.is_lecturer) {
+      return { role: "lecturer", id: String(u.id), name: String(u.full_name || "") };
+    }
+    if (u.is_student) {
+      return { role: "student", id: String(u.id), name: String(u.full_name || "") };
+    }
   }
 
   return null;
@@ -801,10 +720,11 @@ async function handleDeleteStudentAuth(req, res) {
 // DMARC policies on organizational domains like atid.org.il).
 //
 // Flow:
-//  1. Verify the email is registered (lecturers / students / staff / public.users)
-//  2. Provision auth.users row if this is the user's first login
-//  3. Generate a recovery link via POST /auth/v1/admin/generate_link (no email sent)
-//  4. Send the link via Gmail/nodemailer
+//  1. Verify the email is registered (lecturers / students / staff in public.users)
+//  2. Rate-limit reset requests in public.auth_rate_limits
+//  3. Provision auth.users row if this is the user's first login
+//  4. Generate a recovery link via POST /auth/v1/admin/generate_link (no email sent)
+//  5. Send the link via Gmail/nodemailer
 
 function buildResetEmail(name, resetUrl) {
   return `<!DOCTYPE html>
@@ -843,6 +763,62 @@ function buildResetEmail(name, resetUrl) {
 </html>`;
 }
 
+const RESET_RATE_WINDOW_MS = 15 * 60 * 1000;
+const RESET_MAX_PER_EMAIL = 3;
+const RESET_MAX_PER_IP = 10;
+
+function requestIp(req) {
+  return req.headers["x-forwarded-for"]?.split(",")[0]?.trim()
+    || req.socket?.remoteAddress
+    || "unknown";
+}
+
+async function fetchRateRows(filter) {
+  const res = await fetch(
+    `${SB_URL}/rest/v1/auth_rate_limits?select=id&${filter}`,
+    { headers: SERVICE_HEADERS },
+  );
+  if (!res.ok) return null;
+  const rows = await res.json();
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function enforceResetRateLimit(normalizedEmail, req) {
+  const ip = requestIp(req);
+  const since = new Date(Date.now() - RESET_RATE_WINDOW_MS).toISOString();
+  const baseFilter = `action=eq.password_reset&created_at=gte.${encodeURIComponent(since)}`;
+  try {
+    const [emailRows, ipRows] = await Promise.all([
+      fetchRateRows(`${baseFilter}&email=eq.${encodeURIComponent(normalizedEmail)}`),
+      fetchRateRows(`${baseFilter}&ip_address=eq.${encodeURIComponent(ip)}`),
+    ]);
+
+    if (emailRows && emailRows.length >= RESET_MAX_PER_EMAIL) {
+      return { limited: true, reason: "email" };
+    }
+    if (ipRows && ipRows.length >= RESET_MAX_PER_IP) {
+      return { limited: true, reason: "ip" };
+    }
+
+    const logRes = await fetch(`${SB_URL}/rest/v1/auth_rate_limits`, {
+      method: "POST",
+      headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
+      body: JSON.stringify({
+        action: "password_reset",
+        email: normalizedEmail,
+        ip_address: ip,
+        user_agent: String(req.headers["user-agent"] || "").slice(0, 500),
+      }),
+    });
+    if (!logRes.ok) {
+      console.warn("auth_rate_limits insert failed:", logRes.status, await logRes.text());
+    }
+  } catch (err) {
+    console.warn("auth_rate_limits check failed:", err);
+  }
+  return { limited: false };
+}
+
 async function handleSendResetEmail(req, res) {
   const { email } = req.body || {};
   if (!email || typeof email !== "string") {
@@ -854,7 +830,7 @@ async function handleSendResetEmail(req, res) {
     return res.status(400).json({ error: "Invalid email format" });
   }
 
-  // 1. Check eligibility (lecturers + students + staff_members)
+  // 1. Check eligibility (lecturers + students + staff/admin in public.users)
   let record = await findEligibleRecord(normalizedEmail);
 
   // Final fallback: public.users (covers staff provisioned via admin API)
@@ -871,6 +847,11 @@ async function handleSendResetEmail(req, res) {
 
   if (!record) {
     return res.status(403).json({ error: "not_registered" });
+  }
+
+  const rateLimit = await enforceResetRateLimit(normalizedEmail, req);
+  if (rateLimit.limited) {
+    return res.status(429).json({ error: "rate_limited", reason: rateLimit.reason });
   }
 
   // 2. Provision auth.users row if this is the first login
@@ -979,13 +960,10 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { action, password } = req.body || {};
-
-  // Dispatch: explicit action or legacy staff-login (has password)
-  const resolvedAction = action || (password ? "staff-login" : null);
+  const { action } = req.body || {};
+  const resolvedAction = action || null;
 
   try {
-    if (resolvedAction === "staff-login")            return await handleStaffLogin(req, res);
     if (resolvedAction === "ensure-user")            return await handleEnsureUser(req, res);
     if (resolvedAction === "send-reset-email")       return await handleSendResetEmail(req, res);
     if (resolvedAction === "update-student-credentials") return await handleUpdateStudentCredentials(req, res);

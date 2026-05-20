@@ -1,4 +1,4 @@
-// notify-staff.js — send team_notify emails to staff_members with matching notifyLoanTypes
+// notify-staff.js - send team_notify emails to staff/admin users with matching notifyLoanTypes
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -24,12 +24,12 @@ export default async function handler(req, res) {
   const { loan_type, student_name, items_list, borrow_date, return_date, logo_url, sound_logo_url } = req.body || {};
   if (!loan_type) return res.status(400).json({ error: "Missing loan_type" });
 
-  // Fetch all staff members with their permissions
+  // Fetch all staff/admin users with their permissions.
   const sbRes = await fetch(
-    `${SB_URL}/rest/v1/staff_members?select=email,full_name,permissions`,
+    `${SB_URL}/rest/v1/users?select=email,full_name,permissions&or=(is_admin.eq.true,is_warehouse.eq.true)`,
     { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } }
   );
-  if (!sbRes.ok) return res.status(500).json({ error: "Failed to fetch staff members" });
+  if (!sbRes.ok) return res.status(500).json({ error: "Failed to fetch staff users" });
 
   const members = await sbRes.json();
 

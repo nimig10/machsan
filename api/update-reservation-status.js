@@ -26,7 +26,7 @@
 //     existing storageGet("reservations") path. This endpoint is the
 //     source of truth; the JSON blob is a cache.
 
-import { requireStaff, resolveUserRole } from "./_auth-helper.js";
+import { resolveUserRole } from "./_auth-helper.js";
 
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -77,10 +77,7 @@ export default async function handler(req, res) {
   } else if (role.role === "user" && role.email && (await isDeptHead(role.email))) {
     caller = { kind: "dept_head", email: role.email };
   } else {
-    // Fall back to legacy staff_members lookup for callers not yet in public.users
-    const staff = await requireStaff(req, res);
-    if (!staff) return;
-    caller = { kind: "staff", email: staff.email };
+    return res.status(403).json({ error: "Forbidden" });
   }
 
   const { id, status, returned_at } = req.body || {};
