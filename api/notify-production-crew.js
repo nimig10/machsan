@@ -80,9 +80,25 @@ async function fetchStudentsByIds(studentIds) {
   return new Map((Array.isArray(rows) ? rows : []).map(row => [String(row.id), row]));
 }
 
-function buildEmail({ studentName, directorName, appUrl }) {
+function roleName(row) {
+  const custom = String(row?.role_label || "").trim();
+  if (custom) return custom;
+  const role = String(row?.role || "");
+  const names = {
+    photographer: "צלם ראשי",
+    sound: "איש סאונד",
+    assistant_photographer: "עוזר צלם",
+    assistant_director: "עוזר במאי",
+    producer: "מפיק",
+    custom: "תפקיד מותאם",
+  };
+  return names[role] || "איש צוות";
+}
+
+function buildEmail({ studentName, directorName, roleLabel, appUrl }) {
   const safeStudent = escapeHtml(studentName || "סטודנט/ית");
   const safeDirector = escapeHtml(directorName || "הבמאי");
+  const safeRole = escapeHtml(roleLabel || "איש צוות");
   const safeUrl = escapeHtml(appUrl);
 
   return `<!DOCTYPE html>
@@ -101,7 +117,7 @@ function buildEmail({ studentName, directorName, appUrl }) {
       </div>
       <p style="font-size:15px;line-height:1.8;color:#e8eaf0;margin:0 0 14px">שלום רב <strong>${safeStudent}</strong>,</p>
       <p style="font-size:14px;line-height:1.9;color:#8891a8;margin:0 0 26px">
-        הבמאי <strong style="color:#e8eaf0">${safeDirector}</strong> הזמין אותך להשתתף בהפקה שלו.<br/>
+        הבמאי <strong style="color:#e8eaf0">${safeDirector}</strong> הזמין אותך להשתתף בהפקה שלו בתפקיד <strong style="color:#e8eaf0">${safeRole}</strong>.<br/>
         אנא כנס/י ללוח ההפקות על מנת לאשר את השתתפותך בהפקה.
       </p>
       <div style="text-align:center;margin:28px 0 10px">
@@ -175,6 +191,7 @@ export default async function handler(req, res) {
           html: buildEmail({
             studentName: student?.name || to.split("@")[0],
             directorName: production.director_name || user.email,
+            roleLabel: roleName(row),
             appUrl,
           }),
         });

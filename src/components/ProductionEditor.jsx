@@ -359,10 +359,10 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
     if (initial?.status === "published") {
       const blob = await persist("published");
       if (blob) {
-        await notifyCrewInvites(blob, { onlyNew: true });
         showToast?.("עודכן", "success");
         onSaved?.(blob);
         onClose();
+        void notifyCrewInvites(blob, { onlyNew: true });
       }
       return;
     }
@@ -377,10 +377,11 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
       showToast?.(`שגיאה בפרסום: ${detail || "ראה Console"}`, "error");
       return;
     }
-    await notifyCrewInvites({ ...blob, status: "published" }, { onlyNew: false });
+    const publishedBlob = { ...blob, status: "published", publishedAt: new Date().toISOString() };
     showToast?.("ההפקה פורסמה", "success");
-    onSaved?.({ ...blob, status: "published", publishedAt: new Date().toISOString() });
+    onSaved?.(publishedBlob);
     onClose();
+    void notifyCrewInvites(publishedBlob, { onlyNew: false });
   }
 
   // Director-side approve/reject for self-enrolled crew (invited_by='self', status='invited').
