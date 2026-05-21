@@ -311,7 +311,11 @@ export async function notifyProductionCrewInvites(productionId, crewIds) {
   if (!productionId || ids.length === 0) return { ok: true, sent: 0 };
 
   try {
-    const token = getLatestToken();
+    let token = getLatestToken();
+    if (!token) {
+      const { data } = await supabase.auth.getSession();
+      token = data?.session?.access_token || null;
+    }
     const headers = { "Content-Type": "application/json" };
     if (token) headers.Authorization = `Bearer ${token}`;
 

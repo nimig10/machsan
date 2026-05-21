@@ -229,7 +229,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
       .filter(c => {
         if (!c?.id || !c.studentId || !c.crewEmail) return false;
         if ((c.invitedBy || "director") !== "director") return false;
-        if ((c.status || "invited") !== "invited") return false;
+        if (!["invited", "approved"].includes(c.status || "invited")) return false;
         if (!onlyNew) return true;
         const prev = previousById.get(String(c.id));
         if (!prev) return true;

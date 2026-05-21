@@ -145,7 +145,7 @@ export default async function handler(req, res) {
       .filter(row =>
         row.student_id &&
         normalizeEmail(row.crew_email) &&
-        row.status === "invited" &&
+        ["invited", "approved"].includes(row.status || "invited") &&
         row.invited_by === "director"
       );
 
