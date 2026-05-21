@@ -4,7 +4,7 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import { Plus, Trash2, Save, Send, AlertTriangle, Check, X as XIcon, ExternalLink } from "lucide-react";
 import { Modal } from "./ui.jsx";
-import { upsertProduction, publishProduction, deleteProduction, approveCrewMember, rejectCrewMember } from "../utils/productionsApi.js";
+import { upsertProduction, notifyProductionCrewInvites, publishProduction, deleteProduction, approveCrewMember, rejectCrewMember } from "../utils/productionsApi.js";
 
 // Only photographer + sound are predefined: the equipment-loan certification
 // check (crewIsCertifiedForEq) validates exactly these two roles, so they
@@ -221,6 +221,44 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
     setCrew(prev => prev.filter(c => c.id !== id));
   }
 
+  function getDirectorInviteCrewIds(nextCrew, { onlyNew } = { onlyNew: true }) {
+    const previousById = new Map(
+      (Array.isArray(initial?.crew) ? initial.crew : []).map(c => [String(c.id), c])
+    );
+    return (Array.isArray(nextCrew) ? nextCrew : [])
+      .filter(c => {
+        if (!c?.id || !c.studentId || !c.crewEmail) return false;
+        if ((c.invitedBy || "director") !== "director") return false;
+        if ((c.status || "invited") !== "invited") return false;
+        if (!onlyNew) return true;
+        const prev = previousById.get(String(c.id));
+        if (!prev) return true;
+        if (!prev.studentId && !prev.crewEmail) return true;
+        const sameStudent = String(prev.studentId || "") === String(c.studentId || "")
+          && String(prev.crewEmail || "").toLowerCase() === String(c.crewEmail || "").toLowerCase();
+        const roleChanged = String(prev.role || "") !== String(c.role || "")
+          || String(prev.roleLabel || "") !== String(c.roleLabel || "");
+        return sameStudent && roleChanged;
+      })
+      .map(c => c.id);
+  }
+
+  async function notifyCrewInvites(blob, opts) {
+    const crewIds = getDirectorInviteCrewIds(blob?.crew, opts);
+    if (crewIds.length === 0) return { ok: true, sent: 0 };
+    const res = await notifyProductionCrewInvites(blob.id, crewIds);
+    if (!res.ok) {
+      console.warn("[ProductionEditor.notifyNewCrewInvites]", res);
+      const detail = String(res.error || "").slice(0, 120);
+      showToast?.(`ההפקה נשמרה, אבל שליחת מייל הזמנה לצוות נכשלה${detail ? `: ${detail}` : ""}`, "error");
+      return { ok: false, sent: 0 };
+    }
+    if (res.sent > 0) {
+      showToast?.("מיילים נשלחו לחברי צוות ההפקה הרלוונטיים שנבחרו", "success");
+    }
+    return { ok: true, sent: res.sent || 0 };
+  }
+
   function validate() {
     if (!title.trim()) return { field: "title", message: "חסר כותרת" };
     if (description.length > 800) return { field: "description", message: "תיאור ארוך מ-800 תווים" };
@@ -321,6 +359,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
     if (initial?.status === "published") {
       const blob = await persist("published");
       if (blob) {
+        await notifyCrewInvites(blob, { onlyNew: true });
         showToast?.("עודכן", "success");
         onSaved?.(blob);
         onClose();
@@ -338,6 +377,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
       showToast?.(`שגיאה בפרסום: ${detail || "ראה Console"}`, "error");
       return;
     }
+    await notifyCrewInvites({ ...blob, status: "published" }, { onlyNew: false });
     showToast?.("ההפקה פורסמה", "success");
     onSaved?.({ ...blob, status: "published", publishedAt: new Date().toISOString() });
     onClose();

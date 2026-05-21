@@ -2,7 +2,7 @@
 // Mirror of kitsApi/teamMembersApi style: singleton supabase client,
 // blob<-->row shape converters, batched syncAll, RPC-backed lifecycle.
 
-import { supabase } from "../supabaseClient.js";
+import { getLatestToken, supabase } from "../supabaseClient.js";
 
 // ─── shape converters ──────────────────────────────────────────────────────
 
@@ -301,6 +301,41 @@ export async function upsertProduction(blob) {
   } catch (err) {
     console.error(`[productionsApi.upsertProduction] step=${step} id=${blob?.id}`, err);
     return { ok: false, error: `[${step}] ${err?.message || String(err)}` };
+  }
+}
+
+export async function notifyProductionCrewInvites(productionId, crewIds) {
+  const ids = Array.isArray(crewIds)
+    ? [...new Set(crewIds.map(id => String(id || "").trim()).filter(Boolean))]
+    : [];
+  if (!productionId || ids.length === 0) return { ok: true, sent: 0 };
+
+  try {
+    const token = getLatestToken();
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const res = await fetch("/api/notify-production-crew", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        production_id: String(productionId),
+        crew_ids: ids,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok && res.status !== 207) {
+      const failure = Array.isArray(data?.failures) && data.failures[0] ? data.failures[0] : null;
+      return {
+        ok: false,
+        error: failure?.error || data?.error || `notify failed (${res.status})`,
+        details: data,
+      };
+    }
+    return { ok: true, sent: Number(data?.sent || 0), details: data };
+  } catch (err) {
+    console.warn("[productionsApi.notifyProductionCrewInvites]", err);
+    return { ok: false, error: err?.message || String(err) };
   }
 }
 

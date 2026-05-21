@@ -2,6 +2,15 @@
 
 ## 📦 שינויים אחרונים שעלו לפרוד
 
+- **2026-05-21** — עדכון מצב אחרי pull ל-`38a9f25` וסריקה מול הקוד + Supabase MCP, כולל הצלבה מול production ו-dev.
+  - `src/App.jsx` כרגע ~7,044 שורות. 8 דפים עדיין inline, אבל מספרי השורות זזו.
+  - `src/components/` מכיל 32 קבצי JSX, כולל `StudentHub`, `ProductionsPage`, `ProductionEditor`, `ErrorBoundary`.
+  - production (`wxkyqgwwraojnbmyyfco`) נבדק read-only דרך `supabase_codex`/`supabase-codex`: המצב התפעולי נראה תקין. RLS מופעל על 6 הטבלאות המרכזיות, אין auth orphans, ואין FK שמצביע ל-`staff_members`.
+  - dev (`mhvujejdlmtowypjdhjd`) משמש לבדיקות בלבד ואינו מיושר לגמרי ל-production: RLS כבוי על 6 טבלאות מרכזיות, ויש עדיין 3 FK constraints שמצביעים ל-`staff_members`.
+  - `staff_members` כבר לא משמש fallback פעיל בקוד `api/`/`src`; `api/_auth-helper.js` פותר staff רק דרך `public.users`. הטבלה עדיין קיימת ב-DB: ב-production יש 9 rows, ב-dev יש row אחד.
+  - `policy_assets` עדיין מאחסן PDFs כ-Base64 ב-DB. זה tech debt/ביצועים, לא חסם מיידי: production מכיל row אחד (~221KB Base64), dev מכיל 4 rows (~1.95MB Base64).
+  - auth orphans נבדקו ב-read-only ונמצאו נקיים בשתי הסביבות: production `auth.users`=104 ו-`public.users`=104; dev `auth.users`=6 ו-`public.users`=6.
+  - בדיקות: `npm run lint` עובר עם 229 warnings קיימות; `npm run build` עובר אחרי הרצה מחוץ ל-sandbox.
 - **2026-05-18** — לוח הפקות (PR #15) עלה לפרוד עם 25 מיגרציות.
   - 4 טבלאות חדשות: `productions`/`production_dates`/`production_crew`/`production_slots` + `productions.kit_id` (FK ל-`kits`).
   - StudentHub חדש (מסך נחיתה לסטודנט) + tab "לוח הפקות" ב-LecturerPortal לראשי מחלקה.
@@ -19,11 +28,11 @@
 
 ### Frontend
 - React + Vite (Hebrew, RTL).
-- `src/App.jsx` הוא ה-shell המרכזי (~7,420 שורות). מכיל orchestration גלובלי: state, routing, realtime channels, auth bootstrap. בנוסף עדיין מוטמעים בו 8 דפים שלא חולצו.
-- 28 רכיבים ב-`src/components/`. הדפים שכבר חולצו (alphabetical):
-  `ActivityLogsPage`, `ArchivePage` *(קובץ קיים אבל לא מיובא — הפעיל הוא inline ב-App.jsx)*, `CertificationsPage`, `DashboardPage`, `EditReservationModal`, `LecturerPortal`, `LecturersPage`, `LessonsPage`, `PublicDailyTablePage`, `PublicDisplayPage`, `PublicForm`, `ReservationsPage`, `SecretaryDashboardPage`, `StaffHub`, `StaffManagementPage`, `StaffSchedulePage`, `StudentsPage`, `StudioBookingPage`, `SystemSettingsPage`, `UserGuideVideosModal`, `UserGuideVideosPage`. רכיבים תומכים: `AIChatBot`, `CalendarGrid`, `CalendarViews`, `InstallPrompt`, `SmartEquipmentImportButton`, `SmartExcelImportButton`, `ui` (Toast/Modal/Loading/StatusBadge).
+- `src/App.jsx` הוא ה-shell המרכזי (~7,044 שורות נכון ל-2026-05-21). מכיל orchestration גלובלי: state, routing, realtime channels, auth bootstrap. בנוסף עדיין מוטמעים בו 8 דפים שלא חולצו.
+- 32 קבצי JSX ב-`src/components/`. הדפים/רכיבים שכבר חולצו (alphabetical):
+  `ActivityLogsPage`, `ArchivePage` *(קובץ קיים אבל לא מיובא — הפעיל הוא inline ב-App.jsx)*, `CertificationsPage`, `DashboardPage`, `EditReservationModal`, `ErrorBoundary`, `LecturerPortal`, `LecturersPage`, `LessonsPage`, `ProductionEditor`, `ProductionsPage`, `PublicDailyTablePage`, `PublicDisplayPage`, `PublicForm`, `ReservationsPage`, `SecretaryDashboardPage`, `StaffHub`, `StaffManagementPage`, `StaffSchedulePage`, `StudentHub`, `StudentsPage`, `StudioBookingPage`, `SystemSettingsPage`, `UserGuideVideosModal`, `UserGuideVideosPage`. רכיבים תומכים: `AIChatBot`, `CalendarGrid`, `CalendarViews`, `InstallPrompt`, `SmartEquipmentImportButton`, `SmartExcelImportButton`, `ui` (Toast/Modal/Loading/StatusBadge).
 - Hooks ב-`src/hooks/`: רק `useNotifications.js` כרגע.
-- API utils ב-`src/utils/`: 13 utils של ישויות + שני utils תומכים (`jewishHolidays.js`, `lessonBookings.js`).
+- API utils ב-`src/utils/`: 14 utils של ישויות + שני utils תומכים (`jewishHolidays.js`, `lessonBookings.js`).
 
 ### Backend
 - Vercel serverless functions ב-`api/` (Node.js, runtime 22).
@@ -81,7 +90,7 @@
 | סטודנטים + הסמכות | `students` + `certification_types` + `student_certifications` + `tracks` | `studentsApi.js` |
 | **לוח הפקות** | `productions` + `production_dates` + `production_crew` + `production_slots` | `productionsApi.js` |
 
-טבלאות תומכות (לא domain): `users` (חדש, מראת auth), `staff_members` (ישן, עוד בשימוש fallback), `activity_logs`, `equipment_reports`, `auth_entity_map`, `staff_schedule_assignments`, `staff_schedule_preferences`, `staff_daily_tasks`.
+טבלאות תומכות (לא domain): `users` (מראת auth ו-source הפעיל להרשאות צוות), `staff_members` (legacy; הטבלה עדיין קיימת אך fallback הקוד הוסר), `activity_logs`, `equipment_reports`, `auth_entity_map`, `staff_schedule_assignments`, `staff_schedule_preferences`, `staff_daily_tasks`, `auth_rate_limits`.
 
 `reservations_new` קיבל שתי עמודות FK אופציונליות: `production_id` (→ `productions.id`, ON DELETE SET NULL) ו-`production_date_id` (→ `production_dates.id`, ON DELETE SET NULL). הזמנות שאינן הפקה — שתי העמודות NULL.
 
@@ -95,7 +104,11 @@
 - Auth helpers: `is_admin`, `is_staff_member`, `is_known_lecturer_email`, `link_auth_to_entity`.
 - Triggers: `touch_updated_at`, `set_updated_at`, `update_users_updated_at`, `production_crew_after_change_trigger`, `production_dates_director_overlap_trg`, `productions_status_director_overlap_trg`, `production_crew_photographer_sound_must_be_student`.
 
-**ספירות חיות בפרוד (snapshot):** `auth.users`=100, `public.users`=100, `students`=168, `lecturers`=29, `staff_members`=9. רק ~100 מהדומיין-אנשים יצרו סיסמה ויש להם חשבון auth; השאר עוד לא עברו onboarding.
+**ספירות/מצב חיים לפי Supabase MCP (snapshot 2026-05-21, read-only):**
+- **production** (`wxkyqgwwraojnbmyyfco`, namespace `mcp__supabase_codex__`): `public.users`=104, `staff_members`=9, `productions`=3. RLS מופעל על `users`, `equipment`, `equipment_units`, `reservations_new`, `reservation_items`, `staff_daily_tasks`; אין auth orphans; אין FK ל-`staff_members`; `policy_assets` מכיל row אחד (~221KB Base64).
+- **dev** (`mhvujejdlmtowypjdhjd`, namespace `mcp__supabase__`): `public.users`=6, `students`=10, `lecturers`=15, `staff_members`=1, `productions`=6. `get_project_url` החזיר `https://mhvujejdlmtowypjdhjd.supabase.co`. dev הוא סביבת בדיקות בלבד ואינו מיושר לגמרי ל-production.
+
+**RLS advisory חי (2026-05-21):** האזהרה הקריטית קיימת ב-dev בלבד: RLS כבוי על `public.users`, `public.equipment`, `public.equipment_units`, `public.reservations_new`, `public.reservation_items`, `public.staff_daily_tasks`. ב-production RLS מופעל על הטבלאות האלה. לא להפעיל RLS אוטומטית ב-dev בלי policies תואמות, כי זה עלול לחסום קריאות/כתיבות קיימות.
 
 ## ✅ Pattern לפיצ'ר חדש (חובה)
 כל ישות חדשה חייבת להיווצר לפי הפטרן הזה. אסור — חזרתית, עם guard ב-ESLint — ליצור JSONB blob חדש או להשתמש ב-`storageGet/storageSet`/`api/store`.
@@ -186,7 +199,7 @@
 הייתה בעבר מודאל "אישור זהות" שהוצג בכל login כדי להגן מפני autofill. הוסר לחלוטין בקומיט `bd3742c` — `public.users.email` כבר FK-bound ל-auth session, ו-RLS בודקת זהות בכל קריאה. אסור להחזיר את ה-modal הזה — הוא יצר חוסר אמון אצל המשתמשים בלי להוסיף הגנה מעבר למה ש-Supabase Auth + RLS כבר אוכפים.
 
 ### API auth helper: `api/_auth-helper.js`
-- `requireStaff(req, res)` — צריך staff (public.users OR staff_members fallback)
+- `requireStaff(req, res)` — צריך staff לפי `public.users` בלבד (`is_admin` או `is_warehouse`). fallback legacy ל-`staff_members` הוסר.
 - `requireAdmin(req, res)` — צריך admin
 - `requireUser(req, res)` — כל משתמש מאומת
 - `resolveUserRole(req)` — מחזיר `{role: "staff"|"user"|"anon"}` רק מ-public.users (בלי fallback)
@@ -195,18 +208,18 @@
 Gmail SMTP + nodemailer ב-`api/auth.js`. `buildResetEmail` בונה את גוף ה-HTML של קישור איפוס.
 
 ## 🧩 דפים שעוד inline ב-App.jsx
-8 דפים עוד לא חולצו. שורות מאומתות:
+8 דפים עוד לא חולצו. שורות מאומתות מחדש ב-2026-05-21:
 
 | דף | מיקום ב-App.jsx | ~שורות |
 |------|----------------|---------|
-| `EquipmentPage` | 1400–3006 | ~1,600 |
-| `PoliciesPage` | 3006–3210 | ~200 |
-| `ArchivePage` | 3210–3408 | ~200 (קיים `src/components/ArchivePage.jsx` נטוש — 213 שורות, לא מיובא) |
-| `TeamPage` | 3408–4094 | ~690 |
-| `KitsPage` | 4094–4467 | ~370 |
-| `ManagerCalendarPage` | 4467–4947 | ~480 |
-| `SettingsPage` | 4947–5178 | ~230 |
-| `DamagedEquipmentPage` | 5178+ | ~200 |
+| `EquipmentPage` | 1431–3038 | ~1,600 |
+| `PoliciesPage` | 3038–3242 | ~200 |
+| `ArchivePage` | 3242–3440 | ~200 (קיים `src/components/ArchivePage.jsx` נטוש, לא מיובא) |
+| `TeamPage` | 3440–4126 | ~690 |
+| `KitsPage` | 4126–4499 | ~370 |
+| `ManagerCalendarPage` | 4499–4979 | ~480 |
+| `SettingsPage` | 4979–5210 | ~230 |
+| `DamagedEquipmentPage` | 5210+ | ~200 |
 
 ## 🔄 כתיבה ל-DB — Pattern החדש
 כל ישות נכתבת דרך API util ייעודי שלה. דוגמא:
@@ -234,16 +247,19 @@ await deleteKit(id);                            // single row delete
 6. **`toDateTime()` מחזיר timestamp (number), לא Date**: בקוד ב-[src/utils.js](src/utils.js) הפונקציה קוראת `.getTime()` בפנים ומחזירה מספר. אל תקרא ל-`.getTime()` על התוצאה — תקבל TypeError ("getTime is not a function"). נגרם בעבר בסטטוס approval של בקשה.
 
 ## 🔥 נקודות חולשה / סיכון
-1. **שתי מערכות auth במקביל** (`public.users` + `staff_members`) — הזרימה הראשית כבר ב-`public.users`, אבל `requireStaff`/`requireAdmin` ב-[api/_auth-helper.js](api/_auth-helper.js) עדיין מחזיקים fallback ל-`staff_members`. **9 קבצים** עדיין מתייחסים ל-`staff_members` (5 ב-`api/`, 3 ב-`src/components/`, 1 ב-migration ראשונית).
-2. **App.jsx ~7.3k שורות** — 8 דפים inline (ראה טבלה). tech debt, לא חסם.
-3. **`policy_assets` מאחסן PDF כ-Base64 ב-TEXT** — כל קריאת מדיניות מושכת את כל ה-blob. ארכיטקטונית לא נקי, לא חסם.
-4. **20 חשבונות auth "orphan"** — לא תואמים students/lecturers/staff. רובם seed/test (`@ggmail.com` typos, `nimig10+sN` test users, `demoacademy.co.il`). לא מסכנים — `routeByRoles` דוחה אותם — אבל מומלץ ניקיון בעתיד.
+1. **production נראה תקין תפעולית כרגע** — RLS מופעל על הטבלאות המרכזיות, auth/public users מיושרים, ואין auth orphans לפי בדיקת read-only מ-2026-05-21.
+2. **dev לא מיושר לגמרי ל-production** — RLS כבוי על `users`, `equipment`, `equipment_units`, `reservations_new`, `reservation_items`, `staff_daily_tasks`, ויש עדיין FK constraints ל-`staff_members`. כרגע זה לא קריטי כי dev משמש לבדיקות בלבד, אבל זה עלול להטעות בבדיקות לפני העלאה.
+3. **`staff_members` עדיין קיימת כטבלת legacy** — הקוד הפעיל כבר לא משתמש בה כ-fallback. ב-production אין אליה FK אבל יש 9 rows; ב-dev יש row אחד ועדיין יש FKs. מומלץ למחוק רק אחרי וידוא שאין תלות חיצונית/היסטורית.
+4. **App.jsx ~7.0k שורות** — 8 דפים inline (ראה טבלה). tech debt, לא חסם.
+5. **`policy_assets` מאחסן PDF כ-Base64 ב-TEXT** — כל קריאת מדיניות מושכת את כל ה-blob. ארכיטקטונית לא נקי, לא חסם מיידי.
+6. **חשבונות auth "orphan"** — נבדק ב-2026-05-21 ונמצא נקי בשתי הסביבות.
 
 ## 🎯 צעדים הבאים מומלצים
-1. **לסגור את `staff_members` סופית** — להסיר את ה-fallback מ-`api/_auth-helper.js` (`requireStaff`/`requireAdmin`), לעבור על 9 הקבצים שמתייחסים לטבלה, ולמחוק את הטבלה במיגרציה. דרושה ודאות שכל המשתמשים הקיימים היגרו ל-`public.users` (כרגע 100/100 ✓).
-2. **לסיים את פיצול App.jsx** — להוציא את 8 הדפים הנותרים. אחרי החילוץ — למחוק את `src/components/ArchivePage.jsx` הנטוש או להחליף בו את ה-inline. שאיפה: App.jsx < 2k שורות (shell/state/routing בלבד).
-3. **`policy_assets` ל-Supabase Storage** — להחליף את `data_base64` (TEXT) ב-bucket עם signed URL; טעינת מדיניות תוכל למשוך URL בלבד במקום blob.
-4. **ניקיון auth orphans** — למחוק ~14 חשבונות seed ישנים ב-`auth.users` שאין להם entity תואם, אם רוצים schema נקי.
+1. **לשמור על production יציב** — לפני כל שינוי DB בפרוד לוודא במפורש namespace/project (`wxkyqgwwraojnbmyyfco`) ולעבוד רק עם מיגרציה מכוונת. כרגע אין תיקון קריטי דחוף בפרוד.
+2. **ליישר dev כשיהיה זמן** — RLS ו-FKs של `staff_members` ב-dev לא דחופים כרגע, אבל כדאי ליישר אותם לפני בדיקות משמעותיות של אבטחה/הרשאות.
+3. **לסגור את `staff_members` סופית** — fallback כבר הוסר מהקוד; ב-production אין FK לטבלה, אבל יש rows. למחוק רק אחרי וידוא שאין תלות חיצונית/היסטורית.
+4. **לסיים את פיצול App.jsx** — להוציא את 8 הדפים הנותרים. אחרי החילוץ — למחוק את `src/components/ArchivePage.jsx` הנטוש או להחליף בו את ה-inline. שאיפה: App.jsx < 2k שורות (shell/state/routing בלבד).
+5. **`policy_assets` ל-Supabase Storage** — להחליף את `data_base64` (TEXT) ב-bucket עם signed URL; טעינת מדיניות תוכל למשוך URL בלבד במקום blob. לא חסם מיידי.
 
 ## 🛠️ כלים זמינים
 - **Supabase MCP** — `execute_sql`, `apply_migration`, `list_migrations`, `list_projects`.
