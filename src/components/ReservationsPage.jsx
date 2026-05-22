@@ -311,6 +311,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
 
   const filtered = [...reservations]
     .filter(r => {
+      if (["בוטל", "מבוטל"].includes(getEffectiveStatus(r))) return false;
       if (isRejectedPage) {
         if (r.status !== "נדחה" && r.status !== "באיחור") return false;
         if (effectiveStatusFilter !== "הכל" && r.status !== effectiveStatusFilter) return false;

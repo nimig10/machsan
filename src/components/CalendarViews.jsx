@@ -42,7 +42,7 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
   const LOAN_ICONS     = { "פרטית":<User size={16} strokeWidth={1.75}/>,"הפקה":<Film size={16} strokeWidth={1.75} />,"סאונד":<Mic size={16} strokeWidth={1.75} />,"קולנוע יומית":<Camera size={16} strokeWidth={1.75}/>,"צוות":<Briefcase size={16} strokeWidth={1.75}/>,"הכל":<Package size={16} strokeWidth={1.75} /> };
 
   const activeRes = reservations.filter(r =>
-    r.status !== "הוחזר" && r.borrow_date && r.return_date &&
+    !["הוחזר", "בוטל", "מבוטל"].includes(r.status) && r.borrow_date && r.return_date &&
     (statusF.length===0 || statusF.includes(r.status)) &&
     (loanTypeF==="הכל" || r.loan_type===loanTypeF)
   );
@@ -270,7 +270,7 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
   }
 
   const activeRes = localRes.filter(r =>
-    r.status !== "הוחזר" && r.borrow_date && r.return_date &&
+    !["הוחזר", "בוטל", "מבוטל"].includes(r.status) && r.borrow_date && r.return_date &&
     !(r.loan_type === "שיעור" && r.status !== "מאושר") &&
     (statusF.length===0 || statusF.includes(r.status)) &&
     (loanTypeF==="הכל" || r.loan_type===loanTypeF)
