@@ -239,23 +239,26 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
       {mStep===2&&<>
         <div className="form-section-title">בחירת ציוד</div>
         <div style={{background:"var(--surface2)",border:"1px solid rgba(148,163,184,0.28)",borderRadius:"var(--r-sm)",padding:"12px 14px",marginBottom:12,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.035)"}}>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
-            <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סינון:</span>
-            <button type="button" onClick={()=>setMShowSelectedOnly(p=>!p)}
-              style={{padding:"6px 13px",borderRadius:20,border:`2px solid ${mShowSelectedOnly?"var(--green)":mSelectedCount>0?"var(--accent)":"rgba(148,163,184,0.34)"}`,background:mShowSelectedOnly?"rgba(46,204,113,0.14)":mSelectedCount>0?"rgba(245,166,35,0.16)":"rgba(18,24,34,0.9)",color:mShowSelectedOnly?"var(--green)":mSelectedCount>0?"var(--accent)":"#dbe7ff",fontWeight:900,fontSize:11,cursor:"pointer",whiteSpace:"nowrap",boxShadow:mSelectedCount>0&&!mShowSelectedOnly?"0 0 0 2px rgba(245,166,35,0.12)":"inset 0 1px 0 rgba(255,255,255,0.04)"}}>
-              {mShowSelectedOnly?<><CheckCircle size={14} strokeWidth={1.75} /> נבחרו</>:"⬜"} {mShowSelectedOnly?"הצג הכל":`הצג נבחרים בלבד${mSelectedCount>0?` (${mSelectedCount})`:""}`}
-            </button>
-            <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
-            {[{k:"all",l:<><Package size={12} strokeWidth={1.75} /> הכל</>},{k:"sound",l:<><Mic size={12} strokeWidth={1.75} /> סאונד</>},{k:"photo",l:<><Camera size={12} strokeWidth={1.75} /> צילום</>}].map(({k,l})=>{
-              const active = meqTypeF === k;
-              return <button key={k} type="button" onClick={()=>{setMeqTypeF(k);setMeqCatF([]);}} style={{padding:"6px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"rgba(148,163,184,0.34)"}`,background:active?"var(--accent)":"rgba(18,24,34,0.9)",color:active?"#0b0f14":"#dbe7ff",fontWeight:900,fontSize:11,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4,boxShadow:active?"0 0 0 2px rgba(245,166,35,0.16)":"inset 0 1px 0 rgba(255,255,255,0.04)"}}>{l}</button>;
-            })}
-            <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
-            {(categories||[]).filter(cat=>mAvailEq.some(e=>e.category===cat&&meqMatch(e))).map(cat=>{
-              const active = meqCatF.includes(cat);
-              return <button key={cat} type="button" onClick={()=>setMeqCatF(p=>p.includes(cat)?p.filter(c=>c!==cat):[...p,cat])} style={{padding:"5px 10px",borderRadius:20,border:`1.5px solid ${active?"var(--accent)":"rgba(148,163,184,0.32)"}`,background:active?"rgba(245,166,35,0.16)":"rgba(18,24,34,0.88)",color:active?"var(--accent)":"#dbe7ff",fontWeight:800,fontSize:11,cursor:"pointer",whiteSpace:"nowrap",boxShadow:active?"0 0 0 2px rgba(245,166,35,0.1)":"none"}}>{cat}</button>;
-            })}
-            {meqCatF.length>0&&<button type="button" onClick={()=>setMeqCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}><X size={12} strokeWidth={1.75} color="var(--text3)" /> נקה</button>}
+          <div style={{display:"flex",flexDirection:"column",gap:9,marginBottom:10}}>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+              <span style={{fontSize:11,fontWeight:900,color:"var(--text3)",marginLeft:2}}>סוג ציוד:</span>
+              <button type="button" onClick={()=>setMShowSelectedOnly(p=>!p)}
+                style={{padding:"6px 13px",borderRadius:20,border:`2px solid ${mShowSelectedOnly?"var(--green)":mSelectedCount>0?"var(--accent)":"rgba(148,163,184,0.34)"}`,background:mShowSelectedOnly?"rgba(46,204,113,0.14)":mSelectedCount>0?"rgba(245,166,35,0.16)":"rgba(18,24,34,0.9)",color:mShowSelectedOnly?"var(--green)":mSelectedCount>0?"var(--accent)":"#dbe7ff",fontWeight:900,fontSize:11,cursor:"pointer",whiteSpace:"nowrap",boxShadow:mSelectedCount>0&&!mShowSelectedOnly?"0 0 0 2px rgba(245,166,35,0.12)":"inset 0 1px 0 rgba(255,255,255,0.04)"}}>
+                {mShowSelectedOnly?<><CheckCircle size={14} strokeWidth={1.75} /> נבחרו</>:"⬜"} {mShowSelectedOnly?"הצג הכל":`הצג נבחרים בלבד${mSelectedCount>0?` (${mSelectedCount})`:""}`}
+              </button>
+              {[{k:"all",l:<><Package size={12} strokeWidth={1.75} /> הכל</>},{k:"sound",l:<><Mic size={12} strokeWidth={1.75} /> סאונד</>},{k:"photo",l:<><Camera size={12} strokeWidth={1.75} /> צילום</>}].map(({k,l})=>{
+                const active = meqTypeF === k;
+                return <button key={k} type="button" onClick={()=>{setMeqTypeF(k);setMeqCatF([]);}} style={{padding:"6px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"rgba(148,163,184,0.34)"}`,background:active?"var(--accent)":"rgba(18,24,34,0.9)",color:active?"#0b0f14":"#dbe7ff",fontWeight:900,fontSize:11,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4,boxShadow:active?"0 0 0 2px rgba(245,166,35,0.16)":"inset 0 1px 0 rgba(255,255,255,0.04)"}}>{l}</button>;
+              })}
+            </div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",paddingTop:8,borderTop:"1px solid rgba(148,163,184,0.18)"}}>
+              <span style={{fontSize:11,fontWeight:900,color:"var(--text3)",marginLeft:2}}>קטגוריות:</span>
+              {(categories||[]).filter(cat=>mAvailEq.some(e=>e.category===cat&&meqMatch(e))).map(cat=>{
+                const active = meqCatF.includes(cat);
+                return <button key={cat} type="button" onClick={()=>setMeqCatF(p=>p.includes(cat)?p.filter(c=>c!==cat):[...p,cat])} style={{padding:"5px 10px",borderRadius:20,border:`1.5px solid ${active?"var(--accent)":"rgba(148,163,184,0.32)"}`,background:active?"rgba(245,166,35,0.16)":"rgba(18,24,34,0.88)",color:active?"var(--accent)":"#dbe7ff",fontWeight:800,fontSize:11,cursor:"pointer",whiteSpace:"nowrap",boxShadow:active?"0 0 0 2px rgba(245,166,35,0.1)":"none"}}>{cat}</button>;
+              })}
+              {meqCatF.length>0&&<button type="button" onClick={()=>setMeqCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}><X size={12} strokeWidth={1.75} color="var(--text3)" /> נקה</button>}
+            </div>
           </div>
           <div className="search-bar" style={{minWidth:150}}><span>🔍</span><input placeholder="חיפוש ציוד..." value={meqSearch} onChange={e=>setMeqSearch(e.target.value)}/></div>
         </div>
