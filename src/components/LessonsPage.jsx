@@ -35,6 +35,7 @@ function normalizeScheduleEntry(entry = {}) {
     endTime: entry?.endTime || "12:00",
     topic: String(entry?.topic || "").trim(),
     studioId: entry?.studioId || null,
+    secondaryStudioId: entry?.secondaryStudioId || null,
     kitId: entry?.kitId || null,
   };
 }
@@ -50,6 +51,15 @@ function dedupeScheduleEntries(entries = []) {
       return true;
     })
     .map(e => e._key ? e : normalizeScheduleEntry(e));
+}
+
+function getLessonSessionStudioIds(session = {}, lesson = {}) {
+  const ids = [];
+  const primaryId = session.studioId || lesson.studioId || null;
+  const secondaryId = session.secondaryStudioId || null;
+  if (primaryId) ids.push(String(primaryId));
+  if (secondaryId && !ids.includes(String(secondaryId))) ids.push(String(secondaryId));
+  return ids;
 }
 
 function normalizeHebrewDay(dayOfWeek = "") {
@@ -344,20 +354,21 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     const found = [];
     const seenIds = new Set();
     for (const session of (lesson.schedule || [])) {
-      const stId = String(session.studioId || lesson.studioId || "");
-      if (!stId) continue;
-      for (const b of studioBookings) {
-        if (seenIds.has(String(b.id))) continue;
-        const kind = b.bookingKind || (b.lesson_id ? "lesson" : b.teamMemberId ? "team" : "student");
-        if (kind !== "student") continue;
-        if (String(b.studioId) !== stId) continue;
-        if (b.date !== session.date) continue;
-        const bS = b.startTime || "00:00", bE = b.endTime || "23:59";
-        const sS = session.startTime || "00:00", sE = session.endTime || "23:59";
-        if (bS < sE && bE > sS) {
-          const studio = studios.find(s => String(s.id) === stId);
-          found.push({ booking: b, session, studioName: studio?.name || "החדר" });
-          seenIds.add(String(b.id));
+      for (const stId of getLessonSessionStudioIds(session, lesson)) {
+        if (!stId) continue;
+        for (const b of studioBookings) {
+          if (seenIds.has(String(b.id))) continue;
+          const kind = b.bookingKind || (b.lesson_id ? "lesson" : b.teamMemberId ? "team" : "student");
+          if (kind !== "student" && kind !== "team") continue;
+          if (String(b.studioId) !== stId) continue;
+          if (b.date !== session.date) continue;
+          const bS = b.startTime || "00:00", bE = b.endTime || "23:59";
+          const sS = session.startTime || "00:00", sE = session.endTime || "23:59";
+          if (bS < sE && bE > sS) {
+            const studio = studios.find(s => String(s.id) === stId);
+            found.push({ booking: b, session, studioName: studio?.name || "החדר" });
+            seenIds.add(String(b.id));
+          }
         }
       }
     }
@@ -449,20 +460,19 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
   const findLessonConflict = (lesson) => {
     for (const session of (lesson.schedule || [])) {
-      const stId = String(session.studioId || lesson.studioId || "");
-      if (!stId) continue;
       const sS = session.startTime || "00:00", sE = session.endTime || "23:59";
-      for (const other of lessons) {
-        if (other.id === lesson.id) continue; // skip self when editing
-        const otherStId = String(other.studioId || "");
-        for (const os of (other.schedule || [])) {
-          const osStId = String(os.studioId || otherStId || "");
-          if (osStId !== stId) continue;
-          if (os.date !== session.date) continue;
-          const oS = os.startTime || "00:00", oE = os.endTime || "23:59";
-          if (oS < sE && oE > sS) {
-            const studio = studios.find(s => String(s.id) === stId);
-            return { lessonName: other.name, studioName: studio?.name || "החדר", startTime: oS, endTime: oE, date: os.date };
+      for (const stId of getLessonSessionStudioIds(session, lesson)) {
+        if (!stId) continue;
+        for (const other of lessons) {
+          if (other.id === lesson.id) continue; // skip self when editing
+          for (const os of (other.schedule || [])) {
+            if (!getLessonSessionStudioIds(os, other).includes(stId)) continue;
+            if (os.date !== session.date) continue;
+            const oS = os.startTime || "00:00", oE = os.endTime || "23:59";
+            if (oS < sE && oE > sS) {
+              const studio = studios.find(s => String(s.id) === stId);
+              return { lessonName: other.name, studioName: studio?.name || "החדר", startTime: oS, endTime: oE, date: os.date };
+            }
           }
         }
       }
@@ -1156,13 +1166,14 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:4000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}>
           <div style={{width:"100%",maxWidth:520,background:"var(--surface)",borderRadius:16,border:"1px solid rgba(231,76,60,0.5)",direction:"rtl",maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
             <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"rgba(231,76,60,0.08)",borderRadius:"16px 16px 0 0"}}>
-              <div style={{fontWeight:900,fontSize:17,color:"var(--red)"}}>⚠️ התנגשות עם קביעות סטודנטים</div>
-              <div style={{fontSize:13,color:"var(--text2)",marginTop:4}}>{conflicts.length} קביעות סטודנטים חופפות עם שיעורי הקורס החדש</div>
+              <div style={{fontWeight:900,fontSize:17,color:"var(--red)"}}>⚠️ התנגשות עם קביעות חדרים</div>
+              <div style={{fontSize:13,color:"var(--text2)",marginTop:4}}>{conflicts.length} קביעות חדרים חופפות עם שיעורי הקורס</div>
             </div>
             <div style={{overflowY:"auto",flex:1,padding:"16px 20px",display:"flex",flexDirection:"column",gap:10}}>
               {conflicts.map(({ booking, studioName }, i) => (
                 <div key={i} style={{background:"var(--surface2)",borderRadius:10,padding:"12px 14px",border:"1px solid rgba(231,76,60,0.2)"}}>
-                  <div style={{fontWeight:800,fontSize:14,marginBottom:6}}>{booking.studentName}</div>
+                  <div style={{fontWeight:800,fontSize:14,marginBottom:6}}>{booking.studentName || booking.teamMemberName || "קביעת חדר"}</div>
+                  <div style={{fontSize:11,color:"var(--text3)",marginBottom:4}}>{(booking.bookingKind || (booking.teamMemberId ? "team" : "student")) === "team" ? "קביעת צוות" : "קביעת סטודנט"}</div>
                   <div style={{fontSize:12,color:"var(--text2)"}}><Mic size={16} strokeWidth={1.75} /> {studioName}</div>
                   <div style={{fontSize:12,color:"var(--text2)"}}><Calendar size={16} strokeWidth={1.75} /> {booking.date}</div>
                   <div style={{fontSize:12,color:"var(--text2)",display:"flex",alignItems:"center",gap:4}}><Clock size={12} strokeWidth={1.75}/> {booking.startTime} – {booking.endTime}</div>
@@ -1175,7 +1186,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                 <X size={16} strokeWidth={1.75} color="var(--text3)" /> בטל שיוך
               </button>
               <button className="btn btn-danger" disabled={conflictSending} onClick={confirmConflictAndSend}>
-                {conflictSending ? <><Clock size={16} strokeWidth={1.75} /> שולח...</> : <><CheckCircle size={16} strokeWidth={1.75} /> אשר ושלח מייל</>}
+                {conflictSending ? <><Clock size={16} strokeWidth={1.75} /> שומר...</> : <><CheckCircle size={16} strokeWidth={1.75} /> אשר והמשך</>}
               </button>
             </div>
           </div>
@@ -1491,8 +1502,8 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
   const [manEndTime, setManEndTime]     = useState("13:00");
   const [manCount, setManCount]         = useState(1);
 
-  // Resizable columns: [#, date, start, end, topic, studio, ×]
-  const [colWidths, setColWidths] = useState([30, 130, 72, 72, 180, 90, 28]);
+  // Resizable columns: [#, date, start, end, topic, primary classroom, secondary classroom, delete]
+  const [colWidths, setColWidths] = useState([30, 130, 72, 72, 160, 110, 110, 28]);
   const resizingRef = useRef(null);
   const startColResize = (e, colIdx) => {
     e.preventDefault();
@@ -1524,7 +1535,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
     const sessions = [];
     let d = parseLocalDate(manStartDate);
     for(let i=0;i<count;i++) {
-      sessions.push({ date: formatLocalDateInput(d), startTime: manStartTime, endTime: manEndTime, topic: "", studioId: studioId||null });
+      sessions.push({ date: formatLocalDateInput(d), startTime: manStartTime, endTime: manEndTime, topic: "", studioId: studioId||null, secondaryStudioId: null });
       d.setDate(d.getDate()+7);
     }
     setSchedule(prev => dedupeScheduleEntries([...prev, ...sessions]));
@@ -1543,6 +1554,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
       endTime: firstLesson.endTime||"12:00",
       topic: "",
       studioId: studioId||null,
+      secondaryStudioId: null,
     }]));
   };
 
@@ -1550,7 +1562,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
     setSchedule(prev => {
       const updated = prev.map((session, sessionIndex) => (
         sessionIndex === index
-          ? { ...session, [field]: (field === "topic" || field === "studioId") ? value : value || (field === "date" ? "" : session[field]) }
+          ? { ...session, [field]: (field === "topic" || field === "studioId" || field === "secondaryStudioId") ? value : value || (field === "date" ? "" : session[field]) }
           : session
       ));
       return field === "date" ? sortScheduleEntries(updated) : updated;
@@ -1748,7 +1760,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
       const count = Math.max(1,Math.min(52,Number(manCount)||1));
       let d = parseLocalDate(manStartDate);
       for(let i=0;i<count;i++) {
-        finalSchedule.push({date:formatLocalDateInput(d),startTime:manStartTime,endTime:manEndTime,topic:"",studioId: studioId||null});
+        finalSchedule.push({date:formatLocalDateInput(d),startTime:manStartTime,endTime:manEndTime,topic:"",studioId: studioId||null, secondaryStudioId: null});
         d.setDate(d.getDate()+7);
       }
     }
@@ -1759,7 +1771,10 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
       // picked a course studio (or via paths that didn't propagate it) saved
       // with studioId=null, making the lesson "unassigned" on re-open.
       studioId: s.studioId || (studioId || null),
+      secondaryStudioId: s.secondaryStudioId || null,
     })));
+    const duplicateClassroomSession = finalSchedule.find(session => session.studioId && session.secondaryStudioId && String(session.studioId) === String(session.secondaryStudioId));
+    if (duplicateClassroomSession) { setLocalMsg({type:"error",text:"כיתה משנית לא יכולה להיות זהה לכיתה הראשית באותו שיעור"}); return; }
     const invalidSession = finalSchedule.find(session => !session.date || session.startTime >= session.endTime);
     if(invalidSession) { setLocalMsg({type:"error",text:"יש לתקן תאריך או שעות לא תקינים בלוח השיעורים"}); return; }
     setSaving(true);
@@ -1867,12 +1882,19 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                       <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>נושא</div>
                       <input className="form-input" placeholder="אופציונלי" value={s.topic||""} style={{fontSize:13,padding:"4px 6px",height:32,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"topic",e.target.value)}/>
                     </div>
-                    <div style={{display:"flex",gap:8}}>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                       <div style={{flex:1}}>
-                        <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>🏫 כיתה</div>
+                        <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>🏫 כיתה ראשית</div>
                         <select className="form-select" value={s.studioId||""} style={{fontSize:12,padding:"4px 6px",height:32,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"studioId",e.target.value||null)}>
                           <option value="">ללא</option>
                           {studios.filter(st=>st.isClassroom||st.classroomOnly||String(st.id)===String(s.studioId||"")).map(st=><option key={st.id} value={st.id}>{st.name}{(!st.isClassroom && !st.classroomOnly) ? " (לא מסומן ככיתה)" : ""}</option>)}
+                        </select>
+                      </div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>כיתה משנית</div>
+                        <select className="form-select" value={s.secondaryStudioId||""} style={{fontSize:12,padding:"4px 6px",height:32,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"secondaryStudioId",e.target.value||null)}>
+                          <option value="">ללא</option>
+                          {studios.filter(st=>st.isClassroom||st.classroomOnly||String(st.id)===String(s.secondaryStudioId||"")).map(st=><option key={st.id} value={st.id} disabled={String(st.id)===String(s.studioId||"")}>{st.name}{(!st.isClassroom && !st.classroomOnly) ? " (לא מסומן ככיתה)" : ""}</option>)}
                         </select>
                       </div>
                     </div>
@@ -1883,12 +1905,12 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
               /* ── דסקטופ: grid עם עמודות גמישות ── */
               <>
                 <div style={{display:"grid",gridTemplateColumns:gridTemplate,gap:0,fontSize:11,color:"var(--text-muted)",marginBottom:2,userSelect:"none",background:"var(--surface2)",borderRadius:"6px 6px 0 0",border:"1px solid rgba(155,89,182,0.2)"}}>
-                  {["","תאריך","התחלה","סיום","נושא","כיתה",""].map((label,ci)=>(
+                  {["","תאריך","התחלה","סיום","נושא","כיתה ראשית","כיתה משנית",""].map((label,ci)=>(
                     <div key={ci} style={{position:"relative",padding:"4px 8px",overflow:"hidden",whiteSpace:"nowrap",
-                      borderRight: ci < 6 ? "1px solid rgba(155,89,182,0.25)" : "none",
-                      fontWeight:700, textAlign: ci===0||ci===6 ? "center" : "right"}}>
+                      borderRight: ci < 7 ? "1px solid rgba(155,89,182,0.25)" : "none",
+                      fontWeight:700, textAlign: ci===0||ci===7 ? "center" : "right"}}>
                       {label}
-                      {ci > 0 && ci < 6 && (
+                      {ci > 0 && ci < 7 && (
                         <div onMouseDown={e=>{ e.preventDefault(); startColResize(e,ci); }}
                           style={{position:"absolute",left:0,top:0,width:8,height:"100%",cursor:"col-resize",zIndex:2}}/>
                       )}
@@ -1910,6 +1932,10 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                       <select className="form-select" value={s.studioId||""} style={{padding:"3px 4px",fontSize:11,height:28,width:"100%",boxSizing:"border-box"}} title="כיתת לימוד למפגש זה" onChange={e=>updateSessionField(i,"studioId",e.target.value||null)}>
                         <option value="">ללא שיוך</option>
                         {studios.filter(st=>st.isClassroom||st.classroomOnly).map(st=><option key={st.id} value={st.id}>{st.name}</option>)}
+                      </select>
+                      <select className="form-select" value={s.secondaryStudioId||""} style={{padding:"3px 4px",fontSize:11,height:28,width:"100%",boxSizing:"border-box"}} title="כיתה משנית למפגש זה" onChange={e=>updateSessionField(i,"secondaryStudioId",e.target.value||null)}>
+                        <option value="">ללא שיוך</option>
+                        {studios.filter(st=>st.isClassroom||st.classroomOnly).map(st=><option key={st.id} value={st.id} disabled={String(st.id)===String(s.studioId||"")}>{st.name}</option>)}
                       </select>
                       <div style={{display:"flex",justifyContent:"center",borderRight:"none",background:"rgba(255,80,80,0.04)"}}>
                         <button onClick={()=>setSchedule(prev=>prev.filter((_,j)=>j!==i))}

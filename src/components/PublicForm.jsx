@@ -5437,6 +5437,12 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
   // Studio certification check
   const studioCertTypes = (certifications?.types || []).filter(t => t.category === "studio" && t.id !== "cert_night_studio");
   const sameStudioId = (a, b) => String(a) === String(b);
+  const normalizeStudioName = (value) => String(value || "").trim().toUpperCase().replace(/\s+/g, " ");
+  const isControlRoomStudio = (studio) => {
+    const name = normalizeStudioName(studio?.name);
+    return name === "MAIN CONTROL" || name === "DIGITAL MIX ROOM";
+  };
+  const isRecordingStudio = (studio) => String(studio?.name || "").trim().replace(/\s+/g, " ") === "\u05e1\u05d8\u05d5\u05d3\u05d9\u05d5 \u05d4\u05e7\u05dc\u05d8\u05d5\u05ea";
   const SMART_BOOKING_BLOCKED_MESSAGE = "לא ניתן להשלים את הבקשה";
   const STUDIO_MAINTENANCE_MESSAGE = "החדר בתחזוקה, מקווים שישוב לעבוד בקרוב";
   const getStudioCertIds = (studio) => {
@@ -5808,9 +5814,14 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
             {modal.isNight ? "🌙 הזמנת לילה" : <span style={{display:"inline-flex",alignItems:"center",gap:6}}><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> הזמנת חדר</span>}
           </div>
           <form onSubmit={submitBooking} style={{padding:20,display:"flex",flexDirection:"column",gap:12}}>
-            <div style={{fontSize:13,color:"var(--text3)"}}>👤 {student.name} · {(modal.selectedDate || modal.date) ? `${getHebrewDayName(modal.selectedDate || modal.date)} ` : ""}{modal.selectedDate || modal.date}</div>
-            <div style={{fontSize:12,color:"var(--text3)"}}>
-              <Mic size={14} strokeWidth={1.75} color="var(--accent)" /> {(studios.find((studio) => sameStudioId(studio.id, modal.selectedStudioId || modal.studioId))?.name) || "בחר חדר"}
+            <div style={{fontSize:13,color:"var(--text3)"}}>
+              <User size={14} strokeWidth={1.75} color="var(--purple)" style={{display:"inline",verticalAlign:"middle",marginLeft:4}} />
+              <strong style={{color:"var(--text)",fontSize:14}}>{student.name}</strong>
+              <span> · {(modal.selectedDate || modal.date) ? `${getHebrewDayName(modal.selectedDate || modal.date)} ` : ""}{modal.selectedDate || modal.date}</span>
+            </div>
+            <div style={{fontSize:13,color:"var(--text3)",display:"flex",alignItems:"center",gap:6}}>
+              <Mic size={14} strokeWidth={1.75} color="var(--accent)" />
+              <strong style={{color:"var(--accent)",fontSize:14}}>{(studios.find((studio) => sameStudioId(studio.id, modal.selectedStudioId || modal.studioId))?.name) || "בחר חדר"}</strong>
             </div>
             <div style={{display:"flex",gap:8}}>
               <label style={{flex:1,fontSize:13,fontWeight:600}}>חדר
@@ -5882,6 +5893,12 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                 value={modal.notes || ""}
                 onChange={(e) => updateAddBookingModal({ notes: e.target.value })}
               />
+              {isControlRoomStudio(studios.find((studio) => sameStudioId(studio.id, modal.selectedStudioId || modal.studioId))) && studios.some(isRecordingStudio) && (
+                <span style={{marginTop:10,fontSize:13,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.35)",borderRadius:8,padding:"10px 12px"}}>
+                  <span>הוספת סטודיו הקלטות</span>
+                  <input type="checkbox" name="addRecordingStudio" style={{width:18,height:18,accentColor:"var(--accent)"}} />
+                </span>
+              )}
             </label>
             <div style={{display:"flex",gap:8}}>
               <button type="button" className="btn btn-secondary" onClick={closeBookingModal}>ביטול</button>
@@ -5905,8 +5922,56 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       const isNight = modal.isNight || false;
       const startTime = isNight ? NIGHT_START_TIME : String(fd.get("startTime") || modal?.selectedStartTime || "").trim();
       const endTime = isNight ? NIGHT_END_TIME : String(fd.get("endTime") || modal?.selectedEndTime || "").trim();
+      const selectedStudio = studios.find(s => sameStudioId(s.id, studioId));
+      const recordingStudio = studios.find(isRecordingStudio);
+      const addRecordingStudio = fd.get("addRecordingStudio") === "on" && isControlRoomStudio(selectedStudio);
+      if (addRecordingStudio && !recordingStudio) {
+        showToast("error", "סטודיו הקלטות לא נמצא ברשימת החדרים");
+        return;
+      }
+      if (addRecordingStudio && isStudioDisabled(recordingStudio.id)) {
+        showToast("error", "סטודיו הקלטות בתחזוקה ולא ניתן לצרף אותו להזמנה");
+        return;
+      }
+      if (addRecordingStudio) {
+        const recordingOverlap = bookings.some((booking) => (
+          sameStudioId(booking.studioId, recordingStudio.id)
+          && booking.date === date
+          && isActiveStudioBooking(booking)
+          && !(endTime <= booking.startTime || startTime >= booking.endTime)
+        ));
+        if (recordingOverlap) {
+          showToast("error", "סטודיו הקלטות תפוס בשעות האלו");
+          return;
+        }
+      }
       const didSave = await persistStudentBooking({ studioId, date, startTime, endTime, notes, isNight });
-      if (didSave) closeBookingModal();
+      if (didSave) {
+        if (addRecordingStudio) {
+          const recordingBooking = {
+            id: `${Date.now()}_rec`,
+            bookingKind: "student",
+            studioId: recordingStudio.id,
+            date,
+            startTime,
+            endTime,
+            studentId: student?.id ?? null,
+            studentEmail: student?.email || "",
+            studentPhone: student?.phone || "",
+            studentName: student.name,
+            notes,
+            isNight,
+            createdAt: new Date().toISOString(),
+          };
+          const recordingSave = await upsertStudioBooking(recordingBooking);
+          if (!recordingSave?.ok) {
+            showToast("error", "ההזמנה נשמרה, אך סטודיו הקלטות לא נרשם ב-DB");
+            return;
+          }
+          setBookings(prev => [...prev, recordingBooking]);
+        }
+        closeBookingModal();
+      }
     } catch(err) {
       console.error("submitBooking error", err);
       showToast("error", "אירעה שגיאה. נסה שוב.");
@@ -5923,16 +5988,89 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     const { bookingId, studioId, date, isNight } = modal;
     const startTime = isNight ? NIGHT_START_TIME : String(fd.get("startTime") || modal?.defaultStart || "").trim();
     const endTime = isNight ? NIGHT_END_TIME : String(fd.get("endTime") || modal?.defaultEnd || "").trim();
+    const selectedStudio = studios.find(s => sameStudioId(s.id, studioId));
+    const recordingStudio = studios.find(isRecordingStudio);
+    const addRecordingStudio = fd.get("addRecordingStudio") === "on" && isControlRoomStudio(selectedStudio);
     const validationError = getStudioBookingValidationError({ studioId, date, startTime, endTime, isNight, excludeBookingId: bookingId });
     if (validationError) { showToast("error", validationError); setSaving(false); return; }
     if (isStudioDisabled(studioId)) { showToast("error", STUDIO_MAINTENANCE_MESSAGE); setSaving(false); return; }
+    if (addRecordingStudio && !recordingStudio) { showToast("error", "סטודיו הקלטות לא נמצא ברשימת החדרים"); setSaving(false); return; }
+    if (addRecordingStudio && isStudioDisabled(recordingStudio.id)) { showToast("error", "סטודיו הקלטות בתחזוקה ולא ניתן לצרף אותו להזמנה"); setSaving(false); return; }
     if(!isNight && startTime >= endTime) { showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה"); setSaving(false); return; }
     const overlap = bookings.some(b => sameStudioId(b.studioId, studioId) && b.date===date && b.id!==bookingId && isActiveStudioBooking(b) && !(endTime<=b.startTime || startTime>=b.endTime));
     if(!isNight && overlap) { showToast("error","קיימת הזמנה חופפת"); setSaving(false); return; }
-    const updated = bookings.map(b => b.id===bookingId ? {...b, startTime, endTime, notes: notes || b.notes} : b);
+    const existingRecordingBooking = recordingStudio ? bookings.find(b => (
+      sameStudioId(b.studioId, recordingStudio.id)
+      && b.date === date
+      && b.id !== bookingId
+      && isActiveStudioBooking(b)
+      && isBookingOwnedByStudent(b)
+      && (
+        (b.startTime === modal.defaultStart && b.endTime === modal.defaultEnd)
+        || (b.startTime === startTime && b.endTime === endTime)
+      )
+    )) : null;
+    if (!addRecordingStudio && existingRecordingBooking) {
+      const updated = bookings.map(b => b.id===bookingId ? {...b, startTime, endTime, notes: notes || b.notes} : b).filter(b => b.id !== existingRecordingBooking.id);
+      const updatedBooking = updated.find(b => b.id === bookingId);
+      setBookings(updated);
+      if (updatedBooking) {
+        const updateResult = await upsertStudioBooking(updatedBooking);
+        if (!updateResult?.ok) { showToast("error", "שמירת ההזמנה ב-DB נכשלה"); setSaving(false); return; }
+      }
+      const deleteResult = await deleteStudioBooking(existingRecordingBooking.id);
+      if (!deleteResult?.ok) { showToast("error", "מחיקת הזמנת סטודיו הקלטות מה-DB נכשלה"); setSaving(false); return; }
+      showToast("success","ההזמנה עודכנה בהצלחה");
+      setModal(null); setSaving(false);
+      return;
+    }
+    if (addRecordingStudio) {
+      const recordingOverlap = bookings.some(b => (
+        sameStudioId(b.studioId, recordingStudio.id)
+        && b.date === date
+        && b.id !== existingRecordingBooking?.id
+        && isActiveStudioBooking(b)
+        && !(endTime <= b.startTime || startTime >= b.endTime)
+      ));
+      if (recordingOverlap) { showToast("error", "סטודיו הקלטות תפוס בשעות האלו"); setSaving(false); return; }
+    }
+    let companionRecordingBooking = null;
+    const updated = bookings.map(b => {
+      if (b.id === bookingId) return {...b, startTime, endTime, notes: notes || b.notes};
+      if (addRecordingStudio && existingRecordingBooking && b.id === existingRecordingBooking.id) {
+        companionRecordingBooking = {...b, startTime, endTime, notes: notes || b.notes, isNight};
+        return companionRecordingBooking;
+      }
+      return b;
+    });
+    if (addRecordingStudio && !existingRecordingBooking) {
+      companionRecordingBooking = {
+        id: `${Date.now()}_rec_edit`,
+        bookingKind: "student",
+        studioId: recordingStudio.id,
+        date,
+        startTime,
+        endTime,
+        studentId: student?.id ?? null,
+        studentEmail: student?.email || "",
+        studentPhone: student?.phone || "",
+        studentName: student.name,
+        notes,
+        isNight,
+        createdAt: new Date().toISOString(),
+      };
+      updated.push(companionRecordingBooking);
+    }
     const updatedBooking = updated.find(b => b.id === bookingId);
     setBookings(updated);
-    if (updatedBooking) await upsertStudioBooking(updatedBooking);
+    if (updatedBooking) {
+      const updateResult = await upsertStudioBooking(updatedBooking);
+      if (!updateResult?.ok) { showToast("error", "שמירת ההזמנה ב-DB נכשלה"); setSaving(false); return; }
+    }
+    if (companionRecordingBooking) {
+      const companionResult = await upsertStudioBooking(companionRecordingBooking);
+      if (!companionResult?.ok) { showToast("error", "סטודיו הקלטות לא נרשם ב-DB"); setSaving(false); return; }
+    }
     showToast("success","ההזמנה עודכנה בהצלחה");
     setModal(null); setSaving(false);
   };
@@ -6130,7 +6268,16 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                 <span style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={16} strokeWidth={1.75} color="var(--text3)" /> עריכת הזמנה</span>
               </div>
               <form onSubmit={submitEditBooking} style={{padding:20,display:"flex",flexDirection:"column",gap:12}}>
-                <div style={{fontSize:13,color:"var(--text3)"}}>👤 {student.name} · {modal.date}</div>
+                <div style={{fontSize:13,color:"var(--text3)"}}>
+                  <User size={14} strokeWidth={1.75} color="var(--purple)" style={{display:"inline",verticalAlign:"middle",marginLeft:4}} />
+                  <strong style={{color:"var(--text)",fontSize:14}}>{student.name}</strong>
+                  <span> · </span>
+                  <strong style={{color:modal.isNight?NIGHT_COLOR:"var(--accent)",fontSize:14}}>{modal.date}</strong>
+                </div>
+                <div style={{fontSize:13,color:"var(--text3)",display:"flex",alignItems:"center",gap:6}}>
+                  <Mic size={14} strokeWidth={1.75} color="var(--accent)" />
+                  <strong style={{color:"var(--accent)",fontSize:14}}>{(studios.find((studio) => sameStudioId(studio.id, modal.studioId))?.name) || "בחר חדר"}</strong>
+                </div>
                 <div style={{display:"flex",gap:8}}>
                   <label style={{flex:1,fontSize:13,fontWeight:600}}>התחלה
                     {modal.isNight ? (
@@ -6158,6 +6305,25 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                 <label style={{fontSize:13,fontWeight:600}}>הערות
                   <textarea name="notes" className="form-input" rows={2} defaultValue={modal.notes||""} placeholder="תיאור הפרויקט..."/>
                 </label>
+                {isControlRoomStudio(studios.find((studio) => sameStudioId(studio.id, modal.studioId))) && studios.some(isRecordingStudio) && (
+                  <label style={{fontSize:13,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.35)",borderRadius:8,padding:"10px 12px"}}>
+                    <span>הוספת סטודיו הקלטות</span>
+                    <input
+                      type="checkbox"
+                      name="addRecordingStudio"
+                      defaultChecked={bookings.some((booking) => (
+                        sameStudioId(booking.studioId, studios.find(isRecordingStudio)?.id)
+                        && booking.date === modal.date
+                        && booking.id !== modal.bookingId
+                        && isActiveStudioBooking(booking)
+                        && isBookingOwnedByStudent(booking)
+                        && booking.startTime === modal.defaultStart
+                        && booking.endTime === modal.defaultEnd
+                      ))}
+                      style={{width:18,height:18,accentColor:"var(--accent)"}}
+                    />
+                  </label>
+                )}
                 <div style={{display:"flex",gap:8}}>
                   <button type="button" className="btn btn-secondary" onClick={()=>setModal(null)}>ביטול</button>
                   <button type="submit" className="btn btn-primary" disabled={saving} style={modal.isNight?{background:NIGHT_COLOR,borderColor:NIGHT_COLOR}:{}}>{saving?"שומר...":"💾 שמור שינויים"}</button>
@@ -6415,13 +6581,13 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
             {policies?.לילה ? (
               <div
                 ref={el=>{ if(el && el.scrollHeight <= el.clientHeight + 30) setNightPolicyScrolled(true); }}
-                style={{padding:"16px 20px",overflowY:"auto",flex:1,fontSize:13,lineHeight:1.7,whiteSpace:"pre-wrap",direction:"rtl"}}
+                style={{padding:"16px 20px",overflowY:"auto",flex:1,fontSize:14,lineHeight:1.9,direction:"rtl",color:"var(--text2)"}}
                 onScroll={e=>{
                   const el = e.target;
                   if (el.scrollHeight - el.scrollTop - el.clientHeight < 30) setNightPolicyScrolled(true);
                 }}
               >
-                {policies.לילה}
+                <div className="policy-content" dangerouslySetInnerHTML={{__html:policyHtml(policies.לילה)}} />
               </div>
             ) : (
               <div style={{padding:"16px 20px",flex:1,fontSize:13,lineHeight:1.7,direction:"rtl",color:"var(--text2)"}}>

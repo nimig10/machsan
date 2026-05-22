@@ -88,6 +88,13 @@ export function PublicDailyTablePage() {
   }, []);
 
   const stName = id => studios.find(s=>String(s.id)===String(id))?.name || id || "—";
+  const stNames = ids => {
+    const list = (Array.isArray(ids) ? ids : [ids])
+      .filter(Boolean)
+      .map(stName)
+      .filter(Boolean);
+    return list.length ? [...new Set(list)].join(" + ") : "—";
+  };
 
   // ── Lessons today ──
   const lessonRows = useMemo(() => {
@@ -96,33 +103,49 @@ export function PublicDailyTablePage() {
     lessons.forEach(lesson => {
       (lesson.schedule||[]).forEach(s => {
         if (s.date !== today) return;
+        const studioIds = [s.studioId || lesson.studioId || "", s.secondaryStudioId || ""].filter(Boolean);
         out.push({
+          lessonId:   lesson.id || "",
           track:      lesson.track || "",
           course:     lesson.courseName || lesson.name || "",
           instructor: lesson.instructorName || lesson.lecturer || "",
           startTime:  s.startTime || "",
           endTime:    s.endTime   || "",
-          studioId:   s.studioId  || lesson.studioId || "",
+          studioId:   studioIds[0] || "",
+          studioIds,
           topic:      s.topic     || "",
         });
       });
     });
     // From bookings marked as lesson (in case lesson session not represented in schedule)
+    const bookingRows = new Map();
     bookings.forEach(b => {
       if (b.date !== today || b.status === "נדחה") return;
       if (getBookingKind(b) !== "lesson") return;
-      // Skip duplicates (same time/studio already in out)
-      if (out.some(r => r.startTime===b.startTime && String(r.studioId)===String(b.studioId))) return;
-      out.push({
+      if (out.some(r => (
+        String(r.lessonId || "") === String(b.lesson_id || "") &&
+        r.startTime === b.startTime &&
+        r.endTime === b.endTime
+      ))) return;
+      const key = `${b.lesson_id || ""}|${b.courseName || ""}|${b.instructorName || ""}|${b.date}|${b.startTime}|${b.endTime}|${b.subject || b.topic || b.sessionName || ""}`;
+      const existing = bookingRows.get(key);
+      if (existing) {
+        if (b.studioId && !existing.studioIds.some(id => String(id) === String(b.studioId))) existing.studioIds.push(b.studioId);
+        return;
+      }
+      bookingRows.set(key, {
+        lessonId:   b.lesson_id || "",
         track:      b.track || "",
         course:     b.courseName || "",
         instructor: b.instructorName || "",
         startTime:  b.startTime || "",
         endTime:    b.endTime   || "",
         studioId:   b.studioId  || "",
+        studioIds:  b.studioId ? [b.studioId] : [],
         topic:      b.topic     || b.sessionName || "",
       });
     });
+    out.push(...bookingRows.values());
     return out.sort((a,b)=>(a.startTime||"").localeCompare(b.startTime||""));
   }, [lessons, bookings, today]);
 
@@ -202,7 +225,7 @@ export function PublicDailyTablePage() {
                       <td style={{...cellBase,fontWeight:700,color:"#fff"}}>{r.course||"—"}</td>
                       <td style={{...cellBase,color:"#ddd"}}>{r.instructor||"—"}</td>
                       <td style={{...cellBase,color:accent,fontWeight:700,whiteSpace:"nowrap"}}>{r.startTime&&r.endTime?`${r.startTime}–${r.endTime}`:r.startTime||"—"}</td>
-                      <td style={{...cellBase,color:"#ddd"}}>{stName(r.studioId)}</td>
+                      <td style={{...cellBase,color:"#ddd"}}>{stNames(r.studioIds || r.studioId)}</td>
                       <td style={{...cellBase,color:"#ddd"}}>{r.topic||"—"}</td>
                     </tr>
                   ))}
@@ -220,7 +243,7 @@ export function PublicDailyTablePage() {
                       <td style={{...cellBase,fontWeight:700,color:"#fff"}}>{r.course||"—"}</td>
                       <td style={{...cellBase,color:"#ddd"}}>{r.instructor||"—"}</td>
                       <td style={{...cellBase,color:"#7eb3ff",fontWeight:700,whiteSpace:"nowrap"}}>{r.startTime&&r.endTime?`${r.startTime}–${r.endTime}`:r.startTime||"—"}</td>
-                      <td style={{...cellBase,color:"#ddd"}}>{stName(r.studioId)}</td>
+                      <td style={{...cellBase,color:"#ddd"}}>{stNames(r.studioIds || r.studioId)}</td>
                       <td style={{...cellBase,color:"#ddd"}}>{r.topic||"—"}</td>
                     </tr>
                   ))}

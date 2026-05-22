@@ -26,9 +26,20 @@ function getLessonScheduleEntries(lesson) {
       endTime: session.endTime || "12:00",
       topic: String(session.topic || "").trim(),
       studioId: session.studioId || null,
+      secondaryStudioId: session.secondaryStudioId || null,
       kitId: session.kitId || null,
     }))
     .sort(compareDateTimeParts);
+}
+
+function getSessionStudioIds(session, lesson) {
+  const ids = [];
+  const primaryId = hasLinkedValue(session.studioId) ? session.studioId
+    : hasLinkedValue(lesson.studioId) ? lesson.studioId : null;
+  const secondaryId = hasLinkedValue(session.secondaryStudioId) ? session.secondaryStudioId : null;
+  if (primaryId) ids.push(primaryId);
+  if (secondaryId && !ids.some((id) => String(id) === String(secondaryId))) ids.push(secondaryId);
+  return ids;
 }
 
 export function buildLessonStudioBookings(lessons = []) {
@@ -39,20 +50,18 @@ export function buildLessonStudioBookings(lessons = []) {
     if (!schedule.length) return;
 
     schedule.forEach((session, index) => {
-      // שיוך כיתה ברמת המפגש עוקף שיוך ברמת הקורס
-      const effectiveStudioId = hasLinkedValue(session.studioId) ? session.studioId
-        : hasLinkedValue(lesson.studioId) ? lesson.studioId : null;
+      const sessionStudioIds = getSessionStudioIds(session, lesson);
       // שיעור ללא כיתה עדיין מופיע בלו"ז — studioId יהיה null
 
       const lessonName = String(lesson.name || "").trim();
       const instructorName = String(lesson.instructorName || "").trim();
       const track = String(lesson.track || "").trim();
-      bookings.push({
-        id: `lesson_booking_${lesson.id}_${index}`,
+      const pushBooking = (studioId, studioIndex = 0) => bookings.push({
+        id: `lesson_booking_${lesson.id}_${index}${studioIndex ? `_secondary_${studioIndex}` : ""}`,
         lesson_id: lesson.id,
         lesson_auto: true,
         bookingKind: "lesson",
-        studioId: effectiveStudioId,
+        studioId,
         date: session.date,
         startTime: session.startTime,
         endTime: session.endTime,
@@ -65,6 +74,11 @@ export function buildLessonStudioBookings(lessons = []) {
         isNight: false,
         createdAt: lesson.created_at || new Date().toISOString(),
       });
+      if (sessionStudioIds.length) {
+        sessionStudioIds.forEach((studioId, studioIndex) => pushBooking(studioId, studioIndex));
+      } else {
+        pushBooking(null, 0);
+      }
     });
   });
 
