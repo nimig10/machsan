@@ -1044,8 +1044,8 @@ export const css = `
   .loading-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:80px 20px; gap:16px; color:var(--text2); }
   .res-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:16px; transition:border-color 0.15s; }
   .res-card:hover { border-color:var(--accent); }
-  .recent-request-row { display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid transparent; border-radius:12px; cursor:pointer; transition:border-color 0.15s, background 0.15s, transform 0.15s; }
-  .recent-request-row:hover { border-color:var(--accent); background:var(--surface2); transform:translateY(-1px); }
+  .recent-request-row { display:flex; align-items:center; gap:10px; margin:0 14px; padding:10px 12px; border:1px solid transparent; border-radius:12px; cursor:pointer; box-shadow:inset 0 -1px 0 var(--border); transition:border-color 0.15s, background 0.15s, transform 0.15s, box-shadow 0.15s; }
+  .recent-request-row:hover { border-color:var(--accent); background:var(--surface2); transform:translateY(-1px); box-shadow:0 0 0 1px var(--accent), 0 10px 24px rgba(0,0,0,0.18); }
   .btn-purple { background:rgba(155,89,182,0.16); color:#d7b9ff; border:1px solid rgba(155,89,182,0.45); }
   .btn-purple:hover { background:rgba(155,89,182,0.26); color:#f3e9ff; }
   .res-card-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:8px; }

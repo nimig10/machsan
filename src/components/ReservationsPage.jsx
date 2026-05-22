@@ -114,6 +114,12 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
     if (mSameDay && mf.borrow_time && tm <= borrowMin) return false;
     return true;
   });
+  const meqMatch = (e) => {
+    if (meqTypeF === "all") return true;
+    if (meqTypeF === "sound") return !!e.soundOnly;
+    if (meqTypeF === "photo") return !!e.photoOnly;
+    return true;
+  };
   const mSave = async () => {
     if(!mOk1||!mOk2){showToast("error","יש להשלים את כל השדות");return;}
     if(!staffUser?.email){showToast("error","לא הצלחנו לזהות את המשתמש המחובר");return;}
@@ -203,10 +209,17 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
           הבקשה תאושר אוטומטית אם התאריכים פנויים. החזרה ידנית בלבד.
         </div>
       </div>
-      <div style={{display:"flex",gap:4,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:4,marginBottom:16}}>
-        {[{n:1,l:"תאריכים",i:<Calendar size={14} strokeWidth={1.75} color="var(--accent)" />},{n:2,l:"ציוד",i:<Package size={14} strokeWidth={1.75} color="var(--accent)" />},{n:3,l:"סיכום",i:<CheckCircle size={14} strokeWidth={1.75} color="var(--accent)" />}].map(s=>(
-          <button key={s.n} type="button" onClick={()=>setMStep(s.n)} style={{flex:1,padding:"8px 4px",borderRadius:6,border:"none",background:mStep===s.n?"var(--accent)":"transparent",color:mStep===s.n?"#000":"var(--text2)",fontWeight:mStep===s.n?800:500,fontSize:12,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-            <span style={{fontSize:14}}>{s.i}</span><span>{s.l}</span></button>))}
+      <div style={{display:"flex",gap:6,background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:5,marginBottom:16,border:"1px solid var(--border)"}}>
+        {[{n:1,l:"תאריכים",Icon:Calendar},{n:2,l:"ציוד",Icon:Package},{n:3,l:"סיכום",Icon:CheckCircle}].map(s=>{
+          const active = mStep === s.n;
+          const Icon = s.Icon;
+          return (
+          <button key={s.n} type="button" onClick={()=>setMStep(s.n)} style={{flex:1,padding:"9px 6px",borderRadius:7,border:`1px solid ${active?"rgba(0,0,0,0.08)":"transparent"}`,background:active?"var(--accent)":"rgba(18,24,34,0.55)",color:active?"#0b0f14":"#dbe7ff",fontWeight:active?900:700,fontSize:12,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,boxShadow:active?"0 0 0 2px rgba(245,166,35,0.16)":"inset 0 1px 0 rgba(255,255,255,0.04)"}}>
+            <Icon size={15} strokeWidth={2} color={active?"#0b0f14":"var(--accent)"} />
+            <span>{s.l}</span>
+          </button>
+          );
+        })}
       </div>
       {mStep===1&&<>
         <div className="form-section-title">תאריכים ושעות <span style={{fontSize:11,color:"var(--text3)",fontWeight:400}}>· ללא מגבלות</span></div>
@@ -224,23 +237,28 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
       </>}
       {mStep===2&&<>
         <div className="form-section-title">בחירת ציוד</div>
-        <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px",marginBottom:12}}>
+        <div style={{background:"var(--surface2)",border:"1px solid rgba(148,163,184,0.28)",borderRadius:"var(--r-sm)",padding:"12px 14px",marginBottom:12,boxShadow:"inset 0 1px 0 rgba(255,255,255,0.035)"}}>
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
             <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סינון:</span>
             <button type="button" onClick={()=>setMShowSelectedOnly(p=>!p)}
-              style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${mShowSelectedOnly?"var(--green)":"var(--border)"}`,background:mShowSelectedOnly?"rgba(46,204,113,0.12)":"transparent",color:mShowSelectedOnly?"var(--green)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>
+              style={{padding:"6px 13px",borderRadius:20,border:`2px solid ${mShowSelectedOnly?"var(--green)":mSelectedCount>0?"var(--accent)":"rgba(148,163,184,0.34)"}`,background:mShowSelectedOnly?"rgba(46,204,113,0.14)":mSelectedCount>0?"rgba(245,166,35,0.16)":"rgba(18,24,34,0.9)",color:mShowSelectedOnly?"var(--green)":mSelectedCount>0?"var(--accent)":"#dbe7ff",fontWeight:900,fontSize:11,cursor:"pointer",whiteSpace:"nowrap",boxShadow:mSelectedCount>0&&!mShowSelectedOnly?"0 0 0 2px rgba(245,166,35,0.12)":"inset 0 1px 0 rgba(255,255,255,0.04)"}}>
               {mShowSelectedOnly?<><CheckCircle size={14} strokeWidth={1.75} /> נבחרו</>:"⬜"} {mShowSelectedOnly?"הצג הכל":`הצג נבחרים בלבד${mSelectedCount>0?` (${mSelectedCount})`:""}`}
             </button>
             <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
-            {[{k:"all",l:<><Package size={12} strokeWidth={1.75} color="var(--accent)" /> הכל</>},{k:"sound",l:<><Mic size={12} strokeWidth={1.75} color="var(--accent)" /> סאונד</>},{k:"photo",l:<><Camera size={12} strokeWidth={1.75} color="var(--accent)" /> צילום</>}].map(({k,l})=>(<button key={k} type="button" onClick={()=>setMeqTypeF(k)} style={{padding:"4px 10px",borderRadius:20,border:`2px solid ${meqTypeF===k?"var(--accent)":"var(--border)"}`,background:meqTypeF===k?"var(--accent-glow)":"transparent",color:meqTypeF===k?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>{l}</button>))}
+            {[{k:"all",l:<><Package size={12} strokeWidth={1.75} /> הכל</>},{k:"sound",l:<><Mic size={12} strokeWidth={1.75} /> סאונד</>},{k:"photo",l:<><Camera size={12} strokeWidth={1.75} /> צילום</>}].map(({k,l})=>{
+              const active = meqTypeF === k;
+              return <button key={k} type="button" onClick={()=>{setMeqTypeF(k);setMeqCatF([]);}} style={{padding:"6px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"rgba(148,163,184,0.34)"}`,background:active?"var(--accent)":"rgba(18,24,34,0.9)",color:active?"#0b0f14":"#dbe7ff",fontWeight:900,fontSize:11,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4,boxShadow:active?"0 0 0 2px rgba(245,166,35,0.16)":"inset 0 1px 0 rgba(255,255,255,0.04)"}}>{l}</button>;
+            })}
             <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
-            {(categories||[]).map(cat=>(<button key={cat} type="button" onClick={()=>setMeqCatF(p=>p.includes(cat)?p.filter(c=>c!==cat):[...p,cat])} style={{padding:"4px 8px",borderRadius:20,border:`2px solid ${meqCatF.includes(cat)?"var(--accent)":"var(--border)"}`,background:meqCatF.includes(cat)?"var(--accent-glow)":"transparent",color:meqCatF.includes(cat)?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>{cat}</button>))}
+            {(categories||[]).filter(cat=>mAvailEq.some(e=>e.category===cat&&meqMatch(e))).map(cat=>{
+              const active = meqCatF.includes(cat);
+              return <button key={cat} type="button" onClick={()=>setMeqCatF(p=>p.includes(cat)?p.filter(c=>c!==cat):[...p,cat])} style={{padding:"5px 10px",borderRadius:20,border:`1.5px solid ${active?"var(--accent)":"rgba(148,163,184,0.32)"}`,background:active?"rgba(245,166,35,0.16)":"rgba(18,24,34,0.88)",color:active?"var(--accent)":"#dbe7ff",fontWeight:800,fontSize:11,cursor:"pointer",whiteSpace:"nowrap",boxShadow:active?"0 0 0 2px rgba(245,166,35,0.1)":"none"}}>{cat}</button>;
+            })}
             {meqCatF.length>0&&<button type="button" onClick={()=>setMeqCatF([])} style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}><X size={12} strokeWidth={1.75} color="var(--text3)" /> נקה</button>}
           </div>
           <div className="search-bar" style={{minWidth:150}}><span>🔍</span><input placeholder="חיפוש ציוד..." value={meqSearch} onChange={e=>setMeqSearch(e.target.value)}/></div>
         </div>
         {(()=>{
-          const meqMatch=(e)=>{const g=(!e.soundOnly&&!e.photoOnly)||(e.soundOnly&&e.photoOnly);return meqTypeF==="all"||(meqTypeF==="sound"&&(e.soundOnly||g))||(meqTypeF==="photo"&&(e.photoOnly||g));};
           const mSelectedFilter=(e)=>!mShowSelectedOnly || (mGetItem(e.id)?.quantity||0) > 0;
           const visCats=(meqCatF.length>0?meqCatF:(categories||[])).filter(cat=>mAvailEq.some(e=>e.category===cat&&meqMatch(e)&&mSelectedFilter(e)&&(!meqSearch||e.name.includes(meqSearch))));
           if(!visCats.length)return <div style={{textAlign:"center",color:"var(--text3)",padding:16,fontSize:13}}>{mShowSelectedOnly?"עדיין לא בחרת ציוד":"לא נמצא ציוד תואם"}</div>;

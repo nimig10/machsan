@@ -766,6 +766,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
   const [kitDropOpen, setKitDropOpen] = useState(false);
   const kitDropRef = useRef(null);
   const [selectedCats, setSelectedCats] = useState([]); // multi-select, empty = all
+  const [equipmentTypeFilter, setEquipmentTypeFilter] = useState("all");
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
   const [equipCertsOpen, setEquipCertsOpen] = useState(false);
 
@@ -839,20 +840,37 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
   const kitEqIds = activeKit ? new Set((activeKit.items||[]).map(i=>String(i.equipment_id))) : null;
   const allowedEquipmentClassifications = getLoanTypeEquipmentClassifications(loanType, categoryLoanTypes);
   const visibleAvailEq = availEq.filter((eq) => matchesEquipmentLoanType(eq, loanType, categoryLoanTypes));
+  const enabledEquipmentTypeFilters = ["סאונד", "צילום"].filter((classification) => allowedEquipmentClassifications.includes(classification));
+  const showEquipmentTypeFilters = enabledEquipmentTypeFilters.length > 1;
+  const matchesEquipmentTypeFilter = (eq) => {
+    if (!showEquipmentTypeFilters || equipmentTypeFilter === "all") return true;
+    if (equipmentTypeFilter === "sound") return !!eq.soundOnly;
+    if (equipmentTypeFilter === "photo") return !!eq.photoOnly;
+    return true;
+  };
+  const typeFilteredAvailEq = visibleAvailEq.filter(matchesEquipmentTypeFilter);
+
+  useEffect(() => {
+    if (!showEquipmentTypeFilters && equipmentTypeFilter !== "all") {
+      setEquipmentTypeFilter("all");
+      setSelectedCats([]);
+    }
+  }, [showEquipmentTypeFilters, equipmentTypeFilter]);
+
   // Include every category that has visible items — even if the admin-managed
   // `categories` array is out of sync (missing a category that still has items).
   // This protects the public form from silently hiding entire categories when
   // `categories` drifts away from the equipment list.
-  const knownOrderedCategories = categories.filter((category) => visibleAvailEq.some((eq) => eq.category === category));
+  const knownOrderedCategories = categories.filter((category) => typeFilteredAvailEq.some((eq) => eq.category === category));
   const knownCategorySet = new Set(knownOrderedCategories);
   const orphanedCategories = [...new Set(
-    visibleAvailEq
+    typeFilteredAvailEq
       .map((eq) => eq.category)
       .filter((category) => category && !knownCategorySet.has(category))
   )];
   const baseCategories = [...knownOrderedCategories, ...orphanedCategories];
   const filteredCategories = selectedCats.length===0 ? baseCategories : baseCategories.filter(c=>selectedCats.includes(c));
-  const selectedItemCount = visibleAvailEq.filter(e=>getItem(e.id).quantity>0).length;
+  const selectedItemCount = typeFilteredAvailEq.filter(e=>getItem(e.id).quantity>0).length;
 
   return (
     <>
@@ -892,15 +910,31 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
       {/* ── Category filter + selected toggle ── */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12,alignItems:"center"}}>
         <button type="button" onClick={()=>{ if(!showSelectedOnly) setSelectedCats([]); setShowSelectedOnly(p=>!p); }}
-          style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${showSelectedOnly?"var(--green)":selectedItemCount>0?"var(--accent)":"var(--border)"}`,background:showSelectedOnly?"rgba(46,204,113,0.12)":selectedItemCount>0?"var(--accent-glow)":"transparent",color:showSelectedOnly?"var(--green)":selectedItemCount>0?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap",boxShadow:selectedItemCount>0&&!showSelectedOnly?"0 0 0 3px rgba(255,193,7,0.15)":"none",transition:"all 0.2s"}}>
+          style={{padding:"6px 13px",borderRadius:20,border:`2px solid ${showSelectedOnly?"var(--green)":selectedItemCount>0?"var(--accent)":"rgba(148,163,184,0.34)"}`,background:showSelectedOnly?"rgba(46,204,113,0.14)":selectedItemCount>0?"rgba(245,166,35,0.16)":"rgba(18,24,34,0.9)",color:showSelectedOnly?"var(--green)":selectedItemCount>0?"var(--accent)":"#dbe7ff",fontWeight:900,fontSize:12,cursor:"pointer",whiteSpace:"nowrap",boxShadow:selectedItemCount>0&&!showSelectedOnly?"0 0 0 2px rgba(245,166,35,0.12)":"inset 0 1px 0 rgba(255,255,255,0.04)",transition:"all 0.2s"}}>
           {showSelectedOnly?<><CheckCircle size={12} strokeWidth={1.75}/> הצג הכל</>:<><CheckCircle size={12} strokeWidth={1.75}/> הצג נבחרים{selectedItemCount>0?` (${selectedItemCount})`:""}</>}
         </button>
+        {showEquipmentTypeFilters && <>
+          <div style={{width:1,height:20,background:"var(--border)",flexShrink:0}}/>
+          {[
+            { key:"all", label:<><Package size={12} strokeWidth={1.75}/> הכל</> },
+            { key:"sound", label:<><Mic size={12} strokeWidth={1.75}/> סאונד</>, enabled: enabledEquipmentTypeFilters.includes("סאונד") },
+            { key:"photo", label:<><Camera size={12} strokeWidth={1.75}/> צילום</>, enabled: enabledEquipmentTypeFilters.includes("צילום") },
+          ].filter((option) => option.key === "all" || option.enabled).map((option) => {
+            const active = equipmentTypeFilter === option.key;
+            return (
+              <button key={option.key} type="button" onClick={()=>{setEquipmentTypeFilter(option.key);setSelectedCats([]);}}
+                style={{padding:"6px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"rgba(148,163,184,0.34)"}`,background:active?"var(--accent)":"rgba(18,24,34,0.9)",color:active?"#0b0f14":"#dbe7ff",fontWeight:900,fontSize:11,cursor:"pointer",whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:4,boxShadow:active?"0 0 0 2px rgba(245,166,35,0.16)":"inset 0 1px 0 rgba(255,255,255,0.04)"}}>
+                {option.label}
+              </button>
+            );
+          })}
+        </>}
         <div style={{width:1,height:20,background:"var(--border)",flexShrink:0}}/>
         {baseCategories.map(cat=>{
           const active = selectedCats.includes(cat);
           return (
             <button key={cat} type="button" onClick={()=>toggleCat(cat)}
-              style={{padding:"4px 10px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>
+              style={{padding:"5px 10px",borderRadius:20,border:`1.5px solid ${active?"var(--accent)":"rgba(148,163,184,0.32)"}`,background:active?"rgba(245,166,35,0.16)":"rgba(18,24,34,0.88)",color:active?"var(--accent)":"#dbe7ff",fontWeight:800,fontSize:11,cursor:"pointer",whiteSpace:"nowrap",boxShadow:active?"0 0 0 2px rgba(245,166,35,0.1)":"none"}}>
               {cat}
             </button>
           );
@@ -990,7 +1024,7 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
 
       {/* ── Equipment list ── */}
       {filteredCategories.map(c=>{
-        let catEq = visibleAvailEq.filter(e=>e.category===c);
+        let catEq = typeFilteredAvailEq.filter(e=>e.category===c);
         if(kitEqIds) catEq = catEq.filter(e=>kitEqIds.has(String(e.id)));
         if(showSelectedOnly) catEq = catEq.filter(e=>getItem(e.id).quantity>0);
         if(!catEq.length) return null;

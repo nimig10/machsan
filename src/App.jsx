@@ -983,8 +983,8 @@ const css = `
   .loading-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:80px 20px; gap:16px; color:var(--text2); }
   .res-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:16px; transition:border-color 0.15s; }
   .res-card:hover { border-color:var(--accent); }
-  .recent-request-row { display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid transparent; border-radius:12px; cursor:pointer; transition:border-color 0.15s, background 0.15s, transform 0.15s; }
-  .recent-request-row:hover { border-color:var(--accent); background:var(--surface2); transform:translateY(-1px); }
+  .recent-request-row { display:flex; align-items:center; gap:10px; margin:0 14px; padding:10px 12px; border:1px solid transparent; border-radius:12px; cursor:pointer; box-shadow:inset 0 -1px 0 var(--border); transition:border-color 0.15s, background 0.15s, transform 0.15s, box-shadow 0.15s; }
+  .recent-request-row:hover { border-color:var(--accent); background:var(--surface2); transform:translateY(-1px); box-shadow:0 0 0 1px var(--accent), 0 10px 24px rgba(0,0,0,0.18); }
   .btn-purple { background:rgba(155,89,182,0.16); color:#d7b9ff; border:1px solid rgba(155,89,182,0.45); }
   .btn-purple:hover { background:rgba(155,89,182,0.26); color:#f3e9ff; }
   .btn-yellow { background:rgba(241,196,15,0.22); color:var(--yellow); border:1px solid rgba(241,196,15,0.55); box-shadow:0 0 0 2px rgba(241,196,15,0.12); }
@@ -1785,11 +1785,11 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
           {id:"reports",label:<><ClipboardList size={14} strokeWidth={1.75}/> דיווחי סטודנטים</>,badge:eqReports.filter(r=>r.status==="open").length||null},
         ].map(t=>(
           <button key={t.id} onClick={()=>setEqSubView(t.id)}
-            style={{padding:"8px 16px",borderRadius:8,border:`2px solid ${eqSubView===t.id?"var(--accent)":"var(--border)"}`,
-              background:eqSubView===t.id?"var(--accent)22":"transparent",color:eqSubView===t.id?"var(--accent)":"var(--text2)",
-              fontWeight:800,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
+            style={{padding:"8px 16px",borderRadius:8,border:`2px solid ${eqSubView===t.id?"var(--accent)":"rgba(148,163,184,0.34)"}`,
+              background:eqSubView===t.id?"var(--accent)":"rgba(18,24,34,0.88)",color:eqSubView===t.id?"#0b0f14":"#dbe7ff",
+              fontWeight:900,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap",boxShadow:eqSubView===t.id?"0 0 0 2px rgba(245,166,35,0.18)":"inset 0 1px 0 rgba(255,255,255,0.04)"}}>
             {t.label}
-            {t.badge!=null && <span style={{background:eqSubView===t.id?"var(--accent)":"var(--text3)",color:"#000",borderRadius:20,padding:"0 7px",fontSize:11,fontWeight:900}}>{t.badge}</span>}
+            {t.badge!=null && <span style={{background:eqSubView===t.id?"rgba(11,15,20,0.18)":"rgba(148,163,184,0.22)",color:eqSubView===t.id?"#0b0f14":"#fff",borderRadius:20,padding:"0 7px",fontSize:11,fontWeight:900}}>{t.badge}</span>}
           </button>
         ))}
       </div>
@@ -1857,7 +1857,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
         {[{k:"הכל",label:<><Package size={12} strokeWidth={1.75}/> הכל</>},{k:"סאונד",label:<><Mic size={12} strokeWidth={1.75}/> סאונד</>},{k:"צילום",label:<><Camera size={12} strokeWidth={1.75}/> צילום</>},{k:"כללי",label:"כללי"}].map(({k,label})=>{
           const active=typeFilter===k;
           return <button key={k} type="button" onClick={()=>setTypeFilter(k)}
-            style={{padding:"5px 14px",borderRadius:8,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+            style={{padding:"6px 15px",borderRadius:8,border:`2px solid ${active?"var(--accent)":"rgba(148,163,184,0.34)"}`,background:active?"var(--accent)":"rgba(18,24,34,0.9)",color:active?"#0b0f14":"#dbe7ff",fontWeight:900,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5,boxShadow:active?"0 0 0 2px rgba(245,166,35,0.18)":"inset 0 1px 0 rgba(255,255,255,0.04)"}}>
             {label}
           </button>;
         })}
@@ -1871,7 +1871,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
           const isEmptyCategory = !equipment.some((item) => item.category === c);
           const isEditing = editingCatPill === c;
           return (
-            <div key={c} style={{display:"flex",alignItems:"center",borderRadius:8,overflow:"hidden",border:`1px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"var(--surface2)"}}>
+            <div key={c} style={{display:"flex",alignItems:"center",borderRadius:8,overflow:"hidden",border:`1.5px solid ${active?"var(--accent)":"rgba(148,163,184,0.32)"}`,background:active?"rgba(245,166,35,0.16)":"rgba(18,24,34,0.92)",boxShadow:active?"0 0 0 2px rgba(245,166,35,0.12)":"inset 0 1px 0 rgba(255,255,255,0.04)"}}>
               {isEditing ? (
                 <>
                   <input
@@ -1902,18 +1902,18 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                 </>
               ) : (
                 <>
-                  <button className="btn btn-sm" style={{borderRadius:0,border:"none",background:"transparent",color:active?"var(--accent)":"var(--text2)",fontWeight:700,padding:"5px 10px"}}
+                  <button className="btn btn-sm" style={{borderRadius:0,border:"none",background:"transparent",color:active?"#ffd36a":"#dbe7ff",fontWeight:900,padding:"6px 11px"}}
                     onClick={()=>setSelectedCats(prev=>active?prev.filter(x=>x!==c):[...prev,c])}>
                     {c}
                   </button>
                   <button type="button" className="btn btn-sm" title="ערוך שם"
-                    style={{borderRadius:0,border:"none",borderRight:"1px solid var(--border)",background:"transparent",color:"var(--text3)",padding:"5px 7px",fontSize:11}}
+                    style={{borderRadius:0,border:"none",borderRight:"1px solid rgba(148,163,184,0.28)",background:"rgba(255,255,255,0.03)",color:"#9fb2d0",padding:"6px 8px",fontSize:11}}
                     onClick={e=>{e.stopPropagation();setEditingCatPill(c);setEditCatPillVal(c);setEditCatPillType(getCatType(c)||"");}}>
                     <Pencil size={12} strokeWidth={1.75} color="var(--text3)"/>
                   </button>
                   {isEmptyCategory && (
                     <button type="button" className="btn btn-sm"
-                      style={{borderRadius:0,border:"none",borderRight:"1px solid var(--border)",background:"transparent",color:"var(--red)",fontWeight:900,padding:"5px 8px"}}
+                      style={{borderRadius:0,border:"none",borderRight:"1px solid rgba(148,163,184,0.28)",background:"rgba(231,76,60,0.08)",color:"#ff6b6b",fontWeight:900,padding:"6px 8px"}}
                       title="מחק רובריקה ריקה" onClick={e=>{e.stopPropagation();deleteEmptyCategoryFromFilters(c);}}>
                       ×
                     </button>

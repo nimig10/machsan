@@ -304,7 +304,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
               .slice(0,8);
             if(!dashFiltered.length) return <div className="empty-state" style={{padding:20}}><div className="emoji"><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /></div><p>אין בקשות תואמות</p></div>;
             return dashFiltered.map(r=>(
-            <div key={r.id} className="recent-request-row" style={{borderBottom:"1px solid var(--border)"}} onClick={()=>setDashViewRes(r)}>
+            <div key={r.id} className="recent-request-row" onClick={()=>setDashViewRes(r)}>
               <div style={{width:34,height:34,borderRadius:"50%",background:"var(--surface2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>{r.student_name?.[0]||"?"}</div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,fontSize:13}}>{r.student_name}</div>
