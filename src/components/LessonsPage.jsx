@@ -293,6 +293,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const normalizeLecturerNameKey = (value = "") => String(value || "")
     .trim()
     .replace(/[\uFEFF\u200B-\u200D\u00A0]/g, " ")
+    .replace(/(?:^|\s)(?:ד["״']?ר\.?|דר\.?|פרופ["׳']?\.?|prof\.?|dr\.?)(?=\s|$)/giu, " ")
     .replace(/[^\p{L}\p{N}"'\s.-]/gu, " ")
     .replace(/\s+/g, " ")
     .toLowerCase();
@@ -303,7 +304,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   };
 
   // Link imported lessons only to existing lecturers by exact normalized name.
-  const syncImportedLecturers = async (importedLessons) => {
+  const syncImportedLecturers = async (importedLessons, lessonIdsToValidate = null) => {
     const nameToId = {};
     for (const lec of lecturers) {
       const keys = [
@@ -315,7 +316,11 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       });
     }
 
-    const missingNames = [...new Set(importedLessons
+    const lessonsForValidation = lessonIdsToValidate
+      ? importedLessons.filter(lesson => lessonIdsToValidate.has(String(lesson?.id || "")))
+      : importedLessons;
+
+    const missingNames = [...new Set(lessonsForValidation
       .map(lesson => String(lesson.instructorName || "").trim())
       .filter(Boolean)
       .filter(name => !nameToId[normalizeLecturerNameKey(name)]))];
@@ -766,6 +771,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       let addedCount = 0;
       let updatedCount = 0;
       const updatedLessons = [...lessons];
+      const importedLessonIds = new Set();
       groups.forEach((group) => {
         const studioId = studios.find((studio) => studio.name === group.studioName)?.id ?? null;
         const kitId = lessonKits.find((kit) => kit.name === group.kitName)?.id ?? null;
@@ -784,11 +790,13 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             kitId: kitId ?? existing.kitId ?? null,
             schedule: dedupeScheduleEntries([...(existing.schedule || []), ...nextSchedule]),
           };
+          importedLessonIds.add(String(existing.id));
           updatedCount += 1;
           return;
         }
+        const newLessonId = `lesson_${Date.now()}_${addedCount + updatedCount}`;
         updatedLessons.push({
-          id: `lesson_${Date.now()}_${addedCount + updatedCount}`,
+          id: newLessonId,
           name: group.name,
           track: group.track,
           instructorName: group.instructorName,
@@ -800,6 +808,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           schedule: nextSchedule,
           created_at: new Date().toISOString(),
         });
+        importedLessonIds.add(String(newLessonId));
         addedCount += 1;
       });
 
@@ -810,7 +819,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
         return;
       }
 
-      const synced = await syncImportedLecturers(updatedLessons);
+      const synced = await syncImportedLecturers(updatedLessons, importedLessonIds);
       setLessons(synced);
       await syncAllLessons(synced);
       showToast("success", `יובאו ${addedCount} קורסים ועודכנו ${updatedCount} קורסים`);
@@ -1067,6 +1076,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           let addedCount = 0;
           let updatedCount = 0;
           const updatedLessons = [...lessons];
+          const importedLessonIds = new Set();
           groupedLessons.forEach((group) => {
             const existingIndex = updatedLessons.findIndex((lesson) => (
               String(lesson?.name || "").trim() === group.name
@@ -1081,6 +1091,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                 track: group.track || existing.track || "",
                 schedule: dedupeScheduleEntries([...(existing.schedule || []), ...group.schedule]),
               };
+              importedLessonIds.add(String(existing.id));
               updatedCount += 1;
               return;
             }
@@ -1089,6 +1100,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
               ...group,
               schedule: dedupeScheduleEntries(group.schedule),
             });
+            importedLessonIds.add(String(group.id));
             addedCount += 1;
           });
 
@@ -1100,7 +1112,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             return;
           }
 
-          const synced = await syncImportedLecturers(updatedLessons);
+          const synced = await syncImportedLecturers(updatedLessons, importedLessonIds);
           setLessons(synced);
           await syncAllLessons(synced);
           showToast("success", `פוענחו ${cleanedLessons.length} שיעורים. נוספו ${addedCount} קורסים ועודכנו ${updatedCount} קורסים.`);
