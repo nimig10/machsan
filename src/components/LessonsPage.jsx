@@ -5,7 +5,7 @@ import { Award, BookOpen, Calendar, Camera, Check, CheckCircle, Clock, Download,
 import { formatDate, formatLocalDateInput, parseLocalDate, today, getAuthToken } from "../utils.js";
 import { listStudents } from "../utils/studentsApi.js";
 import { syncAllStudioBookings } from "../utils/studioBookingsApi.js";
-import { syncAllLecturers } from "../utils/lecturersApi.js";
+import { dualWriteLecturer } from "../utils/lecturersApi.js";
 import { syncAllLessons } from "../utils/lessonsApi.js";
 import { makeLecturer } from "./LecturersPage.jsx";
 
@@ -299,26 +299,37 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     const existingNames = new Set(lecturers.map(l => String(l.fullName || "").trim().toLowerCase()));
     const newLecs = [];
     const nameToId = {};
-    for (const lec of lecturers) nameToId[String(lec.fullName || "").trim().toLowerCase()] = lec.id;
+    const emailToId = {};
+    for (const lec of lecturers) {
+      const nameKey = String(lec.fullName || "").trim().toLowerCase();
+      const emailKey = String(lec.email || "").trim().toLowerCase();
+      if (nameKey) nameToId[nameKey] = lec.id;
+      if (emailKey) emailToId[emailKey] = lec.id;
+    }
 
     const updated = importedLessons.map(lesson => {
       const instrName = String(lesson.instructorName || "").trim();
       if (!instrName) return lesson;
       const key = instrName.toLowerCase();
+      const emailKey = String(lesson.instructorEmail || "").trim().toLowerCase();
+      if (emailKey && emailToId[emailKey]) {
+        return { ...lesson, lecturerId: emailToId[emailKey] || lesson.lecturerId || null };
+      }
       if (!existingNames.has(key) && !nameToId[key]) {
         const newLec = makeLecturer({ fullName: instrName, phone: lesson.instructorPhone || "", email: lesson.instructorEmail || "" });
         newLecs.push(newLec);
         existingNames.add(key);
         nameToId[key] = newLec.id;
+        const newEmailKey = String(newLec.email || "").trim().toLowerCase();
+        if (newEmailKey) emailToId[newEmailKey] = newLec.id;
       }
       return { ...lesson, lecturerId: nameToId[key] || lesson.lecturerId || null };
     });
 
     if (newLecs.length > 0) {
       const allLecs = [...lecturers, ...newLecs];
-      // Stage 7 cleanup: lecturers live in public.lecturers — blob is gone.
-      const result = await syncAllLecturers(allLecs);
-      if (!result?.ok) {
+      const results = await Promise.all(newLecs.map(dualWriteLecturer));
+      if (results.some(result => !result?.ok)) {
         throw new Error("שגיאה בשמירת המרצים החדשים שנוצרו מהייבוא");
       }
       setLecturers(allLecs);
