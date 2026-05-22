@@ -290,19 +290,35 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   }, [openLessonId]);
   const normalizedTrackOptions = [...new Set((trackOptions || []).map((option) => String(option || "").trim()).filter(Boolean))];
   const isKnownTrack = (value = "") => normalizedTrackOptions.includes(String(value || "").trim());
+  const normalizeLecturerNameKey = (value = "") => String(value || "")
+    .trim()
+    .replace(/[\uFEFF\u200B-\u200D\u00A0]/g, " ")
+    .replace(/[^\p{L}\p{N}"'\s.-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+  const lecturerDisplayName = (lecturer) => {
+    const fullName = String(lecturer?.fullName || "").trim();
+    const fromParts = [lecturer?.firstName, lecturer?.lastName].map(part => String(part || "").trim()).filter(Boolean).join(" ");
+    return fullName || fromParts;
+  };
 
   // Link imported lessons only to existing lecturers by exact normalized name.
   const syncImportedLecturers = async (importedLessons) => {
     const nameToId = {};
     for (const lec of lecturers) {
-      const nameKey = String(lec.fullName || "").trim().toLowerCase();
-      if (nameKey) nameToId[nameKey] = lec.id;
+      const keys = [
+        lecturerDisplayName(lec),
+        [lec?.firstName, lec?.lastName].map(part => String(part || "").trim()).filter(Boolean).join(" "),
+      ].map(normalizeLecturerNameKey).filter(Boolean);
+      keys.forEach((nameKey) => {
+        nameToId[nameKey] = lec.id;
+      });
     }
 
     const missingNames = [...new Set(importedLessons
       .map(lesson => String(lesson.instructorName || "").trim())
       .filter(Boolean)
-      .filter(name => !nameToId[name.toLowerCase()]))];
+      .filter(name => !nameToId[normalizeLecturerNameKey(name)]))];
 
     if (missingNames.length > 0) {
       throw new Error(`הייבוא נכשל: המרצים הבאים לא קיימים ברובריקת המרצים: ${missingNames.join(", ")}`);
@@ -310,7 +326,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
     return importedLessons.map(lesson => {
       const instrName = String(lesson.instructorName || "").trim();
-      const key = instrName.toLowerCase();
+      const key = normalizeLecturerNameKey(instrName);
       return { ...lesson, lecturerId: nameToId[key] || lesson.lecturerId || null };
     });
   };
@@ -1976,7 +1992,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
             )}
           </div>
           <div style={{fontSize:11,color:"var(--text3)",marginTop:3}}>
-            ניתן לבחור כאן רק מרצה שכבר קיים ברובריקת "מרצים". אם זה מרצה חדש, צריך להוסיף אותו קודם שם. בייבוא XL מרצים חדשים נוצרים אוטומטית.
+            ניתן לבחור כאן רק מרצה שכבר קיים ברובריקת "מרצים". אם זה מרצה חדש, צריך להוסיף אותו קודם שם. גם בייבוא XL נדרש שם מרצה קיים כדי למנוע כפילויות.
           </div>
           {lecturerSelectionInvalid && (
             <div style={{fontSize:11,color:"#ef4444",marginTop:3}}>
