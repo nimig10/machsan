@@ -131,7 +131,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
   const hasApprovedPhotographer = crew.some(c => c.role === "photographer" && c.status === "approved" && c.studentId);
 
   const linkedReservations = useMemo(() =>
-    (reservations || []).filter(r => r.production_id === productionId && r.status !== "בוטל"),
+    (reservations || []).filter(r => r.production_id === productionId),
     [reservations, productionId]);
   // Per-date-range lock: only the specific date range that already has an
   // active equipment-list reservation is locked. Other ranges (and adding new
@@ -863,7 +863,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
               <p style={{margin:0,fontWeight:700}}>פעולה זו תמחק את ההפקה לחלוטין.</p>
               {deleteConfirm.length > 0 ? (
                 <>
-                  <p style={{margin:"8px 0 4px"}}>{deleteConfirm.length} השאלות ציוד מקושרות יבוטלו אוטומטית:</p>
+                  <p style={{margin:"8px 0 4px"}}>{deleteConfirm.length} השאלות ציוד מקושרות יימחקו אוטומטית:</p>
                   <ul style={{margin:"4px 0",paddingInlineStart:20,fontSize:13}}>
                     {deleteConfirm.map(r => <li key={r.id}>#{r.id} — {r.status} — {r.borrow_date}</li>)}
                   </ul>

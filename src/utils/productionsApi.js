@@ -361,8 +361,19 @@ export async function publishProduction(id) {
 export async function deleteProduction(id) {
   if (!id) return { ok: false, error: "missing id" };
   try {
-    const { data, error } = await supabase.rpc("production_delete_v1", { p_production_id: String(id) });
-    if (error) throw error;
+    const token = await getLatestToken();
+    const response = await fetch("/api/delete-production", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ production_id: String(id) }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data?.ok === false) {
+      throw new Error(data?.error || `delete failed (${response.status})`);
+    }
     return { ok: true, result: data };
   } catch (err) {
     console.warn("[productionsApi.deleteProduction]", id, err);

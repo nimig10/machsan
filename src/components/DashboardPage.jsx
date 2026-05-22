@@ -299,7 +299,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
           </div>
           {(()=>{
             const dashFiltered = [...reservations]
-              .filter(r=>r.status!=="הוחזר"&&r.loan_type!=="שיעור"&&(dashStatusF.length===0||dashStatusF.includes(getEffectiveStatus(r))))
+              .filter(r=>!["הוחזר","בוטל","מבוטל"].includes(getEffectiveStatus(r))&&r.loan_type!=="שיעור"&&(dashStatusF.length===0||dashStatusF.includes(getEffectiveStatus(r))))
               .sort((a,b)=>dashSortBy==="urgency"?new Date(a.borrow_date)-new Date(b.borrow_date):Number(b.id)-Number(a.id))
               .slice(0,8);
             if(!dashFiltered.length) return <div className="empty-state" style={{padding:20}}><div className="emoji"><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /></div><p>אין בקשות תואמות</p></div>;

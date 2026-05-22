@@ -4925,7 +4925,7 @@ ${inventory}
               const rEmail=String(r.email||"").toLowerCase().trim();
               if (stEmail&&rEmail) return stEmail===rEmail;
               return normalizeName(r.student_name||"")===normalizeName(loggedInStudent?.name||"");
-            }).filter(r=>getEffectiveStatus(r)!=="הוחזר").sort((a,b)=>(b.borrow_date||"")>(a.borrow_date||"")?1:-1);
+            }).filter(r=>!["הוחזר","בוטל","מבוטל"].includes(getEffectiveStatus(r))).sort((a,b)=>(b.borrow_date||"")>(a.borrow_date||"")?1:-1);
             if (myRes.length===0) return <div style={{textAlign:"center",color:"var(--text3)",padding:"20px 0",fontSize:13}}>אין בקשות השאלה</div>;
             return myRes.map(r=>{
               const isExp=expandedResId===r.id;
