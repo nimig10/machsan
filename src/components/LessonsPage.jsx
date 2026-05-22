@@ -16,6 +16,73 @@ function newScheduleKey() {
   return `sk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function formatLessonDateShort(value) {
+  const date = parseLocalDate(value);
+  if (!date || Number.isNaN(date.getTime())) return String(value || "");
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = String(date.getFullYear()).slice(-2);
+  return `${day}/${month}/${year}`;
+}
+
+function parseLessonDateShort(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const match = raw.match(/^(\d{1,2})[./:-](\d{1,2})[./:-](\d{2}|\d{4})$/);
+  if (!match) return "";
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3].length === 2 ? `20${match[3]}` : match[3]);
+  const date = new Date(year, month - 1, day, 12, 0, 0, 0);
+  if (
+    date.getFullYear() !== year
+    || date.getMonth() !== month - 1
+    || date.getDate() !== day
+  ) return "";
+  return formatLocalDateInput(date);
+}
+
+function LessonDateInput({ value, onChange, className = "form-input", style = {}, title = "תאריך" }) {
+  const [displayValue, setDisplayValue] = useState(formatLessonDateShort(value));
+
+  useEffect(() => {
+    setDisplayValue(formatLessonDateShort(value));
+  }, [value]);
+
+  const commit = () => {
+    const nextValue = parseLessonDateShort(displayValue);
+    if (nextValue) {
+      onChange(nextValue);
+      setDisplayValue(formatLessonDateShort(nextValue));
+    } else {
+      setDisplayValue(formatLessonDateShort(value));
+    }
+  };
+
+  return (
+    <input
+      className={className}
+      type="text"
+      inputMode="numeric"
+      dir="ltr"
+      title={title}
+      placeholder="DD/MM/YY"
+      value={displayValue}
+      style={style}
+      onChange={event => setDisplayValue(event.target.value)}
+      onBlur={commit}
+      onKeyDown={event => {
+        if (event.key === "Enter") event.currentTarget.blur();
+        if (event.key === "Escape") {
+          setDisplayValue(formatLessonDateShort(value));
+          event.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
 function sortScheduleEntries(entries = []) {
   return [...entries].sort((a, b) => {
     const aDateTime = `${a?.date || ""} ${a?.startTime || "00:00"}`;
@@ -1161,7 +1228,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                     <User size={14} strokeWidth={1.75}/> {c.lecturerName}
                   </div>
                   <div style={{fontSize:12,color:"var(--text2)",marginBottom:4,display:"flex",alignItems:"center",gap:4}}>
-                    <Calendar size={14} strokeWidth={1.75}/> {c.date}
+                    <Calendar size={14} strokeWidth={1.75}/> {formatLessonDateShort(c.date)}
                   </div>
                   <div style={{fontSize:12,color:"var(--text2)",display:"flex",alignItems:"center",gap:4,marginBottom:2}}>
                     <BookOpen size={14} strokeWidth={1.75}/> "{c.lessonA}" — <Clock size={12} strokeWidth={1.75}/> {c.timeA}
@@ -1193,7 +1260,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                   <div style={{fontWeight:800,fontSize:14,marginBottom:6}}>{booking.studentName || booking.teamMemberName || "קביעת חדר"}</div>
                   <div style={{fontSize:11,color:"var(--text3)",marginBottom:4}}>{(booking.bookingKind || (booking.teamMemberId ? "team" : "student")) === "team" ? "קביעת צוות" : "קביעת סטודנט"}</div>
                   <div style={{fontSize:12,color:"var(--text2)"}}><Mic size={16} strokeWidth={1.75} /> {studioName}</div>
-                  <div style={{fontSize:12,color:"var(--text2)"}}><Calendar size={16} strokeWidth={1.75} /> {booking.date}</div>
+                  <div style={{fontSize:12,color:"var(--text2)"}}><Calendar size={16} strokeWidth={1.75} /> {formatLessonDateShort(booking.date)}</div>
                   <div style={{fontSize:12,color:"var(--text2)",display:"flex",alignItems:"center",gap:4}}><Clock size={12} strokeWidth={1.75}/> {booking.startTime} – {booking.endTime}</div>
                 </div>
               ))}
@@ -1365,7 +1432,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                             const isPast = s.date < today();
                             return (
                               <div key={i} style={{display:"flex",gap:10,alignItems:"center",padding:"8px 12px",borderRadius:8,background:isPast?"rgba(0,0,0,0.1)":"rgba(46,204,113,0.07)",opacity:isPast?0.55:1}}>
-                                <span style={{fontSize:13,fontWeight:800,minWidth:92}}>{s.date}</span>
+                                <span style={{fontSize:13,fontWeight:800,minWidth:92}}>{formatLessonDateShort(s.date)}</span>
                                 {s.startTime && <span style={{fontSize:14,fontWeight:800,color:"var(--green)",letterSpacing:0.3,fontVariantNumeric:"tabular-nums"}}>{s.startTime}{s.endTime?`–${s.endTime}`:""}</span>}
                                 {s.topic && <span style={{fontSize:12,color:"var(--text2)",flex:1}}>· {s.topic}</span>}
                                 {isPast && <span style={{fontSize:10,color:"var(--text3)"}}>עבר</span>}
@@ -1414,7 +1481,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                               <div style={{flex:1,minWidth:200}}>
                                 <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{l.name}</div>
                                 {l.instructorName && <div style={{fontSize:13,color:"var(--text2)"}}>{l.instructorName}</div>}
-                                {nextSession && <div style={{fontSize:12,color:"var(--green)",marginTop:2}}><Calendar size={16} strokeWidth={1.75} /> מפגש קרוב: {nextSession.date}{nextSession.startTime?` · ${nextSession.startTime}`:""}</div>}
+                                {nextSession && <div style={{fontSize:12,color:"var(--green)",marginTop:2}}><Calendar size={16} strokeWidth={1.75} /> מפגש קרוב: {formatLessonDateShort(nextSession.date)}{nextSession.startTime?` · ${nextSession.startTime}`:""}</div>}
                                 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
                                   <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}><Calendar size={16} strokeWidth={1.75} /> {(l.schedule||[]).length} שיעורים</span>
                                   {upcoming>0 && <span style={{background:"rgba(46,204,113,0.12)",color:"var(--green)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><CheckCircle size={10} strokeWidth={1.75}/> {upcoming} קרובים</span>}
@@ -1843,7 +1910,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
         <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end",marginBottom:12}}>
           <div className="form-group" style={{flex:"1 1 130px",minWidth:120}}>
             <label className="form-label">תאריך התחלה</label>
-            <input className="form-input" type="date" value={manStartDate} onChange={e=>setManStartDate(e.target.value)}/>
+            <LessonDateInput value={manStartDate} onChange={setManStartDate}/>
           </div>
           <div className="form-group" style={{flex:"0 0 90px"}}>
             <label className="form-label">שעת התחלה</label>
@@ -1881,7 +1948,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:6}}>
                       <div style={{flex:"1 1 130px"}}>
                         <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>תאריך</div>
-                        <input className="form-input" type="date" value={s.date} style={{fontSize:13,padding:"4px 6px",height:32,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"date",e.target.value)}/>
+                        <LessonDateInput value={s.date} style={{fontSize:13,padding:"4px 6px",height:32,width:"100%",boxSizing:"border-box"}} onChange={value=>updateSessionField(i,"date",value)}/>
                       </div>
                       <div style={{flex:"0 0 84px"}}>
                         <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>התחלה</div>
@@ -1939,7 +2006,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                   {schedule.map((s,i)=>(
                     <div key={s._key || `${s.date}-${s.startTime}-${i}`} style={{display:"grid",gridTemplateColumns:gridTemplate,alignItems:"center",gap:0,fontSize:12,background:"var(--surface2)",border:"1px solid rgba(155,89,182,0.12)",borderTop:"none"}}>
                       <div style={{fontWeight:800,color:"#9b59b6",fontSize:11,textAlign:"center",padding:"4px 2px",borderRight:"1px solid rgba(155,89,182,0.15)"}}>#{i+1}</div>
-                      <input className="form-input" type="date" value={s.date} style={{padding:"3px 6px",fontSize:12,height:28,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"date",e.target.value)}/>
+                      <LessonDateInput value={s.date} style={{padding:"3px 6px",fontSize:12,height:28,width:"100%",boxSizing:"border-box"}} onChange={value=>updateSessionField(i,"date",value)}/>
                       <select className="form-select" value={s.startTime} style={{padding:"3px 4px",fontSize:12,height:28,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"startTime",e.target.value)}>
                         {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
                       </select>
