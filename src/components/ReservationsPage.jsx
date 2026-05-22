@@ -115,9 +115,10 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
     return true;
   });
   const meqMatch = (e) => {
+    const isGeneral = (!e.soundOnly && !e.photoOnly) || (e.soundOnly && e.photoOnly);
     if (meqTypeF === "all") return true;
-    if (meqTypeF === "sound") return !!e.soundOnly;
-    if (meqTypeF === "photo") return !!e.photoOnly;
+    if (meqTypeF === "sound") return !!e.soundOnly || isGeneral;
+    if (meqTypeF === "photo") return !!e.photoOnly || isGeneral;
     return true;
   };
   const mSave = async () => {

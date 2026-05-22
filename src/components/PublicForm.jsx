@@ -843,9 +843,10 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
   const enabledEquipmentTypeFilters = ["סאונד", "צילום"].filter((classification) => allowedEquipmentClassifications.includes(classification));
   const showEquipmentTypeFilters = enabledEquipmentTypeFilters.length > 1;
   const matchesEquipmentTypeFilter = (eq) => {
+    const isGeneral = (!eq.soundOnly && !eq.photoOnly) || (eq.soundOnly && eq.photoOnly);
     if (!showEquipmentTypeFilters || equipmentTypeFilter === "all") return true;
-    if (equipmentTypeFilter === "sound") return !!eq.soundOnly;
-    if (equipmentTypeFilter === "photo") return !!eq.photoOnly;
+    if (equipmentTypeFilter === "sound") return !!eq.soundOnly || isGeneral;
+    if (equipmentTypeFilter === "photo") return !!eq.photoOnly || isGeneral;
     return true;
   };
   const typeFilteredAvailEq = visibleAvailEq.filter(matchesEquipmentTypeFilter);
