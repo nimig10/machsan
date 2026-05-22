@@ -912,10 +912,6 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
       <div style={{display:"flex",flexDirection:"column",gap:9,marginBottom:14}}>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
           <span style={{fontSize:11,fontWeight:900,color:"var(--text3)",marginLeft:2}}>סוג ציוד:</span>
-          <button type="button" onClick={()=>{ if(!showSelectedOnly) setSelectedCats([]); setShowSelectedOnly(p=>!p); }}
-            style={{padding:"6px 13px",borderRadius:20,border:`2px solid ${showSelectedOnly?"var(--green)":selectedItemCount>0?"var(--accent)":"rgba(148,163,184,0.34)"}`,background:showSelectedOnly?"rgba(46,204,113,0.14)":selectedItemCount>0?"rgba(245,166,35,0.16)":"rgba(18,24,34,0.9)",color:showSelectedOnly?"var(--green)":selectedItemCount>0?"var(--accent)":"#dbe7ff",fontWeight:900,fontSize:12,cursor:"pointer",whiteSpace:"nowrap",boxShadow:selectedItemCount>0&&!showSelectedOnly?"0 0 0 2px rgba(245,166,35,0.12)":"inset 0 1px 0 rgba(255,255,255,0.04)",transition:"all 0.2s"}}>
-            {showSelectedOnly?<><CheckCircle size={12} strokeWidth={1.75}/> הצג הכל</>:<><CheckCircle size={12} strokeWidth={1.75}/> הצג נבחרים{selectedItemCount>0?` (${selectedItemCount})`:""}</>}
-          </button>
           {showEquipmentTypeFilters && [
             { key:"all", label:<><Package size={12} strokeWidth={1.75}/> הכל</> },
             { key:"sound", label:<><Mic size={12} strokeWidth={1.75}/> סאונד</>, enabled: enabledEquipmentTypeFilters.includes("סאונד") },
@@ -947,6 +943,13 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
               <X size={16} strokeWidth={1.75} color="var(--text3)" /> נקה
             </button>
           )}
+        </div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",paddingTop:8,borderTop:"1px solid rgba(148,163,184,0.18)"}}>
+          <span style={{fontSize:11,fontWeight:900,color:"var(--text3)",marginLeft:2}}>בחירה:</span>
+          <button type="button" onClick={()=>{ if(!showSelectedOnly) setSelectedCats([]); setShowSelectedOnly(p=>!p); }}
+            style={{padding:"6px 13px",borderRadius:20,border:`2px solid ${showSelectedOnly?"var(--green)":selectedItemCount>0?"var(--accent)":"rgba(148,163,184,0.34)"}`,background:showSelectedOnly?"rgba(46,204,113,0.14)":selectedItemCount>0?"rgba(245,166,35,0.16)":"rgba(18,24,34,0.9)",color:showSelectedOnly?"var(--green)":selectedItemCount>0?"var(--accent)":"#dbe7ff",fontWeight:900,fontSize:12,cursor:"pointer",whiteSpace:"nowrap",boxShadow:selectedItemCount>0&&!showSelectedOnly?"0 0 0 2px rgba(245,166,35,0.12)":"inset 0 1px 0 rgba(255,255,255,0.04)",transition:"all 0.2s"}}>
+            {showSelectedOnly?<><CheckCircle size={12} strokeWidth={1.75}/> הצג הכל</>:<><CheckCircle size={12} strokeWidth={1.75}/> הצג נבחרים{selectedItemCount>0?` (${selectedItemCount})`:""}</>}
+          </button>
         </div>
       </div>
 
