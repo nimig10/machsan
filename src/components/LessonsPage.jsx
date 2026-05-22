@@ -106,16 +106,27 @@ function normalizeScheduleEntry(entry = {}) {
 }
 
 function dedupeScheduleEntries(entries = []) {
-  const seen = new Set();
-  return sortScheduleEntries(entries)
-    .filter((entry) => {
-      const normalized = normalizeScheduleEntry(entry);
-      const key = `${normalized.date}__${normalized.startTime}__${normalized.endTime}__${normalized.topic}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .map(e => e._key ? e : normalizeScheduleEntry(e));
+  const byTime = new Map();
+  for (const entry of sortScheduleEntries(entries)) {
+    const normalized = normalizeScheduleEntry(entry);
+    const key = `${normalized.date}__${normalized.startTime}__${normalized.endTime}`;
+    const existing = byTime.get(key);
+    if (!existing) {
+      byTime.set(key, normalized);
+      continue;
+    }
+    if (!existing.topic && normalized.topic) existing.topic = normalized.topic;
+    if (!existing.kitId && normalized.kitId) existing.kitId = normalized.kitId;
+    const incomingStudioIds = [normalized.studioId, normalized.secondaryStudioId].filter(Boolean).map(String);
+    for (const incomingStudioId of incomingStudioIds) {
+      if (!existing.studioId) {
+        existing.studioId = incomingStudioId;
+      } else if (String(existing.studioId) !== incomingStudioId && !existing.secondaryStudioId) {
+        existing.secondaryStudioId = incomingStudioId;
+      }
+    }
+  }
+  return [...byTime.values()];
 }
 
 function getLessonSessionStudioIds(session = {}, lesson = {}) {
@@ -357,6 +368,20 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   }, [openLessonId]);
   const normalizedTrackOptions = [...new Set((trackOptions || []).map((option) => String(option || "").trim()).filter(Boolean))];
   const isKnownTrack = (value = "") => normalizedTrackOptions.includes(String(value || "").trim());
+  const normalizeStudioNameKey = (value = "") => String(value || "")
+    .trim()
+    .replace(/[\uFEFF\u200B-\u200D\u00A0]/g, " ")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+  const findImportedStudio = (name = "") => {
+    const raw = String(name || "").trim();
+    if (!raw) return null;
+    const exact = studios.find(studio => String(studio.name || "").trim() === raw);
+    if (exact) return exact;
+    const rawKey = normalizeStudioNameKey(raw);
+    return studios.find(studio => normalizeStudioNameKey(studio.name) === rawKey) || null;
+  };
   const normalizeLecturerNameKey = (value = "") => String(value || "")
     .trim()
     .replace(/[\uFEFF\u200B-\u200D\u00A0]/g, " ")
@@ -807,12 +832,13 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           if (!group.description && notesIdx >= 0) group.description = String(row[notesIdx] || "").trim();
           const sessionStudioName = studioIdx >= 0 ? String(row[studioIdx] || "").trim() : "";
           const sessionKitName = kitIdx >= 0 ? String(row[kitIdx] || "").trim() : "";
+          const sessionStudio = findImportedStudio(sessionStudioName);
           group.schedule.push(normalizeScheduleEntry({
             date,
             startTime: startIdx >= 0 ? normalizeImportedLessonTime(row[startIdx]) || "09:00" : "09:00",
             endTime: endIdx >= 0 ? normalizeImportedLessonTime(row[endIdx]) || "12:00" : "12:00",
             topic: topicIdx >= 0 ? String(row[topicIdx] || "").trim() : "",
-            studioId: sessionStudioName ? (studios.find(s=>s.name===sessionStudioName)?.id || null) : null,
+            studioId: sessionStudio?.id || null,
             kitId: sessionKitName ? (lessonKits.find(k=>k.name===sessionKitName)?.id || null) : null,
           }));
         }
@@ -840,7 +866,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       const updatedLessons = [...lessons];
       const importedLessonIds = new Set();
       groups.forEach((group) => {
-        const studioId = studios.find((studio) => studio.name === group.studioName)?.id ?? null;
+        const studioId = findImportedStudio(group.studioName)?.id ?? null;
         const kitId = lessonKits.find((kit) => kit.name === group.kitName)?.id ?? null;
         const existingIndex = updatedLessons.findIndex((lesson) => lesson.name === group.name);
         const nextSchedule = dedupeScheduleEntries(group.schedule);
