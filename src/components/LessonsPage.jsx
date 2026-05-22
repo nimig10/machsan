@@ -5,9 +5,7 @@ import { Award, BookOpen, Calendar, Camera, Check, CheckCircle, Clock, Download,
 import { formatDate, formatLocalDateInput, parseLocalDate, today, getAuthToken } from "../utils.js";
 import { listStudents } from "../utils/studentsApi.js";
 import { syncAllStudioBookings } from "../utils/studioBookingsApi.js";
-import { dualWriteLecturer } from "../utils/lecturersApi.js";
 import { syncAllLessons } from "../utils/lessonsApi.js";
-import { makeLecturer } from "./LecturersPage.jsx";
 
 // Stage 8 fix: previously a module-scoped counter (`sk-${++_skeyCounter}`)
 // reset on every page load, so newly-added sessions could collide with
@@ -293,48 +291,28 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const normalizedTrackOptions = [...new Set((trackOptions || []).map((option) => String(option || "").trim()).filter(Boolean))];
   const isKnownTrack = (value = "") => normalizedTrackOptions.includes(String(value || "").trim());
 
-  // Auto-create lecturers from imported lessons and link them
+  // Link imported lessons only to existing lecturers by exact normalized name.
   const syncImportedLecturers = async (importedLessons) => {
-    if (!setLecturers) return importedLessons;
-    const existingNames = new Set(lecturers.map(l => String(l.fullName || "").trim().toLowerCase()));
-    const newLecs = [];
     const nameToId = {};
-    const emailToId = {};
     for (const lec of lecturers) {
       const nameKey = String(lec.fullName || "").trim().toLowerCase();
-      const emailKey = String(lec.email || "").trim().toLowerCase();
       if (nameKey) nameToId[nameKey] = lec.id;
-      if (emailKey) emailToId[emailKey] = lec.id;
     }
 
-    const updated = importedLessons.map(lesson => {
+    const missingNames = [...new Set(importedLessons
+      .map(lesson => String(lesson.instructorName || "").trim())
+      .filter(Boolean)
+      .filter(name => !nameToId[name.toLowerCase()]))];
+
+    if (missingNames.length > 0) {
+      throw new Error(`הייבוא נכשל: המרצים הבאים לא קיימים ברובריקת המרצים: ${missingNames.join(", ")}`);
+    }
+
+    return importedLessons.map(lesson => {
       const instrName = String(lesson.instructorName || "").trim();
-      if (!instrName) return lesson;
       const key = instrName.toLowerCase();
-      const emailKey = String(lesson.instructorEmail || "").trim().toLowerCase();
-      if (emailKey && emailToId[emailKey]) {
-        return { ...lesson, lecturerId: emailToId[emailKey] || lesson.lecturerId || null };
-      }
-      if (!existingNames.has(key) && !nameToId[key]) {
-        const newLec = makeLecturer({ fullName: instrName, phone: lesson.instructorPhone || "", email: lesson.instructorEmail || "" });
-        newLecs.push(newLec);
-        existingNames.add(key);
-        nameToId[key] = newLec.id;
-        const newEmailKey = String(newLec.email || "").trim().toLowerCase();
-        if (newEmailKey) emailToId[newEmailKey] = newLec.id;
-      }
       return { ...lesson, lecturerId: nameToId[key] || lesson.lecturerId || null };
     });
-
-    if (newLecs.length > 0) {
-      const allLecs = [...lecturers, ...newLecs];
-      const results = await Promise.all(newLecs.map(dualWriteLecturer));
-      if (results.some(result => !result?.ok)) {
-        throw new Error("שגיאה בשמירת המרצים החדשים שנוצרו מהייבוא");
-      }
-      setLecturers(allLecs);
-    }
-    return updated;
   };
 
   const lessonKits = kits.filter(k=>(k.loanTypes||[]).includes("שיעור"));
