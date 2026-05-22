@@ -816,7 +816,8 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       showToast("success", `יובאו ${addedCount} קורסים ועודכנו ${updatedCount} קורסים`);
     } catch (error) {
       console.error("Lessons XL import failed", error);
-      showToast("error", "שגיאה בייבוא קורסים מ־XL");
+      const detail = error?.message || "שגיאה לא ידועה";
+      showToast("error", `שגיאה בייבוא קורסים מ־XL: ${detail}`);
     } finally {
       setXlImporting(false);
     }
