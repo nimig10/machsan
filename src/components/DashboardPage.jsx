@@ -472,9 +472,17 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                   {dashViewRes.loan_type==="שיעור"?<Film size={16} strokeWidth={1.75} color="var(--accent)" />:<ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" />} {dashViewRes.student_name}
                   {statusBadge(getEffectiveStatus(dashViewRes))}
                 </div>
-                <div style={{fontSize:12,color:"var(--text3)",marginTop:3,display:"flex",gap:12,flexWrap:"wrap"}}>
-                  {dashViewRes.email&&<span>📧 {dashViewRes.email}</span>}
-                  {dashViewRes.phone&&<span>📞 {dashViewRes.phone}</span>}
+                <div style={{fontSize:12,marginTop:8,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                  {dashViewRes.email&&(
+                    <span style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(148,163,184,0.28)",borderRadius:999,padding:"4px 9px",color:"#fff",fontWeight:800,direction:"ltr",unicodeBidi:"plaintext"}}>
+                      <span aria-hidden="true">📧</span>{dashViewRes.email}
+                    </span>
+                  )}
+                  {dashViewRes.phone&&(
+                    <span style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(148,163,184,0.28)",borderRadius:999,padding:"4px 9px",color:"#fff",fontWeight:800,direction:"ltr",unicodeBidi:"plaintext"}}>
+                      <span aria-hidden="true">📞</span>{dashViewRes.phone}
+                    </span>
+                  )}
                 </div>
               </div>
               <button className="btn btn-secondary btn-sm" onClick={()=>setDashViewRes(null)}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>
