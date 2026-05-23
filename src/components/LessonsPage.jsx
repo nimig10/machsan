@@ -1,11 +1,12 @@
 // LessonsPage.jsx — course & lesson schedule management
-import { useRef, useState, useEffect } from "react";
+import { Fragment, useRef, useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { Award, BookOpen, Calendar, Camera, Check, CheckCircle, Clock, Download, FileText, Film, GraduationCap, Lightbulb, Link, Mail, Mic, Package, Pencil, Phone, Plus, Search, Trash2, Upload, User, Video, X, XCircle } from "lucide-react";
 import { formatDate, formatLocalDateInput, parseLocalDate, today, getAuthToken } from "../utils.js";
 import { listStudents } from "../utils/studentsApi.js";
 import { syncAllStudioBookings } from "../utils/studioBookingsApi.js";
 import { syncAllLessons } from "../utils/lessonsApi.js";
+import { getEffectiveLessonStudioIds, isMainControlStudio, isRecordingStudio } from "../utils/lessonBookings.js";
 
 // Stage 8 fix: previously a module-scoped counter (`sk-${++_skeyCounter}`)
 // reset on every page load, so newly-added sessions could collide with
@@ -45,6 +46,7 @@ function parseLessonDateShort(value) {
 
 function LessonDateInput({ value, onChange, className = "form-input", style = {}, title = "תאריך" }) {
   const [displayValue, setDisplayValue] = useState(formatLessonDateShort(value));
+  const nativeDateRef = useRef(null);
 
   useEffect(() => {
     setDisplayValue(formatLessonDateShort(value));
@@ -60,26 +62,56 @@ function LessonDateInput({ value, onChange, className = "form-input", style = {}
     }
   };
 
+  const openDatePicker = () => {
+    const input = nativeDateRef.current;
+    if (!input) return;
+    if (typeof input.showPicker === "function") {
+      input.showPicker();
+      return;
+    }
+    input.click();
+  };
+
   return (
-    <input
-      className={className}
-      type="text"
-      inputMode="numeric"
-      dir="ltr"
-      title={title}
-      placeholder="DD/MM/YY"
-      value={displayValue}
-      style={style}
-      onChange={event => setDisplayValue(event.target.value)}
-      onBlur={commit}
-      onKeyDown={event => {
-        if (event.key === "Enter") event.currentTarget.blur();
-        if (event.key === "Escape") {
-          setDisplayValue(formatLessonDateShort(value));
-          event.currentTarget.blur();
-        }
-      }}
-    />
+    <div style={{position:"relative",width:style?.width || "100%"}}>
+      <input
+        className={className}
+        type="text"
+        inputMode="numeric"
+        dir="ltr"
+        title={title}
+        placeholder="DD/MM/YY"
+        value={displayValue}
+        style={{...style,paddingRight:style?.paddingRight || 38,paddingLeft:style?.paddingLeft || 12,textAlign:"right",direction:"rtl"}}
+        onChange={event => setDisplayValue(event.target.value)}
+        onBlur={commit}
+        onKeyDown={event => {
+          if (event.key === "Enter") event.currentTarget.blur();
+          if (event.key === "Escape") {
+            setDisplayValue(formatLessonDateShort(value));
+            event.currentTarget.blur();
+          }
+        }}
+      />
+      <button
+        type="button"
+        aria-label="פתח לוח שנה"
+        title="פתח לוח שנה"
+        onClick={openDatePicker}
+        style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",width:24,height:24,border:"none",background:"transparent",color:"var(--text2)",display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:"pointer",padding:0}}
+      >
+        <Calendar size={16} strokeWidth={1.9}/>
+      </button>
+      <input
+        ref={nativeDateRef}
+        type="date"
+        value={value || ""}
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={event => onChange(event.target.value)}
+        style={{position:"absolute",right:8,top:"50%",width:24,height:24,opacity:0,pointerEvents:"none"}}
+      />
+    </div>
   );
 }
 
@@ -93,6 +125,8 @@ function sortScheduleEntries(entries = []) {
 
 function normalizeScheduleEntry(entry = {}) {
   const isLegacyKey = !entry?._key || /^sk-\d+$/.test(entry._key);
+  const lecturerId = entry?.lecturerId || entry?.alternateLecturerId || null;
+  const instructorName = String(entry?.instructorName || entry?.alternateInstructorName || "").trim();
   return {
     _key: isLegacyKey ? newScheduleKey() : entry._key,
     date: entry?.date || "",
@@ -102,6 +136,8 @@ function normalizeScheduleEntry(entry = {}) {
     studioId: entry?.studioId || null,
     secondaryStudioId: entry?.secondaryStudioId || null,
     kitId: entry?.kitId || null,
+    lecturerId,
+    instructorName,
   };
 }
 
@@ -109,6 +145,7 @@ function dedupeScheduleEntries(entries = []) {
   const byTime = new Map();
   for (const entry of sortScheduleEntries(entries)) {
     const normalized = normalizeScheduleEntry(entry);
+    if (Array.isArray(entry?.sourceRows)) normalized.sourceRows = entry.sourceRows;
     const key = `${normalized.date}__${normalized.startTime}__${normalized.endTime}`;
     const existing = byTime.get(key);
     if (!existing) {
@@ -117,6 +154,11 @@ function dedupeScheduleEntries(entries = []) {
     }
     if (!existing.topic && normalized.topic) existing.topic = normalized.topic;
     if (!existing.kitId && normalized.kitId) existing.kitId = normalized.kitId;
+    if (!existing.lecturerId && normalized.lecturerId) existing.lecturerId = normalized.lecturerId;
+    if (!existing.instructorName && normalized.instructorName) existing.instructorName = normalized.instructorName;
+    if (Array.isArray(normalized.sourceRows)) {
+      existing.sourceRows = [...(existing.sourceRows || []), ...normalized.sourceRows];
+    }
     const incomingStudioIds = [normalized.studioId, normalized.secondaryStudioId].filter(Boolean).map(String);
     for (const incomingStudioId of incomingStudioIds) {
       if (!existing.studioId) {
@@ -129,51 +171,12 @@ function dedupeScheduleEntries(entries = []) {
   return [...byTime.values()];
 }
 
-function getLessonSessionStudioIds(session = {}, lesson = {}) {
-  const ids = [];
-  const primaryId = session.studioId || lesson.studioId || null;
-  const secondaryId = session.secondaryStudioId || null;
-  if (primaryId) ids.push(String(primaryId));
-  if (secondaryId && !ids.includes(String(secondaryId))) ids.push(String(secondaryId));
-  return ids;
+function getLessonDisplaySchedule(lesson = {}) {
+  return dedupeScheduleEntries(lesson?.schedule || []);
 }
 
-function normalizeHebrewDay(dayOfWeek = "") {
-  const cleaned = String(dayOfWeek || "").trim().replace(/^יום\s+/, "");
-  const aliasMap = {
-    ראשון: 0,
-    א: 0,
-    "א׳": 0,
-    שני: 1,
-    ב: 1,
-    "ב׳": 1,
-    שלישי: 2,
-    ג: 2,
-    "ג׳": 2,
-    רביעי: 3,
-    ד: 3,
-    "ד׳": 3,
-    חמישי: 4,
-    ה: 4,
-    "ה׳": 4,
-    שישי: 5,
-    ו: 5,
-    "ו׳": 5,
-    שבת: 6,
-    ש: 6,
-    "ש׳": 6,
-  };
-  return aliasMap[cleaned];
-}
-
-function getNextDateForHebrewDay(dayOfWeek = "") {
-  const targetDay = normalizeHebrewDay(dayOfWeek);
-  if (targetDay === undefined) return today();
-  const now = new Date();
-  const diff = (targetDay - now.getDay() + 7) % 7;
-  const nextDate = new Date(now);
-  nextDate.setDate(now.getDate() + diff);
-  return formatLocalDateInput(nextDate);
+function getLessonSessionStudioIds(session = {}, lesson = {}, studios = []) {
+  return getEffectiveLessonStudioIds(session, lesson, studios).map(String);
 }
 
 function isValidImportedDate(dateStr = "") {
@@ -185,33 +188,6 @@ function isValidImportedDate(dateStr = "") {
     && date.getMonth() === month - 1
     && date.getDate() === day
   );
-}
-
-function normalizeImportedLessonDate(dateValue = "", dayOfWeek = "") {
-  const raw = String(dateValue || "").trim();
-  if (!raw) return getNextDateForHebrewDay(dayOfWeek);
-
-  if (isValidImportedDate(raw)) return raw;
-
-  if (/^\d{4,6}$/.test(raw)) {
-    const serial = Number(raw);
-    if (Number.isFinite(serial) && serial > 0) {
-      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-      const parsedDate = new Date(excelEpoch.getTime() + serial * 24 * 60 * 60 * 1000);
-      const normalized = `${parsedDate.getUTCFullYear()}-${String(parsedDate.getUTCMonth() + 1).padStart(2, "0")}-${String(parsedDate.getUTCDate()).padStart(2, "0")}`;
-      if (isValidImportedDate(normalized)) return normalized;
-    }
-  }
-
-  const localMatch = raw.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
-  if (localMatch) {
-    const [, day, month, yearRaw] = localMatch;
-    const year = yearRaw.length === 2 ? `20${yearRaw}` : yearRaw;
-    const normalized = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    if (isValidImportedDate(normalized)) return normalized;
-  }
-
-  return getNextDateForHebrewDay(dayOfWeek);
 }
 
 function normalizeImportedLessonTime(timeValue = "") {
@@ -243,64 +219,6 @@ function buildLessonTimeOptions(startHour = 7, endHour = 23) {
 
 const LESSON_TIME_OPTIONS = buildLessonTimeOptions();
 
-function splitImportedLessonTimeRange(timeRangeValue = "") {
-  const raw = String(timeRangeValue || "").trim();
-  if (!raw) return { startTime: "", endTime: "" };
-  const matches = [...raw.matchAll(/(\d{1,2}):(\d{1,2})/g)];
-  if (matches.length < 2) return { startTime: "", endTime: "" };
-  return {
-    startTime: normalizeImportedLessonTime(`${matches[0][1]}:${matches[0][2]}`),
-    endTime: normalizeImportedLessonTime(`${matches[1][1]}:${matches[1][2]}`),
-  };
-}
-
-function resolveImportedLessonTimes(item = {}) {
-  const rawStartTime = String(item?.startTime || "").trim();
-  const rawEndTime = String(item?.endTime || "").trim();
-  const rangeCandidate = [
-    item?.timeRange,
-    item?.timeWindow,
-    item?.time_window,
-    item?.hoursRange,
-    item?.hourRange,
-    rawStartTime.includes("-") ? rawStartTime : "",
-    rawEndTime.includes("-") ? rawEndTime : "",
-  ].find((value) => String(value || "").trim());
-  const { startTime: rangeStartTime, endTime: rangeEndTime } = splitImportedLessonTimeRange(rangeCandidate);
-  const hasExplicitStartTime = /(\d{1,2}):(\d{1,2})/.test(rawStartTime) && !rawStartTime.includes("-");
-  const hasExplicitEndTime = /(\d{1,2}):(\d{1,2})/.test(rawEndTime) && !rawEndTime.includes("-");
-
-  return {
-    startTime: hasExplicitStartTime ? normalizeImportedLessonTime(rawStartTime) : (rangeStartTime || normalizeImportedLessonTime(rawStartTime)),
-    endTime: hasExplicitEndTime ? normalizeImportedLessonTime(rawEndTime) : (rangeEndTime || normalizeImportedLessonTime(rawEndTime)),
-  };
-}
-
-function parseGeneratedLessonsJson(text = "") {
-  const raw = String(text || "").trim();
-  if (!raw) return [];
-  const cleaned = raw
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
-  return JSON.parse(cleaned);
-}
-
-const fetchWithRetry = async (url, options, maxRetries = 5) => {
-  const delays = [2000, 5000, 10000, 20000, 32000];
-  for (let i = 0; i < maxRetries; i += 1) {
-    const response = await fetch(url, options);
-    if (response.status === 429) {
-      console.warn(`API Rate Limit hit. Retrying in ${(delays[i] ?? delays[delays.length - 1]) / 1000} seconds...`);
-      await new Promise((resolve) => setTimeout(resolve, delays[i] ?? delays[delays.length - 1]));
-      continue;
-    }
-    return response;
-  }
-  return fetch(url, options);
-};
-
 export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[], trackOptions=[], studioBookings=[], setStudioBookings, certifications={}, openLessonId=null, onOpenLessonConsumed=null, lecturers=[], setLecturers, siteSettings={} }) {
   const [mode, setMode] = useState(null); // null | "add" | "edit"
   const [editTarget, setEditTarget] = useState(null);
@@ -308,12 +226,17 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const [conflicts, setConflicts] = useState([]);
   const [conflictSending, setConflictSending] = useState(false);
   const [lecturerConflicts, setLecturerConflicts] = useState([]); // [{lessonA, lessonB, lecturerName, date, timeA, timeB}]
+  const [importReport, setImportReport] = useState(null);
+  const [editingImportErrorKey, setEditingImportErrorKey] = useState(null);
+  const [importErrorDraft, setImportErrorDraft] = useState(null);
+  const [retryingImportError, setRetryingImportError] = useState(false);
   const [detailTarget, setDetailTarget] = useState(null); // course detail modal
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState([]);
   const [sortMode, setSortMode] = useState("recent"); // "recent" | "urgency"
   const [archiveView, setArchiveView] = useState(false);
   const [timeFilter, setTimeFilter] = useState("all"); // "all" | "today" | "week" | "month"
+  const [showUnassignedLecturerOnly, setShowUnassignedLecturerOnly] = useState(false);
 
   // Stage 6 step 5c: students used by studentsInTrack and the conflict-email
   // lookup come from public.students via studentsApi. Falls back to
@@ -351,9 +274,26 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       setStage8Backfilling(false);
     }
   };
-  const [aiImporting, setAiImporting] = useState(false);
   const importInputRef = useRef(null);
-  const aiImportInputRef = useRef(null);
+  const [pendingImportFile, setPendingImportFile] = useState(null);
+  const [pendingImportMode, setPendingImportMode] = useState("upsert");
+  const [showImportModeDialog, setShowImportModeDialog] = useState(false);
+
+  const handleLessonsXLFileSelect = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setPendingImportFile(file);
+    setPendingImportMode("upsert");
+    setShowImportModeDialog(true);
+  };
+
+  const closeImportModeDialog = () => {
+    if (xlImporting) return;
+    setShowImportModeDialog(false);
+    setPendingImportFile(null);
+    setPendingImportMode("upsert");
+  };
 
   // Navigate directly to lesson edit form when openLessonId is set (e.g. from room booking)
   useEffect(() => {
@@ -395,27 +335,73 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     return fullName || fromParts;
   };
 
-  // Link imported lessons only to existing lecturers by exact normalized name.
-  const syncImportedLecturers = async (importedLessons, lessonIdsToValidate = null) => {
-    const nameToId = {};
+  const getLecturerNameMap = () => {
+    const nameToLecturer = {};
     for (const lec of lecturers) {
       const keys = [
         lecturerDisplayName(lec),
         [lec?.firstName, lec?.lastName].map(part => String(part || "").trim()).filter(Boolean).join(" "),
       ].map(normalizeLecturerNameKey).filter(Boolean);
       keys.forEach((nameKey) => {
-        nameToId[nameKey] = lec.id;
+        if (!nameToLecturer[nameKey]) nameToLecturer[nameKey] = lec;
       });
     }
+    return nameToLecturer;
+  };
+
+  const normalizeLessonLecturerList = (lesson = {}) => {
+    const byKey = new Map();
+    const add = (lecturerId, instructorName) => {
+      const id = String(lecturerId || "").trim();
+      const matched = id ? lecturers.find(l => String(l.id) === id) : null;
+      const name = lecturerDisplayName(matched) || String(instructorName || "").trim();
+      if (!id && !name) return;
+      const key = id ? `id:${id}` : `name:${normalizeLecturerNameKey(name)}`;
+      if (!byKey.has(key)) byKey.set(key, { lecturerId: id || null, instructorName: name });
+    };
+    add(lesson.lecturerId, lesson.instructorName);
+    (Array.isArray(lesson.lecturers) ? lesson.lecturers : []).forEach((lecturer) => {
+      add(lecturer?.lecturerId || lecturer?.id, lecturer?.instructorName || lecturer?.fullName || lecturer?.name);
+    });
+    (lesson.schedule || []).forEach((session) => {
+      add(session?.lecturerId || session?.alternateLecturerId, session?.instructorName || session?.alternateInstructorName);
+    });
+    return [...byKey.values()];
+  };
+
+  const effectiveLecturerName = (lesson = {}, session = {}) => {
+    const sessionName = String(session?.instructorName || session?.alternateInstructorName || "").trim();
+    if (sessionName) return sessionName;
+    const sessionId = String(session?.lecturerId || session?.alternateLecturerId || "").trim();
+    if (sessionId) return lecturerDisplayName(lecturers.find(l => String(l.id) === sessionId)) || sessionId;
+    return String(lesson?.instructorName || "").trim();
+  };
+
+  // Link imported lessons only to existing lecturers by exact normalized name.
+  const syncImportedLecturers = async (importedLessons, lessonIdsToValidate = null) => {
+    const nameToLecturer = getLecturerNameMap();
 
     const lessonsForValidation = lessonIdsToValidate
       ? importedLessons.filter(lesson => lessonIdsToValidate.has(String(lesson?.id || "")))
       : importedLessons;
 
-    const missingNames = [...new Set(lessonsForValidation
-      .map(lesson => String(lesson.instructorName || "").trim())
+    const namesToValidate = [];
+    lessonsForValidation.forEach((lesson) => {
+      const mainName = String(lesson.instructorName || "").trim();
+      if (mainName) namesToValidate.push(mainName);
+      (Array.isArray(lesson.lecturers) ? lesson.lecturers : []).forEach((lecturer) => {
+        const lecturerName = String(lecturer?.instructorName || lecturer?.name || "").trim();
+        if (lecturerName) namesToValidate.push(lecturerName);
+      });
+      (lesson.schedule || []).forEach((session) => {
+        const sessionName = String(session?.instructorName || session?.alternateInstructorName || "").trim();
+        if (sessionName) namesToValidate.push(sessionName);
+      });
+    });
+
+    const missingNames = [...new Set(namesToValidate
       .filter(Boolean)
-      .filter(name => !nameToId[normalizeLecturerNameKey(name)]))];
+      .filter(name => !nameToLecturer[normalizeLecturerNameKey(name)]))];
 
     if (missingNames.length > 0) {
       throw new Error(`הייבוא נכשל: המרצים הבאים לא קיימים ברובריקת המרצים: ${missingNames.join(", ")}`);
@@ -424,7 +410,33 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     return importedLessons.map(lesson => {
       const instrName = String(lesson.instructorName || "").trim();
       const key = normalizeLecturerNameKey(instrName);
-      return { ...lesson, lecturerId: nameToId[key] || lesson.lecturerId || null };
+      const courseLecturers = normalizeLessonLecturerList(lesson).map((lecturer) => {
+        const name = String(lecturer.instructorName || "").trim();
+        const matched = lecturer.lecturerId
+          ? lecturers.find(l => String(l.id) === String(lecturer.lecturerId))
+          : nameToLecturer[normalizeLecturerNameKey(name)];
+        return {
+          lecturerId: matched?.id || lecturer.lecturerId || null,
+          instructorName: lecturerDisplayName(matched) || name,
+        };
+      }).filter((lecturer) => lecturer.lecturerId || lecturer.instructorName);
+      return {
+        ...lesson,
+        lecturerId: instrName ? (nameToLecturer[key]?.id || lesson.lecturerId || null) : (lesson.lecturerId || null),
+        instructorName: instrName ? (lecturerDisplayName(nameToLecturer[key]) || lesson.instructorName || "") : "",
+        lecturers: courseLecturers,
+        schedule: (lesson.schedule || []).map((session) => {
+          const sessionName = String(session?.instructorName || session?.alternateInstructorName || lesson.instructorName || "").trim();
+          const sessionLecturer = session?.lecturerId
+            ? lecturers.find(l => String(l.id) === String(session.lecturerId))
+            : nameToLecturer[normalizeLecturerNameKey(sessionName)];
+          return {
+            ...session,
+            lecturerId: sessionLecturer?.id || session.lecturerId || null,
+            instructorName: lecturerDisplayName(sessionLecturer) || sessionName,
+          };
+        }),
+      };
     });
   };
 
@@ -456,7 +468,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     const found = [];
     const seenIds = new Set();
     for (const session of (lesson.schedule || [])) {
-      for (const stId of getLessonSessionStudioIds(session, lesson)) {
+      for (const stId of getLessonSessionStudioIds(session, lesson, studios)) {
         if (!stId) continue;
         for (const b of studioBookings) {
           if (seenIds.has(String(b.id))) continue;
@@ -483,27 +495,35 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const lecturerKey = (lesson) => {
     const id = String(lesson?.lecturerId || "").trim();
     if (id) return `id:${id}`;
-    const name = String(lesson?.instructorName || "").trim().toLowerCase();
+    const name = normalizeLecturerNameKey(lesson?.instructorName || "");
     return name ? `name:${name}` : null;
+  };
+
+  const lecturerKeyForSession = (lesson, session = {}) => {
+    const sessionId = String(session?.lecturerId || session?.alternateLecturerId || "").trim();
+    if (sessionId) return `id:${sessionId}`;
+    const sessionNameKey = normalizeLecturerNameKey(session?.instructorName || session?.alternateInstructorName || "");
+    if (sessionNameKey) return `name:${sessionNameKey}`;
+    return lecturerKey(lesson);
   };
 
   // Single-lesson check (manual save). Returns first overlap found, or null.
   const findLecturerConflict = (lesson, lessonsList = lessons) => {
-    const key = lecturerKey(lesson);
-    if (!key) return null;
     for (const session of (lesson.schedule || [])) {
       if (!session?.date) continue;
+      const key = lecturerKeyForSession(lesson, session);
+      if (!key) continue;
       const sS = session.startTime || "00:00", sE = session.endTime || "23:59";
       for (const other of lessonsList) {
         if (other.id === lesson.id) continue;
-        if (lecturerKey(other) !== key) continue;
         for (const os of (other.schedule || [])) {
+          if (lecturerKeyForSession(other, os) !== key) continue;
           if (os.date !== session.date) continue;
           const oS = os.startTime || "00:00", oE = os.endTime || "23:59";
           if (oS < sE && sS < oE) {
             return {
               lessonName: other.name || "(ללא שם)",
-              lecturerName: lesson.instructorName || other.instructorName || "המרצה",
+              lecturerName: effectiveLecturerName(lesson, session) || effectiveLecturerName(other, os) || "המרצה",
               date: os.date,
               startTime: oS,
               endTime: oE,
@@ -521,10 +541,10 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const findLecturerConflictsAcross = (lessonsList) => {
     const buckets = new Map(); // `${key}|${date}` -> [{lesson, session}]
     for (const l of (lessonsList || [])) {
-      const key = lecturerKey(l);
-      if (!key) continue;
       for (const s of (l.schedule || [])) {
         if (!s?.date) continue;
+        const key = lecturerKeyForSession(l, s);
+        if (!key) continue;
         const bk = `${key}|${s.date}`;
         if (!buckets.has(bk)) buckets.set(bk, []);
         buckets.get(bk).push({ lesson: l, session: s });
@@ -548,7 +568,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             conflicts.push({
               lessonA: a.lesson.name || "(ללא שם)",
               lessonB: b.lesson.name || "(ללא שם)",
-              lecturerName: a.lesson.instructorName || b.lesson.instructorName || "מרצה",
+              lecturerName: effectiveLecturerName(a.lesson, a.session) || effectiveLecturerName(b.lesson, b.session) || "מרצה",
               date: a.session.date,
               timeA: `${aS}–${aE}`,
               timeB: `${bS}–${bE}`,
@@ -563,12 +583,12 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const findLessonConflict = (lesson) => {
     for (const session of (lesson.schedule || [])) {
       const sS = session.startTime || "00:00", sE = session.endTime || "23:59";
-      for (const stId of getLessonSessionStudioIds(session, lesson)) {
+      for (const stId of getLessonSessionStudioIds(session, lesson, studios)) {
         if (!stId) continue;
         for (const other of lessons) {
           if (other.id === lesson.id) continue; // skip self when editing
           for (const os of (other.schedule || [])) {
-            if (!getLessonSessionStudioIds(os, other).includes(stId)) continue;
+            if (!getLessonSessionStudioIds(os, other, studios).includes(stId)) continue;
             if (os.date !== session.date) continue;
             const oS = os.startTime || "00:00", oE = os.endTime || "23:59";
             if (oS < sE && oE > sS) {
@@ -684,6 +704,16 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     const lastDate = [...schedule].sort((a, b) => b.date.localeCompare(a.date))[0]?.date || "";
     return lastDate < today();
   };
+  const hasAssignedLecturer = (lesson = {}) => {
+    if (String(lesson?.lecturerId || "").trim()) return true;
+    if (String(lesson?.instructorName || "").trim()) return true;
+    if (normalizeLessonLecturerList(lesson).length > 0) return true;
+    return (lesson.schedule || []).some((session) => (
+      String(session?.lecturerId || session?.alternateLecturerId || "").trim()
+      || String(session?.instructorName || session?.alternateInstructorName || "").trim()
+    ));
+  };
+  const isWithoutLecturer = (lesson = {}) => !hasAssignedLecturer(lesson);
 
   // חישוב טווחי זמן: היום / השבוע (ראשון–שבת) / החודש הנוכחי
   const getTodayRange = () => {
@@ -712,14 +742,16 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     const trackLabel = getLessonTrackLabel(lesson);
     const matchesTrack = allTracksSelected || trackFilter.includes(trackLabel);
     const matchesArchive = archiveView ? isArchived(lesson) : !isArchived(lesson);
+    const matchesLecturer = !showUnassignedLecturerOnly || isWithoutLecturer(lesson);
     const matchesTime = timeFilter === "all" ||
       (timeFilter === "today" && lessonHasSessionInRange(lesson, getTodayRange())) ||
       (timeFilter === "week" && lessonHasSessionInRange(lesson, getWeekRange())) ||
       (timeFilter === "month" && lessonHasSessionInRange(lesson, getMonthRange()));
-    return matchesSearch && matchesTrack && matchesArchive && matchesTime;
+    return matchesSearch && matchesTrack && matchesArchive && matchesLecturer && matchesTime;
   });
 
   const archivedCount = lessons.filter(isArchived).length;
+  const withoutLecturerCount = lessons.filter((lesson) => !isArchived(lesson) && isWithoutLecturer(lesson)).length;
 
   const sortedFiltered = [...filtered].sort((a, b) => {
     if (sortMode === "urgency") {
@@ -739,503 +771,918 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     return groups;
   }, {});
 
-  const importLessonsXL = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    event.target.value = "";
-    setXlImporting(true);
-    try {
-      // קריאת כל הגיליונות ללא AI
-      const readAllSheets = async () => {
-        if (/\.xlsx?$/i.test(file.name)) {
-          const buf = await file.arrayBuffer();
-          const wb = XLSX.read(buf, { type:"array" });
-          return wb.SheetNames
-            .map(name => ({ name, rows: XLSX.utils.sheet_to_json(wb.Sheets[name], { header:1, defval:"" }) }))
-            .filter(s => s.rows.length > 1);
-        }
-        // CSV / TSV
-        const text = await file.text();
-        const lines = text.split(/\r?\n/).filter(line => line.trim());
-        const sep = lines[0]?.includes("\t") ? "\t" : ",";
-        return [{ name: "sheet1", rows: lines.map(line => line.split(sep).map(cell => cell.trim().replace(/^"|"$/g, ""))) }];
-      };
+  const toImportIsoDate = (rawValue) => {
+    if (rawValue instanceof Date && !Number.isNaN(rawValue.getTime())) return formatLocalDateInput(rawValue);
+    if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
+      const date = new Date(Math.round((rawValue - 25569) * 86400000));
+      return formatLocalDateInput(date);
+    }
+    let value = String(rawValue || "").trim();
+    if (!value) return "";
+    if (/^\d{5}$/.test(value)) {
+      const date = new Date(Math.round((Number(value) - 25569) * 86400000));
+      return formatLocalDateInput(date);
+    }
+    const parsedShort = parseLessonDateShort(value);
+    if (parsedShort) return parsedShort;
+    const parts = value.includes("/") ? value.split("/") : value.split("-");
+    if (parts.length !== 3) return value;
+    if (parts[0].length === 4) return `${parts[0]}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}`;
+    const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+    return `${year}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+  };
 
-      const sheets = await readAllSheets();
-      if (!sheets.length) {
-        showToast("error", "קובץ ה־XL ריק");
-        setXlImporting(false);
-        return;
-      }
+  const importGroupKey = ({ name = "", track = "" }) => [
+    String(name || "").trim(),
+    String(track || "").trim(),
+  ].join("__");
 
-      const toIsoDate = (rawValue) => {
-        let value = String(rawValue || "").trim();
-        if (!value) return "";
-        if (/^\d{5}$/.test(value)) {
-          const date = new Date(Math.round((Number(value) - 25569) * 86400000));
-          return formatLocalDateInput(date);
-        }
-        const parts = value.includes("/") ? value.split("/") : value.split("-");
-        if (parts.length !== 3) return value;
-        if (parts[0].length === 4) return `${parts[0]}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}`;
-        return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
-      };
+  const reportErrorIdentity = (error = {}) => [
+    error.sheet || "",
+    error.rowNumber || "",
+  ].join("__");
 
-      // עיבוד כל גיליון בנפרד — כל גיליון עם headers משלו
-      const groups = new Map();
-      for (const sheet of sheets) {
-        const rows = sheet.rows;
-        if (rows.length < 2) continue;
-        const headers = rows[0].map(h => String(h || "").trim().replace(/[\uFEFF\u200B-\u200D\u00A0]/g, "").toLowerCase());
-        const findH = (...patterns) => headers.findIndex(h => patterns.some(p => h.includes(p)));
-        const courseIdx = findH("קורס", "course", "שם קורס");
-        const dateIdx = findH("תאריך", "date");
-        const startIdx = findH("התחלה", "start", "שעת התחלה");
-        const endIdx = findH("סיום", "end", "שעת סיום");
-        const instructorIdx = findH("מרצה", "מורה", "lecturer", "teacher", "instructor");
-        const phoneIdx = findH("טלפון", "phone", "נייד");
-        const emailIdx = findH("מייל", "email", "mail");
-        const trackIdx = findH("מסלול", "track", "קבוצה", "class");
-        const studioIdx = findH("כיתת לימוד", "אולפן", "studio", "כיתה");
-        const kitIdx = findH("ערכה", "kit");
-        const topicIdx = findH("נושא", "topic", "subject");
-        const notesIdx = findH("הערות", "description", "notes", "תיאור");
+  const reportErrorKey = (error = {}) => [
+    reportErrorIdentity(error),
+    error.reason || "",
+  ].join("__");
 
-        if (courseIdx === -1 || dateIdx === -1) continue; // גיליון ללא עמודות חובה — דלג
+  const makeImportError = (rowInfo = {}, reason = "") => ({
+    sheet: rowInfo.sheet || "",
+    rowNumber: rowInfo.rowNumber || "",
+    courseName: rowInfo.courseName || "",
+    track: rowInfo.track || "",
+    instructorName: rowInfo.instructorName || "",
+    date: rowInfo.date || "",
+    startTime: rowInfo.startTime || "",
+    endTime: rowInfo.endTime || "",
+    studioName: rowInfo.studioName || "",
+    topic: rowInfo.topic || "",
+    notes: rowInfo.notes || "",
+    kitName: rowInfo.kitName || "",
+    phone: rowInfo.phone || "",
+    email: rowInfo.email || "",
+    reason,
+  });
 
-        for (let i = 1; i < rows.length; i++) {
-          const row = rows[i];
-          // אם שם הקורס לא קיים בשורה, נסה לקחת אותו משם הגיליון
-          const courseName = String(row[courseIdx] || "").trim() || sheet.name.trim();
-          const date = toIsoDate(row[dateIdx]);
-          if (!courseName || !date) continue;
-          if (!groups.has(courseName)) {
-            groups.set(courseName, {
-              name: courseName,
-              instructorName: instructorIdx >= 0 ? String(row[instructorIdx] || "").trim() : "",
-              instructorPhone: phoneIdx >= 0 ? String(row[phoneIdx] || "").trim() : "",
-              instructorEmail: emailIdx >= 0 ? String(row[emailIdx] || "").trim() : "",
-              track: trackIdx >= 0 ? String(row[trackIdx] || "").trim() : "",
-              studioName: studioIdx >= 0 ? String(row[studioIdx] || "").trim() : "",
-              kitName: kitIdx >= 0 ? String(row[kitIdx] || "").trim() : "",
-              description: notesIdx >= 0 ? String(row[notesIdx] || "").trim() : "",
-              schedule: [],
-            });
+  const addImportError = (errors, rowInfo, reason) => {
+    errors.push(makeImportError(rowInfo, reason));
+  };
+
+  const importSessionMergeKey = (session = {}) => [
+    session.date || "",
+    session.startTime || "",
+    session.endTime || "",
+    String(session.topic || "").trim(),
+    session.lecturerId || normalizeLecturerNameKey(session.instructorName || ""),
+  ].join("__");
+
+  const stripImportMeta = (session) => {
+    const { sourceRows, ...rest } = session;
+    return rest;
+  };
+
+  const stableSessionForCompare = (session = {}) => {
+    const normalized = normalizeScheduleEntry(session);
+    return {
+      date: normalized.date || "",
+      startTime: normalized.startTime || "09:00",
+      endTime: normalized.endTime || "12:00",
+      topic: String(normalized.topic || "").trim(),
+      studioId: normalized.studioId || null,
+      secondaryStudioId: normalized.secondaryStudioId || null,
+      kitId: normalized.kitId || null,
+      lecturerId: normalized.lecturerId || null,
+      instructorName: String(normalized.instructorName || "").trim(),
+    };
+  };
+
+  const scheduleFingerprint = (schedule = []) => JSON.stringify(
+    dedupeScheduleEntries(schedule)
+      .map(stableSessionForCompare)
+      .sort((a, b) => `${a.date} ${a.startTime} ${a.endTime}`.localeCompare(`${b.date} ${b.startTime} ${b.endTime}`))
+  );
+
+  const findRoomConflictInList = (candidate, lessonsList) => {
+    for (const session of (candidate.schedule || [])) {
+      const sS = session.startTime || "00:00", sE = session.endTime || "23:59";
+      for (const stId of getLessonSessionStudioIds(session, candidate, studios)) {
+        if (!stId) continue;
+        for (const other of lessonsList) {
+          if (other.id === candidate.id) continue;
+          for (const os of (other.schedule || [])) {
+            if (!getLessonSessionStudioIds(os, other, studios).includes(stId)) continue;
+            if (os.date !== session.date) continue;
+            const oS = os.startTime || "00:00", oE = os.endTime || "23:59";
+            if (oS < sE && oE > sS) {
+              const studio = studios.find(s => String(s.id) === stId);
+              return { studioName: studio?.name || "החדר", lessonName: other.name || "שיעור קיים", startTime: oS, endTime: oE };
+            }
           }
-          const group = groups.get(courseName);
-          if (!group.instructorName && instructorIdx >= 0) group.instructorName = String(row[instructorIdx] || "").trim();
-          if (!group.instructorPhone && phoneIdx >= 0) group.instructorPhone = String(row[phoneIdx] || "").trim();
-          if (!group.instructorEmail && emailIdx >= 0) group.instructorEmail = String(row[emailIdx] || "").trim();
-          if (!group.track && trackIdx >= 0) group.track = String(row[trackIdx] || "").trim();
-          if (!group.studioName && studioIdx >= 0) group.studioName = String(row[studioIdx] || "").trim();
-          if (!group.kitName && kitIdx >= 0) group.kitName = String(row[kitIdx] || "").trim();
-          if (!group.description && notesIdx >= 0) group.description = String(row[notesIdx] || "").trim();
-          const sessionStudioName = studioIdx >= 0 ? String(row[studioIdx] || "").trim() : "";
-          const sessionKitName = kitIdx >= 0 ? String(row[kitIdx] || "").trim() : "";
-          const sessionStudio = findImportedStudio(sessionStudioName);
-          group.schedule.push(normalizeScheduleEntry({
-            date,
-            startTime: startIdx >= 0 ? normalizeImportedLessonTime(row[startIdx]) || "09:00" : "09:00",
-            endTime: endIdx >= 0 ? normalizeImportedLessonTime(row[endIdx]) || "12:00" : "12:00",
-            topic: topicIdx >= 0 ? String(row[topicIdx] || "").trim() : "",
-            studioId: sessionStudio?.id || null,
-            kitId: sessionKitName ? (lessonKits.find(k=>k.name===sessionKitName)?.id || null) : null,
-          }));
+        }
+        for (const b of studioBookings) {
+          const kind = b.bookingKind || (b.lesson_id ? "lesson" : b.teamMemberId ? "team" : "student");
+          if (kind !== "student" && kind !== "team") continue;
+          if (String(b.studioId) !== String(stId)) continue;
+          if (b.date !== session.date) continue;
+          const bS = b.startTime || "00:00", bE = b.endTime || "23:59";
+          if (bS < sE && bE > sS) {
+            const studio = studios.find(s => String(s.id) === stId);
+            return { studioName: studio?.name || "החדר", lessonName: b.studentName || b.teamMemberName || "קביעת חדר קיימת", startTime: bS, endTime: bE };
+          }
         }
       }
+    }
+    return null;
+  };
 
-      if (groups.size === 0) {
-        showToast("error", "לא נמצאו קורסים תקינים לייבוא");
-        setXlImporting(false);
+  const mergeCourseLists = (...lists) => {
+    const byKey = new Map();
+    lists.flat().filter(Boolean).forEach((course) => {
+      const key = importGroupKey(course);
+      const current = byKey.get(key);
+      byKey.set(key, {
+        ...current,
+        ...course,
+        sessions: Math.max(Number(current?.sessions) || 0, Number(course.sessions) || 0),
+      });
+    });
+    return [...byKey.values()];
+  };
+
+  const mergeImportReport = (baseReport, nextReport, replaceIdentities = []) => {
+    if (!baseReport) return nextReport;
+    const replaceSet = new Set(replaceIdentities);
+    const keptErrors = (baseReport.errors || []).filter(error => !replaceSet.has(reportErrorIdentity(error)));
+    return {
+      ...baseReport,
+      fileName: nextReport.fileName || baseReport.fileName,
+      mode: nextReport.mode || baseReport.mode,
+      addedCount: (Number(baseReport.addedCount) || 0) + (Number(nextReport.addedCount) || 0),
+      updatedCount: (Number(baseReport.updatedCount) || 0) + (Number(nextReport.updatedCount) || 0),
+      skippedCount: Number(baseReport.skippedCount) || 0,
+      savedSessions: (Number(baseReport.savedSessions) || 0) + (Number(nextReport.savedSessions) || 0),
+      addedSessions: (Number(baseReport.addedSessions) || 0) + (Number(nextReport.addedSessions) || 0),
+      updatedSessions: (Number(baseReport.updatedSessions) || 0) + (Number(nextReport.updatedSessions) || 0),
+      addedCourses: mergeCourseLists(baseReport.addedCourses || [], nextReport.addedCourses || []),
+      updatedCourses: mergeCourseLists(baseReport.updatedCourses || [], nextReport.updatedCourses || []),
+      skippedCourses: baseReport.skippedCourses || [],
+      errors: [...keptErrors, ...(nextReport.errors || [])],
+    };
+  };
+
+  const readImportRowsFromFile = async (file) => {
+    const readAllSheets = async () => {
+      if (/\.xlsx?$/i.test(file.name)) {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type:"array" });
+        return wb.SheetNames
+          .map(name => ({ name, rows: XLSX.utils.sheet_to_json(wb.Sheets[name], { header:1, defval:"" }) }))
+          .filter(s => s.rows.length > 1);
+      }
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).filter(line => line.trim());
+      const sep = lines[0]?.includes("\t") ? "\t" : ",";
+      return [{ name: "sheet1", rows: lines.map(line => line.split(sep).map(cell => cell.trim().replace(/^"|"$/g, ""))) }];
+    };
+
+    const sheets = await readAllSheets();
+    const importRows = [];
+    const importErrors = [];
+    for (const sheet of sheets) {
+      const rows = sheet.rows;
+      if (rows.length < 2) continue;
+      const headers = rows[0].map(h => String(h || "").trim().replace(/[\uFEFF\u200B-\u200D\u00A0]/g, "").toLowerCase());
+      const findH = (...patterns) => headers.findIndex(h => patterns.some(p => h.includes(p)));
+      const courseIdx = findH("קורס", "course", "שם קורס");
+      const dateIdx = findH("תאריך", "date");
+      const startIdx = findH("התחלה", "start", "שעת התחלה");
+      const endIdx = findH("סיום", "end", "שעת סיום");
+      const instructorIdx = findH("מרצה", "מורה", "lecturer", "teacher", "instructor");
+      const phoneIdx = findH("טלפון", "phone", "נייד");
+      const emailIdx = findH("מייל", "email", "mail");
+      const trackIdx = findH("מסלול", "track", "קבוצה", "class");
+      const studioIdx = findH("כיתת לימוד", "אולפן", "studio", "כיתה", "חדר");
+      const kitIdx = findH("ערכה", "kit");
+      const topicIdx = findH("נושא", "topic", "subject");
+      const notesIdx = findH("הערות", "description", "notes", "תיאור");
+
+      if (courseIdx === -1 || dateIdx === -1) {
+        addImportError(importErrors, { sheet: sheet.name, rowNumber: 1 }, "הגיליון חסר עמודת שם קורס או תאריך");
+        continue;
+      }
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row.some(cell => String(cell || "").trim())) continue;
+        importRows.push({
+          sheet: sheet.name,
+          rowNumber: i + 1,
+          courseName: String(row[courseIdx] || "").trim() || sheet.name.trim(),
+          track: trackIdx >= 0 ? String(row[trackIdx] || "").trim() : "",
+          instructorName: instructorIdx >= 0 ? String(row[instructorIdx] || "").trim() : "",
+          phone: phoneIdx >= 0 ? String(row[phoneIdx] || "").trim() : "",
+          email: emailIdx >= 0 ? String(row[emailIdx] || "").trim() : "",
+          date: toImportIsoDate(row[dateIdx]),
+          startTime: startIdx >= 0 ? normalizeImportedLessonTime(row[startIdx]) : "",
+          endTime: endIdx >= 0 ? normalizeImportedLessonTime(row[endIdx]) : "",
+          studioName: studioIdx >= 0 ? String(row[studioIdx] || "").trim() : "",
+          kitName: kitIdx >= 0 ? String(row[kitIdx] || "").trim() : "",
+          topic: topicIdx >= 0 ? String(row[topicIdx] || "").trim() : "",
+          notes: notesIdx >= 0 ? String(row[notesIdx] || "").trim() : "",
+        });
+      }
+    }
+    return { sheets, importRows, importErrors };
+  };
+
+  const buildImportGroups = (importRows = [], reportErrors = []) => {
+    const nameToLecturer = getLecturerNameMap();
+    const groups = new Map();
+
+    importRows.forEach((rowInfo) => {
+      const rowReasons = [];
+      if (!rowInfo.courseName) rowReasons.push("חסר שם קורס");
+      if (!rowInfo.track || !isKnownTrack(rowInfo.track)) rowReasons.push(`מסלול לימודים לא קיים: ${rowInfo.track || "חסר מסלול"}`);
+      if (rowInfo.instructorName && !nameToLecturer[normalizeLecturerNameKey(rowInfo.instructorName)]) rowReasons.push(`מרצה לא קיים ברובריקת המרצים: ${rowInfo.instructorName}`);
+      if (!rowInfo.date || !isValidImportedDate(rowInfo.date)) rowReasons.push("תאריך לא תקין");
+      if (!rowInfo.startTime || !rowInfo.endTime || rowInfo.startTime >= rowInfo.endTime) rowReasons.push("שעת התחלה/סיום לא תקינה");
+      const sessionStudio = rowInfo.studioName ? findImportedStudio(rowInfo.studioName) : null;
+      if (rowInfo.studioName && !sessionStudio) rowReasons.push(`כיתה/חדר לא קיימים: ${rowInfo.studioName}`);
+
+      if (rowReasons.length) {
+        rowReasons.forEach(reason => addImportError(reportErrors, rowInfo, reason));
         return;
       }
-      const invalidTracks = [...new Set(
-        [...groups.values()]
-          .map((group) => String(group.track || "").trim())
-          .filter((track) => !isKnownTrack(track))
-          .map((track) => track || "ללא מסלול")
-      )];
-      if (invalidTracks.length) {
-        showToast("error", `מסלול לימודים לא קיים: ${invalidTracks.join(", ")}`);
-        setXlImporting(false);
-        return;
+
+      const groupKey = importGroupKey({ name: rowInfo.courseName, track: rowInfo.track });
+      const lecturer = rowInfo.instructorName ? nameToLecturer[normalizeLecturerNameKey(rowInfo.instructorName)] : null;
+      const instructorDisplayName = lecturerDisplayName(lecturer) || rowInfo.instructorName;
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+          name: rowInfo.courseName,
+          track: rowInfo.track,
+          instructorName: instructorDisplayName,
+          instructorPhone: lecturer?.phone || rowInfo.phone || "",
+          instructorEmail: lecturer?.email || rowInfo.email || "",
+          lecturerId: lecturer?.id || null,
+          lecturers: instructorDisplayName ? [{ lecturerId: lecturer?.id || null, instructorName: instructorDisplayName }] : [],
+          studioName: rowInfo.studioName,
+          kitName: rowInfo.kitName,
+          description: rowInfo.notes || "",
+          rawSchedule: [],
+          schedule: [],
+        });
       }
 
-      let addedCount = 0;
-      let updatedCount = 0;
-      const updatedLessons = [...lessons];
-      const importedLessonIds = new Set();
-      groups.forEach((group) => {
-        const studioId = findImportedStudio(group.studioName)?.id ?? null;
-        const kitId = lessonKits.find((kit) => kit.name === group.kitName)?.id ?? null;
-        const existingIndex = updatedLessons.findIndex((lesson) => lesson.name === group.name);
-        const nextSchedule = dedupeScheduleEntries(group.schedule);
-        if (existingIndex >= 0) {
-          const existing = updatedLessons[existingIndex];
-          updatedLessons[existingIndex] = {
-            ...existing,
-            track: group.track || existing.track || "",
-            instructorName: group.instructorName || existing.instructorName || "",
-            instructorPhone: group.instructorPhone || existing.instructorPhone || "",
-            instructorEmail: group.instructorEmail || existing.instructorEmail || "",
-            description: group.description || existing.description || "",
-            studioId: studioId ?? existing.studioId ?? null,
-            kitId: kitId ?? existing.kitId ?? null,
-            schedule: dedupeScheduleEntries([...(existing.schedule || []), ...nextSchedule]),
-          };
-          importedLessonIds.add(String(existing.id));
-          updatedCount += 1;
+      const group = groups.get(groupKey);
+      if (instructorDisplayName && !group.lecturers.some((item) => String(item.lecturerId || "") === String(lecturer?.id || "") || normalizeLecturerNameKey(item.instructorName) === normalizeLecturerNameKey(instructorDisplayName))) {
+        group.lecturers.push({ lecturerId: lecturer?.id || null, instructorName: instructorDisplayName });
+      }
+      const session = normalizeScheduleEntry({
+        date: rowInfo.date,
+        startTime: rowInfo.startTime,
+        endTime: rowInfo.endTime,
+        topic: rowInfo.topic,
+        studioId: sessionStudio?.id || null,
+        kitId: rowInfo.kitName ? (lessonKits.find(k=>k.name===rowInfo.kitName)?.id || null) : null,
+        lecturerId: lecturer?.id || null,
+        instructorName: instructorDisplayName,
+      });
+      session.sourceRows = [rowInfo];
+      group.rawSchedule.push(session);
+      if (!group.description && rowInfo.notes) group.description = rowInfo.notes;
+      if (!group.studioName && rowInfo.studioName) group.studioName = rowInfo.studioName;
+      if (!group.kitName && rowInfo.kitName) group.kitName = rowInfo.kitName;
+    });
+
+    groups.forEach((group) => {
+      const mergedBySession = new Map();
+      group.rawSchedule.forEach((session) => {
+        const key = importSessionMergeKey(session);
+        if (!mergedBySession.has(key)) mergedBySession.set(key, []);
+        mergedBySession.get(key).push(session);
+      });
+      const schedule = [];
+      mergedBySession.forEach((sessions) => {
+        const uniqueStudioIds = [];
+        sessions.forEach((session) => {
+          if (session.studioId && !uniqueStudioIds.some(id => String(id) === String(session.studioId))) uniqueStudioIds.push(session.studioId);
+        });
+        const recordingStudio = studios.find(isRecordingStudio);
+        const mainControlStudioId = uniqueStudioIds.find((id) => isMainControlStudio(studios.find((studio) => String(studio.id) === String(id))));
+        const recordingStudioId = recordingStudio?.id || null;
+        const hasMainControl = Boolean(mainControlStudioId);
+        const assignableStudioIds = uniqueStudioIds.filter((id) => !(hasMainControl && recordingStudioId && String(id) === String(recordingStudioId)));
+        if (hasMainControl) {
+          assignableStudioIds.sort((a, b) => {
+            if (String(a) === String(mainControlStudioId)) return -1;
+            if (String(b) === String(mainControlStudioId)) return 1;
+            return 0;
+          });
+        }
+        if (assignableStudioIds.length > 2) {
+          sessions.forEach(session => {
+            (session.sourceRows || []).forEach(rowInfo => addImportError(reportErrors, rowInfo, "לא ניתן לשייך יותר משתי כיתות לאותו שיעור"));
+          });
           return;
         }
-        const newLessonId = `lesson_${Date.now()}_${addedCount + updatedCount}`;
-        updatedLessons.push({
-          id: newLessonId,
+        const allowedStudioIds = assignableStudioIds.slice(0, 2);
+        const allowedSessions = sessions.filter(session => (
+          !session.studioId
+          || allowedStudioIds.some(id => String(id) === String(session.studioId))
+          || (hasMainControl && recordingStudioId && String(session.studioId) === String(recordingStudioId))
+        ));
+        if (!allowedSessions.length) return;
+        const base = allowedSessions.find(session => mainControlStudioId && String(session.studioId) === String(mainControlStudioId)) || allowedSessions[0];
+        schedule.push({
+          ...base,
+          studioId: allowedStudioIds[0] || base.studioId || null,
+          secondaryStudioId: allowedStudioIds[1] || null,
+          sourceRows: allowedSessions.flatMap(session => session.sourceRows || []),
+        });
+      });
+      group.schedule = schedule;
+      delete group.rawSchedule;
+    });
+
+    return groups;
+  };
+
+  const runLessonImportRows = async (importRows, { fileName, mode = "upsert", initialErrors = [], baseReport = null, replaceErrorIdentities = [], retry = false } = {}) => {
+    const reportErrors = [...initialErrors];
+    const groups = buildImportGroups(importRows, reportErrors);
+
+    const finishReport = (partialReport, toastType, toastText) => {
+      const nextReport = mergeImportReport(baseReport, partialReport, replaceErrorIdentities);
+      setImportReport(nextReport);
+      if (toastText) showToast(toastType, toastText);
+      return nextReport;
+    };
+
+    if (groups.size === 0) {
+      finishReport(
+        { fileName, mode, addedCount: 0, updatedCount: 0, skippedCount: 0, savedSessions: 0, addedSessions: 0, updatedSessions: 0, addedCourses: [], updatedCourses: [], skippedCourses: [], errors: reportErrors },
+        reportErrors.length ? "error" : "success",
+        retry
+          ? (reportErrors.length ? "התיקון עדיין לא נשמר. דוח השגיאות עודכן." : "לא נמצא שינוי חדש לשמירה.")
+          : (reportErrors.length ? "לא נמצאו שורות תקינות לייבוא. דוח השגיאות נפתח לבדיקה." : "לא נמצאו קורסים תקינים לייבוא")
+      );
+      return;
+    }
+
+    let addedCount = 0;
+    let updatedCount = 0;
+    let savedSessions = 0;
+    let addedSessions = 0;
+    let updatedSessions = 0;
+    const addedCourses = [];
+    const updatedCourses = [];
+    const skippedCourses = [];
+    const updatedLessons = [...lessons];
+    const importedLessonIds = new Set();
+
+    groups.forEach((group) => {
+      const studioId = findImportedStudio(group.studioName)?.id ?? null;
+      const kitId = lessonKits.find((kit) => kit.name === group.kitName)?.id ?? null;
+      const matchingIndexes = updatedLessons
+        .map((lesson, index) => ({ lesson, index }))
+        .filter(({ lesson }) => importGroupKey({
+          name: lesson.name,
+          track: lesson.track,
+        }) === importGroupKey(group))
+        .map(({ index }) => index);
+      const existingIndex = matchingIndexes[0] ?? -1;
+      if (mode === "create_only" && existingIndex >= 0) {
+        skippedCourses.push({
           name: group.name,
           track: group.track,
-          instructorName: group.instructorName,
-          instructorPhone: group.instructorPhone,
-          instructorEmail: group.instructorEmail,
-          description: group.description,
-          studioId,
-          kitId,
-          schedule: nextSchedule,
-          created_at: new Date().toISOString(),
+          sessions: dedupeScheduleEntries(group.schedule).length,
+          reason: "קורס קיים במערכת",
         });
-        importedLessonIds.add(String(newLessonId));
-        addedCount += 1;
-      });
-
-      const lecConflicts = findLecturerConflictsAcross(updatedLessons);
-      if (lecConflicts.length > 0) {
-        setLecturerConflicts(lecConflicts);
-        setXlImporting(false);
         return;
       }
+      const duplicateExistingSchedules = matchingIndexes
+        .slice(1)
+        .flatMap((index) => updatedLessons[index]?.schedule || []);
+      const existing = existingIndex >= 0 ? updatedLessons[existingIndex] : null;
+      const lessonId = existing?.id || `lesson_${Date.now()}_${addedCount + updatedCount}`;
+      const baseLesson = existing ? {
+        ...existing,
+        track: group.track || existing.track || "",
+        instructorName: group.instructorName || existing.instructorName || "",
+        instructorPhone: group.instructorPhone || existing.instructorPhone || "",
+        instructorEmail: group.instructorEmail || existing.instructorEmail || "",
+        lecturerId: group.lecturerId || existing.lecturerId || null,
+        lecturers: normalizeLessonLecturerList({
+          ...existing,
+          schedule: [...(existing.schedule || []), ...(group.schedule || [])],
+          lecturers: [...(Array.isArray(existing.lecturers) ? existing.lecturers : []), ...(group.lecturers || [])],
+        }),
+        description: group.description || existing.description || "",
+        studioId: studioId ?? existing.studioId ?? null,
+        kitId: kitId ?? existing.kitId ?? null,
+        schedule: dedupeScheduleEntries([...(existing.schedule || []), ...duplicateExistingSchedules]),
+      } : {
+        id: lessonId,
+        name: group.name,
+        track: group.track,
+        instructorName: group.instructorName,
+        instructorPhone: group.instructorPhone,
+        instructorEmail: group.instructorEmail,
+        lecturerId: group.lecturerId || null,
+        lecturers: group.lecturers || [],
+        description: group.description,
+        studioId,
+        kitId,
+        schedule: [],
+        created_at: new Date().toISOString(),
+      };
 
-      const synced = await syncImportedLecturers(updatedLessons, importedLessonIds);
-      setLessons(synced);
-      await syncAllLessons(synced);
-      showToast("success", `יובאו ${addedCount} קורסים ועודכנו ${updatedCount} קורסים`);
+      let changed = false;
+      let groupSavedSessions = 0;
+      const sessions = dedupeScheduleEntries(group.schedule);
+      sessions.forEach((session) => {
+        const beforeFingerprint = scheduleFingerprint(baseLesson.schedule);
+        const nextSchedule = dedupeScheduleEntries([...(baseLesson.schedule || []), stripImportMeta(session)]);
+        const afterFingerprint = scheduleFingerprint(nextSchedule);
+        if (afterFingerprint === beforeFingerprint) return;
+
+        const candidate = {
+          ...baseLesson,
+          schedule: [stripImportMeta(session)],
+        };
+        const lecturerConflict = findLecturerConflict(candidate, updatedLessons);
+        if (lecturerConflict) {
+          (session.sourceRows || []).forEach(rowInfo => addImportError(reportErrors, rowInfo, `חפיפת מרצה: ${effectiveLecturerName(candidate, session)} כבר משויך/ת ל-${lecturerConflict.lessonName} בשעות ${lecturerConflict.startTime}-${lecturerConflict.endTime}`));
+          return;
+        }
+        const roomConflict = findRoomConflictInList(candidate, updatedLessons);
+        if (roomConflict) {
+          (session.sourceRows || []).forEach(rowInfo => addImportError(reportErrors, rowInfo, `חפיפת חדר: ${roomConflict.studioName} תפוס על ידי ${roomConflict.lessonName} בשעות ${roomConflict.startTime}-${roomConflict.endTime}`));
+          return;
+        }
+        baseLesson.schedule = nextSchedule;
+        savedSessions += 1;
+        groupSavedSessions += 1;
+        changed = true;
+      });
+
+      if (!changed) return;
+      if (existingIndex >= 0) {
+        updatedLessons[existingIndex] = baseLesson;
+        matchingIndexes.slice(1).sort((a, b) => b - a).forEach((index) => updatedLessons.splice(index, 1));
+        updatedCount += 1;
+        updatedSessions += groupSavedSessions;
+        updatedCourses.push({ name: baseLesson.name, track: baseLesson.track, sessions: baseLesson.schedule.length });
+      } else {
+        updatedLessons.push(baseLesson);
+        addedCount += 1;
+        addedSessions += groupSavedSessions;
+        addedCourses.push({ name: baseLesson.name, track: baseLesson.track, sessions: baseLesson.schedule.length });
+      }
+      importedLessonIds.add(String(lessonId));
+    });
+
+    const partialReport = { fileName, mode, addedCount, updatedCount, skippedCount: skippedCourses.length, savedSessions, addedSessions, updatedSessions, addedCourses, updatedCourses, skippedCourses, errors: reportErrors };
+
+    if (savedSessions === 0) {
+      finishReport(
+        partialReport,
+        reportErrors.length ? "error" : "success",
+        retry
+          ? (reportErrors.length ? "התיקון עדיין לא נשמר. דוח השגיאות עודכן." : "השורה כבר קיימת במערכת ולא דרשה שמירה נוספת.")
+          : (reportErrors.length ? "לא נשמרו שורות חדשות. דוח השגיאות נפתח לבדיקה." : "הקובץ כבר קיים במערכת. לא נוצרו או עודכנו קורסים.")
+      );
+      return;
+    }
+
+    const synced = await syncImportedLecturers(updatedLessons, importedLessonIds);
+    setLessons(synced);
+    await syncAllLessons(synced);
+
+    finishReport(
+      partialReport,
+      "success",
+      retry
+        ? (reportErrors.length ? "התיקון נשמר חלקית, ונשארו שורות שדורשות תיקון." : "השורה תוקנה ונשמרה בהצלחה.")
+        : (reportErrors.length
+          ? `הייבוא הושלם חלקית: נוספו ${addedSessions} שיעורים ועודכנו ${updatedSessions} שיעורים. ${reportErrors.length} שורות דורשות תיקון.`
+          : `יובאו ${addedCount} קורסים ועודכנו ${updatedCount} קורסים. נוספו ${addedSessions} שיעורים ועודכנו ${updatedSessions} שיעורים.`)
+    );
+  };
+
+  const importLessonsXL = async (file, mode = "upsert") => {
+    if (!file) return;
+    setXlImporting(true);
+    setImportReport(null);
+    setShowImportModeDialog(false);
+    setEditingImportErrorKey(null);
+    setImportErrorDraft(null);
+    try {
+      const { sheets, importRows, importErrors } = await readImportRowsFromFile(file);
+      if (!sheets.length) {
+        showToast("error", "קובץ ה־XL ריק");
+        return;
+      }
+      await runLessonImportRows(importRows, { fileName: file.name, mode, initialErrors: importErrors });
     } catch (error) {
       console.error("Lessons XL import failed", error);
       const detail = error?.message || "שגיאה לא ידועה";
       showToast("error", `שגיאה בייבוא קורסים מ־XL: ${detail}`);
     } finally {
       setXlImporting(false);
+      setPendingImportFile(null);
+      setPendingImportMode("upsert");
     }
   };
 
-  const importLessonsSmartAI = async (event) => {
-    const input = event.target;
-    const file = input?.files?.[0];
-    if (!file) return;
+  const importRetryGroupKey = (row = {}) => [
+    String(row.courseName || "").trim(),
+    String(row.track || "").trim(),
+    normalizeLecturerNameKey(row.instructorName || ""),
+    toImportIsoDate(row.date || ""),
+    normalizeImportedLessonTime(row.startTime || ""),
+    normalizeImportedLessonTime(row.endTime || ""),
+    String(row.topic || "").trim(),
+  ].join("__");
 
-    setAiImporting(true);
+  const startEditImportError = (error) => {
+    setEditingImportErrorKey(reportErrorIdentity(error));
+    setImportErrorDraft({
+      sheet: error.sheet || "",
+      rowNumber: error.rowNumber || "",
+      courseName: error.courseName || "",
+      track: error.track || "",
+      instructorName: error.instructorName || "",
+      date: formatLessonDateShort(error.date) || error.date || "",
+      startTime: error.startTime || "",
+      endTime: error.endTime || "",
+      studioName: error.studioName || "",
+      topic: error.topic || "",
+      notes: error.notes || "",
+      kitName: error.kitName || "",
+      phone: error.phone || "",
+      email: error.email || "",
+    });
+  };
 
+  const cancelEditImportError = () => {
+    setEditingImportErrorKey(null);
+    setImportErrorDraft(null);
+  };
+
+  const updateImportErrorDraft = (field, value) => {
+    setImportErrorDraft(prev => ({ ...(prev || {}), [field]: value }));
+  };
+
+  const retryImportErrorDraft = async () => {
+    if (!importReport || !importErrorDraft) return;
+    const editedIdentity = reportErrorIdentity(importErrorDraft);
+    const editedRow = {
+      ...importErrorDraft,
+      date: toImportIsoDate(importErrorDraft.date),
+      startTime: normalizeImportedLessonTime(importErrorDraft.startTime),
+      endTime: normalizeImportedLessonTime(importErrorDraft.endTime),
+      courseName: String(importErrorDraft.courseName || "").trim(),
+      track: String(importErrorDraft.track || "").trim(),
+      instructorName: String(importErrorDraft.instructorName || "").trim(),
+      studioName: String(importErrorDraft.studioName || "").trim(),
+      topic: String(importErrorDraft.topic || "").trim(),
+      notes: String(importErrorDraft.notes || "").trim(),
+    };
+    const retryRows = [editedRow];
+    const replaceErrorIdentities = [editedIdentity];
+    setRetryingImportError(true);
     try {
-      const reader = new FileReader();
-
-      reader.onload = async (e) => {
-        try {
-          const result = e?.target?.result;
-          const data = new Uint8Array(result instanceof ArrayBuffer ? result : new ArrayBuffer(0));
-          const workbook = XLSX.read(data, { type: "array" });
-          const sheetNames = workbook.SheetNames || [];
-          if (!sheetNames.length) throw new Error("לא נמצא גיליון תקין בקובץ.");
-
-          const csvParts = [];
-          for (const sName of sheetNames) {
-            const ws = workbook.Sheets[sName];
-            if (!ws) continue;
-            const csv = XLSX.utils.sheet_to_csv(ws);
-            const cleanLines = String(csv || "").split("\n").filter(line => line.replace(/,/g, "").trim());
-            if (cleanLines.length) {
-              csvParts.push(`--- גיליון: ${sName} ---\n${cleanLines.join("\n")}`);
-            }
-          }
-          const csvData = csvParts.join("\n\n");
-          if (!csvData.trim()) throw new Error("לא נמצא תוכן קריא בקובץ.");
-
-
-          const studioListStr = (studios || []).map(s => s.name).filter(Boolean).join(", ");
-          const systemInstruction = `
-אתה מנהל מערכת חכם במכללת קולנוע וסאונד. מטרתך לחלץ נתוני קורסים מקובץ CSV ולהחזירם כ-JSON.
-
-מבנה הטמפלייט הצפוי (ייתכנו שגיאות כתיב, מילים חלקיות, ניסוחים שונים — התמודד איתם):
-• כותרת קורס: "מסלול לימודים" / "מסלול", "שם" (=שם הקורס), "שיוך אולפן" / "אולפן" (=שם האולפן), "מפגשים" (=מספר מפגשים)
-• פרטי מרצה: "פרטי מרצה", "שם", "מייל" / "אימייל" / "email", "טלפון" / "נייד"
-• טבלת מפגשים: "מפגשים" / "מפגש" / "#", "תאריך", "שעת התחלה" / "שעה", "שעת סיום", "נושא המפגש" / "נושא" / "תיאור"
-• עמודת כיתה/אולפן: עשויה להופיע בשמות שונים: "כיתה", "כיתת לימוד", "אולפן", "חדר", "שיוך אולפן", "studio" — כולם מתייחסים לאותו שדה (studioName).
-
-אולפנים קיימים במערכת: ${studioListStr || "לא צוין"}
-אם בעמודה "כיתה" / "כיתת לימוד" מופיע שם דומה לאחד מהאולפנים לעיל — כתוב studioName בדיוק כפי שהוא מופיע ברשימה. אחרת כתוב את הטקסט כפי שמופיע בקובץ.
-
-חוקים:
-1. לכל שורת מפגש — חלץ: date, startTime, endTime, sessionTopic (נושא המפגש), dayOfWeek
-2. חלץ studioName מהעמודה "כיתה" / "אולפן" / "כיתת לימוד" (גם אם הכתיב שגוי) — נסה להתאים לרשימת האולפנים הנ"ל
-3. חלץ instructorEmail ו-instructorPhone מסקשן "פרטי מרצה" — שייך אותם לאותו קורס
-4. חלץ שעות לפורמט HH:MM. אם חסרה שעה — כתוב '00:00'
-5. תאריך בפורמט YYYY-MM-DD. אם הוא מספר אקסל (כגון 46120) — המר ל-YYYY-MM-DD (בסיס: 1900-01-01)
-6. זהה מסלול לימודים מהכותרות. אם לא ברור — השאר ריק
-7. התעלם לחלוטין משורות של: חגים, שבתות, פגרות, הודעות מנהלה ("פורים", "שבת", "פגרה", "סגור" וכו')
-        `;
-
-          const csvText = csvData;
-          const prompt = `
-  אני מעביר לך תוכן גולמי (CSV) שחולץ מקובץ מערכת שעות של שיעורים וקורסים.
-
-  חובה עליך ליישם את החוקים הבאים:
-  1. תאריכים: המר כל תאריך שמופיע (לרוב בפורמט DD/MM/YYYY) לפורמט סטנדרטי בלבד: YYYY-MM-DD (לדוגמה: 2026-03-26).
-  2. פיצול טווח שעות (קריטי!): תחת "טווח שעות" תמצא זמנים כמו "09:00-11:45" או "12:15-15:00".
-     חובה עליך לפצל אותם לשני שדות נפרדים לחלוטין:
-     - startTime: שעת ההתחלה בדיוק כפי שהיא מופיעה (למשל "09:00" או "12:15").
-     - endTime: שעת הסיום בדיוק כפי שהיא מופיעה (למשל "11:45" או "15:00").
-     אל תשנה או תעגל את הדקות, פשוט פצל את המחרוזת לפי המקף.
-  3. שם המרצה/מורה (קריטי!): עליך לחלץ את שם איש הצוות המעביר את השיעור. הכותרת בקובץ עשויה להשתנות: "מורה", "מרצה", "מדריך", "מורה/מרצה". גם אם השם מופיע בכותרת מעל הטבלה ולא בכל שורה — שייך אותו לכל השורות שמתחתיו. הכנס את השם המלא לשדה instructor. אסור להחזיר instructor ריק אם ניתן לזהות שם מרצה!
-  4. חלץ גם את נושא השיעור (title), מסלול (track) ושנה (year).
-  5. כיתה/אולפן: חלץ מעמודה "כיתה" / "כיתת לימוד" / "אולפן" לשדה studioName.
-
-  הנתונים הגולמיים (CSV):
-  ${csvText}
-          `;
-
-          const requestBody = {
-            contents: [{ parts: [{ text: prompt }] }],
-            systemInstruction: { parts: [{ text: "אתה עוזר חכם לניהול מערכת שעות. החזר אך ורק JSON חוקי של מערך אובייקטים, בלי טקסט נוסף ובלי Markdown." }] },
-            generationConfig: {
-              thinkingConfig: { thinkingBudget: 0 },
-              responseMimeType: "application/json",
-              responseSchema: {
-                type: "ARRAY",
-                items: {
-                  type: "OBJECT",
-                  properties: {
-                    title: { type: "STRING", description: "נושא השיעור / שם הקורס" },
-                    date: { type: "STRING", description: "תאריך השיעור בפורמט YYYY-MM-DD" },
-                    startTime: { type: "STRING", description: "שעת התחלה בפורמט HH:MM (למשל 09:00 או 12:15)" },
-                    endTime: { type: "STRING", description: "שעת סיום בפורמט HH:MM (למשל 11:45 או 15:00)" },
-                    track: { type: "STRING", description: "מסלול לימודים" },
-                    instructor: { type: "STRING", description: "שם המורה / מרצה / מדריך המעביר את השיעור" },
-                    year: { type: "STRING", description: "שנה (א/ב/ג)" },
-                    dayOfWeek: { type: "STRING" },
-                    timeRange: { type: "STRING", description: "טווח שעות מקורי אם קיים, למשל 09:00-11:45" },
-                    studioName: { type: "STRING" },
-                    sessionTopic: { type: "STRING" },
-                    instructorEmail: { type: "STRING" },
-                    instructorPhone: { type: "STRING" },
-                  },
-                  required: ["title", "date", "startTime", "endTime", "instructor"],
-                },
-              },
-            },
-          };
-
-          let jsonResponse = null;
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 120000);
-          try {
-            const token = await getAuthToken();
-            const resp = await fetchWithRetry('/api/gemini', {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-              body: JSON.stringify(requestBody),
-              signal: controller.signal,
-            }, 2);
-            clearTimeout(timeoutId);
-            if (!resp.ok) {
-              const errorText = await resp.text();
-              throw new Error(`API Error ${resp.status}: ${errorText}`);
-            }
-            jsonResponse = await resp.json();
-          } catch (fetchErr) {
-            clearTimeout(timeoutId);
-            if (fetchErr.name === "AbortError") throw new Error("timeout — השרת לא הגיב תוך 2 דקות");
-            throw fetchErr;
-          }
-          if (!jsonResponse?.candidates?.length) {
-            throw new Error("Gemini לא החזיר תוצאות. נסה שוב.");
-          }
-
-          const generatedText = jsonResponse.candidates[0]?.content?.parts?.[0]?.text;
-          if (!generatedText) throw new Error("Gemini לא החזיר JSON.");
-
-          const parsedLessons = parseGeneratedLessonsJson(generatedText);
-          if (!Array.isArray(parsedLessons) || parsedLessons.length === 0) {
-            throw new Error("לא נמצאו שיעורים בקובץ לפי הפענוח של Gemini.");
-          }
-
-          const blockedKeywords = ["פורים", "שבת", "9 באב", "יום השואה", "חופשה", "חג", "הערה", "מזכירות", "הודעה", "ביטול"];
-          blockedKeywords.push("פגרה", "סגור", "בית הספר יהיה סגור");
-          const cleanedLessons = parsedLessons.filter((item) => {
-            const mergedText = [item?.title, item?.courseName, item?.instructor, item?.teacher, item?.track, item?.dayOfWeek, item?.date]
-              .map((value) => String(value || ""))
-              .join(" ");
-            return !blockedKeywords.some((keyword) => mergedText.includes(keyword));
-          });
-
-          if (cleanedLessons.length === 0) {
-            throw new Error("Gemini לא החזיר שיעורים תקינים אחרי סינון חגים והערות.");
-          }
-          // fuzzy-match tracks: if AI returns a slightly different name, try to find the closest known track
-          const fuzzyMatchTrack = (aiTrack) => {
-            if (!aiTrack) return "";
-            if (isKnownTrack(aiTrack)) return aiTrack;
-            const lower = aiTrack.toLowerCase();
-            return normalizedTrackOptions.find(t => t.toLowerCase().includes(lower) || lower.includes(t.toLowerCase())) || aiTrack;
-          };
-          cleanedLessons.forEach(item => {
-            if (item?.track) item.track = fuzzyMatchTrack(String(item.track).trim());
-          });
-          const invalidAiTracks = [...new Set(
-            cleanedLessons
-              .map((item) => String(item?.track || "").trim())
-              .filter((track) => track && !isKnownTrack(track))
-          )];
-          if (invalidAiTracks.length) {
-            // warn but don't block — set unrecognized tracks to empty
-            invalidAiTracks.forEach(bad => {
-              cleanedLessons.forEach(item => { if (String(item?.track||"").trim() === bad) item.track = ""; });
-            });
-          }
-
-          const groupedLessons = new Map();
-          cleanedLessons.forEach((item, index) => {
-            const courseName = String(item?.title || item?.courseName || "").trim();
-            const teacher = String(item?.instructor || item?.teacher || "").trim() || "לא צוין";
-            const track = String(item?.track || "").trim();
-            const dayOfWeek = String(item?.dayOfWeek || "").trim();
-            const lessonDate = normalizeImportedLessonDate(item?.date, dayOfWeek);
-            const { startTime, endTime } = resolveImportedLessonTimes(item);
-            const sessionTopic = String(item?.sessionTopic || item?.title || "").trim();
-            const studioNameRaw = String(item?.studioName || "").trim();
-            const itemEmail = String(item?.instructorEmail || "").trim();
-            const itemPhone = String(item?.instructorPhone || "").trim();
-            const lessonYear = String(item?.year || "").trim();
-            if (!courseName) return;
-
-            // fuzzy match studio to existing studios list
-            const fuzzyMatchStudio = (raw) => {
-              if (!raw || !studios?.length) return null;
-              const norm = s => String(s || "").toLowerCase().replace(/[\s\-_]/g, "");
-              const rawNorm = norm(raw);
-              // 1. exact match (case-insensitive)
-              let hit = studios.find(s => norm(s.name) === rawNorm);
-              if (hit) return hit;
-              // 2. one contains the other
-              hit = studios.find(s => norm(s.name).includes(rawNorm) || rawNorm.includes(norm(s.name)));
-              if (hit) return hit;
-              // 3. first significant word match
-              const firstWord = raw.split(/\s+/).find(w => w.length > 1)?.toLowerCase();
-              if (firstWord) hit = studios.find(s => norm(s.name).includes(firstWord) || firstWord.includes(norm(s.name)));
-              return hit || null;
-            };
-            const matchedStudio = fuzzyMatchStudio(studioNameRaw);
-
-            const groupKey = `${courseName}__${teacher}__${track}`;
-            if (!groupedLessons.has(groupKey)) {
-              groupedLessons.set(groupKey, {
-                id: `lesson_ai_${Date.now()}_${index}`,
-                name: courseName,
-                instructorName: teacher,
-                instructorPhone: itemPhone,
-                instructorEmail: itemEmail,
-                track,
-                description: lessonYear ? `יובא באמצעות ייבוא אקסל חכם (AI) • שנה ${lessonYear}` : "יובא באמצעות ייבוא אקסל חכם (AI)",
-                studioId: matchedStudio?.id || null,
-                kitId: null,
-                created_at: new Date().toISOString(),
-                schedule: [],
-              });
-            } else {
-              // enrich email/phone if not yet set
-              const g = groupedLessons.get(groupKey);
-              if (!g.instructorEmail && itemEmail) g.instructorEmail = itemEmail;
-              if (!g.instructorPhone && itemPhone) g.instructorPhone = itemPhone;
-              if (!g.studioId && matchedStudio?.id) g.studioId = matchedStudio.id;
-            }
-
-            groupedLessons.get(groupKey).schedule.push(normalizeScheduleEntry({
-              date: lessonDate,
-              startTime,
-              endTime,
-              topic: sessionTopic || (dayOfWeek ? `יום ${dayOfWeek}` : ""),
-            }));
-          });
-
-          if (groupedLessons.size === 0) {
-            throw new Error("לא נוצרו קורסים תקינים מהפענוח.");
-          }
-
-          let addedCount = 0;
-          let updatedCount = 0;
-          const updatedLessons = [...lessons];
-          const importedLessonIds = new Set();
-          groupedLessons.forEach((group) => {
-            const existingIndex = updatedLessons.findIndex((lesson) => (
-              String(lesson?.name || "").trim() === group.name
-              && String(lesson?.instructorName || "").trim() === group.instructorName
-              && String(lesson?.track || "").trim() === group.track
-            ));
-
-            if (existingIndex >= 0) {
-              const existing = updatedLessons[existingIndex];
-              updatedLessons[existingIndex] = {
-                ...existing,
-                track: group.track || existing.track || "",
-                schedule: dedupeScheduleEntries([...(existing.schedule || []), ...group.schedule]),
-              };
-              importedLessonIds.add(String(existing.id));
-              updatedCount += 1;
-              return;
-            }
-
-            updatedLessons.push({
-              ...group,
-              schedule: dedupeScheduleEntries(group.schedule),
-            });
-            importedLessonIds.add(String(group.id));
-            addedCount += 1;
-          });
-
-          const lecConflicts = findLecturerConflictsAcross(updatedLessons);
-          if (lecConflicts.length > 0) {
-            setLecturerConflicts(lecConflicts);
-            setAiImporting(false);
-            if (input) input.value = null;
-            return;
-          }
-
-          const synced = await syncImportedLecturers(updatedLessons, importedLessonIds);
-          setLessons(synced);
-          await syncAllLessons(synced);
-          showToast("success", `פוענחו ${cleanedLessons.length} שיעורים. נוספו ${addedCount} קורסים ועודכנו ${updatedCount} קורסים.`);
-        } catch (err) {
-          console.error("Error processing Excel:", err);
-          showToast("error", `שגיאה בייבוא: ${err?.message || "שגיאה לא ידועה"}`);
-        } finally {
-          setAiImporting(false);
-          if (input) input.value = null;
-        }
-      };
-
-      reader.onerror = () => {
-        console.error("File upload error: failed to read file");
-        showToast("error", "שגיאה בקריאת הקובץ.");
-        setAiImporting(false);
-        if (input) input.value = null;
-      };
-
-      reader.readAsArrayBuffer(file);
+      await runLessonImportRows(retryRows, {
+        fileName: importReport.fileName || "ייבוא XL",
+        mode: importReport.mode || "upsert",
+        baseReport: importReport,
+        replaceErrorIdentities,
+        retry: true,
+      });
+      cancelEditImportError();
     } catch (error) {
-      console.error("File upload error:", error);
-      showToast("error", "שגיאה בהעלאת הקובץ.");
-      setAiImporting(false);
-      if (input) input.value = null;
+      console.error("Retry import row failed", error);
+      showToast("error", `שגיאה בשמירת תיקון השורה: ${error?.message || "שגיאה לא ידועה"}`);
+    } finally {
+      setRetryingImportError(false);
     }
+  };
+
+  const getImportReportSummary = (report = {}) => {
+    const explicitAddedSessions = Number(report.addedSessions);
+    const explicitUpdatedSessions = Number(report.updatedSessions);
+    const hasExplicitAddedSessions = Number.isFinite(explicitAddedSessions);
+    const hasExplicitUpdatedSessions = Number.isFinite(explicitUpdatedSessions);
+    const addedCourses = (report.addedCourses || []).length;
+    const updatedCourses = (report.updatedCourses || []).length;
+    const skippedCourses = (report.skippedCourses || []).length;
+    const savedSessions = Number(report.savedSessions) || 0;
+    const addedSessions = hasExplicitAddedSessions ? explicitAddedSessions : (addedCourses > 0 && updatedCourses === 0 ? savedSessions : 0);
+    const updatedSessions = hasExplicitUpdatedSessions ? explicitUpdatedSessions : (updatedCourses > 0 && addedCourses === 0 ? savedSessions : 0);
+
+    return {
+      addedSessions,
+      updatedSessions,
+      addedCourses: addedSessions > 0 ? addedCourses : 0,
+      updatedCourses: updatedSessions > 0 ? updatedCourses : 0,
+      skippedCourses,
+    };
+  };
+
+  const importSummary = importReport ? getImportReportSummary(importReport) : null;
+
+  const printImportReport = () => {
+    if (!importReport) return;
+    const summary = getImportReportSummary(importReport);
+    const escapeHtml = (value = "") => String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+    const courseListHtml = (title, courses = []) => courses.length ? `
+      <h2>${escapeHtml(title)}</h2>
+      <table>
+        <thead><tr><th>קורס</th><th>מסלול</th><th>סה"כ מפגשים בקורס</th></tr></thead>
+        <tbody>${courses.map((course) => `
+          <tr>
+            <td>${escapeHtml(course.name)}</td>
+            <td>${escapeHtml(course.track)}</td>
+            <td>${escapeHtml(course.sessions)}</td>
+          </tr>
+        `).join("")}</tbody>
+      </table>
+    ` : "";
+    const rowsHtml = (importReport.errors || []).map((error) => `
+      <tr>
+        <td>${escapeHtml(error.rowNumber)}</td>
+        <td>${escapeHtml(error.courseName)}</td>
+        <td>${escapeHtml(error.track)}</td>
+        <td>${escapeHtml(error.instructorName)}</td>
+        <td>${escapeHtml(formatLessonDateShort(error.date))}</td>
+        <td>${escapeHtml(error.startTime)}-${escapeHtml(error.endTime)}</td>
+        <td>${escapeHtml(error.studioName)}</td>
+        <td>${escapeHtml(error.reason)}</td>
+      </tr>
+    `).join("");
+    const win = window.open("", "_blank", "width=1100,height=800");
+    if (!win) return;
+    win.document.write(`<!doctype html>
+      <html lang="he" dir="rtl">
+        <head>
+          <meta charset="utf-8" />
+          <title>דוח שגיאות ייבוא XL</title>
+          <style>
+            body { font-family: Arial, sans-serif; direction: rtl; color: #111827; padding: 24px; }
+            h1 { margin: 0 0 8px; font-size: 24px; }
+            .meta { color: #4b5563; margin-bottom: 18px; line-height: 1.6; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th, td { border: 1px solid #d1d5db; padding: 8px; vertical-align: top; text-align: right; }
+            th { background: #f3f4f6; font-weight: 800; }
+            h2 { margin: 22px 0 8px; font-size: 18px; }
+          </style>
+        </head>
+        <body>
+          <h1>דוח שגיאות ייבוא XL</h1>
+          <div class="meta">
+            קובץ: ${escapeHtml(importReport.fileName || "")}<br />
+            נוספו ${escapeHtml(summary.addedSessions)} שיעורים · עודכנו ${escapeHtml(summary.updatedSessions)} שיעורים<br />
+            נוצרו ${escapeHtml(summary.addedCourses)} קורסים · עודכנו ${escapeHtml(summary.updatedCourses)} קורסים · דולגו ${escapeHtml(summary.skippedCourses)} קורסים<br />
+            שורות שנכשלו: ${escapeHtml((importReport.errors || []).length)}
+          </div>
+          ${courseListHtml("קורסים שנוצרו", importReport.addedCourses || [])}
+          ${courseListHtml("קורסים שעודכנו", importReport.updatedCourses || [])}
+          <table>
+            <thead>
+              <tr>
+                <th>שורה</th><th>קורס</th><th>מסלול</th><th>מרצה</th><th>תאריך</th><th>שעות</th><th>כיתה</th><th>סיבה</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </body>
+      </html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 250);
   };
 
   return (
     <div className="page">
+      {showImportModeDialog && pendingImportFile && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:4300,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}>
+          <div style={{width:"100%",maxWidth:560,background:"var(--surface)",borderRadius:16,border:"1px solid rgba(245,166,35,0.45)",direction:"rtl",boxShadow:"0 16px 44px rgba(0,0,0,0.45)"}}>
+            <div style={{padding:"18px 20px",borderBottom:"1px solid var(--border)",background:"rgba(245,166,35,0.08)",borderRadius:"16px 16px 0 0"}}>
+              <div style={{fontWeight:900,fontSize:18,color:"var(--accent)",display:"flex",alignItems:"center",gap:8}}>
+                <FileText size={18} strokeWidth={1.75}/> בחירת מצב ייבוא XL
+              </div>
+              <div style={{fontSize:13,color:"var(--text2)",marginTop:7,lineHeight:1.6}}>
+                הקובץ שנבחר: <strong style={{color:"var(--text)"}}>{pendingImportFile.name}</strong>
+              </div>
+            </div>
+            <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:12}}>
+              <label style={{display:"flex",gap:12,alignItems:"flex-start",padding:"14px",borderRadius:12,border:`2px solid ${pendingImportMode==="upsert" ? "var(--accent)" : "var(--border)"}`,background:pendingImportMode==="upsert" ? "rgba(245,166,35,0.09)" : "var(--surface2)",cursor:"pointer"}}>
+                <input type="radio" name="lesson-xl-import-mode" checked={pendingImportMode==="upsert"} onChange={()=>setPendingImportMode("upsert")} style={{marginTop:3}}/>
+                <span>
+                  <span style={{display:"block",fontWeight:900,color:"var(--text)",marginBottom:4}}>צור קורסים חדשים ועדכן קורסים קיימים</span>
+                  <span style={{display:"block",fontSize:12,color:"var(--text2)",lineHeight:1.5}}>מתאים לעדכון לוח קיים: קורסים קיימים יעודכנו רק אם נמצא שינוי אמיתי במפגשים.</span>
+                </span>
+              </label>
+              <label style={{display:"flex",gap:12,alignItems:"flex-start",padding:"14px",borderRadius:12,border:`2px solid ${pendingImportMode==="create_only" ? "var(--accent)" : "var(--border)"}`,background:pendingImportMode==="create_only" ? "rgba(245,166,35,0.09)" : "var(--surface2)",cursor:"pointer"}}>
+                <input type="radio" name="lesson-xl-import-mode" checked={pendingImportMode==="create_only"} onChange={()=>setPendingImportMode("create_only")} style={{marginTop:3}}/>
+                <span>
+                  <span style={{display:"block",fontWeight:900,color:"var(--text)",marginBottom:4}}>צור קורסים חדשים בלבד</span>
+                  <span style={{display:"block",fontSize:12,color:"var(--text2)",lineHeight:1.5}}>קורסים שכבר קיימים לפי שם קורס ומסלול לימודים ידולגו ולא ישתנו.</span>
+                </span>
+              </label>
+            </div>
+            <div style={{padding:"14px 20px",borderTop:"1px solid var(--border)",display:"flex",gap:10,justifyContent:"flex-end",flexWrap:"wrap"}}>
+              <button className="btn btn-secondary" type="button" onClick={closeImportModeDialog} disabled={xlImporting}>
+                <X size={16} strokeWidth={1.75}/> ביטול
+              </button>
+              <button className="btn btn-primary" type="button" onClick={()=>importLessonsXL(pendingImportFile, pendingImportMode)} disabled={xlImporting}>
+                {xlImporting ? "מייבא..." : "התחל ייבוא"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {importReport && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:4200,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}>
+          <div style={{width:"min(96vw, 1380px)",maxWidth:"96vw",background:"var(--surface)",borderRadius:16,border:"1px solid rgba(245,166,35,0.45)",direction:"rtl",maxHeight:"86vh",display:"flex",flexDirection:"column"}}>
+            <div style={{padding:"16px 20px",borderBottom:"1px solid var(--border)",background:"rgba(245,166,35,0.08)",borderRadius:"16px 16px 0 0"}}>
+              <div style={{fontWeight:900,fontSize:17,color:"var(--accent)",display:"flex",alignItems:"center",gap:8}}>
+                <FileText size={18} strokeWidth={1.75}/> דוח ייבוא XL
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
+                <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:999,background:"rgba(46,204,113,0.08)",border:"1px solid rgba(46,204,113,0.22)",color:"var(--green)",fontSize:12,fontWeight:800}}>
+                  קורסים שנוצרו: {importSummary?.addedCourses || 0}
+                </span>
+                <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:999,background:"rgba(46,204,113,0.12)",border:"1px solid rgba(46,204,113,0.28)",color:"var(--green)",fontSize:12,fontWeight:900}}>
+                  נוספו {importSummary?.addedSessions || 0} שיעורים
+                </span>
+                <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:999,background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.22)",color:"var(--accent)",fontSize:12,fontWeight:800}}>
+                  קורסים שעודכנו: {importSummary?.updatedCourses || 0}
+                </span>
+                <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:999,background:"rgba(245,166,35,0.12)",border:"1px solid rgba(245,166,35,0.28)",color:"var(--accent)",fontSize:12,fontWeight:900}}>
+                  עודכנו {importSummary?.updatedSessions || 0} שיעורים
+                </span>
+                <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:999,background:"rgba(255,255,255,0.05)",border:"1px solid var(--border)",color:"var(--text2)",fontSize:12,fontWeight:800}}>
+                  קורסים שדולגו: {importSummary?.skippedCourses || 0}
+                </span>
+                {(importReport.errors || []).length > 0 && (
+                  <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:999,background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.3)",color:"var(--red)",fontSize:12,fontWeight:900}}>
+                    {(importReport.errors || []).length} שורות דורשות תיקון
+                  </span>
+                )}
+              </div>
+            </div>
+            <div style={{overflowY:"auto",flex:1,padding:"16px 20px"}}>
+              {((importReport.addedCourses || []).length > 0 || (importReport.updatedCourses || []).length > 0 || (importReport.skippedCourses || []).length > 0) && (
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:12,marginBottom:16}}>
+                  {[
+                    { title:"קורסים שנוצרו", courses: importSummary?.addedCourses ? (importReport.addedCourses || []) : [], color:"var(--green)" },
+                    { title:"קורסים שעודכנו", courses: importSummary?.updatedCourses ? (importReport.updatedCourses || []) : [], color:"var(--accent)" },
+                    { title:"קורסים קיימים שדולגו", courses: importReport.skippedCourses || [], color:"var(--text2)" },
+                  ].filter(section => section.courses.length > 0).map((section) => (
+                    <div key={section.title} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:12,padding:"12px 14px"}}>
+                      <div style={{fontSize:13,fontWeight:900,color:section.color,marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+                        <BookOpen size={14} strokeWidth={1.75}/> {section.title} ({section.courses.length})
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:150,overflowY:"auto"}}>
+                        {section.courses.map((course, index) => (
+                          <div key={`${course.name}-${course.track}-${index}`} style={{display:"flex",justifyContent:"space-between",gap:10,padding:"7px 9px",borderRadius:8,background:"rgba(255,255,255,0.03)",fontSize:12}}>
+                            <span style={{fontWeight:800,color:"var(--text)"}}>{course.name}</span>
+                            <span style={{color:"var(--text2)",textAlign:"left"}}>{course.track}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {(importReport.errors || []).length === 0 ? (
+                <div style={{padding:"18px",border:"1px solid rgba(46,204,113,0.25)",background:"rgba(46,204,113,0.08)",borderRadius:12,color:"var(--green)",fontWeight:800}}>
+                  הייבוא הסתיים ללא שגיאות.
+                </div>
+              ) : (
+                <div style={{overflowX:"auto",paddingBottom:10}}>
+                  <datalist id="lesson-import-error-studios">
+                    {studios.map(studio => <option key={studio.id} value={studio.name}/>)}
+                  </datalist>
+                  <datalist id="lesson-import-error-lecturers">
+                    {lecturers.map(lecturer => <option key={lecturer.id} value={lecturerDisplayName(lecturer)}/>)}
+                  </datalist>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:1180,tableLayout:"fixed"}}>
+                    <thead>
+                      <tr style={{background:"var(--surface2)",color:"var(--text2)"}}>
+                        {[
+                          {label:"", width:44},
+                          {label:"שורה", width:58},
+                          {label:"קורס", width:250},
+                          {label:"מסלול", width:150},
+                          {label:"מרצה", width:105},
+                          {label:"תאריך", width:90},
+                          {label:"שעות", width:96},
+                          {label:"כיתה", width:150},
+                          {label:"סיבת הכשל", width:300},
+                        ].map((header) => (
+                          <th key={header.label || "action"} style={{padding:"8px 10px",border:"1px solid var(--border)",textAlign:"right",whiteSpace:"nowrap",width:header.width}}>{header.label}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(importReport.errors || []).map((error, index) => {
+                        const isEditing = editingImportErrorKey === reportErrorIdentity(error);
+                        const iconButtonStyle = {width:30,height:30,minWidth:30,minHeight:30,padding:0,borderRadius:8,display:"inline-flex",alignItems:"center",justifyContent:"center"};
+                        const actionButtonStyle = {height:30,minHeight:30,padding:"4px 9px",fontSize:12,borderRadius:8,whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:5};
+                        return (
+                          <Fragment key={`${reportErrorKey(error)}-${index}`}>
+                            <tr style={isEditing ? {background:"rgba(245,166,35,0.05)"} : undefined}>
+                              <td style={{padding:"6px",border:"1px solid var(--border)",whiteSpace:"nowrap",verticalAlign:"top",width:44,textAlign:"center"}}>
+                                <button type="button" className="btn btn-secondary btn-sm" aria-label={isEditing ? "סגור עריכה" : "עריכת שורה"} title={isEditing ? "סגור עריכה" : "עריכת שורה"} onClick={() => isEditing ? cancelEditImportError() : startEditImportError(error)} style={iconButtonStyle}>
+                                  {isEditing ? <X size={14} strokeWidth={1.9}/> : <Pencil size={14} strokeWidth={1.9}/>}
+                                </button>
+                              </td>
+                              <td style={{padding:"8px 10px",border:"1px solid var(--border)",fontWeight:800,color:"var(--accent)",verticalAlign:"top",width:58}}>{error.rowNumber}</td>
+                              <td style={{padding:"8px 10px",border:"1px solid var(--border)",verticalAlign:"top",width:250,lineHeight:1.45}}>{error.courseName || "—"}</td>
+                              <td style={{padding:"8px 10px",border:"1px solid var(--border)",verticalAlign:"top",width:150,lineHeight:1.45}}>{error.track || "—"}</td>
+                              <td style={{padding:"8px 10px",border:"1px solid var(--border)",verticalAlign:"top",width:105,lineHeight:1.45}}>{error.instructorName || "—"}</td>
+                              <td style={{padding:"8px 10px",border:"1px solid var(--border)",direction:"ltr",textAlign:"right",verticalAlign:"top",width:88}}>{formatLessonDateShort(error.date) || "—"}</td>
+                              <td style={{padding:"8px 10px",border:"1px solid var(--border)",direction:"ltr",textAlign:"right",verticalAlign:"top",width:96}}>{error.startTime || "—"}-{error.endTime || "—"}</td>
+                              <td style={{padding:"8px 10px",border:"1px solid var(--border)",verticalAlign:"top",width:150,lineHeight:1.45}}>{error.studioName || "—"}</td>
+                              <td style={{padding:"8px 10px",border:"1px solid var(--border)",color:"var(--red)",fontWeight:800,verticalAlign:"top",width:300,lineHeight:1.45,whiteSpace:"normal"}}>{error.reason}</td>
+                            </tr>
+                            {isEditing && (
+                              <tr>
+                                <td colSpan={9} style={{padding:"12px 14px",border:"1px solid rgba(245,166,35,0.32)",background:"rgba(245,166,35,0.07)",overflowX:"auto"}}>
+                                  <div style={{display:"grid",gridTemplateColumns:"minmax(260px,1fr) minmax(420px,1.4fr) minmax(150px,0.7fr) 120px 96px 96px minmax(170px,0.8fr)",gap:8,alignItems:"end",minWidth:1160}}>
+                                    <label style={{display:"flex",flexDirection:"column",gap:4,fontSize:11,color:"var(--text2)",fontWeight:800}}>
+                                      קורס
+                                      <input className="form-input" value={importErrorDraft?.courseName || ""} onChange={e=>updateImportErrorDraft("courseName", e.target.value)} style={{height:32,fontSize:12,width:"100%"}}/>
+                                    </label>
+                                    <label style={{display:"flex",flexDirection:"column",gap:4,fontSize:11,color:"var(--text2)",fontWeight:800}}>
+                                      מסלול
+                                      <select className="form-select" value={importErrorDraft?.track || ""} onChange={e=>updateImportErrorDraft("track", e.target.value)} title={importErrorDraft?.track || "בחר מסלול"} style={{height:40,minHeight:40,fontSize:12,lineHeight:"20px",width:"100%",direction:"rtl",textAlign:"right",paddingTop:0,paddingBottom:0}}>
+                                        <option value="">בחר מסלול</option>
+                                        {normalizedTrackOptions.map(track => <option key={track} value={track}>{track}</option>)}
+                                      </select>
+                                    </label>
+                                    <label style={{display:"flex",flexDirection:"column",gap:4,fontSize:11,color:"var(--text2)",fontWeight:800}}>
+                                      מרצה
+                                      <input className="form-input" list="lesson-import-error-lecturers" value={importErrorDraft?.instructorName || ""} onChange={e=>updateImportErrorDraft("instructorName", e.target.value)} style={{height:32,fontSize:12,width:"100%"}}/>
+                                    </label>
+                                    <label style={{display:"flex",flexDirection:"column",gap:4,fontSize:11,color:"var(--text2)",fontWeight:800}}>
+                                      תאריך
+                                      <input className="form-input" value={importErrorDraft?.date || ""} onChange={e=>updateImportErrorDraft("date", e.target.value)} placeholder="DD/MM/YY" style={{height:32,fontSize:12,textAlign:"right"}}/>
+                                    </label>
+                                    <label style={{display:"flex",flexDirection:"column",gap:4,fontSize:11,color:"var(--text2)",fontWeight:800}}>
+                                      התחלה
+                                      <input className="form-input" value={importErrorDraft?.startTime || ""} onChange={e=>updateImportErrorDraft("startTime", e.target.value)} style={{height:32,fontSize:12,textAlign:"right"}}/>
+                                    </label>
+                                    <label style={{display:"flex",flexDirection:"column",gap:4,fontSize:11,color:"var(--text2)",fontWeight:800}}>
+                                      סיום
+                                      <input className="form-input" value={importErrorDraft?.endTime || ""} onChange={e=>updateImportErrorDraft("endTime", e.target.value)} style={{height:32,fontSize:12,textAlign:"right"}}/>
+                                    </label>
+                                    <label style={{display:"flex",flexDirection:"column",gap:4,fontSize:11,color:"var(--text2)",fontWeight:800}}>
+                                      כיתה
+                                      <input className="form-input" list="lesson-import-error-studios" value={importErrorDraft?.studioName || ""} onChange={e=>updateImportErrorDraft("studioName", e.target.value)} style={{height:32,fontSize:12,width:"100%"}}/>
+                                    </label>
+                                    <div style={{gridColumn:"1 / -1",display:"flex",gap:8,whiteSpace:"nowrap",justifyContent:"flex-start",paddingTop:8,borderTop:"1px solid rgba(245,166,35,0.18)"}}>
+                                      <button type="button" className="btn btn-primary btn-sm" onClick={retryImportErrorDraft} disabled={retryingImportError} style={actionButtonStyle}>
+                                        <Check size={12} strokeWidth={1.75}/> {retryingImportError ? "שומר..." : "שמור"}
+                                      </button>
+                                      <button type="button" className="btn btn-secondary btn-sm" onClick={cancelEditImportError} disabled={retryingImportError} style={actionButtonStyle}>
+                                        ביטול
+                                      </button>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div style={{padding:"14px 20px",borderTop:"1px solid var(--border)",display:"flex",gap:10,justifyContent:"flex-end",flexWrap:"wrap"}}>
+              <button className="btn btn-secondary" onClick={()=>setImportReport(null)}>
+                <X size={16} strokeWidth={1.75}/> סגור
+              </button>
+              {(importReport.errors || []).length > 0 && (
+                <button className="btn btn-primary" onClick={printImportReport}>
+                  <Download size={16} strokeWidth={1.75}/> הדפס/שמור PDF
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {lecturerConflicts.length > 0 && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:4100,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}}>
           <div style={{width:"100%",maxWidth:560,background:"var(--surface)",borderRadius:16,border:"1px solid rgba(231,76,60,0.5)",direction:"rtl",maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
@@ -1322,15 +1769,15 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
         />
       ) : (
         <>
-          {/* Row 1 — חיפוש + פילטרים נשלפים (מיון + טווח זמן) */}
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,flexWrap:"wrap"}}>
-            <div className="search-bar" style={{flex:1,minWidth:180}}><span><Search size={16} strokeWidth={1.75} color="var(--text3)" /></span>
+          {/* Controls — search, sorting, time/status filters, and actions */}
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+            <div className="search-bar" style={{flex:"1 1 260px",minWidth:220}}><span><Search size={16} strokeWidth={1.75} color="var(--text3)" /></span>
               <input placeholder="חיפוש קורס או מרצה..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
-            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <div style={{display:"flex",gap:6,alignItems:"center",flex:"0 0 auto"}}>
               <span style={{fontSize:12,color:"var(--text3)",fontWeight:700}}>מיון:</span>
               <select
                 className="form-select"
-                style={{minWidth:130,fontSize:12,padding:"6px 8px",fontWeight:700,borderColor:sortMode!=="recent"?"#f5a623":"var(--border)",color:sortMode!=="recent"?"#f5a623":"var(--text2)"}}
+                style={{minWidth:118,fontSize:12,padding:"6px 8px",fontWeight:700,borderColor:sortMode!=="recent"?"#f5a623":"var(--border)",color:sortMode!=="recent"?"#f5a623":"var(--text2)"}}
                 value={sortMode}
                 onChange={e=>setSortMode(e.target.value)}
               >
@@ -1338,10 +1785,9 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                 <option value="urgency">⚡ דחיפות</option>
               </select>
             </div>
-            {/* פילטר זמן — היום / השבוע / החודש */}
             <select
               className="form-select"
-              style={{minWidth:120,fontSize:12,padding:"6px 8px",fontWeight:700,borderColor:timeFilter!=="all"?"#4ade80":"var(--border)",color:timeFilter!=="all"?"#4ade80":"var(--text2)"}}
+              style={{minWidth:112,fontSize:12,padding:"6px 8px",fontWeight:700,borderColor:timeFilter!=="all"?"#4ade80":"var(--border)",color:timeFilter!=="all"?"#4ade80":"var(--text2)",flex:"0 0 auto"}}
               value={timeFilter}
               onChange={e=>setTimeFilter(e.target.value)}
             >
@@ -1350,18 +1796,33 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
               <option value="week">🗓️ השבוע</option>
               <option value="month">📅 החודש</option>
             </select>
-          </div>
-          {/* Row 2 — לחצני פעולה */}
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:12}}>
             <button
               type="button"
-              onClick={() => { setArchiveView(v => !v); setSearch(""); setTrackFilter([]); }}
+              onClick={() => setShowUnassignedLecturerOnly(v => !v)}
+              style={{
+                padding: "6px 14px", borderRadius: 20, fontWeight: 800, fontSize: 12, cursor: "pointer",
+                border: `2px solid ${showUnassignedLecturerOnly ? "#ef4444" : "var(--border)"}`,
+                background: showUnassignedLecturerOnly ? "rgba(239,68,68,0.14)" : "transparent",
+                color: showUnassignedLecturerOnly ? "#ef4444" : "var(--text3)",
+                display: "inline-flex", alignItems: "center", gap: 6, flex:"0 0 auto",
+              }}
+            >
+              <User size={14} strokeWidth={1.75}/> ללא מרצה
+              {withoutLecturerCount > 0 && (
+                <span style={{ background: showUnassignedLecturerOnly ? "#ef4444" : "rgba(239,68,68,0.18)", color: showUnassignedLecturerOnly ? "#fff" : "#ef4444", borderRadius: 20, padding: "1px 7px", fontSize: 11, fontWeight: 900 }}>
+                  {withoutLecturerCount}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setArchiveView(v => !v); setSearch(""); setTrackFilter([]); setShowUnassignedLecturerOnly(false); }}
               style={{
                 padding: "6px 14px", borderRadius: 20, fontWeight: 700, fontSize: 13, cursor: "pointer",
                 border: `2px solid ${archiveView ? "#e67e22" : "var(--border)"}`,
                 background: archiveView ? "rgba(230,126,34,0.14)" : "transparent",
                 color: archiveView ? "#e67e22" : "var(--text3)",
-                display: "inline-flex", alignItems: "center", gap: 6,
+                display: "inline-flex", alignItems: "center", gap: 6, flex:"0 0 auto",
               }}
             >
               <Package size={16} strokeWidth={1.75} /> ארכיון
@@ -1371,18 +1832,16 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                 </span>
               )}
             </button>
-            <input ref={aiImportInputRef} type="file" accept=".csv,.xlsx,.xls" style={{display:"none"}} onChange={importLessonsSmartAI} disabled={aiImporting}/>
-            <button className="btn btn-primary" style={{display:"inline-flex",alignItems:"center",gap:6}} onClick={()=>aiImportInputRef.current?.click()} disabled={aiImporting}>
-              {aiImporting ? "מפענח את קובץ האקסל..." : "✨ ייבוא אקסל חכם (AI)"}
-            </button>
-            <input ref={importInputRef} type="file" accept=".csv,.tsv,.xlsx,.xls" style={{display:"none"}} onChange={importLessonsXL} disabled={xlImporting}/>
-            <button className="btn btn-secondary" onClick={()=>importInputRef.current?.click()} disabled={xlImporting}>{xlImporting ? "מייבא..." : "ייבוא XL"}</button>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginInlineStart:"auto"}}>
+            <input ref={importInputRef} type="file" accept=".csv,.tsv,.xlsx,.xls" style={{display:"none"}} onChange={handleLessonsXLFileSelect} disabled={xlImporting}/>
+            <button className="btn btn-primary" onClick={()=>importInputRef.current?.click()} disabled={xlImporting}>{xlImporting ? "מייבא..." : "ייבוא XL"}</button>
             {import.meta.env.DEV && (
               <button className="btn btn-secondary" onClick={runStage8Backfill} disabled={stage8Backfilling} title="Sync store.lessons blob → public.lessons table (dev only)">
                 {stage8Backfilling ? "מסנכרן..." : "🔁 Stage 8 Backfill"}
               </button>
             )}
             <button className="btn btn-primary" onClick={()=>{setMode("add");setEditTarget(null);}}>➕ קורס חדש</button>
+            </div>
           </div>
 
           {allTrackFilters.length > 1 && (
@@ -1431,11 +1890,23 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                   </div>
                 </div>
                 <div style={{overflowY:"auto",flex:1,padding:"16px 20px",display:"flex",flexDirection:"column",gap:14}}>
+                  <div style={{background:"rgba(155,89,182,0.07)",border:"1px solid rgba(155,89,182,0.22)",borderRadius:10,padding:"10px 14px"}}>
+                    <div style={{fontWeight:800,fontSize:12,color:"#9b59b6",marginBottom:6,display:"flex",alignItems:"center",gap:5}}><BookOpen size={13} strokeWidth={1.75}/> שם הקורס</div>
+                    <div style={{fontSize:15,fontWeight:900,color:"var(--text)"}}>{detailTarget.name}</div>
+                  </div>
                   {/* Instructor */}
-                  {(detailTarget.instructorName||detailTarget.instructorEmail||detailTarget.instructorPhone) && (
+                  {detailTarget.track && (
+                    <div style={{background:"rgba(245,166,35,0.07)",border:"1px solid rgba(245,166,35,0.22)",borderRadius:10,padding:"10px 14px"}}>
+                      <div style={{fontWeight:800,fontSize:12,color:"#f5a623",marginBottom:6,display:"flex",alignItems:"center",gap:5}}><GraduationCap size={13} strokeWidth={1.75}/> מסלול לימודים</div>
+                      <div style={{fontSize:13,fontWeight:800,color:"var(--text)"}}>{detailTarget.track}</div>
+                    </div>
+                  )}
+                  {(detailTarget.instructorName||detailTarget.instructorEmail||detailTarget.instructorPhone||normalizeLessonLecturerList(detailTarget).length > 0) && (
                     <div style={{background:"rgba(155,89,182,0.07)",border:"1px solid rgba(155,89,182,0.2)",borderRadius:10,padding:"12px 14px"}}>
-                      <div style={{fontWeight:800,fontSize:12,color:"#9b59b6",marginBottom:8}}>פרטי מרצה</div>
-                      {detailTarget.instructorName && <div style={{fontSize:13,fontWeight:700}}>{detailTarget.instructorName}</div>}
+                      <div style={{fontWeight:800,fontSize:12,color:"#9b59b6",marginBottom:8}}>מרצי הקורס</div>
+                      {normalizeLessonLecturerList(detailTarget).map((lecturer) => (
+                        <div key={lecturer.lecturerId || lecturer.instructorName} style={{fontSize:13,fontWeight:700,marginBottom:4}}>{lecturer.instructorName}</div>
+                      ))}
                       {detailTarget.instructorPhone && <div style={{fontSize:14,fontWeight:700,color:"var(--text)",marginTop:6,display:"flex",alignItems:"center",gap:6}}><Phone size={14} strokeWidth={2}/> {detailTarget.instructorPhone}</div>}
                       {detailTarget.instructorEmail && <div style={{fontSize:14,fontWeight:700,color:"var(--text)",marginTop:4,display:"flex",alignItems:"center",gap:6,wordBreak:"break-all"}}><Mail size={14} strokeWidth={2}/> {detailTarget.instructorEmail}</div>}
                     </div>
@@ -1450,16 +1921,17 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                   )}
                   {/* Sessions */}
                   <div style={{background:"rgba(46,204,113,0.06)",border:"1px solid rgba(46,204,113,0.2)",borderRadius:10,padding:"12px 14px"}}>
-                    <div style={{fontWeight:800,fontSize:12,color:"var(--green)",marginBottom:8}}><Calendar size={16} strokeWidth={1.75} /> מפגשים ({(detailTarget.schedule||[]).length})</div>
-                    {(detailTarget.schedule||[]).length === 0
+                    <div style={{fontWeight:800,fontSize:12,color:"var(--green)",marginBottom:8}}><Calendar size={16} strokeWidth={1.75} /> מפגשים ({getLessonDisplaySchedule(detailTarget).length})</div>
+                    {getLessonDisplaySchedule(detailTarget).length === 0
                       ? <div style={{fontSize:12,color:"var(--text3)"}}>אין מפגשים רשומים</div>
                       : <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:300,overflowY:"auto"}}>
-                          {[...(detailTarget.schedule||[])].sort((a,b)=>a.date.localeCompare(b.date)).map((s,i)=>{
+                          {getLessonDisplaySchedule(detailTarget).sort((a,b)=>a.date.localeCompare(b.date)).map((s,i)=>{
                             const isPast = s.date < today();
                             return (
                               <div key={i} style={{display:"flex",gap:10,alignItems:"center",padding:"8px 12px",borderRadius:8,background:isPast?"rgba(0,0,0,0.1)":"rgba(46,204,113,0.07)",opacity:isPast?0.55:1}}>
                                 <span style={{fontSize:13,fontWeight:800,minWidth:92}}>{formatLessonDateShort(s.date)}</span>
                                 {s.startTime && <span style={{fontSize:14,fontWeight:800,color:"var(--green)",letterSpacing:0.3,fontVariantNumeric:"tabular-nums"}}>{s.startTime}{s.endTime?`–${s.endTime}`:""}</span>}
+                                {(s.instructorName || s.alternateInstructorName) && <span style={{fontSize:11,color:"#f5a623",fontWeight:800}}>מרצה: {s.instructorName || s.alternateInstructorName}</span>}
                                 {s.topic && <span style={{fontSize:12,color:"var(--text2)",flex:1}}>· {s.topic}</span>}
                                 {isPast && <span style={{fontSize:10,color:"var(--text3)"}}>עבר</span>}
                               </div>
@@ -1482,9 +1954,16 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
               <button type="button" onClick={()=>setArchiveView(false)} style={{marginRight:"auto",padding:"2px 10px",borderRadius:20,border:"1px solid rgba(230,126,34,0.5)",background:"transparent",color:"#e67e22",fontSize:12,cursor:"pointer",fontWeight:700}}>חזור לפעילים</button>
             </div>
           )}
+          {showUnassignedLecturerOnly && (
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"10px 16px",background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.25)",borderRadius:10}}>
+              <User size={16} strokeWidth={1.75} color="#ef4444"/>
+              <span style={{fontSize:13,color:"#ef4444",fontWeight:800}}>מציג קורסים ללא מרצה משויך</span>
+              <button type="button" onClick={()=>setShowUnassignedLecturerOnly(false)} style={{marginRight:"auto",padding:"2px 10px",borderRadius:20,border:"1px solid rgba(239,68,68,0.5)",background:"transparent",color:"#ef4444",fontSize:12,cursor:"pointer",fontWeight:800}}>בטל סינון</button>
+            </div>
+          )}
 
           {sortedFiltered.length===0
-            ? <div className="empty-state"><div className="emoji"><Package size={32} strokeWidth={1.75} /></div><div>{archiveView ? "אין קורסים בארכיון" : lessons.length===0 ? "אין קורסים עדיין" : "לא נמצאו קורסים למסלולים שנבחרו"}</div><div style={{fontSize:13,color:"var(--text3)"}}>{archiveView ? "קורסים עוברים לארכיון אוטומטית כשמפגשם האחרון מסתיים" : lessons.length===0 ? 'לחץ "➕ קורס חדש" כדי להתחיל' : "נסה לשנות חיפוש או מסלולי לימוד"}</div></div>
+            ? <div className="empty-state"><div className="emoji"><Package size={32} strokeWidth={1.75} /></div><div>{archiveView ? "אין קורסים בארכיון" : showUnassignedLecturerOnly ? "לא נמצאו קורסים ללא מרצה" : lessons.length===0 ? "אין קורסים עדיין" : "לא נמצאו קורסים למסלולים שנבחרו"}</div><div style={{fontSize:13,color:"var(--text3)"}}>{archiveView ? "קורסים עוברים לארכיון אוטומטית כשמפגשם האחרון מסתיים" : showUnassignedLecturerOnly ? "כל הקורסים הפעילים משויכים לפחות למרצה אחד" : lessons.length===0 ? 'לחץ "➕ קורס חדש" כדי להתחיל' : "נסה לשנות חיפוש או מסלולי לימוד"}</div></div>
             : <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {Object.entries(groupedLessons)
                   .sort(([left], [right]) => left.localeCompare(right, "he"))
@@ -1497,8 +1976,9 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                       {trackLessons.map(l=>{
                         const studio = studios.find(s=>String(s.id)===String(l.studioId));
                         const kit = getLinkedKit(l);
-                        const upcoming = (l.schedule||[]).filter(s=>s.date>=today()).length;
-                        const nextSession = (l.schedule||[]).filter(s=>s.date>=today()).sort((a,b)=>a.date.localeCompare(b.date))[0];
+                        const displaySchedule = getLessonDisplaySchedule(l);
+                        const upcoming = displaySchedule.filter(s=>s.date>=today()).length;
+                        const nextSession = displaySchedule.filter(s=>s.date>=today()).sort((a,b)=>a.date.localeCompare(b.date))[0];
                         return (
                           <div key={l.id}
                             onClick={()=>setDetailTarget(l)}
@@ -1506,10 +1986,19 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,flexWrap:"wrap"}}>
                               <div style={{flex:1,minWidth:200}}>
                                 <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>{l.name}</div>
-                                {l.instructorName && <div style={{fontSize:13,color:"var(--text2)"}}>{l.instructorName}</div>}
+                                {trackName !== UNASSIGNED_TRACK && (
+                                  <div style={{fontSize:12,color:"#f5a623",fontWeight:800,marginBottom:4,display:"flex",alignItems:"center",gap:4}}>
+                                    <GraduationCap size={13} strokeWidth={1.75}/> {trackName}
+                                  </div>
+                                )}
+                                {normalizeLessonLecturerList(l).length > 0 ? (
+                                  <div style={{fontSize:13,color:"var(--text2)"}}>{normalizeLessonLecturerList(l).map(lecturer => lecturer.instructorName).filter(Boolean).join(" · ")}</div>
+                                ) : (
+                                  <div style={{fontSize:12,color:"#ef4444",fontWeight:800,display:"inline-flex",alignItems:"center",gap:4}}><User size={12} strokeWidth={1.75}/> ללא מרצה</div>
+                                )}
                                 {nextSession && <div style={{fontSize:12,color:"var(--green)",marginTop:2}}><Calendar size={16} strokeWidth={1.75} /> מפגש קרוב: {formatLessonDateShort(nextSession.date)}{nextSession.startTime?` · ${nextSession.startTime}`:""}</div>}
                                 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
-                                  <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}><Calendar size={16} strokeWidth={1.75} /> {(l.schedule||[]).length} שיעורים</span>
+                                  <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}><Calendar size={16} strokeWidth={1.75} /> {displaySchedule.length} שיעורים</span>
                                   {upcoming>0 && <span style={{background:"rgba(46,204,113,0.12)",color:"var(--green)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><CheckCircle size={10} strokeWidth={1.75}/> {upcoming} קרובים</span>}
                                   {studio && <span style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}><Mic size={16} strokeWidth={1.75} /> {studio.name}</span>}
                                   {kit && <span style={{background:"rgba(245,166,35,0.12)",color:"var(--accent)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><Package size={11} strokeWidth={1.75}/> {kit.name}</span>}
@@ -1536,15 +2025,61 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 // ── Lesson/Course Form ────────────────────────────────────────────────────────
 function LessonForm({ initial, onSave, onCancel, studios, equipment, reservations, setReservations, kits, showToast, trackOptions=[], lecturers=[], setLecturers, certifications={}, siteSettings={} }) {
   const lecturerOptions = lecturers.filter((lecturer) => lecturer?.isActive !== false);
+  const displayLecturerName = (lecturer) => {
+    const fullName = String(lecturer?.fullName || "").trim();
+    const fromParts = [lecturer?.firstName, lecturer?.lastName].map(part => String(part || "").trim()).filter(Boolean).join(" ");
+    return fullName || fromParts;
+  };
   const [name, setName]                       = useState(initial?.name||"");
   const [track, setTrack]                     = useState(initial?.track||"");
-  const initLecturerId = initial?.lecturerId || (initial?.instructorName ? (lecturers.find(l => l.fullName.trim().toLowerCase() === String(initial.instructorName||"").trim().toLowerCase())?.id || "") : "");
+  const initLecturerId = initial?.lecturerId || (initial?.instructorName ? (lecturers.find(l => displayLecturerName(l).trim().toLowerCase() === String(initial.instructorName||"").trim().toLowerCase())?.id || "") : "");
   const [lecturerId, setLecturerId]           = useState(initLecturerId);
-  const initLecturerName = initLecturerId ? (lecturers.find(l => l.id === initLecturerId)?.fullName || initial?.instructorName || "") : (initial?.instructorName || "");
+  const initLecturerName = initLecturerId ? (displayLecturerName(lecturers.find(l => l.id === initLecturerId)) || initial?.instructorName || "") : (initial?.instructorName || "");
   const [lecturerInput, setLecturerInput]     = useState(initLecturerName);
+  const normalizeCourseLecturerList = (items = []) => {
+    const byKey = new Map();
+    items.forEach((item) => {
+      const rawId = item?.lecturerId || item?.id || "";
+      const rawName = item?.instructorName || item?.fullName || item?.name || "";
+      const matched = rawId
+        ? lecturerOptions.find(l => String(l.id) === String(rawId))
+        : lecturerOptions.find(l => displayLecturerName(l).trim().toLowerCase() === String(rawName || "").trim().toLowerCase());
+      const id = matched?.id || rawId || null;
+      const instructorName = displayLecturerName(matched) || String(rawName || "").trim();
+      if (!id && !instructorName) return;
+      const key = id ? `id:${id}` : `name:${instructorName.trim().toLowerCase()}`;
+      if (!byKey.has(key)) byKey.set(key, { lecturerId: id, instructorName });
+    });
+    return [...byKey.values()];
+  };
+  const initialCourseLecturers = normalizeCourseLecturerList([
+    { lecturerId: initLecturerId, instructorName: initLecturerName },
+    ...(Array.isArray(initial?.lecturers) ? initial.lecturers : []),
+    ...((initial?.schedule || []).map(session => ({
+      lecturerId: session?.lecturerId || session?.alternateLecturerId || null,
+      instructorName: session?.instructorName || session?.alternateInstructorName || "",
+    }))),
+  ]);
+  const [courseLecturers, setCourseLecturers] = useState(initialCourseLecturers);
+  const [additionalLecturerId, setAdditionalLecturerId] = useState("");
   const [description, setDescription]         = useState(initial?.description||"");
   const [studioId, setStudioId]               = useState(initial?.studioId||"");
-  const [schedule, setSchedule]               = useState((initial?.schedule||[]).map(normalizeScheduleEntry));
+  const initialSecondaryStudioId = initial?.secondaryStudioId || (() => {
+    const secondaryIds = [...new Set((initial?.schedule || []).map(session => session?.secondaryStudioId).filter(Boolean).map(String))];
+    return secondaryIds.length === 1 ? secondaryIds[0] : "";
+  })();
+  const [secondaryStudioId, setSecondaryStudioId] = useState(initialSecondaryStudioId);
+  const [schedule, setSchedule]               = useState(() => dedupeScheduleEntries((initial?.schedule||[]).map((entry) => {
+    const normalized = normalizeScheduleEntry(entry);
+    const matched = normalized.lecturerId
+      ? lecturerOptions.find(l => String(l.id) === String(normalized.lecturerId))
+      : lecturerOptions.find(l => displayLecturerName(l).trim().toLowerCase() === String(normalized.instructorName || "").trim().toLowerCase());
+    return {
+      ...normalized,
+      lecturerId: matched?.id || normalized.lecturerId || null,
+      instructorName: displayLecturerName(matched) || normalized.instructorName || "",
+    };
+  })));
   const [saving, setSaving]                   = useState(false);
   const [localMsg, setLocalMsg]               = useState(null);
   const [teacherMessage, setTeacherMessage]   = useState("");
@@ -1607,14 +2142,28 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
   const selectedLecturerObj = lecturerId ? lecturers.find(l => l.id === lecturerId) : null;
   const lecturerSelectionInvalid = Boolean(String(lecturerInput || "").trim()) && !selectedLecturerObj;
 
+  useEffect(() => {
+    if (!selectedLecturerObj) return;
+    const primaryName = displayLecturerName(selectedLecturerObj);
+    setCourseLecturers(prev => normalizeCourseLecturerList([
+      { lecturerId: selectedLecturerObj.id, instructorName: primaryName },
+      ...prev,
+    ]));
+    setSchedule(prev => prev.map(session => (
+      session.lecturerId || session.instructorName
+        ? session
+        : { ...session, lecturerId: selectedLecturerObj.id, instructorName: primaryName }
+    )));
+  }, [lecturerId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Manual schedule builder
   const [manStartDate, setManStartDate] = useState("");
   const [manStartTime, setManStartTime] = useState("10:00");
   const [manEndTime, setManEndTime]     = useState("13:00");
   const [manCount, setManCount]         = useState(1);
 
-  // Resizable columns: [#, date, start, end, topic, primary classroom, secondary classroom, delete]
-  const [colWidths, setColWidths] = useState([30, 130, 72, 72, 160, 110, 110, 28]);
+  // Resizable columns: [#, date, start, end, topic, lecturer, primary classroom, secondary classroom, delete]
+  const [colWidths, setColWidths] = useState([30, 130, 72, 72, 150, 130, 110, 110, 28]);
   const resizingRef = useRef(null);
   const startColResize = (e, colIdx) => {
     e.preventDefault();
@@ -1645,8 +2194,9 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
     const count = Math.max(1, Math.min(52, Number(manCount)||1));
     const sessions = [];
     let d = parseLocalDate(manStartDate);
+    const defaultLecturerName = displayLecturerName(selectedLecturerObj) || lecturerInput || "";
     for(let i=0;i<count;i++) {
-      sessions.push({ date: formatLocalDateInput(d), startTime: manStartTime, endTime: manEndTime, topic: "", studioId: studioId||null, secondaryStudioId: null });
+      sessions.push({ date: formatLocalDateInput(d), startTime: manStartTime, endTime: manEndTime, topic: "", studioId: studioId||null, secondaryStudioId: secondaryStudioId||null, lecturerId: lecturerId || null, instructorName: defaultLecturerName });
       d.setDate(d.getDate()+7);
     }
     setSchedule(prev => dedupeScheduleEntries([...prev, ...sessions]));
@@ -1665,7 +2215,9 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
       endTime: firstLesson.endTime||"12:00",
       topic: "",
       studioId: studioId||null,
-      secondaryStudioId: null,
+      secondaryStudioId: secondaryStudioId||null,
+      lecturerId: firstLesson.lecturerId || lecturerId || null,
+      instructorName: firstLesson.instructorName || displayLecturerName(selectedLecturerObj) || lecturerInput || "",
     }]));
   };
 
@@ -1673,11 +2225,34 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
     setSchedule(prev => {
       const updated = prev.map((session, sessionIndex) => (
         sessionIndex === index
-          ? { ...session, [field]: (field === "topic" || field === "studioId" || field === "secondaryStudioId") ? value : value || (field === "date" ? "" : session[field]) }
+          ? { ...session, [field]: (field === "topic" || field === "studioId" || field === "secondaryStudioId" || field === "lecturerId" || field === "instructorName") ? value : value || (field === "date" ? "" : session[field]) }
           : session
       ));
       return field === "date" ? sortScheduleEntries(updated) : updated;
     });
+  };
+
+  const updateSessionLecturer = (index, value) => {
+    const selected = courseLecturers.find((lecturer) => String(lecturer.lecturerId || "") === String(value));
+    setSchedule(prev => prev.map((session, sessionIndex) => (
+      sessionIndex === index
+        ? {
+            ...session,
+            lecturerId: selected?.lecturerId || null,
+            instructorName: selected?.instructorName || "",
+          }
+        : session
+    )));
+  };
+
+  const addCourseLecturer = () => {
+    const selected = lecturerOptions.find(l => String(l.id) === String(additionalLecturerId));
+    if (!selected) return;
+    setCourseLecturers(prev => normalizeCourseLecturerList([
+      ...prev,
+      { lecturerId: selected.id, instructorName: displayLecturerName(selected) },
+    ]));
+    setAdditionalLecturerId("");
   };
 
   const sendTeacherEmail = async () => {
@@ -1863,18 +2438,21 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
       return;
     }
     if (lecturerSelectionInvalid) {
-      setLocalMsg({type:"error",text:'לא ניתן לשמור שם מרצה שאינו קיים. בחרו מרצה קיים מרובריקת "מרצים", או הוסיפו אותו קודם שם. בייבוא XL מרצים חדשים נוצרים אוטומטית.'});
+      setLocalMsg({type:"error",text:'לא ניתן לשמור שם מרצה שאינו קיים. בחרו מרצה קיים מרובריקת "מרצים", או הוסיפו אותו קודם שם.'});
       return;
     }
     let finalSchedule = [...schedule];
     if(manStartDate && finalSchedule.length===0) {
       const count = Math.max(1,Math.min(52,Number(manCount)||1));
       let d = parseLocalDate(manStartDate);
+      const defaultLecturerName = displayLecturerName(selectedLecturerObj) || lecturerInput || "";
       for(let i=0;i<count;i++) {
-        finalSchedule.push({date:formatLocalDateInput(d),startTime:manStartTime,endTime:manEndTime,topic:"",studioId: studioId||null, secondaryStudioId: null});
+        finalSchedule.push({date:formatLocalDateInput(d),startTime:manStartTime,endTime:manEndTime,topic:"",studioId: studioId||null, secondaryStudioId: secondaryStudioId||null, lecturerId: lecturerId || null, instructorName: defaultLecturerName});
         d.setDate(d.getDate()+7);
       }
     }
+    const selectedLecturer = lecturerId ? lecturers.find(l => l.id === lecturerId) : null;
+    const defaultLecturerName = displayLecturerName(selectedLecturer) || "";
     finalSchedule = dedupeScheduleEntries(finalSchedule.map(normalizeScheduleEntry).map(s => ({
       ...s,
       // Sessions without an explicit studioId inherit the course-level
@@ -1882,24 +2460,32 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
       // picked a course studio (or via paths that didn't propagate it) saved
       // with studioId=null, making the lesson "unassigned" on re-open.
       studioId: s.studioId || (studioId || null),
-      secondaryStudioId: s.secondaryStudioId || null,
+      secondaryStudioId: s.secondaryStudioId || (secondaryStudioId || null),
+      lecturerId: s.lecturerId || lecturerId || null,
+      instructorName: String(s.instructorName || defaultLecturerName || "").trim(),
     })));
     const duplicateClassroomSession = finalSchedule.find(session => session.studioId && session.secondaryStudioId && String(session.studioId) === String(session.secondaryStudioId));
     if (duplicateClassroomSession) { setLocalMsg({type:"error",text:"כיתה משנית לא יכולה להיות זהה לכיתה הראשית באותו שיעור"}); return; }
     const invalidSession = finalSchedule.find(session => !session.date || session.startTime >= session.endTime);
     if(invalidSession) { setLocalMsg({type:"error",text:"יש לתקן תאריך או שעות לא תקינים בלוח השיעורים"}); return; }
     setSaving(true);
-    const selectedLecturer = lecturerId ? lecturers.find(l => l.id === lecturerId) : null;
+    const savedCourseLecturers = normalizeCourseLecturerList([
+      { lecturerId: lecturerId || null, instructorName: defaultLecturerName },
+      ...courseLecturers,
+      ...finalSchedule.map(s => ({ lecturerId: s.lecturerId, instructorName: s.instructorName })),
+    ]);
     const lesson = {
       id: initial?.id||`lesson_${Date.now()}`,
       name: name.trim(),
       track: track.trim(),
       lecturerId: lecturerId || null,
-      instructorName: selectedLecturer?.fullName || "",
+      instructorName: displayLecturerName(selectedLecturer) || "",
       instructorPhone: selectedLecturer?.phone || "",
       instructorEmail: selectedLecturer?.email || "",
+      lecturers: savedCourseLecturers,
       description: description.trim(),
       studioId: studioId||null,
+      secondaryStudioId: secondaryStudioId||null,
       schedule: finalSchedule,
       certificateTemplateType: certificateTemplateType || "",
       // Preserve lecturer-managed fields so an admin save doesn't wipe them.
@@ -1954,7 +2540,10 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
             <label className="form-label">מס׳ שבועות</label>
             <input className="form-input" type="number" min={1} max={52} value={manCount} onChange={e=>setManCount(e.target.value)}/>
           </div>
-          <button className="btn btn-primary" style={{background:"#9b59b6",borderColor:"#9b59b6",whiteSpace:"nowrap"}} onClick={buildAndAppendSchedule}>➕ הוסף</button>
+          <div className="form-group" style={{flex:"0 0 auto",marginBottom:0}}>
+            <label className="form-label" aria-hidden="true">&nbsp;</label>
+            <button className="btn btn-primary" style={{background:"#9b59b6",borderColor:"#9b59b6",whiteSpace:"nowrap",height:44,minWidth:88,display:"inline-flex",alignItems:"center",justifyContent:"center"}} onClick={buildAndAppendSchedule}>➕ הוסף</button>
+          </div>
         </div>
 
         {schedule.length>0 && (
@@ -1993,6 +2582,13 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                       <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>נושא</div>
                       <input className="form-input" placeholder="אופציונלי" value={s.topic||""} style={{fontSize:13,padding:"4px 6px",height:32,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"topic",e.target.value)}/>
                     </div>
+                    <div style={{marginBottom:6}}>
+                      <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>שם מרצה</div>
+                      <select className="form-select" value={s.lecturerId||""} style={{fontSize:12,padding:"4px 6px",height:32,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionLecturer(i,e.target.value)}>
+                        <option value="">ללא שיוך</option>
+                        {[...courseLecturers].sort((a,b)=>a.instructorName.localeCompare(b.instructorName,"he")).map(l=><option key={l.lecturerId || l.instructorName} value={l.lecturerId || ""}>{l.instructorName}</option>)}
+                      </select>
+                    </div>
                     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                       <div style={{flex:1}}>
                         <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>🏫 כיתה ראשית</div>
@@ -2016,12 +2612,12 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
               /* ── דסקטופ: grid עם עמודות גמישות ── */
               <>
                 <div style={{display:"grid",gridTemplateColumns:gridTemplate,gap:0,fontSize:11,color:"var(--text-muted)",marginBottom:2,userSelect:"none",background:"var(--surface2)",borderRadius:"6px 6px 0 0",border:"1px solid rgba(155,89,182,0.2)"}}>
-                  {["","תאריך","התחלה","סיום","נושא","כיתה ראשית","כיתה משנית",""].map((label,ci)=>(
+                  {["","תאריך","התחלה","סיום","נושא","שם מרצה","כיתה ראשית","כיתה משנית",""].map((label,ci)=>(
                     <div key={ci} style={{position:"relative",padding:"4px 8px",overflow:"hidden",whiteSpace:"nowrap",
-                      borderRight: ci < 7 ? "1px solid rgba(155,89,182,0.25)" : "none",
-                      fontWeight:700, textAlign: ci===0||ci===7 ? "center" : "right"}}>
+                      borderRight: ci < 8 ? "1px solid rgba(155,89,182,0.25)" : "none",
+                      fontWeight:700, textAlign: ci===0||ci===8 ? "center" : "right"}}>
                       {label}
-                      {ci > 0 && ci < 7 && (
+                      {ci > 0 && ci < 8 && (
                         <div onMouseDown={e=>{ e.preventDefault(); startColResize(e,ci); }}
                           style={{position:"absolute",left:0,top:0,width:8,height:"100%",cursor:"col-resize",zIndex:2}}/>
                       )}
@@ -2040,6 +2636,10 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                         {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
                       </select>
                       <input className="form-input" placeholder="אופציונלי" value={s.topic||""} style={{padding:"3px 6px",fontSize:12,height:28,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"topic",e.target.value)}/>
+                      <select className="form-select" value={s.lecturerId||""} style={{padding:"3px 4px",fontSize:11,height:28,width:"100%",boxSizing:"border-box"}} title="שם המרצה למפגש זה" onChange={e=>updateSessionLecturer(i,e.target.value)}>
+                        <option value="">ללא שיוך</option>
+                        {[...courseLecturers].sort((a,b)=>a.instructorName.localeCompare(b.instructorName,"he")).map(l=><option key={l.lecturerId || l.instructorName} value={l.lecturerId || ""}>{l.instructorName}</option>)}
+                      </select>
                       <select className="form-select" value={s.studioId||""} style={{padding:"3px 4px",fontSize:11,height:28,width:"100%",boxSizing:"border-box"}} title="כיתת לימוד למפגש זה" onChange={e=>updateSessionField(i,"studioId",e.target.value||null)}>
                         <option value="">ללא שיוך</option>
                         {studios.filter(st=>st.isClassroom||st.classroomOnly).map(st=><option key={st.id} value={st.id}>{st.name}</option>)}
@@ -2076,27 +2676,65 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
         <div className="form-group" style={{marginBottom:10}}>
           <label className="form-label">מרצה</label>
           <datalist id="lf-lecturers-list">
-            {lecturerOptions.sort((a,b)=>a.fullName.localeCompare(b.fullName,"he")).map(l=>(
-              <option key={l.id} value={l.fullName}/>
+            {lecturerOptions.sort((a,b)=>displayLecturerName(a).localeCompare(displayLecturerName(b),"he")).map(l=>(
+              <option key={l.id} value={displayLecturerName(l)}/>
             ))}
           </datalist>
-          <div style={{position:"relative"}}>
-            <input className="form-input" list="lf-lecturers-list"
-              style={lecturerSelectionInvalid ? { borderColor:"#ef4444", boxShadow:"0 0 0 1px rgba(239,68,68,0.18)" } : undefined}
-              placeholder="הקלד שם מרצה..."
-              value={lecturerInput}
-              onChange={e=>{
-                const val = e.target.value;
-                setLecturerInput(val);
-                const matched = lecturerOptions.find(l=>l.fullName.trim().toLowerCase()===val.trim().toLowerCase());
-                setLecturerId(matched ? matched.id : "");
-              }}
-            />
-            {lecturerInput && (
-              <button type="button" onClick={()=>{setLecturerInput("");setLecturerId("");}}
-                style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"var(--text3)",cursor:"pointer",fontSize:16,lineHeight:1,padding:0}}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>
-            )}
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <div style={{position:"relative",flex:1}}>
+              <input className="form-input" list="lf-lecturers-list"
+                style={lecturerSelectionInvalid ? { borderColor:"#ef4444", boxShadow:"0 0 0 1px rgba(239,68,68,0.18)" } : undefined}
+                placeholder="הקלד שם מרצה..."
+                value={lecturerInput}
+                onChange={e=>{
+                  const val = e.target.value;
+                  setLecturerInput(val);
+                  const matched = lecturerOptions.find(l=>displayLecturerName(l).trim().toLowerCase()===val.trim().toLowerCase());
+                  setLecturerId(matched ? matched.id : "");
+                }}
+              />
+              {lecturerInput && (
+                <button type="button" onClick={()=>{setLecturerInput("");setLecturerId("");}}
+                  style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"var(--text3)",cursor:"pointer",fontSize:16,lineHeight:1,padding:0}}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>
+              )}
+            </div>
+            <select className="form-select" value={additionalLecturerId} onChange={e=>setAdditionalLecturerId(e.target.value)} style={{flex:"0 0 220px"}}>
+              <option value="">בחר מרצה להוספה</option>
+              {lecturerOptions
+                .filter(l => !courseLecturers.some(courseLecturer => String(courseLecturer.lecturerId || "") === String(l.id)))
+                .sort((a,b)=>displayLecturerName(a).localeCompare(displayLecturerName(b),"he"))
+                .map(l=><option key={l.id} value={l.id}>{displayLecturerName(l)}</option>)}
+            </select>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={addCourseLecturer} disabled={!additionalLecturerId} style={{whiteSpace:"nowrap"}}>
+              <Plus size={14} strokeWidth={1.75}/> הוסף מרצה
+            </button>
           </div>
+          {courseLecturers.length > 0 && (
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+              {courseLecturers.map((lecturer) => {
+                const isPrimary = String(lecturer.lecturerId || "") === String(lecturerId || "");
+                return (
+                  <span key={lecturer.lecturerId || lecturer.instructorName} style={{display:"inline-flex",alignItems:"center",gap:5,border:"1px solid rgba(155,89,182,0.35)",background:isPrimary?"rgba(155,89,182,0.18)":"var(--surface2)",borderRadius:999,padding:"4px 10px",fontSize:12,fontWeight:800,color:isPrimary?"#c084fc":"var(--text2)"}}>
+                    <User size={12} strokeWidth={1.75}/> {lecturer.instructorName}{isPrimary ? " · ברירת מחדל" : ""}
+                    {!isPrimary && (
+                      <button type="button" aria-label="הסר מרצה מהקורס" onClick={()=>{
+                        const removedKey = String(lecturer.lecturerId || lecturer.instructorName);
+                        setCourseLecturers(prev=>prev.filter(item => String(item.lecturerId || item.instructorName) !== removedKey));
+                        setSchedule(prev=>prev.map(session => String(session.lecturerId || session.instructorName) === removedKey ? {
+                          ...session,
+                          lecturerId: lecturerId || null,
+                          instructorName: displayLecturerName(selectedLecturerObj) || "",
+                        } : session));
+                      }}
+                        style={{background:"transparent",border:"none",color:"var(--text3)",cursor:"pointer",padding:0,display:"inline-flex"}}>
+                        <X size={12} strokeWidth={2}/>
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
+            </div>
+          )}
           <div style={{fontSize:11,color:"var(--text3)",marginTop:3}}>
             ניתן לבחור כאן רק מרצה שכבר קיים ברובריקת "מרצים". אם זה מרצה חדש, צריך להוסיף אותו קודם שם. גם בייבוא XL נדרש שם מרצה קיים כדי למנוע כפילויות.
           </div>
@@ -2121,26 +2759,46 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
         </div>
       </div>
 
-      {/* Link to studio (optional) */}
+      {/* Link to classrooms (optional) */}
       <div style={{background:"rgba(52,152,219,0.06)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
-        <div style={{fontWeight:800,fontSize:13,color:"#3498db",marginBottom:10,display:"flex",alignItems:"center",gap:6}}><Link size={13} strokeWidth={1.75}/> שיוך (אופציונלי)</div>
+        <div style={{fontWeight:800,fontSize:13,color:"#3498db",marginBottom:10,display:"flex",alignItems:"center",gap:6}}><Link size={13} strokeWidth={1.75}/> שיוך כיתות לימוד</div>
         <div className="grid-2">
           <div className="form-group">
-            <label className="form-label">שיוך לכיתת לימוד</label>
+            <label className="form-label">כיתה ראשית לכל הקורס</label>
             <select className="form-select" value={studioId} onChange={e=>{
-              setStudioId(e.target.value);
-              setSchedule(prev=>prev.map(s=>({...s, studioId: e.target.value||null})));
+              const nextStudioId = e.target.value;
+              setStudioId(nextStudioId);
+              if (nextStudioId && String(nextStudioId) === String(secondaryStudioId || "")) setSecondaryStudioId("");
+              setSchedule(prev=>prev.map(s=>({
+                ...s,
+                studioId: nextStudioId||null,
+                secondaryStudioId: nextStudioId && String(nextStudioId) === String(s.secondaryStudioId || "") ? null : s.secondaryStudioId,
+              })));
             }}>
               <option value="">ללא שיוך</option>
               {studios.filter(s => s.isClassroom || s.classroomOnly || String(s.id) === String(studioId)).map(s=>(
-                <option key={s.id} value={s.id}>{s.name}{(!s.isClassroom && !s.classroomOnly) ? " (לא מסומן ככיתה)" : ""}</option>
+                <option key={s.id} value={s.id} disabled={String(s.id)===String(secondaryStudioId||"")}>{s.name}{(!s.isClassroom && !s.classroomOnly) ? " (לא מסומן ככיתה)" : ""}</option>
               ))}
             </select>
-            {studios.filter(s=>s.isClassroom||s.classroomOnly).length === 0 && (
-              <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}><Lightbulb size={16} strokeWidth={1.75} /> סמן חדר כ"כיתת לימוד" ברובריקת חדרים כדי שיופיע כאן.</div>
-            )}
+          </div>
+          <div className="form-group">
+            <label className="form-label">כיתה משנית לכל הקורס</label>
+            <select className="form-select" value={secondaryStudioId} onChange={e=>{
+              const nextSecondaryStudioId = e.target.value;
+              if (nextSecondaryStudioId && String(nextSecondaryStudioId) === String(studioId || "")) return;
+              setSecondaryStudioId(nextSecondaryStudioId);
+              setSchedule(prev=>prev.map(s=>({...s, secondaryStudioId: nextSecondaryStudioId||null})));
+            }}>
+              <option value="">ללא שיוך</option>
+              {studios.filter(s => s.isClassroom || s.classroomOnly || String(s.id) === String(secondaryStudioId)).map(s=>(
+                <option key={s.id} value={s.id} disabled={String(s.id)===String(studioId||"")}>{s.name}{(!s.isClassroom && !s.classroomOnly) ? " (לא מסומן ככיתה)" : ""}</option>
+              ))}
+            </select>
           </div>
         </div>
+        {studios.filter(s=>s.isClassroom||s.classroomOnly).length === 0 && (
+          <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}><Lightbulb size={16} strokeWidth={1.75} /> סמן חדר כ"כיתת לימוד" ברובריקת חדרים כדי שיופיע כאן.</div>
+        )}
       </div>
 
       {/* Certificate template — global type selection */}
