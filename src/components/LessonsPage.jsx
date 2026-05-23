@@ -737,8 +737,23 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     return (lesson.schedule || []).some(s => s.date >= range.start && s.date <= range.end);
   };
 
+  const searchTerm = String(search || "").trim();
+  const normalizedSearchTerm = searchTerm.toLowerCase();
+  const normalizedLecturerSearchTerm = normalizeLecturerNameKey(searchTerm);
+  const lessonMatchesSearch = (lesson) => {
+    if (!searchTerm) return true;
+    if (String(lesson?.name || "").toLowerCase().includes(normalizedSearchTerm)) return true;
+    return normalizeLessonLecturerList(lesson).some((lecturer) => {
+      const name = String(lecturer?.instructorName || "");
+      return (
+        name.toLowerCase().includes(normalizedSearchTerm)
+        || normalizeLecturerNameKey(name).includes(normalizedLecturerSearchTerm)
+      );
+    });
+  };
+
   const filtered = lessons.filter((lesson) => {
-    const matchesSearch = !search || lesson.name?.includes(search) || lesson.instructorName?.includes(search);
+    const matchesSearch = lessonMatchesSearch(lesson);
     const trackLabel = getLessonTrackLabel(lesson);
     const matchesTrack = allTracksSelected || trackFilter.includes(trackLabel);
     const matchesArchive = archiveView ? isArchived(lesson) : !isArchived(lesson);
