@@ -6137,7 +6137,7 @@ export default function App() {
         // lesson_auto (regenerated from lessons.schedule). This avoids a flicker
         // on initial render before the regen effect fires.
         const realBookings = Array.isArray(stdBk) ? stdBk : [];
-        const lessonAutoBookings = buildLessonStudioBookings(lsns, Array.isArray(stds) ? stds : []);
+        const lessonAutoBookings = buildLessonStudioBookings(lsns);
         _setStudioBookings([...realBookings, ...lessonAutoBookings]);
         let loadedLecturers = Array.isArray(lecturersR.value) ? lecturersR.value : [];
 
@@ -6858,7 +6858,7 @@ export default function App() {
     );
     if (!hasAnyKitLink) {
       // Still need to keep studio bookings in sync, but no reservation churn.
-      const generatedLessonBookings = buildLessonStudioBookings(lessons, studios);
+      const generatedLessonBookings = buildLessonStudioBookings(lessons);
       const nextStudioBookings = [
         ...currentStudioBookings.filter((booking) => booking.lesson_auto !== true),
         ...generatedLessonBookings,
@@ -6903,7 +6903,7 @@ export default function App() {
       // list stale.
     }
 
-    const generatedLessonBookings = buildLessonStudioBookings(lessons, studios);
+    const generatedLessonBookings = buildLessonStudioBookings(lessons);
     const nextStudioBookings = [
       ...currentStudioBookings.filter((booking) => booking.lesson_auto !== true),
       ...generatedLessonBookings,

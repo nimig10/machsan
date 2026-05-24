@@ -49,7 +49,7 @@ export function PublicDisplayPage() {
     const lessons = Array.isArray(lsns) ? lsns : [];
     setLessons(lessons);
     // Merge persisted bookings with in-memory lesson_auto (from lessons.schedule)
-    const lessonAuto = buildLessonStudioBookings(lessons, Array.isArray(stds) ? stds : []);
+    const lessonAuto = buildLessonStudioBookings(lessons);
     setBookings([...(Array.isArray(realBookings) ? realBookings : []), ...lessonAuto]);
     setStudios(Array.isArray(stds) ? stds : []);
     if (settings && typeof settings === "object") setSiteSettings(settings);

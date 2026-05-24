@@ -6,7 +6,7 @@ import { formatDate, formatLocalDateInput, parseLocalDate, today, getAuthToken }
 import { listStudents } from "../utils/studentsApi.js";
 import { syncAllStudioBookings } from "../utils/studioBookingsApi.js";
 import { syncAllLessons } from "../utils/lessonsApi.js";
-import { getEffectiveLessonStudioIds, isMainControlStudio, isRecordingStudio } from "../utils/lessonBookings.js";
+import { getEffectiveLessonStudioIds } from "../utils/lessonBookings.js";
 
 // Stage 8 fix: previously a module-scoped counter (`sk-${++_skeyCounter}`)
 // reset on every page load, so newly-added sessions could collide with
@@ -175,8 +175,8 @@ function getLessonDisplaySchedule(lesson = {}) {
   return dedupeScheduleEntries(lesson?.schedule || []);
 }
 
-function getLessonSessionStudioIds(session = {}, lesson = {}, studios = []) {
-  return getEffectiveLessonStudioIds(session, lesson, studios).map(String);
+function getLessonSessionStudioIds(session = {}, lesson = {}) {
+  return getEffectiveLessonStudioIds(session, lesson).map(String);
 }
 
 function isValidImportedDate(dateStr = "") {
@@ -468,7 +468,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     const found = [];
     const seenIds = new Set();
     for (const session of (lesson.schedule || [])) {
-      for (const stId of getLessonSessionStudioIds(session, lesson, studios)) {
+      for (const stId of getLessonSessionStudioIds(session, lesson)) {
         if (!stId) continue;
         for (const b of studioBookings) {
           if (seenIds.has(String(b.id))) continue;
@@ -583,12 +583,12 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const findLessonConflict = (lesson) => {
     for (const session of (lesson.schedule || [])) {
       const sS = session.startTime || "00:00", sE = session.endTime || "23:59";
-      for (const stId of getLessonSessionStudioIds(session, lesson, studios)) {
+      for (const stId of getLessonSessionStudioIds(session, lesson)) {
         if (!stId) continue;
         for (const other of lessons) {
           if (other.id === lesson.id) continue; // skip self when editing
           for (const os of (other.schedule || [])) {
-            if (!getLessonSessionStudioIds(os, other, studios).includes(stId)) continue;
+            if (!getLessonSessionStudioIds(os, other).includes(stId)) continue;
             if (os.date !== session.date) continue;
             const oS = os.startTime || "00:00", oE = os.endTime || "23:59";
             if (oS < sE && oE > sS) {
@@ -881,12 +881,12 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const findRoomConflictInList = (candidate, lessonsList) => {
     for (const session of (candidate.schedule || [])) {
       const sS = session.startTime || "00:00", sE = session.endTime || "23:59";
-      for (const stId of getLessonSessionStudioIds(session, candidate, studios)) {
+      for (const stId of getLessonSessionStudioIds(session, candidate)) {
         if (!stId) continue;
         for (const other of lessonsList) {
           if (other.id === candidate.id) continue;
           for (const os of (other.schedule || [])) {
-            if (!getLessonSessionStudioIds(os, other, studios).includes(stId)) continue;
+            if (!getLessonSessionStudioIds(os, other).includes(stId)) continue;
             if (os.date !== session.date) continue;
             const oS = os.startTime || "00:00", oE = os.endTime || "23:59";
             if (oS < sE && oE > sS) {
@@ -1084,32 +1084,19 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
         sessions.forEach((session) => {
           if (session.studioId && !uniqueStudioIds.some(id => String(id) === String(session.studioId))) uniqueStudioIds.push(session.studioId);
         });
-        const recordingStudio = studios.find(isRecordingStudio);
-        const mainControlStudioId = uniqueStudioIds.find((id) => isMainControlStudio(studios.find((studio) => String(studio.id) === String(id))));
-        const recordingStudioId = recordingStudio?.id || null;
-        const hasMainControl = Boolean(mainControlStudioId);
-        const assignableStudioIds = uniqueStudioIds.filter((id) => !(hasMainControl && recordingStudioId && String(id) === String(recordingStudioId)));
-        if (hasMainControl) {
-          assignableStudioIds.sort((a, b) => {
-            if (String(a) === String(mainControlStudioId)) return -1;
-            if (String(b) === String(mainControlStudioId)) return 1;
-            return 0;
-          });
-        }
-        if (assignableStudioIds.length > 2) {
+        if (uniqueStudioIds.length > 2) {
           sessions.forEach(session => {
             (session.sourceRows || []).forEach(rowInfo => addImportError(reportErrors, rowInfo, "לא ניתן לשייך יותר משתי כיתות לאותו שיעור"));
           });
           return;
         }
-        const allowedStudioIds = assignableStudioIds.slice(0, 2);
+        const allowedStudioIds = uniqueStudioIds.slice(0, 2);
         const allowedSessions = sessions.filter(session => (
           !session.studioId
           || allowedStudioIds.some(id => String(id) === String(session.studioId))
-          || (hasMainControl && recordingStudioId && String(session.studioId) === String(recordingStudioId))
         ));
         if (!allowedSessions.length) return;
-        const base = allowedSessions.find(session => mainControlStudioId && String(session.studioId) === String(mainControlStudioId)) || allowedSessions[0];
+        const base = allowedSessions[0];
         schedule.push({
           ...base,
           studioId: allowedStudioIds[0] || base.studioId || null,

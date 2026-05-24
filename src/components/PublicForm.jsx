@@ -2244,7 +2244,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     if (Array.isArray(s)) setStudios(s);
     // Merge persisted bookings with in-memory lesson_auto bookings (regenerated
     // from lessons.schedule). Same pattern as App.jsx initial load.
-    const lessonAuto = Array.isArray(lessons) ? buildLessonStudioBookings(lessons, Array.isArray(s) ? s : []) : [];
+    const lessonAuto = Array.isArray(lessons) ? buildLessonStudioBookings(lessons) : [];
     setStudioBookings([...(Array.isArray(realBookings) ? realBookings : []), ...lessonAuto]);
   };
 
