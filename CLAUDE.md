@@ -1,78 +1,65 @@
 # מסמך מעבר חשבון — אפליקציית "מחסן קמרה"
 
-## 📦 שינויים אחרונים שעלו לפרוד
-
-- **2026-05-21** — עדכון מצב אחרי pull ל-`38a9f25` וסריקה מול הקוד + Supabase MCP, כולל הצלבה מול production ו-dev.
-  - `src/App.jsx` כרגע ~7,044 שורות. 8 דפים עדיין inline, אבל מספרי השורות זזו.
-  - `src/components/` מכיל 32 קבצי JSX, כולל `StudentHub`, `ProductionsPage`, `ProductionEditor`, `ErrorBoundary`.
-  - production (`wxkyqgwwraojnbmyyfco`) נבדק read-only דרך `supabase_codex`/`supabase-codex`: המצב התפעולי נראה תקין. RLS מופעל על 6 הטבלאות המרכזיות, אין auth orphans, ואין FK שמצביע ל-`staff_members`.
-  - dev (`mhvujejdlmtowypjdhjd`) משמש לבדיקות בלבד ואינו מיושר לגמרי ל-production: RLS כבוי על 6 טבלאות מרכזיות, ויש עדיין 3 FK constraints שמצביעים ל-`staff_members`.
-  - `staff_members` כבר לא משמש fallback פעיל בקוד `api/`/`src`; `api/_auth-helper.js` פותר staff רק דרך `public.users`. הטבלה עדיין קיימת ב-DB: ב-production יש 9 rows, ב-dev יש row אחד.
-  - `policy_assets` עדיין מאחסן PDFs כ-Base64 ב-DB. זה tech debt/ביצועים, לא חסם מיידי: production מכיל row אחד (~221KB Base64), dev מכיל 4 rows (~1.95MB Base64).
-  - auth orphans נבדקו ב-read-only ונמצאו נקיים בשתי הסביבות: production `auth.users`=104 ו-`public.users`=104; dev `auth.users`=6 ו-`public.users`=6.
-  - בדיקות: `npm run lint` עובר עם 229 warnings קיימות; `npm run build` עובר אחרי הרצה מחוץ ל-sandbox.
-- **2026-05-18** — לוח הפקות (PR #15) עלה לפרוד עם 25 מיגרציות.
-  - 4 טבלאות חדשות: `productions`/`production_dates`/`production_crew`/`production_slots` + `productions.kit_id` (FK ל-`kits`).
-  - StudentHub חדש (מסך נחיתה לסטודנט) + tab "לוח הפקות" ב-LecturerPortal לראשי מחלקה.
-  - Per-student overlap guard + director-overlap guard ב-`create_reservation_v2`/`production_dates` triggers.
-  - מדיניות 8 ימי הודעה (inclusive) להגשת רשימת ציוד להפקה (היה 9).
-  - Mobile fixes לעורך ההפקה (crew + dates rows).
-  - **`OVERDUE_BLOCK_BUFFER_MS = 48h`** — הזמנת `באיחור` חוסמת השאלה עתידית רק 48 שעות אחרי `return_date` המתוכנן (במקום לעולם). מוגדר ב-`src/utils.js` + `src/App.jsx`.
+> מסמך הקשר יחיד לסשנים חדשים. סנאפ-שוט עדכני נכון ל-**2026-05-25**.
 
 ## 🎯 רעיון האפליקציה
+
 אפליקציית ניהול לבית ספר לקולנוע/סאונד בישראל ("קמרה"). מערכת בעברית עם RTL.
-מטרה: לנהל את מחסן הציוד, אולפני ההקלטה, מסלולי לימוד, תלמידים, מרצים, שיעורים, והקצאות הסמכה.
-כולל טפסים ציבוריים להשאלת ציוד והזמנת אולפנים, פורטל מרצים, ודשבורד אדמיניסטרציה.
+ניהול מחסן ציוד, אולפני הקלטה, מסלולי לימוד, תלמידים, מרצים, שיעורים, הסמכות.
+טפסים ציבוריים להשאלת ציוד והזמנת אולפנים, פורטל מרצים, דשבורד אדמיניסטרציה, ולוח הפקות.
 
 ## 🏗️ מבנה טכני
 
 ### Frontend
-- React + Vite (Hebrew, RTL).
-- `src/App.jsx` הוא ה-shell המרכזי (~7,044 שורות נכון ל-2026-05-21). מכיל orchestration גלובלי: state, routing, realtime channels, auth bootstrap. בנוסף עדיין מוטמעים בו 8 דפים שלא חולצו.
-- 32 קבצי JSX ב-`src/components/`. הדפים/רכיבים שכבר חולצו (alphabetical):
-  `ActivityLogsPage`, `ArchivePage` *(קובץ קיים אבל לא מיובא — הפעיל הוא inline ב-App.jsx)*, `CertificationsPage`, `DashboardPage`, `EditReservationModal`, `ErrorBoundary`, `LecturerPortal`, `LecturersPage`, `LessonsPage`, `ProductionEditor`, `ProductionsPage`, `PublicDailyTablePage`, `PublicDisplayPage`, `PublicForm`, `ReservationsPage`, `SecretaryDashboardPage`, `StaffHub`, `StaffManagementPage`, `StaffSchedulePage`, `StudentHub`, `StudentsPage`, `StudioBookingPage`, `SystemSettingsPage`, `UserGuideVideosModal`, `UserGuideVideosPage`. רכיבים תומכים: `AIChatBot`, `CalendarGrid`, `CalendarViews`, `InstallPrompt`, `SmartEquipmentImportButton`, `SmartExcelImportButton`, `ui` (Toast/Modal/Loading/StatusBadge).
-- Hooks ב-`src/hooks/`: רק `useNotifications.js` כרגע.
-- API utils ב-`src/utils/`: 14 utils של ישויות + שני utils תומכים (`jewishHolidays.js`, `lessonBookings.js`).
+- React + Vite (עברית, RTL).
+- `src/App.jsx` — shell מרכזי (~7,423 שורות). מכיל orchestration גלובלי (state, routing, realtime, auth bootstrap) + **8 דפים inline** שעוד לא חולצו.
+- `src/components/` — 32 קבצי JSX.
+- `src/utils/` — 16 קבצי utils (14 entity APIs + `jewishHolidays.js` + `lessonBookings.js`).
+- `src/hooks/` — `useNotifications.js`.
 
 ### Backend
-- Vercel serverless functions ב-`api/` (Node.js, runtime 22).
+- Vercel serverless functions ב-`api/` (Node 22).
 - Supabase = Postgres + Auth + RLS + Realtime.
-- Gmail SMTP (nodemailer) ב-`api/auth.js` שולח מיילים (קישורי password reset). **לא Supabase SMTP, לא Resend.**
+- Gmail SMTP (nodemailer) ב-`api/auth.js` שולח קישורי password-reset. **לא Supabase SMTP, לא Resend.**
 
 ### Deploy
-- GitHub repo: `nimig10/machsan` (main branch).
-- Vercel project: `machsan` בלבד → `app.camera.org.il` (פרויקטים נוספים בארגון `kupa-ktana` ו-`sound-academy` לא קשורים לפרויקט זה).
-- Supabase project (prod): `wxkyqgwwraojnbmyyfco` (name: "MACHSAN CAMERA").
+- GitHub: `nimig10/machsan`, ענף יחיד `main`.
+- Vercel project: `machsan` → `app.camera.org.il`.
+- Supabase prod: `wxkyqgwwraojnbmyyfco` (`MACHSAN CAMERA`).
 
-## 🔀 שני מסדי נתונים — prod ו-dev (חובה לכבד)
+---
 
-**תמיד יש שני DBs נפרדים. לעולם לא לערבב ביניהם.**
+## 🔀 שני מסדי נתונים — חובה לכבד
 
-| סביבה | Supabase project_ref | Dashboard | מתי בשימוש |
-|-------|----------------------|-----------|-------------|
-| **Production** | `wxkyqgwwraojnbmyyfco` (name: `MACHSAN CAMERA`, branch `main`) | https://supabase.com/dashboard/project/wxkyqgwwraojnbmyyfco | רק כשהקוד ב-`main` רץ ב-`app.camera.org.il` |
-| **Development** | `mhvujejdlmtowypjdhjd` (branch name: `develop`, parent = prod) | https://supabase.com/dashboard/project/mhvujejdlmtowypjdhjd | localhost (`.env.local`) + Vercel Preview של feature branches |
+| סביבה | project_ref | מתי בשימוש |
+|-------|-------------|-------------|
+| **Production** | `wxkyqgwwraojnbmyyfco` | רק כשהקוד ב-`main` רץ ב-`app.camera.org.il` |
+| **Development** | `mhvujejdlmtowypjdhjd` | localhost (`.env.local`) + Vercel Preview של feature branches |
 
-**זרימת עבודה קבועה (חובה — תמיד בודקים בלוקאל לפני פרוד):**
-1. **שלב 1 — Localhost על dev DB**: `http://localhost:5174` (port נעול ב-`vite.config.js`). `.env.local` מצביע על **dev** (`mhvujejdlmtowypjdhjd`). כל מיגרציה / כתיבה / SQL-טסט הולך לשם.
-2. **שלב 2 — Vercel Preview על dev DB**: push ל-feature branch → Preview מתחבר לאותו dev DB. שלב נוסף לבדיקה במיוחד ל-PWA / mobile.
-3. **שלב 3 — Production**: רק אחרי merge ל-`main` הקוד רץ מול **prod DB**. מיגרציות ל-prod נעשות אך ורק כשמבצעים merge מסודר, או דרך `apply_migration` MCP על הפרויקט הראשי במודע.
+### ⚠️ זרימת עבודה קבועה — חובה, אסור לדלג
 
-**אסור לדלג על שלב 1.** כל פיצ'ר/תיקון, אפילו הקטן ביותר, נבדק בלוקאל על port 5174 + dev DB לפני שמעלים.
+1. **Stage 1 — localhost על dev DB**: `http://localhost:5174` (port נעול ב-`vite.config.js`). כל מיגרציה/כתיבה/SQL-טסט הולך ל-dev. **המשתמש בודק ידנית בדפדפן ומאשר במפורש שעובד.**
+2. **Stage 2 — Vercel Preview על dev DB**: push ל-feature branch → Preview מתחבר ל-dev DB. שלב נוסף לבדיקה (בעיקר PWA/mobile).
+3. **Stage 3 — Production**: רק אחרי שהמשתמש אישר Stage 1 במפורש — מחילים מיגרציה ל-prod דרך `apply_migration` MCP **לפני** ה-merge ל-main.
 
-**כללים:**
-- כברירת מחדל, כל `execute_sql`/`apply_migration` דרך MCP פועל על **dev** (`mhvujejdlmtowypjdhjd`) — אלא אם המשתמש ביקש במפורש לכתוב לפרוד.
-- כשמשתמשים ב-Supabase MCP, חובה לוודא שה-`project_id` שמועבר תואם לסביבה.
-- אסור לרוץ מיגרציה הרסנית (`DROP`, `DELETE` רחב, שינוי schema) מול prod בלי אישור מפורש של המשתמש לסשן הנוכחי.
-- אם רואים שגיאה / נתונים חסרים — קודם לוודא לאיזה DB מחוברים, לא להניח שהבעיה בקוד.
+**אסור לדלג על Stage 1.** SQL smoke + `npm run test:db` הם בדיקות עזר — **לא תחליף** לבדיקה ידנית של המשתמש בדפדפן.
 
-## 🗄️ מבנה נתונים (Supabase) — Tables-only
+**`CREATE OR REPLACE FUNCTION` הוא שינוי schema** ודורש אישור מפורש של המשתמש לסשן הנוכחי. אישור תוכנית מראש **לא** מהווה אישור לרוץ על prod.
 
-**אין `public.store`** — הוסר ב-`20260430220000_drop_store_table_and_guards` יחד עם כל המנגנון מסביבו (`store_snapshots`, `store_shrink_guard`, `kits_content_guard`, `is_protected_store_key`, `prune_store_snapshots`, DDL guard event triggers). לא נשארו blobs ב-DB.
+### כללים נוספים
+- כל `execute_sql`/`apply_migration` דרך MCP פועל על **dev** by default. כתיבה לפרוד דורשת אישור מפורש לסשן.
+- חובה לוודא `project_id` תואם לסביבה בכל קריאת MCP.
+- שגיאה/נתונים חסרים — קודם לוודא לאיזה DB מחוברים, לא להניח שהבעיה בקוד.
 
-**33 טבלאות `public` קיימות (verified):**
+---
 
-| ישות domain | טבלה(ות) | API util |
+## 🗄️ מבנה DB — Tables-only (אין `public.store`)
+
+ה-blob (`public.store`) הוסר ב-`20260430220000` יחד עם כל המנגנון מסביבו. כל ישות יושבת בטבלה נורמלית.
+
+### טבלאות domain
+
+| ישות | טבלה(ות) | API util |
 |------|----------|----------|
 | ציוד | `equipment` + `equipment_units` | `writeEquipmentToDB` ב-`utils.js` (RPC) |
 | השאלות | `reservations_new` + `reservation_items` | `createReservation`, `updateReservationStatus` |
@@ -83,188 +70,257 @@
 | שיעורים | `lessons` | `lessonsApi.js` |
 | אולפנים | `studios` | `studiosApi.js` |
 | הזמנות אולפנים | `studio_bookings` | `studioBookingsApi.js` |
-| מדיניות + נכסי PDF | `policies` + `policy_assets` | `policiesApi.js` |
-| הגדרות אתר | `site_settings` (כולל `managerToken`) | `siteSettingsApi.js` |
+| מדיניות | `policies` + `policy_assets` (Base64 PDFs) | `policiesApi.js` |
+| הגדרות אתר | `site_settings` | `siteSettingsApi.js` |
 | מנהל מכללה | `college_manager` | `collegeManagerApi.js` |
 | ראשי מחלקה | `dept_heads` | `deptHeadsApi.js` |
-| סטודנטים + הסמכות | `students` + `certification_types` + `student_certifications` + `tracks` | `studentsApi.js` |
-| **לוח הפקות** | `productions` + `production_dates` + `production_crew` + `production_slots` | `productionsApi.js` |
+| סטודנטים | `students` + `certification_types` + `student_certifications` + `tracks` | `studentsApi.js` |
+| לוח הפקות | `productions` + `production_dates` + `production_crew` + `production_slots` | `productionsApi.js` |
 
-טבלאות תומכות (לא domain): `users` (מראת auth ו-source הפעיל להרשאות צוות), `staff_members` (legacy; הטבלה עדיין קיימת אך fallback הקוד הוסר), `activity_logs`, `equipment_reports`, `auth_entity_map`, `staff_schedule_assignments`, `staff_schedule_preferences`, `staff_daily_tasks`, `auth_rate_limits`.
+טבלאות תומכות: `users` (מראת auth, source הפעיל להרשאות), `staff_members` (legacy, fallback הוסר), `activity_logs`, `equipment_reports`, `auth_entity_map`, `staff_schedule_assignments`, `staff_schedule_preferences`, `staff_daily_tasks`, `auth_rate_limits`.
 
-`reservations_new` קיבל שתי עמודות FK אופציונליות: `production_id` (→ `productions.id`, ON DELETE SET NULL) ו-`production_date_id` (→ `production_dates.id`, ON DELETE SET NULL). הזמנות שאינן הפקה — שתי העמודות NULL.
+`reservations_new` קיבל FK אופציונליים: `production_id` + `production_date_id` (ON DELETE SET NULL).
+`productions.kit_id` (FK → `kits`, ON DELETE SET NULL) — כש-set, הזמנת ההפקה מוגבלת לפריטי הערכה.
 
-`productions` כולל גם `kit_id` (→ `kits.id`, ON DELETE SET NULL). כש-`kit_id` מוגדר, השאלת ההפקה מוגבלת לפריטי הערכה בלבד; NULL = "כללית" (ללא הגבלה).
+### RPCs פעילות
 
-**RPCs פעילות:**
-- כתיבה לציוד: `sync_equipment_from_json`.
-- הזמנות: `create_reservation_v2`, `create_lesson_reservations_v1`, `update_reservation_status_v1`, `delete_reservation_v1`, `restore_reservation_v1`, `student_modify_reservation_item_v1`, `mark_overdue_email_sent`.
-- **לוח הפקות**: `production_approve_crew_v1`, `production_check_crew_conflict_v1`, `production_crew_change_recheck_v1`, `production_delete_v1`, `crew_is_certified_for_equipment`, `check_director_no_overlap_for_production`, `run_productions_regression_tests` (read-only).
-- בדיקות overlap: `assert_reservation_overlap_ok`, `run_reservation_overlap_tests`.
-- Auth helpers: `is_admin`, `is_staff_member`, `is_known_lecturer_email`, `link_auth_to_entity`.
-- Triggers: `touch_updated_at`, `set_updated_at`, `update_users_updated_at`, `production_crew_after_change_trigger`, `production_dates_director_overlap_trg`, `productions_status_director_overlap_trg`, `production_crew_photographer_sound_must_be_student`.
+- **ציוד**: `sync_equipment_from_json`.
+- **הזמנות**: `create_reservation_v2`, `create_lesson_reservations_v1`, `update_reservation_status_v1`, `delete_reservation_v1`, `restore_reservation_v1`, `student_modify_reservation_item_v1`, `mark_overdue_email_sent`.
+- **לוח הפקות**: `production_approve_crew_v1`, `production_check_crew_conflict_v1`, `production_crew_change_recheck_v1`, **`production_delete_v1` (HARD_DELETE, atomic — 2026-05-25)**, `crew_is_certified_for_equipment`, `check_director_no_overlap_for_production`, `run_productions_regression_tests`.
+- **בדיקות overlap**: `assert_reservation_overlap_ok`, `run_reservation_overlap_tests`.
+- **Auth helpers**: `is_admin`, `is_staff_member`, `is_known_lecturer_email`, `link_auth_to_entity`.
 
-**ספירות/מצב חיים לפי Supabase MCP (snapshot 2026-05-21, read-only):**
-- **production** (`wxkyqgwwraojnbmyyfco`, namespace `mcp__supabase_codex__`): `public.users`=104, `staff_members`=9, `productions`=3. RLS מופעל על `users`, `equipment`, `equipment_units`, `reservations_new`, `reservation_items`, `staff_daily_tasks`; אין auth orphans; אין FK ל-`staff_members`; `policy_assets` מכיל row אחד (~221KB Base64).
-- **dev** (`mhvujejdlmtowypjdhjd`, namespace `mcp__supabase__`): `public.users`=6, `students`=10, `lecturers`=15, `staff_members`=1, `productions`=6. `get_project_url` החזיר `https://mhvujejdlmtowypjdhjd.supabase.co`. dev הוא סביבת בדיקות בלבד ואינו מיושר לגמרי ל-production.
+### Triggers
+`touch_updated_at`, `set_updated_at`, `update_users_updated_at`, `production_crew_after_change_trigger`, `production_dates_director_overlap_trg`, `productions_status_director_overlap_trg`, `production_crew_photographer_sound_must_be_student`.
 
-**RLS advisory חי (2026-05-21):** האזהרה הקריטית קיימת ב-dev בלבד: RLS כבוי על `public.users`, `public.equipment`, `public.equipment_units`, `public.reservations_new`, `public.reservation_items`, `public.staff_daily_tasks`. ב-production RLS מופעל על הטבלאות האלה. לא להפעיל RLS אוטומטית ב-dev בלי policies תואמות, כי זה עלול לחסום קריאות/כתיבות קיימות.
+### מצב חי בפרוד (2026-05-25)
+`auth.users`=107, `public.users`=107 (מיושר), `students`=168, `lecturers`=31, `lessons`=145, `studio_bookings`=295, `reservations_new`=87, `productions`=2, `staff_members`=9 (legacy, אין FK), `auth_rate_limits`=4.
 
-## ✅ Pattern לפיצ'ר חדש (חובה)
-כל ישות חדשה חייבת להיווצר לפי הפטרן הזה. אסור — חזרתית, עם guard ב-ESLint — ליצור JSONB blob חדש או להשתמש ב-`storageGet/storageSet`/`api/store`.
-
-1. **מיגרציה ב-`supabase/migrations/`** — `CREATE TABLE` עם עמודות מפורשות, `created_at`/`updated_at`, `touch_updated_at` trigger, `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`, ושלוש policies סטנדרטיות:
-   - `service_role_all_<table>` — `FOR ALL TO service_role USING (true) WITH CHECK (true)`
-   - `staff_all_<table>` — `FOR ALL TO authenticated USING (public.is_staff_member()) WITH CHECK (public.is_staff_member())`
-   - `anon_read_<table>` — `FOR SELECT TO anon, authenticated USING (true)` (רק אם הטבלה מוצגת לציבור)
-   - `ALTER PUBLICATION supabase_realtime ADD TABLE public.<table>` (אם צריך realtime)
-2. **אינדקסים unique** — אם יש שדה שצריך להיות ייחודי (כמו email), הוסף UNIQUE index ו**ודא שכל ה-dedup בצד הקליינט עובד על אותו שדה**, לא על שדה אחר (ראה הערה על email-first dedup בסעיף "לקחים נלמדו").
-3. **API util ב-`src/utils/<entity>Api.js`** עם singleton supabase client (`import { supabase } from "../supabaseClient.js"`). חתימות סטנדרטיות: `list<Entity>()`, `upsert<Entity>(row)`, `delete<Entity>(id)`, `syncAll<Entity>(arr)`. תבניות: `kitsApi.js`/`teamMembersApi.js`.
-4. **App.jsx wrapper** ב-pattern של `loadKitsWrapped` — try/catch + source flag.
-5. **Realtime channel** ב-App.jsx (אם הטבלה מתעדכנת בריצה) עם 400ms debounce.
-6. **JSONB מותר רק** עבור value heterogeneous (כמו `site_settings.value`) או metadata חופשי קטן. לא לאחסון מערכי domain רחבים.
-
-### Batched writes (חובה לישויות גדולות)
-לישות עם N>~20 שורות (תלמידים, ציוד, מרצים), אסור לעטוף את כל ה-rows ב-`Promise.all` יחיד — זה רווי את ה-HTTP/1.1 per-host limit ויוצר `ERR_CONNECTION_CLOSED` בקנה מידה (ראה `studentsApi.syncAllStudents` עם `inBatches(rows, fn, 4)`). כשהאדמין עורך שורה אחת, לחשב diff מ-prev ל-next ולשלוח רק את ההפרשים (`syncStudentsDiff` + `studentDiff` ב-`dualWriteCertifications`).
-
-## 🛡️ Guardrails חיים
-- **ESLint** ב-`eslint.config.js` חוסם: `storageGet(...)`, `storageSet(...)`, `supabase.from('store'...)`, `from('store_snapshots'...)`, `/api/store`. כל ניסיון להוסיף קוד כזה נכשל ב-`npm run lint`.
-- **Supabase**: הטבלה `public.store` לא קיימת. כל קריאה/כתיבה מקבלת `relation does not exist`.
-- כל RPCs/triggers/tables של עידן ה-blob נמחקו לחלוטין (מיגרציות `20260430220000` + `20260502000000`). פעילות נשארו רק כתיבה לציוד (`sync_equipment_from_json`) וזרימת הזמנות מנורמלת (`create_reservation_v2`, `update_reservation_status_v1`, `delete_reservation_v1`, `create_lesson_reservations_v1`, `restore_reservation_v1`, `student_modify_reservation_item_v1`).
+---
 
 ## 🚨 כלל ברזל: סטטוסים שחוסמים מלאי
 
-**רק** ההזמנות בסטטוסים הבאים נספרות כתופסות מלאי / חוסמות בקשות חדשות חופפות:
-- `מאושר` — אישור איש המחסן (הציוד התחייב לבקשה)
-- `באיחור` — הציוד עוד בחוץ אחרי תאריך החזרה
-- `פעילה` — הציוד יצא לסטודנט
+**רק** הסטטוסים האלה תופסים מלאי / חוסמים בקשות חופפות:
+- `מאושר` — אישור איש המחסן
+- `באיחור` — ציוד עוד בחוץ אחרי תאריך החזרה
+- `פעילה` — ציוד יצא לסטודנט
 
-**לא חוסמות** (לעולם!): `ממתין`, `אישור ראש מחלקה`, `נדחה`, `הוחזר`, `בוטל`.
+**לא חוסמות**: `ממתין`, `אישור ראש מחלקה`, `נדחה`, `הוחזר`, `בוטל`.
 
-הסיבה: כל עוד הבקשה לא הגיעה לסטטוס `מאושר`, היא לא תופסת מלאי בפועל. רק אישור איש המחסן הופך אותה למחויבת. שני סטודנטים יכולים להחזיק `ממתין` חופפים על אותו פריט — איש המחסן יבחר את מי לאשר.
+### חלון 48h ל-`באיחור`
+הזמנת `באיחור` חוסמת השאלה עתידית **רק** אם ה-borrow_date החדש בטווח 48h אחרי ה-`return_date` המתוכנן. מימוש: `OVERDUE_BLOCK_BUFFER_MS = 48*60*60*1000` ב-[src/utils.js](src/utils.js) + [src/App.jsx](src/App.jsx).
 
-### תת-כלל: חלון 48h ל-`באיחור` (2026-05-18)
+**Anti-regression**: כל שינוי ב-`create_reservation_v2`/`update_reservation_status_v1`/RPC חדש עם overlap-check — חובה לוודא `r.status IN ('מאושר','באיחור','פעילה')` בלבד.
 
-הזמנת `באיחור` חוסמת השאלות עתידיות **רק כאשר** ה-borrow_date של ההשאלה החדשה נופל בטווח של **48 שעות אחרי** ה-`return_date` המתוכנן של ההזמנה הבאיחור. השאלה שמתחילה מעבר ל-48h — לא חסומה (מניחים שהציוד יחזור).
-
-מימוש: קבוע `OVERDUE_BLOCK_BUFFER_MS = 48 * 60 * 60 * 1000` ב-[src/utils.js](src/utils.js) + [src/App.jsx](src/App.jsx). מוחל ב-4 מקומות: 2 copies של `availableUnitsAt` + 2 copies של `getReservationApprovalConflicts`. ה-overlap check בצד ה-server (`create_reservation_v2`) משתמש בתאריכי ההזמנה הממשיים — לא נחוץ buffer שם.
-
-**Anti-regression**: כל שינוי ב-`create_reservation_v2`, ב-`update_reservation_status_v1`, או ביצירת RPC חדש שעושה overlap-check — חובה לאמת ש-`r.status IN ('מאושר','באיחור','פעילה')` בלבד. ראה `supabase/migrations/20260516160000_create_reservation_v2_pending_not_blocking.sql` — תיקון של רגרסיה שכללה `ממתין` ברשימה החוסמת.
+---
 
 ## 🎬 לוח הפקות (Productions Board)
 
-הפיצ'ר נכנס לפרוד ב-2026-05-18 (PR #15). מערכת תכנון הפקות שמהקדם את זרימת השאלת הציוד — הבמאי מפרסם הפקה, מרכיב צוות, ורק אז קופץ לטופס השאלת ציוד דרך bridge ייעודי.
+### זרימה
+1. סטודנט → **StudentHub** ([src/components/StudentHub.jsx](src/components/StudentHub.jsx)) — 2 כרטיסים: "מערכת הפניות" / "לוח הפקות".
+2. **ProductionsPage** — board (published), inbox (בקשות נכנסות/יוצאות). חיפוש סטודנטים = טקסט חופשי.
+3. **ProductionEditor** — כותרת, תיאור (800 תווים), Drive URL, צבע, סוג (כללית / kit), עד 7 ימי צילום, צוות. פוטוגרף + סאונד חייבים סטודנט רשום.
+4. **בקשת הצטרפות** (`requestJoinProduction`) — סטודנט אחר בוחר תפקיד פתוח → במאי מאשר/דוחה.
+5. **השאלת ציוד להפקה** — bridge ל-PublicForm עם `loan_type="הפקה"` + `production_id`. ב-step 3, אם להפקה `kit_id` — נעול לפריטי הערכה.
 
-**ארכיטקטורה:**
-- 4 טבלאות: `productions` (parent), `production_dates` (1..N תאריכי צילום), `production_crew` (1..N תפקידי צוות + הזמנות), `production_slots` (תשתית קיימת, לא בשימוש מהקליינט נכון לעכשיו).
-- `reservations_new` קיבל FK אופציונליים: `production_id` + `production_date_id`. הזמנת הפקה מקושרת לטווח תאריכים ספציפי.
-- `productions.kit_id` (אופציונלי): כש-set, השאלת ההפקה תוגבל אך-ורק לפריטי הערכה ההיא. NULL = "כללית" (חופשי).
+### חוקים יחודיים להפקה (לא משפיעים על פרטית/סאונד/קולנוע יומית/שיעור)
+- **8 ימים מראש (inclusive)** להגשת רשימת ציוד.
+- **Per-student overlap guard** ב-`create_reservation_v2`: אותו `lower(email)` לא יכול להגיש 2 השאלות חופפות בכל סוג.
+- **Director-overlap guard** ב-triggers: אותו `director_student_id` לא יכול לבמא 2 הפקות published חופפות.
+- **`production_dates_max_7_days`** CHECK.
+- **Cert recheck**: שינוי צלם/סאונדמן בהפקה עם הזמנה מאושרת → trigger קורא ל-`production_crew_change_recheck_v1` → אם הצוות החדש לא מוסמך, הזמנה חוזרת ל-`ממתין`.
+- **`student_modify_reservation_item_v1`** מקבל סטטוס `אישור ראש מחלקה` (סטודנט/במאי יכול לבטל/להסיר פריט גם אחרי שעברה לראש מחלקה).
 
-**זרימה מצומצמת:**
-1. **סטודנט קולנוע מתחבר → StudentHub** (`src/components/StudentHub.jsx`) — מסך נחיתה עם 2 כרטיסים: "מערכת הפניות" / "לוח הפקות".
-2. **לוח הפקות** (`ProductionsPage`) — board (כל ההפקות המפורסמות), inbox (בקשות נכנסות/יוצאות). הסינון לפי שם סטודנט הוא טקסט-חופשי (לא חושף רשימה).
-3. **יצירת הפקה** (`ProductionEditor`) — כותרת, תיאור (800 תווים), Drive URL אופציונלי, צבע, **סוג ההפקה** (כללית / kit), תאריכי צילום (עד 7 ימים לטווח), צוות (פוטוגרף + סאונד חייבים סטודנט רשום; שאר התפקידים יכולים להיות מותאמים אישית או placeholders ריקים).
-4. **בקשת הצטרפות** (`requestJoinProduction`) — סטודנט אחר רואה את ההפקה, בוחר תפקיד פתוח, הבמאי מאשר/דוחה.
-5. **השאלת ציוד להפקה** — מהעורך/Detail modal יש כפתור "השאלת ציוד להפקה" שעובר ל-PublicForm עם `loan_type="הפקה"` + `production_id` ממולאים. בצעד 2 מוצגים chips של תאריכי הצילום (טווחים שכבר הוגשה רשימה עבורם — נסתרים). בצעד 3, אם להפקה יש `kit_id`, התפריט נעול לפריטי הערכה.
+### גישה לראשי מחלקה
+`LecturerPortal` → tab "לוח הפקות" (גלוי רק אם `myDeptHead`). `ProductionsPage` במצב read-only.
 
-**חוקים יחודיים להפקה (לא משפיעים על פרטית/סאונד/קולנוע יומית/שיעור):**
-- **8 ימים מראש (inclusive)** להגשת רשימת ציוד — היום נספר כיום 0, החל מ-PR #15. כל חישוב deadline פר-תאריך-צילום מבוסס על זה.
-- **per-student overlap guard ב-`create_reservation_v2`**: אותו `lower(email)` לא יכול להגיש 2 השאלות פעילות עם חפיפת זמנים (כל סוג השאלה, לא רק הפקה). סטטוסים פעילים = הכל חוץ מ-`בוטל`/`הוחזר`/`נדחה`.
-- **director-overlap guard ב-`productions` + `production_dates` triggers**: אותו `director_student_id` לא יכול להיות במאי של 2 הפקות published עם חפיפת `production_dates`. אישור crew membership של סטודנט בכמה הפקות חופפות **כן מותר** (ההגבלה היחידה היא ברמת הבמאי).
-- **`production_dates_max_7_days`** CHECK constraint: `end_date - start_date <= 6`.
-- **Cert recheck**: אם הצלם או הסאונדמן משתנים על הפקה שכבר יש לה הזמנת ציוד מאושרת, ה-trigger `production_crew_after_change_trigger` מפעיל את `production_crew_change_recheck_v1` שבודק certs בכל פריטי הציוד — אם הצוות החדש לא מוסמך, ההזמנה חוזרת ל-`ממתין`.
-- **`student_modify_reservation_item_v1`** מקבל גם סטטוס `אישור ראש מחלקה` (נוסף ב-PR #15) — אז סטודנט/במאי יכול להסיר פריטים או לבטל את כל ההזמנה גם אחרי שעברה לראש מחלקה.
+### Anti-regressions
+1. **השאלות אחרות לא הושפעו** — לוגיקת ההפקה מותנית ב-`isProductionLoan` (`loan_type==="הפקה"`).
+2. **8-day inclusive** — אל תחזיר ל-9 (היה bug). חישוב `minShootISO`/`minDays`/`fmtDeadline`.
+3. **Director overlap trigger דולג כשתאריכים לא משתנים** (מיגרציה `20260518130000`). אם תבדוק ב-UPDATE ללא השוואת OLD vs NEW, כל edit ייכשל.
+4. **Stable productionId** ב-`ProductionEditor.jsx`: `useState(() => initial?.id || genId("prod"))`, לא `const`. אחרת retry של publish שנכשל יוצר draft חדש.
+5. **`production_delete_v1` הוא HARD_DELETE atomic** (2026-05-25). קוראים אליו ישירות מהקליינט דרך `supabase.rpc("production_delete_v1")`. אסור להחזיר API endpoint עוקף.
 
-**גישה לראשי מחלקה**: `LecturerPortal` הוסיף tab שלישי "לוח הפקות" שגלוי רק אם `myDeptHead` קיים. הוא משתמש באותו `ProductionsPage` במצב read-only (`currentStudent={null}` → אין יצירה/עריכה/הצטרפות).
+---
 
-**Anti-regressions:**
-1. **השאלות אחרות לא הושפעו**: כל הלוגיקה החדשה בקליינט מותנית ב-`isProductionLoan` (loan_type==="הפקה"). אם משנים את הזרימה הזאת, חובה לוודא שפרטית/סאונד/קולנוע יומית/שיעור עובדים בדיוק כמו לפני.
-2. **8-day inclusive — אל תחזיר ל-9**: ה-policy מבוסס "today + 7 ימי קלנדר = הכי קרוב". בכל הקבצים שמחשבים `minShootISO`/`minDays`/`fmtDeadline` ל-loan_type הפקה.
-3. **Director overlap trigger דולג כשתאריכים לא משתנים** (מיגרציה `20260518130000`) — אם תחזיר את הבדיקה ב-UPDATE ללא השוואת OLD vs NEW, כל edit על הפקה קיימת ייכשל גם אם החפיפה היא pre-existing.
-4. **Stable productionId via useState** — ב-`ProductionEditor.jsx` חובה לייצב את ה-`productionId` דרך `useState(() => initial?.id || genId("prod"))`, לא `const ... = ...`. אחרת כל retry של publish שנכשל יצר draft חדש (באג שזוהה ב-session-4).
+## 🎙️ הזמנות אולפן — `studio_bookings`
+
+הטבלה מכילה **4 סוגי הזמנות** (שדה `bookingKind` או נגזר):
+
+| סוג | מי יוצר | מקור | זיהוי בקוד |
+|-----|---------|------|------------|
+| `lesson` | אדמין | **נגזר אוטומטית** מ-`lessons.schedule[]` ע"י `buildLessonStudioBookings()` ב-[src/utils/lessonBookings.js](src/utils/lessonBookings.js) — לא persisted | `lesson_auto: true` / `lesson_id` |
+| `team` | אדמין/איש צוות | קביעת זמן באולפן לטכנאי/מדריך | `teamMemberId` / `bookingKind === "team"` |
+| `student` | סטודנט | טופס PublicForm "הזמנת אולפן" יום | `studentName` + לא בלילה |
+| `night` | סטודנט | אותו טופס, slot לילה 21:30+ | `isNight === true` |
+
+### כיתה משנית בשיעורים (PR #17)
+שיעור יכול להחזיק `studioId` (ראשית) + `secondaryStudioId` (משנית) פר session ב-`schedule[]`. `buildLessonStudioBookings` יוצר 2 derived rows — אחד לכל אולפן. בדיקת חפיפה ב-[src/components/LessonsPage.jsx:586](src/components/LessonsPage.jsx#L586) (`findLessonConflict`) קוראת ל-`getLessonSessionStudioIds` שמחזיר מערך של שני האולפנים → **בדיקת קונפליקט תופסת גם את המשנית**.
+
+**Validation בעת שמירה** ([LessonsPage.jsx:2469-2470](src/components/LessonsPage.jsx#L2469)): `duplicateClassroomSession` — `session.studioId !== session.secondaryStudioId`. שגיאה: "כיתה משנית לא יכולה להיות זהה לכיתה הראשית".
+
+### Toggle ידני "צרף סטודיו הקלטות" (PR #17)
+קיים רק ב-**team + student bookings** ב-MAIN CONTROL/DIGITAL MIX ROOM. **לא בשיעורים** (הוסר ב-`6c89345`).
+
+- **UI**: checkbox עם `name="addRecordingStudio"` ב-[PublicForm.jsx:5939](src/components/PublicForm.jsx#L5939) (create) + [:6353](src/components/PublicForm.jsx#L6353) (edit). תנאי: `isControlRoomStudio(selectedStudio) && studios.some(isRecordingStudio)`.
+- **DB**: כשmarked, נוצרות **2 רשומות נפרדות** ב-`studio_bookings` עם תאריך/שעה זהים. **אין עמודת `companion_booking_id`** ב-schema.
+- **Edit**: matching של ה-companion נעשה ב-runtime לפי tuple (`date+studioId+studentEmail+startTime+endTime`). אם המשתמש מסיר את ה-toggle בעריכה → DELETE על ה-companion ([PublicForm.jsx:6053-6062](src/components/PublicForm.jsx#L6053)).
+- **Team edit** ב-[StudioBookingPage.jsx:456](src/components/StudioBookingPage.jsx#L456): `teamAddRecordingStudio` מאותחל ב-`Boolean(hasRecordingCompanion)` בפתיחת modal עריכה.
+
+**Anti-regression**: אסור להחזיר auto-coupling ב-lesson path. שיעור ב-MAIN CONTROL לא ייצור booking ב-הקלטות אוטומטית — רק אם המשתמש בחר `secondaryStudioId = הקלטות`.
+
+---
+
+## 📊 ייבוא XL לשיעורים (PR #19)
+
+זרימה מלאה: file picker → mode dialog → parser → validation עם partial save → דוח שגיאות עם עריכה+retry.
+
+### זרימה
+1. **כפתור ייבוא** ב-[LessonsPage.jsx:1839](src/components/LessonsPage.jsx#L1839) → file input מקבל `.csv,.tsv,.xlsx,.xls`. ספריה: `xlsx` (import line 3).
+2. **Pre-import mode dialog** ([:1480-1510](src/components/LessonsPage.jsx#L1480)) — radio: `"upsert"` (עדכון+יצירה) או `"create_only"` (יצירה בלבד). state: `pendingImportMode` ([:279](src/components/LessonsPage.jsx#L279)).
+3. **Parser** `readImportRowsFromFile()` ([:949-1011](src/components/LessonsPage.jsx#L949)) — `XLSX.read()` → `XLSX.utils.sheet_to_json()` → column-matching לפי שמות עבריים ("קורס","תאריך","התחלה"...). מחזיר `{sheets, importRows, importErrors}`.
+4. **Grouping + validation** `buildImportGroups()` ([:1014-1112](src/components/LessonsPage.jsx#L1014)) — בודק שורה-שורה: קורס/מסלול/מרצה קיים/תאריך/חלון שעות/חדר. שגיאות → `reportErrors` array (`addImportError`, [:1029](src/components/LessonsPage.jsx#L1029)).
+5. **Partial save** `runLessonImportRows()` ([:1114-1275](src/components/LessonsPage.jsx#L1114)) — שורות תקינות נכנסות ל-groups → לולאת sessions per group, conflict checks (lecturer + room) → sessions תקינות מצטברות ל-`baseLesson.schedule`. **קורסים עם 0 sessions תקינים נופלים מהדוח**.
+
+### דוח שגיאות עם עריכה ו-retry
+- **Shape של error row** ([:825-841](src/components/LessonsPage.jsx#L825)): `{sheet, rowNumber, courseName, track, instructorName, date, startTime, endTime, studioName, topic, notes, kitName, phone, email, reason}`.
+- **עריכת שורה כושלת**: state `editingImportErrorKey` ([:1313](src/components/LessonsPage.jsx#L1313)) + `importErrorDraft` ([:1314-1329](src/components/LessonsPage.jsx#L1314)).
+- **Retry**: `retryImportErrorDraft()` ([:1341-1374](src/components/LessonsPage.jsx#L1341)) — ממיר draft → import format → קורא ל-`runLessonImportRows([row], {retry: true, replaceErrorIdentities: [originalKey]})`. רץ באותו pipeline. אם תקין — הקורס נוצר/מתעדכן והשורה יוצאת מהדוח.
+
+### מרצים מרובים לקורס
+- **Shape**: `lesson.lecturers = [{lecturerId?, instructorName}, ...]`.
+- **Normalize**: `normalizeLessonLecturerList(lesson)` ([:352-370](src/components/LessonsPage.jsx#L352)) — מאחד 3 מקורות: primary (`lesson.lecturerId`/`instructorName`) + `lesson.lecturers[]` + `lesson.schedule[].lecturerId`/`instructorName`. dedupe לפי id-or-normalized-name.
+- **חיפוש** (hotfix `e2dac20`): [LessonsPage.jsx:746](src/components/LessonsPage.jsx#L746) משתמש ב-`normalizeLessonLecturerList` במקום ב-`lesson.instructorName` בלבד → תופס גם מרצי-קורס נוספים וגם מרצי-מפגש.
+
+### "ללא מרצה" filter
+predicate: `isWithoutLecturer(lesson)` ([:716](src/components/LessonsPage.jsx#L716)) = `!hasAssignedLecturer(lesson)`. `hasAssignedLecturer` ([:707-715](src/components/LessonsPage.jsx#L707)) = true אם יש לפחות אחד מ: `lecturerId`/`instructorName`/`lecturers[]`/per-session lecturer. toggle: `showUnassignedLecturerOnly` ([:1801-1818](src/components/LessonsPage.jsx#L1801)).
+
+### איחוד מפגשים כפולים (`dedupeScheduleEntries`)
+- **מיקום**: [LessonsPage.jsx:144-172](src/components/LessonsPage.jsx#L144).
+- **מפתח dedup**: `date__startTime__endTime`.
+- **מתי**: על load (`getLessonDisplaySchedule` [:175](src/components/LessonsPage.jsx#L175)), בייבוא ([:1206](src/components/LessonsPage.jsx#L1206)), על שמירה ב-edit form ([:2074](src/components/LessonsPage.jsx#L2074), [:2458](src/components/LessonsPage.jsx#L2458)).
+- **התנהגות במיזוג**: מערכים זוכים לעדיפות לפי הראשון שיש בו `topic`/`kitId`/`lecturerId`. אם 2 שורות שונות בכיתה — האחת נכנסת ל-`studioId`, השנייה ל-`secondaryStudioId` ([:162-167](src/components/LessonsPage.jsx#L162)).
+
+### "שיוך כיתות לימוד" panel
+[LessonsPage.jsx:2765-2804](src/components/LessonsPage.jsx#L2765). מנהל `studioId` + `secondaryStudioId` ברמת קורס, מפיץ ל-**כל** sessions ([:2774-2778, :2792](src/components/LessonsPage.jsx#L2774)).
+
+---
 
 ## 🔐 Auth + זרימות
 
-### זרימת Login
-- **Password-only** דרך `supabase.auth.signInWithPassword` ב-`handleLogin` ([PublicForm.jsx](src/components/PublicForm.jsx)). **אין magic link login.** ה-`flowType: "implicit"` ב-`src/supabaseClient.js` קיים אך ורק כדי שקישורי password-reset יעבדו (כולל in-app browsers כמו WhatsApp/Telegram, איפה ש-PKCE נכשל). `detectSessionInUrl: true` משויך לאותה סיבה.
-- **משתמש חדש = "שכחת סיסמה?"**: לתלמיד/מרצה/צוות שעוד אין לו `auth.users` row, ה-onboarding היחיד — לחיצה על "שכחת סיסמה?" → `/api/auth` action `send-reset-email` שולח קישור איפוס דרך Gmail SMTP → המשתמש פותח את הקישור ויוצר סיסמה → מעכשיו מתחבר רגיל. **`auth.users` נוצר רק כשהמשתמש יוצר סיסמה בפועל**, לא בעצם הקיום שלו ב-`students`/`lecturers`/`staff_members`.
-- **קליינט auth** — `src/supabaseClient.js`:
-  - `lock: async (_, __, fn) => fn()` — bypass של navigator.locks. מספר קריאות `getSession()` מקבילות + `autoRefreshToken` יוצרים deadlock תחת Edge tracking-prevention / PWA standalone. אסור להחזיר.
-  - ה-auth listener ב-PublicForm קורא ל-`routeByRoles(session)` **fire-and-forget** (לא `await`). supabase-js עוטף את כל ה-listeners ב-`Promise.all` בתוך `_notifyAllSubscribers`, שעוטף ב-`signInWithPassword`. אם תעטוף `routeByRoles` ב-`await`, ה-DB-fetches שלו (~5 שאילתות + `/api/auth`) יחסמו את `signInWithPassword` ויעברו את ה-10s safety timer של handleLogin. הותר אחרי תקלה ב-prod.
-- `handleLogin` עצמו כן `await`-ים `routeByRoles` בנפרד אחרי `signInWithPassword`, אז הזרימה לא נשברה.
-- סיסמה מינ׳: 6 תווים (המשתמש דחה 8). מיפוי הודעות שגיאה לעברית ב-`src/components/PublicForm.jsx`.
-- **Supabase setting חובה**: "Prevent use of leaked passwords" = **OFF** (אחרת HaveIBeenPwned דוחה סיסמאות סבירות).
+### Login — Password only
+`supabase.auth.signInWithPassword` ב-`handleLogin` ([PublicForm.jsx](src/components/PublicForm.jsx)). **אין magic link login.** ה-`flowType: "implicit"` ב-[src/supabaseClient.js](src/supabaseClient.js) קיים רק לקישורי password-reset (כולל in-app browsers כמו WhatsApp).
 
-### Identity confirmation modal — הוסר
-הייתה בעבר מודאל "אישור זהות" שהוצג בכל login כדי להגן מפני autofill. הוסר לחלוטין בקומיט `bd3742c` — `public.users.email` כבר FK-bound ל-auth session, ו-RLS בודקת זהות בכל קריאה. אסור להחזיר את ה-modal הזה — הוא יצר חוסר אמון אצל המשתמשים בלי להוסיף הגנה מעבר למה ש-Supabase Auth + RLS כבר אוכפים.
+### Onboarding משתמש חדש
+**אין יצירת חשבון מפורשת.** משתמש חדש (סטודנט/מרצה/צוות) שעוד אין לו `auth.users` row — לוחץ "שכחת סיסמה?" → `/api/auth` action `send-reset-email` → Gmail SMTP → המשתמש יוצר סיסמה → מתחבר. `auth.users` נוצר רק כשהמשתמש יוצר סיסמה.
+
+### קליינט auth — נקודות קריטיות שאסור לשבור
+- **`lock: async (_, __, fn) => fn()`** ב-`src/supabaseClient.js` — bypass של navigator.locks (deadlock תחת Edge tracking-prevention / PWA standalone). **אסור להחזיר.**
+- **listener fire-and-forget** — onAuthStateChange קורא ל-`routeByRoles(session)` בלי `await`. עטיפה ב-await חוסמת את `signInWithPassword` ועוברת את ה-10s safety timer.
+- **Identity-confirmation modal — הוסר** ב-`bd3742c`. אסור להחזיר. RLS + FK על `public.users.email` כבר מספקים את ההגנה.
+- סיסמה מינ׳ 6 תווים. **Supabase setting חובה: "Prevent use of leaked passwords" = OFF.**
 
 ### API auth helper: `api/_auth-helper.js`
-- `requireStaff(req, res)` — צריך staff לפי `public.users` בלבד (`is_admin` או `is_warehouse`). fallback legacy ל-`staff_members` הוסר.
-- `requireAdmin(req, res)` — צריך admin
-- `requireUser(req, res)` — כל משתמש מאומת
-- `resolveUserRole(req)` — מחזיר `{role: "staff"|"user"|"anon"}` רק מ-public.users (בלי fallback)
+- `requireStaff` — staff לפי `public.users` בלבד (`is_admin`/`is_warehouse`). אין fallback ל-`staff_members`.
+- `requireAdmin` — admin בלבד.
+- `requireUser` — כל משתמש מאומת.
+- `resolveUserRole` — `{role: "staff"|"user"|"anon"}` מ-`public.users`.
 
 ### Email
-Gmail SMTP + nodemailer ב-`api/auth.js`. `buildResetEmail` בונה את גוף ה-HTML של קישור איפוס.
-
-## 🧩 דפים שעוד inline ב-App.jsx
-8 דפים עוד לא חולצו. שורות מאומתות מחדש ב-2026-05-21:
-
-| דף | מיקום ב-App.jsx | ~שורות |
-|------|----------------|---------|
-| `EquipmentPage` | 1431–3038 | ~1,600 |
-| `PoliciesPage` | 3038–3242 | ~200 |
-| `ArchivePage` | 3242–3440 | ~200 (קיים `src/components/ArchivePage.jsx` נטוש, לא מיובא) |
-| `TeamPage` | 3440–4126 | ~690 |
-| `KitsPage` | 4126–4499 | ~370 |
-| `ManagerCalendarPage` | 4499–4979 | ~480 |
-| `SettingsPage` | 4979–5210 | ~230 |
-| `DamagedEquipmentPage` | 5210+ | ~200 |
-
-## 🔄 כתיבה ל-DB — Pattern החדש
-כל ישות נכתבת דרך API util ייעודי שלה. דוגמא:
-```js
-import { syncAllKits, upsertKit, deleteKit } from "../utils/kitsApi.js";
-await upsertKit({ id, name, items });          // single row upsert
-await syncAllKits(arr);                         // batch upsert + delete-missing
-await deleteKit(id);                            // single row delete
-```
-תחת המכסה: כל util משתמש ב-singleton `supabase` client → `supabase.from("<table>").upsert(...)` → RLS בודקת `is_staff_member()` → realtime בערוץ הטבלה משדר ל-tabs אחרים.
-
-**אסור**:
-- ❌ `storageGet`, `storageSet` (הוסרו, ESLint יחסום)
-- ❌ `fetch("/api/store")` (הendpoint נמחק)
-- ❌ `supabase.from("store")` (הטבלה לא קיימת)
-- ❌ JSONB column חדש למערכי domain (השתמש בטבלה ייעודית)
-- ❌ `Promise.all` ענק ב-bulk upsert של ישות גדולה (השתמש ב-`inBatches`)
-
-## 🎓 לקחים נלמדו (anti-regressions)
-1. **Email-first dedup ב-`lecturers`**: ה-bootstrap ב-App.jsx מחלץ מרצים אוטומטית משיעורים. ה-dedup חייב לבדוק `lower(email)` **לפני** `lower(name)`, כי הטבלה מחזיקה UNIQUE index על `lower(email)`. dedup לפי שם בלבד יוצר UUID חדש אם השם נכתב מעט אחרת ("איציק רוזן" vs "ד\"ר איציק רוזן") → 23505.
-2. **navigator.locks deadlock**: אסור להחזיר את `lock` ל-default ב-`supabaseClient.js`. ראה הסעיף Auth.
-3. **listener fire-and-forget**: אסור להחזיר `await` ל-`routeByRoles` בתוך ה-onAuthStateChange listener. ראה הסעיף Auth.
-4. **Identity-confirmation modal**: אסור להחזיר. ראה הסעיף Identity confirmation.
-5. **`FAR_FUTURE` block ל-`באיחור`**: היה bug שחסם **כל** השאלה עתידית כשהיתה הזמנה ב-`באיחור` (טופל ב-2026-05-18). עכשיו ה-block מוגבל ל-48h בלבד (`OVERDUE_BLOCK_BUFFER_MS`). אסור להחזיר ל-`FAR_FUTURE`.
-6. **`toDateTime()` מחזיר timestamp (number), לא Date**: בקוד ב-[src/utils.js](src/utils.js) הפונקציה קוראת `.getTime()` בפנים ומחזירה מספר. אל תקרא ל-`.getTime()` על התוצאה — תקבל TypeError ("getTime is not a function"). נגרם בעבר בסטטוס approval של בקשה.
-
-## 🔥 נקודות חולשה / סיכון
-1. **production נראה תקין תפעולית כרגע** — RLS מופעל על הטבלאות המרכזיות, auth/public users מיושרים, ואין auth orphans לפי בדיקת read-only מ-2026-05-21.
-2. **dev לא מיושר לגמרי ל-production** — RLS כבוי על `users`, `equipment`, `equipment_units`, `reservations_new`, `reservation_items`, `staff_daily_tasks`, ויש עדיין FK constraints ל-`staff_members`. כרגע זה לא קריטי כי dev משמש לבדיקות בלבד, אבל זה עלול להטעות בבדיקות לפני העלאה.
-3. **`staff_members` עדיין קיימת כטבלת legacy** — הקוד הפעיל כבר לא משתמש בה כ-fallback. ב-production אין אליה FK אבל יש 9 rows; ב-dev יש row אחד ועדיין יש FKs. מומלץ למחוק רק אחרי וידוא שאין תלות חיצונית/היסטורית.
-4. **App.jsx ~7.0k שורות** — 8 דפים inline (ראה טבלה). tech debt, לא חסם.
-5. **`policy_assets` מאחסן PDF כ-Base64 ב-TEXT** — כל קריאת מדיניות מושכת את כל ה-blob. ארכיטקטונית לא נקי, לא חסם מיידי.
-6. **חשבונות auth "orphan"** — נבדק ב-2026-05-21 ונמצא נקי בשתי הסביבות.
-
-## 🎯 צעדים הבאים מומלצים
-1. **לשמור על production יציב** — לפני כל שינוי DB בפרוד לוודא במפורש namespace/project (`wxkyqgwwraojnbmyyfco`) ולעבוד רק עם מיגרציה מכוונת. כרגע אין תיקון קריטי דחוף בפרוד.
-2. **ליישר dev כשיהיה זמן** — RLS ו-FKs של `staff_members` ב-dev לא דחופים כרגע, אבל כדאי ליישר אותם לפני בדיקות משמעותיות של אבטחה/הרשאות.
-3. **לסגור את `staff_members` סופית** — fallback כבר הוסר מהקוד; ב-production אין FK לטבלה, אבל יש rows. למחוק רק אחרי וידוא שאין תלות חיצונית/היסטורית.
-4. **לסיים את פיצול App.jsx** — להוציא את 8 הדפים הנותרים. אחרי החילוץ — למחוק את `src/components/ArchivePage.jsx` הנטוש או להחליף בו את ה-inline. שאיפה: App.jsx < 2k שורות (shell/state/routing בלבד).
-5. **`policy_assets` ל-Supabase Storage** — להחליף את `data_base64` (TEXT) ב-bucket עם signed URL; טעינת מדיניות תוכל למשוך URL בלבד במקום blob. לא חסם מיידי.
-
-## 🛠️ כלים זמינים
-- **Supabase MCP** — `execute_sql`, `apply_migration`, `list_migrations`, `list_projects`.
-- **Vercel MCP** — `list_projects`, `get_project`, `list_deployments`, `deploy_to_vercel`.
-- **Git + GitHub CLI** (`gh`) — גישה מלאה ל-repo.
+Gmail SMTP + nodemailer ב-`api/auth.js`. `buildResetEmail`.
 
 ---
-*ההקשר המלא של הקוד נמצא ב-repo, והמצב הנוכחי ב-DB. כל העבודה committed + pushed.*
+
+## ✅ Pattern לפיצ'ר חדש (חובה)
+
+כל ישות חדשה לפי הפטרן:
+
+1. **מיגרציה** ב-`supabase/migrations/` — `CREATE TABLE` עם עמודות מפורשות, `created_at`/`updated_at`, `touch_updated_at` trigger, RLS + 3 policies (`service_role_all_<table>`, `staff_all_<table>`, `anon_read_<table>` אם ציבורי), `ALTER PUBLICATION supabase_realtime ADD TABLE` אם realtime.
+2. **UNIQUE indexes** — dedup בקליינט חייב לעבוד על אותו שדה. ראה לקח 1 למטה.
+3. **API util** ב-`src/utils/<entity>Api.js` עם singleton supabase (`import { supabase } from "../supabaseClient.js"`). חתימות: `list<Entity>()`, `upsert<Entity>(row)`, `delete<Entity>(id)`, `syncAll<Entity>(arr)`. תבניות: [src/utils/kitsApi.js](src/utils/kitsApi.js)/[src/utils/teamMembersApi.js](src/utils/teamMembersApi.js).
+4. **App.jsx wrapper** בסגנון `loadKitsWrapped` — try/catch + source flag.
+5. **Realtime channel** ב-App.jsx (אם רלוונטי) עם debounce 400ms.
+6. **JSONB מותר רק** ל-value heterogeneous (כמו `site_settings.value`) או metadata חופשי קטן. **לא** לאחסון מערכי domain.
+
+### Batched writes (חובה ל-N>~20)
+אסור `Promise.all` יחיד על כל השורות — רווי את HTTP/1.1 per-host limit, יוצר `ERR_CONNECTION_CLOSED`. השתמש ב-`inBatches(rows, fn, 4)` (ראה [src/utils/studentsApi.js](src/utils/studentsApi.js)). כשמשתמש עורך שורה אחת, חשב diff ושלח רק הפרשים (`syncStudentsDiff`).
+
+### אסור
+- ❌ `storageGet`/`storageSet` (ESLint יחסום)
+- ❌ `fetch("/api/store")` (endpoint נמחק)
+- ❌ `supabase.from("store"...)` (טבלה לא קיימת)
+- ❌ JSONB חדש למערכי domain
+- ❌ `Promise.all` ענק ב-bulk upsert
+
+---
+
+## 🧩 דפים שעוד inline ב-App.jsx (8 דפים, ~3,800 שורות)
+
+| דף | שורה ב-App.jsx |
+|------|---------------|
+| `EquipmentPage` | 1431 |
+| `PoliciesPage` | 3038 |
+| `ArchivePage` | 3242 (קיים `src/components/ArchivePage.jsx` נטוש) |
+| `TeamPage` | 3440 |
+| `KitsPage` | 4126 |
+| `ManagerCalendarPage` | 4499 |
+| `SettingsPage` | 4979 |
+| `DamagedEquipmentPage` | 5210 |
+
+שאיפה: App.jsx < 2k שורות (shell/state/routing בלבד).
+
+---
+
+## 🎓 לקחים נלמדו (anti-regressions)
+
+1. **Email-first dedup ב-`lecturers`** — bootstrap ב-App.jsx מחלץ מרצים אוטומטית משיעורים. dedup חייב לבדוק `lower(email)` **לפני** `lower(name)`. UNIQUE על email — dedup לפי שם יוצר 23505.
+2. **navigator.locks deadlock** — אסור להחזיר את `lock` ל-default ב-`supabaseClient.js`.
+3. **Listener fire-and-forget** — אסור `await routeByRoles` ב-onAuthStateChange.
+4. **Identity-confirmation modal** — אסור להחזיר.
+5. **`FAR_FUTURE` block ל-`באיחור`** — היה bug שחסם כל השאלה עתידית. עכשיו 48h בלבד.
+6. **`toDateTime()` מחזיר number, לא Date** — אל תקרא `.getTime()` על התוצאה.
+7. **Auto-coupling MAIN CONTROL → סטודיו הקלטות בשיעורים** — הוסר לחלוטין בקומיט `6c89345`. שיעור ב-MAIN CONTROL לא משריין אוטומטית את סטודיו הקלטות. אם צריך גם הקלטות — לבחור כיתה משנית במפורש. ה-toggle הידני "צרף סטודיו הקלטות" ב-team/student booking נשמר כ-opt-in.
+8. **`production_delete_v1` atomic hard-delete** — קוראים ישירות מ-React (`supabase.rpc`), לא דרך API endpoint נפרד. כל הפעולה ב-transaction יחיד של Postgres. ראה מיגרציה `20260525120000`.
+
+---
+
+## 🛡️ Guardrails חיים
+
+- **ESLint** ([eslint.config.js](eslint.config.js)) חוסם: `storageGet`, `storageSet`, `supabase.from('store'...)`, `from('store_snapshots'...)`, `/api/store`. רמה=ERROR.
+- **CI workflow** ([.github/workflows/ci.yml](.github/workflows/ci.yml)) — `Lint & build` רץ על כל PR/push. `DB smoke (dev project)` רץ אם `SUPABASE_DEV_URL`/`SUPABASE_DEV_SERVICE_ROLE_KEY` מוגדרים ב-GitHub secrets (כרגע לא — הוא מדלג נקי).
+- **Global Error Boundary** ([src/components/ErrorBoundary.jsx](src/components/ErrorBoundary.jsx)) — Hebrew/RTL fallback עוטף את `<App/>` ב-StrictMode.
+- **DB smoke** (`npm run test:db`, [scripts/run-db-smoke.mjs](scripts/run-db-smoke.mjs)) — 19 scenarios: `run_reservation_overlap_tests` (13) + `run_productions_regression_tests` (6). מסרב לרוץ אם ה-hostname לא `mhvujejdlmtowypjdhjd`. status נוכחי: **19/19 PASS**.
+
+---
+
+## 🔥 נקודות חולשה / סיכון
+
+1. **dev לא מיושר ל-prod** — RLS כבוי על `users`/`equipment`/`equipment_units`/`reservations_new`/`reservation_items`/`staff_daily_tasks`, ויש FK constraints ל-`staff_members`. לא קריטי כי dev = sandbox.
+2. **`staff_members` legacy** — הקוד הפעיל לא משתמש כ-fallback. ב-prod: 9 rows, אין FK. ב-dev: row אחד + יש FKs. למחוק אחרי וידוא שאין תלות היסטורית.
+3. **App.jsx ~7,423 שורות** — 8 דפים inline (טבלה למעלה).
+4. **`policy_assets` שומר PDF כ-Base64 ב-TEXT** — קריאת מדיניות מושכת blob שלם. tech debt.
+
+---
+
+## 🛠️ כלים זמינים
+
+- **Supabase MCP** — `execute_sql`, `apply_migration`, `list_migrations`, `list_projects`, `get_advisors`.
+- **Vercel MCP** — `list_projects`, `get_project`, `list_deployments`, `deploy_to_vercel`.
+- **Git + GitHub CLI (`gh`)** — גישה מלאה ל-repo.
+- **Context7 MCP** (`ctx7`) — docs של ספריות (דורש restart של Claude Code כשמתקינים).
+
+---
+
+## 📜 היסטוריית PRs אחרונים שעלו לפרוד
+
+- **2026-05-25** — `867daeb` Atomic production delete: `production_delete_v1` עבר ל-HARD_DELETE atomic, `api/delete-production.js` נמחק (135 שורות). מיגרציה `20260525120000`.
+- **2026-05-23** — PR #19 + hotfix `e2dac20` — ייבוא XL לשיעורים (מצב partial, דוח מפורט, איחוד כפילות), חיפוש לפי מרצים מרובים, ביטול auto-coupling סטודיו הקלטות לשיעורים (קומיט `6c89345`).
+- **2026-05-22** — PR #18 + PR #17 — Hard delete לרזרבציות הפקה דרך API (הוחלף ב-RPC ב-2026-05-25), `secondaryStudioId` בשיעורים, toggle ידני "צרף סטודיו הקלטות" ב-team/student.
+- **2026-05-20** — PR #16 — CI workflow + Global Error Boundary + DB smoke. ניקוי `staff_members` fallback מהקוד (`b6af87a`). מיגרציה `auth_rate_limits`.
+- **2026-05-18** — PR #15 — לוח הפקות (4 טבלאות + 17 מיגרציות). 48h overdue buffer. StudentHub. tab "לוח הפקות" ב-LecturerPortal.
+- **2026-05-12** — PR #14 — ביטול הזמנה ע"י סטודנט = hard delete. PR #13 — מדריך וידאו לקהלי צוות/מרצים.
+- **2026-05-11** — PR #11 — פאנל "רשימות פעילות" ב-PublicForm step 2, פילטרים לוח (סגול=ראש מחלקה, אדום=באיחור), תאריכי חודש סמוך בלוח, דיווחי תקלה ניתנים לעריכה.
+
+---
+
+*ההקשר המלא של הקוד נמצא ב-repo, מצב חי ב-DB. כל העבודה committed + pushed.*
