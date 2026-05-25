@@ -1743,7 +1743,10 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     setCategories(updatedCats);
     setCategoryTypes(updatedTypes);
     await syncAllCategories(updatedCats, updatedTypes);
-    showToast("success", `הרובריקה "${categoryName}" נמחקה`);
+    showToast("success", `הרובריקה "${categoryName}" נמחקה`, {
+      aggregateKey: "category-delete",
+      pluralize: n => `${n} רובריקות נמחקו`,
+    });
   };
 
   const todayStr2 = today();
@@ -3249,7 +3252,10 @@ function ArchivePage({ reservations, setReservations, equipment, showToast }) {
     await deleteReservation(id); // Stage 5 — delete from Supabase (previously only blob)
     const updated = reservations.filter(r=>r.id!==id);
     setReservations(updated);
-    showToast("success", "הבקשה נמחקה מהארכיון");
+    showToast("success", "הבקשה נמחקה מהארכיון", {
+      aggregateKey: "archive-delete",
+      pluralize: n => `${n} בקשות נמחקו מהארכיון`,
+    });
     if(viewRes?.id===id) setViewRes(null);
   };
 
@@ -5768,7 +5774,7 @@ export default function App() {
     setUndoStack((prev) => {
       const last = prev[prev.length - 1];
       if (last && dataEquals(last.snapshot, snapshot)) return prev;
-      return [...prev, { id: Date.now(), snapshot }].slice(-10);
+      return [...prev, { id: Date.now(), snapshot }].slice(-15);
     });
     window.setTimeout(() => {
       historyQueuedRef.current = false;
@@ -5850,10 +5856,37 @@ export default function App() {
     try { const token=await getAuthToken(); const r = await fetch("/api/equipment-report",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({action:"list"})}); const d = await r.json(); if(Array.isArray(d)) setEquipmentReports(d); } catch {}
   };
 
-  const showToast = (type, msg) => {
-    const id = Date.now();
-    setToasts(p=>[...p,{id,type,msg}]);
-    setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)), 3500);
+  // Optional toast aggregation: when callers pass `opts.aggregateKey`, repeated
+  // toasts of the same key+type within 3.5s merge into a single toast whose
+  // text updates via `opts.pluralize(count)`. Without opts, behavior is
+  // identical to the legacy implementation (no dedup, stacked).
+  // Synchronous on the click path — no async, no extra renders for legacy calls.
+  const toastTimersRef = useRef(new Map()); // aggregateKey -> setTimeout id
+  const showToast = (type, msg, opts = {}) => {
+    const { aggregateKey, pluralize } = opts;
+    if (!aggregateKey) {
+      const id = Date.now() + Math.random();
+      setToasts(p => [...p, { id, type, msg }]);
+      setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3500);
+      return;
+    }
+    setToasts(prev => {
+      const existing = prev.find(t => t.aggregateKey === aggregateKey && t.type === type);
+      if (existing) {
+        const nextCount = (existing.count || 1) + 1;
+        const nextMsg = typeof pluralize === "function" ? pluralize(nextCount) : msg;
+        return prev.map(t => t.id === existing.id ? { ...t, msg: nextMsg, count: nextCount } : t);
+      }
+      const id = Date.now() + Math.random();
+      return [...prev, { id, type, msg, aggregateKey, count: 1 }];
+    });
+    const oldTimer = toastTimersRef.current.get(aggregateKey);
+    if (oldTimer) clearTimeout(oldTimer);
+    const newTimer = setTimeout(() => {
+      setToasts(p => p.filter(t => t.aggregateKey !== aggregateKey));
+      toastTimersRef.current.delete(aggregateKey);
+    }, 3500);
+    toastTimersRef.current.set(aggregateKey, newTimer);
   };
 
   const attachLogIdToUndo = (logId) => {
@@ -5886,99 +5919,66 @@ export default function App() {
       const currentState = getUndoSnapshot();
 
       // Reservations live in reservations_new + reservation_items (relational).
-      // Diff snapshot vs current and call the matching RPC for each delta:
-      //   - id in snapshot but not in current  → /api/restore-reservation
-      //   - id in current  but not in snapshot → /api/delete-reservation
-      // Status changes / item edits are not handled — they're rare and the
-      // local restore (_setReservations below) covers them until next poll.
+      // Diff snapshot vs current to produce restore/delete lists.
       // lesson_auto rows are virtual — never written to DB, skipped here.
+      let toRestore = [];
+      let toDelete = [];
+      let authHeaders = { "Content-Type": "application/json" };
       try {
         const snapshotRes = Array.isArray(snapshot.reservations) ? snapshot.reservations : [];
         const currentRes  = Array.isArray(currentState.reservations) ? currentState.reservations : [];
         const snapshotById = new Map(snapshotRes.filter(r => !r.lesson_auto).map(r => [String(r.id), r]));
         const currentById  = new Map(currentRes.filter(r => !r.lesson_auto).map(r => [String(r.id), r]));
+        for (const [id, r] of snapshotById) if (!currentById.has(id)) toRestore.push(r);
+        for (const [id] of currentById)     if (!snapshotById.has(id)) toDelete.push(id);
         const token = await getAuthToken().catch(() => null);
-        const authHeaders = { "Content-Type": "application/json" };
         if (token) authHeaders["Authorization"] = `Bearer ${token}`;
-
-        const toRestore = [];
-        for (const [id, r] of snapshotById) {
-          if (!currentById.has(id)) toRestore.push(r);
-        }
-        const toDelete = [];
-        for (const [id] of currentById) {
-          if (!snapshotById.has(id)) toDelete.push(id);
-        }
-
-        // Run sequentially — small N, and serial output is easier to reason
-        // about if any single call fails partway.
-        for (const r of toRestore) {
-          await fetch("/api/restore-reservation", {
-            method: "POST",
-            headers: authHeaders,
-            body: JSON.stringify({
-              reservation: r,
-              items: Array.isArray(r.items) ? r.items.map(i => ({
-                equipment_id: i.equipment_id,
-                name: i.name,
-                quantity: Number(i.quantity) || 1,
-                unit_id: i.unit_id,
-              })) : [],
-            }),
-          }).catch(err => console.error("undo restore-reservation failed", id, err));
-          // Clear any pendingDeletes guard so the row is allowed back into refetches.
-          unmarkReservationDeleting(String(r.id), 0);
-        }
-        for (const id of toDelete) {
-          await fetch("/api/delete-reservation", {
-            method: "POST",
-            headers: authHeaders,
-            body: JSON.stringify({ id: String(id) }),
-          }).catch(err => console.error("undo delete-reservation failed", id, err));
-        }
       } catch (err) {
         console.error("undo: reservation diff failed", err);
       }
 
-      const promises = [];
+      // Build entity sync promises (computed up-front so we can fire them
+      // after applying local state without re-computing currentState).
+      const entityPromises = [];
       if (snapshot.equipment !== undefined && !dataEquals(currentState.equipment, snapshot.equipment)) {
-        promises.push(writeEquipmentToDB(snapshot.equipment));
+        entityPromises.push(writeEquipmentToDB(snapshot.equipment));
       }
-      // Categories + loan_type_filters (Stage 12)
       if (snapshot.categories !== undefined && !dataEquals(currentState.categories, snapshot.categories)) {
-        promises.push(syncAllCategories(snapshot.categories, snapshot.categoryTypes || {}));
+        entityPromises.push(syncAllCategories(snapshot.categories, snapshot.categoryTypes || {}));
       }
       if (snapshot.categoryLoanTypes !== undefined && !dataEquals(currentState.categoryLoanTypes, snapshot.categoryLoanTypes)) {
-        promises.push(syncLoanTypeFilters(snapshot.categoryLoanTypes));
+        entityPromises.push(syncLoanTypeFilters(snapshot.categoryLoanTypes));
       }
-      // Team members + kits (Stage 11)
       if (snapshot.teamMembers !== undefined && !dataEquals(currentState.teamMembers, snapshot.teamMembers)) {
-        promises.push(syncAllTeamMembers(snapshot.teamMembers));
+        entityPromises.push(syncAllTeamMembers(snapshot.teamMembers));
       }
       if (snapshot.kits !== undefined && !dataEquals(currentState.kits, snapshot.kits)) {
-        promises.push(syncAllKits(snapshot.kits));
+        entityPromises.push(syncAllKits(snapshot.kits));
       }
-      // Stage 13: policies / siteSettings / collegeManager / deptHeads
       if (snapshot.policies !== undefined && !dataEquals(currentState.policies, snapshot.policies)) {
-        promises.push(syncAllPolicies(snapshot.policies));
+        entityPromises.push(syncAllPolicies(snapshot.policies));
       }
       if (snapshot.siteSettings !== undefined && !dataEquals(currentState.siteSettings, snapshot.siteSettings)) {
-        promises.push(syncAllSiteSettings(snapshot.siteSettings));
+        entityPromises.push(syncAllSiteSettings(snapshot.siteSettings));
       }
       if (snapshot.collegeManager !== undefined && !dataEquals(currentState.collegeManager, snapshot.collegeManager)) {
-        promises.push(saveCollegeManager(snapshot.collegeManager));
+        entityPromises.push(saveCollegeManager(snapshot.collegeManager));
       }
       if (snapshot.deptHeads !== undefined && !dataEquals(currentState.deptHeads, snapshot.deptHeads)) {
-        promises.push(syncAllDeptHeads(snapshot.deptHeads));
+        entityPromises.push(syncAllDeptHeads(snapshot.deptHeads));
       }
-      // Lessons + lecturers are normalized — restore via the table API.
       if (snapshot.lessons !== undefined && !dataEquals(currentState.lessons, snapshot.lessons)) {
-        promises.push(syncAllLessons(snapshot.lessons));
+        entityPromises.push(syncAllLessons(snapshot.lessons));
       }
       if (snapshot.lecturers !== undefined && !dataEquals(currentState.lecturers, snapshot.lecturers)) {
-        promises.push(syncAllLecturers(snapshot.lecturers));
+        entityPromises.push(syncAllLecturers(snapshot.lecturers));
       }
 
+      // Apply local state IMMEDIATELY so the UI reflects the undo with zero
+      // network latency. The button counter and the underlying data update in
+      // the same tick. Network calls run in the background (Promise.all
+      // below), and the next refetch will reconcile if any backend write
+      // failed silently.
       _setEquipment(snapshot.equipment);
       _setReservations(snapshot.reservations);
       _setCategories(snapshot.categories);
@@ -5995,19 +5995,54 @@ export default function App() {
       if (snapshot.studio_bookings) _setStudioBookings(snapshot.studio_bookings);
       if (snapshot.lessons) _setLessons(snapshot.lessons);
       if (snapshot.lecturers) _setLecturers(snapshot.lecturers);
+      // Pop the stack immediately so the button counter decrements without
+      // waiting for network.
+      setUndoStack((prev) => prev.slice(0, -1));
+
+      // Fire all network calls in parallel. Reservations were previously
+      // serialized — parallelizing brings a noticeable speed-up for undos
+      // that touch many rows.
+      const reservationPromises = [
+        ...toRestore.map((r) => fetch("/api/restore-reservation", {
+          method: "POST",
+          headers: authHeaders,
+          body: JSON.stringify({
+            reservation: r,
+            items: Array.isArray(r.items) ? r.items.map(i => ({
+              equipment_id: i.equipment_id,
+              name: i.name,
+              quantity: Number(i.quantity) || 1,
+              unit_id: i.unit_id,
+            })) : [],
+          }),
+        }).then((res) => {
+          unmarkReservationDeleting(String(r.id), 0);
+          return res;
+        }).catch((err) => { console.error("undo restore-reservation failed", r.id, err); return null; })),
+        ...toDelete.map((id) => fetch("/api/delete-reservation", {
+          method: "POST",
+          headers: authHeaders,
+          body: JSON.stringify({ id: String(id) }),
+        }).catch((err) => { console.error("undo delete-reservation failed", id, err); return null; })),
+      ];
 
       let ok = true;
-      if (promises.length > 0) {
-        const results = await Promise.all(promises);
-        ok = results.every((r) => r?.ok);
-      }
+      const allResults = await Promise.all([...entityPromises, ...reservationPromises]);
+      // Entity sync helpers return {ok:true/false}; fetch results have .ok.
+      // null = caught error → not ok.
+      ok = allResults.every((r) => r === null ? false : (r?.ok !== false));
 
       if (ok && lastEntry.logId) deleteActivityLog(lastEntry.logId);
-      setUndoStack((prev) => prev.slice(0, -1));
-      showToast(ok ? "success" : "error", ok ? "הפעולה האחרונה בוטלה" : "הפעולה בוטלה מקומית, אך חלק מהשמירות נכשלו");
+      showToast(ok ? "success" : "error", ok ? "הפעולה האחרונה בוטלה" : "הפעולה בוטלה מקומית, אך חלק מהשמירות נכשלו", {
+        aggregateKey: ok ? "undo-success" : "undo-partial",
+        pluralize: n => ok ? `${n} פעולות בוטלו` : `${n} פעולות בוטלו (חלק מהשמירות נכשלו)`,
+      });
     } catch (error) {
       console.error("undo error", error);
-      showToast("error", "שגיאה בביטול הפעולה האחרונה");
+      showToast("error", "שגיאה בביטול הפעולה האחרונה", {
+        aggregateKey: "undo-error",
+        pluralize: n => `שגיאה ב-${n} פעולות ביטול`,
+      });
     } finally {
       window.setTimeout(() => {
         historySuspendedRef.current = false;

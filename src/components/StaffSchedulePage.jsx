@@ -316,12 +316,20 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
   const deletePref = async (id) => {
     const r = await scheduleApi("delete-preference", { id });
     if (r.error) { showToast("error", r.error); return; }
-    showToast("success", "ההעדפה נמחקה"); await fetchWeekData();
+    showToast("success", "ההעדפה נמחקה", {
+      aggregateKey: "staff-pref-delete",
+      pluralize: n => `${n} העדפות נמחקו`,
+    });
+    await fetchWeekData();
   };
   const deleteAssignment = async (id) => {
     const r = await scheduleApi("delete-assignment", { id });
     if (r.error) { showToast("error", r.error); return; }
-    showToast("success", "השיבוץ נמחק"); await fetchWeekData();
+    showToast("success", "השיבוץ נמחק", {
+      aggregateKey: "staff-shift-delete",
+      pluralize: n => `${n} שיבוצים נמחקו`,
+    });
+    await fetchWeekData();
   };
   const toggleLock = async (aId, locked) => {
     const r = await scheduleApi(locked ? "unlock" : "lock", { id: aId });
@@ -484,7 +492,10 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
     });
     setLessons(updated);
     await syncAllLessons(updated);
-    showToast("success", "השיעור נמחק מיום זה");
+    showToast("success", "השיעור נמחק מיום זה", {
+      aggregateKey: "staff-lesson-day-delete",
+      pluralize: n => `${n} שיעורים נמחקו מהיום`,
+    });
   };
 
   /* ══════════ Render ══════════ */

@@ -179,7 +179,11 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
             const updated = current.filter(m => m.id !== id && m.email?.toLowerCase() !== deleted.email?.toLowerCase());
             if (updated.length !== current.length) { setTeamMembers(updated); syncAllTeamMembers(updated).catch(err => console.warn("[stage11] team_members sync failed:", err)); }
           }
-          showToast?.("success", "המשתמש נמחק"); fetchStaff();
+          showToast?.("success", "המשתמש נמחק", {
+            aggregateKey: "staff-user-delete",
+            pluralize: n => `${n} משתמשים נמחקו`,
+          });
+          fetchStaff();
         }
       else {
           const data = await res.json().catch(() => ({}));
