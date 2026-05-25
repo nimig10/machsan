@@ -133,12 +133,26 @@ function normalizeScheduleEntry(entry = {}) {
     startTime: entry?.startTime || "09:00",
     endTime: entry?.endTime || "12:00",
     topic: String(entry?.topic || "").trim(),
-    studioId: entry?.studioId || null,
-    secondaryStudioId: entry?.secondaryStudioId || null,
+    studioIds: normalizeScheduleStudioIds(entry),
     kitId: entry?.kitId || null,
     lecturerId,
     instructorName,
   };
+}
+
+function normalizeScheduleStudioIds(entry = {}) {
+  // Position-preserving normalization: each index is independent.
+  // Explicit studioIds keeps gaps ("" entries) so that column N stays at
+  // index N for every session. Legacy entries fall back to a packed list.
+  if (Array.isArray(entry.studioIds)) {
+    return entry.studioIds.map(v => (v === null || v === undefined) ? "" : String(v).trim());
+  }
+  const out = [];
+  if (entry.studioId) out.push(String(entry.studioId).trim());
+  if (entry.secondaryStudioId && String(entry.secondaryStudioId) !== String(entry.studioId || "")) {
+    out.push(String(entry.secondaryStudioId).trim());
+  }
+  return out;
 }
 
 function dedupeScheduleEntries(entries = []) {
@@ -159,14 +173,33 @@ function dedupeScheduleEntries(entries = []) {
     if (Array.isArray(normalized.sourceRows)) {
       existing.sourceRows = [...(existing.sourceRows || []), ...normalized.sourceRows];
     }
-    const incomingStudioIds = [normalized.studioId, normalized.secondaryStudioId].filter(Boolean).map(String);
-    for (const incomingStudioId of incomingStudioIds) {
-      if (!existing.studioId) {
-        existing.studioId = incomingStudioId;
-      } else if (String(existing.studioId) !== incomingStudioId && !existing.secondaryStudioId) {
-        existing.secondaryStudioId = incomingStudioId;
+    // Merge studioIds position-preserving: prefer the existing value per slot,
+    // fill empty slots from the incoming entry, then append any extra studios.
+    const existingIds = [...(existing.studioIds || [])];
+    const incomingIds = [...(normalized.studioIds || [])];
+    const maxLen = Math.max(existingIds.length, incomingIds.length);
+    const seenNonEmpty = new Set(existingIds.filter(Boolean).map(String));
+    const merged = [];
+    for (let i = 0; i < maxLen; i += 1) {
+      const e = existingIds[i] || "";
+      const inc = incomingIds[i] || "";
+      let chosen = e || inc;
+      if (chosen) {
+        const k = String(chosen);
+        if (seenNonEmpty.has(k) && e !== chosen) chosen = "";
+        else seenNonEmpty.add(k);
       }
+      merged.push(chosen);
     }
+    // If the incoming brings extra non-empty studios beyond max length, append.
+    for (const inc of incomingIds) {
+      if (!inc) continue;
+      const k = String(inc);
+      if (seenNonEmpty.has(k)) continue;
+      seenNonEmpty.add(k);
+      merged.push(k);
+    }
+    existing.studioIds = merged;
   }
   return [...byTime.values()];
 }
@@ -177,6 +210,23 @@ function getLessonDisplaySchedule(lesson = {}) {
 
 function getLessonSessionStudioIds(session = {}, lesson = {}) {
   return getEffectiveLessonStudioIds(session, lesson).map(String);
+}
+
+// Normalize Israeli phone numbers to international format for wa.me deep links.
+// Accepts inputs like "054-123-4567", "054 123 4567", "+972541234567", "972541234567"
+// and returns "972541234567". Returns "" if no usable digits found.
+function normalizeIsraeliPhone(raw = "") {
+  const digits = String(raw || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("972")) return digits;
+  if (digits.startsWith("0")) return `972${digits.slice(1)}`;
+  return digits;
+}
+
+function formatLessonDateDdMmYy(iso = "") {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso || "";
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y.slice(2)}`;
 }
 
 function isValidImportedDate(dateStr = "") {
@@ -219,12 +269,15 @@ function buildLessonTimeOptions(startHour = 7, endHour = 23) {
 
 const LESSON_TIME_OPTIONS = buildLessonTimeOptions();
 
-export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[], trackOptions=[], studioBookings=[], setStudioBookings, certifications={}, openLessonId=null, onOpenLessonConsumed=null, lecturers=[], setLecturers, siteSettings={} }) {
+export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[], trackOptions=[], studioBookings=[], setStudioBookings, certifications={}, openLessonId=null, onOpenLessonConsumed=null, lecturers=[], setLecturers, teamMembers=[], siteSettings={} }) {
   const [mode, setMode] = useState(null); // null | "add" | "edit"
   const [editTarget, setEditTarget] = useState(null);
   const [pendingLesson, setPendingLesson] = useState(null);
   const [conflicts, setConflicts] = useState([]);
   const [conflictSending, setConflictSending] = useState(false);
+  // Optional free-text message admin writes when accepting a conflict — appended
+  // to the auto-cancellation email as a "הודעה מהמכללה" block.
+  const [conflictMessage, setConflictMessage] = useState("");
   const [lecturerConflicts, setLecturerConflicts] = useState([]); // [{lessonA, lessonB, lecturerName, date, timeA, timeB}]
   const [importReport, setImportReport] = useState(null);
   const [editingImportErrorKey, setEditingImportErrorKey] = useState(null);
@@ -637,9 +690,24 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       const newBookings = studioBookings.filter(b => !conflictIds.has(String(b.id)));
       if (setStudioBookings) setStudioBookings(newBookings);
       await syncAllStudioBookings(newBookings);
+
+      const customMessage = String(conflictMessage || "").trim();
+
       await Promise.all(conflicts.map(async ({ booking, studioName }) => {
-        const studentRecord = studentsFromTable.find(s => s.name === booking.studentName);
-        const email = studentRecord?.email || booking.email;
+        // Resolve recipient — both team and student bookings can be cancelled here.
+        const kind = booking.bookingKind || (booking.lesson_id ? "lesson" : booking.teamMemberId ? "team" : "student");
+        const isTeamBooking = kind === "team" || (!booking.studentName && booking.teamMemberId);
+        let email = "";
+        let recipientName = "";
+        if (isTeamBooking) {
+          const teamRec = teamMembers.find(t => String(t.id) === String(booking.teamMemberId));
+          email = teamRec?.email || booking.teamMemberEmail || booking.email || "";
+          recipientName = teamRec?.name || booking.teamMemberName || "";
+        } else {
+          const studentRecord = studentsFromTable.find(s => s.name === booking.studentName);
+          email = studentRecord?.email || booking.email || booking.studentEmail || "";
+          recipientName = booking.studentName || "";
+        }
         if (!email) return;
         try {
           const tokConf = await getAuthToken();
@@ -649,11 +717,12 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
             body: JSON.stringify({
               to: email,
               type: "studio_lesson_conflict",
-              student_name: booking.studentName,
+              student_name: recipientName,
               project_name: studioName,
               borrow_date: booking.date,
               borrow_time: booking.startTime,
               return_time: booking.endTime,
+              custom_message: customMessage,
             }),
           });
         } catch(e) { console.error("conflict email failed", e); }
@@ -663,7 +732,49 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       setConflictSending(false);
       setPendingLesson(null);
       setConflicts([]);
+      setConflictMessage("");
     }
+  };
+
+  // Resolve the affected user's phone for a conflict booking. Mirrors the
+  // email resolution in `confirmConflictAndSend`: team bookings hit the
+  // team_members lookup, students hit the students table.
+  const getConflictRecipientPhone = (booking) => {
+    const kind = booking?.bookingKind || (booking?.lesson_id ? "lesson" : booking?.teamMemberId ? "team" : "student");
+    const isTeamBooking = kind === "team" || (!booking?.studentName && booking?.teamMemberId);
+    if (isTeamBooking) {
+      const teamRec = teamMembers.find(t => String(t.id) === String(booking?.teamMemberId));
+      return teamRec?.phone || booking?.teamMemberPhone || booking?.phone || "";
+    }
+    const studentRecord = studentsFromTable.find(s => s.name === booking?.studentName);
+    return studentRecord?.phone || booking?.phone || booking?.studentPhone || "";
+  };
+
+  // Build a wa.me deep link (or "" if no phone) prefilled with a short
+  // cancellation summary + the admin's optional custom message. Opens in a new
+  // tab — WhatsApp routes to web/desktop/mobile based on the platform.
+  const buildConflictWhatsAppLink = (booking, studioName) => {
+    const phone = normalizeIsraeliPhone(getConflictRecipientPhone(booking));
+    if (!phone) return "";
+    const recipientName = booking?.studentName || booking?.teamMemberName || "";
+    const dateLabel = formatLessonDateDdMmYy(booking?.date) || booking?.date || "";
+    const timeLabel = (booking?.startTime || booking?.endTime)
+      ? `${booking?.startTime || ""}${booking?.endTime ? `–${booking.endTime}` : ""}`
+      : "";
+    const extra = String(conflictMessage || "").trim();
+    const lines = [
+      recipientName ? `שלום ${recipientName},` : "שלום,",
+      "",
+      `לצערנו נאלצנו לבטל את קביעת החדר${studioName ? ` ${studioName}` : ""}${dateLabel ? ` בתאריך ${dateLabel}` : ""}${timeLabel ? ` (${timeLabel})` : ""} לטובת שיעור.`,
+    ];
+    if (extra) {
+      lines.push("");
+      lines.push(extra);
+    }
+    lines.push("");
+    lines.push("ניתן לנסות לקבוע חדר חלופי בלוח קביעת החדרים.");
+    const text = encodeURIComponent(lines.join("\n"));
+    return `https://wa.me/${phone}?text=${text}`;
   };
 
   const del = async (id) => {
@@ -864,8 +975,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       startTime: normalized.startTime || "09:00",
       endTime: normalized.endTime || "12:00",
       topic: String(normalized.topic || "").trim(),
-      studioId: normalized.studioId || null,
-      secondaryStudioId: normalized.secondaryStudioId || null,
+      studioIds: [...(normalized.studioIds || [])].map(String).sort(),
       kitId: normalized.kitId || null,
       lecturerId: normalized.lecturerId || null,
       instructorName: String(normalized.instructorName || "").trim(),
@@ -1059,7 +1169,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
         startTime: rowInfo.startTime,
         endTime: rowInfo.endTime,
         topic: rowInfo.topic,
-        studioId: sessionStudio?.id || null,
+        studioIds: sessionStudio?.id ? [String(sessionStudio.id)] : [],
         kitId: rowInfo.kitName ? (lessonKits.find(k=>k.name===rowInfo.kitName)?.id || null) : null,
         lecturerId: lecturer?.id || null,
         instructorName: instructorDisplayName,
@@ -1080,31 +1190,35 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       });
       const schedule = [];
       mergedBySession.forEach((sessions) => {
-        const uniqueStudioIds = [];
+        // Merge ALL classrooms from rows that share the same time slot.
+        // No max-2 limit — XL with 3+ rooms per slot is allowed.
+        const mergedStudioIds = [];
+        const seen = new Set();
         sessions.forEach((session) => {
-          if (session.studioId && !uniqueStudioIds.some(id => String(id) === String(session.studioId))) uniqueStudioIds.push(session.studioId);
-        });
-        if (uniqueStudioIds.length > 2) {
-          sessions.forEach(session => {
-            (session.sourceRows || []).forEach(rowInfo => addImportError(reportErrors, rowInfo, "לא ניתן לשייך יותר משתי כיתות לאותו שיעור"));
+          (session.studioIds || []).forEach((id) => {
+            const key = String(id);
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            mergedStudioIds.push(key);
           });
-          return;
-        }
-        const allowedStudioIds = uniqueStudioIds.slice(0, 2);
-        const allowedSessions = sessions.filter(session => (
-          !session.studioId
-          || allowedStudioIds.some(id => String(id) === String(session.studioId))
-        ));
-        if (!allowedSessions.length) return;
-        const base = allowedSessions[0];
+        });
+        const base = sessions[0];
         schedule.push({
           ...base,
-          studioId: allowedStudioIds[0] || base.studioId || null,
-          secondaryStudioId: allowedStudioIds[1] || null,
-          sourceRows: allowedSessions.flatMap(session => session.sourceRows || []),
+          studioIds: mergedStudioIds,
+          sourceRows: sessions.flatMap(session => session.sourceRows || []),
         });
       });
       group.schedule = schedule;
+      const courseStudioIds = [];
+      const courseSeen = new Set();
+      schedule.forEach((s) => (s.studioIds || []).forEach((id) => {
+        const key = String(id);
+        if (!key || courseSeen.has(key)) return;
+        courseSeen.add(key);
+        courseStudioIds.push(key);
+      }));
+      group.studios = courseStudioIds.map((id) => ({ studioId: id }));
       delete group.rawSchedule;
     });
 
@@ -1169,6 +1283,21 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
         .flatMap((index) => updatedLessons[index]?.schedule || []);
       const existing = existingIndex >= 0 ? updatedLessons[existingIndex] : null;
       const lessonId = existing?.id || `lesson_${Date.now()}_${addedCount + updatedCount}`;
+      const mergedStudios = (() => {
+        const out = [];
+        const seen = new Set();
+        const push = (id) => {
+          const key = String(id || "").trim();
+          if (!key || seen.has(key)) return;
+          seen.add(key);
+          out.push({ studioId: key });
+        };
+        (existing?.studios || []).forEach(cs => push(cs?.studioId));
+        if (existing?.studioId) push(existing.studioId);
+        (group.studios || []).forEach(cs => push(cs?.studioId));
+        if (studioId) push(studioId);
+        return out;
+      })();
       const baseLesson = existing ? {
         ...existing,
         track: group.track || existing.track || "",
@@ -1182,7 +1311,8 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           lecturers: [...(Array.isArray(existing.lecturers) ? existing.lecturers : []), ...(group.lecturers || [])],
         }),
         description: group.description || existing.description || "",
-        studioId: studioId ?? existing.studioId ?? null,
+        studioId: mergedStudios[0]?.studioId || null,
+        studios: mergedStudios,
         kitId: kitId ?? existing.kitId ?? null,
         schedule: dedupeScheduleEntries([...(existing.schedule || []), ...duplicateExistingSchedules]),
       } : {
@@ -1195,7 +1325,8 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
         lecturerId: group.lecturerId || null,
         lecturers: group.lecturers || [],
         description: group.description,
-        studioId,
+        studioId: mergedStudios[0]?.studioId || null,
+        studios: mergedStudios,
         kitId,
         schedule: [],
         created_at: new Date().toISOString(),
@@ -1730,19 +1861,88 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
               <div style={{fontSize:13,color:"var(--text2)",marginTop:4}}>{conflicts.length} קביעות חדרים חופפות עם שיעורי הקורס</div>
             </div>
             <div style={{overflowY:"auto",flex:1,padding:"16px 20px",display:"flex",flexDirection:"column",gap:10}}>
-              {conflicts.map(({ booking, studioName }, i) => (
-                <div key={i} style={{background:"var(--surface2)",borderRadius:10,padding:"12px 14px",border:"1px solid rgba(231,76,60,0.2)"}}>
-                  <div style={{fontWeight:800,fontSize:14,marginBottom:6}}>{booking.studentName || booking.teamMemberName || "קביעת חדר"}</div>
-                  <div style={{fontSize:11,color:"var(--text3)",marginBottom:4}}>{(booking.bookingKind || (booking.teamMemberId ? "team" : "student")) === "team" ? "קביעת צוות" : "קביעת סטודנט"}</div>
-                  <div style={{fontSize:12,color:"var(--text2)"}}><Mic size={16} strokeWidth={1.75} /> {studioName}</div>
-                  <div style={{fontSize:12,color:"var(--text2)"}}><Calendar size={16} strokeWidth={1.75} /> {formatLessonDateShort(booking.date)}</div>
-                  <div style={{fontSize:12,color:"var(--text2)",display:"flex",alignItems:"center",gap:4}}><Clock size={12} strokeWidth={1.75}/> {booking.startTime} – {booking.endTime}</div>
-                </div>
-              ))}
+              {conflicts.map(({ booking, studioName }, i) => {
+                const waLink = buildConflictWhatsAppLink(booking, studioName);
+                return (
+                  <div key={i} style={{background:"var(--surface2)",borderRadius:10,padding:"12px 14px",border:"1px solid rgba(231,76,60,0.2)"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,flexWrap:"wrap"}}>
+                      <div style={{flex:1, minWidth:0}}>
+                        <div style={{fontWeight:800,fontSize:14,marginBottom:6}}>{booking.studentName || booking.teamMemberName || "קביעת חדר"}</div>
+                        <div style={{fontSize:11,color:"var(--text3)",marginBottom:4}}>{(booking.bookingKind || (booking.teamMemberId ? "team" : "student")) === "team" ? "קביעת צוות" : "קביעת סטודנט"}</div>
+                        <div style={{fontSize:12,color:"var(--text2)"}}><Mic size={16} strokeWidth={1.75} /> {studioName}</div>
+                        <div style={{fontSize:12,color:"var(--text2)"}}><Calendar size={16} strokeWidth={1.75} /> {formatLessonDateShort(booking.date)}</div>
+                        <div style={{fontSize:12,color:"var(--text2)",display:"flex",alignItems:"center",gap:4}}><Clock size={12} strokeWidth={1.75}/> {booking.startTime} – {booking.endTime}</div>
+                      </div>
+                      {waLink ? (
+                        <a
+                          href={waLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="פתח שיחת WhatsApp עם המשתמש (הטקסט יתעדכן אוטומטית לפי ההודעה שכתבת)"
+                          style={{
+                            display:"inline-flex",
+                            alignItems:"center",
+                            gap:5,
+                            background:"#25D366",
+                            color:"#0a3d20",
+                            fontWeight:800,
+                            fontSize:12,
+                            padding:"6px 10px",
+                            borderRadius:8,
+                            textDecoration:"none",
+                            whiteSpace:"nowrap",
+                            boxShadow:"0 1px 4px rgba(37,211,102,0.35)",
+                          }}
+                        >
+                          <Phone size={14} strokeWidth={2}/> WhatsApp
+                        </a>
+                      ) : (
+                        <span title="לא נמצא מספר טלפון למשתמש זה" style={{fontSize:10,color:"var(--text3)",fontStyle:"italic"}}>אין טלפון</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{padding:"12px 20px", borderTop:"1px solid var(--border)"}}>
+              <label style={{fontSize:12, fontWeight:700, color:"var(--text2)", display:"block", marginBottom:6}}>
+                💬 הודעה מותאמת אישית למשתמש שנפגע (אופציונלי)
+              </label>
+              <textarea
+                value={conflictMessage}
+                onChange={e => setConflictMessage(e.target.value)}
+                onInput={(e) => {
+                  const el = e.currentTarget;
+                  el.style.height = "auto";
+                  el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+                }}
+                placeholder='לדוגמה: "אני מצטער על העברת השיעור, ניתן להזמין את החדר ביום אחר."'
+                rows={2}
+                disabled={conflictSending}
+                style={{
+                  width: "100%",
+                  minHeight: 56,
+                  maxHeight: 240,
+                  resize: "none",
+                  overflow: "auto",
+                  fontSize: 13,
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  border: "1px solid var(--border)",
+                  background: "var(--surface2)",
+                  color: "var(--text)",
+                  fontFamily: "inherit",
+                  direction: "rtl",
+                  boxSizing: "border-box",
+                }}
+              />
+              <div style={{fontSize:11, color:"var(--text3)", marginTop:4}}>
+                הטקסט יתווסף בסוף המייל האוטומטי כבלוק נפרד "הודעה מהמכללה".
+              </div>
             </div>
             <div style={{padding:"14px 20px",borderTop:"1px solid var(--border)",display:"flex",gap:10,justifyContent:"flex-end",flexWrap:"wrap"}}>
               <button className="btn btn-secondary" disabled={conflictSending}
-                onClick={()=>{ setConflicts([]); setPendingLesson(null); }}>
+                onClick={()=>{ setConflicts([]); setPendingLesson(null); setConflictMessage(""); }}>
                 <X size={16} strokeWidth={1.75} color="var(--text3)" /> בטל שיוך
               </button>
               <button className="btn btn-danger" disabled={conflictSending} onClick={confirmConflictAndSend}>
@@ -1914,13 +2114,40 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                     </div>
                   )}
                   {/* Studio/Kit */}
-                  {(studios.find(s=>String(s.id)===String(detailTarget.studioId)) || getLinkedKit(detailTarget)) && (
-                    <div style={{background:"rgba(52,152,219,0.07)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:10,padding:"12px 14px"}}>
-                      <div style={{fontWeight:800,fontSize:12,color:"#3498db",marginBottom:8,display:"flex",alignItems:"center",gap:4}}><Link size={12} strokeWidth={1.75}/> שיוכים</div>
-                      {studios.find(s=>String(s.id)===String(detailTarget.studioId)) && <div style={{fontSize:13}}><Mic size={16} strokeWidth={1.75} /> {studios.find(s=>String(s.id)===String(detailTarget.studioId)).name}</div>}
-                      {getLinkedKit(detailTarget) && <div style={{fontSize:13,marginTop:4,display:"flex",alignItems:"center",gap:4}}><Package size={13} strokeWidth={1.75}/> {getLinkedKit(detailTarget).name}</div>}
-                    </div>
-                  )}
+                  {(() => {
+                    const courseStudioIds = (() => {
+                      const ids = [];
+                      const seen = new Set();
+                      const push = (id) => {
+                        const k = String(id || "").trim();
+                        if (!k || seen.has(k)) return;
+                        seen.add(k);
+                        ids.push(k);
+                      };
+                      (detailTarget.studios || []).forEach(cs => push(cs?.studioId));
+                      push(detailTarget.studioId);
+                      (detailTarget.schedule || []).forEach(s => {
+                        (s.studioIds || []).forEach(push);
+                        push(s.studioId);
+                        push(s.secondaryStudioId);
+                      });
+                      return ids;
+                    })();
+                    const courseStudioObjs = courseStudioIds
+                      .map(id => studios.find(s => String(s.id) === id))
+                      .filter(Boolean);
+                    const linkedKit = getLinkedKit(detailTarget);
+                    if (courseStudioObjs.length === 0 && !linkedKit) return null;
+                    return (
+                      <div style={{background:"rgba(52,152,219,0.07)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:10,padding:"12px 14px"}}>
+                        <div style={{fontWeight:800,fontSize:12,color:"#3498db",marginBottom:8,display:"flex",alignItems:"center",gap:4}}><Link size={12} strokeWidth={1.75}/> שיוכים</div>
+                        {courseStudioObjs.map(st => (
+                          <div key={st.id} style={{fontSize:13,marginBottom:2}}><Mic size={16} strokeWidth={1.75} /> {st.name}</div>
+                        ))}
+                        {linkedKit && <div style={{fontSize:13,marginTop:4,display:"flex",alignItems:"center",gap:4}}><Package size={13} strokeWidth={1.75}/> {linkedKit.name}</div>}
+                      </div>
+                    );
+                  })()}
                   {/* Sessions */}
                   <div style={{background:"rgba(46,204,113,0.06)",border:"1px solid rgba(46,204,113,0.2)",borderRadius:10,padding:"12px 14px"}}>
                     <div style={{fontWeight:800,fontSize:12,color:"var(--green)",marginBottom:8}}><Calendar size={16} strokeWidth={1.75} /> מפגשים ({getLessonDisplaySchedule(detailTarget).length})</div>
@@ -1976,7 +2203,27 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                         <span style={{background:trackName===UNASSIGNED_TRACK?"rgba(239,68,68,0.16)":"rgba(245,166,35,0.16)",color:trackName===UNASSIGNED_TRACK?"#ef4444":"#f5a623",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:800}}>{trackLessons.length} קורסים</span>
                       </div>
                       {trackLessons.map(l=>{
-                        const studio = studios.find(s=>String(s.id)===String(l.studioId));
+                        const cardStudioIds = (() => {
+                          const ids = [];
+                          const seen = new Set();
+                          const push = (id) => {
+                            const k = String(id || "").trim();
+                            if (!k || seen.has(k)) return;
+                            seen.add(k);
+                            ids.push(k);
+                          };
+                          (l.studios || []).forEach(cs => push(cs?.studioId));
+                          push(l.studioId);
+                          (l.schedule || []).forEach(s => {
+                            (s.studioIds || []).forEach(push);
+                            push(s.studioId);
+                            push(s.secondaryStudioId);
+                          });
+                          return ids;
+                        })();
+                        const cardStudios = cardStudioIds
+                          .map(id => studios.find(s => String(s.id) === id))
+                          .filter(Boolean);
                         const kit = getLinkedKit(l);
                         const displaySchedule = getLessonDisplaySchedule(l);
                         const upcoming = displaySchedule.filter(s=>s.date>=today()).length;
@@ -2002,7 +2249,9 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                                 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
                                   <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}><Calendar size={16} strokeWidth={1.75} /> {displaySchedule.length} שיעורים</span>
                                   {upcoming>0 && <span style={{background:"rgba(46,204,113,0.12)",color:"var(--green)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><CheckCircle size={10} strokeWidth={1.75}/> {upcoming} קרובים</span>}
-                                  {studio && <span style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}><Mic size={16} strokeWidth={1.75} /> {studio.name}</span>}
+                                  {cardStudios.map(st => (
+                                    <span key={st.id} style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}><Mic size={16} strokeWidth={1.75} /> {st.name}</span>
+                                  ))}
                                   {kit && <span style={{background:"rgba(245,166,35,0.12)",color:"var(--accent)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><Package size={11} strokeWidth={1.75}/> {kit.name}</span>}
                                 </div>
                               </div>
@@ -2065,12 +2314,34 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
   const [courseLecturers, setCourseLecturers] = useState(initialCourseLecturers);
   const [additionalLecturerId, setAdditionalLecturerId] = useState("");
   const [description, setDescription]         = useState(initial?.description||"");
-  const [studioId, setStudioId]               = useState(initial?.studioId||"");
-  const initialSecondaryStudioId = initial?.secondaryStudioId || (() => {
-    const secondaryIds = [...new Set((initial?.schedule || []).map(session => session?.secondaryStudioId).filter(Boolean).map(String))];
-    return secondaryIds.length === 1 ? secondaryIds[0] : "";
-  })();
-  const [secondaryStudioId, setSecondaryStudioId] = useState(initialSecondaryStudioId);
+  const classroomStudios = studios.filter(st => st?.isClassroom || st?.classroomOnly);
+  const studioById = (id) => studios.find(st => String(st?.id) === String(id || ""));
+  const studioDisplayName = (id) => studioById(id)?.name || "";
+  const normalizeCourseStudioList = (items = []) => {
+    const out = [];
+    const seen = new Set();
+    items.forEach((item) => {
+      const raw = item && typeof item === "object" ? (item.studioId ?? item.id ?? item) : item;
+      if (raw === null || raw === undefined) return;
+      const key = String(raw).trim();
+      if (!key) return;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ studioId: key });
+    });
+    return out;
+  };
+  const initialCourseStudios = normalizeCourseStudioList([
+    initial?.studioId,
+    initial?.secondaryStudioId,
+    ...(Array.isArray(initial?.studios) ? initial.studios : []),
+    ...((initial?.schedule || []).flatMap(session => {
+      if (Array.isArray(session?.studioIds) && session.studioIds.length) return session.studioIds;
+      return [session?.studioId, session?.secondaryStudioId];
+    })),
+  ]);
+  const [courseStudios, setCourseStudios] = useState(initialCourseStudios);
+  const [additionalStudioId, setAdditionalStudioId] = useState("");
   const [schedule, setSchedule]               = useState(() => dedupeScheduleEntries((initial?.schedule||[]).map((entry) => {
     const normalized = normalizeScheduleEntry(entry);
     const matched = normalized.lecturerId
@@ -2164,8 +2435,11 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
   const [manEndTime, setManEndTime]     = useState("13:00");
   const [manCount, setManCount]         = useState(1);
 
-  // Resizable columns: [#, date, start, end, topic, lecturer, primary classroom, secondary classroom, delete]
-  const [colWidths, setColWidths] = useState([30, 130, 72, 72, 150, 130, 110, 110, 28]);
+  // Resizable widths for the fixed columns: [#, date, start, end, topic, lecturer].
+  // Classroom columns + delete column use fixed widths (sized by classroom count).
+  const [colWidths, setColWidths] = useState([30, 130, 72, 72, 150, 130]);
+  const CLASSROOM_COL_WIDTH = 110;
+  const DELETE_COL_WIDTH = 28;
   const resizingRef = useRef(null);
   const startColResize = (e, colIdx) => {
     e.preventDefault();
@@ -2187,9 +2461,17 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
   };
-  const gridTemplate = colWidths.map(w => `${w}px`).join(" ");
+  const gridTemplate = [
+    ...colWidths.map(w => `${w}px`),
+    ...courseStudios.map(() => `${CLASSROOM_COL_WIDTH}px`),
+    `${DELETE_COL_WIDTH}px`,
+  ].join(" ");
+  // Last column index = (resizable count) + (classroom count) — used to draw the right border between cells.
+  const lastDataColIdx = colWidths.length + courseStudios.length - 1;
 
   const LESSON_TIMES = LESSON_TIME_OPTIONS;
+
+  const courseStudioIds = () => courseStudios.map(cs => cs.studioId).filter(Boolean);
 
   const buildAndAppendSchedule = () => {
     if(!manStartDate) { setLocalMsg({type:"error",text:"יש לבחור תאריך"}); return; }
@@ -2197,8 +2479,9 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
     const sessions = [];
     let d = parseLocalDate(manStartDate);
     const defaultLecturerName = displayLecturerName(selectedLecturerObj) || lecturerInput || "";
+    const defaultStudioIds = courseStudioIds();
     for(let i=0;i<count;i++) {
-      sessions.push({ date: formatLocalDateInput(d), startTime: manStartTime, endTime: manEndTime, topic: "", studioId: studioId||null, secondaryStudioId: secondaryStudioId||null, lecturerId: lecturerId || null, instructorName: defaultLecturerName });
+      sessions.push({ date: formatLocalDateInput(d), startTime: manStartTime, endTime: manEndTime, topic: "", studioIds: [...defaultStudioIds], lecturerId: lecturerId || null, instructorName: defaultLecturerName });
       d.setDate(d.getDate()+7);
     }
     setSchedule(prev => dedupeScheduleEntries([...prev, ...sessions]));
@@ -2216,8 +2499,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
       startTime: firstLesson.startTime||"09:00",
       endTime: firstLesson.endTime||"12:00",
       topic: "",
-      studioId: studioId||null,
-      secondaryStudioId: secondaryStudioId||null,
+      studioIds: [...courseStudioIds()],
       lecturerId: firstLesson.lecturerId || lecturerId || null,
       instructorName: firstLesson.instructorName || displayLecturerName(selectedLecturerObj) || lecturerInput || "",
     }]));
@@ -2227,11 +2509,58 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
     setSchedule(prev => {
       const updated = prev.map((session, sessionIndex) => (
         sessionIndex === index
-          ? { ...session, [field]: (field === "topic" || field === "studioId" || field === "secondaryStudioId" || field === "lecturerId" || field === "instructorName") ? value : value || (field === "date" ? "" : session[field]) }
+          ? { ...session, [field]: (field === "topic" || field === "lecturerId" || field === "instructorName") ? value : value || (field === "date" ? "" : session[field]) }
           : session
       ));
       return field === "date" ? sortScheduleEntries(updated) : updated;
     });
+  };
+
+  // Position-based slot update: column `colIdx` of session `sessionIndex` is
+  // set to `value` (or cleared if value === ""). Each column holds an
+  // independent classroom — the user can freely pick a different one per row,
+  // and the change shows up in the column they edited (not somewhere else).
+  const updateSessionStudioSlot = (sessionIndex, colIdx, value) => {
+    setSchedule(prev => prev.map((session, idx) => {
+      if (idx !== sessionIndex) return session;
+      const current = Array.isArray(session.studioIds) ? [...session.studioIds].map(v => String(v || "")) : [];
+      while (current.length <= colIdx) current.push("");
+      current[colIdx] = String(value || "");
+      return { ...session, studioIds: current };
+    }));
+  };
+
+  const addCourseStudio = () => {
+    const selected = classroomStudios.find(st => String(st.id) === String(additionalStudioId));
+    if (!selected) return;
+    setCourseStudios(prev => normalizeCourseStudioList([...prev, { studioId: selected.id }]));
+    const idStr = String(selected.id);
+    // Append the new classroom as a new column (default value) on every session
+    // that doesn't already include it. Padding with "" keeps column positions
+    // aligned for sessions that had blanks.
+    setSchedule(prev => prev.map(session => {
+      const current = Array.isArray(session.studioIds) ? session.studioIds.map(v => String(v || "")) : [];
+      if (current.includes(idStr)) return { ...session, studioIds: current };
+      return { ...session, studioIds: [...current, idStr] };
+    }));
+    setAdditionalStudioId("");
+  };
+
+  const removeCourseStudio = (studioIdToRemove) => {
+    const idStr = String(studioIdToRemove);
+    setCourseStudios(prev => prev.filter(cs => String(cs.studioId) !== idStr));
+    // Remove the studio by ID from each session (preserving any override the
+    // user may have placed in another column). Then trim trailing empties so
+    // the array doesn't grow unbounded across edits.
+    setSchedule(prev => prev.map(session => {
+      if (!Array.isArray(session.studioIds)) return session;
+      const filtered = session.studioIds
+        .map(v => String(v || ""))
+        .filter(id => id !== idStr);
+      // Strip trailing empty slots
+      while (filtered.length > 0 && filtered[filtered.length - 1] === "") filtered.pop();
+      return { ...session, studioIds: filtered };
+    }));
   };
 
   const updateSessionLecturer = (index, value) => {
@@ -2444,12 +2773,13 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
       return;
     }
     let finalSchedule = [...schedule];
+    const fallbackStudioIds = courseStudioIds();
     if(manStartDate && finalSchedule.length===0) {
       const count = Math.max(1,Math.min(52,Number(manCount)||1));
       let d = parseLocalDate(manStartDate);
       const defaultLecturerName = displayLecturerName(selectedLecturerObj) || lecturerInput || "";
       for(let i=0;i<count;i++) {
-        finalSchedule.push({date:formatLocalDateInput(d),startTime:manStartTime,endTime:manEndTime,topic:"",studioId: studioId||null, secondaryStudioId: secondaryStudioId||null, lecturerId: lecturerId || null, instructorName: defaultLecturerName});
+        finalSchedule.push({date:formatLocalDateInput(d),startTime:manStartTime,endTime:manEndTime,topic:"",studioIds: [...fallbackStudioIds], lecturerId: lecturerId || null, instructorName: defaultLecturerName});
         d.setDate(d.getDate()+7);
       }
     }
@@ -2457,17 +2787,26 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
     const defaultLecturerName = displayLecturerName(selectedLecturer) || "";
     finalSchedule = dedupeScheduleEntries(finalSchedule.map(normalizeScheduleEntry).map(s => ({
       ...s,
-      // Sessions without an explicit studioId inherit the course-level
-      // assignment. Without this fallback, sessions added before the user
-      // picked a course studio (or via paths that didn't propagate it) saved
-      // with studioId=null, making the lesson "unassigned" on re-open.
-      studioId: s.studioId || (studioId || null),
-      secondaryStudioId: s.secondaryStudioId || (secondaryStudioId || null),
+      // Sessions without explicit studios inherit the course-level assignment.
+      // Without this fallback, sessions added before the user picked course
+      // studios (or via paths that didn't propagate them) saved with empty
+      // studioIds, making the lesson "unassigned" on re-open.
+      // Only fall back to course defaults if the session has no studios at all
+      // (not even empty slots). A session that was explicitly cleared via the
+      // dropdowns keeps its "" entries — position-aware.
+      studioIds: (Array.isArray(s.studioIds) && s.studioIds.some(v => String(v || "").trim()))
+        ? s.studioIds
+        : (Array.isArray(s.studioIds) && s.studioIds.length ? s.studioIds : [...fallbackStudioIds]),
       lecturerId: s.lecturerId || lecturerId || null,
       instructorName: String(s.instructorName || defaultLecturerName || "").trim(),
     })));
-    const duplicateClassroomSession = finalSchedule.find(session => session.studioId && session.secondaryStudioId && String(session.studioId) === String(session.secondaryStudioId));
-    if (duplicateClassroomSession) { setLocalMsg({type:"error",text:"כיתה משנית לא יכולה להיות זהה לכיתה הראשית באותו שיעור"}); return; }
+    const dupClassroom = finalSchedule.find(session => {
+      const ids = (Array.isArray(session.studioIds) ? session.studioIds : [])
+        .map(v => String(v || ""))
+        .filter(Boolean);
+      return ids.length !== new Set(ids).size;
+    });
+    if (dupClassroom) { setLocalMsg({type:"error",text:"לא ניתן לשייך את אותה הכיתה פעמיים לאותו שיעור"}); return; }
     const invalidSession = finalSchedule.find(session => !session.date || session.startTime >= session.endTime);
     if(invalidSession) { setLocalMsg({type:"error",text:"יש לתקן תאריך או שעות לא תקינים בלוח השיעורים"}); return; }
     setSaving(true);
@@ -2475,6 +2814,10 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
       { lecturerId: lecturerId || null, instructorName: defaultLecturerName },
       ...courseLecturers,
       ...finalSchedule.map(s => ({ lecturerId: s.lecturerId, instructorName: s.instructorName })),
+    ]);
+    const savedCourseStudios = normalizeCourseStudioList([
+      ...courseStudios,
+      ...finalSchedule.flatMap(s => (s.studioIds || []).map(id => ({ studioId: id }))),
     ]);
     const lesson = {
       id: initial?.id||`lesson_${Date.now()}`,
@@ -2486,8 +2829,9 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
       instructorEmail: selectedLecturer?.email || "",
       lecturers: savedCourseLecturers,
       description: description.trim(),
-      studioId: studioId||null,
-      secondaryStudioId: secondaryStudioId||null,
+      // studioId persists as the primary fallback for the DB `studio_id` column.
+      studioId: savedCourseStudios[0]?.studioId || null,
+      studios: savedCourseStudios,
       schedule: finalSchedule,
       certificateTemplateType: certificateTemplateType || "",
       // Preserve lecturer-managed fields so an admin save doesn't wipe them.
@@ -2591,22 +2935,38 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                         {[...courseLecturers].sort((a,b)=>a.instructorName.localeCompare(b.instructorName,"he")).map(l=><option key={l.lecturerId || l.instructorName} value={l.lecturerId || ""}>{l.instructorName}</option>)}
                       </select>
                     </div>
-                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>🏫 כיתה ראשית</div>
-                        <select className="form-select" value={s.studioId||""} style={{fontSize:12,padding:"4px 6px",height:32,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"studioId",e.target.value||null)}>
-                          <option value="">ללא</option>
-                          {studios.filter(st=>st.isClassroom||st.classroomOnly||String(st.id)===String(s.studioId||"")).map(st=><option key={st.id} value={st.id}>{st.name}{(!st.isClassroom && !st.classroomOnly) ? " (לא מסומן ככיתה)" : ""}</option>)}
-                        </select>
+                    {courseStudios.length === 0 ? (
+                      <div style={{fontSize:11,color:"var(--text3)",fontStyle:"italic"}}>הוסף כיתה מהפאנל "שיוך כיתות לימוד" כדי לבחור כיתה למפגש</div>
+                    ) : (
+                      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                        {courseStudios.map((cs, colIdx) => {
+                          const sessionIds = Array.isArray(s.studioIds) ? s.studioIds.map(v => String(v || "")) : [];
+                          const currentValue = sessionIds[colIdx] || "";
+                          // Options = the course's classrooms (from the global panel) +
+                          // the currently-selected studio if it's not in the course list
+                          // (preserves legacy/imported data without silently dropping it).
+                          const optionIds = new Set(courseStudios.map(o => String(o.studioId)));
+                          if (currentValue) optionIds.add(currentValue);
+                          const optionStudios = [...optionIds]
+                            .map(id => classroomStudios.find(st => String(st.id) === id) || studios.find(st => String(st.id) === id))
+                            .filter(Boolean);
+                          const usedByOtherColumns = new Set(sessionIds.filter((id, j) => j !== colIdx && id));
+                          return (
+                            <div key={`col-${colIdx}-${cs.studioId}`} style={{flex:1, minWidth:130}}>
+                              <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>🏫 כיתה {colIdx+1}</div>
+                              <select className="form-select" value={currentValue} style={{fontSize:12,padding:"4px 6px",height:32,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionStudioSlot(i, colIdx, e.target.value)}>
+                                <option value="">ללא</option>
+                                {optionStudios.map(st => (
+                                  <option key={st.id} value={st.id} disabled={usedByOtherColumns.has(String(st.id))}>
+                                    {st.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>כיתה משנית</div>
-                        <select className="form-select" value={s.secondaryStudioId||""} style={{fontSize:12,padding:"4px 6px",height:32,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"secondaryStudioId",e.target.value||null)}>
-                          <option value="">ללא</option>
-                          {studios.filter(st=>st.isClassroom||st.classroomOnly||String(st.id)===String(s.secondaryStudioId||"")).map(st=><option key={st.id} value={st.id} disabled={String(st.id)===String(s.studioId||"")}>{st.name}{(!st.isClassroom && !st.classroomOnly) ? " (לא מסומן ככיתה)" : ""}</option>)}
-                        </select>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -2614,12 +2974,21 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
               /* ── דסקטופ: grid עם עמודות גמישות ── */
               <>
                 <div style={{display:"grid",gridTemplateColumns:gridTemplate,gap:0,fontSize:11,color:"var(--text-muted)",marginBottom:2,userSelect:"none",background:"var(--surface2)",borderRadius:"6px 6px 0 0",border:"1px solid rgba(155,89,182,0.2)"}}>
-                  {["","תאריך","התחלה","סיום","נושא","שם מרצה","כיתה ראשית","כיתה משנית",""].map((label,ci)=>(
+                  {[
+                    { label: "", resizable: false, centered: true },
+                    { label: "תאריך", resizable: true },
+                    { label: "התחלה", resizable: true },
+                    { label: "סיום", resizable: true },
+                    { label: "נושא", resizable: true },
+                    { label: "שם מרצה", resizable: true },
+                    ...courseStudios.map((cs, idx) => ({ label: `כיתה ${idx+1}`, resizable: false })),
+                    { label: "", resizable: false, centered: true },
+                  ].map((col, ci, arr) => (
                     <div key={ci} style={{position:"relative",padding:"4px 8px",overflow:"hidden",whiteSpace:"nowrap",
-                      borderRight: ci < 8 ? "1px solid rgba(155,89,182,0.25)" : "none",
-                      fontWeight:700, textAlign: ci===0||ci===8 ? "center" : "right"}}>
-                      {label}
-                      {ci > 0 && ci < 8 && (
+                      borderRight: ci < arr.length - 1 ? "1px solid rgba(155,89,182,0.25)" : "none",
+                      fontWeight:700, textAlign: col.centered ? "center" : "right"}}>
+                      {col.label}
+                      {col.resizable && (
                         <div onMouseDown={e=>{ e.preventDefault(); startColResize(e,ci); }}
                           style={{position:"absolute",left:0,top:0,width:8,height:"100%",cursor:"col-resize",zIndex:2}}/>
                       )}
@@ -2627,7 +2996,9 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                   ))}
                 </div>
                 <div style={{maxHeight:300,overflow:"auto",display:"flex",flexDirection:"column",gap:2}}>
-                  {schedule.map((s,i)=>(
+                  {schedule.map((s,i)=>{
+                    const sessionIds = Array.isArray(s.studioIds) ? s.studioIds.map(String) : [];
+                    return (
                     <div key={s._key || `${s.date}-${s.startTime}-${i}`} style={{display:"grid",gridTemplateColumns:gridTemplate,alignItems:"center",gap:0,fontSize:12,background:"var(--surface2)",border:"1px solid rgba(155,89,182,0.12)",borderTop:"none"}}>
                       <div style={{fontWeight:800,color:"#9b59b6",fontSize:11,textAlign:"center",padding:"4px 2px",borderRight:"1px solid rgba(155,89,182,0.15)"}}>#{i+1}</div>
                       <LessonDateInput value={s.date} style={{padding:"3px 6px",fontSize:12,height:28,width:"100%",boxSizing:"border-box"}} onChange={value=>updateSessionField(i,"date",value)}/>
@@ -2642,20 +3013,32 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                         <option value="">ללא שיוך</option>
                         {[...courseLecturers].sort((a,b)=>a.instructorName.localeCompare(b.instructorName,"he")).map(l=><option key={l.lecturerId || l.instructorName} value={l.lecturerId || ""}>{l.instructorName}</option>)}
                       </select>
-                      <select className="form-select" value={s.studioId||""} style={{padding:"3px 4px",fontSize:11,height:28,width:"100%",boxSizing:"border-box"}} title="כיתת לימוד למפגש זה" onChange={e=>updateSessionField(i,"studioId",e.target.value||null)}>
-                        <option value="">ללא שיוך</option>
-                        {studios.filter(st=>st.isClassroom||st.classroomOnly).map(st=><option key={st.id} value={st.id}>{st.name}</option>)}
-                      </select>
-                      <select className="form-select" value={s.secondaryStudioId||""} style={{padding:"3px 4px",fontSize:11,height:28,width:"100%",boxSizing:"border-box"}} title="כיתה משנית למפגש זה" onChange={e=>updateSessionField(i,"secondaryStudioId",e.target.value||null)}>
-                        <option value="">ללא שיוך</option>
-                        {studios.filter(st=>st.isClassroom||st.classroomOnly).map(st=><option key={st.id} value={st.id} disabled={String(st.id)===String(s.studioId||"")}>{st.name}</option>)}
-                      </select>
+                      {courseStudios.map((cs, colIdx) => {
+                        const currentValue = sessionIds[colIdx] || "";
+                        // Options = course classrooms + currently-selected studio (legacy fallback).
+                        const optionIds = new Set(courseStudios.map(o => String(o.studioId)));
+                        if (currentValue) optionIds.add(currentValue);
+                        const optionStudios = [...optionIds]
+                          .map(id => classroomStudios.find(st => String(st.id) === id) || studios.find(st => String(st.id) === id))
+                          .filter(Boolean);
+                        const usedByOtherColumns = new Set(sessionIds.filter((id, j) => j !== colIdx && id));
+                        return (
+                          <select key={`col-${colIdx}-${cs.studioId}`} className="form-select" value={currentValue} style={{padding:"3px 4px",fontSize:11,height:28,width:"100%",boxSizing:"border-box"}} title={`כיתה ${colIdx+1} למפגש זה`} onChange={e=>updateSessionStudioSlot(i, colIdx, e.target.value)}>
+                            <option value="">ללא שיוך</option>
+                            {optionStudios.map(st => (
+                              <option key={st.id} value={st.id} disabled={usedByOtherColumns.has(String(st.id))}>
+                                {st.name}
+                              </option>
+                            ))}
+                          </select>
+                        );
+                      })}
                       <div style={{display:"flex",justifyContent:"center",borderRight:"none",background:"rgba(255,80,80,0.04)"}}>
                         <button onClick={()=>setSchedule(prev=>prev.filter((_,j)=>j!==i))}
                           style={{background:"none",border:"none",color:"var(--red)",cursor:"pointer",fontSize:16,padding:0,lineHeight:1,width:"100%",height:28}} title="מחק מפגש">×</button>
                       </div>
                     </div>
-                  ))}
+                  );})}
                 </div>
               </>
             )}
@@ -2764,41 +3147,41 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
       {/* Link to classrooms (optional) */}
       <div style={{background:"rgba(52,152,219,0.06)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
         <div style={{fontWeight:800,fontSize:13,color:"#3498db",marginBottom:10,display:"flex",alignItems:"center",gap:6}}><Link size={13} strokeWidth={1.75}/> שיוך כיתות לימוד</div>
-        <div className="grid-2">
-          <div className="form-group">
-            <label className="form-label">כיתה ראשית לכל הקורס</label>
-            <select className="form-select" value={studioId} onChange={e=>{
-              const nextStudioId = e.target.value;
-              setStudioId(nextStudioId);
-              if (nextStudioId && String(nextStudioId) === String(secondaryStudioId || "")) setSecondaryStudioId("");
-              setSchedule(prev=>prev.map(s=>({
-                ...s,
-                studioId: nextStudioId||null,
-                secondaryStudioId: nextStudioId && String(nextStudioId) === String(s.secondaryStudioId || "") ? null : s.secondaryStudioId,
-              })));
-            }}>
-              <option value="">ללא שיוך</option>
-              {studios.filter(s => s.isClassroom || s.classroomOnly || String(s.id) === String(studioId)).map(s=>(
-                <option key={s.id} value={s.id} disabled={String(s.id)===String(secondaryStudioId||"")}>{s.name}{(!s.isClassroom && !s.classroomOnly) ? " (לא מסומן ככיתה)" : ""}</option>
-              ))}
+        <div className="form-group" style={{marginBottom:0}}>
+          <label className="form-label">כיתות הקורס</label>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <select className="form-select" value={additionalStudioId} onChange={e=>setAdditionalStudioId(e.target.value)} style={{flex:"1 1 220px"}}>
+              <option value="">בחר כיתה להוספה</option>
+              {classroomStudios
+                .filter(st => !courseStudios.some(cs => String(cs.studioId) === String(st.id)))
+                .sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"he"))
+                .map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
             </select>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={addCourseStudio} disabled={!additionalStudioId} style={{whiteSpace:"nowrap"}}>
+              <Plus size={14} strokeWidth={1.75}/> הוסף כיתה
+            </button>
           </div>
-          <div className="form-group">
-            <label className="form-label">כיתה משנית לכל הקורס</label>
-            <select className="form-select" value={secondaryStudioId} onChange={e=>{
-              const nextSecondaryStudioId = e.target.value;
-              if (nextSecondaryStudioId && String(nextSecondaryStudioId) === String(studioId || "")) return;
-              setSecondaryStudioId(nextSecondaryStudioId);
-              setSchedule(prev=>prev.map(s=>({...s, secondaryStudioId: nextSecondaryStudioId||null})));
-            }}>
-              <option value="">ללא שיוך</option>
-              {studios.filter(s => s.isClassroom || s.classroomOnly || String(s.id) === String(secondaryStudioId)).map(s=>(
-                <option key={s.id} value={s.id} disabled={String(s.id)===String(studioId||"")}>{s.name}{(!s.isClassroom && !s.classroomOnly) ? " (לא מסומן ככיתה)" : ""}</option>
-              ))}
-            </select>
+          {courseStudios.length > 0 && (
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+              {courseStudios.map((cs) => {
+                const name = studioDisplayName(cs.studioId) || cs.studioId;
+                return (
+                  <span key={cs.studioId} style={{display:"inline-flex",alignItems:"center",gap:5,border:"1px solid rgba(52,152,219,0.35)",background:"var(--surface2)",borderRadius:999,padding:"4px 10px",fontSize:12,fontWeight:800,color:"var(--text2)"}}>
+                    <Link size={12} strokeWidth={1.75}/> {name}
+                    <button type="button" aria-label="הסר כיתה מהקורס" onClick={()=>removeCourseStudio(cs.studioId)}
+                      style={{background:"transparent",border:"none",color:"var(--text3)",cursor:"pointer",padding:0,display:"inline-flex"}}>
+                      <X size={12} strokeWidth={2}/>
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>
+            ניתן להוסיף כמה כיתות שצריך. כל כיתה תופיע כעמודה נפרדת ב"לוח שיעורים" וכל מפגש יכול לבחור איזו כיתה בפועל הוא משריין.
           </div>
         </div>
-        {studios.filter(s=>s.isClassroom||s.classroomOnly).length === 0 && (
+        {classroomStudios.length === 0 && (
           <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}><Lightbulb size={16} strokeWidth={1.75} /> סמן חדר כ"כיתת לימוד" ברובריקת חדרים כדי שיופיע כאן.</div>
         )}
       </div>

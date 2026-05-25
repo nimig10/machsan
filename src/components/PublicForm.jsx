@@ -4792,8 +4792,14 @@ ${inventory}
             dailyLessons.forEach(lesson => {
               (lesson.schedule||[]).forEach(s => {
                 if (s.date === targetDate) {
-                  const studioObj = (studios || []).find(st => String(st.id) === String(lesson.studioId));
-                  allSessions.push({ lessonName: lesson.name||"", instructorName: lesson.instructorName||"", topic: s.topic||"", startTime: s.startTime||"", endTime: s.endTime||"", track: lesson.track||"", studioName: studioObj?.name || "" });
+                  const sessionStudioIds = Array.isArray(s.studioIds) && s.studioIds.length
+                    ? s.studioIds
+                    : [s.studioId, s.secondaryStudioId, lesson.studioId].filter(Boolean);
+                  const studioName = [...new Set(sessionStudioIds)]
+                    .map(id => (studios || []).find(st => String(st.id) === String(id))?.name)
+                    .filter(Boolean)
+                    .join(" + ");
+                  allSessions.push({ lessonName: lesson.name||"", instructorName: lesson.instructorName||"", topic: s.topic||"", startTime: s.startTime||"", endTime: s.endTime||"", track: lesson.track||"", studioName });
                 }
               });
             });

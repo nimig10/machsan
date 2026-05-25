@@ -103,7 +103,10 @@ export function PublicDailyTablePage() {
     lessons.forEach(lesson => {
       (lesson.schedule||[]).forEach(s => {
         if (s.date !== today) return;
-        const studioIds = [s.studioId || lesson.studioId || "", s.secondaryStudioId || ""].filter(Boolean);
+        const raw = Array.isArray(s.studioIds) && s.studioIds.length
+          ? s.studioIds
+          : [s.studioId, s.secondaryStudioId, lesson.studioId].filter(Boolean);
+        const studioIds = [...new Set(raw.map(String))];
         out.push({
           lessonId:   lesson.id || "",
           track:      lesson.track || "",

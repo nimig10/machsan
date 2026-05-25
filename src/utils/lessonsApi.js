@@ -19,8 +19,51 @@ import { supabase } from "../supabaseClient.js";
 
 // ─── Shape mapping (DB row ↔ blob entry) ──────────────────────────────────
 
+function normalizeSessionStudioIds(session = {}) {
+  // Position-preserving: keep empty slots as "" so column N stays at index N
+  // when the lesson reloads. Legacy entries fall back to a packed list.
+  if (Array.isArray(session.studioIds)) {
+    return session.studioIds.map(v => (v === null || v === undefined) ? "" : String(v).trim());
+  }
+  const out = [];
+  if (session.studioId) out.push(String(session.studioId).trim());
+  if (session.secondaryStudioId && String(session.secondaryStudioId) !== String(session.studioId || "")) {
+    out.push(String(session.secondaryStudioId).trim());
+  }
+  return out;
+}
+
+function buildCourseStudiosFromLesson(rawLesson) {
+  const out = [];
+  const seen = new Set();
+  const push = (value) => {
+    if (value === null || value === undefined) return;
+    const key = String(value).trim();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push({ studioId: key });
+  };
+  if (Array.isArray(rawLesson?.studios)) {
+    for (const entry of rawLesson.studios) push(entry?.studioId ?? entry);
+  }
+  push(rawLesson?.studio_id);
+  if (Array.isArray(rawLesson?.schedule)) {
+    for (const s of rawLesson.schedule) {
+      normalizeSessionStudioIds(s).forEach(push);
+    }
+  }
+  return out;
+}
+
 function rowToBlob(r) {
   if (!r) return null;
+  const rawSchedule = Array.isArray(r.schedule) ? r.schedule : [];
+  // Normalize legacy schedule entries (studioId+secondaryStudioId) into studioIds[]
+  // so every consumer sees the new shape regardless of when the row was written.
+  const schedule = rawSchedule.map(s => ({
+    ...s,
+    studioIds: normalizeSessionStudioIds(s),
+  }));
   return {
     id:                       r.id,
     name:                     r.name ?? "",
@@ -31,9 +74,10 @@ function rowToBlob(r) {
     instructorEmail:          r.instructor_email ?? "",
     description:              r.description ?? "",
     studioId:                 r.studio_id ?? null,
+    studios:                  buildCourseStudiosFromLesson({ ...r, schedule }),
     certificateTemplateType:  r.certificate_template_type ?? "",
     lecturerNotifiedAt7d:     r.lecturer_notified_at_7d ?? null,
-    schedule:                 Array.isArray(r.schedule) ? r.schedule : [],
+    schedule,
     studentStatuses:          (r.student_statuses && typeof r.student_statuses === "object" && !Array.isArray(r.student_statuses))
                                 ? r.student_statuses : {},
     created_at:               r.created_at,
@@ -44,6 +88,19 @@ function rowToBlob(r) {
 function blobToRow(l) {
   if (!l?.id) return null;
   const name = String(l.name || "").trim();
+  // Normalize each schedule entry to write `studioIds` (array) and drop the
+  // legacy `studioId` / `secondaryStudioId` fields so the JSONB stays clean.
+  const schedule = (Array.isArray(l.schedule) ? l.schedule : []).map((s) => {
+    const studioIds = normalizeSessionStudioIds(s);
+    const { studioId: _legacyPrimary, secondaryStudioId: _legacySecondary, ...rest } = s || {};
+    return { ...rest, studioIds };
+  });
+  // Course-level `studio_id` column persists the primary studio (first in the
+  // course studios list, with fallback to the blob's studioId). Used by the
+  // legacy column on `lessons` table — full array lives inside schedule JSONB.
+  const coursePrimary = Array.isArray(l.studios) && l.studios[0]?.studioId
+    ? l.studios[0].studioId
+    : (l.studioId || null);
   return {
     id:                         l.id,
     name:                       name || "(ללא שם)",   // NOT NULL — never empty
@@ -53,10 +110,10 @@ function blobToRow(l) {
     instructor_phone:           l.instructorPhone || null,
     instructor_email:           l.instructorEmail || null,
     description:                l.description || null,
-    studio_id:                  l.studioId || null,
+    studio_id:                  coursePrimary,
     certificate_template_type:  l.certificateTemplateType || null,
     lecturer_notified_at_7d:    l.lecturerNotifiedAt7d || null,
-    schedule:                   Array.isArray(l.schedule) ? l.schedule : [],
+    schedule,
     student_statuses:           (l.studentStatuses && typeof l.studentStatuses === "object" && !Array.isArray(l.studentStatuses))
                                   ? l.studentStatuses : {},
   };
