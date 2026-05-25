@@ -69,15 +69,21 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
     const rows = [];
     (lessons || []).forEach(lesson => {
       (lesson.schedule || []).forEach(session => {
-        if (session.date === today) {
+        if (session.date !== today) return;
+        const raw = Array.isArray(session.studioIds) && session.studioIds.length
+          ? session.studioIds
+          : [session.studioId, session.secondaryStudioId, lesson.studioId].filter(Boolean);
+        const ids = [...new Set(raw.map(String))];
+        const list = ids.length ? ids : [""];
+        list.forEach(stId => {
           rows.push({
             startTime: session.startTime || "",
             endTime:   session.endTime   || "",
             topic:     session.topic     || "",
             courseName: lesson.courseName || lesson.name || "",
-            studioId:  session.studioId || lesson.studioId || "",
+            studioId:  stId,
           });
-        }
+        });
       });
     });
     return rows.sort((a, b) => a.startTime.localeCompare(b.startTime));
@@ -147,15 +153,21 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
         if (!session.date) return;
         const [y,m,d] = session.date.split("-").map(Number);
         const sd = new Date(y, m-1, d);
-        if (sd > now && sd <= limit) {
+        if (sd <= now || sd > limit) return;
+        const raw = Array.isArray(session.studioIds) && session.studioIds.length
+          ? session.studioIds
+          : [session.studioId, session.secondaryStudioId, lesson.studioId].filter(Boolean);
+        const ids = [...new Set(raw.map(String))];
+        const list = ids.length ? ids : [""];
+        list.forEach(stId => {
           rows.push({
             date: session.date,
             startTime: session.startTime || "",
             endTime:   session.endTime   || "",
             courseName: lesson.courseName || lesson.name || "",
-            studioId: session.studioId || lesson.studioId || "",
+            studioId: stId,
           });
-        }
+        });
       });
     });
     return rows.sort((a,b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)).slice(0, 8);
@@ -197,18 +209,25 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
     (lessons || []).forEach(lesson => {
       (lesson.schedule || []).forEach(session => {
         if (session.date !== dayViewDate) return;
-        const key = `${session.studioId || lesson.studioId || ""}_${session.startTime || ""}`;
-        if (usedLessonStudioTimes.has(key)) return;
-        usedLessonStudioTimes.add(key);
-        rows.push({
-          startTime:  session.startTime || "",
-          endTime:    session.endTime   || "",
-          studioId:   session.studioId  || lesson.studioId || "",
-          label:      lesson.courseName || lesson.name || "",
-          instructor: lesson.instructorName || lesson.lecturer || "",
-          kind:       "lesson",
-          isNight:    false,
-          color:      LESSON_COLOR,
+        const raw = Array.isArray(session.studioIds) && session.studioIds.length
+          ? session.studioIds
+          : [session.studioId, session.secondaryStudioId, lesson.studioId].filter(Boolean);
+        const ids = [...new Set(raw.map(String))];
+        const list = ids.length ? ids : [""];
+        list.forEach(stId => {
+          const key = `${stId}_${session.startTime || ""}`;
+          if (usedLessonStudioTimes.has(key)) return;
+          usedLessonStudioTimes.add(key);
+          rows.push({
+            startTime:  session.startTime || "",
+            endTime:    session.endTime   || "",
+            studioId:   stId,
+            label:      lesson.courseName || lesson.name || "",
+            instructor: lesson.instructorName || lesson.lecturer || "",
+            kind:       "lesson",
+            isNight:    false,
+            color:      LESSON_COLOR,
+          });
         });
       });
     });

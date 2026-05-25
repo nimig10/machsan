@@ -63,11 +63,20 @@ export function PublicDisplayPage() {
   }, []);
 
   // ── Today's lessons ────────────────────────────────────────────────────────
+  // A session can occupy multiple classrooms; we fan out one row per studio so
+  // each room shows in the display board, just as before with primary/secondary
+  // (now N rooms).
   const todayLessons = useMemo(() => {
     const rows = [];
     lessons.forEach(lesson => {
       (lesson.schedule || []).forEach(s => {
-        if (s.date === today) {
+        if (s.date !== today) return;
+        const sessionStudios = Array.isArray(s.studioIds) && s.studioIds.length
+          ? s.studioIds
+          : [s.studioId, s.secondaryStudioId, lesson.studioId].filter(Boolean);
+        const uniq = [...new Set(sessionStudios.map(String))];
+        const list = uniq.length ? uniq : [""];
+        list.forEach(stId => {
           rows.push({
             startTime:      s.startTime      || "",
             endTime:        s.endTime        || "",
@@ -75,9 +84,9 @@ export function PublicDisplayPage() {
             instructorName: lesson.instructorName || "",
             track:          lesson.track     || "",
             topic:          s.topic          || "",
-            studioId:       s.studioId       || lesson.studioId || "",
+            studioId:       stId,
           });
-        }
+        });
       });
     });
     return rows.sort((a,b) =>

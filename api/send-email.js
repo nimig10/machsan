@@ -33,6 +33,18 @@ const transporter = nodemailer.createTransport({
   auth: { user: GMAIL_USER, pass: GMAIL_PASS },
 });
 
+// Minimal HTML-escape for untrusted text we inject into email bodies.
+// Used when an admin writes a free-text message in the conflict modal.
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[c]));
+}
+
 function buildEmail({
   type,
   recipient_name,
@@ -127,7 +139,11 @@ function buildEmail({
   const body = isLessonConflict
     ? `אנו מתנצלים, אך המכללה נאלצה לבטל את קביעת החדר שלך לטובת שיעור.<br/><br/>
        קביעת החדר <strong style="color:#e8eaf0">${project_name || "החדר"}</strong>${borrow_date ? ` בתאריך <strong style="color:#e8eaf0">${borrow_date}</strong>` : ""}${borrow_time ? ` בין השעות <strong style="color:#e8eaf0">${borrow_time}–${return_time || ""}</strong>` : ""} <strong style="color:#e74c3c">בוטלה</strong>.<br/><br/>
-       אתה מוזמן לנסות ולקבוע חדר חלופי בלוח קביעת החדרים, או לנסות ולקבוע את החדר <strong style="color:#e8eaf0">${project_name || "החדר"}</strong> ביום אחר.`
+       אתה מוזמן לנסות ולקבוע חדר חלופי בלוח קביעת החדרים, או לנסות ולקבוע את החדר <strong style="color:#e8eaf0">${project_name || "החדר"}</strong> ביום אחר.${
+         custom_message && String(custom_message).trim()
+           ? `<br/><br/><div style="border-right:3px solid #3498db;background:rgba(52,152,219,0.08);padding:12px 16px;margin-top:16px;border-radius:6px"><div style="font-weight:800;color:#3498db;margin-bottom:6px;font-size:14px">💬 הודעה מהמכללה</div><div style="color:#e8eaf0;white-space:pre-wrap;font-size:13px;line-height:1.6">${escapeHtml(String(custom_message).trim())}</div></div>`
+           : ""
+       }`
     : isStudioApproved
     ? `קביעת החדר שלך עברה את אישורו של איש הצוות בהצלחה 🎉<br/><br/>
        ניתן להגיע בשמחה ולעבוד בחדר <strong style="color:#2ecc71">${project_name || "החדר"}</strong>.`
@@ -181,7 +197,9 @@ function buildEmail({
       <div style="font-size:13px;color:#e8eaf0;white-space:pre-wrap;line-height:1.7">${finalTeacherMessage}</div>
     </div>` : "";
 
-  const studentMessageSection = custom_message && (isApproved || isOverdue || (!isNew && !isTeamNotify && !isDeptHead && !isManagerReport && !isLessonKitReady && !isOverdueTeam)) ? `
+  // studio_lesson_conflict renders custom_message inline in the body (above) —
+  // exclude it here so we don't double-render the admin's note.
+  const studentMessageSection = custom_message && !isLessonConflict && (isApproved || isOverdue || (!isNew && !isTeamNotify && !isDeptHead && !isManagerReport && !isLessonKitReady && !isOverdueTeam)) ? `
     <div style="background:#1a1d26;border:1px solid #2d3244;border-radius:8px;padding:16px;margin:16px 0;direction:rtl">
       <div style="font-size:13px;color:${isApproved ? "#2ecc71" : isOverdue ? "#f5a623" : "#e74c3c"};font-weight:700;margin-bottom:10px">${isApproved ? "דיווח מצוות המחסן על אישור הבקשה" : isOverdue ? "הודעה נוספת מצוות המחסן על האיחור" : "הסבר מצוות המחסן על סיבת הדחייה"}</div>
       <div style="font-size:13px;color:#e8eaf0;white-space:pre-wrap;line-height:1.7">${custom_message}</div>
@@ -364,6 +382,7 @@ export default async function handler(req, res) {
     overdue_team:      `🚨 ציוד לא הוחזר במועד — ${student_name || ""}`,
     lesson_kit_ready:  `📚 ערכת שיעור מוכנה לבדיקה — ${lesson_kit_name || project_name || student_name || ""}`,
     course_end_notice: `🎓 הקורס "${project_name || lesson_kit_name || ""}" מסתיים בעוד שבוע — נא לעדכן סטטוסים`,
+    studio_lesson_conflict: `❌ קביעת החדר${project_name ? ` ב-${project_name}` : ""} בוטלה לטובת שיעור – מכללת קמרה אובסקורה וסאונד`,
   };
 
   // Convert base64 data URIs to inline CID attachments (email clients block data: URIs)

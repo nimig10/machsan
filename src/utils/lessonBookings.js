@@ -21,6 +21,42 @@ export function normalizeLessonStudioName(value) {
   return String(value || "").trim().toUpperCase().replace(/\s+/g, " ");
 }
 
+function normalizeStudioIdList(input) {
+  if (!Array.isArray(input)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const value of input) {
+    if (!hasLinkedValue(value)) continue;
+    const key = String(value);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
+}
+
+function getSessionStudioIdsLegacy(session) {
+  if (Array.isArray(session?.studioIds) && session.studioIds.length) {
+    return normalizeStudioIdList(session.studioIds);
+  }
+  const legacy = [];
+  if (hasLinkedValue(session?.studioId)) legacy.push(session.studioId);
+  if (hasLinkedValue(session?.secondaryStudioId)) legacy.push(session.secondaryStudioId);
+  return normalizeStudioIdList(legacy);
+}
+
+function getLessonCourseStudioIds(lesson) {
+  const ids = [];
+  if (Array.isArray(lesson?.studios)) {
+    for (const entry of lesson.studios) {
+      const value = entry && typeof entry === "object" ? entry.studioId : entry;
+      if (hasLinkedValue(value)) ids.push(value);
+    }
+  }
+  if (hasLinkedValue(lesson?.studioId)) ids.push(lesson.studioId);
+  return normalizeStudioIdList(ids);
+}
+
 function getLessonScheduleEntries(lesson) {
   return (Array.isArray(lesson?.schedule) ? lesson.schedule : [])
     .filter((session) => session?.date)
@@ -29,8 +65,7 @@ function getLessonScheduleEntries(lesson) {
       startTime: session.startTime || "09:00",
       endTime: session.endTime || "12:00",
       topic: String(session.topic || "").trim(),
-      studioId: session.studioId || null,
-      secondaryStudioId: session.secondaryStudioId || null,
+      studioIds: getSessionStudioIdsLegacy(session),
       kitId: session.kitId || null,
       lecturerId: session.lecturerId || session.alternateLecturerId || null,
       instructorName: String(session.instructorName || session.alternateInstructorName || "").trim(),
@@ -39,13 +74,9 @@ function getLessonScheduleEntries(lesson) {
 }
 
 export function getEffectiveLessonStudioIds(session, lesson) {
-  const ids = [];
-  const primaryId = hasLinkedValue(session.studioId) ? session.studioId
-    : hasLinkedValue(lesson.studioId) ? lesson.studioId : null;
-  const secondaryId = hasLinkedValue(session.secondaryStudioId) ? session.secondaryStudioId : null;
-  if (primaryId) ids.push(primaryId);
-  if (secondaryId && !ids.some((id) => String(id) === String(secondaryId))) ids.push(secondaryId);
-  return ids;
+  const sessionIds = getSessionStudioIdsLegacy(session);
+  if (sessionIds.length) return sessionIds;
+  return getLessonCourseStudioIds(lesson);
 }
 
 export function buildLessonStudioBookings(lessons = []) {

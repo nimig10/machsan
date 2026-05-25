@@ -1284,7 +1284,17 @@ export function LecturerPortal({
                             </div>
                             <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 4 }}>
                               {session.topic ? `${session.topic} · ` : ""}
-                              {session.studioId && studioNameById[String(session.studioId)] ? `כיתה: ${studioNameById[String(session.studioId)]}` : "ללא כיתה משויכת"}
+                              {(() => {
+                                const raw = Array.isArray(session.studioIds) && session.studioIds.length
+                                  ? session.studioIds
+                                  : [session.studioId, session.secondaryStudioId].filter(Boolean);
+                                const names = [...new Set(raw.map(String))]
+                                  .map(id => studioNameById[id])
+                                  .filter(Boolean);
+                                return names.length
+                                  ? `${names.length === 1 ? "כיתה" : "כיתות"}: ${names.join(" + ")}`
+                                  : "ללא כיתה משויכת";
+                              })()}
                             </div>
                             <div style={{ fontSize: 12, marginTop: 6, color: isPast ? "var(--text3)" : sessionKit ? "#4ade80" : inheritedKit ? "#f5a623" : "var(--text3)" }}>
                               {sessionKit
