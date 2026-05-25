@@ -6054,10 +6054,10 @@ export default function App() {
     if (isAdmin) sessionStorage.setItem("admin_redirect", pathname);
   }, []);
 
-  // ─── טיימר חוסר פעילות — 20 דקות ───────────────────────────────────────
+  // ─── טיימר חוסר פעילות — שעה ────────────────────────────────────────────
   useEffect(() => {
     if (!isAdmin || !authed) return;
-    const TIMEOUT_MS = 20 * 60 * 1000;
+    const TIMEOUT_MS = 60 * 60 * 1000;
     const doLogout = async () => {
       await supabase.auth.signOut().catch(()=>{});
       sessionStorage.removeItem("staff_user");
