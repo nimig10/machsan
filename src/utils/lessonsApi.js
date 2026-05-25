@@ -55,6 +55,24 @@ function buildCourseStudiosFromLesson(rawLesson) {
   return out;
 }
 
+function normalizeCourseStudiosColumn(raw) {
+  // Accepts the JSONB `course_studios` column value. Each entry is either a
+  // {studioId} object (current shape) or a bare id (defensive). Returns
+  // [{studioId}] with dedup + empty filter.
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const entry of raw) {
+    const value = entry && typeof entry === "object" ? entry.studioId : entry;
+    if (value === null || value === undefined) continue;
+    const key = String(value).trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ studioId: key });
+  }
+  return out;
+}
+
 function rowToBlob(r) {
   if (!r) return null;
   const rawSchedule = Array.isArray(r.schedule) ? r.schedule : [];
@@ -64,6 +82,15 @@ function rowToBlob(r) {
     ...s,
     studioIds: normalizeSessionStudioIds(s),
   }));
+  // Prefer the explicit `course_studios` JSONB column when it has data; fall
+  // back to derivation for legacy rows that were saved before the column
+  // existed. The derived path includes session-level overrides which is what
+  // we want for legacy rows (the override and the course studio are
+  // indistinguishable in the old shape).
+  const explicitStudios = normalizeCourseStudiosColumn(r.course_studios);
+  const studios = explicitStudios.length
+    ? explicitStudios
+    : buildCourseStudiosFromLesson({ ...r, schedule });
   return {
     id:                       r.id,
     name:                     r.name ?? "",
@@ -74,7 +101,7 @@ function rowToBlob(r) {
     instructorEmail:          r.instructor_email ?? "",
     description:              r.description ?? "",
     studioId:                 r.studio_id ?? null,
-    studios:                  buildCourseStudiosFromLesson({ ...r, schedule }),
+    studios,
     certificateTemplateType:  r.certificate_template_type ?? "",
     lecturerNotifiedAt7d:     r.lecturer_notified_at_7d ?? null,
     schedule,
@@ -97,10 +124,9 @@ function blobToRow(l) {
   });
   // Course-level `studio_id` column persists the primary studio (first in the
   // course studios list, with fallback to the blob's studioId). Used by the
-  // legacy column on `lessons` table — full array lives inside schedule JSONB.
-  const coursePrimary = Array.isArray(l.studios) && l.studios[0]?.studioId
-    ? l.studios[0].studioId
-    : (l.studioId || null);
+  // legacy column on `lessons` table — full array lives inside `course_studios`.
+  const courseStudios = normalizeCourseStudiosColumn(l.studios);
+  const coursePrimary = courseStudios[0]?.studioId || l.studioId || null;
   return {
     id:                         l.id,
     name:                       name || "(ללא שם)",   // NOT NULL — never empty
@@ -111,6 +137,9 @@ function blobToRow(l) {
     instructor_email:           l.instructorEmail || null,
     description:                l.description || null,
     studio_id:                  coursePrimary,
+    // Explicit course-level classrooms (chips). Distinguishes from session
+    // overrides stored inside `schedule[].studioIds`.
+    course_studios:             courseStudios,
     certificate_template_type:  l.certificateTemplateType || null,
     lecturer_notified_at_7d:    l.lecturerNotifiedAt7d || null,
     schedule,
