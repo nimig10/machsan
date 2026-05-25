@@ -582,6 +582,10 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     const rawKey = normalizeStudioNameKey(raw);
     return studios.find(studio => normalizeStudioNameKey(studio.name) === rawKey) || null;
   };
+  const splitImportCellValues = (value = "") => String(value || "")
+    .split(/[\r\n,;،，]+/)
+    .map(part => part.trim().replace(/^[\s{}[\]()"'\u05F3\u05F4]+|[\s{}[\]()"'\u05F3\u05F4]+$/g, "").trim())
+    .filter(Boolean);
   const normalizeLecturerNameKey = (value = "") => String(value || "")
     .trim()
     .replace(/[\uFEFF\u200B-\u200D\u00A0]/g, " ")
@@ -1099,7 +1103,10 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     const updated = lessons.filter(l => l.id !== id);
     setLessons(updated);
     await syncAllLessons(updated);
-    showToast("success", "הקורס נמחק. ניתן לשחזר עם לחצן ↩ בטל פעולה למעלה.");
+    showToast("success", "הקורס נמחק. ניתן לשחזר עם לחצן ↩ בטל פעולה למעלה.", {
+      aggregateKey: "lesson-delete",
+      pluralize: n => `${n} קורסים נמחקו. ניתן לשחזר עם לחצן ↩ בטל פעולה למעלה.`,
+    });
   };
 
   const UNASSIGNED_TRACK = "לא משויך";
@@ -1450,8 +1457,10 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       if (rowInfo.instructorName && !nameToLecturer[normalizeLecturerNameKey(rowInfo.instructorName)]) rowReasons.push(`מרצה לא קיים ברובריקת המרצים: ${rowInfo.instructorName}`);
       if (!rowInfo.date || !isValidImportedDate(rowInfo.date)) rowReasons.push("תאריך לא תקין");
       if (!rowInfo.startTime || !rowInfo.endTime || rowInfo.startTime >= rowInfo.endTime) rowReasons.push("שעת התחלה/סיום לא תקינה");
-      const sessionStudio = rowInfo.studioName ? findImportedStudio(rowInfo.studioName) : null;
-      if (rowInfo.studioName && !sessionStudio) rowReasons.push(`כיתה/חדר לא קיימים: ${rowInfo.studioName}`);
+      const studioNames = splitImportCellValues(rowInfo.studioName);
+      const sessionStudios = studioNames.map(name => ({ name, studio: findImportedStudio(name) }));
+      const missingStudios = sessionStudios.filter(item => !item.studio).map(item => item.name);
+      if (missingStudios.length) rowReasons.push(`כיתה/חדר לא קיימים: ${missingStudios.join(", ")}`);
 
       if (rowReasons.length) {
         rowReasons.forEach(reason => addImportError(reportErrors, rowInfo, reason));
@@ -1461,6 +1470,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       const groupKey = importGroupKey({ name: rowInfo.courseName, track: rowInfo.track });
       const lecturer = rowInfo.instructorName ? nameToLecturer[normalizeLecturerNameKey(rowInfo.instructorName)] : null;
       const instructorDisplayName = lecturerDisplayName(lecturer) || rowInfo.instructorName;
+      const studioIds = [...new Set(sessionStudios.map(item => item.studio?.id).filter(Boolean).map(String))];
       if (!groups.has(groupKey)) {
         groups.set(groupKey, {
           name: rowInfo.courseName,
@@ -1487,7 +1497,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
         startTime: rowInfo.startTime,
         endTime: rowInfo.endTime,
         topic: rowInfo.topic,
-        studioIds: sessionStudio?.id ? [String(sessionStudio.id)] : [],
+        studioIds,
         kitId: rowInfo.kitName ? (lessonKits.find(k=>k.name===rowInfo.kitName)?.id || null) : null,
         lecturerId: lecturer?.id || null,
         instructorName: instructorDisplayName,

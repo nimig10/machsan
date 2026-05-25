@@ -486,7 +486,10 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
     markReservationDeleting(id);
     setReservations(updated);
     setSelected(null);
-    showToast("success", "הבקשה נמחקה");
+    showToast("success", "הבקשה נמחקה", {
+      aggregateKey: "reservation-delete",
+      pluralize: n => `${n} בקשות נמחקו`,
+    });
     const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
     const rpc = await deleteReservationRpc(id);
     if (!rpc.ok) {

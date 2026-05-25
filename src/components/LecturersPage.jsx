@@ -391,7 +391,10 @@ export function LecturersPage({ lecturers = [], setLecturers, showToast, trackOp
       return;
     }
     setLecturers(updated);
-    showToast("success", "המרצה נמחק");
+    showToast("success", "המרצה נמחק", {
+      aggregateKey: "lecturer-delete",
+      pluralize: n => `${n} מרצים נמחקו`,
+    });
     if (editingId === lec.id) {
       resetInlineSaveState();
       setInlineSaving(false);

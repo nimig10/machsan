@@ -139,7 +139,10 @@ export function CertificationsPage({ certifications, setCertifications, showToas
         setEquipment(updatedEquipment);
         await writeEquipmentToDB(updatedEquipment);
       }
-      showToast("success","ההסמכה נמחקה");
+      showToast("success", "ההסמכה נמחקה", {
+        aggregateKey: "cert-type-delete",
+        pluralize: n => `${n} סוגי הסמכה נמחקו`,
+      });
     }
   };
 

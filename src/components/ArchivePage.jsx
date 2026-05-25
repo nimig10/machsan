@@ -26,7 +26,10 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
       setReservations(prev);
       return;
     }
-    showToast("success", "הבקשה נמחקה מהארכיון");
+    showToast("success", "הבקשה נמחקה מהארכיון", {
+      aggregateKey: "archive-delete",
+      pluralize: n => `${n} בקשות נמחקו מהארכיון`,
+    });
   };
 
   const eqName = id => equipment.find(e=>e.id==id)?.name||"?";

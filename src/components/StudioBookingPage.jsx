@@ -747,7 +747,10 @@ export default function StudioBookingPage(props) {
   const deleteStudio = async (studioId) => {
     await saveStudios(studios.filter((studio) => studio.id !== studioId));
     await saveBookings(bookings.filter((booking) => !sameStudioId(booking.studioId, studioId)));
-    showToast("success", "החדר נמחק");
+    showToast("success", "החדר נמחק", {
+      aggregateKey: "studio-delete",
+      pluralize: n => `${n} חדרים נמחקו`,
+    });
   };
 
   const sendStudioEmail = async (type, booking, customMessage = "") => {
@@ -959,9 +962,15 @@ export default function StudioBookingPage(props) {
     await saveBookings(bookings.filter((item) => item.id !== bookingId));
     if (kind === "student") {
       await sendStudioEmail("studio_deleted", booking, cancelMessage.trim());
-      showToast("success", "הקביעה נמחקה ונשלח מייל לסטודנט");
+      showToast("success", "הקביעה נמחקה ונשלח מייל לסטודנט", {
+        aggregateKey: "studio-booking-student-delete",
+        pluralize: n => `${n} קביעות סטודנטים נמחקו ונשלחו מיילים`,
+      });
     } else {
-      showToast("success", "קביעת הצוות נמחקה");
+      showToast("success", "קביעת הצוות נמחקה", {
+        aggregateKey: "studio-booking-team-delete",
+        pluralize: n => `${n} קביעות צוות נמחקו`,
+      });
     }
     closeModal();
   };
