@@ -1,6 +1,6 @@
 # מסמך מעבר חשבון — אפליקציית "מחסן קמרה"
 
-> מסמך הקשר יחיד לסשנים חדשים. סנאפ-שוט עדכני נכון ל-**2026-05-25**.
+> מסמך הקשר יחיד לסשנים חדשים. סנאפ-שוט עדכני נכון ל-**2026-05-25** (אחרי PR #23).
 
 ## 🎯 רעיון האפליקציה
 
@@ -154,10 +154,17 @@
 | `student` | סטודנט | טופס PublicForm "הזמנת אולפן" יום | `studentName` + לא בלילה |
 | `night` | סטודנט | אותו טופס, slot לילה 21:30+ | `isNight === true` |
 
-### כיתה משנית בשיעורים (PR #17)
-שיעור יכול להחזיק `studioId` (ראשית) + `secondaryStudioId` (משנית) פר session ב-`schedule[]`. `buildLessonStudioBookings` יוצר 2 derived rows — אחד לכל אולפן. בדיקת חפיפה ב-[src/components/LessonsPage.jsx:586](src/components/LessonsPage.jsx#L586) (`findLessonConflict`) קוראת ל-`getLessonSessionStudioIds` שמחזיר מערך של שני האולפנים → **בדיקת קונפליקט תופסת גם את המשנית**.
+### N כיתות לקורס/מפגש (PR #20, PR #21)
+שיעור יכול להחזיק **מערך של N כיתות** — `lesson.studios[]` ברמת הקורס, ו-`session.studioIds[]` ברמת המפגש. החליף את הזוג `studioId`+`secondaryStudioId` (PR #17). `buildLessonStudioBookings` יוצר N derived rows — אחד לכל אולפן. בדיקת חפיפה ב-[LessonsPage.jsx:847](src/components/LessonsPage.jsx#L847) (`findLessonConflict`) קוראת ל-`getLessonSessionStudioIds` → `getEffectiveLessonStudioIds` שמחזיר את כל ה-N אולפנים → **בדיקת קונפליקט תופסת את כל הכיתות במקביל**.
 
-**Validation בעת שמירה** ([LessonsPage.jsx:2469-2470](src/components/LessonsPage.jsx#L2469)): `duplicateClassroomSession` — `session.studioId !== session.secondaryStudioId`. שגיאה: "כיתה משנית לא יכולה להיות זהה לכיתה הראשית".
+**Backwards compatibility בקריאה**: `normalizeSessionStudioIds` ב-[lessonsApi.js:22](src/utils/lessonsApi.js#L22) — אם השורה הישנה מכילה `studioId`/`secondaryStudioId` בלבד, הם נארזים למערך. **השמירה תמיד יוצאת כ-`studioIds[]`**.
+
+### `course_studios` JSONB column (PR #21)
+ברמת הקורס יש עמודה ייעודית `lessons.course_studios jsonb` (מיגרציה `20260525150000`) שמחליפה את הגזירה האוטומטית של איחוד `union(schedule[].studioIds)`. למה: ב-PR הקודם כל override מפגש "דלף" לרמת הקורס וגרם ל-phantom column אחרי reload. עכשיו: chips של הקורס נשמרים ישירות, overrides של מפגש נשארים inline.
+
+- **Helper**: `normalizeCourseStudiosColumn` + `buildCourseStudiosFromLesson` ב-[lessonsApi.js:36](src/utils/lessonsApi.js#L36).
+- **Read fallback**: אם השורה מהDB ריקה בעמודה החדשה (legacy) — נגזר union משדות ישנים.
+- **UI**: dropdown בפאנל "שיוך כיתות לימוד" מציג את **כל הכיתות במערכת** (לא רק את אלה שכבר בקורס).
 
 ### Toggle ידני "צרף סטודיו הקלטות" (PR #17)
 קיים רק ב-**team + student bookings** ב-MAIN CONTROL/DIGITAL MIX ROOM. **לא בשיעורים** (הוסר ב-`6c89345`).
@@ -199,10 +206,20 @@ predicate: `isWithoutLecturer(lesson)` ([:716](src/components/LessonsPage.jsx#L7
 - **מיקום**: [LessonsPage.jsx:144-172](src/components/LessonsPage.jsx#L144).
 - **מפתח dedup**: `date__startTime__endTime`.
 - **מתי**: על load (`getLessonDisplaySchedule` [:175](src/components/LessonsPage.jsx#L175)), בייבוא ([:1206](src/components/LessonsPage.jsx#L1206)), על שמירה ב-edit form ([:2074](src/components/LessonsPage.jsx#L2074), [:2458](src/components/LessonsPage.jsx#L2458)).
-- **התנהגות במיזוג**: מערכים זוכים לעדיפות לפי הראשון שיש בו `topic`/`kitId`/`lecturerId`. אם 2 שורות שונות בכיתה — האחת נכנסת ל-`studioId`, השנייה ל-`secondaryStudioId` ([:162-167](src/components/LessonsPage.jsx#L162)).
+- **התנהגות במיזוג**: מערכים זוכים לעדיפות לפי הראשון שיש בו `topic`/`kitId`/`lecturerId`. אם N שורות שונות בכיתה — כל ה-studioIds מתאחדים ל-`session.studioIds[]` במערך אחד (PR #20).
 
-### "שיוך כיתות לימוד" panel
-[LessonsPage.jsx:2765-2804](src/components/LessonsPage.jsx#L2765). מנהל `studioId` + `secondaryStudioId` ברמת קורס, מפיץ ל-**כל** sessions ([:2774-2778, :2792](src/components/LessonsPage.jsx#L2774)).
+### "שיוך כיתות לימוד" panel (PR #21)
+מנהל את `course_studios` של הקורס כ-chips ניתנים להוספה/הסרה. dropdown מציג את **כל הכיתות במערכת**. position-based binding (`value={sessionIds[colIdx]}` — לא לפי studioId, אחרת החלפת ערך בעמודה תיצור orphan). chip שאינו ב-course_studios אבל יש מפגש שמשתמש בו = override של מפגש בלבד, לא דולף לרמת הקורס.
+
+### Conflict resolver modal (PR #20, PR #21)
+חפיפה (חדר או מרצה) פותחת **modal לפתרון inline** ([ConflictResolverCard ב-LessonsPage.jsx:131](src/components/LessonsPage.jsx#L131)):
+- מציג את כל המפגשים בקונפליקט (`findAllLessonRoomConflicts` / `findAllLessonLecturerConflicts` → arrays).
+- מאפשר לשנות כיתה/מרצה של ה-**מפגש האחר** ישירות (`applyOtherLessonFix`).
+- Textarea להודעה מותאמת + כפתור WhatsApp deep-link (`wa.me/<phone>?text=<encoded>`).
+- אם הסיבה לקונפליקט היא חדר אחר — שולח מייל אוטומטי `studio_lesson_conflict` ([api/send-email.js](api/send-email.js)) עם block "💬 הודעה מהמכללה" אופציונלי. **לא לכפול את ה-`custom_message`** ב-`studentMessageSection` הישן (כבר טופל).
+
+### Splitting classroom column values ב-XL import (PR #20)
+`splitImportCellValues` ב-[LessonsPage.jsx:585](src/components/LessonsPage.jsx#L585) חותך תאי "כיתה" לפי `,;،，` וכו'. **רק עמודת הכיתה** — עמודת המרצה לא נחתכת (יש לעצב כל מרצה כשורה נפרדת ב-XL).
 
 ---
 
@@ -254,6 +271,37 @@ Gmail SMTP + nodemailer ב-`api/auth.js`. `buildResetEmail`.
 
 ---
 
+## 🎨 UX Patterns גלובליים
+
+### Toast aggregation (PR #22)
+`showToast(type, msg, opts?)` ב-[App.jsx](src/App.jsx) תומך באגרגציה אופציונלית:
+```js
+showToast("success", "X נמחק", {
+  aggregateKey: "lesson-delete",
+  pluralize: n => `${n} X נמחקו`,
+});
+```
+- ללא `aggregateKey` — התנהגות זהה לחלוטין למה שהיה (backwards-compatible).
+- עם `aggregateKey` — toast יחיד מתעדכן ל-"2 X נמחקו" → "3..." כשהמשתמש מוחק ברצף. ה-timer מתאפס בכל לחיצה ונעלם 3.5s אחרי הפעולה האחרונה.
+- **קריטי**: סינכרוני לחלוטין בתוך `setToasts(prev => ...)` + `useRef` ל-Map של טיימרים. **אסור** להוסיף async/await בנתיב הזה — `aggregateKey` נוצר בדיוק כדי לא להאט את לחיצת הכפתור.
+- callsites קיימים: `lesson-delete`, `lecturer-delete`, `cert-type-delete`, `archive-delete`, `staff-user-delete`, `staff-pref-delete`, `staff-shift-delete`, `staff-lesson-day-delete`, `studio-delete`, `studio-booking-student-delete`, `studio-booking-team-delete`, `reservation-delete`, `category-delete`.
+
+### Undo stack (PR #22)
+- **גודל**: 15 פעולות (היה 10).
+- **Optimistic**: state setter רץ **לפני** הקריאה לרשת. `setUndoStack(prev => prev.slice(0,-1))` מיידי, אחר כך `Promise.all([...reservationPromises, ...entityPromises])` במקביל. הלחיצה מרגישה מיידית.
+- **Toast מצוין**: `undo-action` אגרגציה — מציג "X פעולות בוטלו" כשמשתמש לוחץ Undo ברצף.
+
+### Inactivity logout (PR #22)
+admin/staff מתנתק אוטומטית אחרי **60 דקות** של חוסר פעילות (היה 20m). מימוש ב-[App.jsx:6060](src/App.jsx#L6060).
+
+### XL import templates — admin upload (PR #23)
+- אדמין מעלה טמפלטים ב-**הגדרות מערכת** ("טמפלטים לייבוא Excel (XL)") — 2 slots: `xl_template_courses` + `xl_template_students`.
+- אחסון: **מיחזור `policy_assets`** (אותה טבלה של PDFs) — אין מיגרציה, אין טבלה חדשה. הbase64 נשמר ב-`data_base64` text.
+- הורדה ב-"הגדרות → אדמיניסטרציה" קוראת ל-`loadXlTemplate(slot)` ב-[src/utils/xlTemplatesApi.js](src/utils/xlTemplatesApi.js); אם אין שורה → fallback ל-`COURSES_TEMPLATE_B64`/`STUDENTS_TEMPLATE_B64` (constants ב-App.jsx).
+- 100% backwards-compatible: בלי upload המשתמש מקבל את אותו טמפלט המובנה שהיה תמיד.
+
+---
+
 ## 🧩 דפים שעוד inline ב-App.jsx (8 דפים, ~3,800 שורות)
 
 | דף | שורה ב-App.jsx |
@@ -281,6 +329,10 @@ Gmail SMTP + nodemailer ב-`api/auth.js`. `buildResetEmail`.
 6. **`toDateTime()` מחזיר number, לא Date** — אל תקרא `.getTime()` על התוצאה.
 7. **Auto-coupling MAIN CONTROL → סטודיו הקלטות בשיעורים** — הוסר לחלוטין בקומיט `6c89345`. שיעור ב-MAIN CONTROL לא משריין אוטומטית את סטודיו הקלטות. אם צריך גם הקלטות — לבחור כיתה משנית במפורש. ה-toggle הידני "צרף סטודיו הקלטות" ב-team/student booking נשמר כ-opt-in.
 8. **`production_delete_v1` atomic hard-delete** — קוראים ישירות מ-React (`supabase.rpc`), לא דרך API endpoint נפרד. כל הפעולה ב-transaction יחיד של Postgres. ראה מיגרציה `20260525120000`.
+9. **`session.studioIds[]` array — לא `studioId`+`secondaryStudioId`** (PR #20). הזוג הישן הוסר. דפים שעוד מסתמכים על `getEffectiveLessonStudioIds`/`getLessonSessionStudioIds` (חוזרים array). שמירת position מותרת — empty string ב-index `i` שומר את העמודה במקומה.
+10. **`course_studios` jsonb explicit column** (PR #21). אסור לחזור לגזירת union מ-`schedule[]` ברמת הקורס — זה גרם ל-phantom columns אחרי reload. chips של הקורס נשמרים ישירות, overrides של מפגש נשארים inline.
+11. **Toast aggregation — סינכרוני בלבד** (PR #22). אסור להוסיף async/await/network בנתיב `aggregateKey`. כל הלוגיקה רצה בתוך `setToasts(prev => ...)` + `useRef`. אם מוסיפים latency — `aggregateKey` מפסיק להיות "קוסמטי בלבד" כפי שתוכנן.
+12. **Custom message in `studio_lesson_conflict` email** (PR #20). `custom_message` מוצג ב-block "💬 הודעה מהמכללה" בלבד. אסור להחזיר אותו ל-`studentMessageSection` הישן — בעבר זה גרם ל-2 תיבות זהות במייל.
 
 ---
 
@@ -297,8 +349,8 @@ Gmail SMTP + nodemailer ב-`api/auth.js`. `buildResetEmail`.
 
 1. **dev לא מיושר ל-prod** — RLS כבוי על `users`/`equipment`/`equipment_units`/`reservations_new`/`reservation_items`/`staff_daily_tasks`, ויש FK constraints ל-`staff_members`. לא קריטי כי dev = sandbox.
 2. **`staff_members` legacy** — הקוד הפעיל לא משתמש כ-fallback. ב-prod: 9 rows, אין FK. ב-dev: row אחד + יש FKs. למחוק אחרי וידוא שאין תלות היסטורית.
-3. **App.jsx ~7,423 שורות** — 8 דפים inline (טבלה למעלה).
-4. **`policy_assets` שומר PDF כ-Base64 ב-TEXT** — קריאת מדיניות מושכת blob שלם. tech debt.
+3. **App.jsx ~7,471 שורות** — 8 דפים inline (טבלה למעלה).
+4. **`policy_assets` שומר PDF + XL templates כ-Base64 ב-TEXT** — קריאת מדיניות / טמפלט מושכת blob שלם. tech debt.
 
 ---
 
@@ -313,6 +365,10 @@ Gmail SMTP + nodemailer ב-`api/auth.js`. `buildResetEmail`.
 
 ## 📜 היסטוריית PRs אחרונים שעלו לפרוד
 
+- **2026-05-25** — **PR #23** — Admin מעלה טמפלטים ל-XL import מתוך "הגדרות מערכת". מיחזור `policy_assets` עם slots `xl_template_courses` + `xl_template_students`. אין מיגרציה. fallback ל-base64 המובנה אם אין upload.
+- **2026-05-25** — **PR #22** — UX: aggregate delete toasts (single counter toast במחיקות עוקבות), undo stack 10→15 + optimistic state + parallel network, admin/staff idle timeout 20m→60m.
+- **2026-05-25** — **PR #21** — Lessons UX overhaul: conflict resolver modal עם textarea + WhatsApp + edit-other-session, lecturer chips עם click-to-promote, view-mode toggle (grouped/flat), creation timestamp, resizable classroom columns, persistence ל-`course_studios jsonb` (מיגרציה `20260525150000`).
+- **2026-05-25** — **PR #20** — N כיתות לקורס/מפגש (`studios[]` / `studioIds[]` במקום הזוג הישן), conflict resolver V1, fix team-booking email lookup.
 - **2026-05-25** — `867daeb` Atomic production delete: `production_delete_v1` עבר ל-HARD_DELETE atomic, `api/delete-production.js` נמחק (135 שורות). מיגרציה `20260525120000`.
 - **2026-05-23** — PR #19 + hotfix `e2dac20` — ייבוא XL לשיעורים (מצב partial, דוח מפורט, איחוד כפילות), חיפוש לפי מרצים מרובים, ביטול auto-coupling סטודיו הקלטות לשיעורים (קומיט `6c89345`).
 - **2026-05-22** — PR #18 + PR #17 — Hard delete לרזרבציות הפקה דרך API (הוחלף ב-RPC ב-2026-05-25), `secondaryStudioId` בשיעורים, toggle ידני "צרף סטודיו הקלטות" ב-team/student.
