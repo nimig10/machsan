@@ -40,6 +40,7 @@ import { syncAllCategories, loadCategoriesFromTable, syncLoanTypeFilters, loadLo
 import { loadPoliciesFromTable, syncAllPolicies } from "./utils/policiesApi.js";
 import { loadSiteSettingsFromTable, syncAllSiteSettings, setSetting as setSiteSetting } from "./utils/siteSettingsApi.js";
 import { USER_GUIDE_SLOTS, loadUserGuideAsset } from "./utils/userGuideAssetsApi.js";
+import { XL_TEMPLATE_SLOTS, loadXlTemplate } from "./utils/xlTemplatesApi.js";
 import { loadCollegeManagerFromTable, saveCollegeManager } from "./utils/collegeManagerApi.js";
 import { loadDeptHeadsFromTable, syncAllDeptHeads, upsertDeptHead, deleteDeptHead } from "./utils/deptHeadsApi.js";
 import { pendingReservationDeletes, unmarkReservationDeleting } from "./pendingDeletes.js";
@@ -5208,8 +5209,21 @@ function downloadXlsxTemplate(b64, filename) {
   const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 }
-function downloadLessonsTemplate() { downloadXlsxTemplate(COURSES_TEMPLATE_B64, 'טמפלט_העלאת_קורסים.xlsx'); }
-function downloadStudentsTemplate() { downloadXlsxTemplate(STUDENTS_TEMPLATE_B64, 'טמפלט_ייבוא_סטודנטים.xlsx'); }
+// Try admin-uploaded template first; fall back to the hardcoded one if none exists.
+async function downloadXlTemplateFromSlot(slot, fallbackB64, fallbackName) {
+  try {
+    const row = await loadXlTemplate(slot);
+    if (row && row.data_base64) {
+      downloadXlsxTemplate(row.data_base64, row.filename || fallbackName);
+      return;
+    }
+  } catch (err) {
+    console.warn("[downloadXlTemplateFromSlot] load failed, falling back", err);
+  }
+  downloadXlsxTemplate(fallbackB64, fallbackName);
+}
+function downloadLessonsTemplate() { downloadXlTemplateFromSlot(XL_TEMPLATE_SLOTS.courses,  COURSES_TEMPLATE_B64,  'טמפלט_העלאת_קורסים.xlsx'); }
+function downloadStudentsTemplate() { downloadXlTemplateFromSlot(XL_TEMPLATE_SLOTS.students, STUDENTS_TEMPLATE_B64, 'טמפלט_ייבוא_סטודנטים.xlsx'); }
 
 // ─── DAMAGED EQUIPMENT PAGE ──────────────────────────────────────────────────
 function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[], collegeManager={}, managerToken="" }) {

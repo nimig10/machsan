@@ -1,10 +1,12 @@
 // SystemSettingsPage.jsx — global system settings (admin only)
 import { useEffect, useState } from "react";
-import { Camera, FileText, Film, Mic, Video, Trash2, Plus, ChevronDown, ChevronUp, Save } from "lucide-react";
+import { Camera, FileText, FileSpreadsheet, Film, Mic, Video, Trash2, Plus, ChevronDown, ChevronUp, Save } from "lucide-react";
 import { syncAllSiteSettings } from "../utils/siteSettingsApi.js";
 import { USER_GUIDE_SLOTS, loadUserGuideAsset, upsertUserGuideAsset, deleteUserGuideAsset } from "../utils/userGuideAssetsApi.js";
+import { XL_TEMPLATE_SLOTS, loadXlTemplate, upsertXlTemplate, deleteXlTemplate } from "../utils/xlTemplatesApi.js";
 
 const PDF_MAX_BYTES = 5 * 1024 * 1024; // 5MB
+const XL_MAX_BYTES = 2 * 1024 * 1024;  // 2MB
 
 export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast }) {
   const [draft, setDraft] = useState({ aiMaxRequests: 5, publicDisplayInterval: 18, ...siteSettings });
@@ -16,6 +18,10 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
   const [pdfDrafts, setPdfDrafts] = useState({});
   const [pdfInitial, setPdfInitial] = useState({});
   const [pdfUploading, setPdfUploading] = useState({});
+  // XL templates — same pattern as PDF assets
+  const [xlDrafts, setXlDrafts] = useState({});
+  const [xlInitial, setXlInitial] = useState({});
+  const [xlUploading, setXlUploading] = useState({});
 
   useEffect(() => {
     let cancelled = false;
@@ -30,6 +36,19 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
         setPdfInitial(map);
       } catch (err) {
         console.warn("[SystemSettingsPage] load user-guide PDFs failed", err);
+      }
+    })();
+    (async () => {
+      try {
+        const entries = await Promise.all(
+          Object.values(XL_TEMPLATE_SLOTS).map(async (slot) => [slot, await loadXlTemplate(slot)])
+        );
+        if (cancelled) return;
+        const map = Object.fromEntries(entries);
+        setXlDrafts(map);
+        setXlInitial(map);
+      } catch (err) {
+        console.warn("[SystemSettingsPage] load XL templates failed", err);
       }
     })();
     return () => { cancelled = true; };
@@ -52,6 +71,26 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
   };
 
   const removePdf = (slot) => setPdfDrafts(p => ({ ...p, [slot]: null }));
+
+  const handleXlUpload = (slot, file) => {
+    if (!file) return;
+    const name = (file.name || "").toLowerCase();
+    const okExt = name.endsWith(".xlsx") || name.endsWith(".xls") || name.endsWith(".csv") || name.endsWith(".tsv");
+    if (!okExt) { showToast("error", "רק קבצי Excel/CSV נתמכים (.xlsx, .xls, .csv, .tsv)"); return; }
+    if (file.size > XL_MAX_BYTES) { showToast("error", "הקובץ גדול מדי — עד 2MB"); return; }
+    setXlUploading(p => ({ ...p, [slot]: true }));
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = String(ev.target?.result || "");
+      const base64 = dataUrl.split(",")[1] || "";
+      setXlDrafts(p => ({ ...p, [slot]: { filename: file.name, data_base64: base64 } }));
+      setXlUploading(p => ({ ...p, [slot]: false }));
+    };
+    reader.onerror = () => { showToast("error", "שגיאה בקריאת הקובץ"); setXlUploading(p => ({ ...p, [slot]: false })); };
+    reader.readAsDataURL(file);
+  };
+
+  const removeXl = (slot) => setXlDrafts(p => ({ ...p, [slot]: null }));
   // Track which video editors are open. Existing videos load collapsed (a
   // compact row); newly-added or just-saved videos collapse too. Adding a
   // new video opens it automatically. The "save" button collapses the row.
@@ -110,10 +149,25 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
         }
       }));
       setPdfInitial(pdfDrafts);
+      // XL templates — same diff/upsert/delete logic
+      const xlSlots = Object.values(XL_TEMPLATE_SLOTS);
+      await Promise.all(xlSlots.map(async (slot) => {
+        const next = xlDrafts[slot] || null;
+        const prev = xlInitial[slot] || null;
+        const sameBase64 = (next?.data_base64 || null) === (prev?.data_base64 || null);
+        const sameName = (next?.filename || null) === (prev?.filename || null);
+        if (sameBase64 && sameName) return;
+        if (next && next.data_base64) {
+          await upsertXlTemplate(slot, { filename: next.filename, data_base64: next.data_base64 });
+        } else if (prev) {
+          await deleteXlTemplate(slot);
+        }
+      }));
+      setXlInitial(xlDrafts);
       showToast("success", "ההגדרות נשמרו");
     } catch (err) {
       console.warn("[SystemSettingsPage.save]", err);
-      showToast("error", "שגיאה בשמירת PDF — נסה שוב");
+      showToast("error", "שגיאה בשמירה — נסה שוב");
     } finally {
       setSaving(false);
     }
@@ -418,6 +472,52 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
         description: "סרטונים שיופיעו בלחצן \"המדריך למשתמש\" בפורטל המרצה — קהל היעד: מרצים וראשי מחלקה.",
         pdfSlot: USER_GUIDE_SLOTS.lecturers,
       })}
+
+      {/* XL Import Templates */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-header"><div className="card-title" style={{display:"inline-flex",alignItems:"center",gap:6}}><FileSpreadsheet size={16} strokeWidth={1.75} color="var(--accent)"/> טמפלטים לייבוא Excel (XL)</div></div>
+        <div style={{ padding: "16px 20px" }}>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14, lineHeight: 1.6 }}>
+            העלה את קבצי הטמפלט שמשתמשים בתת אדמין "אדמיניסטרציה" יכולים להוריד תחת "טמפלטים להורדה — ייבוא מקובץ XL". אם לא יועלה קובץ — תוצג ברירת המחדל המובנית בקוד. עד 2MB. סוגים נתמכים: .xlsx, .xls, .csv, .tsv.
+          </div>
+          {[
+            { slot: XL_TEMPLATE_SLOTS.courses,  label: "טמפלט העלאת קורסים", hint: "מבנה לייבוא שיעורים / קורסים" },
+            { slot: XL_TEMPLATE_SLOTS.students, label: "טמפלט ייבוא סטודנטים", hint: "מבנה לייבוא רשימת סטודנטים" },
+          ].map(({ slot, label, hint }) => {
+            const file = xlDrafts[slot] || null;
+            const isUploading = !!xlUploading[slot];
+            return (
+              <div key={slot} style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 4 }}>{label}</div>
+                <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 8 }}>{hint}</div>
+                {file && file.data_base64 ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "10px 14px", borderRadius: 10, background: "var(--surface2)", border: "1px solid var(--border)" }}>
+                    <FileSpreadsheet size={18} strokeWidth={1.75} color="var(--accent)" />
+                    <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {file.filename || "קובץ"}
+                    </div>
+                    <label className="btn btn-secondary" style={{ cursor: isUploading ? "not-allowed" : "pointer", opacity: isUploading ? 0.6 : 1, fontSize: 12 }}>
+                      {isUploading ? "מעלה..." : "החלף"}
+                      <input type="file" accept=".xlsx,.xls,.csv,.tsv" style={{ display: "none" }} disabled={isUploading}
+                        onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; handleXlUpload(slot, f); }} />
+                    </label>
+                    <button type="button" className="btn btn-secondary" style={{ fontSize: 12 }}
+                      onClick={() => removeXl(slot)}>
+                      <Trash2 size={12} strokeWidth={1.75} /> הסר
+                    </button>
+                  </div>
+                ) : (
+                  <label className="btn btn-secondary" style={{ cursor: isUploading ? "not-allowed" : "pointer", opacity: isUploading ? 0.6 : 1, fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    {isUploading ? "מעלה..." : <><FileSpreadsheet size={14} strokeWidth={1.75} /> העלה טמפלט</>}
+                    <input type="file" accept=".xlsx,.xls,.csv,.tsv" style={{ display: "none" }} disabled={isUploading}
+                      onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; handleXlUpload(slot, f); }} />
+                  </label>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {/* AI */}
       <div className="card" style={{ marginBottom: 20 }}>
