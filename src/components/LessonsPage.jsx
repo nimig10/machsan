@@ -324,7 +324,8 @@ function ConflictResolverCard({ conflict, otherLesson, studios = [], classroomSt
 
 function normalizeScheduleEntry(entry = {}) {
   const isLegacyKey = !entry?._key || /^sk-\d+$/.test(entry._key);
-  const lecturerId = entry?.lecturerId || entry?.alternateLecturerId || null;
+  const lecturerIds = normalizeScheduleLecturerIds(entry);
+  const lecturerId = lecturerIds[0] || entry?.lecturerId || entry?.alternateLecturerId || null;
   const instructorName = String(entry?.instructorName || entry?.alternateInstructorName || "").trim();
   return {
     _key: isLegacyKey ? newScheduleKey() : entry._key,
@@ -335,8 +336,20 @@ function normalizeScheduleEntry(entry = {}) {
     studioIds: normalizeScheduleStudioIds(entry),
     kitId: entry?.kitId || null,
     lecturerId,
+    lecturerIds,
     instructorName,
   };
+}
+
+function normalizeScheduleLecturerIds(entry = {}) {
+  // Position-preserving: each index is an independent lecturer column slot.
+  // Legacy scalar `lecturerId` is promoted to [lecturerId] so column 1 holds
+  // the original assignment.
+  if (Array.isArray(entry?.lecturerIds)) {
+    return entry.lecturerIds.map(v => (v === null || v === undefined) ? "" : String(v).trim());
+  }
+  const legacyId = entry?.lecturerId || entry?.alternateLecturerId || "";
+  return legacyId ? [String(legacyId).trim()] : [];
 }
 
 function normalizeScheduleStudioIds(entry = {}) {
@@ -1280,12 +1293,15 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     errors.push(makeImportError(rowInfo, reason));
   };
 
+  // Merge sessions ONLY by date+time+topic. Lecturer is intentionally NOT
+  // part of the key: two XL rows that share the same shoot slot but list
+  // different lecturers should collapse into one session with both
+  // lecturerIds[] populated — mirroring how studioIds[] merges.
   const importSessionMergeKey = (session = {}) => [
     session.date || "",
     session.startTime || "",
     session.endTime || "",
     String(session.topic || "").trim(),
-    session.lecturerId || normalizeLecturerNameKey(session.instructorName || ""),
   ].join("__");
 
   const stripImportMeta = (session) => {
@@ -1303,6 +1319,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       studioIds: [...(normalized.studioIds || [])].map(String).sort(),
       kitId: normalized.kitId || null,
       lecturerId: normalized.lecturerId || null,
+      lecturerIds: [...(normalized.lecturerIds || [])].map(String).sort(),
       instructorName: String(normalized.instructorName || "").trim(),
     };
   };
@@ -1408,11 +1425,14 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       const dateIdx = findH("תאריך", "date");
       const startIdx = findH("התחלה", "start", "שעת התחלה");
       const endIdx = findH("סיום", "end", "שעת סיום");
-      const instructorIdx = findH("מרצה", "מורה", "lecturer", "teacher", "instructor");
+      const findAllH = (...patterns) => headers
+        .map((h, idx) => (patterns.some(p => h.includes(p)) ? idx : -1))
+        .filter(idx => idx >= 0);
+      const instructorIdxs = findAllH("מרצה", "מורה", "lecturer", "teacher", "instructor");
       const phoneIdx = findH("טלפון", "phone", "נייד");
       const emailIdx = findH("מייל", "email", "mail");
       const trackIdx = findH("מסלול", "track", "קבוצה", "class");
-      const studioIdx = findH("כיתת לימוד", "אולפן", "studio", "כיתה", "חדר");
+      const studioIdxs = findAllH("כיתת לימוד", "אולפן", "studio", "כיתה", "חדר");
       const kitIdx = findH("ערכה", "kit");
       const topicIdx = findH("נושא", "topic", "subject");
       const notesIdx = findH("הערות", "description", "notes", "תיאור");
@@ -1430,13 +1450,22 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           rowNumber: i + 1,
           courseName: String(row[courseIdx] || "").trim() || sheet.name.trim(),
           track: trackIdx >= 0 ? String(row[trackIdx] || "").trim() : "",
-          instructorName: instructorIdx >= 0 ? String(row[instructorIdx] || "").trim() : "",
+          instructorNames: instructorIdxs.length
+            ? instructorIdxs.map(idx => String(row[idx] || "").trim()).filter(Boolean)
+            : [],
+          // Scalar shim for legacy code paths that still read instructorName.
+          // Always reflects the first non-empty lecturer column.
+          instructorName: instructorIdxs.length
+            ? (instructorIdxs.map(idx => String(row[idx] || "").trim()).find(Boolean) || "")
+            : "",
           phone: phoneIdx >= 0 ? String(row[phoneIdx] || "").trim() : "",
           email: emailIdx >= 0 ? String(row[emailIdx] || "").trim() : "",
           date: toImportIsoDate(row[dateIdx]),
           startTime: startIdx >= 0 ? normalizeImportedLessonTime(row[startIdx]) : "",
           endTime: endIdx >= 0 ? normalizeImportedLessonTime(row[endIdx]) : "",
-          studioName: studioIdx >= 0 ? String(row[studioIdx] || "").trim() : "",
+          studioName: studioIdxs.length
+            ? studioIdxs.map(idx => String(row[idx] || "").trim()).filter(Boolean).join("\n")
+            : "",
           kitName: kitIdx >= 0 ? String(row[kitIdx] || "").trim() : "",
           topic: topicIdx >= 0 ? String(row[topicIdx] || "").trim() : "",
           notes: notesIdx >= 0 ? String(row[notesIdx] || "").trim() : "",
@@ -1454,7 +1483,15 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       const rowReasons = [];
       if (!rowInfo.courseName) rowReasons.push("חסר שם קורס");
       if (!rowInfo.track || !isKnownTrack(rowInfo.track)) rowReasons.push(`מסלול לימודים לא קיים: ${rowInfo.track || "חסר מסלול"}`);
-      if (rowInfo.instructorName && !nameToLecturer[normalizeLecturerNameKey(rowInfo.instructorName)]) rowReasons.push(`מרצה לא קיים ברובריקת המרצים: ${rowInfo.instructorName}`);
+      const instructorNames = Array.isArray(rowInfo.instructorNames) && rowInfo.instructorNames.length
+        ? rowInfo.instructorNames
+        : (rowInfo.instructorName ? [rowInfo.instructorName] : []);
+      const sessionLecturers = instructorNames.map(name => ({
+        name,
+        lecturer: nameToLecturer[normalizeLecturerNameKey(name)] || null,
+      }));
+      const missingLecturers = sessionLecturers.filter(item => !item.lecturer).map(item => item.name);
+      if (missingLecturers.length) rowReasons.push(`מרצה לא קיים ברובריקת המרצים: ${missingLecturers.join(", ")}`);
       if (!rowInfo.date || !isValidImportedDate(rowInfo.date)) rowReasons.push("תאריך לא תקין");
       if (!rowInfo.startTime || !rowInfo.endTime || rowInfo.startTime >= rowInfo.endTime) rowReasons.push("שעת התחלה/סיום לא תקינה");
       const studioNames = splitImportCellValues(rowInfo.studioName);
@@ -1468,18 +1505,20 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       }
 
       const groupKey = importGroupKey({ name: rowInfo.courseName, track: rowInfo.track });
-      const lecturer = rowInfo.instructorName ? nameToLecturer[normalizeLecturerNameKey(rowInfo.instructorName)] : null;
-      const instructorDisplayName = lecturerDisplayName(lecturer) || rowInfo.instructorName;
+      // Primary lecturer for this row = first non-empty column.
+      const primaryLecturer = sessionLecturers.find(item => item.lecturer)?.lecturer || null;
+      const primaryDisplayName = lecturerDisplayName(primaryLecturer) || (sessionLecturers[0]?.name || "");
       const studioIds = [...new Set(sessionStudios.map(item => item.studio?.id).filter(Boolean).map(String))];
+      const sessionLecturerIds = [...new Set(sessionLecturers.map(item => item.lecturer?.id).filter(Boolean).map(String))];
       if (!groups.has(groupKey)) {
         groups.set(groupKey, {
           name: rowInfo.courseName,
           track: rowInfo.track,
-          instructorName: instructorDisplayName,
-          instructorPhone: lecturer?.phone || rowInfo.phone || "",
-          instructorEmail: lecturer?.email || rowInfo.email || "",
-          lecturerId: lecturer?.id || null,
-          lecturers: instructorDisplayName ? [{ lecturerId: lecturer?.id || null, instructorName: instructorDisplayName }] : [],
+          instructorName: primaryDisplayName,
+          instructorPhone: primaryLecturer?.phone || rowInfo.phone || "",
+          instructorEmail: primaryLecturer?.email || rowInfo.email || "",
+          lecturerId: primaryLecturer?.id || null,
+          lecturers: [],
           studioName: rowInfo.studioName,
           kitName: rowInfo.kitName,
           description: rowInfo.notes || "",
@@ -1489,9 +1528,18 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       }
 
       const group = groups.get(groupKey);
-      if (instructorDisplayName && !group.lecturers.some((item) => String(item.lecturerId || "") === String(lecturer?.id || "") || normalizeLecturerNameKey(item.instructorName) === normalizeLecturerNameKey(instructorDisplayName))) {
-        group.lecturers.push({ lecturerId: lecturer?.id || null, instructorName: instructorDisplayName });
-      }
+      // Accumulate every lecturer mentioned in any row of this group into
+      // group.lecturers (deduped by id or normalized name). These become the
+      // "מרצי הקורס" chips on save.
+      sessionLecturers.forEach(({ lecturer, name }) => {
+        const displayName = lecturerDisplayName(lecturer) || name;
+        if (!displayName) return;
+        const exists = group.lecturers.some((item) =>
+          (lecturer?.id && String(item.lecturerId || "") === String(lecturer.id)) ||
+          normalizeLecturerNameKey(item.instructorName) === normalizeLecturerNameKey(displayName)
+        );
+        if (!exists) group.lecturers.push({ lecturerId: lecturer?.id || null, instructorName: displayName });
+      });
       const session = normalizeScheduleEntry({
         date: rowInfo.date,
         startTime: rowInfo.startTime,
@@ -1499,8 +1547,9 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
         topic: rowInfo.topic,
         studioIds,
         kitId: rowInfo.kitName ? (lessonKits.find(k=>k.name===rowInfo.kitName)?.id || null) : null,
-        lecturerId: lecturer?.id || null,
-        instructorName: instructorDisplayName,
+        lecturerIds: sessionLecturerIds,
+        lecturerId: primaryLecturer?.id || null,
+        instructorName: primaryDisplayName,
       });
       session.sourceRows = [rowInfo];
       group.rawSchedule.push(session);
@@ -1518,22 +1567,34 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       });
       const schedule = [];
       mergedBySession.forEach((sessions) => {
-        // Merge ALL classrooms from rows that share the same time slot.
-        // No max-2 limit — XL with 3+ rooms per slot is allowed.
+        // Merge ALL classrooms + lecturers from rows that share the same time
+        // slot. No max-2 limit — XL with N rooms/lecturers per slot is allowed.
         const mergedStudioIds = [];
-        const seen = new Set();
+        const seenStudio = new Set();
         sessions.forEach((session) => {
           (session.studioIds || []).forEach((id) => {
             const key = String(id);
-            if (!key || seen.has(key)) return;
-            seen.add(key);
+            if (!key || seenStudio.has(key)) return;
+            seenStudio.add(key);
             mergedStudioIds.push(key);
+          });
+        });
+        const mergedLecturerIds = [];
+        const seenLec = new Set();
+        sessions.forEach((session) => {
+          (session.lecturerIds || []).forEach((id) => {
+            const key = String(id);
+            if (!key || seenLec.has(key)) return;
+            seenLec.add(key);
+            mergedLecturerIds.push(key);
           });
         });
         const base = sessions[0];
         schedule.push({
           ...base,
           studioIds: mergedStudioIds,
+          lecturerIds: mergedLecturerIds,
+          lecturerId: mergedLecturerIds[0] || base.lecturerId || null,
           sourceRows: sessions.flatMap(session => session.sourceRows || []),
         });
       });
@@ -2722,14 +2783,31 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
   const initLecturerName = initLecturerId
     ? (displayLecturerName(lecturers.find(l => l.id === initLecturerId)) || initial?.instructorName || "")
     : (initial?.instructorName || "");
-  const initialCourseLecturers = normalizeCourseLecturerList([
-    { lecturerId: initLecturerId, instructorName: initLecturerName },
-    ...(Array.isArray(initial?.lecturers) ? initial.lecturers : []),
-    ...((initial?.schedule || []).map(session => ({
-      lecturerId: session?.lecturerId || session?.alternateLecturerId || null,
-      instructorName: session?.instructorName || session?.alternateInstructorName || "",
-    }))),
-  ]);
+  // Prefer the explicit course_lecturers list (persisted as a JSONB column on
+  // public.lessons since 20260526200000). When it's populated we trust it as
+  // the source of truth for the "מרצי הקורס" chips — that avoids session
+  // overrides leaking back into the course list on every reload. Legacy rows
+  // that pre-date the column fall through to the schedule-scavenging path.
+  const persistedLecturers = Array.isArray(initial?.lecturers) ? initial.lecturers : [];
+  const initialCourseLecturers = persistedLecturers.length
+    ? normalizeCourseLecturerList([
+        { lecturerId: initLecturerId, instructorName: initLecturerName },
+        ...persistedLecturers,
+      ])
+    : normalizeCourseLecturerList([
+        { lecturerId: initLecturerId, instructorName: initLecturerName },
+        // Flatten each session's lecturerIds[] so all per-column assignments
+        // surface as "מרצי הקורס" chips, in addition to the scalar lecturerId.
+        ...((initial?.schedule || []).flatMap(session => {
+          const ids = Array.isArray(session?.lecturerIds) && session.lecturerIds.length
+            ? session.lecturerIds
+            : [session?.lecturerId || session?.alternateLecturerId];
+          return ids.filter(Boolean).map(id => ({
+            lecturerId: id,
+            instructorName: "",
+          }));
+        })),
+      ]);
   const [courseLecturers, setCourseLecturers] = useState(initialCourseLecturers);
   const [additionalLecturerId, setAdditionalLecturerId] = useState("");
   const [description, setDescription]         = useState(initial?.description||"");
@@ -2772,6 +2850,14 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
       instructorName: displayLecturerName(matched) || normalized.instructorName || "",
     };
   })));
+  // Number of lecturer columns rendered in the schedule grid. Initialised
+  // from the widest session.lecturerIds array on first load — sessions that
+  // already have N lecturers force the grid to start with N columns so the
+  // saved values are visible without clicking "הוסף עמודת מרצה" each time.
+  const [lecturerColumnCount, setLecturerColumnCount] = useState(() => {
+    const widest = (initial?.schedule || []).reduce((m, s) => Math.max(m, Array.isArray(s?.lecturerIds) ? s.lecturerIds.length : 0), 0);
+    return Math.max(1, widest);
+  });
   const [saving, setSaving]                   = useState(false);
   const [localMsg, setLocalMsg]               = useState(null);
   const [teacherMessage, setTeacherMessage]   = useState("");
@@ -2856,27 +2942,51 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
   const [manEndTime, setManEndTime]     = useState("13:00");
   const [manCount, setManCount]         = useState(1);
 
-  // Resizable widths for the fixed columns: [#, date, start, end, topic, lecturer].
-  // All resizable widths in one array. First 6 are fixed columns (#, date,
-  // start, end, topic, lecturer); the rest are one per classroom (synced with
-  // courseStudios). The delete column at the end has a fixed width.
-  const FIXED_COL_COUNT = 6;
+  // All resizable widths in one array. Layout:
+  //   [5 structural cols (#, date, start, end, topic),
+  //    lecturerColumnCount lecturer cols,
+  //    courseStudios.length classroom cols]
+  // The delete column at the end has a fixed width.
+  const FIXED_STRUCT_COUNT = 5;
+  const LECTURER_COL_WIDTH = 130;
   const CLASSROOM_COL_WIDTH = 110;
   const DELETE_COL_WIDTH = 28;
   const [colWidths, setColWidths] = useState([30, 130, 72, 72, 150, 130]);
-  // Keep colWidths length in sync with courseStudios — preserve existing
-  // widths on add/remove so the user's resizing isn't lost.
+  // Keep colWidths length in sync with (lecturerColumnCount + courseStudios) —
+  // preserve existing widths on add/remove so the user's resizing isn't lost.
+  // Lecturer columns sit between the structural columns and the classroom
+  // columns: when lecturerColumnCount grows, append at index (FIXED + current
+  // lecturer cols); when courseStudios grows, append at the end.
+  const prevLecturerColCountRef = useRef(lecturerColumnCount);
+  const prevCourseStudiosCountRef = useRef(courseStudios.length);
   useEffect(() => {
     setColWidths(prev => {
-      const baseCount = FIXED_COL_COUNT;
-      const wantTotal = baseCount + courseStudios.length;
+      const wantTotal = FIXED_STRUCT_COUNT + lecturerColumnCount + courseStudios.length;
       if (prev.length === wantTotal) return prev;
-      if (prev.length < wantTotal) {
-        return [...prev, ...Array(wantTotal - prev.length).fill(CLASSROOM_COL_WIDTH)];
+      const prevLec = prevLecturerColCountRef.current;
+      const prevStudios = prevCourseStudiosCountRef.current;
+      let next = [...prev];
+      // Lecturer cols changed: splice inside [FIXED_STRUCT_COUNT, FIXED_STRUCT_COUNT + prevLec]
+      if (lecturerColumnCount > prevLec) {
+        const insertAt = FIXED_STRUCT_COUNT + prevLec;
+        next.splice(insertAt, 0, ...Array(lecturerColumnCount - prevLec).fill(LECTURER_COL_WIDTH));
+      } else if (lecturerColumnCount < prevLec) {
+        next.splice(FIXED_STRUCT_COUNT + lecturerColumnCount, prevLec - lecturerColumnCount);
       }
-      return prev.slice(0, wantTotal);
+      // Studio cols changed: append/trim at the end
+      if (courseStudios.length > prevStudios) {
+        next = [...next, ...Array(courseStudios.length - prevStudios).fill(CLASSROOM_COL_WIDTH)];
+      } else if (courseStudios.length < prevStudios) {
+        next = next.slice(0, FIXED_STRUCT_COUNT + lecturerColumnCount + courseStudios.length);
+      }
+      // Fallback safety — if mismatch persists, pad/truncate to target.
+      if (next.length < wantTotal) next = [...next, ...Array(wantTotal - next.length).fill(CLASSROOM_COL_WIDTH)];
+      if (next.length > wantTotal) next = next.slice(0, wantTotal);
+      prevLecturerColCountRef.current = lecturerColumnCount;
+      prevCourseStudiosCountRef.current = courseStudios.length;
+      return next;
     });
-  }, [courseStudios.length]);
+  }, [lecturerColumnCount, courseStudios.length]);
   const resizingRef = useRef(null);
   const startColResize = (e, colIdx) => {
     e.preventDefault();
@@ -2916,8 +3026,11 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
     let d = parseLocalDate(manStartDate);
     const defaultLecturerName = displayLecturerName(selectedLecturerObj) || "";
     const defaultStudioIds = courseStudioIds();
+    const defaultLecturerIds = lecturerId
+      ? [String(lecturerId), ...Array(Math.max(0, lecturerColumnCount - 1)).fill("")]
+      : Array(Math.max(1, lecturerColumnCount)).fill("");
     for(let i=0;i<count;i++) {
-      sessions.push({ date: formatLocalDateInput(d), startTime: manStartTime, endTime: manEndTime, topic: "", studioIds: [...defaultStudioIds], lecturerId: lecturerId || null, instructorName: defaultLecturerName });
+      sessions.push({ date: formatLocalDateInput(d), startTime: manStartTime, endTime: manEndTime, topic: "", studioIds: [...defaultStudioIds], lecturerId: lecturerId || null, lecturerIds: [...defaultLecturerIds], instructorName: defaultLecturerName });
       d.setDate(d.getDate()+7);
     }
     setSchedule(prev => dedupeScheduleEntries([...prev, ...sessions]));
@@ -2930,13 +3043,21 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
     const lastLesson = schedule[schedule.length-1];
     const nextDateObj = parseLocalDate(lastLesson.date || today());
     nextDateObj.setDate(nextDateObj.getDate()+7);
+    // Inherit lecturerIds layout from the first session so the new row keeps
+    // the same column count, but reset to "" (the admin picks per-row).
+    const baseLecturerIds = Array.isArray(firstLesson.lecturerIds) && firstLesson.lecturerIds.length
+      ? firstLesson.lecturerIds.map(() => "")
+      : Array(Math.max(1, lecturerColumnCount)).fill("");
+    const primary = firstLesson.lecturerId || lecturerId || null;
+    if (primary) baseLecturerIds[0] = String(primary);
     setSchedule(prev=>dedupeScheduleEntries([...prev, {
       date: formatLocalDateInput(nextDateObj),
       startTime: firstLesson.startTime||"09:00",
       endTime: firstLesson.endTime||"12:00",
       topic: "",
       studioIds: [...courseStudioIds()],
-      lecturerId: firstLesson.lecturerId || lecturerId || null,
+      lecturerId: primary,
+      lecturerIds: baseLecturerIds,
       instructorName: firstLesson.instructorName || displayLecturerName(selectedLecturerObj) || "",
     }]));
   };
@@ -2999,17 +3120,66 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
     }));
   };
 
-  const updateSessionLecturer = (index, value) => {
+  // Position-based lecturer slot update: column `colIdx` of session
+  // `sessionIndex` is set to `value` (or cleared if value === ""). Mirrors
+  // updateSessionStudioSlot. session.lecturerId tracks lecturerIds[0] for
+  // backward compatibility with all the downstream code that still reads the
+  // scalar field (LecturerPortal, public displays, conflict checks).
+  const updateSessionLecturerSlot = (sessionIndex, colIdx, value) => {
     const selected = courseLecturers.find((lecturer) => String(lecturer.lecturerId || "") === String(value));
-    setSchedule(prev => prev.map((session, sessionIndex) => (
-      sessionIndex === index
-        ? {
-            ...session,
-            lecturerId: selected?.lecturerId || null,
-            instructorName: selected?.instructorName || "",
-          }
-        : session
-    )));
+    setSchedule(prev => prev.map((session, idx) => {
+      if (idx !== sessionIndex) return session;
+      const current = Array.isArray(session.lecturerIds) ? [...session.lecturerIds].map(v => String(v || "")) : [];
+      while (current.length <= colIdx) current.push("");
+      current[colIdx] = selected?.lecturerId ? String(selected.lecturerId) : "";
+      const primary = current.find(id => id) || null;
+      const primaryLecturer = primary
+        ? courseLecturers.find((lecturer) => String(lecturer.lecturerId || "") === String(primary))
+        : null;
+      return {
+        ...session,
+        lecturerIds: current,
+        lecturerId: primary,
+        instructorName: primaryLecturer?.instructorName || "",
+      };
+    }));
+  };
+  // Append a new empty lecturer column to every session. Capped at
+  // courseLecturers.length so the user can never create more columns than
+  // there are lecturers to fill them with.
+  const addLecturerColumn = () => {
+    setLecturerColumnCount(c => Math.min(c + 1, Math.max(1, courseLecturers.length)));
+    setSchedule(prev => prev.map(session => {
+      const current = Array.isArray(session.lecturerIds) ? [...session.lecturerIds].map(v => String(v || "")) : [];
+      return { ...session, lecturerIds: [...current, ""] };
+    }));
+  };
+  // Drop the LAST lecturer column from every session. Floor at 1 — the
+  // primary lecturer column always stays visible. If the column being
+  // removed had assignments in any session, those selections are dropped
+  // (the user added the column intentionally, so removal is also their
+  // explicit choice; they can re-add and re-pick if it was a mistake).
+  // Cancel button at the top of the form is the broader undo path.
+  const removeLecturerColumn = () => {
+    setLecturerColumnCount(c => Math.max(1, c - 1));
+    setSchedule(prev => prev.map(session => {
+      if (!Array.isArray(session.lecturerIds)) return session;
+      // Drop the trailing slot. If only 1 slot is left, keep it so the
+      // primary column has somewhere to live.
+      const next = session.lecturerIds.length > 1
+        ? session.lecturerIds.slice(0, -1)
+        : [...session.lecturerIds];
+      const primary = next.find(id => id) || null;
+      const primaryLecturer = primary
+        ? courseLecturers.find((lecturer) => String(lecturer.lecturerId || "") === String(primary))
+        : null;
+      return {
+        ...session,
+        lecturerIds: next,
+        lecturerId: primary,
+        instructorName: primaryLecturer?.instructorName || (primary ? session.instructorName : ""),
+      };
+    }));
   };
 
   const addCourseLecturer = () => {
@@ -3367,12 +3537,32 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                       <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>נושא</div>
                       <input className="form-input" placeholder="אופציונלי" value={s.topic||""} style={{fontSize:13,padding:"4px 6px",height:32,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"topic",e.target.value)}/>
                     </div>
-                    <div style={{marginBottom:6}}>
-                      <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>שם מרצה</div>
-                      <select className="form-select" value={s.lecturerId||""} style={{fontSize:12,padding:"4px 6px",height:32,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionLecturer(i,e.target.value)}>
-                        <option value="">ללא שיוך</option>
-                        {[...courseLecturers].sort((a,b)=>a.instructorName.localeCompare(b.instructorName,"he")).map(l=><option key={l.lecturerId || l.instructorName} value={l.lecturerId || ""}>{l.instructorName}</option>)}
-                      </select>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:6}}>
+                      {Array.from({ length: lecturerColumnCount }, (_, colIdx) => {
+                        const sessionLecturerIds = Array.isArray(s.lecturerIds) ? s.lecturerIds.map(v => String(v || "")) : [];
+                        const currentValue = sessionLecturerIds[colIdx] || "";
+                        const optionLecturers = [...courseLecturers].sort((a,b)=>a.instructorName.localeCompare(b.instructorName,"he"));
+                        const orphan = currentValue && !optionLecturers.some(l => String(l.lecturerId || "") === currentValue)
+                          ? lecturers.find(l => String(l.id) === currentValue)
+                          : null;
+                        const usedByOtherColumns = new Set(sessionLecturerIds.filter((id, j) => j !== colIdx && id));
+                        return (
+                          <div key={`lec-${colIdx}`} style={{flex:1, minWidth:130}}>
+                            <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>{lecturerColumnCount === 1 ? "שם מרצה" : `מרצה ${colIdx+1}`}</div>
+                            <select className="form-select" value={currentValue} style={{fontSize:12,padding:"4px 6px",height:32,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionLecturerSlot(i, colIdx, e.target.value)}>
+                              <option value="">ללא שיוך</option>
+                              {optionLecturers.map(l => (
+                                <option key={l.lecturerId || l.instructorName} value={l.lecturerId || ""} disabled={!!l.lecturerId && usedByOtherColumns.has(String(l.lecturerId))}>
+                                  {l.instructorName}
+                                </option>
+                              ))}
+                              {orphan && (
+                                <option key={orphan.id} value={orphan.id}>{displayLecturerName(orphan)}</option>
+                              )}
+                            </select>
+                          </div>
+                        );
+                      })}
                     </div>
                     {courseStudios.length === 0 ? (
                       <div style={{fontSize:11,color:"var(--text3)",fontStyle:"italic"}}>הוסף כיתה מהפאנל "שיוך כיתות לימוד" כדי לבחור כיתה למפגש</div>
@@ -3424,7 +3614,10 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                     { label: "התחלה", resizable: true },
                     { label: "סיום", resizable: true },
                     { label: "נושא", resizable: true },
-                    { label: "שם מרצה", resizable: true },
+                    ...Array.from({ length: lecturerColumnCount }, (_, idx) => ({
+                      label: lecturerColumnCount === 1 ? "שם מרצה" : `מרצה ${idx+1}`,
+                      resizable: true,
+                    })),
                     ...courseStudios.map((cs, idx) => ({ label: `כיתה ${idx+1}`, resizable: true })),
                     { label: "", resizable: false, centered: true },
                   ].map((col, ci, arr) => (
@@ -3442,6 +3635,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                 <div style={{maxHeight:300,overflow:"auto",display:"flex",flexDirection:"column",gap:2}}>
                   {schedule.map((s,i)=>{
                     const sessionIds = Array.isArray(s.studioIds) ? s.studioIds.map(String) : [];
+                    const sessionLecturerIds = Array.isArray(s.lecturerIds) ? s.lecturerIds.map(String) : [];
                     return (
                     <div key={s._key || `${s.date}-${s.startTime}-${i}`} style={{display:"grid",gridTemplateColumns:gridTemplate,alignItems:"center",gap:0,fontSize:12,background:"var(--surface2)",border:"1px solid rgba(155,89,182,0.12)",borderTop:"none"}}>
                       <div style={{fontWeight:800,color:"#9b59b6",fontSize:11,textAlign:"center",padding:"4px 2px",borderRight:"1px solid rgba(155,89,182,0.15)"}}>#{i+1}</div>
@@ -3453,10 +3647,27 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                         {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
                       </select>
                       <input className="form-input" placeholder="אופציונלי" value={s.topic||""} style={{padding:"3px 6px",fontSize:12,height:28,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"topic",e.target.value)}/>
-                      <select className="form-select" value={s.lecturerId||""} style={{padding:"3px 4px",fontSize:11,height:28,width:"100%",boxSizing:"border-box"}} title="שם המרצה למפגש זה" onChange={e=>updateSessionLecturer(i,e.target.value)}>
-                        <option value="">ללא שיוך</option>
-                        {[...courseLecturers].sort((a,b)=>a.instructorName.localeCompare(b.instructorName,"he")).map(l=><option key={l.lecturerId || l.instructorName} value={l.lecturerId || ""}>{l.instructorName}</option>)}
-                      </select>
+                      {Array.from({ length: lecturerColumnCount }, (_, colIdx) => {
+                        const currentValue = sessionLecturerIds[colIdx] || "";
+                        const optionLecturers = [...courseLecturers].sort((a,b)=>a.instructorName.localeCompare(b.instructorName,"he"));
+                        const orphan = currentValue && !optionLecturers.some(l => String(l.lecturerId || "") === currentValue)
+                          ? lecturers.find(l => String(l.id) === currentValue)
+                          : null;
+                        const usedByOtherColumns = new Set(sessionLecturerIds.filter((id, j) => j !== colIdx && id));
+                        return (
+                          <select key={`lec-${colIdx}`} className="form-select" value={currentValue} style={{padding:"3px 4px",fontSize:11,height:28,width:"100%",boxSizing:"border-box"}} title={lecturerColumnCount === 1 ? "שם המרצה למפגש זה" : `מרצה ${colIdx+1} למפגש זה`} onChange={e=>updateSessionLecturerSlot(i, colIdx, e.target.value)}>
+                            <option value="">ללא שיוך</option>
+                            {optionLecturers.map(l => (
+                              <option key={l.lecturerId || l.instructorName} value={l.lecturerId || ""} disabled={!!l.lecturerId && usedByOtherColumns.has(String(l.lecturerId))}>
+                                {l.instructorName}
+                              </option>
+                            ))}
+                            {orphan && (
+                              <option key={orphan.id} value={orphan.id}>{displayLecturerName(orphan)}</option>
+                            )}
+                          </select>
+                        );
+                      })}
                       {courseStudios.map((cs, colIdx) => {
                         const currentValue = sessionIds[colIdx] || "";
                         // Per-session classrooms: show ALL classrooms. Selecting one
@@ -3490,8 +3701,20 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
               </>
             )}
 
-            <div style={{display:"flex",gap:6,marginTop:8}}>
+            <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
               <button className="btn btn-secondary btn-sm" onClick={appendLessonFromExisting}>➕ שיעור נוסף</button>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={addLecturerColumn}
+                disabled={lecturerColumnCount >= courseLecturers.length}
+                title={lecturerColumnCount >= courseLecturers.length ? "הוסף עוד מרצה ב\"מרצי הקורס\" כדי להוסיף עמודה" : "הוסף עמודת מרצה ללוח השיעורים"}
+              >👤 הוסף עמודת מרצה</button>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={removeLecturerColumn}
+                disabled={lecturerColumnCount <= 1}
+                title={lecturerColumnCount <= 1 ? "נשארה עמודת מרצה אחת בלבד" : "הסר את עמודת המרצה האחרונה (כולל הבחירות בה)"}
+              >👤 הסר עמודת מרצה</button>
               <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>setSchedule([])}>🗑️ נקה הכל</button>
             </div>
           </div>
