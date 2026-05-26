@@ -150,7 +150,7 @@ git stash pop  # להחזיר כשתרצה להמשיך עליו
 
 ## 🔗 קישורים
 
-- **PR URL**: _(יתעדכן אחרי `gh pr create`)_
+- **PR URL**: https://github.com/nimig10/machsan/pull/24
 - **Vercel Preview**: _(יקושר מתוך ה-PR אחרי שה-CI יסיים)_
 - **Dev DB**: https://supabase.com/dashboard/project/mhvujejdlmtowypjdhjd
 - **Prod DB**: https://supabase.com/dashboard/project/wxkyqgwwraojnbmyyfco
