@@ -4790,6 +4790,14 @@ ${inventory}
             const dateLabel = `יום ${dayName}, ${dd} ב${HE_MONTHS[offsetDate.getMonth()]} ${yyyy}`;
             const allSessions = [];
             dailyLessons.forEach(lesson => {
+              // id → name map for resolving session.lecturerIds[] to display
+              // names joined by " + " (PR #24 multi-lecturer).
+              const lessonLecturerById = new Map();
+              if (Array.isArray(lesson?.lecturers)) {
+                for (const item of lesson.lecturers) {
+                  if (item?.lecturerId) lessonLecturerById.set(String(item.lecturerId), String(item.instructorName || "").trim());
+                }
+              }
               (lesson.schedule||[]).forEach(s => {
                 if (s.date === targetDate) {
                   const sessionStudioIds = Array.isArray(s.studioIds) && s.studioIds.length
@@ -4799,7 +4807,12 @@ ${inventory}
                     .map(id => (studios || []).find(st => String(st.id) === String(id))?.name)
                     .filter(Boolean)
                     .join(" + ");
-                  allSessions.push({ lessonName: lesson.name||"", instructorName: lesson.instructorName||"", topic: s.topic||"", startTime: s.startTime||"", endTime: s.endTime||"", track: lesson.track||"", studioName });
+                  const sessionLecturerIds = Array.isArray(s.lecturerIds) ? s.lecturerIds.filter(Boolean) : [];
+                  const joinedLecturers = sessionLecturerIds.length
+                    ? sessionLecturerIds.map(id => lessonLecturerById.get(String(id)) || "").filter(Boolean).join(" + ")
+                    : "";
+                  const instructorName = joinedLecturers || s.instructorName || lesson.instructorName || "";
+                  allSessions.push({ lessonName: lesson.name||"", instructorName, topic: s.topic||"", startTime: s.startTime||"", endTime: s.endTime||"", track: lesson.track||"", studioName });
                 }
               });
             });

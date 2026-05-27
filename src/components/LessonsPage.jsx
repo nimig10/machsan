@@ -2595,20 +2595,38 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                     <div style={{fontWeight:800,fontSize:12,color:"var(--green)",marginBottom:8}}><Calendar size={16} strokeWidth={1.75} /> מפגשים ({getLessonDisplaySchedule(detailTarget).length})</div>
                     {getLessonDisplaySchedule(detailTarget).length === 0
                       ? <div style={{fontSize:12,color:"var(--text3)"}}>אין מפגשים רשומים</div>
-                      : <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:300,overflowY:"auto"}}>
-                          {getLessonDisplaySchedule(detailTarget).sort((a,b)=>a.date.localeCompare(b.date)).map((s,i)=>{
-                            const isPast = s.date < today();
-                            return (
-                              <div key={i} style={{display:"flex",gap:10,alignItems:"center",padding:"8px 12px",borderRadius:8,background:isPast?"rgba(0,0,0,0.1)":"rgba(46,204,113,0.07)",opacity:isPast?0.55:1}}>
-                                <span style={{fontSize:13,fontWeight:800,minWidth:92}}>{formatLessonDateShort(s.date)}</span>
-                                {s.startTime && <span style={{fontSize:14,fontWeight:800,color:"var(--green)",letterSpacing:0.3,fontVariantNumeric:"tabular-nums"}}>{s.startTime}{s.endTime?`–${s.endTime}`:""}</span>}
-                                {(s.instructorName || s.alternateInstructorName) && <span style={{fontSize:11,color:"#f5a623",fontWeight:800}}>מרצה: {s.instructorName || s.alternateInstructorName}</span>}
-                                {s.topic && <span style={{fontSize:12,color:"var(--text2)",flex:1}}>· {s.topic}</span>}
-                                {isPast && <span style={{fontSize:10,color:"var(--text3)"}}>עבר</span>}
-                              </div>
-                            );
-                          })}
-                        </div>
+                      : (() => {
+                          // Build id → name map once for the whole sessions block so
+                          // session.lecturerIds[] can resolve to display names joined
+                          // by " + " (multi-lecturer per session, PR #24).
+                          const lessonLecturerById = new Map();
+                          if (Array.isArray(detailTarget?.lecturers)) {
+                            for (const item of detailTarget.lecturers) {
+                              if (item?.lecturerId) lessonLecturerById.set(String(item.lecturerId), String(item.instructorName || "").trim());
+                            }
+                          }
+                          return (
+                            <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:300,overflowY:"auto"}}>
+                              {getLessonDisplaySchedule(detailTarget).sort((a,b)=>a.date.localeCompare(b.date)).map((s,i)=>{
+                                const isPast = s.date < today();
+                                const sessionLecturerIds = Array.isArray(s.lecturerIds) ? s.lecturerIds.filter(Boolean) : [];
+                                const joinedLecturers = sessionLecturerIds.length
+                                  ? sessionLecturerIds.map(id => lessonLecturerById.get(String(id)) || "").filter(Boolean).join(" + ")
+                                  : "";
+                                const lecturerLabel = joinedLecturers || s.instructorName || s.alternateInstructorName || "";
+                                return (
+                                  <div key={i} style={{display:"flex",gap:10,alignItems:"center",padding:"8px 12px",borderRadius:8,background:isPast?"rgba(0,0,0,0.1)":"rgba(46,204,113,0.07)",opacity:isPast?0.55:1}}>
+                                    <span style={{fontSize:13,fontWeight:800,minWidth:92}}>{formatLessonDateShort(s.date)}</span>
+                                    {s.startTime && <span style={{fontSize:14,fontWeight:800,color:"var(--green)",letterSpacing:0.3,fontVariantNumeric:"tabular-nums"}}>{s.startTime}{s.endTime?`–${s.endTime}`:""}</span>}
+                                    {lecturerLabel && <span style={{fontSize:11,color:"#f5a623",fontWeight:800}}>מרצה: {lecturerLabel}</span>}
+                                    {s.topic && <span style={{fontSize:12,color:"var(--text2)",flex:1}}>· {s.topic}</span>}
+                                    {isPast && <span style={{fontSize:10,color:"var(--text3)"}}>עבר</span>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()
                     }
                   </div>
                   {detailTarget.description && <div style={{fontSize:13,color:"var(--text3)",display:"flex",alignItems:"center",gap:4}}><FileText size={12} strokeWidth={1.75}/> {detailTarget.description}</div>}

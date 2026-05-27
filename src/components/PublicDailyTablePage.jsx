@@ -101,17 +101,32 @@ export function PublicDailyTablePage() {
     const out = [];
     // From lesson schedules
     lessons.forEach(lesson => {
+      // Build id → name map from the course chips so per-session lecturer
+      // assignments resolve to display names, joined with " + ".
+      const lessonLecturerById = new Map();
+      if (Array.isArray(lesson?.lecturers)) {
+        for (const item of lesson.lecturers) {
+          if (item?.lecturerId) lessonLecturerById.set(String(item.lecturerId), String(item.instructorName || "").trim());
+        }
+      }
       (lesson.schedule||[]).forEach(s => {
         if (s.date !== today) return;
         const raw = Array.isArray(s.studioIds) && s.studioIds.length
           ? s.studioIds
           : [s.studioId, s.secondaryStudioId, lesson.studioId].filter(Boolean);
         const studioIds = [...new Set(raw.map(String))];
+        // Multi-lecturer: prefer session.lecturerIds[] joined by " + ".
+        // Falls back to session.instructorName (scalar) then course primary.
+        const sessionLecturerIds = Array.isArray(s.lecturerIds) ? s.lecturerIds.filter(Boolean) : [];
+        const joinedLecturers = sessionLecturerIds.length
+          ? sessionLecturerIds.map(id => lessonLecturerById.get(String(id)) || "").filter(Boolean).join(" + ")
+          : "";
+        const instructor = joinedLecturers || s.instructorName || lesson.instructorName || lesson.lecturer || "";
         out.push({
           lessonId:   lesson.id || "",
           track:      lesson.track || "",
           course:     lesson.courseName || lesson.name || "",
-          instructor: lesson.instructorName || lesson.lecturer || "",
+          instructor,
           startTime:  s.startTime || "",
           endTime:    s.endTime   || "",
           studioId:   studioIds[0] || "",
