@@ -33,6 +33,26 @@ function normalizeSessionStudioIds(session = {}) {
   return out;
 }
 
+function normalizeSessionLecturerIds(session = {}) {
+  // Position-preserving: each index is an independent lecturer column slot.
+  // Legacy entries (scalar `lecturerId`) become [lecturerId] so column 1 holds
+  // the original lecturer.
+  if (Array.isArray(session.lecturerIds)) {
+    return session.lecturerIds.map(v => (v === null || v === undefined) ? "" : String(v).trim());
+  }
+  const out = [];
+  if (session.lecturerId) out.push(String(session.lecturerId).trim());
+  return out;
+}
+
+function trimTrailingEmpties(arr) {
+  const out = Array.isArray(arr) ? [...arr] : [];
+  while (out.length > 0 && (out[out.length - 1] === "" || out[out.length - 1] === null || out[out.length - 1] === undefined)) {
+    out.pop();
+  }
+  return out;
+}
+
 function buildCourseStudiosFromLesson(rawLesson) {
   const out = [];
   const seen = new Set();
@@ -73,14 +93,62 @@ function normalizeCourseStudiosColumn(raw) {
   return out;
 }
 
+function normalizeCourseLecturersColumn(raw) {
+  // Accepts the JSONB `course_lecturers` column value. Each entry is either a
+  // {lecturerId, instructorName?} object (current shape) or a bare id
+  // (defensive). Returns [{lecturerId, instructorName}] with dedup + empty
+  // filter. Names are persisted as a denormalised hint — readers should
+  // resolve the canonical name from public.lecturers when available.
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const entry of raw) {
+    const isObj = entry && typeof entry === "object";
+    const value = isObj ? entry.lecturerId : entry;
+    if (value === null || value === undefined) continue;
+    const key = String(value).trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      lecturerId: key,
+      instructorName: isObj ? String(entry.instructorName || "").trim() : "",
+    });
+  }
+  return out;
+}
+
+function buildCourseLecturersFromLesson(rawLesson) {
+  // Fallback derivation for rows saved BEFORE the course_lecturers column
+  // existed. Mirrors buildCourseStudiosFromLesson — union of:
+  //   * the (then-only) scalar lecturer_id
+  //   * each session.lecturerIds[] / legacy session.lecturerId
+  const out = [];
+  const seen = new Set();
+  const push = (value) => {
+    if (value === null || value === undefined) return;
+    const key = String(value).trim();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push({ lecturerId: key, instructorName: "" });
+  };
+  push(rawLesson?.lecturer_id);
+  if (Array.isArray(rawLesson?.schedule)) {
+    for (const s of rawLesson.schedule) {
+      normalizeSessionLecturerIds(s).forEach(push);
+    }
+  }
+  return out;
+}
+
 function rowToBlob(r) {
   if (!r) return null;
   const rawSchedule = Array.isArray(r.schedule) ? r.schedule : [];
-  // Normalize legacy schedule entries (studioId+secondaryStudioId) into studioIds[]
-  // so every consumer sees the new shape regardless of when the row was written.
+  // Normalize legacy schedule entries into studioIds[]/lecturerIds[] so every
+  // consumer sees the new shape regardless of when the row was written.
   const schedule = rawSchedule.map(s => ({
     ...s,
     studioIds: normalizeSessionStudioIds(s),
+    lecturerIds: normalizeSessionLecturerIds(s),
   }));
   // Prefer the explicit `course_studios` JSONB column when it has data; fall
   // back to derivation for legacy rows that were saved before the column
@@ -91,6 +159,12 @@ function rowToBlob(r) {
   const studios = explicitStudios.length
     ? explicitStudios
     : buildCourseStudiosFromLesson({ ...r, schedule });
+  // Same pattern for course_lecturers — explicit column wins; legacy rows
+  // hydrate via union of scalar lecturer_id + session lecturerIds.
+  const explicitLecturers = normalizeCourseLecturersColumn(r.course_lecturers);
+  const lecturersList = explicitLecturers.length
+    ? explicitLecturers
+    : buildCourseLecturersFromLesson({ ...r, schedule });
   return {
     id:                       r.id,
     name:                     r.name ?? "",
@@ -102,6 +176,7 @@ function rowToBlob(r) {
     description:              r.description ?? "",
     studioId:                 r.studio_id ?? null,
     studios,
+    lecturers:                lecturersList,
     certificateTemplateType:  r.certificate_template_type ?? "",
     lecturerNotifiedAt7d:     r.lecturer_notified_at_7d ?? null,
     schedule,
@@ -115,18 +190,25 @@ function rowToBlob(r) {
 function blobToRow(l) {
   if (!l?.id) return null;
   const name = String(l.name || "").trim();
-  // Normalize each schedule entry to write `studioIds` (array) and drop the
-  // legacy `studioId` / `secondaryStudioId` fields so the JSONB stays clean.
+  // Normalize each schedule entry to write `studioIds` + `lecturerIds` (arrays)
+  // and drop the legacy `studioId` / `secondaryStudioId` fields so the JSONB
+  // stays clean. Trim trailing empties on both arrays so the on-disk shape
+  // doesn't grow unbounded across edits.
   const schedule = (Array.isArray(l.schedule) ? l.schedule : []).map((s) => {
-    const studioIds = normalizeSessionStudioIds(s);
+    const studioIds = trimTrailingEmpties(normalizeSessionStudioIds(s));
+    const lecturerIds = trimTrailingEmpties(normalizeSessionLecturerIds(s));
     const { studioId: _legacyPrimary, secondaryStudioId: _legacySecondary, ...rest } = s || {};
-    return { ...rest, studioIds };
+    return { ...rest, studioIds, lecturerIds };
   });
   // Course-level `studio_id` column persists the primary studio (first in the
   // course studios list, with fallback to the blob's studioId). Used by the
   // legacy column on `lessons` table — full array lives inside `course_studios`.
   const courseStudios = normalizeCourseStudiosColumn(l.studios);
   const coursePrimary = courseStudios[0]?.studioId || l.studioId || null;
+  // Course-level lecturer chips. Mirror of course_studios — the `lecturer_id`
+  // scalar column stays as the course primary, the full chip list lives in
+  // `course_lecturers` jsonb. Empty array is the column default.
+  const courseLecturers = normalizeCourseLecturersColumn(l.lecturers);
   return {
     id:                         l.id,
     name:                       name || "(ללא שם)",   // NOT NULL — never empty
@@ -140,6 +222,9 @@ function blobToRow(l) {
     // Explicit course-level classrooms (chips). Distinguishes from session
     // overrides stored inside `schedule[].studioIds`.
     course_studios:             courseStudios,
+    // Explicit course-level lecturers (chips). Distinguishes from session
+    // overrides stored inside `schedule[].lecturerIds`.
+    course_lecturers:           courseLecturers,
     certificate_template_type:  l.certificateTemplateType || null,
     lecturer_notified_at_7d:    l.lecturerNotifiedAt7d || null,
     schedule,

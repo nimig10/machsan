@@ -57,6 +57,34 @@ function getLessonCourseStudioIds(lesson) {
   return normalizeStudioIdList(ids);
 }
 
+function normalizeSessionLecturerIdList(session) {
+  // Position-independent list (no empty gaps) — used by display/filter callers
+  // that only care about which lecturer ids appear in the session.
+  if (Array.isArray(session?.lecturerIds)) {
+    const out = [];
+    const seen = new Set();
+    for (const value of session.lecturerIds) {
+      if (!hasLinkedValue(value)) continue;
+      const key = String(value);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(key);
+    }
+    return out;
+  }
+  const legacy = session?.lecturerId || session?.alternateLecturerId;
+  return hasLinkedValue(legacy) ? [String(legacy)] : [];
+}
+
+export function getEffectiveLessonLecturerIds(session, lesson) {
+  // Prefer session-level lecturerIds[]; fall back to course-level (single)
+  // lecturer when no session assignment is present.
+  const sessionIds = normalizeSessionLecturerIdList(session);
+  if (sessionIds.length) return sessionIds;
+  const courseLevel = lesson?.lecturerId;
+  return hasLinkedValue(courseLevel) ? [String(courseLevel)] : [];
+}
+
 function getLessonScheduleEntries(lesson) {
   return (Array.isArray(lesson?.schedule) ? lesson.schedule : [])
     .filter((session) => session?.date)
@@ -68,6 +96,7 @@ function getLessonScheduleEntries(lesson) {
       studioIds: getSessionStudioIdsLegacy(session),
       kitId: session.kitId || null,
       lecturerId: session.lecturerId || session.alternateLecturerId || null,
+      lecturerIds: normalizeSessionLecturerIdList(session),
       instructorName: String(session.instructorName || session.alternateInstructorName || "").trim(),
     }))
     .sort(compareDateTimeParts);
@@ -91,7 +120,21 @@ export function buildLessonStudioBookings(lessons = []) {
       // שיעור ללא כיתה עדיין מופיע בלו"ז — studioId יהיה null
 
       const lessonName = String(lesson.name || "").trim();
-      const instructorName = String(session.instructorName || lesson.instructorName || "").trim();
+      // Multi-lecturer support: join all session lecturers with " + " for
+      // display in public boards / daily tables / secretary dashboard.
+      // Resolves names from lesson.lecturers[] (course chips) when present;
+      // falls back to session.instructorName for the first slot.
+      const lessonLecturerById = new Map();
+      if (Array.isArray(lesson?.lecturers)) {
+        for (const item of lesson.lecturers) {
+          if (item?.lecturerId) lessonLecturerById.set(String(item.lecturerId), String(item.instructorName || "").trim());
+        }
+      }
+      const sessionLecturerIds = Array.isArray(session?.lecturerIds) ? session.lecturerIds.filter(Boolean) : [];
+      const joinedNames = sessionLecturerIds.length
+        ? sessionLecturerIds.map(id => lessonLecturerById.get(String(id)) || "").filter(Boolean).join(" + ")
+        : "";
+      const instructorName = joinedNames || String(session.instructorName || lesson.instructorName || "").trim();
       const track = String(lesson.track || "").trim();
       const pushBooking = (studioId, studioIndex = 0) => bookings.push({
         id: `lesson_booking_${lesson.id}_${index}${studioIndex ? `_secondary_${studioIndex}` : ""}`,

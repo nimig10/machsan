@@ -276,6 +276,12 @@ export function LecturerPortal({
       if (hasLinkedValue(lesson.lecturerId) && String(lesson.lecturerId) === lecturerId) return true;
       if (normalizeName(lesson.instructorName) === lecturerName) return true;
       if (lecturerEmail && String(lesson.instructorEmail || "").trim().toLowerCase() === lecturerEmail) return true;
+      // Multi-lecturer: match if the lecturer appears in any session's
+      // lecturerIds[] (column 2+ assignments don't surface via lesson.lecturerId).
+      if (Array.isArray(lesson.lecturers) && lesson.lecturers.some(item => String(item?.lecturerId || "") === lecturerId)) return true;
+      if (Array.isArray(lesson.schedule) && lesson.schedule.some(session =>
+        Array.isArray(session?.lecturerIds) && session.lecturerIds.some(id => String(id || "") === lecturerId)
+      )) return true;
       return false;
     });
   }, [currentLecturer, lessons]);

@@ -69,6 +69,13 @@ export function PublicDisplayPage() {
   const todayLessons = useMemo(() => {
     const rows = [];
     lessons.forEach(lesson => {
+      // id → name map for resolving session lecturerIds to display names.
+      const lessonLecturerById = new Map();
+      if (Array.isArray(lesson?.lecturers)) {
+        for (const item of lesson.lecturers) {
+          if (item?.lecturerId) lessonLecturerById.set(String(item.lecturerId), String(item.instructorName || "").trim());
+        }
+      }
       (lesson.schedule || []).forEach(s => {
         if (s.date !== today) return;
         const sessionStudios = Array.isArray(s.studioIds) && s.studioIds.length
@@ -76,12 +83,18 @@ export function PublicDisplayPage() {
           : [s.studioId, s.secondaryStudioId, lesson.studioId].filter(Boolean);
         const uniq = [...new Set(sessionStudios.map(String))];
         const list = uniq.length ? uniq : [""];
+        // Multi-lecturer: prefer session.lecturerIds[] joined by " + ".
+        const sessionLecturerIds = Array.isArray(s.lecturerIds) ? s.lecturerIds.filter(Boolean) : [];
+        const joinedLecturers = sessionLecturerIds.length
+          ? sessionLecturerIds.map(id => lessonLecturerById.get(String(id)) || "").filter(Boolean).join(" + ")
+          : "";
+        const instructorName = joinedLecturers || s.instructorName || lesson.instructorName || "";
         list.forEach(stId => {
           rows.push({
             startTime:      s.startTime      || "",
             endTime:        s.endTime        || "",
             courseName:     lesson.courseName || lesson.name || "",
-            instructorName: lesson.instructorName || "",
+            instructorName,
             track:          lesson.track     || "",
             topic:          s.topic          || "",
             studioId:       stId,

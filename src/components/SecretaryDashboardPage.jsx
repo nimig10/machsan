@@ -207,6 +207,14 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
       rows.filter(r => r.kind === "lesson").map(r => `${r.studioId}_${r.startTime}`)
     );
     (lessons || []).forEach(lesson => {
+      // Build id → name map for resolving session.lecturerIds[] to display
+      // names joined by " + " (PR #24 multi-lecturer).
+      const lessonLecturerById = new Map();
+      if (Array.isArray(lesson?.lecturers)) {
+        for (const item of lesson.lecturers) {
+          if (item?.lecturerId) lessonLecturerById.set(String(item.lecturerId), String(item.instructorName || "").trim());
+        }
+      }
       (lesson.schedule || []).forEach(session => {
         if (session.date !== dayViewDate) return;
         const raw = Array.isArray(session.studioIds) && session.studioIds.length
@@ -214,6 +222,11 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
           : [session.studioId, session.secondaryStudioId, lesson.studioId].filter(Boolean);
         const ids = [...new Set(raw.map(String))];
         const list = ids.length ? ids : [""];
+        const sessionLecturerIds = Array.isArray(session.lecturerIds) ? session.lecturerIds.filter(Boolean) : [];
+        const joinedLecturers = sessionLecturerIds.length
+          ? sessionLecturerIds.map(id => lessonLecturerById.get(String(id)) || "").filter(Boolean).join(" + ")
+          : "";
+        const instructor = joinedLecturers || session.instructorName || lesson.instructorName || lesson.lecturer || "";
         list.forEach(stId => {
           const key = `${stId}_${session.startTime || ""}`;
           if (usedLessonStudioTimes.has(key)) return;
@@ -223,7 +236,7 @@ export function SecretaryDashboardPage({ certifications, studios, studioBookings
             endTime:    session.endTime   || "",
             studioId:   stId,
             label:      lesson.courseName || lesson.name || "",
-            instructor: lesson.instructorName || lesson.lecturer || "",
+            instructor,
             kind:       "lesson",
             isNight:    false,
             color:      LESSON_COLOR,
