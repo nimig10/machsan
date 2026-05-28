@@ -1,7 +1,7 @@
 // PublicForm.jsx — public loan request form
 import { AlertTriangle, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mail, Mic, Minus, Moon, Package, Pencil, Phone, Save, School, Search, Settings, Shield, ShieldCheck, Trash2, User, X, XCircle } from "lucide-react";
 import { useEffect, useState, useRef, useMemo } from "react";
-import { formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR } from "../utils.js";
+import { formatDate, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR, groupReservationItemsByCategory } from "../utils.js";
 import { supabase } from "../supabaseClient.js";
 import { listStudents } from "../utils/studentsApi.js";
 import { listLessons } from "../utils/lessonsApi.js";
@@ -5047,7 +5047,10 @@ ${inventory}
                   const photogResCerts = photogRec?.certs || {};
                   const soundResCerts = soundRec?.certs || {};
                   return (<div style={{padding:"12px 14px",borderTop:`1px solid ${sBorder(st)}`,display:"flex",flexDirection:"column",gap:10}}>
-                  {(r.items||[]).map((item,i)=>{
+                  {groupReservationItemsByCategory(r.items, equipment).map(group=>(
+                  <div key={group.category} style={{display:"flex",flexDirection:"column",gap:10}}>
+                  <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",paddingTop:6}}>{group.category}</div>
+                  {group.entries.map(({item,index:i})=>{
                     const eq=equipment.find(e=>String(e.id)===String(item.equipment_id));
                     const img=eq?.image;
                     const rKey=`${item.equipment_id}:${r.id}`;
@@ -5127,6 +5130,8 @@ ${inventory}
                       </div>
                     </div>);
                   })}
+                  </div>
+                  ))}
                   {removingItemsForResId===r.id && (r.items?.length||0)>0 && (
                     <button
                       type="button"

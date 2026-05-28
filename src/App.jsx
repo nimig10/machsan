@@ -1027,6 +1027,10 @@ const css = `
     .modal { max-width:100%; max-height:calc(100dvh - 60px); border-radius:var(--r) var(--r) 0 0; }
     .modal-overlay { align-items:flex-end; padding:60px 0 0 0; }
     .modal-lg { max-width:100%; }
+    /* Dashboard quick-view: anchor to top + cap height so the bottom action
+       button ("הוחזר"/"אשר בקשה") clears the fixed bottom nav (60px+safe-area). */
+    .dash-quickview-overlay { align-items:flex-start !important; }
+    .dash-quickview-modal { max-height:calc(100dvh - 60px - env(safe-area-inset-bottom,0px) - 56px) !important; }
     .search-bar { min-width:0; flex:1; }
     .flex-between { flex-wrap:wrap; gap:10px; }
     html, body, #root { min-height:100%; }
@@ -2004,7 +2008,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                       </div>
                       {isEmpty&&<span style={{fontSize:10,fontWeight:900,color:"var(--red)",background:"rgba(231,76,60,0.12)",border:"1px solid rgba(231,76,60,0.4)",borderRadius:6,padding:"2px 7px",whiteSpace:"nowrap"}}>אזל במלאי</span>}
                     </div>
-                    {eq.notes && <div className="chip" style={{marginTop:6,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%",display:"block",fontSize:11}} title={eq.notes}>💬 {eq.notes}</div>}
+                    {eq.notes && <div className="chip" style={{marginTop:6,whiteSpace:"normal",overflowWrap:"anywhere",wordBreak:"break-word",maxWidth:"100%",width:"100%",boxSizing:"border-box",display:"block",fontSize:11,lineHeight:1.5,textAlign:"right"}} title={eq.notes}>💬 {eq.notes}</div>}
                     <div style={{marginTop:8}}>{statusBadge(eq.status)}</div>
                     <div className="flex gap-2" style={{marginTop:12,flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
                       <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"edit",item:eq})} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> עריכה</button>
