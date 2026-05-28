@@ -1,6 +1,6 @@
 // DashboardPage.jsx — admin dashboard page
 import { useState } from "react";
-import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, syncReservationStatusToBlob, getLoanTypeColor, normalizeName } from "../utils.js";
+import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, syncReservationStatusToBlob, getLoanTypeColor, normalizeName, groupReservationItemsByCategory } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import { Activity, AlertTriangle, ArrowUpFromLine, Briefcase, Calendar, Camera, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Layers, MessageSquare, Mic, Package, RefreshCw, Shield, User, Wrench, X, XCircle } from "lucide-react";
@@ -463,8 +463,8 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
 
       {/* Dashboard quick-view modal */}
       {dashViewRes&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}} onClick={e=>e.target===e.currentTarget&&setDashViewRes(null)}>
-          <div style={{width:"100%",maxWidth:640,background:"var(--surface)",borderRadius:18,border:"1px solid var(--border)",direction:"rtl",maxHeight:"92vh",overflowY:"auto"}}>
+        <div className="dash-quickview-overlay" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}} onClick={e=>e.target===e.currentTarget&&setDashViewRes(null)}>
+          <div className="dash-quickview-modal" style={{width:"100%",maxWidth:640,background:"var(--surface)",borderRadius:18,border:"1px solid var(--border)",direction:"rtl",maxHeight:"92vh",overflowY:"auto"}}>
             {/* Header */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 22px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"18px 18px 0 0",position:"sticky",top:0,zIndex:1}}>
               <div>
@@ -544,8 +544,10 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                     const soundRec = isProduction && dashViewRes.crew_sound_name ? findStudentByName(dashViewRes.crew_sound_name) : null;
                     const photogCertsR = photogRec?.certs || {};
                     const soundCertsR = soundRec?.certs || {};
-                    return dashViewRes.items?.map((i,j)=>{
-                    const eq = equipment.find(e=>e.id==i.equipment_id);
+                    return groupReservationItemsByCategory(dashViewRes.items, equipment).map(group => (
+                    <div key={group.category} style={{display:"flex",flexDirection:"column",gap:8}}>
+                      <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",paddingTop:6}}>{group.category}</div>
+                      {group.entries.map(({item:i, eq, index:j})=>{
                     const hasReport = equipmentReports.some(rp=>rp.equipment_id===String(i.equipment_id)&&rp.reservation_id===String(dashViewRes.id)&&rp.status==="open");
                     const img = eq?.image || eq?.img || "";
                     const showImg = img && (img.startsWith("data:") || img.startsWith("http"));
@@ -560,13 +562,12 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                             ? <img src={img} alt={eq?.name||""} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                             : <Package size={16} strokeWidth={1.75} />}
                         </div>
-                        {/* Name + category */}
+                        {/* Name */}
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontWeight:800,fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                          <div style={{fontWeight:800,fontSize:14,whiteSpace:"normal",overflowWrap:"anywhere",wordBreak:"break-word",lineHeight:1.3}}>
                             {hasReport&&<span style={{color:"#e74c3c",marginLeft:6}}>⚠️</span>}
                             {eq?.name||i.name||"?"}
                           </div>
-                          {eq?.category&&<div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>{eq.category}</div>}
                           {needsCert && (
                             <div style={{marginTop:6,display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,color:"#f59e0b",background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.35)",borderRadius:6,padding:"2px 8px"}}>
                               <Shield size={10} strokeWidth={2} /> דרושה הסמכה
@@ -577,7 +578,9 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                         <div style={{background:"var(--accent-glow)",border:"1px solid var(--accent)",borderRadius:8,padding:"5px 14px",fontSize:16,fontWeight:900,color:"var(--accent)",flexShrink:0}}>×{i.quantity}</div>
                       </div>
                     );
-                  });
+                  })}
+                    </div>
+                  ));
                   })()}
                 </div>
               </div>

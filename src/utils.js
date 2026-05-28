@@ -491,6 +491,28 @@ export function getPrivateLoanLimitedQty(items = [], equipment = []) {
   }, 0);
 }
 
+// Group reservation items by their equipment category (from the "ציוד" rubric),
+// returning groups sorted alphabetically (Hebrew). "ללא קטגוריה" is always last.
+// Each entry keeps the resolved equipment row and the item's ORIGINAL index so
+// callers can preserve stable React keys / index-based logic after grouping.
+export function groupReservationItemsByCategory(items = [], equipment = []) {
+  const NO_CAT = "ללא קטגוריה";
+  const byCat = new Map();
+  (items || []).forEach((item, index) => {
+    const eq = (equipment || []).find((e) => String(e.id) === String(item.equipment_id));
+    const cat = (eq?.category && String(eq.category).trim()) || NO_CAT;
+    if (!byCat.has(cat)) byCat.set(cat, []);
+    byCat.get(cat).push({ item, eq, index });
+  });
+  return [...byCat.keys()]
+    .sort((a, b) => {
+      if (a === NO_CAT) return 1;
+      if (b === NO_CAT) return -1;
+      return a.localeCompare(b, "he");
+    })
+    .map((category) => ({ category, entries: byCat.get(category) }));
+}
+
 export function normalizeReservationStatus(status) {
   return status === "ממתין לאישור ראש המחלקה" ? "אישור ראש מחלקה" : status;
 }
