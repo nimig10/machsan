@@ -564,7 +564,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                         </div>
                         {/* Name */}
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontWeight:800,fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                          <div style={{fontWeight:800,fontSize:14,whiteSpace:"normal",overflowWrap:"anywhere",wordBreak:"break-word",lineHeight:1.3}}>
                             {hasReport&&<span style={{color:"#e74c3c",marginLeft:6}}>⚠️</span>}
                             {eq?.name||i.name||"?"}
                           </div>
