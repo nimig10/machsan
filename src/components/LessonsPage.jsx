@@ -1185,6 +1185,15 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const lessonHasSessionInRange = (lesson, range) => {
     return (lesson.schedule || []).some(s => s.date >= range.start && s.date <= range.end);
   };
+  // For the "קבלה" (intake) sort, the day/week/month filter is relative to when
+  // the course was ADDED to the system (created_at), not its session dates.
+  const lessonCreatedInRange = (lesson, range) => {
+    if (!lesson?.created_at) return false;
+    const created = new Date(lesson.created_at);
+    if (Number.isNaN(created.getTime())) return false;
+    const createdDate = formatLocalDateInput(created);
+    return createdDate >= range.start && createdDate <= range.end;
+  };
 
   const searchTerm = String(search || "").trim();
   const normalizedSearchTerm = searchTerm.toLowerCase();
@@ -1207,10 +1216,12 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     const matchesTrack = allTracksSelected || trackFilter.includes(trackLabel);
     const matchesArchive = archiveView ? isArchived(lesson) : !isArchived(lesson);
     const matchesLecturer = !showUnassignedLecturerOnly || isWithoutLecturer(lesson);
+    // "דחיפות" filters by session dates; "קבלה" filters by course creation time.
+    const inRange = sortMode === "urgency" ? lessonHasSessionInRange : lessonCreatedInRange;
     const matchesTime = timeFilter === "all" ||
-      (timeFilter === "today" && lessonHasSessionInRange(lesson, getTodayRange())) ||
-      (timeFilter === "week" && lessonHasSessionInRange(lesson, getWeekRange())) ||
-      (timeFilter === "month" && lessonHasSessionInRange(lesson, getMonthRange()));
+      (timeFilter === "today" && inRange(lesson, getTodayRange())) ||
+      (timeFilter === "week" && inRange(lesson, getWeekRange())) ||
+      (timeFilter === "month" && inRange(lesson, getMonthRange()));
     return matchesSearch && matchesTrack && matchesArchive && matchesLecturer && matchesTime;
   });
 
