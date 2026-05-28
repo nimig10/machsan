@@ -1668,16 +1668,13 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
           track: lesson.track,
         }) === importGroupKey(group))
         .map(({ index }) => index);
-      const existingIndex = matchingIndexes[0] ?? -1;
-      if (mode === "create_only" && existingIndex >= 0) {
-        skippedCourses.push({
-          name: group.name,
-          track: group.track,
-          sessions: dedupeScheduleEntries(group.schedule).length,
-          reason: "קורס קיים במערכת",
-        });
-        return;
-      }
+      // "צור קורסים חדשים בלבד" (create_only): import a brand-new semester.
+      // We intentionally IGNORE the (name, track) match and treat every group
+      // as a NEW course, so a course with an identical name/lecturer/track but
+      // DIFFERENT dates is added as a separate course. Genuine duplicates
+      // (same date+time) are still blocked per-session by the room/lecturer
+      // conflict checks below (both require os.date === session.date).
+      const existingIndex = mode === "create_only" ? -1 : (matchingIndexes[0] ?? -1);
       const duplicateExistingSchedules = matchingIndexes
         .slice(1)
         .flatMap((index) => updatedLessons[index]?.schedule || []);
