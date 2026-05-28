@@ -2743,7 +2743,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                         const hh = String(d.getHours()).padStart(2,"0");
                         const min = String(d.getMinutes()).padStart(2,"0");
                         return (
-                          <div style={{position:"absolute",bottom:6,left:12,fontSize:11,color:"var(--text2)",fontWeight:600,pointerEvents:"none"}}>
+                          <div style={{position:"absolute",bottom:6,left:12,fontSize:13,color:"var(--text2)",fontWeight:600,pointerEvents:"none"}}>
                             זמן יצירה: {dd}/{mm}/{yy} {hh}:{min}
                           </div>
                         );
