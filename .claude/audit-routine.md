@@ -41,6 +41,8 @@
 4. **אסור לדחוף ל-`main`** (מוגן ממילא — 403). רק לענף `claude/daily-audit`.
 5. **אסור לפתוח PR חדש** אם כבר קיים PR פתוח של הרוטינה — מעדכנים את הקיים (Rolling PR).
 6. אסור לחרוג מהיקף ה-hot files.
+7. **מקסימום `git push` אחד ליום (= build אחד ב-Vercel).** ההרצה כולה דוחפת **פעם אחת בלבד**, בסוף, ורק אחרי ש-`lint`+`build` עברו מקומית. אסור push ביניים/fixup, אסור לדחוף "כדי לבדוק" (האימות מקומי בלבד). אם נדרשו תיקוני fixup — לאחד (`git commit --amend` / squash) ל-commit אחד לפני ה-push היחיד.
+8. **אם אין ממצאים → אפס push באותו יום.** לא commit, לא push, לא build ב-Vercel, לא נגיעה ב-PR. לדלג בשקט לחלוטין.
 
 ## 🔄 פרוצדורה יומית (צעד-צעד)
 
@@ -49,15 +51,15 @@
    - **קיים** → `git fetch origin claude/daily-audit` + checkout. נסה `git rebase origin/main`; אם conflict → `git rebase --abort`, המשך על ה-tip הקיים, וציין ב-PR ש-rebase ממתין.
    - **לא קיים** → צור ענף טרי `claude/daily-audit` מ-`origin/main`.
 3. **סרוק** את ה-hot files לפי המטרה למעלה. השווה מול ה-log כדי לא לחזור על ממצאים שכבר טופלו/דווחו.
-4. **אם אין ממצאים חדשים** → **לדלג בשקט**: אין commit, אין שינוי ב-PR, אין log. סיים את הסשן. (זו ההחלטה שנבחרה.)
-5. **אם יש ממצאים**:
-   a. החל את ה-safe fixes בקוד.
-   b. **אמת**: `npm ci` (אם צריך) → `npm run lint` → `npm run build`. אם נכשל — תקן או החזר את השינוי הבעייתי. **אסור לדחוף build שבור.**
-   c. הוסף רשומה ל-`.claude/audit-log.md` (פורמט למטה).
-   d. `git commit` עם הודעה מתוארכת: `chore(audit): YYYY-MM-DD daily scan — <N> fixes, <M> reported`.
-   e. `git push -u origin claude/daily-audit` (retry עם backoff על שגיאות רשת).
-   f. אם אין PR פתוח → פתח PR (`base=main`, `head=claude/daily-audit`). אם קיים → הוא מתעדכן אוטומטית מה-push; עדכן את גוף ה-PR.
-6. **עדכן את גוף ה-PR** לפורמט למטה (כולל קישור Preview עדכני).
+4. **אם אין ממצאים חדשים** → **לדלג בשקט**: אין commit, אין push, אין build ב-Vercel, אין שינוי ב-PR, אין log. סיים את הסשן. **זה התרחיש הנפוץ — ואז אפס דחיפות באותו יום.**
+5. **אם יש ממצאים** — מבצעים הכל מקומית, ודוחפים **פעם אחת בלבד** בסוף:
+   a. החל את **כל** ה-safe fixes בקוד (במצב עבודה מקומי, בלי לדחוף בין לבין).
+   b. עדכן את `.claude/audit-log.md` (פורמט למטה).
+   c. **אמת מקומית**: `npm ci` (אם צריך) → `npm run lint` → `npm run build`. אם נכשל — תקן מקומית. **אסור לדחוף build שבור, ואסור לדחוף כדי לבדוק** (האימות כולו מקומי, לא ב-Vercel).
+   d. `git commit` **יחיד** עם הודעה מתוארכת: `chore(audit): YYYY-MM-DD daily scan — <N> fixes, <M> reported`. (אם יצרת fixups תוך כדי — squash/`--amend` ל-commit אחד.)
+   e. **push יחיד**: `git push -u origin claude/daily-audit` (retry עם backoff **רק** על שגיאות רשת — retry של רשת אינו "push נוסף", זו אותה דחיפה). **זו הדחיפה היחידה ביום.**
+   f. אם אין PR פתוח → פתח PR (`base=main`, `head=claude/daily-audit`). אם קיים → הוא מתעדכן אוטומטית מה-push; עדכן את גוף ה-PR (עדכון גוף ה-PR אינו push ל-git, לא מפעיל build).
+6. **עדכן את גוף ה-PR** לפורמט למטה (כולל קישור Preview עדכני) — דרך GitHub API, לא דרך commit נוסף.
 
 ## 🔗 קישור Preview
 
