@@ -1003,6 +1003,24 @@ function lessonPeriod(startTime) {
   return "evening";
 }
 
+/* buildLessonStudioBookings emits one derived row per studio — collapse rows of
+   the same lesson session (lesson_id + date + start/end) into a single entry
+   that carries every studio id, so a multi-classroom lesson shows once. */
+function mergeLessonBookingsByStudio(bookings) {
+  const map = new Map();
+  for (const b of bookings) {
+    const key = `${b.lesson_id ?? b.courseName ?? ""}__${b.date ?? ""}__${b.startTime ?? ""}__${b.endTime ?? ""}`;
+    let entry = map.get(key);
+    if (!entry) { entry = { ...b, studioIds: [] }; map.set(key, entry); }
+    const sid = b.studioId;
+    if (sid != null && sid !== "" && !entry.studioIds.some(id => String(id) === String(sid))) entry.studioIds.push(sid);
+  }
+  return Array.from(map.values());
+}
+function bookingStudioNames(entry, studioMap) {
+  return (entry.studioIds || []).map(id => studioMap[String(id)]?.name).filter(Boolean);
+}
+
 /* ══════════ Lessons row — direct grid children (Fragment) ══════════ */
 function LessonsRow({ workDays, studioBookings, studios, today, holidays }) {
   const bookings = Array.isArray(studioBookings) ? studioBookings : [];
@@ -1021,14 +1039,14 @@ function LessonsRow({ workDays, studioBookings, studios, today, holidays }) {
       </div>
       {/* Day cells */}
       {workDays.map((date, i) => {
-        const allLessons = bookings
-          .filter(b => b.date === date && b.status !== "נדחה" && getBookingKind(b) === "lesson")
-          .sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
+        const allLessons = mergeLessonBookingsByStudio(
+          bookings.filter(b => b.date === date && b.status !== "נדחה" && getBookingKind(b) === "lesson")
+        ).sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
 
         return (
           <div key={date} style={{ padding: "4px 3px", borderLeft: i < workDays.length - 1 ? "1px solid var(--border)" : "none", borderTop: "1px solid var(--border)", minHeight: 54 }}>
             {allLessons.map((b, j) => {
-              const studio = studioMap[String(b.studioId)];
+              const studioNames = bookingStudioNames(b, studioMap);
               const period = LESSON_PERIODS.find(p => p.key === lessonPeriod(b.startTime));
               return (
                 <div key={b.id || j} style={{ background: "rgba(245,166,35,0.12)", border: "1px solid rgba(245,166,35,0.3)", borderRadius: 5, padding: "3px 5px", marginBottom: 3, borderRight: `2px solid ${period?.color || "#f5a623"}` }}>
@@ -1036,7 +1054,7 @@ function LessonsRow({ workDays, studioBookings, studios, today, holidays }) {
                   <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 11, lineHeight: 1.3 }}>{b.courseName || b.studentName || "שיעור"}</div>
                   {b.instructorName && <div style={{ color: "#f5a623", fontSize: 11, fontWeight: 700 }}>👨‍🏫 {b.instructorName}</div>}
                   {b.track && <div style={{ color: "var(--text3)", fontSize: 9, fontWeight: 600 }}>📍 {b.track}</div>}
-                  <div style={{ color: studio ? "var(--text2)" : "var(--text3)", fontSize: 11, fontWeight: 600, fontStyle: studio ? "normal" : "italic" }}>🏛️ {studio ? studio.name : "לא משויך"}</div>
+                  <div style={{ color: studioNames.length ? "var(--text2)" : "var(--text3)", fontSize: 11, fontWeight: 600, fontStyle: studioNames.length ? "normal" : "italic" }}>🏛️ {studioNames.length ? studioNames.join(" • ") : "לא משויך"}</div>
                 </div>
               );
             })}
@@ -1062,9 +1080,10 @@ const DAY_LESSON_COLS = [
 ];
 
 function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEditSession, onDeleteSession }) {
-  const bookings = (Array.isArray(studioBookings) ? studioBookings : [])
-    .filter(b => b.date === date && b.status !== "נדחה" && getBookingKind(b) === "lesson")
-    .sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
+  const bookings = mergeLessonBookingsByStudio(
+    (Array.isArray(studioBookings) ? studioBookings : [])
+      .filter(b => b.date === date && b.status !== "נדחה" && getBookingKind(b) === "lesson")
+  ).sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
   const studioMap = Object.fromEntries((studios || []).map(s => [String(s.id), s]));
   const classroomStudios = (studios || []).filter(s => s.isClassroom || s.classroomOnly);
 
@@ -1177,7 +1196,7 @@ function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEd
               {/* Lesson rows */}
               {group.items.map(b => {
                 const isEditing = editingId === b.id;
-                const studio = studioMap[String(b.studioId)];
+                const studioNames = bookingStudioNames(b, studioMap);
                 const endDate = getLessonEndDate(b.lesson_id);
                 const sessionNum = getSessionNum(b.lesson_id, b.date);
                 const sessionTopic = getSessionTopic(b.lesson_id, b.date);
@@ -1217,7 +1236,7 @@ function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEd
                           <option value="">ללא שיוך</option>
                           {classroomStudios.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
-                      ) : <span style={{ fontWeight: 600, color: studio ? "inherit" : "var(--text3)", fontStyle: studio ? "normal" : "italic" }}>{studio?.name || "לא משויך"}</span>}
+                      ) : <span style={{ fontWeight: 600, color: studioNames.length ? "inherit" : "var(--text3)", fontStyle: studioNames.length ? "normal" : "italic" }}>{studioNames.length ? studioNames.join(" • ") : "לא משויך"}</span>}
                     </div>
                     <div style={{ ...tdBase }}><span style={{ color: "var(--text3)", fontSize: 11 }}>{fmtDate(endDate)}</span></div>
                     {canEdit && (
@@ -1298,7 +1317,7 @@ function LoanChip({ r, isReturn }) {
       borderRadius: 5, padding: "2px 4px", marginBottom: 2,
     }}>
       <div style={{ fontWeight: 700, color: isReturn ? "#3b82f6" : "#f59e0b", fontSize: 9 }}>
-        {isReturn ? "↩ החזרה" : "↗ יציאה"} {r.borrow_time && !isReturn ? r.borrow_time : ""}
+        {isReturn ? "↩ החזרה" : "↗ יציאה"} {isReturn ? (r.return_time || "") : (r.borrow_time || "")}
       </div>
       <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 10, lineHeight: 1.3 }}>{r.student_name || "—"}</div>
       <div style={{ color: "var(--text3)", fontSize: 9 }}>{(r.items || []).length} פריטים · {r.loan_type || ""}</div>
