@@ -1150,7 +1150,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const isArchived = (lesson) => {
     const schedule = lesson.schedule || [];
     if (!schedule.length) return false;
-    const lastDate = [...schedule].sort((a, b) => b.date.localeCompare(a.date))[0]?.date || "";
+    const lastDate = [...schedule].sort((a, b) => String(b?.date || "").localeCompare(String(a?.date || "")))[0]?.date || "";
     return lastDate < today();
   };
   const hasAssignedLecturer = (lesson = {}) => {
@@ -2693,6 +2693,7 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                   const upcoming = displaySchedule.filter(s=>s.date>=today()).length;
                   const nextSession = displaySchedule.filter(s=>s.date>=today()).sort((a,b)=>a.date.localeCompare(b.date))[0];
                   const cardTrack = getLessonTrackLabel(l);
+                  const cardLecturers = normalizeLessonLecturerList(l);
                   // In grouped mode the surrounding container shows the track header,
                   // so skip the track sub-label inside the card unless it's the
                   // "unassigned" group. In flat mode always show the track.
@@ -2711,8 +2712,8 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
                               <GraduationCap size={13} strokeWidth={1.75}/> {cardTrack}
                             </div>
                           )}
-                          {normalizeLessonLecturerList(l).length > 0 ? (
-                            <div style={{fontSize:13,color:"var(--text2)"}}>{normalizeLessonLecturerList(l).map(lecturer => lecturer.instructorName).filter(Boolean).join(" · ")}</div>
+                          {cardLecturers.length > 0 ? (
+                            <div style={{fontSize:13,color:"var(--text2)"}}>{cardLecturers.map(lecturer => lecturer.instructorName).filter(Boolean).join(" · ")}</div>
                           ) : (
                             <div style={{fontSize:12,color:"#ef4444",fontWeight:800,display:"inline-flex",alignItems:"center",gap:4}}><User size={12} strokeWidth={1.75}/> ללא מרצה</div>
                           )}
