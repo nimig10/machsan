@@ -7273,7 +7273,7 @@ export default function App() {
                 <span className="topbar-title" style={{flex:1}}>חלוקת משמרות</span>
               </div>
             </div>
-            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <StaffSchedulePage staffUser={staffUser} showToast={showToast} studios={studios} studioBookings={studioBookings} reservations={reservations} lessons={lessons} setLessons={setLessons}/>}
+            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <StaffSchedulePage staffUser={staffUser} showToast={showToast} studios={studios} studioBookings={studioBookings} reservations={reservations} lessons={lessons} setLessons={setLessons} onNavigateToLesson={(lessonId) => { setEditLessonId(lessonId); setStaffView("administration"); setSecretaryPage("lessons"); }}/>}
           </div>
         </div>
       )}

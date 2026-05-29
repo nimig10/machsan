@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "rea
 import { Modal } from "./ui.jsx";
 import { getAuthToken } from "../utils.js";
 import { syncAllLessons } from "../utils/lessonsApi.js";
-import { BookOpen, Calendar, Check, ClipboardList, Package, Shield, X } from "lucide-react";
+import { BookOpen, Calendar, Check, ClipboardList, Package, Shield, X, User, MapPin, Building2, Pencil, GraduationCap } from "lucide-react";
 
 /* ── Half-hour time slots 09:00–22:00 ── */
 const TIME_SLOTS = (() => {
@@ -127,7 +127,7 @@ async function scheduleApi(action, body = {}) {
 }
 
 /* ══════════════════════ Main Component ══════════════════════ */
-export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBookings = [], reservations = [], lessons = [], setLessons }) {
+export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBookings = [], reservations = [], lessons = [], setLessons, onNavigateToLesson }) {
   const isAdmin = staffUser?.role === "admin";
   const canEditLessons = isAdmin || !!staffUser?.permissions?.canEditDailyLessons;
   const currentStaffId = staffUser?.id;
@@ -153,7 +153,15 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
   const [showStudentBookings, setShowStudentBookings] = useState(() => { try { return localStorage.getItem("sch_showBookings") === "1"; } catch { return false; } });
   const [showLoans, setShowLoans] = useState(() => { try { return localStorage.getItem("sch_showLoans") === "1"; } catch { return false; } });
   const [viewMode, setViewMode] = useState(() => { try { return sessionStorage.getItem("sch_viewMode") || "week"; } catch { return "week"; } });
+  const [lessonTrackFilter, setLessonTrackFilter] = useState("all");
   const [dayViewIdx, setDayViewIdx] = useState(() => { try { return Number(sessionStorage.getItem("sch_dayViewIdx") || 0); } catch { return 0; } });
+  // Distinct study tracks present in lesson bookings — for the weekly lessons track filter.
+  const lessonTracks = useMemo(() => (
+    [...new Set((studioBookings || [])
+      .filter(b => getBookingKind(b) === "lesson")
+      .map(b => String(b.track || "").trim())
+      .filter(Boolean))].sort((a, b) => a.localeCompare(b, "he"))
+  ), [studioBookings]);
   const [dayMenuOpen, setDayMenuOpen] = useState(false);
   const dayMenuRef = useRef(null);
 
@@ -477,7 +485,25 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
     }
     const updated = lessons.map(l => {
       if (String(l.id) !== String(lessonId)) return l;
-      return { ...l, schedule: (l.schedule || []).map(s => s.date === sessionDate ? { ...s, ...updates } : s) };
+      return { ...l, schedule: (l.schedule || []).map(s => {
+        if (s.date !== sessionDate) return s;
+        const next = { ...s };
+        if (updates.startTime !== undefined) next.startTime = updates.startTime;
+        if (updates.endTime !== undefined) next.endTime = updates.endTime;
+        // PR #20: sessions store studioIds[] array, not scalar studioId.
+        // Only rewrite when the chosen value differs from the current first studio,
+        // so confirming an unchanged dropdown doesn't collapse a multi-classroom session.
+        if (updates.studioId !== undefined) {
+          const currentFirst = String((Array.isArray(s.studioIds) && s.studioIds[0]) || s.studioId || "");
+          const chosen = String(updates.studioId || "");
+          if (chosen !== currentFirst) {
+            next.studioIds = chosen ? [chosen] : [];
+            delete next.studioId;
+            delete next.secondaryStudioId;
+          }
+        }
+        return next;
+      }) };
     });
     setLessons(updated);
     await syncAllLessons(updated);
@@ -882,11 +908,49 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
             <SectionDivider
               title={viewMode === "day"
                 ? <><BookOpen size={16} strokeWidth={1.75} color="var(--accent)" /> {`לו"ז יומי — שיעורים`}</>
-                : <><BookOpen size={16} strokeWidth={1.75} color="var(--accent)" /> {`לו"ז יומי — שיעורים`}</>}
+                : <><BookOpen size={16} strokeWidth={1.75} color="var(--accent)" /> {`לו"ז שבועי — שיעורים`}</>}
               subtitle={viewMode === "day" ? `${HE_DAYS[new Date(displayDays[0] + "T00:00:00").getDay()]} ${formatDateHe(displayDays[0])}` : null}
               open={showLessons}
               onToggle={() => setShowLessons(v => !v)}
             />
+
+            {/* ══ Lessons track filter (weekly only) ══ */}
+            {showLessons && viewMode !== "day" && (
+              <div style={{
+                gridColumn: "1 / -1",
+                padding: "4px 8px",
+                borderTop: "1px solid var(--border)",
+                display: "flex",
+                justifyContent: "flex-start",
+                direction: "rtl",
+              }}>
+                <div style={{
+                  background: "rgba(245,166,35,0.06)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  padding: "3px 8px",
+                  display: "flex", alignItems: "center", gap: 8,
+                }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text2)" }}>סינון לפי מסלול:</span>
+                  <select
+                    value={lessonTrackFilter}
+                    onChange={e => setLessonTrackFilter(e.target.value)}
+                    className="form-select"
+                    style={{ fontSize: 12, padding: "3px 6px", height: 26, minWidth: 180 }}
+                  >
+                    <option value="all">כל המסלולים</option>
+                    {lessonTracks.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  {lessonTrackFilter !== "all" && (
+                    <button
+                      onClick={() => setLessonTrackFilter("all")}
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: 11, padding: "2px 8px" }}
+                    >נקה</button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* ══ Lessons body row ══ */}
             {showLessons && viewMode === "day" ? (
@@ -901,11 +965,20 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                 showToast={showToast}
               />
             ) : showLessons && (
-              <LessonsRow workDays={displayDays} studioBookings={studioBookings} studios={studios} today={today} holidays={holidays} />
+              <LessonsRow
+                workDays={displayDays}
+                studioBookings={studioBookings}
+                studios={studios}
+                today={today}
+                holidays={holidays}
+                trackFilter={lessonTrackFilter}
+                isAdmin={isAdmin}
+                onNavigateToLesson={onNavigateToLesson}
+              />
             )}
 
             {/* ══ Section divider: Student Bookings ══ */}
-            <SectionDivider title="🎵 לו&quot;ז יומי — קביעות" open={showStudentBookings} onToggle={() => setShowStudentBookings(v => !v)} />
+            <SectionDivider title={viewMode === "day" ? "🎵 לו\"ז יומי — קביעות" : "🎵 לו\"ז שבועי — קביעות"} open={showStudentBookings} onToggle={() => setShowStudentBookings(v => !v)} />
 
             {/* ══ Student Bookings body row ══ */}
             {showStudentBookings && <StudentBookingsRow workDays={displayDays} studioBookings={studioBookings} studios={studios} today={today} holidays={holidays} />}
@@ -1022,9 +1095,10 @@ function bookingStudioNames(entry, studioMap) {
 }
 
 /* ══════════ Lessons row — direct grid children (Fragment) ══════════ */
-function LessonsRow({ workDays, studioBookings, studios, today, holidays }) {
+function LessonsRow({ workDays, studioBookings, studios, today, holidays, trackFilter = "all", isAdmin = false, onNavigateToLesson }) {
   const bookings = Array.isArray(studioBookings) ? studioBookings : [];
   const studioMap = Object.fromEntries((studios || []).map(s => [String(s.id), s]));
+  const matchesTrack = (b) => trackFilter === "all" || String(b.track || "").trim() === trackFilter;
 
   return (
     <Fragment>
@@ -1040,7 +1114,7 @@ function LessonsRow({ workDays, studioBookings, studios, today, holidays }) {
       {/* Day cells */}
       {workDays.map((date, i) => {
         const allLessons = mergeLessonBookingsByStudio(
-          bookings.filter(b => b.date === date && b.status !== "נדחה" && getBookingKind(b) === "lesson")
+          bookings.filter(b => b.date === date && b.status !== "נדחה" && getBookingKind(b) === "lesson" && matchesTrack(b))
         ).sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
 
         return (
@@ -1048,13 +1122,47 @@ function LessonsRow({ workDays, studioBookings, studios, today, holidays }) {
             {allLessons.map((b, j) => {
               const studioNames = bookingStudioNames(b, studioMap);
               const period = LESSON_PERIODS.find(p => p.key === lessonPeriod(b.startTime));
+              const color = period?.color || "#f5a623";
+              const showEditBtn = isAdmin && b.lesson_id && onNavigateToLesson;
               return (
-                <div key={b.id || j} style={{ background: "rgba(245,166,35,0.12)", border: "1px solid rgba(245,166,35,0.3)", borderRadius: 5, padding: "3px 5px", marginBottom: 3, borderRight: `2px solid ${period?.color || "#f5a623"}` }}>
-                  <div style={{ fontWeight: 800, color: "#f5a623", fontSize: 10 }}>{b.startTime || ""}–{b.endTime || ""}</div>
-                  <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 11, lineHeight: 1.3 }}>{b.courseName || b.studentName || "שיעור"}</div>
-                  {b.instructorName && <div style={{ color: "#f5a623", fontSize: 11, fontWeight: 700 }}>👨‍🏫 {b.instructorName}</div>}
-                  {b.track && <div style={{ color: "var(--text3)", fontSize: 9, fontWeight: 600 }}>📍 {b.track}</div>}
-                  <div style={{ color: studioNames.length ? "var(--text2)" : "var(--text3)", fontSize: 11, fontWeight: 600, fontStyle: studioNames.length ? "normal" : "italic" }}>🏛️ {studioNames.length ? studioNames.join(" • ") : "לא משויך"}</div>
+                <div key={b.id || j} style={{
+                  background: `${color}1f`,
+                  border: `1px solid ${color}59`,
+                  borderRight: `3px solid ${color}`,
+                  borderRadius: 5,
+                  padding: "3px 5px",
+                  marginBottom: 3,
+                }}>
+                  <div style={{ fontWeight: 800, color, fontSize: 10 }}>{b.startTime || ""}–{b.endTime || ""}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, fontWeight: 700, color: "var(--text)", fontSize: 11, lineHeight: 1.3 }}>
+                    <GraduationCap size={13} strokeWidth={1.75} color="var(--accent)" />
+                    <span>{b.courseName || b.studentName || "שיעור"}</span>
+                  </div>
+                  {b.track && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text)", fontSize: 10, fontWeight: 600 }}>
+                      <MapPin size={13} strokeWidth={1.75} color="var(--accent)" />
+                      <span>{b.track}</span>
+                    </div>
+                  )}
+                  {b.instructorName && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text)", fontSize: 11, fontWeight: 700 }}>
+                      <User size={13} strokeWidth={1.75} color="var(--accent)" />
+                      <span>{b.instructorName}</span>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, color: studioNames.length ? "var(--text)" : "var(--text3)", fontSize: 11, fontWeight: 600, fontStyle: studioNames.length ? "normal" : "italic" }}>
+                    <Building2 size={13} strokeWidth={1.75} color="var(--accent)" />
+                    <span style={{ flex: 1, minWidth: 0 }}>{studioNames.length ? studioNames.join(" • ") : "לא משויך"}</span>
+                    {showEditBtn && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onNavigateToLesson(b.lesson_id); }}
+                        title="עריכת קורס באדמיניסטרציה"
+                        style={{ background: "transparent", border: "none", padding: 0, marginInlineStart: 4, cursor: "pointer", lineHeight: 0 }}
+                      >
+                        <Pencil size={13} strokeWidth={1.75} color="var(--accent)" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}

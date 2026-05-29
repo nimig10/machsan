@@ -1,5 +1,5 @@
 // LessonsPage.jsx — course & lesson schedule management
-import { Fragment, useRef, useState, useEffect } from "react";
+import { Fragment, useRef, useState, useEffect, useLayoutEffect } from "react";
 import * as XLSX from "xlsx";
 import { Award, BookOpen, Calendar, Camera, Check, CheckCircle, Clock, Download, FileText, Film, GraduationCap, Lightbulb, Link, Mail, Mic, Package, Pencil, Phone, Plus, Search, Trash2, Upload, User, Video, X, XCircle } from "lucide-react";
 import { formatDate, formatLocalDateInput, parseLocalDate, today, getAuthToken } from "../utils.js";
@@ -568,14 +568,16 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     setPendingImportMode("upsert");
   };
 
-  // Navigate directly to lesson edit form when openLessonId is set (e.g. from room booking)
-  useEffect(() => {
+  // Navigate directly to lesson edit form when openLessonId is set (e.g. from room booking).
+  // useLayoutEffect runs after commit but before paint, so the mode flip happens in the
+  // same paint cycle as the navigation — no flash of the course list.
+  useLayoutEffect(() => {
     if (!openLessonId) return;
     const lesson = lessons.find(l => String(l.id) === String(openLessonId));
     if (lesson) {
       setEditTarget(lesson);
       setMode("edit");
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo(0, 0);
     }
     if (onOpenLessonConsumed) onOpenLessonConsumed();
   }, [openLessonId]);
