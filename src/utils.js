@@ -498,8 +498,9 @@ export function getPrivateLoanLimitedQty(items = [], equipment = []) {
 export function groupReservationItemsByCategory(items = [], equipment = []) {
   const NO_CAT = "ללא קטגוריה";
   const byCat = new Map();
+  const eqById = new Map((equipment || []).map((e) => [String(e.id), e]));
   (items || []).forEach((item, index) => {
-    const eq = (equipment || []).find((e) => String(e.id) === String(item.equipment_id));
+    const eq = eqById.get(String(item.equipment_id));
     const cat = (eq?.category && String(eq.category).trim()) || NO_CAT;
     if (!byCat.has(cat)) byCat.set(cat, []);
     byCat.get(cat).push({ item, eq, index });
@@ -689,7 +690,7 @@ export const OVERDUE_BLOCK_BUFFER_MS = 48 * 60 * 60 * 1000;
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 // Ensure each equipment item has a units array
 export function ensureUnits(eq) {
-  if (Array.isArray(eq.units) && eq.units.length === eq.total_quantity) return eq;
+  if (Array.isArray(eq.units) && eq.units.length === (Number(eq.total_quantity) || 0)) return eq;
   const existing = Array.isArray(eq.units) ? eq.units : [];
   const units = [];
   for (let i = 0; i < (eq.total_quantity || 0); i++) {
