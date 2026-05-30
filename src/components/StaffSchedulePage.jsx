@@ -1,7 +1,23 @@
 // StaffSchedulePage.jsx — Staff weekly schedule + daily activity summary
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
 import { Modal } from "./ui.jsx";
-import { getAuthToken, groupReservationItemsByCategory } from "../utils.js";
+import { getAuthToken, groupReservationItemsByCategory, normalizeReservationStatus } from "../utils.js";
+
+/* Reservation-status → color, matching the badge palette in "תפעול מחסן"
+   (statusBadge in ui.jsx / .badge-* CSS in App.jsx). Keeps loan chips
+   color-consistent with the warehouse control panel. */
+const LOAN_STATUS_COLOR = {
+  "מאושר": "#2ecc71",          // badge-green
+  "פעילה": "#64b5f6",          // badge-teal
+  "ממתין": "#f1c40f",          // badge-yellow
+  "נדחה": "#e74c3c",           // badge-red
+  "הוחזר": "#3498db",          // badge-blue
+  "באיחור": "#e67e22",         // badge-orange
+  "אישור ראש מחלקה": "#9b59b6", // badge-purple
+};
+function loanStatusColor(status) {
+  return LOAN_STATUS_COLOR[normalizeReservationStatus(status)] || "#9aa0a6"; // badge-gray fallback
+}
 import { syncAllLessons } from "../utils/lessonsApi.js";
 import { BookOpen, Calendar, Check, ClipboardList, Package, Shield, X, User, MapPin, Building2, Pencil, GraduationCap } from "lucide-react";
 
@@ -1463,12 +1479,12 @@ function LoanChip({ r, isReturn, onClick }) {
       borderRadius: 5, padding: "2px 4px", marginBottom: 2,
       cursor: onClick ? "pointer" : "default",
     }}>
-      <div style={{ fontWeight: 700, color: isReturn ? "#3b82f6" : "#f59e0b", fontSize: 9 }}>
+      <div style={{ fontWeight: 700, color: isReturn ? "#3b82f6" : "#f59e0b", fontSize: 10 }}>
         {isReturn ? "↩ החזרה" : "↗ יציאה"} {isReturn ? (r.return_time || "") : (r.borrow_time || "")}
       </div>
-      <div style={{ fontWeight: 700, color: "#fff", fontSize: 10, lineHeight: 1.3 }}>{r.student_name || "—"}</div>
-      <div style={{ color: "#fff", fontSize: 11, fontWeight: 800, marginTop: 1 }}>{(r.items || []).length} פריטים · {r.loan_type || ""}</div>
-      {r.status && <div style={{ fontSize: 8, fontWeight: 700, color: String(r.status).includes("ראש מחלקה") || String(r.status).includes("ראש המחלקה") ? "#9b59b6" : "#fff", marginTop: 1 }}>● {r.status}</div>}
+      <div style={{ fontWeight: 700, color: "#fff", fontSize: 11, lineHeight: 1.3 }}>{r.student_name || "—"}</div>
+      <div style={{ color: "#fff", fontSize: 12, fontWeight: 800, marginTop: 1 }}>{(r.items || []).length} פריטים · {r.loan_type || ""}</div>
+      {r.status && <div style={{ fontSize: 10, fontWeight: 800, color: loanStatusColor(r.status), marginTop: 1 }}>● {normalizeReservationStatus(r.status)}</div>}
     </div>
   );
 }
