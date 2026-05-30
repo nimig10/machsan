@@ -1,7 +1,7 @@
 // StaffSchedulePage.jsx — Staff weekly schedule + daily activity summary
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
 import { Modal } from "./ui.jsx";
-import { getAuthToken } from "../utils.js";
+import { getAuthToken, groupReservationItemsByCategory } from "../utils.js";
 import { syncAllLessons } from "../utils/lessonsApi.js";
 import { BookOpen, Calendar, Check, ClipboardList, Package, Shield, X, User, MapPin, Building2, Pencil, GraduationCap } from "lucide-react";
 
@@ -127,7 +127,7 @@ async function scheduleApi(action, body = {}) {
 }
 
 /* ══════════════════════ Main Component ══════════════════════ */
-export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBookings = [], reservations = [], lessons = [], setLessons, onNavigateToLesson }) {
+export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBookings = [], reservations = [], lessons = [], setLessons, onNavigateToLesson, equipment = [] }) {
   const isAdmin = staffUser?.role === "admin";
   const canEditLessons = isAdmin || !!staffUser?.permissions?.canEditDailyLessons;
   const currentStaffId = staffUser?.id;
@@ -148,10 +148,13 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
   const [dailyTasks, setDailyTasks] = useState([]);
   const [editModal, setEditModal] = useState(null);
   const [notePopup, setNotePopup] = useState(null); // { memberName, note }
+  const [selectedLoan, setSelectedLoan] = useState(null); // reservation whose borrowed equipment is shown in a read-only panel
   const [myShiftsOnly, setMyShiftsOnly] = useState(false);
   const [showLessons, setShowLessons] = useState(() => { try { return localStorage.getItem("sch_showLessons") === "1"; } catch { return false; } });
   const [showStudentBookings, setShowStudentBookings] = useState(() => { try { return localStorage.getItem("sch_showBookings") === "1"; } catch { return false; } });
   const [showLoans, setShowLoans] = useState(() => { try { return localStorage.getItem("sch_showLoans") === "1"; } catch { return false; } });
+  // Shifts table is collapsible too, but unlike the others it defaults to OPEN.
+  const [showShifts, setShowShifts] = useState(() => { try { return localStorage.getItem("sch_showShifts") !== "0"; } catch { return true; } });
   const [viewMode, setViewMode] = useState(() => { try { return sessionStorage.getItem("sch_viewMode") || "week"; } catch { return "week"; } });
   const [lessonTrackFilter, setLessonTrackFilter] = useState("all");
   const [dayViewIdx, setDayViewIdx] = useState(() => { try { return Number(sessionStorage.getItem("sch_dayViewIdx") || 0); } catch { return 0; } });
@@ -172,6 +175,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
   useEffect(() => { try { localStorage.setItem("sch_showLessons", showLessons ? "1" : "0"); } catch {} }, [showLessons]);
   useEffect(() => { try { localStorage.setItem("sch_showBookings", showStudentBookings ? "1" : "0"); } catch {} }, [showStudentBookings]);
   useEffect(() => { try { localStorage.setItem("sch_showLoans", showLoans ? "1" : "0"); } catch {} }, [showLoans]);
+  useEffect(() => { try { localStorage.setItem("sch_showShifts", showShifts ? "1" : "0"); } catch {} }, [showShifts]);
 
   /* Load staff members from Supabase */
   useEffect(() => {
@@ -742,8 +746,11 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
               );
             })}
 
+            {/* ══ Section divider: Shifts (defaults OPEN) ══ */}
+            <SectionDivider title={<><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> משמרות עובדים</>} open={showShifts} onToggle={() => setShowShifts(v => !v)} />
+
             {/* ═══ Shift Rows (morning / custom / evening) ═══ */}
-            {SLOT_ORDER.map((slotKey, rowIdx) => {
+            {showShifts && SLOT_ORDER.map((slotKey, rowIdx) => {
               const st = SHIFT_TYPES[slotKey];
               const isLastSlot = rowIdx === SLOT_ORDER.length - 1;
               return (
@@ -987,7 +994,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
             <SectionDivider title={<><Package size={16} strokeWidth={1.75} color="var(--accent)" /> בקשות השאלה</>} open={showLoans} onToggle={() => setShowLoans(v => !v)} />
 
             {/* ══ Loans body row ══ */}
-            {showLoans && <LoansRow workDays={displayDays} reservations={reservations} today={today} />}
+            {showLoans && <LoansRow workDays={displayDays} reservations={reservations} today={today} onSelectLoan={setSelectedLoan} />}
 
           </div>
         </div>
@@ -1017,6 +1024,34 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
       )}
 
       {/* ── Edit Modal ── */}
+      {selectedLoan && (
+        <Modal title={`ציוד שהושאל — ${selectedLoan.student_name || selectedLoan.studentName || selectedLoan.user_name || ""}`} onClose={() => setSelectedLoan(null)} size="modal-lg">
+          {(selectedLoan.items || []).length === 0 ? (
+            <div style={{ color: "var(--text3)", textAlign: "center", padding: 20 }}>אין פריטים בהשאלה זו</div>
+          ) : (
+            groupReservationItemsByCategory(selectedLoan.items, equipment).map(group => (
+              <div key={group.category} style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: "var(--accent)", paddingTop: 6 }}>{group.category}</div>
+                {group.entries.map(({ item: i, eq, index: j }) => {
+                  const img = eq?.image || eq?.img || "";
+                  const showImg = img && (img.startsWith("data:") || img.startsWith("http"));
+                  return (
+                    <div key={j} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "var(--surface2)", borderRadius: 12, border: "1px solid var(--border)" }}>
+                      <div style={{ width: 52, height: 52, borderRadius: 10, background: "var(--surface3)", flexShrink: 0, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {showImg ? <img src={img} alt={eq?.name || ""} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <Package size={16} strokeWidth={1.75} />}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 800, fontSize: 14, whiteSpace: "normal", overflowWrap: "anywhere", wordBreak: "break-word", lineHeight: 1.3 }}>{eq?.name || i.name || "?"}</div>
+                      </div>
+                      <div style={{ background: "var(--accent-glow)", border: "1px solid var(--accent)", borderRadius: 8, padding: "5px 14px", fontSize: 16, fontWeight: 900, color: "var(--accent)", flexShrink: 0 }}>×{i.quantity}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))
+          )}
+        </Modal>
+      )}
       {editModal && (
         <ScheduleEditorModal
           modal={editModal}
@@ -1417,12 +1452,16 @@ function StudentBookingsRow({ workDays, studioBookings, studios, today, holidays
 }
 
 /* ══════════ Loans row ══════════ */
-function LoanChip({ r, isReturn }) {
+function LoanChip({ r, isReturn, onClick }) {
   return (
-    <div style={{
+    <div
+      onClick={() => onClick?.(r)}
+      title="הצג ציוד שהושאל"
+      style={{
       background: isReturn ? "rgba(59,130,246,0.1)" : "rgba(245,158,11,0.1)",
       border: `1px solid ${isReturn ? "rgba(59,130,246,0.25)" : "rgba(245,158,11,0.25)"}`,
       borderRadius: 5, padding: "2px 4px", marginBottom: 2,
+      cursor: onClick ? "pointer" : "default",
     }}>
       <div style={{ fontWeight: 700, color: isReturn ? "#3b82f6" : "#f59e0b", fontSize: 9 }}>
         {isReturn ? "↩ החזרה" : "↗ יציאה"} {isReturn ? (r.return_time || "") : (r.borrow_time || "")}
@@ -1434,7 +1473,7 @@ function LoanChip({ r, isReturn }) {
   );
 }
 
-function LoansRow({ workDays, reservations, today }) {
+function LoansRow({ workDays, reservations, today, onSelectLoan }) {
   const activeRes = (reservations || []).filter(r => r.status !== "נדחה" && r.status !== "הוחזר");
 
   return (
@@ -1459,10 +1498,10 @@ function LoansRow({ workDays, reservations, today }) {
         const hasData = studentBorrows.length + lessonBorrows.length + studentReturns.length + lessonReturns.length > 0;
         return (
           <div key={date} style={{ padding: "4px 3px", borderLeft: i < workDays.length - 1 ? "1px solid var(--border)" : "none", borderTop: "1px solid var(--border)", minHeight: 50, fontSize: 10 }}>
-            {studentBorrows.map(r => <LoanChip key={`sb-${r.id}`} r={r} isReturn={false} />)}
-            {studentReturns.map(r => <LoanChip key={`sr-${r.id}`} r={r} isReturn={true} />)}
-            {lessonBorrows.map(r => <LoanChip key={`lb-${r.id}`} r={r} isReturn={false} />)}
-            {lessonReturns.map(r => <LoanChip key={`lr-${r.id}`} r={r} isReturn={true} />)}
+            {studentBorrows.map(r => <LoanChip key={`sb-${r.id}`} r={r} isReturn={false} onClick={onSelectLoan} />)}
+            {studentReturns.map(r => <LoanChip key={`sr-${r.id}`} r={r} isReturn={true} onClick={onSelectLoan} />)}
+            {lessonBorrows.map(r => <LoanChip key={`lb-${r.id}`} r={r} isReturn={false} onClick={onSelectLoan} />)}
+            {lessonReturns.map(r => <LoanChip key={`lr-${r.id}`} r={r} isReturn={true} onClick={onSelectLoan} />)}
             {!hasData && <div style={{ color: "var(--text3)", textAlign: "center", paddingTop: 14, fontSize: 10 }}>—</div>}
           </div>
         );
