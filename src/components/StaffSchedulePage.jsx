@@ -1466,9 +1466,9 @@ function LoanChip({ r, isReturn, onClick }) {
       <div style={{ fontWeight: 700, color: isReturn ? "#3b82f6" : "#f59e0b", fontSize: 9 }}>
         {isReturn ? "↩ החזרה" : "↗ יציאה"} {isReturn ? (r.return_time || "") : (r.borrow_time || "")}
       </div>
-      <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 10, lineHeight: 1.3 }}>{r.student_name || "—"}</div>
-      <div style={{ color: "var(--text3)", fontSize: 9 }}>{(r.items || []).length} פריטים · {r.loan_type || ""}</div>
-      {r.status && <div style={{ fontSize: 8, fontWeight: 700, color: r.status === "מאושר" ? "#22c55e" : r.status === "ממתין" ? "#f59e0b" : "var(--text3)", marginTop: 1 }}>● {r.status}</div>}
+      <div style={{ fontWeight: 700, color: "#fff", fontSize: 10, lineHeight: 1.3 }}>{r.student_name || "—"}</div>
+      <div style={{ color: "#fff", fontSize: 11, fontWeight: 800, marginTop: 1 }}>{(r.items || []).length} פריטים · {r.loan_type || ""}</div>
+      {r.status && <div style={{ fontSize: 8, fontWeight: 700, color: String(r.status).includes("ראש מחלקה") || String(r.status).includes("ראש המחלקה") ? "#9b59b6" : "#fff", marginTop: 1 }}>● {r.status}</div>}
     </div>
   );
 }
