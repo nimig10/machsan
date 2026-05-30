@@ -746,8 +746,11 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
               );
             })}
 
+            {/* ══ Section divider: Shifts (defaults OPEN) ══ */}
+            <SectionDivider title={<><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> משמרות עובדים</>} open={showShifts} onToggle={() => setShowShifts(v => !v)} />
+
             {/* ═══ Shift Rows (morning / custom / evening) ═══ */}
-            {SLOT_ORDER.map((slotKey, rowIdx) => {
+            {showShifts && SLOT_ORDER.map((slotKey, rowIdx) => {
               const st = SHIFT_TYPES[slotKey];
               const isLastSlot = rowIdx === SLOT_ORDER.length - 1;
               return (
@@ -1451,10 +1454,14 @@ function StudentBookingsRow({ workDays, studioBookings, studios, today, holidays
 /* ══════════ Loans row ══════════ */
 function LoanChip({ r, isReturn, onClick }) {
   return (
-    <div style={{
+    <div
+      onClick={() => onClick?.(r)}
+      title="הצג ציוד שהושאל"
+      style={{
       background: isReturn ? "rgba(59,130,246,0.1)" : "rgba(245,158,11,0.1)",
       border: `1px solid ${isReturn ? "rgba(59,130,246,0.25)" : "rgba(245,158,11,0.25)"}`,
       borderRadius: 5, padding: "2px 4px", marginBottom: 2,
+      cursor: onClick ? "pointer" : "default",
     }}>
       <div style={{ fontWeight: 700, color: isReturn ? "#3b82f6" : "#f59e0b", fontSize: 9 }}>
         {isReturn ? "↩ החזרה" : "↗ יציאה"} {isReturn ? (r.return_time || "") : (r.borrow_time || "")}
@@ -1491,10 +1498,10 @@ function LoansRow({ workDays, reservations, today, onSelectLoan }) {
         const hasData = studentBorrows.length + lessonBorrows.length + studentReturns.length + lessonReturns.length > 0;
         return (
           <div key={date} style={{ padding: "4px 3px", borderLeft: i < workDays.length - 1 ? "1px solid var(--border)" : "none", borderTop: "1px solid var(--border)", minHeight: 50, fontSize: 10 }}>
-            {studentBorrows.map(r => <LoanChip key={`sb-${r.id}`} r={r} isReturn={false} />)}
-            {studentReturns.map(r => <LoanChip key={`sr-${r.id}`} r={r} isReturn={true} />)}
-            {lessonBorrows.map(r => <LoanChip key={`lb-${r.id}`} r={r} isReturn={false} />)}
-            {lessonReturns.map(r => <LoanChip key={`lr-${r.id}`} r={r} isReturn={true} />)}
+            {studentBorrows.map(r => <LoanChip key={`sb-${r.id}`} r={r} isReturn={false} onClick={onSelectLoan} />)}
+            {studentReturns.map(r => <LoanChip key={`sr-${r.id}`} r={r} isReturn={true} onClick={onSelectLoan} />)}
+            {lessonBorrows.map(r => <LoanChip key={`lb-${r.id}`} r={r} isReturn={false} onClick={onSelectLoan} />)}
+            {lessonReturns.map(r => <LoanChip key={`lr-${r.id}`} r={r} isReturn={true} onClick={onSelectLoan} />)}
             {!hasData && <div style={{ color: "var(--text3)", textAlign: "center", paddingTop: 14, fontSize: 10 }}>—</div>}
           </div>
         );
