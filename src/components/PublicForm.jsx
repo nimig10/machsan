@@ -2027,7 +2027,14 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     }
   });
   const [publicView, setPublicView] = useState(() => sessionStorage.getItem("public_view") || "equipment"); // "equipment" | "studios" | "daily"
-  const [studentApp, setStudentApp]   = useState(() => sessionStorage.getItem("student_app") || "hub"); // "hub" | "forms" | "productions"
+  const [studentApp, setStudentApp]   = useState(() => {
+    // Deep-link: `?app=productions` (used by the production-deadline reminder
+    // email button) lands the student straight on the productions board after
+    // login. Falls back to the last-used view, then the hub.
+    const appParam = initialParams.get("app");
+    if (["hub","forms","productions"].includes(appParam || "")) return appParam;
+    return sessionStorage.getItem("student_app") || "hub";
+  }); // "hub" | "forms" | "productions"
   const [dailyLessons, setDailyLessons] = useState([]);
   const [dailyDayOffset, setDailyDayOffset] = useState(0);
   const [dailyMyLessons, setDailyMyLessons] = useState(false);

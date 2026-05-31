@@ -45,7 +45,8 @@ const SERVICE_HEADERS = {
 // "one day before the deadline" (deadline = shoot − 7, last day = daysToShoot 7).
 const REMINDER_DAYS_BEFORE_SHOOT = 8;
 
-const PORTAL_URL = "https://app.camera.org.il";
+// Deep-link straight to the productions board (PublicForm reads ?app=productions).
+const PORTAL_URL = "https://app.camera.org.il/?app=productions";
 
 // Today's date in Israel timezone, formatted YYYY-MM-DD.
 function todayInIsrael() {
