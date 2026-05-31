@@ -65,8 +65,31 @@ function shiftDate(isoDate, daysBefore) {
   return `${yy}-${mm}-${dd}`;
 }
 
-async function fetchJson(path) {
-  const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: SERVICE_HEADERS });
+// "YYYY-MM-DD" → "DD/MM/YYYY" for display in the email body.
+function formatDateHe(isoDate) {
+  if (!isoDate) return "";
+  const [y, m, d] = String(isoDate).slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return "";
+  return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
+}
+
+function fmtHHMM(t) {
+  return t ? String(t).slice(0, 5) : "";
+}
+
+// One shoot date → "DD/MM/YYYY (HH:MM–HH:MM)", or a "DD/MM/YYYY – DD/MM/YYYY"
+// range for a multi-day shoot.
+function shootDateLine(d) {
+  const start = formatDateHe(d.start_date);
+  const end = d.end_date && d.end_date !== d.start_date ? formatDateHe(d.end_date) : "";
+  const dateStr = end ? `${start} – ${end}` : start;
+  const st = fmtHHMM(d.start_time);
+  const et = fmtHHMM(d.end_time);
+  const timeStr = st && et ? ` (${st}–${et})` : st ? ` (${st})` : "";
+  return dateStr + timeStr;
+}
+
+async function fetchJson(path) {  const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: SERVICE_HEADERS });
   if (!r.ok) {
     const text = await r.text();
     throw new Error(`fetch ${path} failed: ${r.status} ${text}`);
@@ -82,7 +105,7 @@ function baseUrlFromEnv() {
     : "http://localhost:3000";
 }
 
-async function sendReminder(baseUrl, { to, directorName, title }) {
+async function sendReminder(baseUrl, { to, directorName, title, datesText }) {
   const res = await fetch(`${baseUrl}/api/send-email`, {
     method: "POST",
     headers: {
@@ -95,6 +118,7 @@ async function sendReminder(baseUrl, { to, directorName, title }) {
       recipient_name: directorName || "סטודנט/ית",
       student_name: directorName || "סטודנט/ית",
       project_name: title || "",
+      shoot_dates_text: datesText || "",
       loan_type: "הפקה",
       portal_url: PORTAL_URL,
     }),
@@ -126,6 +150,7 @@ export default async function handler(req, res) {
         to: forceTest,
         directorName: "בדיקה",
         title: "הפקת דוגמה",
+        datesText: "08/06/2026 (09:00–17:00)<br/>09/06/2026 (09:00–14:00)",
       });
       return res.status(200).json({ ok: true, force_test: forceTest, sent: 1 });
     } catch (e) {
@@ -136,7 +161,7 @@ export default async function handler(req, res) {
   try {
     const [productions, dates, reservations] = await Promise.all([
       fetchJson("productions?select=id,title,director_email,director_name,status"),
-      fetchJson("production_dates?select=id,production_id,start_date"),
+      fetchJson("production_dates?select=id,production_id,start_date,end_date,start_time,end_time"),
       fetchJson("reservations_new?select=production_id,production_date_id,status&production_id=not.is.null"),
     ]);
 
@@ -166,13 +191,19 @@ export default async function handler(req, res) {
       if (!email) continue;
 
       const pDates = datesByProduction.get(String(p.id)) || [];
-      // Reminder fires if ANY pending (not-yet-submitted) shoot date is exactly
-      // one day before its submission deadline today.
-      const hit = pDates.some((d) => {
+      // Reminder fires for pending (not-yet-submitted) shoot dates that are
+      // exactly one day before their submission deadline today.
+      const matchingDates = pDates.filter((d) => {
         if (submittedDateIds.has(String(d.id))) return false;
         return shiftDate(d.start_date, REMINDER_DAYS_BEFORE_SHOOT) === today;
       });
-      if (!hit) continue;
+      if (matchingDates.length === 0) continue;
+
+      const datesText = matchingDates
+        .slice()
+        .sort((a, b) => String(a.start_date).localeCompare(String(b.start_date)))
+        .map(shootDateLine)
+        .join("<br/>");
 
       considered++;
       try {
@@ -180,6 +211,7 @@ export default async function handler(req, res) {
           to: email,
           directorName: p.director_name,
           title: p.title,
+          datesText,
         });
         sent++;
         console.log(`production-deadline-reminder: emailed ${email} for production "${p.title}"`);

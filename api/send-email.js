@@ -56,6 +56,7 @@ function buildEmail({
   items_list,
   loan_type,
   project_name,
+  shoot_dates_text,
   production_reason,
   crew_photographer,
   crew_sound,
@@ -186,7 +187,11 @@ function buildEmail({
        4. בחירת סטטוס לכל תלמיד ולחיצה על "שמירה".<br/><br/>
        ללא העדכון הזה, צוות האדמיניסטרציה לא יוכל להפיק את תעודות הסיום.`
     : isProductionDeadline
-    ? `שים/י לב — <strong style="color:#f5a623">מחר יהיה היום האחרון</strong> שבו תוכל/י להגיש רשימת ציוד מלאה עבור תאריכי ההפקה${project_name ? ` <strong style="color:#e8eaf0">"${project_name}"</strong>` : ""} המבוקשים!!<br/><br/>
+    ? `שים/י לב — <strong style="color:#f5a623">מחר יהיה היום האחרון</strong> שבו תוכל/י להגיש רשימת ציוד מלאה עבור תאריכי ההפקה${project_name ? ` <strong style="color:#e8eaf0">"${project_name}"</strong>` : ""} המבוקשים!!${
+         shoot_dates_text
+           ? `<br/><br/><div style="border-right:3px solid #f5a623;background:rgba(245,166,35,0.08);padding:14px 16px;border-radius:8px"><div style="font-weight:800;color:#f5a623;margin-bottom:8px;font-size:14px">📅 תאריכי הצילום שעבורם נדרשת רשימת הציוד</div><div style="color:#e8eaf0;font-size:14px;line-height:1.9;font-weight:700">${shoot_dates_text}</div></div>`
+           : ""
+       }<br/><br/>
        עליך להזדרז ולהכין את הרשימה בהקדם האפשרי!!<br/><br/>
        שיהיה המון בהצלחה בהפקה — המכללה שמחה לעזור תמיד 🎬`
     : isNew
@@ -346,6 +351,7 @@ export default async function handler(req, res) {
     items_list,
     loan_type,
     project_name,
+    shoot_dates_text,
     production_reason,
     crew_photographer,
     crew_sound,
@@ -439,6 +445,7 @@ export default async function handler(req, res) {
         items_list,
         loan_type,
         project_name,
+        shoot_dates_text,
         production_reason,
         crew_photographer,
         crew_sound,
