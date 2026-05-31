@@ -1,5 +1,6 @@
 // PublicDisplayPage.jsx — public display screen for daily schedule & room bookings
 import { useState, useEffect, useMemo, useRef } from "react";
+import { formatTime } from "../utils.js";
 import { listLessons } from "../utils/lessonsApi.js";
 import { listStudios } from "../utils/studiosApi.js";
 import { listStudioBookings } from "../utils/studioBookingsApi.js";
