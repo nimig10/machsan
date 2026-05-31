@@ -56,6 +56,7 @@ function buildEmail({
   items_list,
   loan_type,
   project_name,
+  shoot_dates_text,
   production_reason,
   crew_photographer,
   crew_sound,
@@ -83,6 +84,7 @@ function buildEmail({
   const isStudioDeleted   = type === "studio_deleted";
   const isLessonConflict  = type === "studio_lesson_conflict";
   const isCourseEndNotice = type === "course_end_notice";
+  const isProductionDeadline = type === "production_deadline";
 
   const finalTeacherMessage =
     teacher_message || custom_message || lesson_message || report_note || "";
@@ -100,6 +102,7 @@ function buildEmail({
     : isManagerReport ? "#e67e22"
     : isLessonKitReady ? "#3498db"
     : isCourseEndNotice ? "#9b59b6"
+    : isProductionDeadline ? "#f5a623"
     : (isOverdue || isOverdueTeam) ? "#e74c3c"
     : (isNew || isTeamNotify) ? "#f5a623"
     : "#e74c3c";
@@ -112,6 +115,7 @@ function buildEmail({
     : isManagerReport ? "📋"
     : isLessonKitReady ? "📚"
     : isCourseEndNotice ? "🎓"
+    : isProductionDeadline ? "⏰"
     : (isOverdue || isOverdueTeam) ? "🚨"
     : (isNew || isTeamNotify) ? "⏳"
     : "❌";
@@ -124,6 +128,7 @@ function buildEmail({
     : isManagerReport ? "דיווח מצוות המחסן"
     : isLessonKitReady ? "ערכת השיעור מוכנה לבדיקה"
     : isCourseEndNotice ? "הקורס מסתיים בעוד שבוע — נא לעדכן סטטוסים"
+    : isProductionDeadline ? "מחר היום האחרון להגשת רשימת ציוד!"
     : isOverdue ? "⚠️ הציוד לא הוחזר — נדרשת פעולה מיידית"
     : isOverdueTeam ? `🚨 ציוד לא הוחזר — ${student_name || ""}`
     : isTeamNotify ? `בקשת השאלה חדשה — ${loan_type || ""}`
@@ -181,6 +186,14 @@ function buildEmail({
        3. לחיצה על הכפתור <strong style="color:#9b59b6">"רשימת תלמידים"</strong>.<br/>
        4. בחירת סטטוס לכל תלמיד ולחיצה על "שמירה".<br/><br/>
        ללא העדכון הזה, צוות האדמיניסטרציה לא יוכל להפיק את תעודות הסיום.`
+    : isProductionDeadline
+    ? `שים/י לב — <strong style="color:#f5a623">מחר יהיה היום האחרון</strong> שבו תוכל/י להגיש רשימת ציוד מלאה עבור תאריכי ההפקה${project_name ? ` <strong style="color:#e8eaf0">"${project_name}"</strong>` : ""} המבוקשים!!${
+         shoot_dates_text
+           ? `<br/><br/><div style="border-right:3px solid #f5a623;background:rgba(245,166,35,0.08);padding:14px 16px;border-radius:8px"><div style="font-weight:800;color:#f5a623;margin-bottom:8px;font-size:14px">📅 תאריכי הצילום שעבורם נדרשת רשימת הציוד</div><div style="color:#e8eaf0;font-size:14px;line-height:1.9;font-weight:700">${shoot_dates_text}</div></div>`
+           : ""
+       }<br/><br/>
+       עליך להזדרז ולהכין את הרשימה בהקדם האפשרי!!<br/><br/>
+       שיהיה המון בהצלחה בהפקה — המכללה שמחה לעזור תמיד 🎬`
     : isNew
     ? `בקשת ההשאלה שלך <strong style="color:#f5a623">התקבלה</strong> וממתינה לאישור.`
     : `לצערנו בקשת ההשאלה שלך <strong style="color:#e74c3c">נדחתה</strong>.`;
@@ -251,7 +264,14 @@ function buildEmail({
       </a>
     </div>` : "";
 
-  const showDetails = (!isManagerReport || student_name !== "צוות המחסן") && !isCourseEndNotice;
+  const productionDeadlineButton = isProductionDeadline && portal_url ? `
+    <div style="text-align:center;margin:24px 0">
+      <a href="${portal_url}" style="display:inline-block;padding:16px 36px;background:#f5a623;color:#111318;font-weight:900;font-size:15px;border-radius:10px;text-decoration:none;letter-spacing:0.4px;box-shadow:0 4px 18px rgba(245,166,35,0.4)">
+        🎬 כניסה ללוח ההפקות
+      </a>
+    </div>` : "";
+
+  const showDetails = (!isManagerReport || student_name !== "צוות המחסן") && !isCourseEndNotice && !isProductionDeadline;
 
   return `
 <!DOCTYPE html>
@@ -276,7 +296,7 @@ function buildEmail({
       ${reportSection}
       ${lessonKitSection}
       ${studentMessageSection}
-      ${isCourseEndNotice ? "" : `
+      ${(isCourseEndNotice || isProductionDeadline) ? "" : `
       <div style="background:#111318;border:1px solid #252b38;border-radius:10px;padding:20px;margin:20px 0;direction:rtl">
         <h3 style="color:#f5a623;font-size:14px;margin:0 0 12px;text-align:right">פרטי הבקשה</h3>
         <table style="width:100%;font-size:13px;color:#8891a8;border-collapse:collapse;direction:rtl">
@@ -302,6 +322,7 @@ function buildEmail({
       ${portalButton}
       ${calendarButton}
       ${courseEndPortalButton}
+      ${productionDeadlineButton}
       ${isApproved ? `
       <div style="background:rgba(46,204,113,0.08);border:1px solid rgba(46,204,113,0.2);border-radius:8px;padding:16px;font-size:13px;color:#8891a8;margin-bottom:20px;direction:rtl;text-align:right">
         📌 <strong style="color:#e8eaf0">תזכורת:</strong> יש להחזיר את הציוד עד <strong style="color:#f5a623">${return_date}${return_time ? " בשעה " + return_time : ""}</strong> במצב תקין.
@@ -330,6 +351,7 @@ export default async function handler(req, res) {
     items_list,
     loan_type,
     project_name,
+    shoot_dates_text,
     production_reason,
     crew_photographer,
     crew_sound,
@@ -382,6 +404,7 @@ export default async function handler(req, res) {
     overdue_team:      `🚨 ציוד לא הוחזר במועד — ${student_name || ""}`,
     lesson_kit_ready:  `📚 ערכת שיעור מוכנה לבדיקה — ${lesson_kit_name || project_name || student_name || ""}`,
     course_end_notice: `🎓 הקורס "${project_name || lesson_kit_name || ""}" מסתיים בעוד שבוע — נא לעדכן סטטוסים`,
+    production_deadline: `⏰ תזכורת: מחר היום האחרון להגשת רשימת ציוד${project_name ? ` — ${project_name}` : ""}`,
     studio_lesson_conflict: `❌ קביעת החדר${project_name ? ` ב-${project_name}` : ""} בוטלה לטובת שיעור – מכללת קמרה אובסקורה וסאונד`,
   };
 
@@ -422,6 +445,7 @@ export default async function handler(req, res) {
         items_list,
         loan_type,
         project_name,
+        shoot_dates_text,
         production_reason,
         crew_photographer,
         crew_sound,

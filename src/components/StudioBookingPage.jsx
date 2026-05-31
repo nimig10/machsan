@@ -298,7 +298,7 @@ export default function StudioBookingPage(props) {
     return "";
   }, [getBookingKind]);
   const getBookingTimeLabel = useCallback((booking) => (
-    booking?.isNight ? `🌙 ${NIGHT_BOOKING_LABEL}` : `${booking?.startTime || ""}–${booking?.endTime || ""}`
+    booking?.isNight ? `🌙 ${NIGHT_BOOKING_LABEL}` : `${formatTime(booking?.startTime)}–${formatTime(booking?.endTime)}`
   ), []);
 
   const weekMiddle = new Date();

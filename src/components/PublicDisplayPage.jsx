@@ -294,7 +294,7 @@ export function PublicDisplayPage() {
                           width:"7.3vw",
                         }}>
                           <div style={{fontWeight:900,fontSize:"2vh",color:accent,textAlign:"center",whiteSpace:"nowrap"}}>
-                            {s.startTime}<br/><span style={{fontSize:"1.3vh",opacity:0.7}}>—</span><br/>{s.endTime}
+                            {formatTime(s.startTime)}<br/><span style={{fontSize:"1.3vh",opacity:0.7}}>—</span><br/>{formatTime(s.endTime)}
                           </div>
                         </div>
                         {/* Info block */}
@@ -392,7 +392,7 @@ export function PublicDisplayPage() {
                           width:"7.3vw",
                         }}>
                           <div style={{fontWeight:900,fontSize:"1.9vh",color,textAlign:"center",whiteSpace:"nowrap"}}>
-                            {b.isNight ? "לילה" : <>{b.startTime}<br/><span style={{fontSize:"1.2vh",opacity:0.7}}>—</span><br/>{b.endTime}</>}
+                            {b.isNight ? "לילה" : <>{formatTime(b.startTime)}<br/><span style={{fontSize:"1.2vh",opacity:0.7}}>—</span><br/>{formatTime(b.endTime)}</>}
                           </div>
                         </div>
                         {/* Info block */}

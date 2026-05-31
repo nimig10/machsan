@@ -4,6 +4,7 @@ import { Modal } from "./ui.jsx";
 import { Calendar, CheckCircle, Mic, Minus, Package, X } from "lucide-react";
 import {
   formatDate,
+  formatTime,
   toDateTime,
   FAR_FUTURE,
   getReservationApprovalConflicts,
@@ -234,7 +235,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
             <div>
               <div className="form-section-title">תאריכים ושעות</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12}}>
-                {[["תאריך השאלה", formatDate(reservation.borrow_date)],["שעת איסוף", reservation.borrow_time || "לא הוזנה"],["תאריך החזרה", formatDate(reservation.return_date)],["שעת החזרה", reservation.return_time || "לא הוזנה"]].map(([label,value])=>(
+                {[["תאריך השאלה", formatDate(reservation.borrow_date)],["שעת איסוף", formatTime(reservation.borrow_time) || "לא הוזנה"],["תאריך החזרה", formatDate(reservation.return_date)],["שעת החזרה", formatTime(reservation.return_time) || "לא הוזנה"]].map(([label,value])=>(
                   <div key={label} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"14px 16px"}}>
                     <div style={{fontSize:12,color:"var(--text3)",marginBottom:6,fontWeight:700}}>{label}</div>
                     <div style={{fontSize:18,fontWeight:900,color:"var(--text)"}}>{value}</div>
@@ -404,10 +405,10 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                                     <span>כמות שהושאלה: <strong style={{color: isOvd ? "var(--red)" : "var(--accent)"}}>{blocker.quantity}</strong></span>
                                   </div>
                                   <div style={{fontSize:11,color:"var(--text2)",marginTop:4,display:"flex",gap:10,flexWrap:"wrap"}}>
-                                    <span>מ־{formatDate(blocker.borrow_date)} {blocker.borrow_time}</span>
+                                    <span>מ־{formatDate(blocker.borrow_date)} {formatTime(blocker.borrow_time)}</span>
                                     {isOvd
                                       ? <span style={{color:"var(--red)",fontWeight:700}}>היה אמור לחזור {formatDate(blocker.return_date)} — עדיין לא הוחזר</span>
-                                      : <span>עד {formatDate(blocker.return_date)} {blocker.return_time}</span>
+                                      : <span>עד {formatDate(blocker.return_date)} {formatTime(blocker.return_time)}</span>
                                     }
                                   </div>
                                 </div>
@@ -521,8 +522,8 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                         <span style={{fontWeight:900,fontSize:15,color:"var(--red)"}}>כמות חסומה: {blocker.quantity}</span>
                       </div>
                       <div style={{fontSize:12,color:"var(--text2)",display:"flex",flexWrap:"wrap",gap:10}}>
-                        <span><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> {formatDate(blocker.borrow_date)} {blocker.borrow_time || ""}</span>
-                        <span>↩ {formatDate(blocker.return_date)} {blocker.return_time || ""}</span>
+                        <span><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> {formatDate(blocker.borrow_date)} {formatTime(blocker.borrow_time)}</span>
+                        <span>↩ {formatDate(blocker.return_date)} {formatTime(blocker.return_time)}</span>
                       </div>
                     </div>
                   ))}

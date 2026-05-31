@@ -508,9 +508,9 @@ function ActiveLoanCard({ reservation, equipById }) {
         <div style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:8,padding:"6px 9px",background:"var(--surface2)",borderRadius:"var(--r-sm)"}}>
           <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700,color:"var(--text)"}}>
             <Calendar size={13} strokeWidth={1.75} color="var(--accent)" />
-            {formatDate(r.borrow_date)}{r.borrow_time ? ` · ${r.borrow_time}` : ""}
+            {formatDate(r.borrow_date)}{r.borrow_time ? ` · ${formatTime(r.borrow_time)}` : ""}
             <span style={{color:"var(--text3)",fontWeight:400,margin:"0 3px"}}>←</span>
-            {formatDate(r.return_date)}{r.return_time ? ` · ${r.return_time}` : ""}
+            {formatDate(r.return_date)}{r.return_time ? ` · ${formatTime(r.return_time)}` : ""}
           </span>
           {r.loan_type && (
             <span style={{padding:"2px 8px",borderRadius:10,background:loanTypeColor[0],color:loanTypeColor[1],fontSize:10,fontWeight:800,border:`1px solid ${loanTypeColor[1]}`}}>
@@ -1133,7 +1133,7 @@ function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, s
     <>
       <div className="form-section-title">סיכום ואישור</div>
       <div className="grid-2" style={{marginBottom:20}}>
-        <div>{[["שם",form.student_name],["אימייל",form.email],["קורס",form.course],["סוג השאלה",form.loan_type],["מ",`${formatDate(form.borrow_date)}${form.borrow_time?" · "+form.borrow_time:""}`],["עד",`${formatDate(form.return_date)}${form.return_time?" · "+form.return_time:""}`]].map(([l,v])=><div key={l} className="req-detail-row"><span className="req-detail-label">{l}:</span><strong>{v}</strong></div>)}</div>
+        <div>{[["שם",form.student_name],["אימייל",form.email],["קורס",form.course],["סוג השאלה",form.loan_type],["מ",`${formatDate(form.borrow_date)}${form.borrow_time?" · "+formatTime(form.borrow_time):""}`],["עד",`${formatDate(form.return_date)}${form.return_time?" · "+formatTime(form.return_time):""}`]].map(([l,v])=><div key={l} className="req-detail-row"><span className="req-detail-label">{l}:</span><strong>{v}</strong></div>)}</div>
         <div>{items.map(i=>{
           const eq = equipment.find(e=>e.id==i.equipment_id);
           const img = eq?.image||null;
@@ -2027,7 +2027,14 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     }
   });
   const [publicView, setPublicView] = useState(() => sessionStorage.getItem("public_view") || "equipment"); // "equipment" | "studios" | "daily"
-  const [studentApp, setStudentApp]   = useState(() => sessionStorage.getItem("student_app") || "hub"); // "hub" | "forms" | "productions"
+  const [studentApp, setStudentApp]   = useState(() => {
+    // Deep-link: `?app=productions` (used by the production-deadline reminder
+    // email button) lands the student straight on the productions board after
+    // login. Falls back to the last-used view, then the hub.
+    const appParam = initialParams.get("app");
+    if (["hub","forms","productions"].includes(appParam || "")) return appParam;
+    return sessionStorage.getItem("student_app") || "hub";
+  }); // "hub" | "forms" | "productions"
   const [dailyLessons, setDailyLessons] = useState([]);
   const [dailyDayOffset, setDailyDayOffset] = useState(0);
   const [dailyMyLessons, setDailyMyLessons] = useState(false);
@@ -4475,7 +4482,7 @@ ${inventory}
                                 const locked = lockedDateIds.has(String(d.id));
                                 return (
                                   <li key={d.id}>
-                                    {fmtDate(d.startDate)} {d.startTime} – {d.startDate === d.endDate ? "" : fmtDate(d.endDate) + " "}{d.endTime}
+                                    {fmtDate(d.startDate)} {formatTime(d.startTime)} – {d.startDate === d.endDate ? "" : fmtDate(d.endDate) + " "}{formatTime(d.endTime)}
                                     {d.note ? <span style={{color:"var(--text3)"}}> ({d.note})</span> : null}
                                     {locked && (
                                       <span style={{marginInlineStart:8,fontSize:11,color:"#2ecc71",fontWeight:700}}>
@@ -4546,8 +4553,8 @@ ${inventory}
                     const studio = visibleStudios?.find(s=>String(s.id)===String(grp.studioId)) || studios?.find(s=>String(s.id)===String(grp.studioId));
                     const hasNight = grp.bookings.some(b=>b.isNight);
                     const timeLabel = grp.isMultiDay
-                      ? `${fmtDate(grp.startDate)} ${grp.startTime||""} – ${fmtDate(grp.endDate)} ${grp.endTime||""}`
-                      : `${fmtDate(grp.startDate)} · ${grp.startTime||""}–${grp.endTime||""}`;
+                      ? `${fmtDate(grp.startDate)} ${formatTime(grp.startTime)} – ${fmtDate(grp.endDate)} ${formatTime(grp.endTime)}`
+                      : `${fmtDate(grp.startDate)} · ${formatTime(grp.startTime)}–${formatTime(grp.endTime)}`;
                     const icon = hasNight ? "🌙" : "☀️";
                     return <option key={grp.primaryId} value={grp.primaryId}>{icon} {studio?.name||"חדר"} · {timeLabel}</option>;
                   })}
@@ -4606,8 +4613,8 @@ ${inventory}
                     <div style={{background:"rgba(76,217,100,0.08)",border:"1px solid rgba(76,217,100,0.3)",borderRadius:"var(--r-sm)",padding:"12px 16px",marginBottom:16,fontSize:13}}>
                       <CheckCircle size={16} strokeWidth={1.75} /> <strong>מועד ההשאלה נקבע לפי קביעת החדר:</strong>{" "}
                       {form.borrow_date === form.return_date
-                        ? `${formatDate(form.borrow_date)} · ${form.borrow_time}–${form.return_time}`
-                        : `${formatDate(form.borrow_date)} ${form.borrow_time} עד ${formatDate(form.return_date)} ${form.return_time}`}
+                        ? `${formatDate(form.borrow_date)} · ${formatTime(form.borrow_time)}–${formatTime(form.return_time)}`
+                        : `${formatDate(form.borrow_date)} ${formatTime(form.borrow_time)} עד ${formatDate(form.return_date)} ${formatTime(form.return_time)}`}
                     </div>
                   )}
                 </>
@@ -4860,7 +4867,7 @@ ${inventory}
                         {/* שעות — בולטות */}
                         {(s.startTime||s.endTime) && (
                           <div style={{fontWeight:800,fontSize:16,color:"var(--accent)",marginBottom:6}}>
-                            🕐 {s.startTime}{s.endTime ? `–${s.endTime}` : ""}
+                            🕐 {formatTime(s.startTime)}{s.endTime ? `–${formatTime(s.endTime)}` : ""}
                           </div>
                         )}
                         {/* שם מרצה — גדול וברור */}
@@ -4936,7 +4943,7 @@ ${inventory}
             const renderRow=(b)=>{
               const studioObj=studios.find(s=>String(s.id)===String(b.studioId));
               const color=b.isNight?"#2196f3":"var(--green)";
-              const timeLabel=b.isNight?`מ-21:30 והלאה`:`${b.startTime||""}–${b.endTime||""}`;
+              const timeLabel=b.isNight?`מ-21:30 והלאה`:`${formatTime(b.startTime)}–${formatTime(b.endTime)}`;
               const isEditing=editingBooking?.id===b.id;
               return (<div key={b.id} style={{background:"var(--surface2)",borderRadius:8,marginBottom:8,border:`1px solid ${color}33`,borderRight:`3px solid ${color}`,overflow:"hidden"}}>
                 <div style={{padding:"12px 14px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,flexWrap:"wrap"}}>
@@ -4995,7 +5002,7 @@ ${inventory}
                 <div style={{background:cardBg,padding:"12px 14px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}} onClick={()=>setExpandedResId(isExp?null:r.id)}>
                   <div>
                     <div style={{fontWeight:700,fontSize:13}}>
-                      <Calendar size={14} strokeWidth={1.75} color="var(--accent)" style={{flexShrink:0}} /> {fmtDate(r.borrow_date)}{r.borrow_time&&<span style={{color:"var(--accent)",marginRight:4}}> {r.borrow_time}</span>} ← {fmtDate(r.return_date)}{r.return_time&&<span style={{color:"var(--accent)",marginRight:4}}> {r.return_time}</span>}
+                      <Calendar size={14} strokeWidth={1.75} color="var(--accent)" style={{flexShrink:0}} /> {fmtDate(r.borrow_date)}{r.borrow_time&&<span style={{color:"var(--accent)",marginRight:4}}> {formatTime(r.borrow_time)}</span>} ← {fmtDate(r.return_date)}{r.return_time&&<span style={{color:"var(--accent)",marginRight:4}}> {formatTime(r.return_time)}</span>}
                     </div>
                     <div style={{fontSize:13,color:"var(--text)",marginTop:4,fontWeight:700}}>{r.loan_type&&<span style={{marginLeft:8,color:"var(--accent)"}}>{r.loan_type}</span>}{r.items?.length||0} פריטים</div>
                   </div>
@@ -6242,7 +6249,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                       <div style={{display:"flex",flexDirection:"column",gap:2}}>
                         <span style={{fontWeight:700,fontSize:13}}>{getBookingTitle(booking)}</span>
                         {getBookingSubtitle(booking) && <span style={{fontSize:11,color:"var(--text3)"}}>{getBookingSubtitle(booking)}</span>}
-                        <span style={{fontSize:11,color:"var(--text3)"}}>{booking.startTime}–{booking.endTime}</span>
+                        <span style={{fontSize:11,color:"var(--text3)"}}>{formatTime(booking.startTime)}–{formatTime(booking.endTime)}</span>
                         {getBookingKind(booking)==="student" && (booking.studentEmail||booking.studentPhone) && (
                           <span style={{fontSize:12,color:"var(--accent)",fontWeight:600}}>
                             {booking.studentEmail && <>{booking.studentEmail}</>}
