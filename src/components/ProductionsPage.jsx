@@ -329,7 +329,7 @@ function ProductionDetail({ p, currentStudent, students, kits = [], reservations
               return (
                 <li key={d.id} style={{marginBottom:6}}>
                   <span>
-                    {fmtDate(d.startDate)} {formatTime(d.startTime)} – {d.startDate === d.endDate ? "" : fmtDate(d.endDate) + " "}{formatTime(d.endTime)}
+                    <strong style={{color:"var(--accent)"}}>יציאה:</strong> {fmtDate(d.startDate)} {formatTime(d.startTime)} <span style={{color:"var(--text3)",margin:"0 2px"}}>·</span> <strong style={{color:"var(--accent)"}}>חזרה:</strong> {d.startDate === d.endDate ? "" : fmtDate(d.endDate) + " "}{formatTime(d.endTime)}
                     {d.note ? <span style={{color:"var(--text3)"}}> — {d.note}</span> : null}
                   </span>
                   {locked && (
