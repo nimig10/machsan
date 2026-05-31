@@ -472,6 +472,14 @@ export function formatDate(d) {
   return parseLocalDate(d).toLocaleDateString("he-IL", { day:"2-digit", month:"2-digit", year:"numeric" });
 }
 
+// Normalize a time-of-day string for display: always "HH:MM".
+// DB rows are inconsistent — some store "09:30:00" (with seconds), some "21:30".
+// Slicing to 5 chars yields a uniform hh:mm regardless of source.
+export function formatTime(t) {
+  if (!t) return "";
+  return String(t).slice(0, 5);
+}
+
 export function normalizeName(value) {
   return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
 }

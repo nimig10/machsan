@@ -78,8 +78,8 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
           </div>
         </div>
         <div style={{marginTop:10,display:"flex",gap:16,fontSize:12,color:"var(--text2)",flexWrap:"wrap"}}>
-          <span><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> {formatDate(r.borrow_date)}{r.borrow_time&&<strong style={{color:"var(--accent)",marginRight:4}}> {r.borrow_time}</strong>}</span>
-          <span>↩ {formatDate(r.return_date)}{r.return_time&&<strong style={{color:"var(--accent)",marginRight:4}}> {r.return_time}</strong>}</span>
+          <span><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> {formatDate(r.borrow_date)}{r.borrow_time&&<strong style={{color:"var(--accent)",marginRight:4}}> {formatTime(r.borrow_time)}</strong>}</span>
+          <span>↩ {formatDate(r.return_date)}{r.return_time&&<strong style={{color:"var(--accent)",marginRight:4}}> {formatTime(r.return_time)}</strong>}</span>
           <span><Package size={14} strokeWidth={1.75} color="var(--accent)" /> {r.items?.length||0} פריטים</span>
           {r.returned_at&&<span style={{color:"var(--text3)"}}>🕐 הוחזר: {new Date(r.returned_at).toLocaleDateString("he-IL")}</span>}
         </div>
@@ -177,7 +177,7 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
               <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"14px 16px"}}>
                 <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>תאריכים</div>
                 <div className="responsive-split">
-                  {[[<><Calendar size={13} strokeWidth={1.75} color="var(--accent)" /> השאלה</>,`${formatDate(viewRes.borrow_date)}${viewRes.borrow_time?" · "+viewRes.borrow_time:""}`],["↩ החזרה",`${formatDate(viewRes.return_date)}${viewRes.return_time?" · "+viewRes.return_time:""}`]].map(([l,v])=>(
+                  {[[<><Calendar size={13} strokeWidth={1.75} color="var(--accent)" /> השאלה</>,`${formatDate(viewRes.borrow_date)}${viewRes.borrow_time?" · "+formatTime(viewRes.borrow_time):""}`],["↩ החזרה",`${formatDate(viewRes.return_date)}${viewRes.return_time?" · "+formatTime(viewRes.return_time):""}`]].map(([l,v])=>(
                     <div key={l} style={{background:"var(--surface3)",borderRadius:"var(--r-sm)",padding:"10px 12px"}}>
                       <div style={{fontSize:11,color:"var(--text3)",marginBottom:4}}>{l}</div>
                       <div style={{fontWeight:700,fontSize:13,color:"var(--accent)"}}>{v}</div>

@@ -1,7 +1,7 @@
 import { supabase } from '../supabaseClient.js';
 // ReservationsPage.jsx — admin reservations management page (includes rejected + archive tabs)
 import { useEffect, useState } from "react";
-import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, createReservation, deleteReservation as deleteReservationRpc, getAuthToken, syncReservationStatusToBlob } from "../utils.js";
+import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, createReservation, deleteReservation as deleteReservationRpc, getAuthToken, syncReservationStatusToBlob } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
@@ -795,7 +795,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                 <div style={{display:"flex",gap:16,fontSize:12,color:"var(--text2)",flexWrap:"wrap"}}>
                   <span><Clock size={12} strokeWidth={1.75} color="var(--accent)" /> {getLoanDurationDays(r.borrow_date, r.return_date)} ימים</span>
                   <span><BookOpen size={12} strokeWidth={1.75} color="var(--accent)" /> {r.course}</span>
-                  <span><Calendar size={12} strokeWidth={1.75} color="var(--accent)" /> {formatDate(r.borrow_date)}{r.borrow_time&&<span style={{color:"var(--accent)",marginRight:4,fontWeight:700}}> {r.borrow_time}</span>} ← {formatDate(r.return_date)}{r.return_time&&<span style={{color:"var(--accent)",marginRight:4,fontWeight:700}}> {r.return_time}</span>}{(()=>{const diff=Math.ceil((new Date(r.borrow_date)-new Date())/(1000*60*60*24));return diff>0?<span style={{marginRight:6,color:"var(--yellow)",fontWeight:700}}>({diff} ימים)</span>:diff===0?<span style={{marginRight:6,color:"var(--green)",fontWeight:700}}>(היום!)</span>:null;})()}</span>
+                  <span><Calendar size={12} strokeWidth={1.75} color="var(--accent)" /> {formatDate(r.borrow_date)}{r.borrow_time&&<span style={{color:"var(--accent)",marginRight:4,fontWeight:700}}> {formatTime(r.borrow_time)}</span>} ← {formatDate(r.return_date)}{r.return_time&&<span style={{color:"var(--accent)",marginRight:4,fontWeight:700}}> {formatTime(r.return_time)}</span>}{(()=>{const diff=Math.ceil((new Date(r.borrow_date)-new Date())/(1000*60*60*24));return diff>0?<span style={{marginRight:6,color:"var(--yellow)",fontWeight:700}}>({diff} ימים)</span>:diff===0?<span style={{marginRight:6,color:"var(--green)",fontWeight:700}}>(היום!)</span>:null;})()}</span>
                   <span><Package size={12} strokeWidth={1.75} color="var(--accent)" /> {r.items?.length||0} פריטים</span>
                   {r.loan_type&&<span style={{background:isStaff?"rgba(100,120,150,0.2)":isLesson?"rgba(155,89,182,0.2)":"var(--surface3)",border:isStaff?"1px solid rgba(100,120,150,0.4)":isLesson?"1px solid rgba(155,89,182,0.4)":"1px solid var(--border)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,color:isStaff?"#8a9bb3":isLesson?"#9b59b6":"var(--accent)"}}>
                     {loanIcon} {loanLabel}
@@ -1092,14 +1092,14 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                   <span style={{color:"var(--accent)",fontWeight:700,display:"flex",alignItems:"center",gap:5}}><Calendar size={14} strokeWidth={2} color="var(--accent)" /> תאריך השאלה</span>
                   <span style={{display:"flex",alignItems:"center",gap:6}}>
                     <strong style={{color:"var(--text)"}}>{formatDate(selected.borrow_date)}</strong>
-                    {selected.borrow_time&&<span style={{background:"var(--surface)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:6,padding:"1px 8px",fontSize:12,fontWeight:800,color:"var(--accent)"}}>{selected.borrow_time}</span>}
+                    {selected.borrow_time&&<span style={{background:"var(--surface)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:6,padding:"1px 8px",fontSize:12,fontWeight:800,color:"var(--accent)"}}>{formatTime(selected.borrow_time)}</span>}
                   </span>
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:13}}>
                   <span style={{color:"var(--accent)",fontWeight:700}}>🔄 תאריך החזרה</span>
                   <span style={{display:"flex",alignItems:"center",gap:6}}>
                     <strong style={{color:"var(--text)"}}>{formatDate(selected.return_date)}</strong>
-                    {selected.return_time&&<span style={{background:"var(--surface)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:6,padding:"1px 8px",fontSize:12,fontWeight:800,color:"var(--accent)"}}>{selected.return_time}</span>}
+                    {selected.return_time&&<span style={{background:"var(--surface)",border:"1px solid rgba(245,166,35,0.4)",borderRadius:6,padding:"1px 8px",fontSize:12,fontWeight:800,color:"var(--accent)"}}>{formatTime(selected.return_time)}</span>}
                   </span>
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginTop:8,paddingTop:8,borderTop:"1px solid rgba(245,166,35,0.15)"}}>

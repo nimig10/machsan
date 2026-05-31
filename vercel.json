@@ -6,6 +6,10 @@
     {
       "path": "/api/notify-course-end-7days",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/production-deadline-reminder",
+      "schedule": "0 9 * * *"
     }
   ]
 }

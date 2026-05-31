@@ -1,6 +1,6 @@
 // DashboardPage.jsx — admin dashboard page
 import { useState } from "react";
-import { formatDate, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, syncReservationStatusToBlob, getLoanTypeColor, normalizeName, groupReservationItemsByCategory } from "../utils.js";
+import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, syncReservationStatusToBlob, getLoanTypeColor, normalizeName, groupReservationItemsByCategory } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import { Activity, AlertTriangle, ArrowUpFromLine, Briefcase, Calendar, Camera, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Layers, MessageSquare, Mic, Package, RefreshCw, Shield, User, Wrench, X, XCircle } from "lucide-react";
@@ -237,7 +237,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                           <div key={j} style={{display:"flex",gap:8,alignItems:"center",fontSize:12,color:"var(--text3)",flexWrap:"wrap"}}>
                             <span style={{background:"var(--surface3)",borderRadius:6,padding:"1px 8px",fontWeight:700,color:"var(--text2)"}}>{LOAN_TYPE_ICON[rv.loan_type]||<Package size={16} strokeWidth={1.75} />} {rv.loan_type||"?"}</span>
                             <span style={{fontWeight:600,color:"var(--text)"}}>{rv.student}</span>
-                            <span><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> {formatDate(rv.borrow_date)}{rv.borrow_time&&` ${rv.borrow_time}`} → {formatDate(rv.return_date)}{rv.return_time&&` ${rv.return_time}`}</span>
+                            <span><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> {formatDate(rv.borrow_date)}{rv.borrow_time&&` ${formatTime(rv.borrow_time)}`} → {formatDate(rv.return_date)}{rv.return_time&&` ${formatTime(rv.return_time)}`}</span>
                             <span style={{color:"#e67e22",fontWeight:700}}>×{rv.qty}</span>
                           </div>
                         ))}
@@ -252,7 +252,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                           <div style={{fontWeight:800,fontSize:14}}>{r.student_name}{equipmentReports.some(rp=>rp.reservation_id===String(r.id)&&rp.status==="open")&&<span title="דיווח תקלה פתוח" style={{color:"#e74c3c",fontSize:14,marginRight:4}}>⚠️</span>}</div>
                           <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>
                             <span style={{background:"var(--surface3)",borderRadius:6,padding:"1px 8px",fontWeight:700,color:"var(--text2)",marginLeft:6}}>{LOAN_TYPE_ICON[r.loan_type]||<Package size={16} strokeWidth={1.75} />} {r.loan_type}</span>
-                            <Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> {formatDate(r.borrow_date)}{r.borrow_time&&` ${r.borrow_time}`} → {formatDate(r.return_date)}{r.return_time&&` ${r.return_time}`}
+                            <Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> {formatDate(r.borrow_date)}{r.borrow_time&&` ${formatTime(r.borrow_time)}`} → {formatDate(r.return_date)}{r.return_time&&` ${formatTime(r.return_time)}`}
                           </div>
                         </div>
                         <span style={{background:"rgba(230,126,34,0.15)",border:"1px solid rgba(230,126,34,0.3)",borderRadius:20,padding:"2px 10px",fontSize:12,fontWeight:900,color:"#e67e22",flexShrink:0}}>
@@ -310,10 +310,11 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                 <div style={{fontWeight:700,fontSize:13}}>{r.student_name}</div>
                 <div style={{fontSize:11,color:"var(--text3)"}}>
                   <span style={{display:"inline-block",marginLeft:8,fontWeight:800,color:"var(--text)"}}>משך: {getLoanDurationDays(r.borrow_date, r.return_date)} ימים</span>
-                  <Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> {formatDate(r.borrow_date)}{r.borrow_time&&<strong style={{color:"var(--accent)",marginRight:3}}> {r.borrow_time}</strong>}
-                  <span style={{margin:"0 3px"}}>–</span>
-                  ↩ {formatDate(r.return_date)}{r.return_time&&<strong style={{color:"var(--accent)",marginRight:3}}> {r.return_time}</strong>}
                   {(()=>{const diff=Math.ceil((new Date(r.borrow_date)-new Date())/(1000*60*60*24));return diff>0?<span style={{marginRight:5,color:"var(--yellow)",fontWeight:700}}>({diff}י)</span>:diff===0?<span style={{marginRight:5,color:"var(--green)",fontWeight:700}}>(היום)</span>:null;})()}
+                  <div style={{marginTop:3,display:"flex",flexWrap:"wrap",gap:"2px 12px"}}>
+                    <span><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> <span style={{fontWeight:800,color:"var(--text2)"}}>הוצאה:</span> {formatDate(r.borrow_date)}{r.borrow_time&&<strong style={{color:"var(--accent)",marginRight:3}}>{formatTime(r.borrow_time)}</strong>}</span>
+                    <span>↩ <span style={{fontWeight:800,color:"var(--text2)"}}>החזרה:</span> {formatDate(r.return_date)}{r.return_time&&<strong style={{color:"var(--accent)",marginRight:3}}>{formatTime(r.return_time)}</strong>}</span>
+                  </div>
                 </div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
@@ -376,7 +377,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                         </div>
                       )}
                       <div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>
-                        <Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> {formatDate(r.borrow_date)} · <Clock size={16} strokeWidth={1.75} color="var(--accent)" /> {r.borrow_time||"?"} – {r.return_time||"?"}
+                        <Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> {formatDate(r.borrow_date)} · <Clock size={16} strokeWidth={1.75} color="var(--accent)" /> {formatTime(r.borrow_time)||"?"} – {formatTime(r.return_time)||"?"}
                       </div>
                       {r.items?.length>0&&(
                         <div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:4}}>
@@ -491,8 +492,8 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
               {/* Dates & info */}
               <div style={{background:"var(--accent-glow)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:12,padding:"14px 16px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 16px"}}>
                 {[
-                  ["השאלה",`${getDayName(dashViewRes.borrow_date)} · ${formatDate(dashViewRes.borrow_date)}${dashViewRes.borrow_time?" · "+dashViewRes.borrow_time:""}`],
-                  ["↩ החזרה",`${getDayName(dashViewRes.return_date)} · ${formatDate(dashViewRes.return_date)}${dashViewRes.return_time?" · "+dashViewRes.return_time:""}`],
+                  ["השאלה",`${getDayName(dashViewRes.borrow_date)} · ${formatDate(dashViewRes.borrow_date)}${dashViewRes.borrow_time?" · "+formatTime(dashViewRes.borrow_time):""}`],
+                  ["↩ החזרה",`${getDayName(dashViewRes.return_date)} · ${formatDate(dashViewRes.return_date)}${dashViewRes.return_time?" · "+formatTime(dashViewRes.return_time):""}`],
                   ["קורס",dashViewRes.course||"—"],
                   ["סוג",dashViewRes.loan_type||"—"],
                   ...(dashViewRes.project_name?[["פרויקט",dashViewRes.project_name]]:[]),
@@ -749,10 +750,10 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                       <span style={{fontWeight:900,fontSize:15,color:"var(--red)"}}>כמות חסומה: {b.quantity}</span>
                     </div>
                     <div style={{fontSize:12,color:"var(--text2)",display:"flex",flexWrap:"wrap",gap:10}}>
-                      <span><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> {formatDate(b.borrow_date)} {b.borrow_time||""}</span>
+                      <span><Calendar size={16} strokeWidth={1.75} color="var(--accent)" /> {formatDate(b.borrow_date)} {formatTime(b.borrow_time)}</span>
                       {isOD
                         ? <span style={{color:"var(--red)",fontWeight:700}}>↩ היה אמור לחזור {formatDate(b.return_date)} — עדיין לא הוחזר</span>
-                        : <span>↩ {formatDate(b.return_date)} {b.return_time||""}</span>}
+                        : <span>↩ {formatDate(b.return_date)} {formatTime(b.return_time)}</span>}
                     </div>
                   </div>);
                 })}
@@ -804,7 +805,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                   <div style={{fontWeight:700,fontSize:15}}>{w.equipment_name} <span style={{color:"var(--yellow)"}}>×{w.quantity}</span></div>
                   <div style={{fontSize:12,color:"var(--text2)",marginTop:4}}>מושאל ל-<strong>{w.student_name}</strong></div>
                 </div>
-                <div style={{fontSize:13,color:"var(--text2)"}}>↩ החזרה: {formatDate(w.return_date)} {w.return_time}</div>
+                <div style={{fontSize:13,color:"var(--text2)"}}>↩ החזרה: {formatDate(w.return_date)} {formatTime(w.return_time)}</div>
               </div>
             ))}
           </div>

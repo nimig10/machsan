@@ -6,7 +6,7 @@ import { Plus, Film, Users, Calendar as CalendarIcon, Inbox, Check, X as XIcon, 
 import { Modal } from "./ui.jsx";
 import { ProductionEditor } from "./ProductionEditor.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
-import { today } from "../utils.js";
+import { today, formatTime } from "../utils.js";
 import {
   approveCrewMember,
   rejectCrewMember,
@@ -329,7 +329,7 @@ function ProductionDetail({ p, currentStudent, students, kits = [], reservations
               return (
                 <li key={d.id} style={{marginBottom:6}}>
                   <span>
-                    {fmtDate(d.startDate)} {d.startTime} – {d.startDate === d.endDate ? "" : fmtDate(d.endDate) + " "}{d.endTime}
+                    {fmtDate(d.startDate)} {formatTime(d.startTime)} – {d.startDate === d.endDate ? "" : fmtDate(d.endDate) + " "}{formatTime(d.endTime)}
                     {d.note ? <span style={{color:"var(--text3)"}}> — {d.note}</span> : null}
                   </span>
                   {locked && (

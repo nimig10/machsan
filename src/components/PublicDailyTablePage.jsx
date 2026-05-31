@@ -242,7 +242,7 @@ export function PublicDailyTablePage() {
                       <td style={{...cellBase,color:"#bbb",fontWeight:500}}>{r.track||"—"}</td>
                       <td style={{...cellBase,fontWeight:700,color:"#fff"}}>{r.course||"—"}</td>
                       <td style={{...cellBase,color:"#ddd"}}>{r.instructor||"—"}</td>
-                      <td style={{...cellBase,color:accent,fontWeight:700,whiteSpace:"nowrap"}}>{r.startTime&&r.endTime?`${r.startTime}–${r.endTime}`:r.startTime||"—"}</td>
+                      <td style={{...cellBase,color:accent,fontWeight:700,whiteSpace:"nowrap"}}>{r.startTime&&r.endTime?`${formatTime(r.startTime)}–${formatTime(r.endTime)}`:formatTime(r.startTime)||"—"}</td>
                       <td style={{...cellBase,color:"#ddd"}}>{stNames(r.studioIds || r.studioId)}</td>
                       <td style={{...cellBase,color:"#ddd"}}>{r.topic||"—"}</td>
                     </tr>
@@ -260,7 +260,7 @@ export function PublicDailyTablePage() {
                       <td style={{...cellBase,color:"#bbb",fontWeight:500}}>{r.track||"—"}</td>
                       <td style={{...cellBase,fontWeight:700,color:"#fff"}}>{r.course||"—"}</td>
                       <td style={{...cellBase,color:"#ddd"}}>{r.instructor||"—"}</td>
-                      <td style={{...cellBase,color:"#7eb3ff",fontWeight:700,whiteSpace:"nowrap"}}>{r.startTime&&r.endTime?`${r.startTime}–${r.endTime}`:r.startTime||"—"}</td>
+                      <td style={{...cellBase,color:"#7eb3ff",fontWeight:700,whiteSpace:"nowrap"}}>{r.startTime&&r.endTime?`${formatTime(r.startTime)}–${formatTime(r.endTime)}`:formatTime(r.startTime)||"—"}</td>
                       <td style={{...cellBase,color:"#ddd"}}>{stNames(r.studioIds || r.studioId)}</td>
                       <td style={{...cellBase,color:"#ddd"}}>{r.topic||"—"}</td>
                     </tr>
@@ -297,7 +297,7 @@ export function PublicDailyTablePage() {
                       <td style={{...cellBase,fontWeight:700,color:"#fff"}}>{r.name}</td>
                       <td style={{...cellBase,color:"#bbb",fontWeight:500}}>{r.track||"—"}</td>
                       <td style={{...cellBase,color:"#ddd"}}>{stName(r.studioId)}</td>
-                      <td style={{...cellBase,color:r.isNight?"#7b8cde":"#f5c842",fontWeight:700,whiteSpace:"nowrap"}}>{r.startTime&&r.endTime?`${r.startTime}–${r.endTime}`:r.startTime||"—"}</td>
+                      <td style={{...cellBase,color:r.isNight?"#7b8cde":"#f5c842",fontWeight:700,whiteSpace:"nowrap"}}>{r.startTime&&r.endTime?`${formatTime(r.startTime)}–${formatTime(r.endTime)}`:formatTime(r.startTime)||"—"}</td>
                       <td style={{...cellBase,whiteSpace:"nowrap"}}>
                         {r.isNight
                           ? <span style={{color:"#7b8cde",fontWeight:700,fontSize:"1.3vh"}}>🌙 לילה</span>
