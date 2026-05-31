@@ -127,7 +127,7 @@ function buildEmail({
     : isManagerReport ? "דיווח מצוות המחסן"
     : isLessonKitReady ? "ערכת השיעור מוכנה לבדיקה"
     : isCourseEndNotice ? "הקורס מסתיים בעוד שבוע — נא לעדכן סטטוסים"
-    : isProductionDeadline ? "⏰ מחר היום האחרון להגשת רשימת ציוד!"
+    : isProductionDeadline ? "מחר היום האחרון להגשת רשימת ציוד!"
     : isOverdue ? "⚠️ הציוד לא הוחזר — נדרשת פעולה מיידית"
     : isOverdueTeam ? `🚨 ציוד לא הוחזר — ${student_name || ""}`
     : isTeamNotify ? `בקשת השאלה חדשה — ${loan_type || ""}`
