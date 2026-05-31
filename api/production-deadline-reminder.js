@@ -76,20 +76,12 @@ function formatDateHe(isoDate) {
   return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
 }
 
-function fmtHHMM(t) {
-  return t ? String(t).slice(0, 5) : "";
-}
-
-// One shoot date → "DD/MM/YYYY (HH:MM–HH:MM)", or a "DD/MM/YYYY – DD/MM/YYYY"
-// range for a multi-day shoot.
+// One shoot date → "DD/MM/YYYY", or a "DD/MM/YYYY – DD/MM/YYYY" range for a
+// multi-day shoot. Dates only — no times.
 function shootDateLine(d) {
   const start = formatDateHe(d.start_date);
   const end = d.end_date && d.end_date !== d.start_date ? formatDateHe(d.end_date) : "";
-  const dateStr = end ? `${start} – ${end}` : start;
-  const st = fmtHHMM(d.start_time);
-  const et = fmtHHMM(d.end_time);
-  const timeStr = st && et ? ` (${st}–${et})` : st ? ` (${st})` : "";
-  return dateStr + timeStr;
+  return end ? `${start} – ${end}` : start;
 }
 
 async function fetchJson(path) {  const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: SERVICE_HEADERS });
@@ -154,7 +146,7 @@ export default async function handler(req, res) {
         to: forceTest,
         directorName: "בדיקה",
         title: "הפקת דוגמה",
-        datesText: "08/06/2026 (09:00–17:00)<br/>09/06/2026 (09:00–14:00)",
+        datesText: "08/06/2026<br/>09/06/2026",
       });
       return res.status(200).json({ ok: true, force_test: forceTest, sent: 1 });
     } catch (e) {
@@ -165,7 +157,7 @@ export default async function handler(req, res) {
   try {
     const [productions, dates, reservations] = await Promise.all([
       fetchJson("productions?select=id,title,director_email,director_name,status"),
-      fetchJson("production_dates?select=id,production_id,start_date,end_date,start_time,end_time"),
+      fetchJson("production_dates?select=id,production_id,start_date,end_date"),
       fetchJson("reservations_new?select=production_id,production_date_id,status&production_id=not.is.null"),
     ]);
 
