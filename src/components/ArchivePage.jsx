@@ -1,6 +1,6 @@
 // ArchivePage.jsx — archive of returned reservations
 import { useState } from "react";
-import { formatDate, deleteReservation as deleteReservationRpc } from "../utils.js";
+import { formatDate, formatTime, deleteReservation as deleteReservationRpc } from "../utils.js";
 import { Calendar, Film, Mic, Package, X } from "lucide-react";
 
 export function ArchivePage({ reservations, setReservations, equipment, showToast }) {
