@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient.js';
 import { useState } from "react";
 import { BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Film, Mic, Package, Phone, Shield, User, Video, X } from "lucide-react";
 import { CalendarGrid } from "./CalendarGrid.jsx";
-import { formatDate, today, cloudinaryThumb, getLoanTypeColor, normalizeName } from "../utils.js";
+import { formatDate, today, cloudinaryThumb, getLoanTypeColor, normalizeName, updateReservationStatus } from "../utils.js";
 
 export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equipment=[], siteSettings={}, certifications={types:[],students:[]} }) {
   const [calDate, setCalDate]     = useState(new Date());
