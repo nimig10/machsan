@@ -893,69 +893,6 @@ export function LecturerPortal({
     );
   }
 
-  if (!loggedInLecturer) {
-    return (
-      <div className="form-page" style={{ "--accent": siteSettings.accentColor || "#f5a623" }}>
-        <div style={{ width: "100%", maxWidth: 430, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 16, padding: "40px 32px", textAlign: "center", direction: "rtl" }}>
-          {siteSettings.logo
-            ? <img src={siteSettings.logo} alt="לוגו" style={{ width: 82, height: 82, objectFit: "contain", borderRadius: 12, marginBottom: 16, display: "block", marginInline: "auto" }} />
-            : <div style={{ fontSize: 48, marginBottom: 16 }}><GraduationCap size={48} strokeWidth={1.75} color="var(--accent)" /></div>}
-          <h2 style={{ fontSize: "clamp(15px,4vw,20px)", fontWeight: 900, color: "var(--accent)", marginBottom: 6 }}>כניסת מרצים למערכת ההשאלות</h2>
-          <div style={{ fontSize: 13, color: "var(--text3)", marginBottom: 24 }}>גישה מוגבלת לקורסים ולמפגשים של המרצה בלבד</div>
-
-          <div style={{ textAlign: "right", marginBottom: 12 }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)", display: "block", marginBottom: 4 }}>שם מלא</label>
-            <input
-              className="form-input"
-              placeholder="הקלד/י שם מלא"
-              value={loginForm.name}
-              onChange={(event) => {
-                setLoginForm((current) => ({ ...current, name: event.target.value }));
-                setLoginError("");
-              }}
-              onKeyDown={(event) => event.key === "Enter" && handleLogin()}
-            />
-          </div>
-
-          <div style={{ textAlign: "right", marginBottom: 16 }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)", display: "block", marginBottom: 4 }}>אימייל או טלפון</label>
-            <input
-              className="form-input"
-              placeholder="האימייל או הטלפון שהוגדרו למרצה"
-              value={loginForm.identifier}
-              onChange={(event) => {
-                setLoginForm((current) => ({ ...current, identifier: event.target.value }));
-                setLoginError("");
-              }}
-              onKeyDown={(event) => event.key === "Enter" && handleLogin()}
-            />
-          </div>
-
-          {loginError && <div style={{ color: "var(--red)", fontSize: 13, fontWeight: 700, marginBottom: 12 }}><XCircle size={16} strokeWidth={1.75} /> {loginError}</div>}
-
-          <button
-            className="btn btn-primary"
-            style={{ width: "100%", padding: "12px", fontSize: 15 }}
-            onClick={handleLogin}
-            disabled={!loginForm.name.trim()}
-          >
-            כניסת מרצה
-          </button>
-
-          <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 16 }}>
-            אפשר להתחבר רק עם מרצה פעיל שכבר קיים ברובריקת "מרצים"
-          </div>
-
-          <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-            <a href="/" style={{ fontSize: 12, color: "var(--text3)", textDecoration: "none" }}>
-              חזרה למסך הבקשות הראשי
-            </a>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="form-page" style={{ "--accent": siteSettings.accentColor || "#f5a623", direction: "rtl" }}>
       <div style={{ width: "min(1180px, 100%)", display: "flex", flexDirection: "column", gap: 20 }}>
