@@ -63,7 +63,6 @@ function buildEmail({
   approve_url,
   calendar_url,
   portal_url,
-  login_url,
   report_note,
   reservation_id,
   custom_message,
@@ -266,16 +265,9 @@ function buildEmail({
     </div>` : "";
 
   const productionDeadlineButton = isProductionDeadline && portal_url ? `
-    <div style="text-align:center;margin:24px 0 12px">
+    <div style="text-align:center;margin:24px 0">
       <a href="${portal_url}" style="display:inline-block;padding:16px 36px;background:#f5a623;color:#111318;font-weight:900;font-size:15px;border-radius:10px;text-decoration:none;letter-spacing:0.4px;box-shadow:0 4px 18px rgba(245,166,35,0.4)">
         🎬 כניסה ללוח ההפקות
-      </a>
-    </div>` : "";
-
-  const loginButton = isProductionDeadline && login_url ? `
-    <div style="text-align:center;margin:0 0 24px">
-      <a href="${login_url}" style="display:inline-block;padding:12px 30px;background:#111318;color:#e8eaf0;font-weight:800;font-size:14px;border-radius:10px;text-decoration:none;border:1px solid #2d3244">
-        🔑 כניסה לאפליקציה
       </a>
     </div>` : "";
 
@@ -331,7 +323,6 @@ function buildEmail({
       ${calendarButton}
       ${courseEndPortalButton}
       ${productionDeadlineButton}
-      ${loginButton}
       ${isApproved ? `
       <div style="background:rgba(46,204,113,0.08);border:1px solid rgba(46,204,113,0.2);border-radius:8px;padding:16px;font-size:13px;color:#8891a8;margin-bottom:20px;direction:rtl;text-align:right">
         📌 <strong style="color:#e8eaf0">תזכורת:</strong> יש להחזיר את הציוד עד <strong style="color:#f5a623">${return_date}${return_time ? " בשעה " + return_time : ""}</strong> במצב תקין.
@@ -366,7 +357,6 @@ export default async function handler(req, res) {
     crew_sound,
     calendar_url,
     portal_url,
-    login_url,
     report_note,
     reservation_id,
     custom_message,
@@ -462,7 +452,6 @@ export default async function handler(req, res) {
         approve_url,
         calendar_url,
         portal_url,
-        login_url,
         report_note,
         reservation_id,
         custom_message,

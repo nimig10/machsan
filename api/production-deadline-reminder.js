@@ -46,9 +46,6 @@ const SERVICE_HEADERS = {
 const REMINDER_DAYS_BEFORE_SHOOT = 8;
 
 const PORTAL_URL = "https://app.camera.org.il";
-// The app's entry/login page (same SPA root — students log in here, then reach
-// StudentHub → לוח הפקות).
-const LOGIN_URL = "https://app.camera.org.il";
 
 // Today's date in Israel timezone, formatted YYYY-MM-DD.
 function todayInIsrael() {
@@ -116,7 +113,6 @@ async function sendReminder(baseUrl, { to, directorName, title, datesText }) {
       shoot_dates_text: datesText || "",
       loan_type: "הפקה",
       portal_url: PORTAL_URL,
-      login_url: LOGIN_URL,
     }),
   });
   if (!res.ok) {
