@@ -312,8 +312,8 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                   <span style={{display:"inline-block",marginLeft:8,fontWeight:800,color:"var(--text)"}}>משך: {getLoanDurationDays(r.borrow_date, r.return_date)} ימים</span>
                   {(()=>{const diff=Math.ceil((new Date(r.borrow_date)-new Date())/(1000*60*60*24));return diff>0?<span style={{marginRight:5,color:"var(--yellow)",fontWeight:700}}>({diff}י)</span>:diff===0?<span style={{marginRight:5,color:"var(--green)",fontWeight:700}}>(היום)</span>:null;})()}
                   <div style={{marginTop:3,display:"flex",flexWrap:"wrap",gap:"2px 12px"}}>
-                    <span><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> <span style={{fontWeight:800,color:"var(--text2)"}}>הוצאה:</span> {formatDate(r.borrow_date)}{r.borrow_time&&<strong style={{color:"var(--accent)",marginRight:3}}>{formatTime(r.borrow_time)}</strong>}</span>
-                    <span>↩ <span style={{fontWeight:800,color:"var(--text2)"}}>החזרה:</span> {formatDate(r.return_date)}{r.return_time&&<strong style={{color:"var(--accent)",marginRight:3}}>{formatTime(r.return_time)}</strong>}</span>
+                    <span><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> <span style={{fontWeight:800,color:"var(--text2)"}}>הוצאה:</span> <span style={{color:"var(--text)",fontWeight:700}}>{formatDate(r.borrow_date)}</span>{r.borrow_time&&<strong style={{color:"var(--accent)",marginInlineStart:8}}>{formatTime(r.borrow_time)}</strong>}</span>
+                    <span>↩ <span style={{fontWeight:800,color:"var(--text2)"}}>החזרה:</span> <span style={{color:"var(--text)",fontWeight:700}}>{formatDate(r.return_date)}</span>{r.return_time&&<strong style={{color:"var(--accent)",marginInlineStart:8}}>{formatTime(r.return_time)}</strong>}</span>
                   </div>
                 </div>
               </div>
