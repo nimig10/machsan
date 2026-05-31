@@ -40,7 +40,10 @@ export default defineConfig([
       // pre-existing noise; only the blob-free guardrail below is error-level.
       'no-unused-vars': ['warn', { varsIgnorePattern: '^[A-Z_]' }],
       'no-empty': 'warn',
-      'no-undef': 'warn',
+      // ERROR-level: a used-but-undefined identifier is a guaranteed runtime
+      // crash (e.g. a missing import). CI must fail on it. See the formatTime /
+      // updateReservationStatus / deleteReservation incidents.
+      'no-undef': 'error',
       'no-useless-escape': 'warn',
       'no-constant-binary-expression': 'warn',
       'no-dupe-keys': 'warn',

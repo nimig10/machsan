@@ -882,32 +882,6 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
         </span>
       </div>
 
-      {false && (
-        <div style={{marginBottom:18,padding:"14px 16px",background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
-          <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",marginBottom:10,letterSpacing:0.5}}>סינון ציוד לפי מסלול לימודים</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-            {[
-              { key:"all", label:"כל הציוד", icon:<Package size={16} strokeWidth={1.75} color="var(--accent)" /> },
-              { key:"sound", label:"ציוד סאונד", icon:<Mic size={16} strokeWidth={1.75} color="var(--accent)" /> },
-              { key:"photo", label:"ציוד צילום", icon:"🎥" },
-            ].map((filterOption) => {
-              const isActive = privateFilter === filterOption.key;
-              return (
-                <button
-                  key={filterOption.key}
-                  type="button"
-                  onClick={()=>setPrivateFilter(filterOption.key)}
-                  style={{padding:"7px 16px",borderRadius:20,border:`2px solid ${isActive?"var(--accent)":"var(--border)"}`,background:isActive?"var(--accent)":"var(--surface3)",color:isActive?"#000":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer",transition:"all 0.15s",display:"flex",alignItems:"center",gap:6}}
-                >
-                  <span>{filterOption.icon}</span>
-                  <span>{filterOption.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* ── Category filter + selected toggle ── */}
       <div style={{display:"flex",flexDirection:"column",gap:9,marginBottom:14}}>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
