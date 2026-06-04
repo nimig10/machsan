@@ -1222,6 +1222,45 @@ function clearFormDraft() {
   try { sessionStorage.removeItem(FORM_DRAFT_KEY); } catch { /* ignore */ }
 }
 
+// ── Production crew snapshot (single source of truth) ───────────────────────
+// Crew is defined ONCE at the production level (production_crew, roles
+// photographer/sound, status 'approved') — there is NO per-date-range crew.
+// Every equipment-loan reservation for a production must carry the approved
+// crew's NAMES as a snapshot, because the warehouse cert-gate
+// (getProductionCertBlockers) reads those snapshot fields off the reservation.
+// Reused by the productions-board bridge, the in-form production picker, and at
+// submit time. Always pass the reliable students source (studentsFromTable) so
+// the lookup doesn't fail when certifications.students hasn't loaded yet — that
+// silent failure is exactly what saved empty crew on a second date-range.
+function deriveProductionCrewSnapshot(production, studentsList) {
+  const blank = {
+    crew_photographer_first_name: "", crew_photographer_last_name: "",
+    crew_photographer_name: "", crew_photographer_phone: "",
+    crew_sound_first_name: "", crew_sound_last_name: "",
+    crew_sound_name: "", crew_sound_phone: "",
+  };
+  if (!production) return blank;
+  const list = Array.isArray(studentsList) ? studentsList : [];
+  const split = (n) => {
+    const p = String(n || "").trim().split(/\s+/).filter(Boolean);
+    return { first: p[0] || "", last: p.slice(1).join(" ") };
+  };
+  const resolve = (role) => {
+    const m = (production.crew || []).find(c => c.role === role && c.status === "approved");
+    return m ? (list.find(s => String(s.id) === String(m.studentId)) || null) : null;
+  };
+  const photog = resolve("photographer");
+  const sound  = resolve("sound");
+  const pp = split(photog?.name);
+  const sp = split(sound?.name);
+  return {
+    crew_photographer_first_name: pp.first, crew_photographer_last_name: pp.last,
+    crew_photographer_name: photog?.name || "", crew_photographer_phone: photog?.phone || "",
+    crew_sound_first_name: sp.first, crew_sound_last_name: sp.last,
+    crew_sound_name: sound?.name || "", crew_sound_phone: sound?.phone || "",
+  };
+}
+
 // Convert a YouTube or Google Drive share URL into an embeddable iframe src.
 // Returns null for unsupported hosts so the caller can render a fallback.
 function videoEmbedSrc(rawUrl) {
@@ -3772,7 +3811,21 @@ ${inventory}
     const submittedAtIso    = submittedAtDate.toISOString();
 
     const reservationId = String(Date.now());
-    const newRes = { ...form, id: reservationId, status: initStatus, created_at: today(), submitted_at: submittedAtHebrew, items };
+
+    // Production loans: ALWAYS re-derive the crew snapshot from the selected
+    // production's approved crew at submit time, using the reliable students
+    // source. This makes the snapshot independent of when the form was opened
+    // or whether certifications.students had loaded back then — the bug that
+    // saved empty crew on a second date-range. Override whatever's in `form`.
+    const crewSnapshot = (isProductionLoan && selectedProduction)
+      ? deriveProductionCrewSnapshot(selectedProduction, studentsFromTable)
+      : {};
+    if (isProductionLoan && !crewSnapshot.crew_photographer_name) {
+      setSub(false);
+      showToast("error", "לא נמצא צלם ראשי מאושר להפקה — יש לאשר צלם ראשי בלוח ההפקות לפני הגשת רשימת ציוד.");
+      return;
+    }
+    const newRes = { ...form, ...crewSnapshot, id: reservationId, status: initStatus, created_at: today(), submitted_at: submittedAtHebrew, items };
 
     // ── ATOMIC SERVER-SIDE CREATE ─────────────────────────────────────────
     // create_reservation_v2 (migration 008) takes FOR UPDATE locks on each
@@ -3829,7 +3882,31 @@ ${inventory}
     showToast("success","הבקשה נשלחה בהצלחה!");
   };
 
-  const reset = () => { clearFormDraft(); setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_first_name:"",crew_photographer_last_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_first_name:"",crew_sound_last_name:"",crew_sound_phone:"",production_reason:""}); setItems([]); setAgreed(false); };
+  const reset = () => {
+    clearFormDraft(); setDone(false); setEmailError(false); setStep(1);
+    const blank = {student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_first_name:"",crew_photographer_last_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_first_name:"",crew_sound_last_name:"",crew_sound_phone:"",production_reason:""};
+    // Re-seed the logged-in student's identity (name/email/phone/course) — the
+    // same person is still logged in, so a fresh "שלח בקשה נוספת" should keep
+    // these prefilled exactly like the initial-load effect does. Without this,
+    // a second production loan is blocked at פרטים→תאריכים because step 1→2 is
+    // gated on ok1 (name+email+production_id) and the blanked fields fail it.
+    if (loggedInStudent) {
+      const explicitFn = String(loggedInStudent.firstName||"").trim();
+      const explicitLn = String(loggedInStudent.lastName ||"").trim();
+      let fn = explicitFn, ln = explicitLn;
+      if (!fn && !ln) {
+        const parts = String(loggedInStudent.name||"").trim().split(/\s+/).filter(Boolean);
+        fn = parts[0] || ""; ln = parts.slice(1).join(" ");
+      }
+      blank.student_first_name = fn;
+      blank.student_last_name  = ln;
+      blank.student_name = [fn, ln].filter(Boolean).join(" ");
+      blank.email = loggedInStudent.email || "";
+      if (loggedInStudent.phone) blank.phone = loggedInStudent.phone;
+      if (loggedInStudent.track) blank.course = loggedInStudent.track;
+    }
+    setForm(blank); setItems([]); setAgreed(false);
+  };
 
   const VIEWS = ["equipment", "studios", "daily", "my-bookings"];
   const handleFormSwipeStart = (e) => {
@@ -4157,17 +4234,6 @@ ${inventory}
               showToast={(msg, type="info") => showToast(type, msg)}
               refresh={refreshProductions}
               onOpenLoanForm={(p) => {
-                const photog = (p?.crew || []).find(c => c.role === "photographer" && c.status === "approved");
-                const sound = (p?.crew || []).find(c => c.role === "sound" && c.status === "approved");
-                const studentsList = certifications?.students || [];
-                const photogStu = studentsList.find(s => String(s.id) === String(photog?.studentId));
-                const soundStu = studentsList.find(s => String(s.id) === String(sound?.studentId));
-                const splitName = (name) => {
-                  const parts = String(name || "").trim().split(/\s+/);
-                  return { first: parts[0] || "", last: parts.slice(1).join(" ") };
-                };
-                const photogParts = splitName(photogStu?.name);
-                const soundParts = splitName(soundStu?.name);
                 setForm(f => ({
                   ...f,
                   loan_type: "הפקה",
@@ -4175,14 +4241,7 @@ ${inventory}
                   production_id: p?.id || "",
                   production_date_id: p?.dates?.length === 1 ? p.dates[0].id : "",
                   production_reason: p?.description || "",
-                  crew_photographer_first_name: photogParts.first,
-                  crew_photographer_last_name:  photogParts.last,
-                  crew_photographer_name: photogStu?.name || "",
-                  crew_photographer_phone: photogStu?.phone || "",
-                  crew_sound_first_name: soundParts.first,
-                  crew_sound_last_name:  soundParts.last,
-                  crew_sound_name: soundStu?.name || "",
-                  crew_sound_phone: soundStu?.phone || "",
+                  ...deriveProductionCrewSnapshot(p, studentsFromTable),
                 }));
                 setStudentApp("forms");
                 setPublicView("equipment");
@@ -4388,31 +4447,13 @@ ${inventory}
                           setForm(f => ({ ...f, production_id: "", production_date_id: "" }));
                           return;
                         }
-                        const studentsList = certifications?.students || [];
-                        const photog = (picked.crew || []).find(c => c.role === "photographer" && c.status === "approved");
-                        const sound = (picked.crew || []).find(c => c.role === "sound" && c.status === "approved");
-                        const photogStu = studentsList.find(s => String(s.id) === String(photog?.studentId));
-                        const soundStu = studentsList.find(s => String(s.id) === String(sound?.studentId));
-                        const splitName = (name) => {
-                          const parts = String(name || "").trim().split(/\s+/);
-                          return { first: parts[0] || "", last: parts.slice(1).join(" ") };
-                        };
-                        const pp = splitName(photogStu?.name);
-                        const sp = splitName(soundStu?.name);
                         setForm(f => ({
                           ...f,
                           production_id: picked.id,
                           production_date_id: picked.dates?.length === 1 ? picked.dates[0].id : "",
                           project_name: picked.title || "",
                           production_reason: picked.description || "",
-                          crew_photographer_first_name: pp.first,
-                          crew_photographer_last_name:  pp.last,
-                          crew_photographer_name: photogStu?.name || "",
-                          crew_photographer_phone: photogStu?.phone || "",
-                          crew_sound_first_name: sp.first,
-                          crew_sound_last_name:  sp.last,
-                          crew_sound_name: soundStu?.name || "",
-                          crew_sound_phone: soundStu?.phone || "",
+                          ...deriveProductionCrewSnapshot(picked, studentsFromTable),
                         }));
                       }}>
                       <option value="">— בחר הפקה —</option>
