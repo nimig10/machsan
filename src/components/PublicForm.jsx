@@ -3882,7 +3882,31 @@ ${inventory}
     showToast("success","הבקשה נשלחה בהצלחה!");
   };
 
-  const reset = () => { clearFormDraft(); setDone(false); setEmailError(false); setStep(1); setForm({student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_first_name:"",crew_photographer_last_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_first_name:"",crew_sound_last_name:"",crew_sound_phone:"",production_reason:""}); setItems([]); setAgreed(false); };
+  const reset = () => {
+    clearFormDraft(); setDone(false); setEmailError(false); setStep(1);
+    const blank = {student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_first_name:"",crew_photographer_last_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_first_name:"",crew_sound_last_name:"",crew_sound_phone:"",production_reason:""};
+    // Re-seed the logged-in student's identity (name/email/phone/course) — the
+    // same person is still logged in, so a fresh "שלח בקשה נוספת" should keep
+    // these prefilled exactly like the initial-load effect does. Without this,
+    // a second production loan is blocked at פרטים→תאריכים because step 1→2 is
+    // gated on ok1 (name+email+production_id) and the blanked fields fail it.
+    if (loggedInStudent) {
+      const explicitFn = String(loggedInStudent.firstName||"").trim();
+      const explicitLn = String(loggedInStudent.lastName ||"").trim();
+      let fn = explicitFn, ln = explicitLn;
+      if (!fn && !ln) {
+        const parts = String(loggedInStudent.name||"").trim().split(/\s+/).filter(Boolean);
+        fn = parts[0] || ""; ln = parts.slice(1).join(" ");
+      }
+      blank.student_first_name = fn;
+      blank.student_last_name  = ln;
+      blank.student_name = [fn, ln].filter(Boolean).join(" ");
+      blank.email = loggedInStudent.email || "";
+      if (loggedInStudent.phone) blank.phone = loggedInStudent.phone;
+      if (loggedInStudent.track) blank.course = loggedInStudent.track;
+    }
+    setForm(blank); setItems([]); setAgreed(false);
+  };
 
   const VIEWS = ["equipment", "studios", "daily", "my-bookings"];
   const handleFormSwipeStart = (e) => {
