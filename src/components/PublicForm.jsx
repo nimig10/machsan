@@ -3786,6 +3786,31 @@ ${inventory}
       console.warn("Could not refresh reservations before submit:", e);
     }
 
+    // ── Per-student overlap block (approval step) ─────────────────────────
+    // A student may hold only ONE loan request per time window. If they already
+    // have a non-cancelled request overlapping these dates/times, block here
+    // with a clear message. The server's create_reservation_v2 guard is the
+    // authoritative backstop; this gives instant feedback at the approval step.
+    {
+      const myEmail  = String(form.email || "").trim().toLowerCase();
+      const newStart = toDateTime(form.borrow_date, form.borrow_time || "00:00");
+      const newEnd   = toDateTime(form.return_date, form.return_time || "23:59");
+      const hasStudentOverlap = myEmail && newStart && newEnd && freshReservations.some(r => {
+        if (String(r.email || "").trim().toLowerCase() !== myEmail) return false;
+        if (["בוטל", "הוחזר", "נדחה"].includes(r.status)) return false;
+        if (r.lesson_auto || r.loan_type === "שיעור") return false; // lessons don't count
+        if (!r.borrow_date || !r.return_date) return false;
+        const rStart = toDateTime(r.borrow_date, r.borrow_time || "00:00");
+        const rEnd   = toDateTime(r.return_date, r.return_time || "23:59");
+        return newStart < rEnd && rStart < newEnd; // half-open overlap
+      });
+      if (hasStudentOverlap) {
+        setSub(false);
+        showToast("error", "כבר קיימת בקשת השאלה עם השם שלך בזמנים הללו, עליך קודם לבטל אותה על מנת ליצור בקשת השאלה חדשה עם כלל הציוד המבוקש");
+        return;
+      }
+    }
+
     // ── Client-side pre-check (fast UX feedback). Server re-checks atomically. ──
     const overLimit = items.filter(item => {
       const avail = getAvailable(item.equipment_id, form.borrow_date, form.return_date, freshReservations, equipment, null, form.borrow_time, form.return_time);
@@ -3852,7 +3877,10 @@ ${inventory}
     );
     if (!rpcResult.ok) {
       setSub(false);
-      if (rpcResult.error === "not_enough_stock") {
+      if (rpcResult.error === "student_overlap") {
+        // Server guard: same student already has an overlapping loan request.
+        showToast("error", "כבר קיימת בקשת השאלה עם השם שלך בזמנים הללו, עליך קודם לבטל אותה על מנת ליצור בקשת השאלה חדשה עם כלל הציוד המבוקש");
+      } else if (rpcResult.error === "not_enough_stock") {
         // Stock became unavailable between pre-check and atomic insert.
         showToast("error", "חלק מהציוד כבר לא זמין — נא לעדכן את הבחירה ולנסות שוב");
       } else if (rpcResult.error === "network_error") {
