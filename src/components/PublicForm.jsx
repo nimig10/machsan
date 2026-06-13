@@ -2058,6 +2058,10 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [expandedResId, setExpandedResId] = useState(null);
   const [editingBooking, setEditingBooking] = useState(null); // {id, studioId, date, startTime, endTime, isNight}
   const [editBookingSaving, setEditBookingSaving] = useState(false);
+  // Per-student overlap block: when set, a floating panel explains the student
+  // already has an overlapping loan request and must cancel it first.
+  // Value is the conflicting reservation row, or `true` (server-side fallback).
+  const [overlapBlock, setOverlapBlock] = useState(null);
   // Equipment reports state
   const [reportModal, setReportModal] = useState(null); // {equipmentId, equipmentName, reservationId, reportId?, reportStatus?}
   const [reportContent, setReportContent] = useState("");
@@ -3786,6 +3790,31 @@ ${inventory}
       console.warn("Could not refresh reservations before submit:", e);
     }
 
+    // ── Per-student overlap block (approval step) ─────────────────────────
+    // A student may hold only ONE loan request per time window. If they already
+    // have a non-cancelled request overlapping these dates/times, block here
+    // with a clear message. The server's create_reservation_v2 guard is the
+    // authoritative backstop; this gives instant feedback at the approval step.
+    {
+      const myEmail  = String(form.email || "").trim().toLowerCase();
+      const newStart = toDateTime(form.borrow_date, form.borrow_time || "00:00");
+      const newEnd   = toDateTime(form.return_date, form.return_time || "23:59");
+      const conflict = (myEmail && newStart && newEnd) ? freshReservations.find(r => {
+        if (String(r.email || "").trim().toLowerCase() !== myEmail) return false;
+        if (["בוטל", "הוחזר", "נדחה"].includes(r.status)) return false;
+        if (r.lesson_auto || r.loan_type === "שיעור") return false; // lessons don't count
+        if (!r.borrow_date || !r.return_date) return false;
+        const rStart = toDateTime(r.borrow_date, r.borrow_time || "00:00");
+        const rEnd   = toDateTime(r.return_date, r.return_time || "23:59");
+        return newStart < rEnd && rStart < newEnd; // half-open overlap
+      }) : null;
+      if (conflict) {
+        setSub(false);
+        setOverlapBlock(conflict);
+        return;
+      }
+    }
+
     // ── Client-side pre-check (fast UX feedback). Server re-checks atomically. ──
     const overLimit = items.filter(item => {
       const avail = getAvailable(item.equipment_id, form.borrow_date, form.return_date, freshReservations, equipment, null, form.borrow_time, form.return_time);
@@ -3852,7 +3881,11 @@ ${inventory}
     );
     if (!rpcResult.ok) {
       setSub(false);
-      if (rpcResult.error === "not_enough_stock") {
+      if (rpcResult.error === "student_overlap") {
+        // Server guard caught it (rare race past the client pre-check) — show
+        // the same floating panel.
+        setOverlapBlock(true);
+      } else if (rpcResult.error === "not_enough_stock") {
         // Stock became unavailable between pre-check and atomic insert.
         showToast("error", "חלק מהציוד כבר לא זמין — נא לעדכן את הבחירה ולנסות שוב");
       } else if (rpcResult.error === "network_error") {
@@ -5347,6 +5380,43 @@ ${inventory}
         </div>
       </div>
     </div>}
+    {overlapBlock && (
+      <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setOverlapBlock(null)}>
+        <div className="modal" style={{maxWidth:440}}>
+          <div className="modal-header">
+            <span className="modal-title" style={{display:"inline-flex",alignItems:"center",gap:6,color:"var(--red)"}}>
+              <AlertTriangle size={18} strokeWidth={1.75} /> בקשת השאלה חופפת
+            </span>
+            <button className="btn btn-secondary btn-sm btn-icon" onClick={()=>setOverlapBlock(null)}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>
+          </div>
+          <div className="modal-body" style={{direction:"rtl",fontSize:14,lineHeight:1.6}}>
+            <p style={{margin:"0 0 12px"}}>
+              כבר קיימת בקשת השאלה עם השם שלך בזמנים הללו. עליך קודם לבטל אותה על מנת ליצור בקשת השאלה חדשה עם כלל הציוד המבוקש.
+            </p>
+            {typeof overlapBlock === "object" && overlapBlock && (
+              <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 14px",fontSize:13,marginBottom:12}}>
+                {overlapBlock.project_name && <div style={{fontWeight:700,marginBottom:2}}>{overlapBlock.project_name}</div>}
+                <div style={{color:"var(--text2)"}}>
+                  {overlapBlock.loan_type ? `${overlapBlock.loan_type} · ` : ""}
+                  {overlapBlock.borrow_date === overlapBlock.return_date
+                    ? `${formatDate(overlapBlock.borrow_date)} · ${formatTime(overlapBlock.borrow_time)}–${formatTime(overlapBlock.return_time)}`
+                    : `${formatDate(overlapBlock.borrow_date)} ${formatTime(overlapBlock.borrow_time)} עד ${formatDate(overlapBlock.return_date)} ${formatTime(overlapBlock.return_time)}`}
+                </div>
+              </div>
+            )}
+            <p style={{margin:0,color:"var(--text2)",fontSize:13}}>
+              לביטול הבקשה הקיימת — עבור/י ל<strong>"ההזמנות שלי"</strong> ובטל/י שם את בקשת ההשאלה החופפת בזמנים.
+            </p>
+          </div>
+          <div className="modal-footer">
+            <button className="btn btn-secondary" onClick={()=>setOverlapBlock(null)}>סגירה</button>
+            <button className="btn btn-primary" onClick={()=>{ setOverlapBlock(null); setPublicView("my-bookings"); loadStudiosData(); loadReservationsData(); }}>
+              <ClipboardList size={16} strokeWidth={1.75} /> מעבר ל"ההזמנות שלי"
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     {showInfoPanel&&<InfoPanel policies={policies} kits={kits} equipment={equipment} teamMembers={teamMembers} onClose={()=>setShowInfoPanel(false)} accentColor={siteSettings.accentColor} commitmentPdf={policies.commitmentPdf} commitmentPdfCompressed={policies.commitmentPdfCompressed} commitmentPdfName={policies.commitmentPdfName} certifications={certifications} userGuideVideos={Array.isArray(siteSettings.userGuideVideos) ? siteSettings.userGuideVideos : []} userGuidePdf={userGuidePdf}/>}
     {showAccountSettings && loggedInStudent && (
       <AccountSettingsModal

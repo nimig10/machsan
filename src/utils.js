@@ -607,9 +607,17 @@ export function toDateTime(dateStr, timeStr) {
   return d.getTime();
 }
 
-// Returns "פעילה" for approved reservations whose borrow time has already started
+// Single source of truth for a reservation's DISPLAYED status:
+//   מאושר + return time passed  → "באיחור"  (overdue; lessons excluded — they
+//                                  auto-archive to "הוחזר" via normalize)
+//   מאושר + borrow time started → "פעילה"   (active — gear is out)
+// Mirrors normalizeReservationsForArchive so the student/staff views agree
+// regardless of whether the row was normalized yet (avoids פעילה↔באיחור flicker)
+// and shows overdue immediately without waiting for the daily overdue cron.
 export function getEffectiveStatus(r) {
   if (r?.status === "מאושר" && r.borrow_date) {
+    const returnAt = getReservationReturnTimestamp(r);
+    if (returnAt !== null && Date.now() >= returnAt && r.loan_type !== "שיעור") return "באיחור";
     if (toDateTime(r.borrow_date, r.borrow_time || "00:00") <= Date.now()) return "פעילה";
   }
   return r?.status || "";

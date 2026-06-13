@@ -115,6 +115,13 @@ const productionCols = [
   { key: "passed", label: "pass", width: 5 },
 ];
 
+const studentOverlapCols = [
+  { key: "scenario", label: "scenario", width: 56 },
+  { key: "expected", label: "expected", width: 10 },
+  { key: "actual", label: "actual", width: 14 },
+  { key: "passed", label: "pass", width: 5 },
+];
+
 const results = [];
 results.push(
   await runSuite({
@@ -128,6 +135,13 @@ results.push(
     rpc: "run_productions_regression_tests",
     expectedCount: 6,
     columns: productionCols,
+  }),
+);
+results.push(
+  await runSuite({
+    rpc: "run_student_overlap_tests",
+    expectedCount: 5,
+    columns: studentOverlapCols,
   }),
 );
 

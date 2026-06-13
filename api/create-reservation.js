@@ -73,12 +73,16 @@ export default async function handler(req, res) {
       // The RPC RAISEs with messages like
       //   "create_reservation_v2: not enough units for ... — requested X, available Y"
       // Map that to a 409 so the client can show a clean Hebrew error.
-      const looksLikeStockIssue = /not enough units/i.test(text);
-      const status = looksLikeStockIssue ? 409 : r.status;
+      const looksLikeStockIssue      = /not enough units/i.test(text);
+      // Per-student overlap guard raise (see create_reservation_v2).
+      const looksLikeStudentOverlap  = /student_overlap|same student already has/i.test(text);
+      const status = (looksLikeStockIssue || looksLikeStudentOverlap) ? 409 : r.status;
       console.error("create-reservation RPC error:", r.status, text);
       return res.status(status).json({
         ok: false,
-        error: looksLikeStockIssue ? "not_enough_stock" : "rpc_error",
+        error: looksLikeStudentOverlap ? "student_overlap"
+             : looksLikeStockIssue     ? "not_enough_stock"
+             : "rpc_error",
         detail: text,
       });
     }
