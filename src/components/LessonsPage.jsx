@@ -7,6 +7,7 @@ import { listStudents } from "../utils/studentsApi.js";
 import { syncAllStudioBookings } from "../utils/studioBookingsApi.js";
 import { syncAllLessons } from "../utils/lessonsApi.js";
 import { getEffectiveLessonStudioIds } from "../utils/lessonBookings.js";
+import { rangesOverlap } from "../utils/studioOverlap.js";
 
 // Stage 8 fix: previously a module-scoped counter (`sk-${++_skeyCounter}`)
 // reset on every page load, so newly-added sessions could collide with
@@ -749,15 +750,15 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     for (const session of (lesson.schedule || [])) {
       for (const stId of getLessonSessionStudioIds(session, lesson)) {
         if (!stId) continue;
+        const sessionWindow = { date: session.date, startTime: session.startTime || "00:00", endTime: session.endTime || "23:59", isNight: false };
         for (const b of studioBookings) {
           if (seenIds.has(String(b.id))) continue;
           const kind = b.bookingKind || (b.lesson_id ? "lesson" : b.teamMemberId ? "team" : "student");
           if (kind !== "student" && kind !== "team") continue;
           if (String(b.studioId) !== stId) continue;
-          if (b.date !== session.date) continue;
-          const bS = b.startTime || "00:00", bE = b.endTime || "23:59";
-          const sS = session.startTime || "00:00", sE = session.endTime || "23:59";
-          if (bS < sE && bE > sS) {
+          // Night-aware overlap (same math as the server EXCLUDE guard) — catches
+          // a night booking that crosses midnight into the lesson's window too.
+          if (rangesOverlap(b, sessionWindow)) {
             const studio = studios.find(s => String(s.id) === stId);
             found.push({ booking: b, session, studioName: studio?.name || "החדר" });
             seenIds.add(String(b.id));
