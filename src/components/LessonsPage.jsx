@@ -3484,7 +3484,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
   return (
     <div className="card" style={{marginBottom:20}}>
       <div className="card-header">
-        <div className="card-title" style={{display:"flex",alignItems:"center",gap:6}}><Video size={15} strokeWidth={1.75}/> {initial?"עריכת קורס":"קורס חדש"}</div>
+        <div className="card-title" style={{display:"flex",alignItems:"center",gap:6}}><Video size={15} strokeWidth={1.75}/> {initial ? (name.trim() ? `עריכת קורס · ${name.trim()}` : "עריכת קורס") : (name.trim() ? `קורס חדש · ${name.trim()}` : "קורס חדש")}</div>
         <button className="btn btn-secondary btn-sm" onClick={onCancel}><X size={16} strokeWidth={1.75} color="var(--text3)" /> ביטול</button>
       </div>
 
@@ -3731,9 +3731,10 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
             )}
 
             <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
-              <button className="btn btn-secondary btn-sm" onClick={appendLessonFromExisting}>➕ שיעור נוסף</button>
+              <button className="btn btn-primary btn-sm" style={{background:"#9b59b6",borderColor:"#9b59b6"}} onClick={appendLessonFromExisting}>➕ שיעור נוסף</button>
               <button
-                className="btn btn-secondary btn-sm"
+                className="btn btn-primary btn-sm"
+                style={{background:"#9b59b6",borderColor:"#9b59b6"}}
                 onClick={addLecturerColumn}
                 disabled={lecturerColumnCount >= courseLecturers.length}
                 title={lecturerColumnCount >= courseLecturers.length ? "הוסף עוד מרצה ב\"מרצי הקורס\" כדי להוסיף עמודה" : "הוסף עמודת מרצה ללוח השיעורים"}
@@ -3767,7 +3768,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                 .sort((a,b)=>displayLecturerName(a).localeCompare(displayLecturerName(b),"he"))
                 .map(l => <option key={l.id} value={l.id}>{displayLecturerName(l)}</option>)}
             </select>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={addCourseLecturer} disabled={!additionalLecturerId} style={{whiteSpace:"nowrap"}}>
+            <button type="button" className="btn btn-primary btn-sm" onClick={addCourseLecturer} disabled={!additionalLecturerId} style={{whiteSpace:"nowrap",background:"#9b59b6",borderColor:"#9b59b6"}}>
               <Plus size={14} strokeWidth={1.75}/> הוסף מרצה
             </button>
           </div>
@@ -3853,7 +3854,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                 .sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"he"))
                 .map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
             </select>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={addCourseStudio} disabled={!additionalStudioId} style={{whiteSpace:"nowrap"}}>
+            <button type="button" className="btn btn-primary btn-sm" onClick={addCourseStudio} disabled={!additionalStudioId} style={{whiteSpace:"nowrap",background:"#9b59b6",borderColor:"#9b59b6"}}>
               <Plus size={14} strokeWidth={1.75}/> הוסף כיתה
             </button>
           </div>
