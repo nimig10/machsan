@@ -8,6 +8,7 @@ import { listLessons } from "../utils/lessonsApi.js";
 import { listStudios } from "../utils/studiosApi.js";
 import { listStudioBookings, upsertStudioBooking, deleteStudioBooking } from "../utils/studioBookingsApi.js";
 import { buildLessonStudioBookings } from "../utils/lessonBookings.js";
+import { rangesOverlap } from "../utils/studioOverlap.js";
 import { useNotifications } from "../hooks/useNotifications.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import AIChatBot from "./AIChatBot.jsx";
@@ -4965,7 +4966,8 @@ ${inventory}
               if(!editingBooking) return;
               const{id,studioId,date,startTime,endTime}=editingBooking;
               if(!startTime||!endTime||startTime>=endTime){showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה");return;}
-              const overlap=studioBookings.some(b=>String(b.studioId)===String(studioId)&&b.date===date&&b.id!==id&&b.status!=="נדחה"&&!(endTime<=b.startTime||startTime>=b.endTime));
+              const editReq={studioId,date,startTime,endTime,isNight:false};
+              const overlap=studioBookings.some(b=>String(b.studioId)===String(studioId)&&String(b.id)!==String(id)&&b.status!=="נדחה"&&rangesOverlap(b,editReq));
               if(overlap){showToast("error","קיימת הזמנה חופפת לשעות אלו");return;}
               const hoursLimit=getStudioFutureHoursLimit(siteSettings);
               const now=new Date();
@@ -4983,7 +4985,15 @@ ${inventory}
               const updated=studioBookings.map(b=>b.id===id?{...b,startTime,endTime}:b);
               const updatedBooking = updated.find(b => b.id === id);
               setStudioBookings(updated);
-              if (updatedBooking) await upsertStudioBooking(updatedBooking);
+              if (updatedBooking) {
+                const res = await upsertStudioBooking(updatedBooking);
+                if (res?.error === "studio_overlap") {
+                  setStudioBookings(studioBookings); // revert optimistic edit
+                  setEditBookingSaving(false);
+                  showToast("error","קיימת כבר קביעה חופפת על החדר בזמנים הללו. רענן/י ונס/י שוב.");
+                  return;
+                }
+              }
               setEditingBooking(null);
               setEditBookingSaving(false);
               showToast("success","ההזמנה עודכנה");
@@ -5782,14 +5792,17 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       const remainingHours = Math.max(0, studioFutureHoursLimit - currentFutureHours);
       return `לא ניתן להשלים את הבקשה. נותרו לך ${formatStudioHoursValue(remainingHours)} שעות בבנק השעות העתידיות.`;
     }
+    // Night-aware overlap (same math as the server EXCLUDE guard). Applies to
+    // night bookings too — the old `!isNight` gate let night bookings skip the
+    // check entirely and double-book.
+    const requested = { studioId, date, startTime: normalizedStartTime, endTime: normalizedEndTime, isNight };
     const overlap = bookings.some((booking) => (
       sameStudioId(booking.studioId, studioId)
-      && booking.date === date
       && isActiveStudioBooking(booking)
       && (excludeBookingId === null || String(booking.id) !== String(excludeBookingId))
-      && !(normalizedEndTime <= booking.startTime || normalizedStartTime >= booking.endTime)
+      && rangesOverlap(booking, requested)
     ));
-    if (!isNight && overlap) return "קיימת הזמנה חופפת";
+    if (overlap) return "קיימת הזמנה חופפת";
     return "";
   };
   const checkStudentParallelBooking = (date, startTime, endTime, excludeBookingId = null) => {
@@ -5841,7 +5854,12 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       };
       const updated = [...bookings, newBooking];
       setBookings(updated);
-      await upsertStudioBooking(newBooking);
+      const saveRes = await upsertStudioBooking(newBooking);
+      if (saveRes?.error === "studio_overlap") {
+        setBookings(bookings); // revert optimistic add — server EXCLUDE guard rejected an overlap
+        showToast("error", "קיימת כבר קביעה חופפת על החדר בזמנים הללו. רענן/י ונס/י שוב.");
+        return false;
+      }
       showToast("success", successMessage);
       return true;
     } catch(err) {
@@ -6090,11 +6108,11 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
         return;
       }
       if (addRecordingStudio) {
+        const recordingRequest = { studioId: recordingStudio.id, date, startTime, endTime, isNight };
         const recordingOverlap = bookings.some((booking) => (
           sameStudioId(booking.studioId, recordingStudio.id)
-          && booking.date === date
           && isActiveStudioBooking(booking)
-          && !(endTime <= booking.startTime || startTime >= booking.endTime)
+          && rangesOverlap(booking, recordingRequest)
         ));
         if (recordingOverlap) {
           showToast("error", "סטודיו הקלטות תפוס בשעות האלו");
@@ -6121,7 +6139,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
           };
           const recordingSave = await upsertStudioBooking(recordingBooking);
           if (!recordingSave?.ok) {
-            showToast("error", "ההזמנה נשמרה, אך סטודיו הקלטות לא נרשם ב-DB");
+            showToast("error", recordingSave?.error === "studio_overlap" ? "סטודיו הקלטות תפוס בשעות האלו" : "ההזמנה נשמרה, אך סטודיו הקלטות לא נרשם ב-DB");
             return;
           }
           setBookings(prev => [...prev, recordingBooking]);
@@ -6153,8 +6171,9 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     if (addRecordingStudio && !recordingStudio) { showToast("error", "סטודיו הקלטות לא נמצא ברשימת החדרים"); setSaving(false); return; }
     if (addRecordingStudio && isStudioDisabled(recordingStudio.id)) { showToast("error", "סטודיו הקלטות בתחזוקה ולא ניתן לצרף אותו להזמנה"); setSaving(false); return; }
     if(!isNight && startTime >= endTime) { showToast("error","שעת סיום חייבת להיות אחרי שעת התחלה"); setSaving(false); return; }
-    const overlap = bookings.some(b => sameStudioId(b.studioId, studioId) && b.date===date && b.id!==bookingId && isActiveStudioBooking(b) && !(endTime<=b.startTime || startTime>=b.endTime));
-    if(!isNight && overlap) { showToast("error","קיימת הזמנה חופפת"); setSaving(false); return; }
+    const editRequest = { studioId, date, startTime, endTime, isNight };
+    const overlap = bookings.some(b => sameStudioId(b.studioId, studioId) && String(b.id)!==String(bookingId) && isActiveStudioBooking(b) && rangesOverlap(b, editRequest));
+    if(overlap) { showToast("error","קיימת הזמנה חופפת"); setSaving(false); return; }
     const existingRecordingBooking = recordingStudio ? bookings.find(b => (
       sameStudioId(b.studioId, recordingStudio.id)
       && b.date === date
@@ -6172,7 +6191,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       setBookings(updated);
       if (updatedBooking) {
         const updateResult = await upsertStudioBooking(updatedBooking);
-        if (!updateResult?.ok) { showToast("error", "שמירת ההזמנה ב-DB נכשלה"); setSaving(false); return; }
+        if (!updateResult?.ok) { showToast("error", updateResult?.error === "studio_overlap" ? "קיימת כבר קביעה חופפת על החדר בזמנים הללו. רענן/י ונס/י שוב." : "שמירת ההזמנה ב-DB נכשלה"); setSaving(false); return; }
       }
       const deleteResult = await deleteStudioBooking(existingRecordingBooking.id);
       if (!deleteResult?.ok) { showToast("error", "מחיקת הזמנת סטודיו הקלטות מה-DB נכשלה"); setSaving(false); return; }
@@ -6181,12 +6200,12 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
       return;
     }
     if (addRecordingStudio) {
+      const recordingEditRequest = { studioId: recordingStudio.id, date, startTime, endTime, isNight };
       const recordingOverlap = bookings.some(b => (
         sameStudioId(b.studioId, recordingStudio.id)
-        && b.date === date
-        && b.id !== existingRecordingBooking?.id
+        && String(b.id) !== String(existingRecordingBooking?.id)
         && isActiveStudioBooking(b)
-        && !(endTime <= b.startTime || startTime >= b.endTime)
+        && rangesOverlap(b, recordingEditRequest)
       ));
       if (recordingOverlap) { showToast("error", "סטודיו הקלטות תפוס בשעות האלו"); setSaving(false); return; }
     }
@@ -6221,11 +6240,11 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
     setBookings(updated);
     if (updatedBooking) {
       const updateResult = await upsertStudioBooking(updatedBooking);
-      if (!updateResult?.ok) { showToast("error", "שמירת ההזמנה ב-DB נכשלה"); setSaving(false); return; }
+      if (!updateResult?.ok) { showToast("error", updateResult?.error === "studio_overlap" ? "קיימת כבר קביעה חופפת על החדר בזמנים הללו. רענן/י ונס/י שוב." : "שמירת ההזמנה ב-DB נכשלה"); setSaving(false); return; }
     }
     if (companionRecordingBooking) {
       const companionResult = await upsertStudioBooking(companionRecordingBooking);
-      if (!companionResult?.ok) { showToast("error", "סטודיו הקלטות לא נרשם ב-DB"); setSaving(false); return; }
+      if (!companionResult?.ok) { showToast("error", companionResult?.error === "studio_overlap" ? "סטודיו הקלטות תפוס בשעות האלו" : "סטודיו הקלטות לא נרשם ב-DB"); setSaving(false); return; }
     }
     showToast("success","ההזמנה עודכנה בהצלחה");
     setModal(null); setSaving(false);
@@ -6774,7 +6793,12 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                       const newBooking = { id:Date.now(), bookingKind:"student", studioId:args.studioId, date:args.date, startTime:normalizedStartTime, endTime:normalizedEndTime, studentName:student.name, studentEmail:student.email||"", studentPhone:student.phone||"", studentId:student?.id??null, notes:args.notes, isNight:args.isNight, createdAt:new Date().toISOString() };
                       const next = [...bookings, newBooking];
                       setBookings(next);
-                      await upsertStudioBooking(newBooking);
+                      const saveRes = await upsertStudioBooking(newBooking);
+                      if (saveRes?.error === "studio_overlap") {
+                        setBookings(bookings); // revert optimistic add — server EXCLUDE guard rejected an overlap
+                        showToast("error", "קיימת כבר קביעה חופפת על החדר בזמנים הללו. רענן/י ונס/י שוב.");
+                        return;
+                      }
                       showToast("success", args.successMessage || "החדר הוזמן בהצלחה!");
                       closeBookingModal();
                     } catch(err) {

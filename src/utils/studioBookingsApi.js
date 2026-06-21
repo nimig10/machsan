@@ -16,6 +16,17 @@
 
 import { supabase } from "../supabaseClient.js";
 
+// Postgres SQLSTATE 23P01 (exclusion_violation) is raised by the
+// studio_bookings_no_overlap EXCLUDE constraint (migration 20260621120000) when
+// a write would create a time-overlapping booking on the same studio. Map it to
+// a stable "studio_overlap" token so callers can show a clear Hebrew message —
+// mirrors the create_reservation_v2 "student_overlap" token handling.
+function isStudioOverlapError(err) {
+  if (!err) return false;
+  if (err.code === "23P01") return true;
+  return /studio_bookings_no_overlap|exclusion_violation|23P01/i.test(err.message || "");
+}
+
 // ─── Shape mapping (DB row ↔ blob entry) ──────────────────────────────────
 
 function rowToBlob(r) {
@@ -133,6 +144,7 @@ export async function upsertStudioBooking(blob) {
     return { ok: true };
   } catch (err) {
     console.warn("[studioBookingsApi.upsertStudioBooking]", blob?.id, err);
+    if (isStudioOverlapError(err)) return { ok: false, error: "studio_overlap" };
     return { ok: false, error: err?.message || String(err) };
   }
 }
@@ -187,6 +199,7 @@ export async function syncAllStudioBookings(nextBookings) {
     return { ok: true, upserted: rows.length, deleted: toDelete.length };
   } catch (err) {
     console.warn("[studioBookingsApi.syncAllStudioBookings]", err);
+    if (isStudioOverlapError(err)) return { ok: false, error: "studio_overlap" };
     return { ok: false, error: err?.message || String(err) };
   }
 }

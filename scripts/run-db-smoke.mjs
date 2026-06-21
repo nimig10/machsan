@@ -144,6 +144,13 @@ results.push(
     columns: studentOverlapCols,
   }),
 );
+results.push(
+  await runSuite({
+    rpc: "run_studio_overlap_tests",
+    expectedCount: 6,
+    columns: studentOverlapCols,
+  }),
+);
 
 const totalPassed = results.reduce((n, r) => n + r.passed, 0);
 const totalFailed = results.reduce((n, r) => n + r.failed, 0);

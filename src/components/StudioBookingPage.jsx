@@ -6,6 +6,7 @@ import { syncAllLessons } from "../utils/lessonsApi.js";
 import { syncAllStudios } from "../utils/studiosApi.js";
 import { syncAllStudioBookings } from "../utils/studioBookingsApi.js";
 import { syncAllSiteSettings } from "../utils/siteSettingsApi.js";
+import { rangesOverlap } from "../utils/studioOverlap.js";
 import { Modal } from "./ui.jsx";
 
 const DAY_HOURS = (() => { const h = []; for (let hr = 9; hr <= 21; hr++) for (let m = 0; m < 60; m += 15) { if (hr === 21 && m > 30) break; h.push(`${String(hr).padStart(2,"0")}:${String(m).padStart(2,"0")}`); } return h; })();
@@ -101,25 +102,6 @@ function getStudioFutureHoursLimit(settings = {}) {
 function formatStudioHoursValue(value = 0) {
   const normalized = Math.max(0, Math.round((Number(value) || 0) * 10) / 10);
   return Number.isInteger(normalized) ? String(normalized) : normalized.toFixed(1);
-}
-
-function buildStudioBookingInterval({ date, startTime, endTime, isNight = false }) {
-  if (!date) return null;
-  const normalizedStartTime = isNight ? NIGHT_START_TIME : String(startTime || "").trim();
-  const normalizedEndTime = isNight ? NIGHT_END_TIME : String(endTime || "").trim();
-  if (!normalizedStartTime || !normalizedEndTime) return null;
-  const start = new Date(`${date}T${normalizedStartTime}:00`);
-  const end = new Date(`${date}T${normalizedEndTime}:00`);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
-  if (end <= start) end.setDate(end.getDate() + 1);
-  return { start, end };
-}
-
-function rangesOverlap(left, right) {
-  const leftInterval = buildStudioBookingInterval(left);
-  const rightInterval = buildStudioBookingInterval(right);
-  if (!leftInterval || !rightInterval) return false;
-  return leftInterval.start < rightInterval.end && rightInterval.start < leftInterval.end;
 }
 
 function addDaysToDateString(dateStr, daysToAdd = 0) {
@@ -229,8 +211,13 @@ export default function StudioBookingPage(props) {
     setBookings(nextBookings);
     // Stage 10-C: blob retired — public.studio_bookings is the sole source
     // of truth. lesson_auto entries are filtered out by syncAllStudioBookings.
-    await syncAllStudioBookings(nextBookings);
-  }, [setBookings]);
+    const res = await syncAllStudioBookings(nextBookings);
+    // Server-side EXCLUDE guard rejected an overlap (race past the client check).
+    if (res?.error === "studio_overlap") {
+      showToast("error", "קיימת כבר קביעה חופפת על החדר בזמנים הללו. רענן/י את הדף ונס/י שוב.");
+    }
+    return res;
+  }, [setBookings, showToast]);
 
   const saveSiteSettings = useCallback(async (nextSettings) => {
     setSiteSettings(nextSettings);
@@ -479,13 +466,14 @@ export default function StudioBookingPage(props) {
       return;
     }
 
-    // Conflict check — exclude bookings from the same lesson on the same date
+    // Conflict check — exclude bookings from the same lesson on the same date.
+    // Night-aware overlap (lessons are day-only, but a night booking on the same
+    // studio could still collide).
+    const lessonCandidate = { studioId: newStudioId || booking.studioId, date: booking.date, startTime: newStart, endTime: newEnd, isNight: false };
     const conflict = activeBookings.find(b => {
       if (String(b.lesson_id) === String(booking.lesson_id) && b.date === booking.date) return false;
       if (!sameStudioId(b.studioId, newStudioId || booking.studioId)) return false;
-      if (b.date !== booking.date) return false;
-      if (b.isNight) return false;
-      return !(newEnd <= (b.startTime || "00:00") || newStart >= (b.endTime || "23:59"));
+      return rangesOverlap(b, lessonCandidate);
     });
     if (conflict) {
       showToast("error", getConflictMessage(conflict, booking.date));
@@ -539,12 +527,13 @@ export default function StudioBookingPage(props) {
       showToast("error", "סטודיו הקלטות בתחזוקה ולא ניתן לצרף אותו להזמנה");
       return;
     }
+    // Night-aware overlap (reuses the same math as the server EXCLUDE guard);
+    // covers day↔day, night↔night and day↔night on the same studio.
+    const editCandidate = { studioId: newStudioId, date: newDate, startTime: newStart, endTime: newEnd, isNight: Boolean(booking.isNight) };
     const conflict = activeBookings.find(b =>
-      b.id !== booking.id &&
+      String(b.id) !== String(booking.id) &&
       sameStudioId(b.studioId, newStudioId) &&
-      b.date === newDate &&
-      !b.isNight &&
-      !(newEnd <= (b.startTime || "00:00") || newStart >= (b.endTime || "23:59"))
+      rangesOverlap(b, editCandidate)
     );
     if (conflict) {
       showToast("error", getConflictMessage(conflict, newDate));
@@ -563,13 +552,12 @@ export default function StudioBookingPage(props) {
       )
     )) : null;
     if (addRecordingStudio) {
+      const recordingCandidate = { studioId: recordingStudio.id, date: newDate, startTime: newStart, endTime: newEnd, isNight: Boolean(booking.isNight) };
       const recordingConflict = activeBookings.find(b =>
-        b.id !== booking.id &&
-        b.id !== existingRecordingBooking?.id &&
+        String(b.id) !== String(booking.id) &&
+        String(b.id) !== String(existingRecordingBooking?.id) &&
         sameStudioId(b.studioId, recordingStudio.id) &&
-        b.date === newDate &&
-        !b.isNight &&
-        !(newEnd <= (b.startTime || "00:00") || newStart >= (b.endTime || "23:59"))
+        rangesOverlap(b, recordingCandidate)
       );
       if (recordingConflict) {
         showToast("error", getConflictMessage(recordingConflict, newDate));
@@ -887,23 +875,18 @@ export default function StudioBookingPage(props) {
       return;
     }
 
-    const overlap = activeBookings.some((booking) => (
-      sameStudioId(booking.studioId, modal.studioId)
-      && booking.date === modal.date
-      && !(endTime <= booking.startTime || startTime >= booking.endTime)
-    ));
-    if (!isNight && overlap) {
+    // Night-aware overlap (same math as the server EXCLUDE guard). Applies to
+    // night bookings too — no `!isNight` gate (that gap let night bookings
+    // double-book any existing booking).
+    const overlap = findBookingConflict({ studioId: modal.studioId, date: modal.date, startTime, endTime, isNight });
+    if (overlap) {
       showToast("error", "קיימת כבר קביעה חופפת בשעות האלו");
       setSaving(false);
       return;
     }
 
     if (addRecordingStudio) {
-      const recordingOverlap = activeBookings.some((booking) => (
-        sameStudioId(booking.studioId, recordingStudio.id)
-        && booking.date === modal.date
-        && !(endTime <= booking.startTime || startTime >= booking.endTime)
-      ));
+      const recordingOverlap = findBookingConflict({ studioId: recordingStudio.id, date: modal.date, startTime, endTime, isNight });
       if (recordingOverlap) {
         showToast("error", "סטודיו הקלטות תפוס בשעות האלו");
         setSaving(false);
@@ -918,8 +901,8 @@ export default function StudioBookingPage(props) {
       : [modal.studioId, ...(addRecordingStudio ? [recordingStudio.id] : [])];
     const newBookings = [];
     for (const sid of targetStudioIds) {
-      // skip if this studio already has a night booking for this date
-      const alreadyBooked = activeBookings.some(b => sameStudioId(b.studioId, sid) && b.date === modal.date && b.isNight);
+      // skip studios that already have ANY overlapping booking for this night
+      const alreadyBooked = findBookingConflict({ studioId: sid, date: modal.date, startTime, endTime, isNight });
       if (bookAllStudios && alreadyBooked) continue;
       newBookings.push({
         id: Date.now() + newBookings.length,
