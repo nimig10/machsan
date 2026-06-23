@@ -424,6 +424,13 @@ function normalizeEquipmentTagFlags(list = [], categoryTypes = {}) {
     }
     const privateLoanUnlimitedValue = normalized.privateLoanUnlimited ?? normalized.private_loan_unlimited;
     normalized.privateLoanUnlimited = privateLoanUnlimitedValue === true || privateLoanUnlimitedValue === "true";
+    // External-loan restriction: surface snake_case DB columns as camelCase so
+    // the UI (chips, UnitsModal) and PublicForm enforcement read them, and so a
+    // subsequent full-array write re-sends them (otherwise the RPC COALESCEs the
+    // missing keys back to false/0 and silently clobbers the saved values).
+    const externalRestrictedValue = normalized.externalLoanRestricted ?? normalized.external_loan_restricted;
+    normalized.externalLoanRestricted = externalRestrictedValue === true || externalRestrictedValue === "true";
+    normalized.externalLoanHoldCount = Number(normalized.externalLoanHoldCount ?? normalized.external_loan_hold_count) || 0;
     return normalized;
   });
 }
@@ -1438,7 +1445,8 @@ function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, savi
             לא מוגבל בהשאלה פרטית
           </button>
         </div>
-        <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>הגבלת השאלת חוץ (מוגבל / החסרת יחידות) מוגדרת בלחצן "יחידות".</div>
+        <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>כשמופעל — פריט זה אינו נספר במגבלת הכמות של השאלה פרטית (אפשר להשאיל ממנו ללא הגבלת כמות).</div>
+        <div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>↩︎ הגבלת השאלת חוץ (חסימה מלאה / החסרת יחידות מהקמפוס) מוגדרת בלחצן "יחידות".</div>
       </div>
       <div className="flex gap-2" style={{paddingTop:8,flexWrap:"wrap"}}>
         <button className="btn btn-primary" disabled={!f.name||saving||imgUploading} onClick={()=>onSave(f)}>{saving?<><Clock size={14} strokeWidth={1.75}/> שומר...</>:initial?"שמור":"הוסף"}</button>
