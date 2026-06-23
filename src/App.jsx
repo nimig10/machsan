@@ -4963,13 +4963,13 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
             type="button"
             className={`btn btn-sm ${restrictAll ? "btn-danger" : "btn-secondary"}`}
             aria-pressed={restrictAll}
-            onClick={()=>setRestrictAll(v=>!v)}
+            onClick={()=>{ const next=!restrictAll; setRestrictAll(next); if(!next) setHoldCount(0); }}
           >
             הגבל את כל היחידות
           </button>
           <span style={{fontSize:12,color:restrictAll?"var(--text3)":"var(--text2)",fontWeight:600}}>או החסר</span>
-          <input type="number" min={0} max={units.length} value={holdCount} disabled={restrictAll}
-            onChange={e=>setHoldCount(Math.max(0, Math.min(Number(e.target.value)||0, units.length)))}
+          <input type="number" min={0} max={units.length} value={restrictAll ? units.length : holdCount} disabled={restrictAll}
+            onChange={e=>{ const v=Math.max(0, Math.min(Number(e.target.value)||0, units.length)); setHoldCount(v); if(units.length>0 && v>=units.length) setRestrictAll(true); }}
             style={{width:56,padding:"4px 8px",borderRadius:"var(--r-sm)",border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",fontSize:13,textAlign:"center",opacity:restrictAll?0.45:1}}/>
           <span style={{fontSize:12,color:restrictAll?"var(--text3)":"var(--text2)",fontWeight:600}}>יחידות</span>
           <span style={{flexBasis:"100%",fontSize:12,fontWeight:600,color:"var(--text2)",marginTop:2}}>
@@ -4977,8 +4977,8 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
               ? `כל ${units.length} היחידות מוגבלות — 0 זמינות להשאלת חוץ (פרטית/הפקה).`
               : `${holdCount} יחידות יישארו בקמפוס · ${Math.max(0, units.length - holdCount)} זמינות להשאלת חוץ (מתוך ${units.length}).`}
           </span>
-          <span style={{flexBasis:"100%",fontSize:11,color:"var(--text3)",marginTop:2}}>
-            פריט מוגבל לא ייצא מהקמפוס בהשאלה פרטית/הפקה. שאר סוגי ההשאלה (יומית/סאונד/קולנוע/צוות/שיעור) אינם מושפעים.
+          <span style={{flexBasis:"100%",fontSize:12,color:"var(--text2)",lineHeight:1.7,marginTop:6,paddingTop:6,borderTop:"1px solid var(--border)"}}>
+            פריט המוגבל להשאלת חוץ <strong style={{color:"var(--text)"}}>לא ייצא מהקמפוס</strong> — הוא לא יוצע להשאלה פרטית או הפקה. החסרת יחידות שומרת רק חלק מהיחידות בקמפוס. שאר סוגי ההשאלה (יומית, סאונד, קולנוע, צוות, שיעור) אינם מושפעים.
           </span>
         </div>
 
