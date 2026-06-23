@@ -4978,7 +4978,7 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
               : `${holdCount} יחידות יישארו בקמפוס · ${Math.max(0, units.length - holdCount)} זמינות להשאלת חוץ (מתוך ${units.length}).`}
           </span>
           <span style={{flexBasis:"100%",fontSize:12,color:"var(--text2)",lineHeight:1.7,marginTop:6,paddingTop:6,borderTop:"1px solid var(--border)"}}>
-            פריט המוגבל להשאלת חוץ <strong style={{color:"var(--text)"}}>לא ייצא מהקמפוס</strong> — הוא לא יוצע להשאלה פרטית או הפקה. החסרת יחידות שומרת רק חלק מהיחידות בקמפוס. שאר סוגי ההשאלה (יומית, סאונד, קולנוע, צוות, שיעור) אינם מושפעים.
+            פריט המוגבל להשאלת חוץ <strong style={{color:"var(--text)"}}>לא ייצא מהקמפוס</strong> — הוא לא יוצע להשאלה פרטית או הפקה. החסרת יחידות שומרת רק חלק מהיחידות בקמפוס. שאר סוגי ההשאלה (יומית, סאונד, קולנוע יומית, צוות, שיעור) אינם מושפעים.
           </span>
         </div>
 
