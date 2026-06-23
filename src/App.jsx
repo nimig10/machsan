@@ -1438,7 +1438,7 @@ function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, savi
         <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
           <button
             type="button"
-            className={`btn btn-sm ${f.privateLoanUnlimited ? "btn-yellow" : "btn-secondary"}`}
+            className={`btn btn-sm ${f.privateLoanUnlimited ? "btn-success" : "btn-secondary"}`}
             aria-pressed={f.privateLoanUnlimited}
             onClick={()=>s("privateLoanUnlimited", !f.privateLoanUnlimited)}
           >
@@ -1446,7 +1446,6 @@ function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, savi
           </button>
         </div>
         <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>כשמופעל — פריט זה אינו נספר במגבלת הכמות של השאלה פרטית (אפשר להשאיל ממנו ללא הגבלת כמות).</div>
-        <div style={{fontSize:11,color:"var(--text3)",marginTop:2}}>↩︎ הגבלת השאלת חוץ (חסימה מלאה / החסרת יחידות מהקמפוס) מוגדרת בלחצן "יחידות".</div>
       </div>
       <div className="flex gap-2" style={{paddingTop:8,flexWrap:"wrap"}}>
         <button className="btn btn-primary" disabled={!f.name||saving||imgUploading} onClick={()=>onSave(f)}>{saving?<><Clock size={14} strokeWidth={1.75}/> שומר...</>:initial?"שמור":"הוסף"}</button>
@@ -4962,7 +4961,7 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
           <span style={{fontSize:12,fontWeight:700,color:"var(--text2)",display:"inline-flex",alignItems:"center",gap:4}}>🔒 הגבלת השאלת חוץ:</span>
           <button
             type="button"
-            className={`btn btn-sm ${restrictAll ? "btn-yellow" : "btn-secondary"}`}
+            className={`btn btn-sm ${restrictAll ? "btn-danger" : "btn-secondary"}`}
             aria-pressed={restrictAll}
             onClick={()=>setRestrictAll(v=>!v)}
           >
@@ -4977,6 +4976,9 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
             {restrictAll
               ? `כל ${units.length} היחידות מוגבלות — 0 זמינות להשאלת חוץ (פרטית/הפקה).`
               : `${holdCount} יחידות יישארו בקמפוס · ${Math.max(0, units.length - holdCount)} זמינות להשאלת חוץ (מתוך ${units.length}).`}
+          </span>
+          <span style={{flexBasis:"100%",fontSize:11,color:"var(--text3)",marginTop:2}}>
+            פריט מוגבל לא ייצא מהקמפוס בהשאלה פרטית/הפקה. שאר סוגי ההשאלה (יומית/סאונד/קולנוע/צוות/שיעור) אינם מושפעים.
           </span>
         </div>
 
