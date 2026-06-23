@@ -76,11 +76,14 @@ export default async function handler(req, res) {
       const looksLikeStockIssue      = /not enough units/i.test(text);
       // Per-student overlap guard raise (see create_reservation_v2).
       const looksLikeStudentOverlap  = /student_overlap|same student already has/i.test(text);
-      const status = (looksLikeStockIssue || looksLikeStudentOverlap) ? 409 : r.status;
+      // External-loan restriction guard raise (see create_reservation_v2).
+      const looksLikeExternalRestricted = /external_restricted|blocked from external loans/i.test(text);
+      const status = (looksLikeStockIssue || looksLikeStudentOverlap || looksLikeExternalRestricted) ? 409 : r.status;
       console.error("create-reservation RPC error:", r.status, text);
       return res.status(status).json({
         ok: false,
-        error: looksLikeStudentOverlap ? "student_overlap"
+        error: looksLikeExternalRestricted ? "external_restricted"
+             : looksLikeStudentOverlap ? "student_overlap"
              : looksLikeStockIssue     ? "not_enough_stock"
              : "rpc_error",
         detail: text,

@@ -424,6 +424,13 @@ function normalizeEquipmentTagFlags(list = [], categoryTypes = {}) {
     }
     const privateLoanUnlimitedValue = normalized.privateLoanUnlimited ?? normalized.private_loan_unlimited;
     normalized.privateLoanUnlimited = privateLoanUnlimitedValue === true || privateLoanUnlimitedValue === "true";
+    // External-loan restriction: surface snake_case DB columns as camelCase so
+    // the UI (chips, UnitsModal) and PublicForm enforcement read them, and so a
+    // subsequent full-array write re-sends them (otherwise the RPC COALESCEs the
+    // missing keys back to false/0 and silently clobbers the saved values).
+    const externalRestrictedValue = normalized.externalLoanRestricted ?? normalized.external_loan_restricted;
+    normalized.externalLoanRestricted = externalRestrictedValue === true || externalRestrictedValue === "true";
+    normalized.externalLoanHoldCount = Number(normalized.externalLoanHoldCount ?? normalized.external_loan_hold_count) || 0;
     return normalized;
   });
 }
@@ -1220,9 +1227,9 @@ function CategoryLoanTypesModal({ categoryLoanTypes = {}, onSave, onClose }) {
 
 // ── EqForm: extracted outside EquipmentPage so React keeps a stable component identity ──
 // Previously defined inline → every parent re-render destroyed form state (quantity, description, etc.)
-function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, saving, onSave, onCancel }) {
+function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, saving, onSave, onCancel, onOpenUnits }) {
   const [f, setF] = useState(() => {
-    const base = { name:"", category:"מצלמות", description:"", technical_details:"", total_quantity:1, image:"📷", notes:"", status:"תקין", certification_id:"" };
+    const base = { name:"", category:"מצלמות", description:"", technical_details:"", total_quantity:1, image:"📷", notes:"", status:"תקין", certification_id:"", privateLoanUnlimited:false, externalLoanRestricted:false };
     const merged = { ...base, ...(initial || {}) };
     // Normalize nullable fields to strings so controlled inputs never receive null
     merged.notes           = merged.notes           ?? "";
@@ -1230,6 +1237,8 @@ function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, savi
     merged.technical_details = merged.technical_details ?? "";
     merged.name            = merged.name            ?? "";
     merged.certification_id = merged.certification_id ?? "";
+    merged.privateLoanUnlimited   = !!merged.privateLoanUnlimited;
+    merged.externalLoanRestricted = !!merged.externalLoanRestricted;
     return merged;
   });
   const s = (k,v) => setF(p=>({...p,[k]:v}));
@@ -1424,8 +1433,23 @@ function EqForm({ initial, onImageUploaded, categories, equipmentCertTypes, savi
         </select>
         <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>רק סטודנטים שעברו הסמכה זו יוכלו להשאיל פריט זה</div>
       </div>
-      <div className="flex gap-2" style={{paddingTop:8}}>
+      <div className="form-group">
+        <label className="form-label">מגבלות השאלה</label>
+        <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+          <button
+            type="button"
+            className={`btn btn-sm ${f.privateLoanUnlimited ? "btn-success" : "btn-secondary"}`}
+            aria-pressed={f.privateLoanUnlimited}
+            onClick={()=>s("privateLoanUnlimited", !f.privateLoanUnlimited)}
+          >
+            לא מוגבל בהשאלה פרטית
+          </button>
+        </div>
+        <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>כשמופעל — פריט זה אינו נספר במגבלת הכמות של השאלה פרטית (אפשר להשאיל ממנו ללא הגבלת כמות).</div>
+      </div>
+      <div className="flex gap-2" style={{paddingTop:8,flexWrap:"wrap"}}>
         <button className="btn btn-primary" disabled={!f.name||saving||imgUploading} onClick={()=>onSave(f)}>{saving?<><Clock size={14} strokeWidth={1.75}/> שומר...</>:initial?"שמור":"הוסף"}</button>
+        {initial && <button className="btn btn-secondary" onClick={onOpenUnits} style={{display:"inline-flex",alignItems:"center",gap:4}}><Wrench size={14} strokeWidth={1.75}/> יחידות</button>}
         <button className="btn btn-secondary" onClick={onCancel}>ביטול</button>
       </div>
     </div>
@@ -1707,19 +1731,6 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
         : `כל הפריטים בקטגוריית "${categoryName}" סווגו ככלליים`);
   };
 
-  const toggleCategoryPrivateLoanUnlimited = async (categoryName) => {
-    const categoryItems = equipment.filter((item) => item.category === categoryName);
-    if (!categoryItems.length) return;
-    const shouldEnable = !categoryItems.every((item) => !!item.privateLoanUnlimited);
-    const updated = equipment.map((item) =>
-      item.category === categoryName ? { ...item, privateLoanUnlimited: shouldEnable } : item
-    );
-    await persistEquipmentChange(updated, {
-      successMessage: shouldEnable ? `הקטגוריה "${categoryName}" הוחרגה ממגבלת השאלה פרטית` : `הוחזרה מגבלת השאלה פרטית לקטגוריה "${categoryName}"`,
-      errorMessage: "שגיאה בשמירת הגדרת הקטגוריה. השינוי לא נשמר בשרת.",
-    });
-  };
-
   const saveCategoryLoanTypes = async (nextCategoryLoanTypes) => {
     const previousCategoryLoanTypes = categoryLoanTypes;
     setCategoryLoanTypes(nextCategoryLoanTypes);
@@ -1962,14 +1973,6 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                   ))}
                   <button
                     type="button"
-                    className={`btn btn-sm ${equipment.filter(e=>e.category===c).every(e=>e.privateLoanUnlimited) ? "btn-yellow" : "btn-secondary"}`}
-                    aria-pressed={equipment.filter(e=>e.category===c).every(e=>e.privateLoanUnlimited)}
-                    onClick={()=>toggleCategoryPrivateLoanUnlimited(c)}
-                  >
-                    לא מוגבל בהשאלה פרטית
-                  </button>
-                  <button
-                    type="button"
                     className="btn btn-sm btn-primary"
                     onClick={(e)=>{e.stopPropagation();setModal({type:"add",defaultCategory:c})}}
                   >
@@ -1999,6 +2002,8 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
                       {eq.soundOnly && <div className="chip" style={{color:"var(--accent)",borderColor:"var(--accent)",display:"flex",alignItems:"center",gap:4}}><Mic size={12} strokeWidth={1.75}/> ציוד סאונד</div>}
                       {eq.photoOnly && <div className="chip" style={{color:"var(--green)",borderColor:"rgba(39,174,96,0.45)",display:"inline-flex",alignItems:"center",gap:4}}><Camera size={11} strokeWidth={1.75}/> ציוד צילום</div>}
+                      {eq.externalLoanRestricted && <div className="chip" style={{color:"var(--red)",borderColor:"rgba(231,76,60,0.45)",display:"inline-flex",alignItems:"center",gap:4}}>🔒 מוגבל להשאלת חוץ</div>}
+                      {!eq.externalLoanRestricted && Number(eq.externalLoanHoldCount)>0 && <div className="chip" style={{color:"var(--yellow)",borderColor:"rgba(241,196,15,0.45)",display:"inline-flex",alignItems:"center",gap:4}}>🔒 מוחזק בקמפוס: {eq.externalLoanHoldCount}</div>}
                     </div>
                     <div style={{fontSize:13,display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
                       <div>
@@ -2029,6 +2034,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
               saving={saving}
               onSave={save}
               onCancel={()=>setModal(null)}
+              onOpenUnits={()=>setModal({type:"units",item:modal.item})}
               onImageUploaded={(url) => {
                 if (modal.type==="edit" && modal.item?.id) {
                   const updated = equipment.map(e => e.id===modal.item.id ? {...e, image: url} : e);
@@ -4876,6 +4882,11 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
   const [units, setUnits] = useState(eq.units || []);
   const [saving, setSaving] = useState(false);
   const [addCount, setAddCount] = useState(1);
+  // How many units to hold back from external loans (private / production) so
+  // they always stay on campus. Clamped to the unit count on save.
+  const [holdCount, setHoldCount] = useState(Number(eq.externalLoanHoldCount) || 0);
+  // Restrict the WHOLE item from external loans (private / production).
+  const [restrictAll, setRestrictAll] = useState(!!eq.externalLoanRestricted);
 
   const STATUS_COLORS = {"תקין":"var(--green)","פגום":"var(--red)","בתיקון":"var(--yellow)","נעלם":"#9b59b6"};
 
@@ -4905,7 +4916,7 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
 
   const saveAll = async () => {
     setSaving(true);
-    const updatedEq = {...eq, units, total_quantity: units.length};
+    const updatedEq = {...eq, units, total_quantity: units.length, externalLoanRestricted: restrictAll, externalLoanHoldCount: restrictAll ? 0 : Math.max(0, Math.min(Number(holdCount)||0, units.length))};
     const updatedEquipment = equipment.map(e => e.id===eq.id ? updatedEq : e);
     const previousEquipment = equipment;
     setEquipment(updatedEquipment);
@@ -4942,7 +4953,33 @@ function UnitsModal({ eq, equipment, setEquipment, showToast, onClose }) {
           <input type="number" min={1} max={20} value={addCount} onChange={e=>setAddCount(e.target.value)}
             style={{width:56,padding:"4px 8px",borderRadius:"var(--r-sm)",border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",fontSize:13,textAlign:"center"}}/>
           <button className="btn btn-primary btn-sm" onClick={addUnits}>הוסף</button>
-          <span style={{fontSize:11,color:"var(--text3)"}}>יחידות חדשות יתווספו כ"תקין"</span>
+          <span style={{fontSize:12,color:"var(--text2)",fontWeight:600}}>יחידות חדשות יתווספו כ"תקין"</span>
+        </div>
+
+        {/* ── External-loan restriction (private / production): all or N units ── */}
+        <div style={{padding:"10px 20px",borderBottom:"1px solid var(--border)",background:"rgba(231,76,60,0.05)",display:"flex",alignItems:"center",gap:8,flexShrink:0,flexWrap:"wrap"}}>
+          <span style={{fontSize:12,fontWeight:700,color:"var(--text2)",display:"inline-flex",alignItems:"center",gap:4}}>🔒 הגבלת השאלת חוץ:</span>
+          <button
+            type="button"
+            className={`btn btn-sm ${restrictAll ? "btn-danger" : "btn-secondary"}`}
+            aria-pressed={restrictAll}
+            onClick={()=>setRestrictAll(v=>!v)}
+          >
+            הגבל את כל היחידות
+          </button>
+          <span style={{fontSize:12,color:restrictAll?"var(--text3)":"var(--text2)",fontWeight:600}}>או החסר</span>
+          <input type="number" min={0} max={units.length} value={holdCount} disabled={restrictAll}
+            onChange={e=>setHoldCount(Math.max(0, Math.min(Number(e.target.value)||0, units.length)))}
+            style={{width:56,padding:"4px 8px",borderRadius:"var(--r-sm)",border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",fontSize:13,textAlign:"center",opacity:restrictAll?0.45:1}}/>
+          <span style={{fontSize:12,color:restrictAll?"var(--text3)":"var(--text2)",fontWeight:600}}>יחידות</span>
+          <span style={{flexBasis:"100%",fontSize:12,fontWeight:600,color:"var(--text2)",marginTop:2}}>
+            {restrictAll
+              ? `כל ${units.length} היחידות מוגבלות — 0 זמינות להשאלת חוץ (פרטית/הפקה).`
+              : `${holdCount} יחידות יישארו בקמפוס · ${Math.max(0, units.length - holdCount)} זמינות להשאלת חוץ (מתוך ${units.length}).`}
+          </span>
+          <span style={{flexBasis:"100%",fontSize:11,color:"var(--text3)",marginTop:2}}>
+            פריט מוגבל לא ייצא מהקמפוס בהשאלה פרטית/הפקה. שאר סוגי ההשאלה (יומית/סאונד/קולנוע/צוות/שיעור) אינם מושפעים.
+          </span>
         </div>
 
         <div style={{flex:1,overflowY:"auto",padding:"16px 20px",display:"flex",flexDirection:"column",gap:8}}>

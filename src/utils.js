@@ -580,6 +580,9 @@ export function normalizeEquipmentTagFlags(list = [], categoryTypes = {}) {
     }
     const privateLoanUnlimitedValue = normalized.privateLoanUnlimited ?? normalized.private_loan_unlimited;
     normalized.privateLoanUnlimited = privateLoanUnlimitedValue === true || privateLoanUnlimitedValue === "true";
+    const externalRestrictedValue = normalized.externalLoanRestricted ?? normalized.external_loan_restricted;
+    normalized.externalLoanRestricted = externalRestrictedValue === true || externalRestrictedValue === "true";
+    normalized.externalLoanHoldCount = Number(normalized.externalLoanHoldCount ?? normalized.external_loan_hold_count) || 0;
     return normalized;
   });
 }
@@ -702,6 +705,12 @@ export const FAR_FUTURE = new Date("2099-12-31T23:59:00").getTime();
 // return_date is allowed (gear is expected back by then). 48h matches the
 // warehouse staff's tolerance for chasing overdue returns.
 export const OVERDUE_BLOCK_BUFFER_MS = 48 * 60 * 60 * 1000;
+
+// Loan types that physically take gear OUT of campus. Equipment flagged
+// "מוגבל להשאלת חוץ" (external_loan_restricted) is hidden from these flows, and
+// a per-item hold-count keeps N units on campus. In-campus loan types (סאונד /
+// קולנוע יומית / צוות / שיעור) are unaffected.
+export const EXTERNAL_LOAN_TYPES = ["פרטית", "הפקה"];
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 // Ensure each equipment item has a units array
