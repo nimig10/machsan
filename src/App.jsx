@@ -1486,6 +1486,15 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
     return true;
   };
 
+  // Toggle the "external loan restriction" flag straight from the card, no modal.
+  const toggleExternalRestriction = async (eq) => {
+    const next = !eq.externalLoanRestricted;
+    const updated = equipment.map(e => e.id === eq.id ? { ...e, externalLoanRestricted: next } : e);
+    await persistEquipmentChange(updated, {
+      successMessage: next ? `"${eq.name}" הוגבל להשאלת חוץ` : `הוסרה הגבלת חוץ מ"${eq.name}"`,
+    });
+  };
+
   const parseCSVLine = (line) => {
     const result = []; let cur = ""; let inQ = false;
     for (let i = 0; i < line.length; i++) {
@@ -2019,6 +2028,15 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
                     <div className="flex gap-2" style={{marginTop:12,flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
                       <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"edit",item:eq})} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> עריכה</button>
                       <button className="btn btn-secondary btn-sm" onClick={()=>setModal({type:"units",item:eq})} style={{display:"inline-flex",alignItems:"center",gap:4}}><Wrench size={12} strokeWidth={1.75} /> יחידות</button>
+                      <button
+                        className={`btn btn-sm ${eq.externalLoanRestricted ? "btn-yellow" : "btn-secondary"}`}
+                        aria-pressed={eq.externalLoanRestricted}
+                        onClick={()=>toggleExternalRestriction(eq)}
+                        style={{display:"inline-flex",alignItems:"center",gap:4}}
+                        title="הגבלת השאלת חוץ — הפריט לא יופיע בהשאלה פרטית/הפקה"
+                      >
+                        🔒 {eq.externalLoanRestricted ? "מוגבל לחוץ" : "הגבל חוץ"}
+                      </button>
                       <button className="btn btn-danger btn-sm" onClick={(e)=>{e.stopPropagation();del(eq)}}><Trash2 size={14} strokeWidth={1.75} /></button>
                     </div>
                   </div>
