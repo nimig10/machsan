@@ -1,7 +1,7 @@
 // PublicForm.jsx — public loan request form
 import { AlertTriangle, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mail, Mic, Minus, Moon, Package, Pencil, Phone, Save, School, Search, Settings, Shield, ShieldCheck, Trash2, User, X, XCircle } from "lucide-react";
 import { useEffect, useState, useRef, useMemo } from "react";
-import { formatDate, formatTime, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR, groupReservationItemsByCategory } from "../utils.js";
+import { formatDate, formatTime, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, EXTERNAL_LOAN_TYPES, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR, groupReservationItemsByCategory } from "../utils.js";
 import { supabase } from "../supabaseClient.js";
 import { listStudents } from "../utils/studentsApi.js";
 import { listLessons } from "../utils/lessonsApi.js";
@@ -840,7 +840,10 @@ function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equi
   // Equipment to display: if a kit is active, only show that kit's items
   const kitEqIds = activeKit ? new Set((activeKit.items||[]).map(i=>String(i.equipment_id))) : null;
   const allowedEquipmentClassifications = getLoanTypeEquipmentClassifications(loanType, categoryLoanTypes);
-  const visibleAvailEq = availEq.filter((eq) => matchesEquipmentLoanType(eq, loanType, categoryLoanTypes));
+  const visibleAvailEq = availEq.filter((eq) =>
+    matchesEquipmentLoanType(eq, loanType, categoryLoanTypes)
+    // Items restricted from external loans never appear in private/production flows.
+    && !(EXTERNAL_LOAN_TYPES.includes(loanType) && eq.externalLoanRestricted));
   const enabledEquipmentTypeFilters = ["סאונד", "צילום"].filter((classification) => allowedEquipmentClassifications.includes(classification));
   const showEquipmentTypeFilters = enabledEquipmentTypeFilters.length > 1;
   const matchesEquipmentTypeFilter = (eq) => {
@@ -3303,15 +3306,22 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 
   const availEq = useMemo(()=>{
     if(!form.borrow_date||!form.return_date) return [];
+    const isExternalLoan = EXTERNAL_LOAN_TYPES.includes(form.loan_type);
     return equipment.map(eq=>{
-      const avail = getAvailable(eq.id,form.borrow_date,form.return_date,reservations,equipment,null,form.borrow_time,form.return_time);
+      let avail = getAvailable(eq.id,form.borrow_date,form.return_date,reservations,equipment,null,form.borrow_time,form.return_time);
+      // External loans (private / production) physically remove gear from campus.
+      // A fully-restricted item is unavailable; a hold-count keeps N units back.
+      if (isExternalLoan) {
+        if (eq.externalLoanRestricted) avail = 0;
+        else avail = Math.max(0, avail - (Number(eq.externalLoanHoldCount) || 0));
+      }
       // Check if the 0-availability is caused by an overdue reservation holding this item
       const overdueBlocked = avail === 0 && reservations.some(r =>
         r.status === "באיחור" && (r.items||[]).some(i => i.equipment_id == eq.id && Number(i.quantity) > 0)
       );
       return {...eq, avail, overdueBlocked};
     });
-  },[form.borrow_date,form.return_date,form.borrow_time,form.return_time,equipment,reservations]);
+  },[form.borrow_date,form.return_date,form.borrow_time,form.return_time,equipment,reservations,form.loan_type]);
 
   useEffect(() => {
     setItems((currentItems) => {
@@ -3889,6 +3899,9 @@ ${inventory}
       } else if (rpcResult.error === "not_enough_stock") {
         // Stock became unavailable between pre-check and atomic insert.
         showToast("error", "חלק מהציוד כבר לא זמין — נא לעדכן את הבחירה ולנסות שוב");
+      } else if (rpcResult.error === "external_restricted") {
+        // Server guard caught a restricted item (rare — it's normally hidden).
+        showToast("error", "פריט שנבחר מוגבל להשאלת חוץ ולא ניתן להשאילו בהשאלה פרטית/הפקה — נא להסירו ולנסות שוב");
       } else if (rpcResult.error === "network_error") {
         showToast("error", "תקלת רשת. בדוק חיבור ונסה שוב.");
       } else {
