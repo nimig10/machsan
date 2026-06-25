@@ -117,11 +117,13 @@ export default async function handler(req, res) {
       //   "update_reservation_status_v1: invalid status ..."
       const notFound = /not found/i.test(text);
       const badInput = /invalid status|required/i.test(text);
-      const httpStatus = notFound ? 404 : badInput ? 400 : r.status;
+      // Atomic approval availability guard raise (see update_reservation_status_v1).
+      const overbook = /approve_overbook|not enough units/i.test(text);
+      const httpStatus = notFound ? 404 : badInput ? 400 : overbook ? 409 : r.status;
       console.error("update-reservation-status RPC error:", r.status, text);
       return res.status(httpStatus).json({
         ok: false,
-        error: notFound ? "not_found" : badInput ? "invalid_input" : "rpc_error",
+        error: notFound ? "not_found" : badInput ? "invalid_input" : overbook ? "approve_overbook" : "rpc_error",
         detail: text,
       });
     }

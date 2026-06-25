@@ -548,7 +548,15 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       const rpcResult = await updateReservationStatus(reservationToApprove.id, "מאושר");
       if (!rpcResult.ok) {
         console.error("doApprove RPC failed:", rpcResult);
-        showToast("error", "שגיאה באישור הבקשה בשרת");
+        // Server-side availability guard caught a race the client pre-check missed
+        // (another approval landed since this page loaded). Refresh so the UI shows truth.
+        if (rpcResult.error === "approve_overbook") {
+          showToast("error", "לא ניתן לאשר — אין מספיק מלאי בחפיפת הזמנים (בקשה אחרת אושרה בינתיים). רענן ובדוק.");
+          const sync = await syncReservationStatusToBlob(reservationToApprove.id, reservationToApprove.status || "ממתין");
+          if (sync.ok) setReservations(normalizeReservationsForArchive(sync.list));
+        } else {
+          showToast("error", "שגיאה באישור הבקשה בשרת");
+        }
         return false;
       }
       // Optimistic update from local (possibly stale) state — UI flips to מאושר
@@ -680,8 +688,12 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
     }
   };
 
-  // Stage 5 — persist EditReservationModal changes directly to Supabase
-  const saveEditedReservation = async (updated) => {
+  // Stage 5 — persist EditReservationModal changes directly to Supabase.
+  // Returns true on success, false on failure. Pass { silent:true } when another
+  // action (e.g. approve) chains off this save — it skips the toast + modal close
+  // so the caller controls the final UX. Returning a boolean lets the approve
+  // path abort if the persist failed (so item/time edits are never silently lost).
+  const saveEditedReservation = async (updated, { silent = false } = {}) => {
     const { items: updatedItems, reservation_items: _ri, ...rowFields } = updated;
 
     // Virtual lesson reservations (lesson_auto: true) have no row in reservations_new.
@@ -697,14 +709,13 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
           const normalized = updatedItems.map(i => ({ equipment_id: i.equipment_id, quantity: Number(i.quantity) || 1, name: i.name || "" }));
           const newKits = freshKits.map(k => String(k.id) === linkedKitId ? { ...k, items: normalized } : k);
           const r = await syncAllKits(newKits);
-          if (!r.ok) { showToast("error", "שגיאה בעדכון ערכת השיעור"); return; }
+          if (!r.ok) { showToast("error", "שגיאה בעדכון ערכת השיעור"); return false; }
         }
       }
       const all = normalizeReservationsForArchive(reservations.map(r => r.id === updated.id ? updated : r));
       setReservations(all);
-      showToast("success", "הבקשה עודכנה");
-      setEditing(null);
-      return;
+      if (!silent) { showToast("success", "הבקשה עודכנה"); setEditing(null); }
+      return true;
     }
 
     // Real reservation — update reservations_new + reservation_items
@@ -724,14 +735,14 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
     if (updErr) {
       console.error("saveEditedReservation update error:", updErr);
       showToast("error", "שגיאה בעדכון הבקשה: " + (updErr.message || "לא ידוע"));
-      return;
+      return false;
     }
     if (updatedItems) {
       const { error: delErr } = await supabase.from("reservation_items").delete().eq("reservation_id", updated.id);
       if (delErr) {
         console.error("saveEditedReservation delete items error:", delErr);
         showToast("error", "שגיאה במחיקת הפריטים הישנים: " + (delErr.message || "לא ידוע"));
-        return;
+        return false;
       }
       if (updatedItems.length) {
         const { error: insErr } = await supabase.from("reservation_items").insert(
@@ -746,14 +757,14 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
         if (insErr) {
           console.error("saveEditedReservation insert items error:", insErr);
           showToast("error", "שגיאה בהוספת הפריטים החדשים: " + (insErr.message || "לא ידוע"));
-          return;
+          return false;
         }
       }
     }
     const all = normalizeReservationsForArchive(reservations.map(r => r.id === updated.id ? updated : r));
     setReservations(all);
-    showToast("success", "הבקשה עודכנה");
-    setEditing(null);
+    if (!silent) { showToast("success", "הבקשה עודכנה"); setEditing(null); }
+    return true;
   };
 
   const studentReqs = filtered.filter(r => r.loan_type !== "שיעור" && r.loan_type !== "צוות");
@@ -910,6 +921,11 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations} collegeManager={collegeManager} managerToken={managerToken}
   onSave={saveEditedReservation}
   onApprove={(editing.status==="נדחה" || editing.status==="ממתין") ? async(updated)=>{
+    // Persist item/time edits FIRST (silent — no toast/close), then approve.
+    // Previously approve skipped the save entirely, so trimming items or changing
+    // the return time and clicking approve silently dropped those edits.
+    const saved = await saveEditedReservation(updated, { silent: true });
+    if (!saved) return false;
     const approved = await approveReservation(updated);
     if (approved) setEditing(null);
     return approved;
