@@ -12,7 +12,7 @@ function getDayName(dateStr) {
   return HE_DAYS[d.getDay()] || "";
 }
 
-export function DashboardPage({ equipment, reservations, setReservations, showToast, siteSettings = {}, equipmentReports = [], certifications = { types: [], students: [] } }) {
+export function DashboardPage({ equipment, reservations, setReservations, showToast, siteSettings = {}, equipmentReports = [], certifications = { types: [], students: [] }, loanHandlers = [] }) {
   const todayStr = today();
   const nowMs = Date.now();
 
@@ -505,6 +505,17 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                   </div>
                 ))}
               </div>
+              {/* Loan-request staff handler (decoupled coordination; display-only) */}
+              {dashViewRes.loan_type!=="שיעור"&&(()=>{
+                const out=(loanHandlers||[]).find(h=>String(h.reservation_id)===String(dashViewRes.id)&&h.kind==="out");
+                const ret=(loanHandlers||[]).find(h=>String(h.reservation_id)===String(dashViewRes.id)&&h.kind==="return");
+                return(
+                  <div style={{background:"var(--surface2)",borderRadius:10,padding:"10px 14px",fontSize:12,display:"flex",gap:16,flexWrap:"wrap"}}>
+                    <span>🧰 אחראי הוצאה: <strong style={{color:out?"#22c55e":"var(--text3)"}}>{out?.staff_name||"לא שויך"}</strong></span>
+                    <span>↩ אחראי החזרה: <strong style={{color:ret?"#22c55e":"var(--text3)"}}>{ret?.staff_name||"לא שויך"}</strong></span>
+                  </div>
+                );
+              })()}
               {/* Production crew */}
               {(dashViewRes.crew_photographer_name||dashViewRes.crew_sound_name)&&(
                 <div style={{background:"var(--surface2)",borderRadius:10,padding:"10px 14px",fontSize:12,display:"flex",gap:16,flexWrap:"wrap"}}>

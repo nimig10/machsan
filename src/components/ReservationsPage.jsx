@@ -1,6 +1,6 @@
 import { supabase } from '../supabaseClient.js';
 // ReservationsPage.jsx — admin reservations management page (includes rejected + archive tabs)
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, createReservation, deleteReservation as deleteReservationRpc, getAuthToken, syncReservationStatusToBlob } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
@@ -303,9 +303,17 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
 
 export function ReservationsPage({ reservations, setReservations, equipment, showToast,
     search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy, mode="active", initialSubView="active", collegeManager={}, managerToken="",
-    categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], siteSettings={}, onLogCreated = () => {}, equipmentReports=[], lessons=[], setLessons=null }) {
+    categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], siteSettings={}, onLogCreated = () => {}, equipmentReports=[], lessons=[], setLessons=null, loanHandlers=[] }) {
   const [subView, setSubView] = useState("active"); // "active" | "rejected" | "archive"
   const [selected, setSelected] = useState(null);
+  // Loan-request staff coordination (decoupled side-table) — display-only here.
+  // Map reservation_id → { out, return } handler rows for quick lookup.
+  const loanHandlerMap = useMemo(() => {
+    const m = {};
+    (loanHandlers || []).forEach(h => { const k = String(h.reservation_id); if (!m[k]) m[k] = {}; m[k][h.kind] = h; });
+    return m;
+  }, [loanHandlers]);
+  const handlersFor = (rid) => loanHandlerMap[String(rid)] || {};
   // Keep the open modal's data in sync with background polling updates.
   // Without this, `selected` holds a snapshot from the moment the card was
   // clicked — if the `items` array was still empty then (FK rows hadn't
@@ -793,6 +801,12 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                   <div>
                     <div style={{fontWeight:700,fontSize:15}}>{r.student_name}</div>
                     <div style={{fontSize:11,color:"var(--text3)"}}>{r.email}</div>
+                    {!isLesson&&(()=>{const h=handlersFor(r.id);return(
+                      <div style={{fontSize:11,fontWeight:700,marginTop:3,display:"flex",gap:8,flexWrap:"wrap"}}>
+                        <span style={{color:h.out?"#22c55e":"var(--text3)"}}>🧰 הוצאה: {h.out?.staff_name||"לא שויך"}</span>
+                        <span style={{color:h.return?"#3b82f6":"var(--text3)"}}>↩ החזרה: {h.return?.staff_name||"לא שויך"}</span>
+                      </div>
+                    );})()}
                   </div>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -918,7 +932,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
           </>}
         </>
       }
-      {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations} collegeManager={collegeManager} managerToken={managerToken}
+      {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations} collegeManager={collegeManager} managerToken={managerToken} loanHandlers={loanHandlers}
   onSave={saveEditedReservation}
   onApprove={(editing.status==="נדחה" || editing.status==="ממתין") ? async(updated)=>{
     // Persist item/time edits FIRST (silent — no toast/close), then approve.
@@ -1097,7 +1111,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
             <div>
               <div className="form-section-title">פרטי סטודנט</div>
               <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:16,border:"1px solid var(--border)"}}>
-                {[["שם",selected.student_name],["אימייל",selected.email],["טלפון",selected.phone],["קורס",selected.course],["פרויקט",selected.project_name],["סוג השאלה",selected.loan_type]].map(([l,v])=>v?
+                {[["שם",selected.student_name],["אימייל",selected.email],["טלפון",selected.phone],["קורס",selected.course],["פרויקט",selected.project_name],["סוג השאלה",selected.loan_type],["אחראי הוצאה",handlersFor(selected.id).out?.staff_name],["אחראי החזרה",handlersFor(selected.id).return?.staff_name]].map(([l,v])=>v?
                   <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid var(--border)",fontSize:13}}>
                     <span style={{color:"var(--text3)"}}>{l}</span>
                     <strong style={{textAlign:"left",maxWidth:"60%",wordBreak:"break-word"}}>{v}</strong>

@@ -55,6 +55,41 @@ function isTaskShiftCompatible(taskKey, shiftType) {
   return true; // prep (הכנת כיתות) — any working shift
 }
 
+/* ── Loan-request staff coordination (decoupled — display/coordination only) ── */
+// Does a shift's time-window cover a given HH:MM moment? (used to match a worker's
+// shift to a loan pickup/return time). morning 09–17, evening 14–22, custom start–end.
+function shiftCoversTime(shiftType, startTime, endTime, hhmm) {
+  if (!hhmm) return false;
+  if (shiftType === "custom") return !!(startTime && endTime) && hhmm >= startTime && hhmm <= endTime;
+  const s = SHIFT_TYPES[shiftType];
+  if (!s || !s.start || !s.end) return false; // absent / unscheduled
+  return hhmm >= s.start && hhmm <= s.end;
+}
+
+// Student loan requests touching a day — OUT (pickup) + RETURN occurrences.
+// Mirrors the LoansRow filter exactly: drops נדחה/הוחזר and lesson loans.
+function getDayStudentLoans(reservations, date) {
+  const active = (reservations || []).filter(r => r.status !== "נדחה" && r.status !== "הוחזר" && r.loan_type !== "שיעור");
+  // Group per reservation so each request shows its OUT then its RETURN directly below it,
+  // and groups are ordered by pickup time (by return time when the loan only returns today).
+  const groups = [];
+  active.forEach(r => {
+    const out = r.borrow_date === date, ret = r.return_date === date;
+    if (!out && !ret) return;
+    const mk = (kind, time) => ({ reservation: r, kind, time: time || "", student_name: r.student_name || "—", itemCount: (r.items || []).length });
+    const occs = [];
+    if (out) occs.push(mk("out", r.borrow_time));
+    if (ret) occs.push(mk("return", r.return_time));
+    groups.push({ sortTime: (out ? r.borrow_time : r.return_time) || "99:99", occs });
+  });
+  groups.sort((a, b) => a.sortTime.localeCompare(b.sortTime));
+  return groups.flatMap(g => g.occs);
+}
+
+function loanHandlerFor(loanHandlers, reservationId, kind) {
+  return (loanHandlers || []).find(h => String(h.reservation_id) === String(reservationId) && h.kind === kind) || null;
+}
+
 const HE_DAYS   = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 const MIN_WEEK_OFFSET = -26; // 6 months back
@@ -154,7 +189,7 @@ async function scheduleApi(action, body = {}) {
 }
 
 /* ══════════════════════ Main Component ══════════════════════ */
-export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBookings = [], reservations = [], lessons = [], setLessons, onNavigateToLesson, equipment = [] }) {
+export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBookings = [], reservations = [], lessons = [], setLessons, onNavigateToLesson, equipment = [], loanHandlers = [], setLoanHandlers, reloadLoanHandlers }) {
   const isAdmin = staffUser?.role === "admin";
   const canEditLessons = isAdmin || !!staffUser?.permissions?.canEditDailyLessons;
   const currentStaffId = staffUser?.id;
@@ -411,6 +446,23 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
       delete weekCache.current[startDate];
       return false;
     }
+    return true;
+  };
+
+  /* ── Loan-request handler assignment (decoupled side-table; immediate writes) ── */
+  const assignLoanHandler = async (reservationId, kind, staffId, staffName) => {
+    const optimistic = { id: `opt-loan-${reservationId}-${kind}`, reservation_id: reservationId, kind, staff_id: staffId, staff_name: staffName || null, assigned_by: effectiveStaffId };
+    setLoanHandlers?.(prev => [...(prev || []).filter(h => !(String(h.reservation_id) === String(reservationId) && h.kind === kind)), optimistic]);
+    const r = await scheduleApi("assign-loan-handler", { reservationId, kind, staffId, staffName });
+    if (r?.error) { showToast("error", r.error); await reloadLoanHandlers?.(); return false; }
+    await reloadLoanHandlers?.();
+    return true;
+  };
+  const unassignLoanHandler = async (reservationId, kind) => {
+    setLoanHandlers?.(prev => (prev || []).filter(h => !(String(h.reservation_id) === String(reservationId) && h.kind === kind)));
+    const r = await scheduleApi("unassign-loan-handler", { reservationId, kind });
+    if (r?.error) { showToast("error", r.error); await reloadLoanHandlers?.(); return false; }
+    await reloadLoanHandlers?.();
     return true;
   };
 
@@ -872,6 +924,19 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                                   const td = DAILY_TASKS.find(t => t.key === dt.task_key);
                                   return td ? <span key={dt.task_key} style={{ fontSize: 12, flexShrink: 0, lineHeight: 1 }} title={td.label}>{td.icon}</span> : null;
                                 })}
+                                {/* 🔧 warehouse-ops marker — this worker handles a loan pickup/return this day */}
+                                {(() => {
+                                  const handled = (loanHandlers || []).filter(h => String(h.staff_id) === String(block.memberId) && (() => {
+                                    const r = (reservations || []).find(x => String(x.id) === String(h.reservation_id));
+                                    return r && (h.kind === "out" ? r.borrow_date === date : r.return_date === date);
+                                  })());
+                                  if (handled.length === 0) return null;
+                                  const tip = handled.map(h => {
+                                    const r = (reservations || []).find(x => String(x.id) === String(h.reservation_id));
+                                    return `${h.kind === "out" ? "הוצאה" : "החזרה"}: ${r?.student_name || ""}`;
+                                  }).join(" · ");
+                                  return <span style={{ fontSize: 12, flexShrink: 0, lineHeight: 1 }} title={`תפעול מחסן — ${tip}`}>🔧</span>;
+                                })()}
                                 {slotKey === "custom" && block.startTime && block.endTime && (
                                   <span style={{ fontSize: 9, color: "rgba(255,255,255,0.6)", whiteSpace: "nowrap", flexShrink: 0 }}>
                                     {block.startTime}–{block.endTime}
@@ -899,8 +964,8 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
               );
             })}
 
-            {/* ═══ Absent Row (only if any absent entries exist) ═══ */}
-            {hasAbsent && (
+            {/* ═══ Absent Row (only if any absent entries exist) — part of the shifts rubric, so it collapses with it ═══ */}
+            {showShifts && hasAbsent && (
               <Fragment key="absent">
                 <div style={{
                   background: SHIFT_TYPES.absent.bg,
@@ -1034,7 +1099,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
             <SectionDivider title={<><Package size={16} strokeWidth={1.75} color="var(--accent)" /> בקשות השאלה</>} open={showLoans} onToggle={() => setShowLoans(v => !v)} />
 
             {/* ══ Loans body row ══ */}
-            {showLoans && <LoansRow workDays={displayDays} reservations={reservations} today={today} onSelectLoan={setSelectedLoan} />}
+            {showLoans && <LoansRow workDays={displayDays} reservations={reservations} today={today} loanHandlers={loanHandlers} onSelectLoan={(res, kind) => setSelectedLoan({ ...res, _handlerKind: kind })} />}
 
           </div>
         </div>
@@ -1066,6 +1131,14 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
       {/* ── Edit Modal ── */}
       {selectedLoan && (
         <Modal title={`ציוד שהושאל — ${selectedLoan.student_name || selectedLoan.studentName || selectedLoan.user_name || ""}`} onClose={() => setSelectedLoan(null)} size="modal-lg">
+          {selectedLoan.loan_type !== "שיעור" && (
+            <div style={{ marginBottom: 12, padding: "8px 12px", background: "var(--surface2)", borderRadius: 8, fontSize: 13, display: "flex", flexDirection: "column", gap: 4 }}>
+              <div>שם הסטודנט: <strong>{selectedLoan.student_name || "—"}</strong></div>
+              {(() => { const h = loanHandlerFor(loanHandlers, selectedLoan.id, selectedLoan._handlerKind); return (
+                <div style={{ color: h ? "#22c55e" : "var(--text3)" }}>איש צוות מטפל: <strong>{h?.staff_name || "לא שויך"}</strong></div>
+              ); })()}
+            </div>
+          )}
           {(selectedLoan.items || []).length === 0 ? (
             <div style={{ color: "var(--text3)", textAlign: "center", padding: 20 }}>אין פריטים בהשאלה זו</div>
           ) : (
@@ -1108,6 +1181,10 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
           getPref={getPref}
           onClaimTask={claimTask}
           onUnclaimTask={unclaimTask}
+          reservations={reservations}
+          loanHandlers={loanHandlers}
+          onAssignLoanHandler={assignLoanHandler}
+          onUnassignLoanHandler={unassignLoanHandler}
         />
       )}
     </div>
@@ -1494,10 +1571,13 @@ function StudentBookingsRow({ workDays, studioBookings, studios, today, holidays
 }
 
 /* ══════════ Loans row ══════════ */
-function LoanChip({ r, isReturn, onClick }) {
+function LoanChip({ r, isReturn, onClick, loanHandlers = [] }) {
+  const kind = isReturn ? "return" : "out";
+  const isLesson = r.loan_type === "שיעור";
+  const handler = isLesson ? null : loanHandlerFor(loanHandlers, r.id, kind);
   return (
     <div
-      onClick={() => onClick?.(r)}
+      onClick={() => onClick?.(r, kind)}
       title="הצג ציוד שהושאל"
       style={{
       background: isReturn ? "rgba(59,130,246,0.1)" : "rgba(245,158,11,0.1)",
@@ -1506,16 +1586,17 @@ function LoanChip({ r, isReturn, onClick }) {
       cursor: onClick ? "pointer" : "default",
     }}>
       <div style={{ fontWeight: 700, color: isReturn ? "#3b82f6" : "#f59e0b", fontSize: 10 }}>
-        {isReturn ? "↩ החזרה" : "↗ יציאה"} {isReturn ? (r.return_time || "") : (r.borrow_time || "")}
+        {isReturn ? "↩ החזרה" : "↗ הוצאה"} {isReturn ? (r.return_time || "") : (r.borrow_time || "")}
       </div>
-      <div style={{ fontWeight: 700, color: "#fff", fontSize: 11, lineHeight: 1.3 }}>{r.student_name || "—"}</div>
+      <div style={{ fontWeight: 700, color: "#fff", fontSize: 11, lineHeight: 1.3 }}>{isLesson ? (r.student_name || "—") : <>שם הסטודנט: <span style={{ fontSize: 13, fontWeight: 800 }}>{r.student_name || "—"}</span></>}</div>
       <div style={{ color: "#fff", fontSize: 12, fontWeight: 800, marginTop: 1 }}>{(r.items || []).length} פריטים · {r.loan_type || ""}</div>
+      {!isLesson && <div style={{ fontSize: 10, fontWeight: 700, color: handler ? "#22c55e" : "var(--text3)", marginTop: 1 }}>איש צוות מטפל: <span style={{ fontSize: 12, fontWeight: 800 }}>{handler?.staff_name || "לא שויך"}</span></div>}
       {r.status && <div style={{ fontSize: 10, fontWeight: 800, color: loanStatusColor(r.status), marginTop: 1 }}>● {normalizeReservationStatus(r.status)}</div>}
     </div>
   );
 }
 
-function LoansRow({ workDays, reservations, today, onSelectLoan }) {
+function LoansRow({ workDays, reservations, today, onSelectLoan, loanHandlers = [] }) {
   const activeRes = (reservations || []).filter(r => r.status !== "נדחה" && r.status !== "הוחזר");
 
   return (
@@ -1532,7 +1613,7 @@ function LoansRow({ workDays, reservations, today, onSelectLoan }) {
       {/* Day cells */}
       {workDays.map((date, i) => {
         const borrows = activeRes.filter(r => r.borrow_date === date);
-        const returns = activeRes.filter(r => r.return_date === date && r.borrow_date !== date);
+        const returns = activeRes.filter(r => r.return_date === date);
         const studentBorrows = borrows.filter(r => r.loan_type !== "שיעור");
         const lessonBorrows = borrows.filter(r => r.loan_type === "שיעור");
         const studentReturns = returns.filter(r => r.loan_type !== "שיעור");
@@ -1540,10 +1621,13 @@ function LoansRow({ workDays, reservations, today, onSelectLoan }) {
         const hasData = studentBorrows.length + lessonBorrows.length + studentReturns.length + lessonReturns.length > 0;
         return (
           <div key={date} style={{ padding: "4px 3px", borderLeft: i < workDays.length - 1 ? "1px solid var(--border)" : "none", borderTop: "1px solid var(--border)", minHeight: 50, fontSize: 10 }}>
-            {studentBorrows.map(r => <LoanChip key={`sb-${r.id}`} r={r} isReturn={false} onClick={onSelectLoan} />)}
-            {studentReturns.map(r => <LoanChip key={`sr-${r.id}`} r={r} isReturn={true} onClick={onSelectLoan} />)}
-            {lessonBorrows.map(r => <LoanChip key={`lb-${r.id}`} r={r} isReturn={false} onClick={onSelectLoan} />)}
-            {lessonReturns.map(r => <LoanChip key={`lr-${r.id}`} r={r} isReturn={true} onClick={onSelectLoan} />)}
+            {[
+              ...studentBorrows.map(r => ({ r, isReturn: false, time: r.borrow_time || "" })),
+              ...studentReturns.map(r => ({ r, isReturn: true, time: r.return_time || "" })),
+              ...lessonBorrows.map(r => ({ r, isReturn: false, time: r.borrow_time || "" })),
+              ...lessonReturns.map(r => ({ r, isReturn: true, time: r.return_time || "" })),
+            ].sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"))
+             .map(c => <LoanChip key={`${c.isReturn ? "ret" : "out"}-${c.r.id}`} r={c.r} isReturn={c.isReturn} onClick={onSelectLoan} loanHandlers={loanHandlers} />)}
             {!hasData && <div style={{ color: "var(--text3)", textAlign: "center", paddingTop: 14, fontSize: 10 }}>—</div>}
           </div>
         );
@@ -1553,7 +1637,7 @@ function LoansRow({ workDays, reservations, today, onSelectLoan }) {
 }
 
 /* ══════════ Editor Modal ══════════ */
-function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSave, onDelete, onLock, onClose, dailyTasks = [], allMembers = [], getAssign = () => null, getPref = () => null, onClaimTask, onUnclaimTask }) {
+function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSave, onDelete, onLock, onClose, dailyTasks = [], allMembers = [], getAssign = () => null, getPref = () => null, onClaimTask, onUnclaimTask, reservations = [], loanHandlers = [], onAssignLoanHandler, onUnassignLoanHandler }) {
   const { staffId: initStaffId, date, mode, defaultShift } = modal;
   // Admin assignment mode lets the manager schedule MANY workers + daily tasks in one
   // session and commit them all with a single Save (draft buffer). Cancel discards everything.
@@ -1856,6 +1940,7 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
         {(isAdmin || (cur.shiftType && cur.shiftType !== "absent")) && (
           <div style={{ marginBottom: 14, padding: "10px 12px", background: "var(--surface2)", borderRadius: 8 }}>
             <label style={{ ...labelStyle, marginBottom: 8, fontSize: 13, color: "var(--text)", display: "flex", alignItems: "center", gap: 6 }}><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> משימות יומיות</label>
+            <div style={{ fontSize: 11, fontWeight: 800, color: "#fcd34d", margin: "0 0 6px" }}>▸ תפעול כללי</div>
             {isAdmin ? (() => {
               /* Admin: per-task worker dropdown (buffered — commits on the single Save).
                  Selectable workers depend on their shift this day:
@@ -1911,6 +1996,64 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
                   </label>
                 );
               });
+            })()}
+
+            {/* ── בקשות השאלה — who handles each student loan pickup/return this day ──
+                Decoupled side-table; IMMEDIATE writes (not part of the shift Save/Cancel).
+                Admin: a shift-time-compatible worker dropdown per loan.
+                Staff: a "V" checkbox per loan that overlaps their chosen shift. */}
+            {(() => {
+              const dayLoans = getDayStudentLoans(reservations, date);
+              const occs = isAdmin ? dayLoans : dayLoans.filter(o => shiftCoversTime(cur.shiftType, cur.startTime, cur.endTime, o.time));
+              if (occs.length === 0) return null;
+              const effShiftOf = (sid) => {
+                const d = drafts[sid];
+                if (d) return { type: d.shiftType, start: d.startTime, end: d.endTime };
+                const e = getAssign(String(sid), date) || getPref(String(sid), date);
+                return { type: e?.shift_type || "", start: e?.start_time, end: e?.end_time };
+              };
+              return (
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: "#fcd34d", margin: "0 0 8px" }}>▸ בקשות השאלה</div>
+                  {occs.map(o => {
+                    const handler = loanHandlerFor(loanHandlers, o.reservation.id, o.kind);
+                    const kindLabel = o.kind === "return" ? "↩ החזרה" : "↗ הוצאה";
+                    const kindColor = o.kind === "return" ? "#3b82f6" : "#f59e0b";
+                    if (isAdmin) {
+                      const assignedId = handler?.staff_id ? String(handler.staff_id) : "";
+                      // Eligible = workers whose effective shift (draft / saved assignment||preference) covers the loan time.
+                      const options = allMembers.filter(m => {
+                        const s = effShiftOf(String(m.id));
+                        return shiftCoversTime(s.type, s.start, s.end, o.time) || String(m.id) === assignedId;
+                      });
+                      return (
+                        <div key={`${o.reservation.id}-${o.kind}`} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                          <span style={{ fontSize: 12, minWidth: 150, lineHeight: 1.35 }}>
+                            <span style={{ color: kindColor, fontWeight: 700 }}>{kindLabel} {o.time}</span><br />{o.student_name} · {o.itemCount} פריטים
+                          </span>
+                          <select value={assignedId}
+                            onChange={e => { const v = e.target.value; if (v) onAssignLoanHandler(o.reservation.id, o.kind, v, allMembers.find(m => String(m.id) === v)?.name); else onUnassignLoanHandler(o.reservation.id, o.kind); }}
+                            style={{ flex: 1, padding: 6, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: 12 }}>
+                            <option value="">— ללא —</option>
+                            {options.map(m => <option key={m.id} value={String(m.id)}>{m.name}</option>)}
+                          </select>
+                        </div>
+                      );
+                    }
+                    // Staff: one worker per slot — a slot taken by someone else shows disabled.
+                    const mine = handler && String(handler.staff_id) === String(staffId);
+                    const takenByOther = handler && !mine;
+                    return (
+                      <label key={`${o.reservation.id}-${o.kind}`} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, cursor: takenByOther ? "default" : "pointer", marginBottom: 6, padding: "4px 0", opacity: takenByOther ? 0.6 : 1 }}>
+                        <input type="checkbox" disabled={takenByOther} checked={!!mine}
+                          onChange={async () => { if (mine) await onUnassignLoanHandler(o.reservation.id, o.kind); else await onAssignLoanHandler(o.reservation.id, o.kind, staffId, memberName); }} />
+                        <span><span style={{ color: kindColor, fontWeight: 700 }}>{kindLabel} {o.time}</span> · {o.student_name} · {o.itemCount} פריטים{takenByOther && <span style={{ color: "var(--text3)" }}> ({handler.staff_name || "שובץ"})</span>}</span>
+                        {mine && <Check size={11} strokeWidth={1.75} color="#22c55e" />}
+                      </label>
+                    );
+                  })}
+                </div>
+              );
             })()}
           </div>
         )}
