@@ -12,7 +12,10 @@ import {
   getAuthToken,
 } from "../utils.js";
 
-export function EditReservationModal({ reservation, equipment, reservations, onSave, onApprove, onClose, collegeManager={}, managerToken="", siteSettings={} }) {
+export function EditReservationModal({ reservation, equipment, reservations, onSave, onApprove, onClose, collegeManager={}, managerToken="", siteSettings={}, loanHandlers=[] }) {
+  // Loan-request staff coordination (decoupled side-table) — read-only display here.
+  const loanOut = (loanHandlers||[]).find(h=>String(h.reservation_id)===String(reservation.id)&&h.kind==="out");
+  const loanReturn = (loanHandlers||[]).find(h=>String(h.reservation_id)===String(reservation.id)&&h.kind==="return");
   const TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30"];
   const isOverdueReservation = reservation.status==="באיחור";
   const [form, setForm]   = useState({...reservation});
@@ -225,6 +228,13 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
               </span>
               <span style={{fontSize:11,color:"var(--text3)"}}>· {formatDate(reservation.borrow_date)}</span>
             </div>
+            {(loanOut||loanReturn) && (
+              <div style={{fontSize:12,color:"var(--text3)",marginTop:6}}>
+                {loanOut && <span>🧰 אחראי הוצאה: <strong style={{color:"var(--accent)"}}>{loanOut.staff_name||"—"}</strong></span>}
+                {loanOut && loanReturn && <span> · </span>}
+                {loanReturn && <span>↩ אחראי החזרה: <strong style={{color:"var(--accent)"}}>{loanReturn.staff_name||"—"}</strong></span>}
+              </div>
+            )}
           </div>
           <button className="btn btn-secondary btn-sm" onClick={onClose}><X size={16} strokeWidth={1.75} color="var(--text3)" /> סגור</button>
         </div>

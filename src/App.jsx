@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { AlertTriangle, AudioLines, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, Clock, ClipboardList, Download, FileText, Film, GraduationCap, HelpCircle, Info, Link, Lightbulb, LogOut, Mail, Mic, Minus, Package, Pencil, Phone, Plus, Save, Search, Settings, Shield, ShoppingCart, SlidersHorizontal, Trash2, Triangle, Upload, User, Video, Wrench, X, XCircle } from "lucide-react";
 import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, deleteReservation, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB, equipmentWriteInFlight, getValidTokenDirect } from "./utils.js";
 import * as XLSX from "xlsx";
@@ -5482,6 +5482,8 @@ export default function App() {
   const [page, setPage]               = useState(() => sessionStorage.getItem("admin_page") || "dashboard");
   const [equipment, _setEquipment]     = useState([]);
   const [reservations, _setReservations] = useState([]);
+  // Loan-request staff coordination (decoupled side-table; display/coordination only).
+  const [loanHandlers, setLoanHandlers] = useState([]);
   const [categories, _setCategories]   = useState(DEFAULT_CATEGORIES);
   const [categoryTypes, _setCategoryTypes] = useState({});
   const [categoryLoanTypes, _setCategoryLoanTypes] = useState({});
@@ -5738,6 +5740,34 @@ export default function App() {
       };
     }
   };
+
+  // ── Loan-request staff coordination (decoupled side-table) ──
+  // Display/coordination only — never touches loan logic. Read directly via the
+  // supabase client (read-all RLS); writes go through /api/staff-schedule.
+  const loadLoanHandlers = useCallback(async () => {
+    try {
+      const { data } = await supabase.from("reservation_staff_assignments").select("*");
+      setLoanHandlers(data || []);
+    } catch { /* table optional / offline — ignore */ }
+  }, []);
+  useEffect(() => {
+    loadLoanHandlers();
+    let debounce;
+    let channel;
+    try {
+      channel = supabase
+        .channel("loan-handlers-live")
+        .on("postgres_changes", { event: "*", schema: "public", table: "reservation_staff_assignments" }, () => {
+          clearTimeout(debounce);
+          debounce = setTimeout(() => void loadLoanHandlers(), 400);
+        })
+        .subscribe();
+    } catch { /* realtime optional */ }
+    return () => {
+      clearTimeout(debounce);
+      if (channel) { try { supabase.removeChannel(channel); } catch {} }
+    };
+  }, [loadLoanHandlers]);
 
   const applyLecturerLiveSync = (key, value) => {
     if (key === "equipment" && Array.isArray(value)) {
@@ -7310,7 +7340,7 @@ export default function App() {
                 <span className="topbar-title" style={{flex:1}}>חלוקת משמרות</span>
               </div>
             </div>
-            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <StaffSchedulePage staffUser={staffUser} showToast={showToast} studios={studios} studioBookings={studioBookings} reservations={reservations} lessons={lessons} setLessons={setLessons} equipment={equipment} onNavigateToLesson={(lessonId) => { setEditLessonId(lessonId); setStaffView("administration"); setSecretaryPage("lessons"); }}/>}
+            {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <StaffSchedulePage staffUser={staffUser} showToast={showToast} studios={studios} studioBookings={studioBookings} reservations={reservations} lessons={lessons} setLessons={setLessons} equipment={equipment} loanHandlers={loanHandlers} setLoanHandlers={setLoanHandlers} reloadLoanHandlers={loadLoanHandlers} onNavigateToLesson={(lessonId) => { setEditLessonId(lessonId); setStaffView("administration"); setSecretaryPage("lessons"); }}/>}
           </div>
         </div>
       )}
@@ -7406,12 +7436,12 @@ export default function App() {
               )}
             </div>
             {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <>
-              <div style={{display:page==="dashboard"?"block":"none"}}><DashboardPage equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} siteSettings={siteSettings} equipmentReports={equipmentReports} certifications={certifications}/></div>
+              <div style={{display:page==="dashboard"?"block":"none"}}><DashboardPage equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} siteSettings={siteSettings} equipmentReports={equipmentReports} certifications={certifications} loanHandlers={loanHandlers}/></div>
               <div style={{display:page==="equipment"?"block":"none"}}><EquipmentPage equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} categoryLoanTypes={categoryLoanTypes} setCategoryLoanTypes={setCategoryLoanTypes} certifications={certifications} studios={studios} collegeManager={collegeManager} managerToken={managerToken} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports} fetchEquipmentReports={fetchEquipmentReports}/></div>
               <div style={{display:page==="reservations"?"block":"none"}}><ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}
-                initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} siteSettings={siteSettings} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports} lessons={lessons} setLessons={setLessons}/></div>
+                initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} siteSettings={siteSettings} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports} lessons={lessons} setLessons={setLessons} loanHandlers={loanHandlers}/></div>
               <div style={{display:page==="team"?"block":"none"}}><TeamPage teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/></div>
               <div style={{display:page==="kits"?"block":"none"}}><KitsPage kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons} setLessons={setLessons} lecturers={lecturers}/></div>
               <div style={{display:page==="productions"?"block":"none"}}><ProductionsPage productions={productions} setProductions={setProductions} currentStudent={null} students={certifications?.students || []} kits={kits} reservations={reservations} showToast={showToast} refresh={async () => { const v = await listProductions({ onlyPublished: false }); _setProductions(Array.isArray(v) ? v : []); }} onOpenLoanForm={() => showToast?.("הטופס פתוח רק לסטודנטים מחוברים", "info")}/></div>

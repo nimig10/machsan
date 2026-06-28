@@ -308,6 +308,64 @@ export default async function handler(req, res) {
     return res.status(result.ok ? 200 : 500).json({ ok: result.ok });
   }
 
+  // ── Loan-request staff coordination (decoupled side-table) ──
+  // Associate a team member with a loan request's OUT/RETURN handling.
+  // Display/coordination only — never affects loan logic.
+
+  // ASSIGN-LOAN-HANDLER — set the worker for a (reservation, kind) slot
+  if (action === "assign-loan-handler") {
+    const { reservationId, kind, staffId, staffName } = req.body;
+    if (!reservationId || !kind || !staffId) {
+      return res.status(400).json({ error: "Missing required fields (reservationId, kind, staffId)" });
+    }
+    if (!["out", "return"].includes(kind)) {
+      return res.status(400).json({ error: "Invalid kind" });
+    }
+    // Non-admin (staff) may only commit themselves to a slot.
+    if (callerRole !== "admin" && String(staffId) !== String(callerStaffId)) {
+      return res.status(403).json({ error: "ניתן להתחייב רק לעצמך" });
+    }
+    const result = await sbFetch("reservation_staff_assignments?on_conflict=reservation_id,kind", {
+      method: "POST",
+      headers: { ...headers, Prefer: "return=representation,resolution=merge-duplicates" },
+      body: JSON.stringify({
+        reservation_id: reservationId,
+        kind,
+        staff_id: staffId,
+        staff_name: staffName || null,
+        assigned_by: callerStaffId || null,
+        updated_at: new Date().toISOString(),
+      }),
+    });
+    if (!result.ok) {
+      return res.status(500).json({ error: "Failed to assign handler", detail: result.data });
+    }
+    return res.status(200).json({ ok: true, data: result.data?.[0] || null });
+  }
+
+  // UNASSIGN-LOAN-HANDLER — clear the worker for a (reservation, kind) slot
+  if (action === "unassign-loan-handler") {
+    const { reservationId, kind } = req.body;
+    if (!reservationId || !kind) {
+      return res.status(400).json({ error: "Missing required fields (reservationId, kind)" });
+    }
+    const existing = await sbFetch(
+      `reservation_staff_assignments?reservation_id=eq.${encodeURIComponent(reservationId)}&kind=eq.${encodeURIComponent(kind)}&select=id,staff_id`
+    );
+    if (!existing.ok || !Array.isArray(existing.data) || existing.data.length === 0) {
+      return res.status(200).json({ ok: true }); // already clear — idempotent
+    }
+    // Non-admin (staff) may only release their own commitment.
+    if (callerRole !== "admin" && String(existing.data[0].staff_id) !== String(callerStaffId)) {
+      return res.status(403).json({ error: "לא ניתן לבטל שיוך של עובד אחר" });
+    }
+    const result = await sbFetch(
+      `reservation_staff_assignments?reservation_id=eq.${encodeURIComponent(reservationId)}&kind=eq.${encodeURIComponent(kind)}`,
+      { method: "DELETE" }
+    );
+    return res.status(result.ok ? 200 : 500).json({ ok: result.ok });
+  }
+
   // PURGE-OLD — delete preferences & assignments older than a given date (admin only)
   if (action === "purge-old") {
     if (callerRole !== "admin") return res.status(403).json({ error: "Admin only" });
