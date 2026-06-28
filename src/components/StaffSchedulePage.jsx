@@ -19,7 +19,7 @@ function loanStatusColor(status) {
   return LOAN_STATUS_COLOR[normalizeReservationStatus(status)] || "#9aa0a6"; // badge-gray fallback
 }
 import { syncAllLessons } from "../utils/lessonsApi.js";
-import { BookOpen, Calendar, Check, ClipboardList, Package, Shield, X, User, MapPin, Building2, Pencil, GraduationCap } from "lucide-react";
+import { BookOpen, Calendar, Check, Circle, ClipboardList, Package, Shield, X, User, MapPin, Building2, Pencil, GraduationCap, Lock, Unlock, Star } from "lucide-react";
 
 /* ── Half-hour time slots 09:00–22:00 ── */
 const TIME_SLOTS = (() => {
@@ -40,9 +40,20 @@ const SLOT_ORDER = ["morning", "custom", "evening"];
 
 const DAILY_TASKS = [
   { key: "open",  label: "פתיחת מכללה", icon: "☀️" },
-  { key: "close", label: "סגירת מכללה", icon: "🌙" },
   { key: "prep",  label: "הכנת כיתות",  icon: "🏫" },
+  { key: "close", label: "סגירת מכללה", icon: "🌙" },
 ];
+
+// Which daily tasks a worker may take given their shift that day:
+//  morning → opening + prep   |   evening → closing + prep
+//  custom (חופשי) → all       |   absent / unscheduled → none
+// Single source of truth for both the admin task dropdown and the on-shift-change cleanup.
+function isTaskShiftCompatible(taskKey, shiftType) {
+  if (!shiftType || shiftType === "absent") return false;
+  if (taskKey === "open")  return shiftType === "morning" || shiftType === "custom";
+  if (taskKey === "close") return shiftType === "evening" || shiftType === "custom";
+  return true; // prep (הכנת כיתות) — any working shift
+}
 
 const HE_DAYS   = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
@@ -410,7 +421,14 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
       const mid = String(member.id);
       const asgn = getAssign(mid, date);
       const pref = getPref(mid, date);
-      const entry = asgn || pref;
+      // Effective shift: a LOCKED assignment is authoritative (staff can't override it). Otherwise the
+      // most recently edited of {assignment, preference} wins — so on an UNLOCKED shift the staff can
+      // change what the manager set, and the manager can re-assert by re-saving (or by locking it).
+      const entry = (asgn && asgn.locked)
+        ? asgn
+        : (asgn && pref)
+          ? (new Date(asgn.updated_at || 0) >= new Date(pref.updated_at || 0) ? asgn : pref)
+          : (asgn || pref);
       if (!entry) return;
       const block = {
         id: entry.id, memberId: mid, memberName: member.name,
@@ -470,10 +488,13 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
 
   const openBlockEditor = (block, date) => {
     if (!isAdmin && block.type === "assignment") {
-      // Staff editing unlocked assignment → open as preference editor
-      setEditModal({ staffId: block.memberId, date, mode: "preference", existing: block.prefEntry, prefEntry: block.prefEntry, asgnEntry: block.asgnEntry });
+      // Staff editing an UNLOCKED assignment → open as preference editor, pre-filled with the
+      // current effective shift so they see what they're changing (if they have no preference yet).
+      setEditModal({ staffId: block.memberId, date, mode: "preference", existing: block.prefEntry, defaultShift: block.shiftType, prefEntry: block.prefEntry, asgnEntry: block.asgnEntry });
     } else {
-      setEditModal({ staffId: block.memberId, date, mode: block.type, existing: block.entry, prefEntry: block.prefEntry, asgnEntry: block.asgnEntry });
+      // Admin always edits the assignment ("שיבוץ עובדים") — never the preference panel.
+      // Staff editing their own preference block stays in preference mode.
+      setEditModal({ staffId: block.memberId, date, mode: isAdmin ? "assignment" : block.type, existing: block.entry, prefEntry: block.prefEntry, asgnEntry: block.asgnEntry });
     }
   };
   const openNewEditor = (date, defaultShift = "morning") => {
@@ -843,7 +864,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                                 onMouseEnter={e => { if (chipClickable) e.currentTarget.style.background = "rgba(255,255,255,0.14)"; }}
                                 onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
                               >
-                                {showLock && <Shield size={9} strokeWidth={1.75} />}
+                                {showLock && <Lock size={11} strokeWidth={2.5} color="#f59e0b" style={{ flexShrink: 0 }} />}
                                 <span style={{ fontSize: 10, fontWeight: 700, color: "#fff", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                   {block.memberName}
                                 </span>
@@ -860,8 +881,11 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                                   <span
                                     onClick={e => { e.stopPropagation(); if (hasVisibleNote) openNotePopup(); }}
                                     title={hasVisibleNote ? "לחץ לצפייה בהערה" : "הערה פרטית"}
-                                    style={{ fontSize: 11, flexShrink: 0, cursor: hasVisibleNote ? "pointer" : "default", opacity: hasVisibleNote ? 1 : 0.4 }}
-                                  >⭐</span>
+                                    style={{ display: "inline-flex", flexShrink: 0, cursor: hasVisibleNote ? "pointer" : "default", opacity: hasVisibleNote ? 1 : 0.45 }}
+                                  >
+                                    {/* Staff note → blue star · Manager note → gold star */}
+                                    <Star size={13} strokeWidth={1.5} fill={block.staffNote ? "#3b82f6" : "#fbbf24"} color={block.staffNote ? "#3b82f6" : "#fbbf24"} />
+                                  </span>
                                 )}
                               </div>
                             );
@@ -1080,6 +1104,8 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
           onClose={() => setEditModal(null)}
           dailyTasks={dailyTasks}
           allMembers={allMembers}
+          getAssign={getAssign}
+          getPref={getPref}
           onClaimTask={claimTask}
           onUnclaimTask={unclaimTask}
         />
@@ -1527,79 +1553,173 @@ function LoansRow({ workDays, reservations, today, onSelectLoan }) {
 }
 
 /* ══════════ Editor Modal ══════════ */
-function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSave, onDelete, onLock, onClose, dailyTasks = [], allMembers = [], onClaimTask, onUnclaimTask }) {
-  const { staffId: initStaffId, date, mode, existing, defaultShift, prefEntry, asgnEntry } = modal;
+function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSave, onDelete, onLock, onClose, dailyTasks = [], allMembers = [], getAssign = () => null, getPref = () => null, onClaimTask, onUnclaimTask }) {
+  const { staffId: initStaffId, date, mode, defaultShift } = modal;
+  // Admin assignment mode lets the manager schedule MANY workers + daily tasks in one
+  // session and commit them all with a single Save (draft buffer). Cancel discards everything.
+  const isMultiEdit = isAdmin && mode === "assignment";
   const [staffId, setStaffId] = useState(String(initStaffId));
-  const [selectedStaffIds, setSelectedStaffIds] = useState([String(initStaffId)]);
-  const memberName = teamMembers.find(m => String(m.id) === staffId)?.name || "";
-  const isEditingSelf = staffId === String(currentStaffId);
-  const isMultiSelect = isAdmin && mode === "assignment" && !existing && selectedStaffIds.length > 0;
+  const memberName = allMembers.find(m => String(m.id) === staffId)?.name
+    || teamMembers.find(m => String(m.id) === staffId)?.name || "";
 
-  const [shiftType, setShiftType] = useState(existing?.shift_type || defaultShift || "morning");
-  const [startTime, setStartTime] = useState(existing?.start_time || "12:00");
-  const [endTime, setEndTime] = useState(existing?.end_time || "20:00");
-  // In preference mode → note = staff note (editable); in assignment mode → note = manager note (editable)
-  const [note, setNote] = useState(existing?.note || "");
-  const [notePublic, setNotePublic] = useState(existing?.note_public ?? true);
-  const [locked, setLocked] = useState(existing?.locked ?? false);
+  // Look up the saved row (assignment in assignment-mode, preference in preference-mode) for a worker.
+  const entryFor = (sid) => (mode === "preference" ? getPref(String(sid), date) : getAssign(String(sid), date)) || null;
+  // Default working values for a worker — their saved row, or fresh defaults.
+  const deriveWorking = (sid) => {
+    const e = entryFor(sid);
+    // Admin with no assignment yet: seed shift/times from the worker's submitted preference,
+    // so it appears pre-filled like a regular existing edit. The MANAGER note stays separate
+    // (never seeded from the preference — that's shown read-only as "הערת איש צוות").
+    const pref = isMultiEdit && !e ? getPref(String(sid), date) : null;
+    const base = e || pref;
+    return {
+      // Staff: pre-select the clicked shift-row (e.g. click an "ערב" cell → opens on evening).
+      // Admin: from assignment, else from the worker's preference, else blank (global panel).
+      shiftType: base?.shift_type || (isMultiEdit ? "" : (defaultShift || "")),
+      startTime: base?.start_time || "12:00",
+      endTime: base?.end_time || "20:00",
+      note: e?.note || "",
+      notePublic: e?.note_public ?? true,
+      locked: e?.locked ?? false,
+    };
+  };
 
-  // Read-only note from the other side
-  const readOnlyStaffNote = mode === "assignment" ? (prefEntry?.note || null) : null;
-  const readOnlyManagerNote = mode === "preference" ? (asgnEntry?.note || null) : null;
+  // Per-worker shift drafts. A worker is persisted on Save only if present here (touched).
+  // Single-worker (staff) mode seeds the worker so Save always writes the shown values.
+  const [drafts, setDrafts] = useState(() => (isMultiEdit ? {} : { [String(initStaffId)]: deriveWorking(String(initStaffId)) }));
+  const cur = drafts[staffId] || deriveWorking(staffId);
+  const updateField = (patch) => setDrafts(d => ({ ...d, [staffId]: { ...(d[staffId] || deriveWorking(staffId)), ...patch } }));
+
+  // When the selected worker's shift changes, drop any daily task they hold that no longer
+  // fits the new shift (e.g. morning→evening removes "פתיחת מכללה"). Admin: buffered (taskWork,
+  // committed on Save). Staff: immediate unclaim (their task model is immediate).
+  const cleanupTasksForShift = (newShift) => {
+    if (isMultiEdit) {
+      setTaskWork(w => {
+        const nw = { ...w };
+        DAILY_TASKS.forEach(t => {
+          if (nw[t.key] === String(staffId) && !isTaskShiftCompatible(t.key, newShift)) nw[t.key] = "";
+        });
+        return nw;
+      });
+    } else {
+      DAILY_TASKS.forEach(t => {
+        const task = dailyTasks.find(dt => dt.date === date && dt.task_key === t.key);
+        if (task && String(task.staff_id) === String(staffId) && !isTaskShiftCompatible(t.key, newShift)) {
+          onUnclaimTask(staffId, date, t.key);
+        }
+      });
+    }
+  };
+
+  // V-mark predicate: worker already has a saved assignment OR was given a shift this session.
+  const isAssigned = (sid) => {
+    const d = drafts[sid];
+    if (d) return !!d.shiftType;   // a draft counts only once a shift type was actually chosen
+    return !!entryFor(sid);
+  };
+
+  // Daily-task working map (admin) — buffered so every task commits on the single Save.
+  const initialTaskMap = useMemo(() => {
+    const m = {};
+    DAILY_TASKS.forEach(t => {
+      const task = dailyTasks.find(dt => dt.date === date && dt.task_key === t.key);
+      m[t.key] = task ? String(task.staff_id) : "";
+    });
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [taskWork, setTaskWork] = useState(initialTaskMap);
+
+  // The existing saved row for the currently-selected worker — drives the delete button.
+  const existing = entryFor(staffId);
+
+  // Read-only note from the other side (recomputed per selected worker)
+  const readOnlyStaffNote = mode === "assignment" ? (getPref(String(staffId), date)?.note || null) : null;
+  const readOnlyManagerNote = mode === "preference" ? (getAssign(String(staffId), date)?.note || null) : null;
+  // The staff's submitted shift preference (admin view only) — informs the manager's decision.
+  const staffPrefShift = mode === "assignment" ? (getPref(String(staffId), date)?.shift_type || null) : null;
+
+  const draftInvalid = (d) => d.shiftType === "custom" && (!d.startTime || !d.endTime || d.startTime >= d.endTime);
+  const anyInvalid = Object.values(drafts).some(draftInvalid);
 
   const handleSave = async () => {
-    if (shiftType === "custom" && (!startTime || !endTime || startTime >= endTime)) return;
-    if (note.length > 250) return;
-    // Close modal immediately (optimistic) for faster UX
+    if (anyInvalid) return;
+    // Close immediately (optimistic) for faster UX; the closure keeps drafts/taskWork.
     onClose();
-    const ids = isMultiSelect ? selectedStaffIds : [staffId];
-    const payload = {
-      date, shiftType,
-      startTime: shiftType === "custom" ? startTime : null,
-      endTime: shiftType === "custom" ? endTime : null,
-      note: note.trim(), notePublic, locked,
-      source: mode === "assignment" ? "manager" : undefined,
-    };
-    // Save all selected staff members (parallel for multi-select)
-    await Promise.all(ids.map(sid => onSave({ ...payload, staffId: sid })));
+    // 1) Persist every touched shift draft (one upsert per worker).
+    await Promise.all(Object.entries(drafts).map(([sid, d]) => {
+      if (draftInvalid(d) || (d.note || "").length > 250) return Promise.resolve();
+      if (!d.shiftType) {
+        // Deselected (clicked the chosen shift again) — remove the saved assignment if one exists.
+        const ex = entryFor(sid);
+        return ex && onDelete ? onDelete(ex.id) : Promise.resolve();
+      }
+      return onSave({
+        staffId: sid, date, shiftType: d.shiftType,
+        startTime: d.shiftType === "custom" ? d.startTime : null,
+        endTime: d.shiftType === "custom" ? d.endTime : null,
+        note: (d.note || "").trim(), notePublic: d.notePublic, locked: d.locked,
+        source: mode === "assignment" ? "manager" : undefined,
+      });
+    }));
+    // 2) Commit daily-task changes (admin) — diff the working map against the originals.
+    if (isMultiEdit) {
+      for (const t of DAILY_TASKS) {
+        const orig = initialTaskMap[t.key];
+        const next = taskWork[t.key];
+        if (next === orig) continue;
+        if (next) await onClaimTask(next, date, t.key);
+        else if (orig) await onUnclaimTask(orig, date, t.key);
+      }
+    }
   };
 
   return (
     <Modal onClose={onClose}>
       <div style={{ padding: 24, minWidth: 300, maxWidth: 420, direction: "rtl" }}>
         <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 4 }}>
-          {mode === "preference" ? "העדפה" : <><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> שיבוץ</>}
+          {mode === "preference" ? "העדפה" : <><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> שיבוץ עובדים</>}
         </div>
         <div style={{ fontSize: 13, color: "var(--text3)", marginBottom: 16 }}>
           {memberName} · {HE_DAYS[new Date(date + "T00:00:00").getDay()]} {formatDateHe(date)}
         </div>
 
-        {/* Member selector (admin creating new assignment — button chips, multi-select) */}
-        {isAdmin && mode === "assignment" && !existing && teamMembers.length > 1 && (
+        {/* Worker chips (admin assignment) — schedule several workers in one session.
+            ✓ = already scheduled (saved or edited now). Click a chip to edit that worker below;
+            all edits are buffered and committed together on Save. */}
+        {isMultiEdit && allMembers.length > 1 && (
           <div style={{ marginBottom: 14 }}>
-            <label style={labelStyle}>עובדים לשיבוץ (ניתן לבחור מספר)</label>
+            <label style={labelStyle}>עובדים (לחיצה לעריכה · ✓ = שובץ · ⭘ = העדפת עובד)</label>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {teamMembers.map(m => {
-                const sel = selectedStaffIds.includes(String(m.id));
+              {allMembers.map(m => {
+                const sid = String(m.id);
+                const active = sid === staffId;
+                const done = isAssigned(sid);
+                // Worker submitted a preference but the manager hasn't scheduled them →
+                // blue + circle, so the manager can tell worker-edited from manager-edited shifts.
+                const fromPref = !done && !!getPref(sid, date);
+                const tint = done ? "#22c55e" : (fromPref ? "#3b82f6" : null);
                 return (
-                  <button key={m.id} type="button"
-                    onClick={e => {
-                      const id = String(m.id);
-                      if (e.ctrlKey || e.metaKey) {
-                        // Ctrl/Cmd: toggle in multi-select
-                        setSelectedStaffIds(prev => sel ? prev.filter(x => x !== id) : [...prev, id]);
-                      } else {
-                        // Regular click: replace selection with this one
-                        setSelectedStaffIds([id]);
-                      }
-                    }}
+                  <button key={m.id} type="button" onClick={() => setStaffId(sid)}
                     style={{
-                      padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: sel ? 700 : 500, cursor: "pointer",
-                      border: `1.5px solid ${sel ? "var(--accent, #f5a623)" : "var(--border)"}`,
-                      background: sel ? "rgba(245,166,35,0.15)" : "var(--surface2)",
-                      color: sel ? "var(--accent, #f5a623)" : "var(--text2)",
-                    }}
-                  >{m.name}</button>
+                      // Constant font-weight + a fixed-width icon slot keep each chip's size
+                      // static whether or not it shows the ✓ / ⭘ / is active — so chips never reflow.
+                      display: "flex", alignItems: "center", gap: 4,
+                      padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                      border: `1.5px solid ${active ? "var(--accent, #f5a623)" : (tint || "var(--border)")}`,
+                      background: active ? "rgba(245,166,35,0.15)" : (fromPref ? "rgba(59,130,246,0.12)" : "var(--surface2)"),
+                      color: active ? "var(--accent, #f5a623)" : (tint || "var(--text2)"),
+                    }}>
+                    <span style={{ width: 12, flex: "0 0 12px", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                      {done
+                        ? <Check size={12} strokeWidth={2.25} color="#22c55e" />
+                        : fromPref
+                          ? <Circle size={10} strokeWidth={2.5} color="#3b82f6" fill="#3b82f6" />
+                          : null}
+                    </span>
+                    {m.name}
+                  </button>
                 );
               })}
             </div>
@@ -1612,19 +1732,28 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {Object.entries(SHIFT_TYPES).map(([key, s]) => (
               <button key={key} onClick={() => {
-                // When switching TO custom, reset to default 12:00–20:00 (unless editing existing custom)
-                if (key === "custom" && shiftType !== "custom") {
-                  setStartTime(existing?.start_time || "12:00");
-                  setEndTime(existing?.end_time || "20:00");
+                let newShift;
+                // Admin: clicking the already-selected shift deselects it (clears the shift + manager note).
+                if (isMultiEdit && cur.shiftType === key) {
+                  newShift = "";
+                  updateField({ shiftType: "", note: "" });
+                } else if (key === "custom" && cur.shiftType !== "custom") {
+                  // When switching TO custom, seed default 12:00–20:00 (unless already custom).
+                  newShift = "custom";
+                  updateField({ shiftType: "custom", startTime: cur.startTime || "12:00", endTime: cur.endTime || "20:00" });
+                } else {
+                  newShift = key;
+                  updateField({ shiftType: key });
                 }
-                setShiftType(key);
+                // Drop any daily-task marking that no longer fits the new shift.
+                cleanupTasksForShift(newShift);
               }}
                 style={{
                   padding: "8px 14px", borderRadius: 8,
-                  border: `1.5px solid ${shiftType === key ? s.color : "var(--border)"}`,
-                  background: shiftType === key ? s.bg : "var(--surface2)",
-                  color: shiftType === key ? s.color : "var(--text2)",
-                  fontWeight: shiftType === key ? 700 : 400, fontSize: 13, cursor: "pointer",
+                  border: `1.5px solid ${cur.shiftType === key ? s.color : "var(--border)"}`,
+                  background: cur.shiftType === key ? s.bg : "var(--surface2)",
+                  color: cur.shiftType === key ? s.color : "var(--text2)",
+                  fontWeight: cur.shiftType === key ? 700 : 400, fontSize: 13, cursor: "pointer",
                 }}>
                 {s.icon} {s.label}
               </button>
@@ -1633,29 +1762,36 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
         </div>
 
         {/* Custom time pickers (30-min slots 09:00–22:00) */}
-        {shiftType === "custom" && (
+        {cur.shiftType === "custom" && (
           <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
             <div style={{ flex: 1 }}>
               <label style={labelStyle}>שעת התחלה</label>
-              <select value={startTime} onChange={e => setStartTime(e.target.value)}
+              <select value={cur.startTime} onChange={e => updateField({ startTime: e.target.value })}
                 style={{ width: "100%", padding: 8, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: 13 }}>
                 {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div style={{ flex: 1 }}>
               <label style={labelStyle}>שעת סיום</label>
-              <select value={endTime} onChange={e => setEndTime(e.target.value)}
+              <select value={cur.endTime} onChange={e => updateField({ endTime: e.target.value })}
                 style={{ width: "100%", padding: 8, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: 13 }}>
-                {TIME_SLOTS.filter(t => t > startTime).map(t => <option key={t} value={t}>{t}</option>)}
+                {TIME_SLOTS.filter(t => t > cur.startTime).map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
           </div>
         )}
 
         {/* Fixed time display */}
-        {(shiftType === "morning" || shiftType === "evening") && (
+        {(cur.shiftType === "morning" || cur.shiftType === "evening") && (
           <div style={{ fontSize: 13, color: "var(--text3)", marginBottom: 14, padding: "8px 12px", background: "var(--surface2)", borderRadius: 8 }}>
-            🕐 {SHIFT_TYPES[shiftType].start || ""} – {SHIFT_TYPES[shiftType].end || ""}
+            🕐 {SHIFT_TYPES[cur.shiftType].start || ""} – {SHIFT_TYPES[cur.shiftType].end || ""}
+          </div>
+        )}
+
+        {/* ── Staff's submitted shift preference (admin view) — informative hint ── */}
+        {staffPrefShift && SHIFT_TYPES[staffPrefShift] && (
+          <div style={{ marginBottom: 14, fontSize: 13, color: "var(--text2)", padding: "8px 12px", background: "var(--surface2)", borderRadius: 8, borderRight: "3px solid #22c55e" }}>
+            🗓️ העדפת איש הצוות: <strong>{SHIFT_TYPES[staffPrefShift].icon} {SHIFT_TYPES[staffPrefShift].label}</strong>
           </div>
         )}
 
@@ -1682,7 +1818,7 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
         {/* ── Editable note ── */}
         <div style={{ marginBottom: 14 }}>
           <label style={labelStyle}>{mode === "assignment" ? "👤 הערת מנהל (אופציונלי)" : "📝 הערת איש צוות (אופציונלי)"}</label>
-          <textarea value={note} onChange={e => { if (e.target.value.length <= 250) setNote(e.target.value); }}
+          <textarea value={cur.note} onChange={e => { if (e.target.value.length <= 250) updateField({ note: e.target.value }); }}
             placeholder={mode === "assignment" ? "סיבת השיבוץ, הוראות..." : "הערה, אילוץ, סיבה..."}
             rows={2}
             style={{ width: "100%", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: 10, color: "var(--text)", fontSize: 13, resize: "vertical", fontFamily: "inherit" }} />
@@ -1691,14 +1827,14 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
             {mode === "preference" ? (
               <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, cursor: "pointer" }}>
-                  <input type="radio" name="noteVis" checked={notePublic} onChange={() => setNotePublic(true)} /> ציבורית
+                  <input type="radio" name="noteVis" checked={cur.notePublic} onChange={() => updateField({ notePublic: true })} /> ציבורית
                 </label>
                 <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, cursor: "pointer" }}>
-                  <input type="radio" name="noteVis" checked={!notePublic} onChange={() => setNotePublic(false)} /> פרטית למנהל <Shield size={12} strokeWidth={1.75} />
+                  <input type="radio" name="noteVis" checked={!cur.notePublic} onChange={() => updateField({ notePublic: false })} /> פרטית למנהל <Shield size={12} strokeWidth={1.75} />
                 </label>
               </div>
             ) : <div />}
-            <span style={{ fontSize: 11, color: note.length > 230 ? "var(--red)" : "var(--text3)" }}>{note.length}/250</span>
+            <span style={{ fontSize: 11, color: cur.note.length > 230 ? "var(--red)" : "var(--text3)" }}>{cur.note.length}/250</span>
           </div>
         </div>
 
@@ -1706,64 +1842,93 @@ function ScheduleEditorModal({ modal, isAdmin, currentStaffId, teamMembers, onSa
         {isAdmin && mode === "assignment" && (
           <div style={{ marginBottom: 14 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-              <input type="checkbox" checked={locked} onChange={e => setLocked(e.target.checked)} />
-              <Shield size={16} strokeWidth={1.75} /> נעילת שיבוץ (מונע עריכה על ידי העובד)
+              <input type="checkbox" checked={cur.locked} onChange={e => updateField({ locked: e.target.checked })} />
+              {cur.locked
+                ? <Lock size={18} strokeWidth={2.5} color="#f5a623" />
+                : <Unlock size={18} strokeWidth={2} color="var(--text3)" />}
+              נעילת שיבוץ (מונע עריכה על ידי העובד)
             </label>
           </div>
         )}
 
-        {/* ── Daily Tasks checkboxes ── */}
-        {shiftType !== "absent" && selectedStaffIds.length <= 1 && (
+        {/* ── Daily Tasks (global per day — independent of the shift worker above) ── */}
+        {/* Staff sees tasks only after choosing a real (non-absent) shift — can't take a task without being scheduled. */}
+        {(isAdmin || (cur.shiftType && cur.shiftType !== "absent")) && (
           <div style={{ marginBottom: 14, padding: "10px 12px", background: "var(--surface2)", borderRadius: 8 }}>
             <label style={{ ...labelStyle, marginBottom: 8, fontSize: 13, color: "var(--text)", display: "flex", alignItems: "center", gap: 6 }}><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> משימות יומיות</label>
-            {DAILY_TASKS.map(t => {
-              const task = dailyTasks.find(dt => dt.date === date && dt.task_key === t.key);
-              const isClaimedByMe = task && String(task.staff_id) === String(staffId);
-              const isClaimedByOther = task && String(task.staff_id) !== String(staffId);
-              const otherName = isClaimedByOther ? (allMembers.find(m => String(m.id) === String(task.staff_id))?.name || "עובד אחר") : null;
-              const canToggle = isClaimedByMe || (!isClaimedByOther) || isAdmin;
-
-              return (
-                <label key={t.key} style={{
-                  display: "flex", alignItems: "center", gap: 8, fontSize: 13,
-                  cursor: canToggle ? "pointer" : "not-allowed",
-                  opacity: canToggle ? 1 : 0.55, marginBottom: 6,
-                  padding: "4px 0",
-                }}>
-                  <input type="checkbox" checked={!!isClaimedByMe} disabled={!canToggle}
-                    onChange={async () => {
-                      if (isClaimedByMe) {
-                        await onUnclaimTask(staffId, date, t.key);
-                      } else {
-                        await onClaimTask(staffId, date, t.key);
-                      }
-                    }}
-                  />
-                  <span>{t.icon} {t.label}</span>
-                  {isClaimedByOther && (
-                    <span style={{ fontSize: 11, color: "#f59e0b", fontWeight: 600 }}>
-                      (תפוס — {otherName})
-                    </span>
-                  )}
-                  {isClaimedByMe && <Check size={11} strokeWidth={1.75} color="#22c55e" />}
-                </label>
-              );
-            })}
+            {isAdmin ? (() => {
+              /* Admin: per-task worker dropdown (buffered — commits on the single Save).
+                 Selectable workers depend on their shift this day:
+                  • morning (בוקר) → opening + prep, NOT closing
+                  • evening (ערב)  → closing + prep, NOT opening
+                  • custom  (חופשי) → all tasks
+                  • absent / unscheduled → none */
+              const shiftOf = (sid) => {
+                const d = drafts[sid];
+                return (d ? d.shiftType : entryFor(sid)?.shift_type) || "";
+              };
+              const eligibleForTask = (sid, taskKey) => isTaskShiftCompatible(taskKey, shiftOf(sid));
+              return DAILY_TASKS.map(t => {
+                const assignedId = taskWork[t.key] || "";
+                // Keep the currently-assigned worker visible even if no longer eligible, so the value shows.
+                const options = allMembers.filter(m => eligibleForTask(String(m.id), t.key) || String(m.id) === assignedId);
+                return (
+                  <div key={t.key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, minWidth: 110 }}>{t.icon} {t.label}</span>
+                    <select value={assignedId}
+                      onChange={e => setTaskWork(w => ({ ...w, [t.key]: e.target.value }))}
+                      style={{ flex: 1, padding: 6, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", fontSize: 12 }}>
+                      <option value="">— ללא —</option>
+                      {options.map(m => <option key={m.id} value={String(m.id)}>{m.name}</option>)}
+                    </select>
+                  </div>
+                );
+              });
+            })() : (() => {
+              /* Staff: only unassigned tasks + my own (so I can release them). Tasks taken by others are hidden. */
+              const visible = DAILY_TASKS.filter(t => {
+                if (!isTaskShiftCompatible(t.key, cur.shiftType)) return false;   // only tasks that fit my shift
+                const task = dailyTasks.find(dt => dt.date === date && dt.task_key === t.key);
+                return !task || String(task.staff_id) === String(staffId);
+              });
+              if (visible.length === 0) return <div style={{ fontSize: 12, color: "var(--text3)" }}>כל המשימות שובצו</div>;
+              return visible.map(t => {
+                const task = dailyTasks.find(dt => dt.date === date && dt.task_key === t.key);
+                const isClaimedByMe = task && String(task.staff_id) === String(staffId);
+                return (
+                  <label key={t.key} style={{
+                    display: "flex", alignItems: "center", gap: 8, fontSize: 13,
+                    cursor: "pointer", marginBottom: 6, padding: "4px 0",
+                  }}>
+                    <input type="checkbox" checked={!!isClaimedByMe}
+                      onChange={async () => {
+                        if (isClaimedByMe) await onUnclaimTask(staffId, date, t.key);
+                        else await onClaimTask(staffId, date, t.key);
+                      }}
+                    />
+                    <span>{t.icon} {t.label}</span>
+                    {isClaimedByMe && <Check size={11} strokeWidth={1.75} color="#22c55e" />}
+                  </label>
+                );
+              });
+            })()}
           </div>
         )}
 
         {/* Actions */}
         <div style={{ display: "flex", gap: 8, justifyContent: "space-between", marginTop: 20, flexWrap: "wrap" }}>
           <div style={{ display: "flex", gap: 6 }}>
-            {existing && onDelete && (
+            {/* Admin removes a shift via deselect (re-click the shift) → committed on Save.
+                The delete button stays only for staff editing their own preference. */}
+            {!isMultiEdit && existing && onDelete && (
               <button className="btn btn-secondary" style={{ color: "#ef4444", fontSize: 12 }}
                 onClick={async () => { await onDelete(existing.id); onClose(); }}>🗑️ מחק</button>
             )}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
-            <button className="btn btn-primary" disabled={(shiftType === "custom" && (!startTime || !endTime || startTime >= endTime)) || (isMultiSelect && selectedStaffIds.length === 0)} onClick={handleSave}>
-              💾 {isMultiSelect && selectedStaffIds.length > 1 ? `שמור (${selectedStaffIds.length} עובדים)` : "שמור"}
+            <button className="btn btn-primary" disabled={anyInvalid} onClick={handleSave}>
+              💾 שמור
             </button>
           </div>
         </div>
