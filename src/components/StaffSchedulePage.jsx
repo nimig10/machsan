@@ -1306,7 +1306,7 @@ function LessonsRow({ workDays, studioBookings, studios, today, holidays, trackF
                   )}
                   <div style={{ display: "flex", alignItems: "center", gap: 4, color: studioNames.length ? "var(--text)" : "var(--text3)", fontSize: 11, fontWeight: 600, fontStyle: studioNames.length ? "normal" : "italic" }}>
                     <Building2 size={13} strokeWidth={1.75} color="var(--accent)" />
-                    <span style={{ flex: 1, minWidth: 0 }}>{studioNames.length ? studioNames.join(" • ") : "לא משויך"}</span>
+                    <span style={{ flex: 1, minWidth: 0, ...(studioNames.length ? {} : { color: "#ef4444", fontWeight: 800, fontStyle: "normal" }) }}>{studioNames.length ? studioNames.join(" • ") : "לא משויך"}</span>
                     {showEditBtn && (
                       <button
                         onClick={(e) => { e.stopPropagation(); onNavigateToLesson(b.lesson_id); }}
@@ -1498,7 +1498,7 @@ function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEd
                           <option value="">ללא שיוך</option>
                           {classroomStudios.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
-                      ) : <span style={{ fontWeight: 600, color: studioNames.length ? "inherit" : "var(--text3)", fontStyle: studioNames.length ? "normal" : "italic" }}>{studioNames.length ? studioNames.join(" • ") : "לא משויך"}</span>}
+                      ) : <span style={{ fontWeight: studioNames.length ? 600 : 800, color: studioNames.length ? "inherit" : "#ef4444", fontStyle: "normal" }}>{studioNames.length ? studioNames.join(" • ") : "לא משויך"}</span>}
                     </div>
                     <div style={{ ...tdBase }}><span style={{ color: "var(--text3)", fontSize: 11 }}>{fmtDate(endDate)}</span></div>
                     {canEdit && (

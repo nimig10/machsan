@@ -3500,6 +3500,138 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
         </div>
       )}
 
+      {/* Course & Instructor details */}
+      <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
+        <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:12}}>פרטי הקורס והמרצה</div>
+        <div className="form-group" style={{marginBottom:10}}>
+          <label className="form-label">שם הקורס *</label>
+          <input className="form-input" placeholder='לדוגמה: "חדר טלוויזיה א"' value={name} onChange={e=>setName(e.target.value)}/>
+        </div>
+        <div className="form-group" style={{marginBottom:10}}>
+          <label className="form-label">מרצי הקורס</label>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <select className="form-select" value={additionalLecturerId} onChange={e=>setAdditionalLecturerId(e.target.value)} style={{flex:"1 1 220px"}}>
+              <option value="">בחר מרצה להוספה</option>
+              {lecturerOptions
+                .filter(l => !courseLecturers.some(cl => String(cl.lecturerId || "") === String(l.id)))
+                .sort((a,b)=>displayLecturerName(a).localeCompare(displayLecturerName(b),"he"))
+                .map(l => <option key={l.id} value={l.id}>{displayLecturerName(l)}</option>)}
+            </select>
+            <button type="button" className="btn btn-primary btn-sm" onClick={addCourseLecturer} disabled={!additionalLecturerId} style={{whiteSpace:"nowrap",background:"#9b59b6",borderColor:"#9b59b6"}}>
+              <Plus size={14} strokeWidth={1.75}/> הוסף מרצה
+            </button>
+          </div>
+          {courseLecturers.length > 0 && (
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+              {courseLecturers.map((lecturer) => {
+                const isPrimary = String(lecturer.lecturerId || "") === String(lecturerId || "");
+                const promote = () => {
+                  if (isPrimary) return;
+                  setLecturerId(lecturer.lecturerId || "");
+                };
+                const remove = (e) => {
+                  e.stopPropagation();
+                  const removedKey = String(lecturer.lecturerId || lecturer.instructorName);
+                  setCourseLecturers(prev => {
+                    const next = prev.filter(item => String(item.lecturerId || item.instructorName) !== removedKey);
+                    // If we removed the primary, promote the next remaining lecturer.
+                    if (isPrimary) {
+                      const nextPrimary = next[0]?.lecturerId || "";
+                      setLecturerId(nextPrimary);
+                    }
+                    return next;
+                  });
+                  setSchedule(prev => prev.map(session => String(session.lecturerId || session.instructorName) === removedKey ? {
+                    ...session,
+                    lecturerId: null,
+                    instructorName: "",
+                  } : session));
+                };
+                return (
+                  <span
+                    key={lecturer.lecturerId || lecturer.instructorName}
+                    onClick={promote}
+                    title={isPrimary ? "מרצה ברירת המחדל" : "לחץ כדי לסמן כברירת מחדל"}
+                    style={{
+                      display:"inline-flex",alignItems:"center",gap:5,
+                      border:"1px solid rgba(155,89,182,0.35)",
+                      background:isPrimary?"rgba(155,89,182,0.18)":"var(--surface2)",
+                      borderRadius:999,padding:"4px 10px",fontSize:12,fontWeight:800,
+                      color:isPrimary?"#c084fc":"var(--text2)",
+                      cursor:isPrimary?"default":"pointer",
+                      userSelect:"none",
+                    }}
+                  >
+                    <User size={12} strokeWidth={1.75}/> {lecturer.instructorName}{isPrimary ? " · ברירת מחדל" : ""}
+                    <button type="button" aria-label="הסר מרצה מהקורס" onClick={remove}
+                      style={{background:"transparent",border:"none",color:"var(--text3)",cursor:"pointer",padding:0,display:"inline-flex"}}>
+                      <X size={12} strokeWidth={2}/>
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>
+            לחיצה על מרצה הופכת אותו לברירת מחדל לקורס. ה-X מסיר מרצה. ניתן להוסיף רק מרצים שכבר קיימים ברובריקת "מרצים".
+          </div>
+          {!lecturers.length && <div style={{fontSize:11,color:"var(--text3)",marginTop:3}}>ניתן להוסיף מרצים דרך רובריקת "מרצים"</div>}
+        </div>
+        <div className="form-group" style={{marginBottom:10}}>
+          <label className="form-label">מסלול לימודים</label>
+          <select className="form-select" value={normalizedTrackOptions.includes(track) ? track : ""} onChange={e=>setTrack(e.target.value)}>
+            <option value="">בחר מסלול לימודים קיים</option>
+            {normalizedTrackOptions.map(option => <option key={option} value={option}>{option}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label">הערות</label>
+          <textarea className="form-textarea" rows={2} placeholder="הערות על הקורס..." value={description} onChange={e=>setDescription(e.target.value)}/>
+        </div>
+      </div>
+
+      {/* Link to classrooms (optional) */}
+      <div style={{background:"rgba(52,152,219,0.06)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
+        <div style={{fontWeight:800,fontSize:13,color:"#3498db",marginBottom:10,display:"flex",alignItems:"center",gap:6}}><Link size={13} strokeWidth={1.75}/> שיוך כיתות לימוד</div>
+        <div className="form-group" style={{marginBottom:0}}>
+          <label className="form-label">כיתות הקורס</label>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <select className="form-select" value={additionalStudioId} onChange={e=>setAdditionalStudioId(e.target.value)} style={{flex:"1 1 220px"}}>
+              <option value="">בחר כיתה להוספה</option>
+              {classroomStudios
+                .filter(st => !courseStudios.some(cs => String(cs.studioId) === String(st.id)))
+                .sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"he"))
+                .map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
+            </select>
+            <button type="button" className="btn btn-primary btn-sm" onClick={addCourseStudio} disabled={!additionalStudioId} style={{whiteSpace:"nowrap",background:"#9b59b6",borderColor:"#9b59b6"}}>
+              <Plus size={14} strokeWidth={1.75}/> הוסף כיתה
+            </button>
+          </div>
+          {courseStudios.length > 0 && (
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+              {courseStudios.map((cs) => {
+                const name = studioDisplayName(cs.studioId) || cs.studioId;
+                return (
+                  <span key={cs.studioId} style={{display:"inline-flex",alignItems:"center",gap:5,border:"1px solid rgba(52,152,219,0.35)",background:"var(--surface2)",borderRadius:999,padding:"4px 10px",fontSize:12,fontWeight:800,color:"var(--text2)"}}>
+                    <Link size={12} strokeWidth={1.75}/> {name}
+                    <button type="button" aria-label="הסר כיתה מהקורס" onClick={()=>removeCourseStudio(cs.studioId)}
+                      style={{background:"transparent",border:"none",color:"var(--text3)",cursor:"pointer",padding:0,display:"inline-flex"}}>
+                      <X size={12} strokeWidth={2}/>
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>
+            ניתן להוסיף כמה כיתות שצריך. כל כיתה תופיע כעמודה נפרדת ב"לוח שיעורים" וכל מפגש יכול לבחור איזו כיתה בפועל הוא משריין.
+          </div>
+        </div>
+        {classroomStudios.length === 0 && (
+          <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}><Lightbulb size={16} strokeWidth={1.75} /> סמן חדר כ"כיתת לימוד" ברובריקת חדרים כדי שיופיע כאן.</div>
+        )}
+      </div>
+
       {/* Schedule builder — FIRST */}
       <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
         <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:12}}><Calendar size={16} strokeWidth={1.75} /> לוח שיעורים</div>
@@ -3749,138 +3881,6 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
               <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>setSchedule([])}>🗑️ נקה הכל</button>
             </div>
           </div>
-        )}
-      </div>
-
-      {/* Course & Instructor details */}
-      <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
-        <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:12}}>פרטי הקורס והמרצה</div>
-        <div className="form-group" style={{marginBottom:10}}>
-          <label className="form-label">שם הקורס *</label>
-          <input className="form-input" placeholder='לדוגמה: "חדר טלוויזיה א"' value={name} onChange={e=>setName(e.target.value)}/>
-        </div>
-        <div className="form-group" style={{marginBottom:10}}>
-          <label className="form-label">מרצי הקורס</label>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <select className="form-select" value={additionalLecturerId} onChange={e=>setAdditionalLecturerId(e.target.value)} style={{flex:"1 1 220px"}}>
-              <option value="">בחר מרצה להוספה</option>
-              {lecturerOptions
-                .filter(l => !courseLecturers.some(cl => String(cl.lecturerId || "") === String(l.id)))
-                .sort((a,b)=>displayLecturerName(a).localeCompare(displayLecturerName(b),"he"))
-                .map(l => <option key={l.id} value={l.id}>{displayLecturerName(l)}</option>)}
-            </select>
-            <button type="button" className="btn btn-primary btn-sm" onClick={addCourseLecturer} disabled={!additionalLecturerId} style={{whiteSpace:"nowrap",background:"#9b59b6",borderColor:"#9b59b6"}}>
-              <Plus size={14} strokeWidth={1.75}/> הוסף מרצה
-            </button>
-          </div>
-          {courseLecturers.length > 0 && (
-            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
-              {courseLecturers.map((lecturer) => {
-                const isPrimary = String(lecturer.lecturerId || "") === String(lecturerId || "");
-                const promote = () => {
-                  if (isPrimary) return;
-                  setLecturerId(lecturer.lecturerId || "");
-                };
-                const remove = (e) => {
-                  e.stopPropagation();
-                  const removedKey = String(lecturer.lecturerId || lecturer.instructorName);
-                  setCourseLecturers(prev => {
-                    const next = prev.filter(item => String(item.lecturerId || item.instructorName) !== removedKey);
-                    // If we removed the primary, promote the next remaining lecturer.
-                    if (isPrimary) {
-                      const nextPrimary = next[0]?.lecturerId || "";
-                      setLecturerId(nextPrimary);
-                    }
-                    return next;
-                  });
-                  setSchedule(prev => prev.map(session => String(session.lecturerId || session.instructorName) === removedKey ? {
-                    ...session,
-                    lecturerId: null,
-                    instructorName: "",
-                  } : session));
-                };
-                return (
-                  <span
-                    key={lecturer.lecturerId || lecturer.instructorName}
-                    onClick={promote}
-                    title={isPrimary ? "מרצה ברירת המחדל" : "לחץ כדי לסמן כברירת מחדל"}
-                    style={{
-                      display:"inline-flex",alignItems:"center",gap:5,
-                      border:"1px solid rgba(155,89,182,0.35)",
-                      background:isPrimary?"rgba(155,89,182,0.18)":"var(--surface2)",
-                      borderRadius:999,padding:"4px 10px",fontSize:12,fontWeight:800,
-                      color:isPrimary?"#c084fc":"var(--text2)",
-                      cursor:isPrimary?"default":"pointer",
-                      userSelect:"none",
-                    }}
-                  >
-                    <User size={12} strokeWidth={1.75}/> {lecturer.instructorName}{isPrimary ? " · ברירת מחדל" : ""}
-                    <button type="button" aria-label="הסר מרצה מהקורס" onClick={remove}
-                      style={{background:"transparent",border:"none",color:"var(--text3)",cursor:"pointer",padding:0,display:"inline-flex"}}>
-                      <X size={12} strokeWidth={2}/>
-                    </button>
-                  </span>
-                );
-              })}
-            </div>
-          )}
-          <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>
-            לחיצה על מרצה הופכת אותו לברירת מחדל לקורס. ה-X מסיר מרצה. ניתן להוסיף רק מרצים שכבר קיימים ברובריקת "מרצים".
-          </div>
-          {!lecturers.length && <div style={{fontSize:11,color:"var(--text3)",marginTop:3}}>ניתן להוסיף מרצים דרך רובריקת "מרצים"</div>}
-        </div>
-        <div className="form-group" style={{marginBottom:10}}>
-          <label className="form-label">מסלול לימודים</label>
-          <select className="form-select" value={normalizedTrackOptions.includes(track) ? track : ""} onChange={e=>setTrack(e.target.value)}>
-            <option value="">בחר מסלול לימודים קיים</option>
-            {normalizedTrackOptions.map(option => <option key={option} value={option}>{option}</option>)}
-          </select>
-        </div>
-        <div className="form-group">
-          <label className="form-label">הערות</label>
-          <textarea className="form-textarea" rows={2} placeholder="הערות על הקורס..." value={description} onChange={e=>setDescription(e.target.value)}/>
-        </div>
-      </div>
-
-      {/* Link to classrooms (optional) */}
-      <div style={{background:"rgba(52,152,219,0.06)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
-        <div style={{fontWeight:800,fontSize:13,color:"#3498db",marginBottom:10,display:"flex",alignItems:"center",gap:6}}><Link size={13} strokeWidth={1.75}/> שיוך כיתות לימוד</div>
-        <div className="form-group" style={{marginBottom:0}}>
-          <label className="form-label">כיתות הקורס</label>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <select className="form-select" value={additionalStudioId} onChange={e=>setAdditionalStudioId(e.target.value)} style={{flex:"1 1 220px"}}>
-              <option value="">בחר כיתה להוספה</option>
-              {classroomStudios
-                .filter(st => !courseStudios.some(cs => String(cs.studioId) === String(st.id)))
-                .sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"he"))
-                .map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
-            </select>
-            <button type="button" className="btn btn-primary btn-sm" onClick={addCourseStudio} disabled={!additionalStudioId} style={{whiteSpace:"nowrap",background:"#9b59b6",borderColor:"#9b59b6"}}>
-              <Plus size={14} strokeWidth={1.75}/> הוסף כיתה
-            </button>
-          </div>
-          {courseStudios.length > 0 && (
-            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
-              {courseStudios.map((cs) => {
-                const name = studioDisplayName(cs.studioId) || cs.studioId;
-                return (
-                  <span key={cs.studioId} style={{display:"inline-flex",alignItems:"center",gap:5,border:"1px solid rgba(52,152,219,0.35)",background:"var(--surface2)",borderRadius:999,padding:"4px 10px",fontSize:12,fontWeight:800,color:"var(--text2)"}}>
-                    <Link size={12} strokeWidth={1.75}/> {name}
-                    <button type="button" aria-label="הסר כיתה מהקורס" onClick={()=>removeCourseStudio(cs.studioId)}
-                      style={{background:"transparent",border:"none",color:"var(--text3)",cursor:"pointer",padding:0,display:"inline-flex"}}>
-                      <X size={12} strokeWidth={2}/>
-                    </button>
-                  </span>
-                );
-              })}
-            </div>
-          )}
-          <div style={{fontSize:11,color:"var(--text3)",marginTop:6}}>
-            ניתן להוסיף כמה כיתות שצריך. כל כיתה תופיע כעמודה נפרדת ב"לוח שיעורים" וכל מפגש יכול לבחור איזו כיתה בפועל הוא משריין.
-          </div>
-        </div>
-        {classroomStudios.length === 0 && (
-          <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}><Lightbulb size={16} strokeWidth={1.75} /> סמן חדר כ"כיתת לימוד" ברובריקת חדרים כדי שיופיע כאן.</div>
         )}
       </div>
 
