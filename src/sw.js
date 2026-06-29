@@ -1,7 +1,8 @@
 // Custom service worker (injectManifest strategy).
 // Handles precaching via workbox + push notifications.
-import { precacheAndRoute, cleanupOutdatedCaches, createHandlerBoundToURL } from 'workbox-precaching';
+import { precacheAndRoute, cleanupOutdatedCaches, PrecacheFallbackPlugin } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
+import { NetworkFirst } from 'workbox-strategies';
 
 self.skipWaiting();
 self.clients.claim();
@@ -10,8 +11,29 @@ self.clients.claim();
 precacheAndRoute(self.__WB_MANIFEST || []);
 cleanupOutdatedCaches();
 
-// SPA navigation fallback → index.html from the precache.
-registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html')));
+// SPA navigations: NETWORK-FIRST (not cache-first).
+//
+// An always-online display (e.g. the /daily-table TV board running in Fully
+// Kiosk) must always pull a *fresh* index.html so it references the current
+// hashed asset URLs. Serving index.html from the precache (the old behavior)
+// caused a death-spiral after a deploy: the cached index pointed at an old
+// /assets/index-<hash>.js that no longer exists → the entry module 404s →
+// the SW-update code in main.jsx never runs → the SW never updates itself →
+// permanent white screen until the device cache is cleared by hand.
+//
+// Network-first fetches index.html from the network when online (so new
+// deploys are picked up immediately) and only falls back to the precached
+// index.html when the network is unreachable (offline). Asset chunks not in
+// the current precache simply fetch from the network as usual.
+registerRoute(
+  new NavigationRoute(
+    new NetworkFirst({
+      cacheName: 'app-shell',
+      networkTimeoutSeconds: 5,
+      plugins: [new PrecacheFallbackPlugin({ fallbackURL: 'index.html' })],
+    })
+  )
+);
 
 // ── Push notifications ───────────────────────────────────────────────────────
 self.addEventListener('push', (event) => {
