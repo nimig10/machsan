@@ -2,7 +2,7 @@
 // Handles precaching via workbox + push notifications.
 import { precacheAndRoute, cleanupOutdatedCaches, PrecacheFallbackPlugin } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
-import { NetworkFirst } from 'workbox-strategies';
+import { NetworkFirst, NetworkOnly } from 'workbox-strategies';
 
 self.skipWaiting();
 self.clients.claim();
@@ -10,6 +10,14 @@ self.clients.claim();
 // Precache everything the build plugin injected.
 precacheAndRoute(self.__WB_MANIFEST || []);
 cleanupOutdatedCaches();
+
+// /daily-table is the corridor TV kiosk page — always-online, single-purpose.
+// Force NetworkOnly so it can NEVER serve a stale cached response (defense in
+// depth on top of main.jsx never registering the SW for this path).
+registerRoute(
+  ({ url }) => url.pathname.startsWith('/daily-table'),
+  new NetworkOnly()
+);
 
 // SPA navigations: NETWORK-FIRST (not cache-first).
 //

@@ -5,12 +5,20 @@ import './index.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 
-// ── PWA: mobile only ─────────────────────────────────────────────────────────
+// ── PWA: mobile only, never on the kiosk page ────────────────────────────────
 // Register the service worker only on mobile/tablet devices.
 // Desktop users get a plain web app (no install prompt, no SW cache issues).
+//
+// /daily-table is the always-online corridor TV kiosk — it must NEVER have a
+// service worker, regardless of UA. Fully Kiosk on Android matches /Android/
+// in the mobile regex, which previously gave the kiosk a PWA cache that
+// could trap it on a dead build between deploys. Treat /daily-table as
+// "always desktop mode": unregister any existing SW + purge caches on every
+// visit so the kiosk self-heals and stays self-healed.
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
   navigator.userAgent
 );
+const isKioskPage = window.location.pathname.startsWith('/daily-table');
 
 let hasReloadedForSwUpdate = false;
 const swStartTime = Date.now();
@@ -23,7 +31,7 @@ const triggerReloadForSwUpdate = () => {
   window.location.reload();
 };
 
-if (isMobile && 'serviceWorker' in navigator) {
+if (isMobile && !isKioskPage && 'serviceWorker' in navigator) {
   registerSW({
     immediate: true,
     onRegisteredSW(_swUrl, registration) {
@@ -45,8 +53,8 @@ if (isMobile && 'serviceWorker' in navigator) {
   });
 
   navigator.serviceWorker.addEventListener('controllerchange', triggerReloadForSwUpdate);
-} else if (!isMobile) {
-  // Desktop: suppress browser install prompt entirely
+} else if (!isMobile || isKioskPage) {
+  // Desktop OR kiosk page: suppress browser install prompt entirely
   window.addEventListener('beforeinstallprompt', e => e.preventDefault());
 
   // Unregister any existing SW so stale cache is cleared.
