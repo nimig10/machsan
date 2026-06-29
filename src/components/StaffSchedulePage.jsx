@@ -1135,7 +1135,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
             <div style={{ marginBottom: 12, padding: "8px 12px", background: "var(--surface2)", borderRadius: 8, fontSize: 13, display: "flex", flexDirection: "column", gap: 4 }}>
               <div>שם הסטודנט: <strong>{selectedLoan.student_name || "—"}</strong></div>
               {(() => { const h = loanHandlerFor(loanHandlers, selectedLoan.id, selectedLoan._handlerKind); return (
-                <div style={{ color: h ? "#22c55e" : "var(--text3)" }}>איש צוות מטפל: <strong>{h?.staff_name || "לא שויך"}</strong></div>
+                <div style={{ color: h ? "#22c55e" : "#ef4444" }}>איש צוות מטפל: <strong>{h?.staff_name || "לא שויך"}</strong></div>
               ); })()}
             </div>
           )}
@@ -1306,7 +1306,7 @@ function LessonsRow({ workDays, studioBookings, studios, today, holidays, trackF
                   )}
                   <div style={{ display: "flex", alignItems: "center", gap: 4, color: studioNames.length ? "var(--text)" : "var(--text3)", fontSize: 11, fontWeight: 600, fontStyle: studioNames.length ? "normal" : "italic" }}>
                     <Building2 size={13} strokeWidth={1.75} color="var(--accent)" />
-                    <span style={{ flex: 1, minWidth: 0 }}>{studioNames.length ? studioNames.join(" • ") : "לא משויך"}</span>
+                    <span style={{ flex: 1, minWidth: 0, ...(studioNames.length ? {} : { color: "#ef4444", fontWeight: 800, fontStyle: "normal" }) }}>{studioNames.length ? studioNames.join(" • ") : "לא משויך"}</span>
                     {showEditBtn && (
                       <button
                         onClick={(e) => { e.stopPropagation(); onNavigateToLesson(b.lesson_id); }}
@@ -1498,7 +1498,7 @@ function DayLessonsTable({ date, studioBookings, studios, lessons, canEdit, onEd
                           <option value="">ללא שיוך</option>
                           {classroomStudios.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
-                      ) : <span style={{ fontWeight: 600, color: studioNames.length ? "inherit" : "var(--text3)", fontStyle: studioNames.length ? "normal" : "italic" }}>{studioNames.length ? studioNames.join(" • ") : "לא משויך"}</span>}
+                      ) : <span style={{ fontWeight: studioNames.length ? 600 : 800, color: studioNames.length ? "inherit" : "#ef4444", fontStyle: "normal" }}>{studioNames.length ? studioNames.join(" • ") : "לא משויך"}</span>}
                     </div>
                     <div style={{ ...tdBase }}><span style={{ color: "var(--text3)", fontSize: 11 }}>{fmtDate(endDate)}</span></div>
                     {canEdit && (
@@ -1590,7 +1590,7 @@ function LoanChip({ r, isReturn, onClick, loanHandlers = [] }) {
       </div>
       <div style={{ fontWeight: 700, color: "#fff", fontSize: 11, lineHeight: 1.3 }}>{isLesson ? (r.student_name || "—") : <>שם הסטודנט: <span style={{ fontSize: 13, fontWeight: 800 }}>{r.student_name || "—"}</span></>}</div>
       <div style={{ color: "#fff", fontSize: 12, fontWeight: 800, marginTop: 1 }}>{(r.items || []).length} פריטים · {r.loan_type || ""}</div>
-      {!isLesson && <div style={{ fontSize: 10, fontWeight: 700, color: handler ? "#22c55e" : "var(--text3)", marginTop: 1 }}>איש צוות מטפל: <span style={{ fontSize: 12, fontWeight: 800 }}>{handler?.staff_name || "לא שויך"}</span></div>}
+      {!isLesson && <div style={{ fontSize: 10, fontWeight: 700, color: handler ? "#22c55e" : "#ef4444", marginTop: 1 }}>איש צוות מטפל: <span style={{ fontSize: 12, fontWeight: 800 }}>{handler?.staff_name || "לא שויך"}</span></div>}
       {r.status && <div style={{ fontSize: 10, fontWeight: 800, color: loanStatusColor(r.status), marginTop: 1 }}>● {normalizeReservationStatus(r.status)}</div>}
     </div>
   );
