@@ -6,7 +6,7 @@ import {
   formatDate,
   formatTime,
   toDateTime,
-  FAR_FUTURE,
+  computeEquipmentAvailability,
   getReservationApprovalConflicts,
   cloudinaryThumb,
   getAuthToken,
@@ -116,46 +116,26 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
   };
 
   const getEquipmentBlockingDetails = (eqId) => {
-    const eq = equipment.find(e=>e.id==eqId);
-    if(!eq) return { total: 0, usedByOthers: 0, available: 0, blockers: [] };
-
     const reqStart = toDateTime(form.borrow_date, form.borrow_time || "00:00");
     const reqEnd   = toDateTime(form.return_date, form.return_time || "23:59");
-    let usedByOthers = 0;
-    const blockers = [];
-
-    for (const res of reservations) {
-      if (res.id === reservation.id) continue;
-      if (res.status !== "מאושר" && res.status !== "באיחור") continue;
-
-      const resStart = toDateTime(res.borrow_date, res.borrow_time || "00:00");
-      // Overdue items are physically out of the warehouse — block every future request
-      const resEnd = res.status === "באיחור" ? FAR_FUTURE : toDateTime(res.return_date, res.return_time || "23:59");
-      const overlaps = reqStart < resEnd && reqEnd > resStart;
-      if (!overlaps) continue;
-
-      const blockingItem = (res.items || []).find(i => i.equipment_id == eqId);
-      if (!blockingItem || !blockingItem.quantity) continue;
-
-      const blockingQty = Number(blockingItem.quantity) || 0;
-      usedByOthers += blockingQty;
-      blockers.push({
-        reservation_id: res.id,
-        student_name: res.student_name || "ללא שם",
-        quantity: blockingQty,
-        borrow_date: res.borrow_date,
-        borrow_time: res.borrow_time || "00:00",
-        return_date: res.return_date,
-        return_time: res.return_time || "23:59",
-        status: res.status,
-      });
-    }
-
+    // Shared peak-concurrent availability (NOT a sum of overlapping demand) — keeps
+    // this modal consistent with getAvailable / the approval check. `total` is now
+    // workingUnits (damaged units excluded) and overdue blockers use the 48h window.
+    const r = computeEquipmentAvailability(eqId, reqStart, reqEnd, reservations, equipment, reservation.id);
     return {
-      total: Number(eq.total_quantity) || 0,
-      usedByOthers,
-      available: Math.max(0, (Number(eq.total_quantity) || 0) - usedByOthers),
-      blockers,
+      total: r.working,
+      usedByOthers: r.peakUsed,
+      available: r.available,
+      blockers: r.overlapping.map(o => ({
+        reservation_id: o.res.id,
+        student_name: o.res.student_name || "ללא שם",
+        quantity: o.qty,
+        borrow_date: o.res.borrow_date,
+        borrow_time: o.res.borrow_time || "00:00",
+        return_date: o.res.return_date,
+        return_time: o.res.return_time || "23:59",
+        status: o.status,
+      })),
     };
   };
 
