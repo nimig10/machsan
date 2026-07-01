@@ -730,13 +730,23 @@ export function workingUnits(eq) {
   return eq.units.filter(u => u.status === "תקין").length;
 }
 
-export function getAvailable(eqId, borrowDate, returnDate, reservations, equipment, excludeId=null, borrowTime="", returnTime="") {
+// Peak concurrent demand for ONE equipment item within the [reqStart, reqEnd] window.
+//
+// CRITICAL: we take the MAX simultaneous demand, not the SUM of all overlapping
+// reservations. Two reservations that each need 1 unit but in NON-overlapping
+// windows only ever tie up 1 physical unit at a time (warehouse hands the same
+// returned unit to the next borrower — units are fungible). Summing them would
+// wrongly report 2 units used when a request window spans both. The minimum number
+// of units needed to serve a set of intervals equals their maximum overlap
+// (interval-graph result), so available = workingUnits − peak-concurrent-demand.
+//
+// Max concurrency within the window is always reached at some blocker's start
+// (clamped to reqStart), so we evaluate only at those candidate points. O(n^2),
+// n = blockers per item (tiny in practice).
+export function computeEquipmentAvailability(eqId, reqStart, reqEnd, reservations, equipment, excludeId = null) {
   const eq = equipment.find(e => e.id == eqId);
-  if (!eq) return 0;
-  // Use end-of-day if no time provided so date-only reservations still block correctly
-  const bStart = toDateTime(borrowDate, borrowTime || "00:00");
-  const rEnd   = toDateTime(returnDate, returnTime || "23:59");
-  let used = 0;
+  if (!eq) return { working: 0, peakUsed: 0, available: 0, overlapping: [] };
+  const overlapping = [];
   for (const res of reservations) {
     if (res.id === excludeId) continue;
     const effStatus = getEffectiveStatus(res);
@@ -746,20 +756,37 @@ export function getAvailable(eqId, borrowDate, returnDate, reservations, equipme
     // requesting the same equipment for the same window. Staff sees pending
     // overlaps via getReservationApprovalConflicts at approval time.
     if (!["מאושר","פעילה","באיחור"].includes(effStatus)) continue;
-    const resStart = toDateTime(res.borrow_date, res.borrow_time || "00:00");
+    const s = toDateTime(res.borrow_date, res.borrow_time || "00:00");
     // Overdue items block only within OVERDUE_BLOCK_BUFFER_MS of their scheduled
     // return — a loan starting >48h after the overdue return_date can be approved.
-    const resEnd = effStatus === "באיחור"
+    const e = effStatus === "באיחור"
       ? toDateTime(res.return_date, res.return_time || "23:59") + OVERDUE_BLOCK_BUFFER_MS
       : toDateTime(res.return_date, res.return_time || "23:59");
     // Overlap: new period starts before existing ends AND new period ends after existing starts
-    if (bStart < resEnd && rEnd > resStart) {
-      const item = res.items?.find(i => i.equipment_id == eqId);
-      if (item) used += item.quantity;
-    }
+    if (!(reqStart < e && reqEnd > s)) continue;
+    const item = res.items?.find(i => i.equipment_id == eqId);
+    const qty = Number(item?.quantity) || 0;
+    if (!qty) continue;
+    overlapping.push({ res, status: effStatus, start: s, end: e, qty });
+  }
+  // Sweep over candidate points (each blocker's start clamped to the window start).
+  const points = [reqStart, ...overlapping.map(b => Math.max(b.start, reqStart))];
+  let peakUsed = 0;
+  for (const t of points) {
+    if (t >= reqEnd) continue;
+    let sum = 0;
+    for (const b of overlapping) if (b.start <= t && t < b.end) sum += b.qty;
+    if (sum > peakUsed) peakUsed = sum;
   }
   const working = workingUnits(eq);
-  return Math.max(0, working - used);
+  return { working, peakUsed, available: Math.max(0, working - peakUsed), overlapping };
+}
+
+export function getAvailable(eqId, borrowDate, returnDate, reservations, equipment, excludeId=null, borrowTime="", returnTime="") {
+  // Use end-of-day if no time provided so date-only reservations still block correctly
+  const bStart = toDateTime(borrowDate, borrowTime || "00:00");
+  const rEnd   = toDateTime(returnDate, returnTime || "23:59");
+  return computeEquipmentAvailability(eqId, bStart, rEnd, reservations, equipment, excludeId).available;
 }
 
 export function getReservationApprovalConflicts(targetReservation, reservations, equipment) {
@@ -772,42 +799,22 @@ export function getReservationApprovalConflicts(targetReservation, reservations,
     const eq = equipment.find(e => e.id == item.equipment_id);
     if (!eq) continue;
 
-    let used = 0;
-    const blockers = [];
-
-    for (const res of reservations) {
-      if (res.id === targetReservation.id) continue;
-      if (res.status !== "מאושר" && res.status !== "באיחור") continue;
-
-      const resStart = toDateTime(res.borrow_date, res.borrow_time || "00:00");
-      // Overdue items block only within OVERDUE_BLOCK_BUFFER_MS of their scheduled
-      // return — a loan starting >48h after the overdue return_date can be approved.
-      const resEnd = res.status === "באיחור"
-        ? toDateTime(res.return_date, res.return_time || "23:59") + OVERDUE_BLOCK_BUFFER_MS
-        : toDateTime(res.return_date, res.return_time || "23:59");
-      const overlaps = reqStart < resEnd && reqEnd > resStart;
-      if (!overlaps) continue;
-
-      const blockingItem = (res.items || []).find(i => i.equipment_id == item.equipment_id);
-      if (!blockingItem || !blockingItem.quantity) continue;
-
-      const blockingQty = Number(blockingItem.quantity) || 0;
-      used += blockingQty;
-      blockers.push({
-        reservation_id: res.id,
-        student_name: res.student_name || "ללא שם",
-        quantity: blockingQty,
-        borrow_date: res.borrow_date,
-        borrow_time: res.borrow_time || "00:00",
-        return_date: res.return_date,
-        return_time: res.return_time || "23:59",
-        status: res.status, // carry status so UI can highlight overdue blockers
-      });
-    }
+    // Peak-concurrent availability (NOT a naive sum of overlapping demand) —
+    // shared with getAvailable / the edit modal so all surfaces agree.
+    const { working: total, available, overlapping } =
+      computeEquipmentAvailability(item.equipment_id, reqStart, reqEnd, reservations, equipment, targetReservation.id);
+    const blockers = overlapping.map(o => ({
+      reservation_id: o.res.id,
+      student_name: o.res.student_name || "ללא שם",
+      quantity: o.qty,
+      borrow_date: o.res.borrow_date,
+      borrow_time: o.res.borrow_time || "00:00",
+      return_date: o.res.return_date,
+      return_time: o.res.return_time || "23:59",
+      status: o.status, // carry status so UI can highlight overdue blockers
+    }));
 
     const requested = Number(item.quantity) || 0;
-    const total = workingUnits(eq);
-    const available = Math.max(0, total - used);
 
     if (requested > available) {
       conflicts.push({
