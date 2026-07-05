@@ -16,7 +16,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
   // Loan-request staff coordination (decoupled side-table) — read-only display here.
   const loanOut = (loanHandlers||[]).find(h=>String(h.reservation_id)===String(reservation.id)&&h.kind==="out");
   const loanReturn = (loanHandlers||[]).find(h=>String(h.reservation_id)===String(reservation.id)&&h.kind==="return");
-  const TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30"];
+  const TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30"];
   const isOverdueReservation = reservation.status==="באיחור";
   const [form, setForm]   = useState({...reservation});
   const [items, setItems] = useState(reservation.items ? [...reservation.items] : []);
@@ -245,6 +245,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                   <label className="form-label">שעת איסוף</label>
                   <select className="form-select" value={form.borrow_time||""} onChange={e=>set("borrow_time",e.target.value)}>
                     <option value="">-- בחר שעה --</option>
+                    {form.borrow_time && !TIME_SLOTS.includes(form.borrow_time) && <option value={form.borrow_time}>{formatTime(form.borrow_time)}</option>}
                     {TIME_SLOTS.map(t=><option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
@@ -256,6 +257,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                   <label className="form-label">שעת החזרה</label>
                   <select className="form-select" value={form.return_time||""} onChange={e=>set("return_time",e.target.value)}>
                     <option value="">-- בחר שעה --</option>
+                    {form.return_time && !TIME_SLOTS.includes(form.return_time) && <option value={form.return_time}>{formatTime(form.return_time)}</option>}
                     {TIME_SLOTS.map(t=><option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>

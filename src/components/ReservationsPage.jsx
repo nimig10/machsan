@@ -1,7 +1,7 @@
 import { supabase } from '../supabaseClient.js';
 // ReservationsPage.jsx — admin reservations management page (includes rejected + archive tabs)
 import { useEffect, useState, useMemo } from "react";
-import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, createReservation, deleteReservation as deleteReservationRpc, getAuthToken, syncReservationStatusToBlob } from "../utils.js";
+import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, createReservation, deleteReservation as deleteReservationRpc, getAuthToken, syncReservationStatusToBlob, groupReservationItemsByCategory } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
@@ -1180,25 +1180,29 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                     : null;
                   const photogCertsR = photogRec?.certs || {};
                   const soundCertsR = soundRec?.certs || {};
-                  return selected.items?.map((item,i)=>{
-                    const hasReport=equipmentReports.some(rp=>rp.equipment_id===String(item.equipment_id)&&rp.reservation_id===String(selected.id)&&rp.status==="open");
-                    const eq = equipment.find(e => String(e.id) === String(item.equipment_id));
-                    const needsCert = isProduction && eq?.certification_id &&
-                      photogCertsR[eq.certification_id] !== "עבר" &&
-                      soundCertsR[eq.certification_id] !== "עבר";
-                    return (<div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:hasReport?"rgba(231,76,60,0.06)":"var(--surface2)",borderRadius:"var(--r-sm)",border:hasReport?"1px solid rgba(231,76,60,0.3)":"1px solid var(--border)"}}>
-                      <EqImg id={item.equipment_id} size={32}/>
-                      <div style={{flex:1}}>
-                        <div style={{fontWeight:700,fontSize:14}}>{eqName(item.equipment_id)}{hasReport&&<span style={{color:"#e74c3c",fontSize:12,marginRight:6}}>⚠️ דיווח תקלה</span>}</div>
-                        <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>כמות: <strong style={{color:"var(--accent)"}}>{item.quantity}</strong></div>
-                        {needsCert && (
-                          <div style={{marginTop:6,display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,color:"#f59e0b",background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.35)",borderRadius:6,padding:"2px 8px"}}>
-                            <Shield size={10} strokeWidth={2} /> דרושה הסמכה
+                  return groupReservationItemsByCategory(selected.items, equipment).map((group)=>(
+                    <div key={group.category} style={{display:"flex",flexDirection:"column",gap:8}}>
+                      <div style={{fontSize:11,fontWeight:800,color:"var(--accent)",marginTop:4}}>{group.category}</div>
+                      {group.entries.map(({item,eq,index})=>{
+                        const hasReport=equipmentReports.some(rp=>rp.equipment_id===String(item.equipment_id)&&rp.reservation_id===String(selected.id)&&rp.status==="open");
+                        const needsCert = isProduction && eq?.certification_id &&
+                          photogCertsR[eq.certification_id] !== "עבר" &&
+                          soundCertsR[eq.certification_id] !== "עבר";
+                        return (<div key={index} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:hasReport?"rgba(231,76,60,0.06)":"var(--surface2)",borderRadius:"var(--r-sm)",border:hasReport?"1px solid rgba(231,76,60,0.3)":"1px solid var(--border)"}}>
+                          <EqImg id={item.equipment_id} size={32}/>
+                          <div style={{flex:1}}>
+                            <div style={{fontWeight:700,fontSize:14}}>{eqName(item.equipment_id)}{hasReport&&<span style={{color:"#e74c3c",fontSize:12,marginRight:6}}>⚠️ דיווח תקלה</span>}</div>
+                            <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>כמות: <strong style={{color:"var(--accent)"}}>{item.quantity}</strong></div>
+                            {needsCert && (
+                              <div style={{marginTop:6,display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,color:"#f59e0b",background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.35)",borderRadius:6,padding:"2px 8px"}}>
+                                <Shield size={10} strokeWidth={2} /> דרושה הסמכה
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    </div>);
-                  });
+                        </div>);
+                      })}
+                    </div>
+                  ));
                 })()}
               </div>
             </div>

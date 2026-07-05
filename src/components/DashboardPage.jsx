@@ -57,7 +57,6 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
   const [calStatusF, setCalStatusF] = useState([]);
   const [calLoanTypeF, setCalLoanTypeF] = useState("הכל");
   const [onLoanModal, setOnLoanModal] = useState(null); // "units" | "items" | null
-  const [dashStatusF, setDashStatusF] = useState([]);
   const [dashSortBy, setDashSortBy] = useState("urgency"); // "urgency" | "received"
 
   const yr = calDate.getFullYear();
@@ -281,25 +280,18 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
           <div className="card-header"><span className="card-title">🕒 בקשות אחרונות</span></div>
           {/* Dashboard filters */}
           <div style={{padding:"8px 16px",display:"flex",flexDirection:"column",gap:8,borderBottom:"1px solid var(--border)"}}>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-              <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סטטוס:</span>
-              {["ממתין","אישור ראש מחלקה","נדחה","מאושר","פעילה","באיחור"].map(s=>{
-                const active=dashStatusF.includes(s);
-                return <button key={s} type="button" onClick={()=>setDashStatusF(p=>active?p.filter(x=>x!==s):[...p,s])}
-                  style={{padding:"3px 10px",borderRadius:20,border:`1.5px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>{s}</button>;
-              })}
-            </div>
-            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
               <span style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>סידור:</span>
               {[{k:"urgency",l:"🔥 דחיפות"},{k:"received",l:"🕐 קבלה"}].map(({k,l})=>(
                 <button key={k} type="button" onClick={()=>setDashSortBy(k)}
                   style={{padding:"3px 10px",borderRadius:20,border:`1.5px solid ${dashSortBy===k?"var(--accent)":"var(--border)"}`,background:dashSortBy===k?"var(--accent-glow)":"transparent",color:dashSortBy===k?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>{l}</button>
               ))}
+              <span style={{fontSize:10,color:"var(--text3)",marginRight:"auto",fontStyle:"italic"}}>מסונן לפי לוח השאלות ציוד ←</span>
             </div>
           </div>
           {(()=>{
             const dashFiltered = [...reservations]
-              .filter(r=>!["הוחזר","בוטל","מבוטל"].includes(getEffectiveStatus(r))&&r.loan_type!=="שיעור"&&(dashStatusF.length===0||dashStatusF.includes(getEffectiveStatus(r))))
+              .filter(r=>!["הוחזר","בוטל","מבוטל"].includes(getEffectiveStatus(r))&&r.loan_type!=="שיעור"&&(calStatusF.length===0||calStatusF.includes(getEffectiveStatus(r)))&&(calLoanTypeF==="הכל"||r.loan_type===calLoanTypeF))
               .sort((a,b)=>dashSortBy==="urgency"?new Date(a.borrow_date)-new Date(b.borrow_date):Number(b.id)-Number(a.id))
               .slice(0,8);
             if(!dashFiltered.length) return <div className="empty-state" style={{padding:20}}><div className="emoji"><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /></div><p>אין בקשות תואמות</p></div>;
@@ -429,7 +421,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                 <button
                   key={filterOption.key}
                   type="button"
-                  onClick={()=>setCalLoanTypeF(filterOption.key)}
+                  onClick={()=>setCalLoanTypeF(active ? "הכל" : filterOption.key)}
                   style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${active?bg:"var(--border)"}`,background:active?bg:"transparent",color:active?fg:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}
                 >
                   {filterOption.icon} {filterOption.label}
@@ -441,7 +433,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4,direction:"rtl"}}>
             {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,color:"var(--text3)",padding:"4px 0"}}>{d}</div>)}
           </div>
-          <CalendarGrid days={days} outOfMonthDays={outOfMonthDays} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={90} fontSize={10} lessonIds={lessonResIds}/>
+          <CalendarGrid days={days} outOfMonthDays={outOfMonthDays} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={90} fontSize={10} lessonIds={lessonResIds} onBarClick={setDashViewRes}/>
         </div>
       </div>
 
@@ -457,7 +449,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
             <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4,direction:"rtl"}}>
               {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:13,fontWeight:700,color:"var(--text3)",padding:"6px 0"}}>{d}</div>)}
             </div>
-            <CalendarGrid days={days} outOfMonthDays={outOfMonthDays} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={130} fontSize={13} lessonIds={lessonResIds}/>
+            <CalendarGrid days={days} outOfMonthDays={outOfMonthDays} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={130} fontSize={13} lessonIds={lessonResIds} onBarClick={setDashViewRes}/>
           </div>
         </div>
       )}

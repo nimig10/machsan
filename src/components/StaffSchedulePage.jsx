@@ -1547,22 +1547,25 @@ function StudentBookingsRow({ workDays, studioBookings, studios, today, holidays
       </div>
       {/* Day cells */}
       {workDays.map((date, i) => {
-        const students = bookings
-          .filter(b => b.date === date && b.status !== "נדחה" && getBookingKind(b) === "student")
+        const dayBookings = bookings
+          .filter(b => b.date === date && b.status !== "נדחה" && getBookingKind(b) !== "lesson")
           .sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
         return (
           <div key={date} style={{ padding: "4px 3px", borderLeft: i < workDays.length - 1 ? "1px solid var(--border)" : "none", borderTop: "1px solid var(--border)", minHeight: 54 }}>
-            {students.map((b, j) => {
+            {dayBookings.map((b, j) => {
               const studio = studioMap[String(b.studioId)];
+              const isTeam = getBookingKind(b) === "team";
+              const accent = isTeam ? "#9b59b6" : "#22c55e";
+              const name = isTeam ? (b.teamMemberName || b.studentName || "איש צוות") : (b.studentName || "סטודנט");
               return (
-                <div key={b.id || j} style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 5, padding: "3px 5px", marginBottom: 3 }}>
-                  <div style={{ fontWeight: 800, color: "#22c55e", fontSize: 10 }}>{b.startTime || ""}–{b.endTime || ""}</div>
-                  <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 11 }}>{b.studentName || "סטודנט"}</div>
+                <div key={b.id || j} style={{ background: isTeam ? "rgba(155,89,182,0.1)" : "rgba(34,197,94,0.1)", border: `1px solid ${isTeam ? "rgba(155,89,182,0.3)" : "rgba(34,197,94,0.25)"}`, borderRadius: 5, padding: "3px 5px", marginBottom: 3 }}>
+                  <div style={{ fontWeight: 800, color: accent, fontSize: 10 }}>{b.startTime || ""}–{b.endTime || ""}</div>
+                  <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 11 }}>{name}</div>
                   {studio && <div style={{ color: "var(--text2)", fontSize: 11, fontWeight: 600 }}>🏛️ {studio.name}</div>}
                 </div>
               );
             })}
-            {students.length === 0 && <div style={{ color: "var(--text3)", textAlign: "center", paddingTop: 14, fontSize: 10 }}>—</div>}
+            {dayBookings.length === 0 && <div style={{ color: "var(--text3)", textAlign: "center", paddingTop: 14, fontSize: 10 }}>—</div>}
           </div>
         );
       })}
