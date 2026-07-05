@@ -932,7 +932,8 @@ const css = `
   .toast-error   { border-right:3px solid var(--red); }
   .toast-info    { border-right:3px solid var(--blue); }
   .cal-headers { display:grid; grid-template-columns:repeat(7,1fr); gap:1px; margin-bottom:2px; }
-  .dashboard-bottom-grid { display:grid; grid-template-columns:minmax(320px,1fr) minmax(520px,640px); gap:16px; align-items:start; }
+  .dashboard-bottom-grid { display:grid; grid-template-columns:minmax(520px,640px) minmax(320px,1fr); gap:16px; align-items:start; }
+  .dashboard-bottom-grid > .calendar-card { order:-1; }
   /* min-width:520px keeps the calendar grid readable on desktop. On phones
      it would force 145px of horizontal overflow on a 375px screen, so cap
      at viewport width when narrow. The grid columns are auto-fr so they'll
@@ -1049,6 +1050,7 @@ const css = `
     .toast-container { left:12px; right:12px; bottom:76px; }
     .toast { min-width:0; width:100%; }
     .dashboard-bottom-grid { grid-template-columns:1fr; order:1; }
+    .dashboard-bottom-grid > .calendar-card { order:0; }
     .dash-stats-section { order:2; }
     .page { display:flex; flex-direction:column; }
     .calendar-card { min-width:0; }
