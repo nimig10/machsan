@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { AlertTriangle, AudioLines, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, Clock, ClipboardList, Download, FileText, Film, GraduationCap, HelpCircle, Info, Link, Lightbulb, LogOut, Mail, Mic, Minus, Package, Pencil, Phone, Plus, Save, Search, Settings, Shield, ShoppingCart, SlidersHorizontal, Trash2, Triangle, Upload, User, Video, Wrench, X, XCircle } from "lucide-react";
-import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, deleteReservation, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB, equipmentWriteInFlight, getValidTokenDirect } from "./utils.js";
+import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, deleteReservation, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB, equipmentWriteInFlight, getValidTokenDirect, groupReservationItemsByCategory } from "./utils.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
 import { CalendarGrid } from "./components/CalendarGrid.jsx";
@@ -4423,17 +4423,19 @@ function KitsPage({ kits, setKits, equipment, categories, showToast, reservation
               {/* Equipment list */}
               <div style={{marginBottom:12}}>
                 <div style={{fontWeight:800,fontSize:13,color:"var(--accent)",marginBottom:8,display:"flex",alignItems:"center",gap:6}}><Package size={13} strokeWidth={1.75}/> ציוד · {(vKit.items||[]).length} סוגים · {(vKit.items||[]).reduce((s,i)=>s+i.quantity,0)} יחידות</div>
-                <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                  {(vKit.items||[]).map((item,j)=>{
-                    const eq=equipment.find(e=>e.id==item.equipment_id);
-                    return (
-                      <div key={j} style={{display:"flex",alignItems:"center",gap:8,background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"5px 10px"}}>
-                        <span style={{fontSize:16,display:"inline-flex",alignItems:"center"}}>{eq?.image&&(eq.image.startsWith("data:")||eq.image.startsWith("http"))?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:20,height:20,objectFit:"cover",borderRadius:4}}/>:(eq?.image?eq.image:<Package size={16} strokeWidth={1.5}/>)}</span>
-                        <span style={{flex:1,fontSize:13,fontWeight:600}}>{eq?.name||item.name||"פריט"}</span>
-                        <span style={{fontSize:13,fontWeight:700,color:"var(--accent)"}}>×{item.quantity}</span>
-                      </div>
-                    );
-                  })}
+                <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  {groupReservationItemsByCategory(vKit.items||[], equipment).map(group=>(
+                    <div key={group.category} style={{display:"flex",flexDirection:"column",gap:4}}>
+                      <div style={{fontSize:11,fontWeight:800,color:"var(--text3)"}}>{group.category}</div>
+                      {group.entries.map(({item,eq,index})=>(
+                        <div key={index} style={{display:"flex",alignItems:"center",gap:8,background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"5px 10px"}}>
+                          <span style={{width:32,height:32,flexShrink:0,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{eq?.image&&(eq.image.startsWith("data:")||eq.image.startsWith("http"))?<img src={cloudinaryThumb(eq.image)} alt="" style={{width:32,height:32,objectFit:"cover",borderRadius:4}}/>:(eq?.image?<span style={{fontSize:22}}>{eq.image}</span>:<Package size={20} strokeWidth={1.5} color="var(--text3)"/>)}</span>
+                          <span style={{flex:1,fontSize:13,fontWeight:600}}>{eq?.name||item.name||"פריט"}</span>
+                          <span style={{fontSize:13,fontWeight:700,color:"var(--accent)"}}>×{item.quantity}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
                 </div>
               </div>
 

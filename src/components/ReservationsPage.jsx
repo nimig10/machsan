@@ -1072,8 +1072,10 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       )}
 
       {selected && (
-        <Modal title={<><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> בקשה — {selected.student_name}</>} onClose={()=>{setSelected(null);setOverdueEmailText("");}} size="modal-lg"
-          footer={<>
+        <Modal title={<><ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" /> בקשה — {selected.student_name}</>} onClose={()=>{setSelected(null);setOverdueEmailText("");}} size="modal-lg">
+          {/* Action buttons hoisted to the top of the modal so warehouse staff
+              reach אשר/דחה/עריכה without scrolling past a long equipment list. */}
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:20,paddingBottom:16,borderBottom:"1px solid var(--border)"}}>
             {(selected.status==="ממתין"||selected.status==="מאושר"||selected.status==="נדחה"||selected.status==="באיחור")&&<button className="btn btn-secondary" onClick={()=>{setEditing(selected);setSelected(null);setOverdueEmailText("");}}>✏️ עריכת בקשה</button>}
             {selected.status==="ממתין"&&(() => {
               const certBlocked = getProductionCertBlockers(selected, equipment, certifications).length > 0;
@@ -1094,7 +1096,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
             <button className="btn btn-secondary" onClick={()=>exportPDF(selected)}>📄 ייצא PDF</button>
             <button className="btn btn-danger" onClick={()=>deleteReservation(selected.id)}>🗑️ מחק</button>
             <button className="btn btn-secondary" onClick={()=>{setSelected(null);setOverdueEmailText("");}}>סגור</button>
-          </>}>
+          </div>
           {/* Lecturer note (lesson loans only — set by the lecturer in the portal).
               Hoisted to the top of the modal so warehouse staff see it before
               even scanning the equipment list — it's the highest-signal piece
