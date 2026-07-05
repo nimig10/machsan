@@ -1,8 +1,8 @@
 // ProductionsPage — לוח הפקות. Three tabs: public board, my productions, new.
 // Visible to all roles; behaviour differs for the logged-in director.
 
-import { useMemo, useState } from "react";
-import { Plus, Film, Users, Calendar as CalendarIcon, Inbox, Check, X as XIcon, ExternalLink, ChevronRight, ChevronLeft } from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
+import { Plus, Film, Users, Calendar as CalendarIcon, Inbox, Check, X as XIcon, ExternalLink, ChevronRight, ChevronLeft, Archive } from "lucide-react";
 import { Modal } from "./ui.jsx";
 import { ProductionEditor } from "./ProductionEditor.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
@@ -20,6 +20,9 @@ const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","�
 const HE_WEEKDAYS = ["א'","ב'","ג'","ד'","ה'","ו'","ש'"];
 
 const DEFAULT_PRODUCTION_COLOR = "#e67e22";
+// Ended/archived productions render in a clear neutral gray (card accent + calendar
+// bar) so users instantly tell them apart from active productions.
+const ARCHIVED_COLOR = "#9ca3af";
 
 // Helpers to derive calendar bar colors from a hex picked by the director.
 function hexToRgba(hex, alpha) {
@@ -40,7 +43,17 @@ function pickTextColor(hex) {
 // Production status label — intentionally NOT "מאושר" since production publish ≠ loan approval.
 // A production is just publicly visible after publish; equipment loan still goes through
 // dept-head + warehouse approval with the regular 8-day-ahead rule.
-function ProductionStatusBadge({ status }) {
+function ProductionStatusBadge({ status, archivedAt }) {
+  // An ended production overrides the publish status with a clear gray "ended" badge.
+  if (archivedAt) {
+    return (
+      <span style={{
+        fontSize:11, padding:"2px 8px", borderRadius:10, fontWeight:800,
+        border:`1px solid ${ARCHIVED_COLOR}`, color:ARCHIVED_COLOR,
+        background:"rgba(156,163,175,0.18)", whiteSpace:"nowrap", flexShrink:0,
+      }}>ההפקה הסתיימה</span>
+    );
+  }
   const label = status === "published" ? "מפורסם" : status === "cancelled" ? "מבוטל" : "טיוטה";
   const colorVar = status === "published"
     ? "var(--accent)"
@@ -77,6 +90,30 @@ function nextDateOf(p) {
   if (dates.length === 0) return null;
   dates.sort();
   return dates[0];
+}
+
+// Archive state is DB-backed: a production is archived iff archivedAt is set (the
+// migration's RPC/cron owns that; the client never recomputes "ended" itself).
+// Students see archived productions only for one month; staff/dept-head (isStudent
+// false) keep them forever. The record is never deleted — staff documentation.
+const ARCHIVE_STUDENT_WINDOW_MS = 30 * 24 * 3600 * 1000;
+function archiveVisibleTo(p, isStudent) {
+  if (!p?.archivedAt) return false;
+  if (!isStudent) return true;
+  const t = new Date(p.archivedAt).getTime();
+  if (!Number.isFinite(t)) return true;
+  return (Date.now() - t) <= ARCHIVE_STUDENT_WINDOW_MS;
+}
+
+// A production is "relevant to month (yr, mo)" if any of its shoot ranges overlaps
+// that calendar month. Drives the board's monthly filter (cards match the calendar).
+function productionInMonth(p, yr, mo) {
+  const mm = String(mo + 1).padStart(2, "0");
+  const monthStart = `${yr}-${mm}-01`;
+  const monthEnd = `${yr}-${mm}-${String(new Date(yr, mo + 1, 0).getDate()).padStart(2, "0")}`;
+  return (p?.dates || []).some(d =>
+    d.startDate && d.endDate && d.startDate <= monthEnd && d.endDate >= monthStart
+  );
 }
 
 // Set of date IDs that already have an active equipment-list reservation.
@@ -173,7 +210,8 @@ function ProductionCard({ p, reservations, onClick }) {
   );
   const crewByRole = approved.reduce((acc, c) => { acc[c.role] = (acc[c.role] || 0) + 1; return acc; }, {});
   const customApproved = approved.filter(c => c.role === "custom");
-  const accentColor = p.color || DEFAULT_PRODUCTION_COLOR;
+  const isArchived = !!p.archivedAt;
+  const accentColor = isArchived ? ARCHIVED_COLOR : (p.color || DEFAULT_PRODUCTION_COLOR);
   return (
     <div onClick={onClick} style={{
       border:"1px solid var(--border)",
@@ -188,11 +226,11 @@ function ProductionCard({ p, reservations, onClick }) {
     >
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"start",marginBottom:8,gap:8}}>
         <h4 style={{margin:0,fontSize:16,color:accentColor}}>{p.title}</h4>
-        <ProductionStatusBadge status={p.status}/>
+        <ProductionStatusBadge status={p.status} archivedAt={p.archivedAt}/>
       </div>
       <div style={{fontSize:13,color:"var(--text2)",marginBottom:4}}>במאי: {p.directorName}</div>
       {next && <div style={{fontSize:13,color:"var(--text2)",marginBottom:8}}>תאריך קרוב: {fmtDate(next.slice(0,10))}</div>}
-      <div style={{marginBottom:6}}><DeadlineChip p={p} reservations={reservations}/></div>
+      {!isArchived && <div style={{marginBottom:6}}><DeadlineChip p={p} reservations={reservations}/></div>}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8,fontSize:11}}>
         {ROLE_ORDER.map(role => crewByRole[role] ? (
           <span key={role} style={{background:"var(--accent-glow)",color:"var(--accent)",padding:"2px 8px",borderRadius:10,border:"1px solid var(--border)"}}>{ROLE_LABELS[role]}</span>
@@ -534,12 +572,13 @@ function JoinRequestDialog({ p, currentStudent, existingRequest, onClose, onConf
 }
 
 export function ProductionsPage({ productions = [], currentStudent, students = [], kits = [], reservations = [], showToast, onOpenLoanForm, onOpenMyReservations, refresh }) {
-  const [tab, setTab]                     = useState("board"); // board | inbox
+  const [tab, setTab]                     = useState("board"); // board | inbox | archive
   const [calDate, setCalDate]             = useState(() => new Date());
   const [editorOpen, setEditorOpen]       = useState(null);    // { initial: ... } | null
   const [detail, setDetail]               = useState(null);
   const [joinTarget, setJoinTarget]       = useState(null);
   const [studentFilter, setStudentFilter] = useState("");      // student.id to filter board by
+  const [scopeAll, setScopeAll]           = useState(false);   // board cards: false = current month only, true = all active
 
   const myEmail = String(currentStudent?.email || "").toLowerCase();
   // Only cinema-track students can create productions. Sound students (and any
@@ -628,6 +667,39 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
   }
   const published = useMemo(() => allPublished.filter(matchesStudentFilter), [allPublished, filteredStudent]);
 
+  const isStudent = !!currentStudent?.id;
+  // Single predicate for the board/archive split — applied to BOTH the cards and
+  // the calendar so the two never diverge. Board = not archived; archive = archived
+  // (student: last month only; staff/dept-head: all).
+  function belongsToTab(p) {
+    return tab === "archive" ? archiveVisibleTo(p, isStudent) : !p.archivedAt;
+  }
+  const calYr = calDate.getFullYear();
+  const calMo = calDate.getMonth();
+  // Board "הפקות אחרות" cards are scoped to the calendar month by default; the
+  // toggle shows all active productions. Never applies to the archive tab, and
+  // never to "ההפקות שלי" (a director always sees their own productions).
+  const monthActive = tab === "board" && !scopeAll;
+  const activeBoardCount = useMemo(() => published.filter(p => !p.archivedAt).length, [published]);
+  const archiveCount     = useMemo(() => published.filter(p => archiveVisibleTo(p, isStudent)).length, [published, isStudent]);
+
+  // On entering the archive tab, jump the calendar to the most recent archived
+  // shoot month (archived shoots are in the past → the current month is empty).
+  // The "היום" button still returns to the current month.
+  useEffect(() => {
+    if (tab !== "archive") return;
+    const ends = published
+      .filter(p => archiveVisibleTo(p, isStudent))
+      .flatMap(p => (p.dates || []).map(d => d.endDate))
+      .filter(Boolean)
+      .sort();
+    if (ends.length) {
+      const [y, m] = ends[ends.length - 1].split("-").map(Number);
+      setCalDate(new Date(y, (m || 1) - 1, 1));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
   function openEditor(initial) {
     setEditorOpen({ initial: initial || null });
   }
@@ -637,15 +709,18 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
     <div style={{padding:"0 20px"}}>
       <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center",justifyContent:"space-between"}}>
         <div style={{display:"flex",gap:6}}>
+          {/* לוח / ארכיון — visible in all mounts (student / staff / dept-head). */}
+          <button onClick={() => setTab("board")} className={tab === "board" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}>
+            <Film size={14}/> לוח {activeBoardCount ? `(${activeBoardCount})` : ""}
+          </button>
+          <button onClick={() => setTab("archive")} className={tab === "archive" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}>
+            <Archive size={14}/> ארכיון {archiveCount ? `(${archiveCount})` : ""}
+          </button>
+          {/* בקשות הפקה — logged-in students only. */}
           {currentStudent?.id && (
-            <>
-              <button onClick={() => setTab("board")} className={tab === "board" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}>
-                <Film size={14}/> לוח הפקות {published.length ? `(${published.length})` : ""}
-              </button>
-              <button onClick={() => setTab("inbox")} className={tab === "inbox" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}>
-                <Inbox size={14}/> בקשות הפקה {totalRequestsCount ? `(${totalRequestsCount})` : ""}
-              </button>
-            </>
+            <button onClick={() => setTab("inbox")} className={tab === "inbox" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}>
+              <Inbox size={14}/> בקשות הפקה {totalRequestsCount ? `(${totalRequestsCount})` : ""}
+            </button>
           )}
         </div>
         {currentStudent?.id && canCreateProductions && (
@@ -655,7 +730,7 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
         )}
       </div>
 
-      {tab === "board" && (
+      {(tab === "board" || tab === "archive") && (
         <div>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
             <label style={{fontSize:13,color:"var(--text2)",fontWeight:700}}>סינון לפי סטודנט:</label>
@@ -683,13 +758,30 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
               )
             )}
           </div>
+          {/* Monthly-scope toggle — board only. Default shows productions relevant to
+              the calendar month; "כל ההפקות" removes the monthly filter. A director's
+              own productions ("ההפקות שלי") are never affected. */}
+          {tab === "board" && (
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+              <label style={{fontSize:13,color:"var(--text2)",fontWeight:700}}>תצוגה:</label>
+              <button onClick={() => setScopeAll(false)} className={!scopeAll ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}>
+                <CalendarIcon size={14}/> {HE_MONTHS[calMo]} {calYr}
+              </button>
+              <button onClick={() => setScopeAll(true)} className={scopeAll ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}>
+                <Film size={14}/> כל ההפקות
+              </button>
+              <span style={{fontSize:12,color:"var(--text3)"}}>
+                {scopeAll ? "מוצגות כל ההפקות הפעילות" : "מוצגות הפקות החודש הנבחר · ההפקות שלך תמיד גלויות"}
+              </span>
+            </div>
+          )}
           {/* "My productions" section — director + crew memberships (deduped). */}
           {currentStudent?.id && (myDirectorProds.length > 0 || myCrewProds.length > 0) && (() => {
             const mineIds = new Set();
             const mineList = [];
             for (const p of myDirectorProds) { mineIds.add(p.id); mineList.push(p); }
             for (const p of myCrewProds) if (!mineIds.has(p.id)) { mineIds.add(p.id); mineList.push(p); }
-            const visibleMine = mineList.filter(matchesStudentFilter);
+            const visibleMine = mineList.filter(p => matchesStudentFilter(p) && belongsToTab(p));
             if (visibleMine.length === 0) return null;
             return (
               <div style={{marginBottom:24}}>
@@ -710,16 +802,19 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
               ...myDirectorProds.map(p => p.id),
               ...myCrewProds.map(p => p.id),
             ]);
-            const others = published.filter(p => !mineIds.has(p.id));
+            const others = published.filter(p =>
+              !mineIds.has(p.id) && belongsToTab(p) &&
+              (!monthActive || productionInMonth(p, calYr, calMo))
+            );
             return (
               <div style={{marginBottom:24}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                   <Film size={16} color="var(--accent)"/>
-                  <h3 style={{margin:0,fontSize:15,color:"var(--accent)"}}>הפקות אחרות {others.length ? `(${others.length})` : ""}</h3>
+                  <h3 style={{margin:0,fontSize:15,color:"var(--accent)"}}>{tab === "archive" ? "ארכיון" : "הפקות אחרות"} {others.length ? `(${others.length})` : ""}</h3>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
                   {others.length === 0
-                    ? <p style={{color:"var(--text3)",gridColumn:"1/-1"}}>אין כרגע הפקות מפורסמות של סטודנטים אחרים</p>
+                    ? <p style={{color:"var(--text3)",gridColumn:"1/-1"}}>{tab === "archive" ? "אין הפקות בארכיון" : monthActive ? "אין הפקות מפורסמות בחודש זה — לחצו „כל ההפקות” לתצוגה מלאה" : "אין כרגע הפקות מפורסמות של סטודנטים אחרים"}</p>
                     : others.map(p => <ProductionCard key={p.id} p={p} reservations={reservations} onClick={() => setDetail(p)}/>)}
                 </div>
               </div>
@@ -753,7 +848,7 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
               days.push(null);
               outOfMonthDays.push(new Date(yr, mo+1, nextDay++));
             }
-            const productionBlocks = published.flatMap(prod =>
+            const productionBlocks = published.filter(belongsToTab).flatMap(prod =>
               (prod.dates || []).map(d => ({
                 id: `${prod.id}__${d.id}`,
                 student_name: prod.title,
@@ -763,7 +858,7 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
                 return_time: d.endTime,
                 loan_type: "הפקה",
                 _productionId: prod.id,
-                _color: prod.color || DEFAULT_PRODUCTION_COLOR,
+                _color: prod.archivedAt ? ARCHIVED_COLOR : (prod.color || DEFAULT_PRODUCTION_COLOR),
               }))
             );
             const colorMap = {};
@@ -797,7 +892,7 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
                   }}
                 />
                 {productionBlocks.length === 0 && (
-                  <p style={{color:"var(--text3)",textAlign:"center",marginTop:14}}>אין הפקות מפורסמות בחודש זה</p>
+                  <p style={{color:"var(--text3)",textAlign:"center",marginTop:14}}>{tab === "archive" ? "אין הפקות בארכיון בחודש זה" : "אין הפקות מפורסמות בחודש זה"}</p>
                 )}
               </div>
             );

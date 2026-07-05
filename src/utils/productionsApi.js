@@ -75,6 +75,7 @@ function productionRowToBlob(r) {
     kitId:              r.kit_id ?? null,
     status:             r.status,
     publishedAt:        r.published_at,
+    archivedAt:         r.archived_at ?? null,
     createdAt:          r.created_at,
     updatedAt:          r.updated_at,
     dates: Array.isArray(r.production_dates)
@@ -295,6 +296,18 @@ export async function upsertProduction(blob) {
         .delete()
         .eq("id", id);
       if (cDelErr) throw cDelErr;
+    }
+
+    // Recompute archive state now that dates are written — instant archive/restore
+    // (no wait for the daily cron). Best-effort: never fail the save if this errors.
+    step = "productions_refresh_archive";
+    try {
+      const { error: aErr } = await supabase.rpc("productions_refresh_archive_v1", {
+        p_production_id: String(blob.id),
+      });
+      if (aErr) console.warn("[productionsApi.upsertProduction] archive refresh", aErr);
+    } catch (aErr) {
+      console.warn("[productionsApi.upsertProduction] archive refresh", aErr);
     }
 
     return { ok: true };
