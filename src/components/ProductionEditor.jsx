@@ -267,20 +267,39 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
       return { field: "drive_url", message: "קישור חייב להתחיל ב-http:// או https://" };
     }
     if (dates.length === 0) return { field: "dates", message: "הוסיפו לפחות תאריך צילום אחד" };
+    // Grandfather pre-existing, UNCHANGED past dates so a director can add a NEW
+    // future range to an ended production and save it (restore-from-archive flow).
+    // New/edited dates still obey the 8-day / weekend / 7-day rules. Overlap and
+    // end>start below apply to ALL dates (incl. grandfathered).
+    const initialById = new Map(
+      (Array.isArray(initial?.dates) ? initial.dates : []).map(d => [String(d.id), d])
+    );
+    function isGrandfathered(d) {
+      const prev = initialById.get(String(d.id));
+      if (!prev) return false;
+      const unchanged =
+        String(prev.startDate) === String(d.startDate) &&
+        String(prev.endDate)   === String(d.endDate) &&
+        String(prev.startTime) === String(d.startTime) &&
+        String(prev.endTime)   === String(d.endTime);
+      return unchanged && String(d.startDate) < minShoot;
+    }
     for (const d of dates) {
       if (!d.startDate || !d.endDate || !d.startTime || !d.endTime) {
         return { field: "dates", message: "תאריך/שעה חסרים בלוח הצילום" };
       }
-      if (d.startDate < minShoot) {
-        return { field: "dates", message: `תאריך צילום חייב להיות לפחות 9 ימי עבודה מהיום (החל מ-${minShoot})` };
-      }
-      if (isWeekendISO(d.startDate) || isWeekendISO(d.endDate)) {
-        return { field: "dates", message: "שישי/שבת אינם זמינים — המחסן סגור בסופי שבוע" };
-      }
-      // 7-day max per shoot range — same rule as the equipment loan form for "הפקה".
-      const daysDiff = Math.floor((new Date(`${d.endDate}T00:00:00`) - new Date(`${d.startDate}T00:00:00`)) / 86400000);
-      if (daysDiff > 6) {
-        return { field: "dates", message: "טווח צילום מקסימלי 7 ימים (כללי השאלת ציוד להפקה)" };
+      if (!isGrandfathered(d)) {
+        if (d.startDate < minShoot) {
+          return { field: "dates", message: `תאריך צילום חייב להיות לפחות 9 ימי עבודה מהיום (החל מ-${minShoot})` };
+        }
+        if (isWeekendISO(d.startDate) || isWeekendISO(d.endDate)) {
+          return { field: "dates", message: "שישי/שבת אינם זמינים — המחסן סגור בסופי שבוע" };
+        }
+        // 7-day max per shoot range — same rule as the equipment loan form for "הפקה".
+        const daysDiff = Math.floor((new Date(`${d.endDate}T00:00:00`) - new Date(`${d.startDate}T00:00:00`)) / 86400000);
+        if (daysDiff > 6) {
+          return { field: "dates", message: "טווח צילום מקסימלי 7 ימים (כללי השאלת ציוד להפקה)" };
+        }
       }
       const s = new Date(`${d.startDate}T${d.startTime}`);
       const e = new Date(`${d.endDate}T${d.endTime}`);
