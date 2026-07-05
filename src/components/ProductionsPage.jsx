@@ -105,6 +105,17 @@ function archiveVisibleTo(p, isStudent) {
   return (Date.now() - t) <= ARCHIVE_STUDENT_WINDOW_MS;
 }
 
+// A production is "relevant to month (yr, mo)" if any of its shoot ranges overlaps
+// that calendar month. Drives the board's monthly filter (cards match the calendar).
+function productionInMonth(p, yr, mo) {
+  const mm = String(mo + 1).padStart(2, "0");
+  const monthStart = `${yr}-${mm}-01`;
+  const monthEnd = `${yr}-${mm}-${String(new Date(yr, mo + 1, 0).getDate()).padStart(2, "0")}`;
+  return (p?.dates || []).some(d =>
+    d.startDate && d.endDate && d.startDate <= monthEnd && d.endDate >= monthStart
+  );
+}
+
 // Set of date IDs that already have an active equipment-list reservation.
 function submittedDateIds(p, reservations) {
   const ids = new Set();
@@ -567,6 +578,7 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
   const [detail, setDetail]               = useState(null);
   const [joinTarget, setJoinTarget]       = useState(null);
   const [studentFilter, setStudentFilter] = useState("");      // student.id to filter board by
+  const [scopeAll, setScopeAll]           = useState(false);   // board cards: false = current month only, true = all active
 
   const myEmail = String(currentStudent?.email || "").toLowerCase();
   // Only cinema-track students can create productions. Sound students (and any
@@ -662,6 +674,12 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
   function belongsToTab(p) {
     return tab === "archive" ? archiveVisibleTo(p, isStudent) : !p.archivedAt;
   }
+  const calYr = calDate.getFullYear();
+  const calMo = calDate.getMonth();
+  // Board "הפקות אחרות" cards are scoped to the calendar month by default; the
+  // toggle shows all active productions. Never applies to the archive tab, and
+  // never to "ההפקות שלי" (a director always sees their own productions).
+  const monthActive = tab === "board" && !scopeAll;
   const activeBoardCount = useMemo(() => published.filter(p => !p.archivedAt).length, [published]);
   const archiveCount     = useMemo(() => published.filter(p => archiveVisibleTo(p, isStudent)).length, [published, isStudent]);
 
@@ -740,6 +758,23 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
               )
             )}
           </div>
+          {/* Monthly-scope toggle — board only. Default shows productions relevant to
+              the calendar month; "כל ההפקות" removes the monthly filter. A director's
+              own productions ("ההפקות שלי") are never affected. */}
+          {tab === "board" && (
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+              <label style={{fontSize:13,color:"var(--text2)",fontWeight:700}}>תצוגה:</label>
+              <button onClick={() => setScopeAll(false)} className={!scopeAll ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}>
+                <CalendarIcon size={14}/> {HE_MONTHS[calMo]} {calYr}
+              </button>
+              <button onClick={() => setScopeAll(true)} className={scopeAll ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}>
+                <Film size={14}/> כל ההפקות
+              </button>
+              <span style={{fontSize:12,color:"var(--text3)"}}>
+                {scopeAll ? "מוצגות כל ההפקות הפעילות" : "מוצגות הפקות החודש הנבחר · ההפקות שלך תמיד גלויות"}
+              </span>
+            </div>
+          )}
           {/* "My productions" section — director + crew memberships (deduped). */}
           {currentStudent?.id && (myDirectorProds.length > 0 || myCrewProds.length > 0) && (() => {
             const mineIds = new Set();
@@ -767,7 +802,10 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
               ...myDirectorProds.map(p => p.id),
               ...myCrewProds.map(p => p.id),
             ]);
-            const others = published.filter(p => !mineIds.has(p.id) && belongsToTab(p));
+            const others = published.filter(p =>
+              !mineIds.has(p.id) && belongsToTab(p) &&
+              (!monthActive || productionInMonth(p, calYr, calMo))
+            );
             return (
               <div style={{marginBottom:24}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
@@ -776,7 +814,7 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
                   {others.length === 0
-                    ? <p style={{color:"var(--text3)",gridColumn:"1/-1"}}>{tab === "archive" ? "אין הפקות בארכיון" : "אין כרגע הפקות מפורסמות של סטודנטים אחרים"}</p>
+                    ? <p style={{color:"var(--text3)",gridColumn:"1/-1"}}>{tab === "archive" ? "אין הפקות בארכיון" : monthActive ? "אין הפקות מפורסמות בחודש זה — לחצו „כל ההפקות” לתצוגה מלאה" : "אין כרגע הפקות מפורסמות של סטודנטים אחרים"}</p>
                     : others.map(p => <ProductionCard key={p.id} p={p} reservations={reservations} onClick={() => setDetail(p)}/>)}
                 </div>
               </div>
