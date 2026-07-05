@@ -20,6 +20,9 @@ const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","�
 const HE_WEEKDAYS = ["א'","ב'","ג'","ד'","ה'","ו'","ש'"];
 
 const DEFAULT_PRODUCTION_COLOR = "#e67e22";
+// Ended/archived productions render in a clear neutral gray (card accent + calendar
+// bar) so users instantly tell them apart from active productions.
+const ARCHIVED_COLOR = "#9ca3af";
 
 // Helpers to derive calendar bar colors from a hex picked by the director.
 function hexToRgba(hex, alpha) {
@@ -40,7 +43,17 @@ function pickTextColor(hex) {
 // Production status label — intentionally NOT "מאושר" since production publish ≠ loan approval.
 // A production is just publicly visible after publish; equipment loan still goes through
 // dept-head + warehouse approval with the regular 8-day-ahead rule.
-function ProductionStatusBadge({ status }) {
+function ProductionStatusBadge({ status, archivedAt }) {
+  // An ended production overrides the publish status with a clear gray "ended" badge.
+  if (archivedAt) {
+    return (
+      <span style={{
+        fontSize:11, padding:"2px 8px", borderRadius:10, fontWeight:800,
+        border:`1px solid ${ARCHIVED_COLOR}`, color:ARCHIVED_COLOR,
+        background:"rgba(156,163,175,0.18)", whiteSpace:"nowrap", flexShrink:0,
+      }}>ההפקה הסתיימה</span>
+    );
+  }
   const label = status === "published" ? "מפורסם" : status === "cancelled" ? "מבוטל" : "טיוטה";
   const colorVar = status === "published"
     ? "var(--accent)"
@@ -186,7 +199,8 @@ function ProductionCard({ p, reservations, onClick }) {
   );
   const crewByRole = approved.reduce((acc, c) => { acc[c.role] = (acc[c.role] || 0) + 1; return acc; }, {});
   const customApproved = approved.filter(c => c.role === "custom");
-  const accentColor = p.color || DEFAULT_PRODUCTION_COLOR;
+  const isArchived = !!p.archivedAt;
+  const accentColor = isArchived ? ARCHIVED_COLOR : (p.color || DEFAULT_PRODUCTION_COLOR);
   return (
     <div onClick={onClick} style={{
       border:"1px solid var(--border)",
@@ -201,11 +215,11 @@ function ProductionCard({ p, reservations, onClick }) {
     >
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"start",marginBottom:8,gap:8}}>
         <h4 style={{margin:0,fontSize:16,color:accentColor}}>{p.title}</h4>
-        <ProductionStatusBadge status={p.status}/>
+        <ProductionStatusBadge status={p.status} archivedAt={p.archivedAt}/>
       </div>
       <div style={{fontSize:13,color:"var(--text2)",marginBottom:4}}>במאי: {p.directorName}</div>
       {next && <div style={{fontSize:13,color:"var(--text2)",marginBottom:8}}>תאריך קרוב: {fmtDate(next.slice(0,10))}</div>}
-      <div style={{marginBottom:6}}><DeadlineChip p={p} reservations={reservations}/></div>
+      {!isArchived && <div style={{marginBottom:6}}><DeadlineChip p={p} reservations={reservations}/></div>}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8,fontSize:11}}>
         {ROLE_ORDER.map(role => crewByRole[role] ? (
           <span key={role} style={{background:"var(--accent-glow)",color:"var(--accent)",padding:"2px 8px",borderRadius:10,border:"1px solid var(--border)"}}>{ROLE_LABELS[role]}</span>
@@ -806,7 +820,7 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
                 return_time: d.endTime,
                 loan_type: "הפקה",
                 _productionId: prod.id,
-                _color: prod.color || DEFAULT_PRODUCTION_COLOR,
+                _color: prod.archivedAt ? ARCHIVED_COLOR : (prod.color || DEFAULT_PRODUCTION_COLOR),
               }))
             );
             const colorMap = {};
