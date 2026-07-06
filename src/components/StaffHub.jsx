@@ -49,24 +49,31 @@ function TodayTasksPanel({ myToday, refreshMyToday }) {
     if (r?.ok && r.data) {
       setNewTask("");
       setToday(t => ({ ...t, personalTasks: [...(t?.personalTasks || []), { id: r.data.id, text: r.data.text, done: r.data.done }] }));
-      void refreshMyToday?.();
     }
   };
+  // Purely optimistic — no re-fetch on success (that was the checkbox lag). We only
+  // reconcile with the server on failure.
   const toggleTask = async (id, done) => {
     setToday(t => ({ ...t, personalTasks: (t?.personalTasks || []).map(p => p.id === id ? { ...p, done } : p) }));
-    await hubApi("toggle-personal-task", { id, done });
-    void refreshMyToday?.(); // reconcile with server truth (also reverts on failure)
+    const r = await hubApi("toggle-personal-task", { id, done });
+    if (!r?.ok) void refreshMyToday?.();
   };
   const deleteTask = async (id) => {
     setToday(t => ({ ...t, personalTasks: (t?.personalTasks || []).filter(p => p.id !== id) }));
-    await hubApi("delete-personal-task", { id });
-    void refreshMyToday?.();
+    const r = await hubApi("delete-personal-task", { id });
+    if (!r?.ok) void refreshMyToday?.();
+  };
+  // Personal tracking checkbox on each loan-handling request (persisted).
+  const toggleLoan = async (assignmentId, done) => {
+    setToday(t => ({ ...t, loanHandling: (t?.loanHandling || []).map(l => l.assignmentId === assignmentId ? { ...l, done } : l) }));
+    const r = await hubApi("toggle-loan-handled", { id: assignmentId, done });
+    if (!r?.ok) void refreshMyToday?.();
   };
 
   const isEmpty = today && !today.dailyTasks?.length && !today.managerNote && !today.myNote && !today.personalTasks?.length && !today.loanHandling?.length;
   // Count of open items (daily tasks + loan-handling + undone personal tasks) —
   // shown as a badge so a collapsed panel (the mobile default) still signals work.
-  const openCount = (today?.dailyTasks?.length || 0) + (today?.loanHandling?.length || 0) + (today?.personalTasks?.filter(p => !p.done).length || 0);
+  const openCount = (today?.dailyTasks?.length || 0) + (today?.loanHandling?.filter(l => !l.done).length || 0) + (today?.personalTasks?.filter(p => !p.done).length || 0);
 
   return (
     <div style={{
@@ -113,13 +120,14 @@ function TodayTasksPanel({ myToday, refreshMyToday }) {
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 6 }}>בקשות השאלה שלי</div>
               {today.loanHandling.map(l => (
-                <div key={l.reservationId + l.kind} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text)", marginBottom: 4 }}>
-                  <span style={{ fontSize: 11, fontWeight: 800, borderRadius: 6, padding: "1px 6px", flexShrink: 0, whiteSpace: "nowrap",
+                <div key={l.assignmentId || (l.reservationId + l.kind)} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 4 }}>
+                  <input type="checkbox" checked={!!l.done} onChange={e => toggleLoan(l.assignmentId, e.target.checked)} style={{ cursor: "pointer", flexShrink: 0, width: 18, height: 18 }} />
+                  <span style={{ fontSize: 11, fontWeight: 800, borderRadius: 6, padding: "1px 6px", flexShrink: 0, whiteSpace: "nowrap", opacity: l.done ? 0.5 : 1,
                     background: l.kind === "out" ? "rgba(46,204,113,0.15)" : "rgba(52,152,219,0.15)",
                     color: l.kind === "out" ? "#2ecc71" : "#3b98e0" }}>
                     {l.kind === "out" ? "הוצאה" : "החזרה"}{l.time ? ` ${l.time}` : ""}
                   </span>
-                  <span style={{ flex: 1, minWidth: 0, wordBreak: "break-word" }}>{l.studentName}{l.loanType ? ` · ${l.loanType}` : ""}</span>
+                  <span style={{ flex: 1, minWidth: 0, wordBreak: "break-word", color: l.done ? "var(--text3)" : "var(--text)", textDecoration: l.done ? "line-through" : "none" }}>{l.studentName}{l.loanType ? ` · ${l.loanType}` : ""}</span>
                 </div>
               ))}
             </div>

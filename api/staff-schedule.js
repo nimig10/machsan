@@ -90,7 +90,7 @@ export default async function handler(req, res) {
       sbFetch(`staff_personal_tasks?staff_id=eq.${sid}&date=eq.${d}&select=id,text,done&order=created_at.asc`),
       // Equipment-loan requests this staff member handles (out=pickup / return),
       // embedding the reservation. Filtered to today by kind below.
-      sbFetch(`reservation_staff_assignments?staff_id=eq.${sid}&select=kind,reservation_id,reservations_new(student_name,borrow_date,borrow_time,return_date,return_time,loan_type)`),
+      sbFetch(`reservation_staff_assignments?staff_id=eq.${sid}&select=id,kind,reservation_id,done,reservations_new(student_name,borrow_date,borrow_time,return_date,return_time,loan_type)`),
     ]);
     const pref = prefR.ok && Array.isArray(prefR.data) ? prefR.data[0] : null;
     const assign = assignR.ok && Array.isArray(assignR.data) ? assignR.data[0] : null;
@@ -103,8 +103,10 @@ export default async function handler(req, res) {
         const date = isOut ? r.borrow_date : r.return_date;
         if (date !== today) return null;
         return {
+          assignmentId: a.id,
           reservationId: a.reservation_id,
           kind: a.kind, // "out" | "return"
+          done: !!a.done,
           studentName: r.student_name || "",
           loanType: r.loan_type || "",
           time: isOut ? (r.borrow_time || "") : (r.return_time || ""),
@@ -418,6 +420,28 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: "Not authorized to delete this task" });
     }
     const result = await sbFetch(`staff_personal_tasks?id=eq.${encodeURIComponent(id)}`, { method: "DELETE" });
+    return res.status(result.ok ? 200 : 500).json({ ok: result.ok });
+  }
+
+  // TOGGLE-LOAN-HANDLED — personal tracking checkbox on a loan-handling assignment
+  // (owner = the assigned handler, or admin). Display-only: the `done` flag never
+  // participates in any loan/reservation logic.
+  if (action === "toggle-loan-handled") {
+    const { id, done } = req.body;
+    if (!id || typeof done !== "boolean") {
+      return res.status(400).json({ error: "Missing id or done" });
+    }
+    const existing = await sbFetch(`reservation_staff_assignments?id=eq.${encodeURIComponent(id)}&select=id,staff_id`);
+    if (!existing.ok || !Array.isArray(existing.data) || existing.data.length === 0) {
+      return res.status(404).json({ error: "Assignment not found" });
+    }
+    if (callerRole !== "admin" && existing.data[0].staff_id !== callerStaffId) {
+      return res.status(403).json({ error: "Not authorized to edit this assignment" });
+    }
+    const result = await sbFetch(`reservation_staff_assignments?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ done }),
+    });
     return res.status(result.ok ? 200 : 500).json({ ok: result.ok });
   }
 
