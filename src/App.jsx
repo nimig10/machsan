@@ -1124,8 +1124,11 @@ const css = `
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 // Ensure each equipment item has a units array
 function ensureUnits(eq) {
-  if (Array.isArray(eq.units) && eq.units.length === eq.total_quantity) return eq;
-  const existing = Array.isArray(eq.units) ? eq.units : [];
+  // Units come back from the equipment_units join in PK/text order (…_1, _10, _2);
+  // sort by the numeric suffix so unit #N always displays in order.
+  const byNum = (a, b) => (parseInt(String(a?.id).split("_")[1] || "0", 10) - parseInt(String(b?.id).split("_")[1] || "0", 10));
+  if (Array.isArray(eq.units) && eq.units.length === eq.total_quantity) return { ...eq, units: [...eq.units].sort(byNum) };
+  const existing = (Array.isArray(eq.units) ? [...eq.units] : []).sort(byNum);
   const units = [];
   for (let i = 0; i < (eq.total_quantity || 0); i++) {
     units.push(existing[i] || { id: `${eq.id}_${i+1}`, status: "תקין", fault: "", repair: "" });
@@ -5706,7 +5709,7 @@ export default function App() {
       // _getAccessToken() calls skip the lock entirely.
       try { await supabase.auth.getSession(); } catch { /* anonymous session — fine */ }
       const [eqR, resR, catsAndTypesR, catLoanTypesR] = await Promise.all([
-        (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
+        (supabase.from("equipment").select("*, units:equipment_units(*)").then(res => ({ value: res.data || [], source: "supabase" }))),
         (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
         loadCategoriesWrapped(), // Stage 12 Session B
         loadLoanTypeFiltersWrapped(), // Stage 12 Session B
@@ -5837,7 +5840,7 @@ export default function App() {
   const refreshLecturerData = async () => {
     try {
       const [eqR, resR, lessonsR, lecturersR, kitsR, studiosR] = await Promise.all([
-        (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
+        (supabase.from("equipment").select("*, units:equipment_units(*)").then(res => ({ value: res.data || [], source: "supabase" }))),
         (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
         loadLessonsWrapped(), // Stage 8 Session B step 5: read from public.lessons
         loadLecturersWrapped(),
@@ -6222,7 +6225,7 @@ export default function App() {
         try {
           historySuspendedRef.current = true;
           const [eqR, resR, catsAndTypesR, catLoanTypesR, tmR, ktsR, polR, dhsR, mgrR, siteSetR, studiosR, studioBkR, lessonsR, lecturersR, prodR] = await Promise.all([
-            (supabase.from("equipment").select("*").then(res => ({ value: res.data || [], source: "supabase" }))),
+            (supabase.from("equipment").select("*, units:equipment_units(*)").then(res => ({ value: res.data || [], source: "supabase" }))),
           (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => ({ value: (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] })), source: "supabase" }))),
           loadCategoriesWrapped(), // Stage 12 Session B: read from public.categories
           loadLoanTypeFiltersWrapped(), // Stage 12 Session B: read from public.loan_type_filters
@@ -6602,7 +6605,7 @@ export default function App() {
             debounceTimer = setTimeout(async () => {
               if (equipmentWriteInFlight()) return;
               try {
-                const { data: rows } = await supabase.from("equipment").select("*");
+                const { data: rows } = await supabase.from("equipment").select("*, units:equipment_units(*)");
                 if (!Array.isArray(rows)) return;
                 const normalized = normalizeEquipmentTagFlags(rows, categoryTypesRef.current || {}).map(ensureUnits);
                 if (!dataEquals(equipmentRef.current, normalized)) _setEquipment(normalized);
