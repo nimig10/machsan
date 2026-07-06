@@ -83,7 +83,7 @@ export default async function handler(req, res) {
     const today = todayInIsrael();
     const sid = encodeURIComponent(callerStaffId);
     const d = encodeURIComponent(today);
-    const [tasksR, prefR, assignR, personalR, loanR] = await Promise.all([
+    const [tasksR, prefR, assignR, personalR, loanR, checkR] = await Promise.all([
       sbFetch(`staff_daily_tasks?staff_id=eq.${sid}&date=eq.${d}&select=task_key`),
       sbFetch(`staff_schedule_preferences?staff_id=eq.${sid}&date=eq.${d}&select=note`),
       sbFetch(`staff_schedule_assignments?staff_id=eq.${sid}&date=eq.${d}&select=note`),
@@ -91,9 +91,12 @@ export default async function handler(req, res) {
       // Equipment-loan requests this staff member handles (out=pickup / return),
       // embedding the reservation. Filtered to today by kind below.
       sbFetch(`reservation_staff_assignments?staff_id=eq.${sid}&select=id,kind,reservation_id,done,reservations_new(student_name,borrow_date,borrow_time,return_date,return_time,loan_type)`),
+      // Check-off state for items on other tables (daily tasks + manager/own notes).
+      sbFetch(`staff_hub_checkoffs?staff_id=eq.${sid}&date=eq.${d}&select=item_type,item_ref`),
     ]);
     const pref = prefR.ok && Array.isArray(prefR.data) ? prefR.data[0] : null;
     const assign = assignR.ok && Array.isArray(assignR.data) ? assignR.data[0] : null;
+    const checkSet = new Set((checkR.ok ? (checkR.data || []) : []).map(c => `${c.item_type}:${c.item_ref}`));
     // out → the pickup happens today (borrow_date); return → today (return_date).
     const loanHandling = (loanR.ok ? (loanR.data || []) : [])
       .map(a => {
@@ -116,9 +119,9 @@ export default async function handler(req, res) {
       .sort((x, y) => String(x.time).localeCompare(String(y.time)));
     return res.status(200).json({
       date: today,
-      dailyTasks: tasksR.ok ? (tasksR.data || []).map(r => r.task_key) : [], // ["open","prep",...]
-      managerNote: assign?.note || null,   // manager -> this staff (scoped to caller)
-      myNote: pref?.note || null,          // caller's own note (shown regardless of note_public)
+      dailyTasks: tasksR.ok ? (tasksR.data || []).map(r => ({ key: r.task_key, done: checkSet.has(`daily:${r.task_key}`) })) : [], // [{key,done}]
+      managerNote: assign?.note ? { text: assign.note, done: checkSet.has("manager_note:note") } : null,   // manager -> this staff
+      myNote: pref?.note ? { text: pref.note, done: checkSet.has("my_note:note") } : null,   // caller's own note
       personalTasks: personalR.ok ? (personalR.data || []) : [], // [{id,text,done}]
       loanHandling,                        // [{reservationId,kind,studentName,loanType,time}]
     });
@@ -442,6 +445,29 @@ export default async function handler(req, res) {
       method: "PATCH",
       body: JSON.stringify({ done }),
     });
+    return res.status(result.ok ? 200 : 500).json({ ok: result.ok });
+  }
+
+  // SET-CHECKOFF — mark/unmark a daily task or a manager/own note as done for the
+  // caller today (presence-based). done=true → upsert a row; done=false → delete it.
+  if (action === "set-checkoff") {
+    const { itemType, itemRef, done } = req.body;
+    if (!["daily", "manager_note", "my_note"].includes(itemType) || !itemRef || typeof done !== "boolean") {
+      return res.status(400).json({ error: "Missing/invalid itemType, itemRef or done" });
+    }
+    const today = todayInIsrael();
+    if (done) {
+      const result = await sbFetch("staff_hub_checkoffs?on_conflict=staff_id,date,item_type,item_ref", {
+        method: "POST",
+        headers: { ...headers, Prefer: "return=representation,resolution=merge-duplicates" },
+        body: JSON.stringify({ staff_id: callerStaffId, date: today, item_type: itemType, item_ref: String(itemRef) }),
+      });
+      return res.status(result.ok ? 200 : 500).json({ ok: result.ok });
+    }
+    const result = await sbFetch(
+      `staff_hub_checkoffs?staff_id=eq.${encodeURIComponent(callerStaffId)}&date=eq.${encodeURIComponent(today)}&item_type=eq.${encodeURIComponent(itemType)}&item_ref=eq.${encodeURIComponent(String(itemRef))}`,
+      { method: "DELETE" }
+    );
     return res.status(result.ok ? 200 : 500).json({ ok: result.ok });
   }
 

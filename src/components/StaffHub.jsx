@@ -69,11 +69,28 @@ function TodayTasksPanel({ myToday, refreshMyToday }) {
     const r = await hubApi("toggle-loan-handled", { id: assignmentId, done });
     if (!r?.ok) void refreshMyToday?.();
   };
+  // Check-off for daily tasks + manager/own notes (persisted via staff_hub_checkoffs).
+  const toggleCheckoff = async (itemType, itemRef, done) => {
+    setToday(t => {
+      if (!t) return t;
+      if (itemType === "daily") return { ...t, dailyTasks: (t.dailyTasks || []).map(x => x.key === itemRef ? { ...x, done } : x) };
+      if (itemType === "manager_note") return { ...t, managerNote: t.managerNote ? { ...t.managerNote, done } : t.managerNote };
+      if (itemType === "my_note") return { ...t, myNote: t.myNote ? { ...t.myNote, done } : t.myNote };
+      return t;
+    });
+    const r = await hubApi("set-checkoff", { itemType, itemRef, done });
+    if (!r?.ok) void refreshMyToday?.();
+  };
 
   const isEmpty = today && !today.dailyTasks?.length && !today.managerNote && !today.myNote && !today.personalTasks?.length && !today.loanHandling?.length;
-  // Count of open items (daily tasks + loan-handling + undone personal tasks) —
-  // shown as a badge so a collapsed panel (the mobile default) still signals work.
-  const openCount = (today?.dailyTasks?.length || 0) + (today?.loanHandling?.filter(l => !l.done).length || 0) + (today?.personalTasks?.filter(p => !p.done).length || 0);
+  // Count of open (undone) items — shown as a badge so a collapsed panel (the
+  // mobile default) still signals there's work left.
+  const openCount =
+    (today?.dailyTasks?.filter(x => !x.done).length || 0) +
+    (today?.loanHandling?.filter(l => !l.done).length || 0) +
+    (today?.personalTasks?.filter(p => !p.done).length || 0) +
+    (today?.managerNote && !today.managerNote.done ? 1 : 0) +
+    (today?.myNote && !today.myNote.done ? 1 : 0);
 
   return (
     <div style={{
@@ -107,9 +124,10 @@ function TodayTasksPanel({ myToday, refreshMyToday }) {
           {today?.dailyTasks?.length > 0 && (
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 6 }}>משמרת היום</div>
-              {today.dailyTasks.map(k => (
-                <div key={k} style={{ fontSize: 14, color: "var(--text)", display: "flex", gap: 6, marginBottom: 2 }}>
-                  <span>{DAILY_TASK_LABELS[k]?.icon || "•"}</span><span>{DAILY_TASK_LABELS[k]?.label || k}</span>
+              {today.dailyTasks.map(d => (
+                <div key={d.key} style={{ fontSize: 14, display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                  <input type="checkbox" checked={!!d.done} onChange={e => toggleCheckoff("daily", d.key, e.target.checked)} style={{ cursor: "pointer", flexShrink: 0, width: 18, height: 18 }} />
+                  <span style={{ flex: 1, minWidth: 0, color: d.done ? "var(--text3)" : "var(--text)", textDecoration: d.done ? "line-through" : "none" }}>{DAILY_TASK_LABELS[d.key]?.icon || "•"} {DAILY_TASK_LABELS[d.key]?.label || d.key}</span>
                 </div>
               ))}
             </div>
@@ -135,15 +153,21 @@ function TodayTasksPanel({ myToday, refreshMyToday }) {
 
           {today?.managerNote && (
             <div style={{ background: "rgba(245,166,35,0.10)", borderRadius: 8, padding: "8px 10px" }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 2 }}>הערת מנהל</div>
-              <div style={{ fontSize: 13, color: "var(--text)", whiteSpace: "pre-wrap" }}>{today.managerNote}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                <input type="checkbox" checked={!!today.managerNote.done} onChange={e => toggleCheckoff("manager_note", "note", e.target.checked)} style={{ cursor: "pointer", flexShrink: 0, width: 16, height: 16 }} />
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)" }}>הערת מנהל</div>
+              </div>
+              <div style={{ fontSize: 13, whiteSpace: "pre-wrap", color: today.managerNote.done ? "var(--text3)" : "var(--text)", textDecoration: today.managerNote.done ? "line-through" : "none" }}>{today.managerNote.text}</div>
             </div>
           )}
 
           {today?.myNote && (
             <div style={{ background: "rgba(14,165,233,0.10)", borderRadius: 8, padding: "8px 10px" }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 2 }}>ההערה שלי</div>
-              <div style={{ fontSize: 13, color: "var(--text)", whiteSpace: "pre-wrap" }}>{today.myNote}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                <input type="checkbox" checked={!!today.myNote.done} onChange={e => toggleCheckoff("my_note", "note", e.target.checked)} style={{ cursor: "pointer", flexShrink: 0, width: 16, height: 16 }} />
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)" }}>ההערה שלי</div>
+              </div>
+              <div style={{ fontSize: 13, whiteSpace: "pre-wrap", color: today.myNote.done ? "var(--text3)" : "var(--text)", textDecoration: today.myNote.done ? "line-through" : "none" }}>{today.myNote.text}</div>
             </div>
           )}
 
