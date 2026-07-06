@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { BookOpen, Calendar, ChevronDown, ChevronUp, ClipboardList, Download, GraduationCap, Home, LayoutDashboard, ListTodo, LogOut, Package, Plus, Settings, Trash2, Users } from "lucide-react";
 import { getAuthToken } from "../utils.js";
 
@@ -23,8 +23,11 @@ async function hubApi(action, body = {}) {
 
 // "משימות להיום" — collapsible bottom-right panel showing the logged-in staff
 // member's daily tasks, manager/own notes, and free-text personal tasks for TODAY.
-function TodayTasksPanel() {
-  const [today, setToday] = useState(null); // { dailyTasks, managerNote, myNote, personalTasks }
+function TodayTasksPanel({ myToday, refreshMyToday }) {
+  // Data is loaded app-level (App.jsx) and passed in as `myToday` → instant on
+  // navigation, no per-mount client fetch. Local mirror allows optimistic edits.
+  const [today, setToday] = useState(myToday); // { dailyTasks, managerNote, myNote, personalTasks, loanHandling }
+  useEffect(() => { setToday(myToday); }, [myToday]);
   const [panelOpen, setPanelOpen] = useState(() => {
     try {
       const saved = sessionStorage.getItem("hub_today_open");
@@ -35,14 +38,6 @@ function TodayTasksPanel() {
   const [newTask, setNewTask] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const loadToday = useCallback(async () => {
-    try {
-      const d = await hubApi("my-today");
-      if (d && !d.error) setToday(d);
-    } catch { /* keep the panel silent on failure */ }
-  }, []);
-
-  useEffect(() => { void loadToday(); }, [loadToday]);
   useEffect(() => { try { sessionStorage.setItem("hub_today_open", panelOpen ? "1" : "0"); } catch { /* ignore */ } }, [panelOpen]);
 
   const addTask = async () => {
@@ -54,23 +49,24 @@ function TodayTasksPanel() {
     if (r?.ok && r.data) {
       setNewTask("");
       setToday(t => ({ ...t, personalTasks: [...(t?.personalTasks || []), { id: r.data.id, text: r.data.text, done: r.data.done }] }));
+      void refreshMyToday?.();
     }
   };
   const toggleTask = async (id, done) => {
-    setToday(t => ({ ...t, personalTasks: t.personalTasks.map(p => p.id === id ? { ...p, done } : p) }));
-    const r = await hubApi("toggle-personal-task", { id, done });
-    if (!r?.ok) void loadToday();
+    setToday(t => ({ ...t, personalTasks: (t?.personalTasks || []).map(p => p.id === id ? { ...p, done } : p) }));
+    await hubApi("toggle-personal-task", { id, done });
+    void refreshMyToday?.(); // reconcile with server truth (also reverts on failure)
   };
   const deleteTask = async (id) => {
     setToday(t => ({ ...t, personalTasks: (t?.personalTasks || []).filter(p => p.id !== id) }));
-    const r = await hubApi("delete-personal-task", { id });
-    if (!r?.ok) void loadToday();
+    await hubApi("delete-personal-task", { id });
+    void refreshMyToday?.();
   };
 
-  const isEmpty = today && !today.dailyTasks?.length && !today.managerNote && !today.myNote && !today.personalTasks?.length;
-  // Count of open items (daily tasks + undone personal tasks) — shown as a badge so
-  // a collapsed panel (the mobile default) still signals there's something to do.
-  const openCount = (today?.dailyTasks?.length || 0) + (today?.personalTasks?.filter(p => !p.done).length || 0);
+  const isEmpty = today && !today.dailyTasks?.length && !today.managerNote && !today.myNote && !today.personalTasks?.length && !today.loanHandling?.length;
+  // Count of open items (daily tasks + loan-handling + undone personal tasks) —
+  // shown as a badge so a collapsed panel (the mobile default) still signals work.
+  const openCount = (today?.dailyTasks?.length || 0) + (today?.loanHandling?.length || 0) + (today?.personalTasks?.filter(p => !p.done).length || 0);
 
   return (
     <div style={{
@@ -112,6 +108,23 @@ function TodayTasksPanel() {
             </div>
           )}
 
+          {/* Equipment-loan requests this staff member handles today (out/return + time) */}
+          {today?.loanHandling?.length > 0 && (
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 6 }}>בקשות השאלה שלי</div>
+              {today.loanHandling.map(l => (
+                <div key={l.reservationId + l.kind} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text)", marginBottom: 4 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, borderRadius: 6, padding: "1px 6px", flexShrink: 0, whiteSpace: "nowrap",
+                    background: l.kind === "out" ? "rgba(46,204,113,0.15)" : "rgba(52,152,219,0.15)",
+                    color: l.kind === "out" ? "#2ecc71" : "#3b98e0" }}>
+                    {l.kind === "out" ? "הוצאה" : "החזרה"}{l.time ? ` ${l.time}` : ""}
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0, wordBreak: "break-word" }}>{l.studentName}{l.loanType ? ` · ${l.loanType}` : ""}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           {today?.managerNote && (
             <div style={{ background: "rgba(245,166,35,0.10)", borderRadius: 8, padding: "8px 10px" }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 2 }}>הערת מנהל</div>
@@ -142,7 +155,7 @@ function TodayTasksPanel() {
 
           <div style={{ display: "flex", gap: 6 }}>
             <input value={newTask} onChange={e => setNewTask(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") addTask(); }} maxLength={200} placeholder="הוסף משימה…"
+              onKeyDown={e => { if (e.key === "Enter") addTask(); }} maxLength={150} placeholder="הוסף משימה…"
               style={{ flex: 1, minWidth: 0, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg)", color: "var(--text)", fontSize: 16 }} />
             <button type="button" onClick={addTask} disabled={busy || !newTask.trim()} title="הוסף"
               style={{ border: "none", borderRadius: 8, background: "var(--accent)", color: "#0a0c10", padding: "0 12px", cursor: busy || !newTask.trim() ? "default" : "pointer", opacity: busy || !newTask.trim() ? 0.5 : 1, display: "flex", alignItems: "center" }}>
@@ -155,7 +168,7 @@ function TodayTasksPanel() {
   );
 }
 
-export function StaffHub({ user, logo, onNavigate, onLogout, canInstall = false, onInstall = () => {} }) {
+export function StaffHub({ user, logo, myToday, refreshMyToday, onNavigate, onLogout, canInstall = false, onInstall = () => {} }) {
   const [hovered, setHovered] = useState(null);
 
   const allowedViews = user?.role === "admin" ? [] : (user?.permissions?.views || []);
@@ -381,7 +394,7 @@ export function StaffHub({ user, logo, onNavigate, onLogout, canInstall = false,
       </div>
 
       {/* ── משימות להיום — collapsible bottom-right panel ── */}
-      <TodayTasksPanel />
+      <TodayTasksPanel myToday={myToday} refreshMyToday={refreshMyToday} />
     </div>
   );
 }

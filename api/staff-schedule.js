@@ -44,7 +44,7 @@ function todayInIsrael() {
   return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Jerusalem" }).slice(0, 10);
 }
 
-const MAX_PERSONAL_TASK_LEN = 200;
+const MAX_PERSONAL_TASK_LEN = 150;
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -83,20 +83,42 @@ export default async function handler(req, res) {
     const today = todayInIsrael();
     const sid = encodeURIComponent(callerStaffId);
     const d = encodeURIComponent(today);
-    const [tasksR, prefR, assignR, personalR] = await Promise.all([
+    const [tasksR, prefR, assignR, personalR, loanR] = await Promise.all([
       sbFetch(`staff_daily_tasks?staff_id=eq.${sid}&date=eq.${d}&select=task_key`),
       sbFetch(`staff_schedule_preferences?staff_id=eq.${sid}&date=eq.${d}&select=note`),
       sbFetch(`staff_schedule_assignments?staff_id=eq.${sid}&date=eq.${d}&select=note`),
       sbFetch(`staff_personal_tasks?staff_id=eq.${sid}&date=eq.${d}&select=id,text,done&order=created_at.asc`),
+      // Equipment-loan requests this staff member handles (out=pickup / return),
+      // embedding the reservation. Filtered to today by kind below.
+      sbFetch(`reservation_staff_assignments?staff_id=eq.${sid}&select=kind,reservation_id,reservations_new(student_name,borrow_date,borrow_time,return_date,return_time,loan_type)`),
     ]);
     const pref = prefR.ok && Array.isArray(prefR.data) ? prefR.data[0] : null;
     const assign = assignR.ok && Array.isArray(assignR.data) ? assignR.data[0] : null;
+    // out → the pickup happens today (borrow_date); return → today (return_date).
+    const loanHandling = (loanR.ok ? (loanR.data || []) : [])
+      .map(a => {
+        const r = a.reservations_new;
+        if (!r) return null;
+        const isOut = a.kind === "out";
+        const date = isOut ? r.borrow_date : r.return_date;
+        if (date !== today) return null;
+        return {
+          reservationId: a.reservation_id,
+          kind: a.kind, // "out" | "return"
+          studentName: r.student_name || "",
+          loanType: r.loan_type || "",
+          time: isOut ? (r.borrow_time || "") : (r.return_time || ""),
+        };
+      })
+      .filter(Boolean)
+      .sort((x, y) => String(x.time).localeCompare(String(y.time)));
     return res.status(200).json({
       date: today,
       dailyTasks: tasksR.ok ? (tasksR.data || []).map(r => r.task_key) : [], // ["open","prep",...]
       managerNote: assign?.note || null,   // manager -> this staff (scoped to caller)
       myNote: pref?.note || null,          // caller's own note (shown regardless of note_public)
       personalTasks: personalR.ok ? (personalR.data || []) : [], // [{id,text,done}]
+      loanHandling,                        // [{reservationId,kind,studentName,loanType,time}]
     });
   }
 

@@ -5773,6 +5773,27 @@ export default function App() {
     };
   }, [loadLoanHandlers]);
 
+  // ── Staff Hub "משימות להיום" — loaded at the app level so the panel is instant
+  // when navigating to the hub (no per-mount client fetch/flash). The result
+  // persists in app state; each time the hub is shown we refresh it silently.
+  const [myToday, setMyToday] = useState(null);
+  const loadMyToday = useCallback(async () => {
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+      const r = await fetch("/api/staff-schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "my-today" }),
+      });
+      const d = await r.json();
+      if (d && !d.error) setMyToday(d);
+    } catch { /* ignore — panel keeps the last good data */ }
+  }, []);
+  useEffect(() => {
+    if (authed && staffView === "hub") void loadMyToday();
+  }, [authed, staffView, loadMyToday]);
+
   const applyLecturerLiveSync = (key, value) => {
     if (key === "equipment" && Array.isArray(value)) {
       const normalizedEquipment = normalizeEquipmentTagFlags(value, categoryTypesRef.current).map(ensureUnits);
@@ -7264,6 +7285,8 @@ export default function App() {
         <StaffHub
           user={staffUser}
           logo={siteSettings.logo}
+          myToday={myToday}
+          refreshMyToday={loadMyToday}
           canInstall={canInstallPwa}
           onInstall={() => { void installPwa(); }}
           onNavigate={(view) => setStaffView(view)}
