@@ -68,26 +68,36 @@ function TodayTasksPanel() {
   };
 
   const isEmpty = today && !today.dailyTasks?.length && !today.managerNote && !today.myNote && !today.personalTasks?.length;
+  // Count of open items (daily tasks + undone personal tasks) — shown as a badge so
+  // a collapsed panel (the mobile default) still signals there's something to do.
+  const openCount = (today?.dailyTasks?.length || 0) + (today?.personalTasks?.filter(p => !p.done).length || 0);
 
   return (
     <div style={{
-      position: "absolute", bottom: 24, right: 24,
-      width: "min(340px, calc(100vw - 48px))", maxHeight: "min(70dvh, 620px)",
+      // fixed → stays in the viewport corner while scrolling; safe-area insets keep
+      // it clear of the PWA home-indicator / notch in standalone mode.
+      position: "fixed",
+      bottom: "calc(16px + env(safe-area-inset-bottom))",
+      right: "calc(16px + env(safe-area-inset-right))",
+      width: "min(340px, calc(100vw - 32px))", maxHeight: "min(75dvh, 620px)",
       display: "flex", flexDirection: "column",
       border: "1px solid var(--border)", borderRadius: 14, background: "var(--surface)",
-      boxShadow: "0 12px 40px rgba(0,0,0,0.22)", overflow: "hidden", zIndex: 50,
+      boxShadow: "0 12px 40px rgba(0,0,0,0.28)", overflow: "hidden", zIndex: 60,
     }}>
       <button type="button" onClick={() => setPanelOpen(o => !o)}
         style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px", border: "none", background: "transparent", cursor: "pointer", width: "100%" }}>
         <ListTodo size={18} strokeWidth={1.75} color="var(--accent)" />
         <span style={{ fontWeight: 800, fontSize: 15, color: "var(--text)" }}>משימות להיום</span>
-        <span style={{ marginInlineStart: "auto", color: "var(--text3)" }}>
+        {openCount > 0 && (
+          <span style={{ background: "var(--accent)", color: "#0a0c10", fontSize: 11, fontWeight: 800, borderRadius: 10, padding: "1px 7px", minWidth: 18, textAlign: "center" }}>{openCount}</span>
+        )}
+        <span style={{ marginInlineStart: "auto", color: "var(--text3)", display: "flex" }}>
           {panelOpen ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
         </span>
       </button>
 
       {panelOpen && (
-        <div style={{ padding: "0 14px 14px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ padding: "0 14px 14px", overflowY: "auto", WebkitOverflowScrolling: "touch", display: "flex", flexDirection: "column", gap: 12 }}>
           {!today && <div style={{ fontSize: 13, color: "var(--text3)" }}>טוען…</div>}
           {isEmpty && <div style={{ fontSize: 14, color: "var(--text3)", padding: "8px 0" }}>אין משימות היום</div>}
 
@@ -120,9 +130,9 @@ function TodayTasksPanel() {
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {today.personalTasks.map(p => (
                 <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input type="checkbox" checked={p.done} onChange={e => toggleTask(p.id, e.target.checked)} style={{ cursor: "pointer", flexShrink: 0 }} />
-                  <span style={{ flex: 1, fontSize: 14, color: p.done ? "var(--text3)" : "var(--text)", textDecoration: p.done ? "line-through" : "none", wordBreak: "break-word" }}>{p.text}</span>
-                  <button type="button" onClick={() => deleteTask(p.id)} title="מחק" style={{ border: "none", background: "transparent", cursor: "pointer", color: "#ef4444", flexShrink: 0, display: "flex" }}>
+                  <input type="checkbox" checked={p.done} onChange={e => toggleTask(p.id, e.target.checked)} style={{ cursor: "pointer", flexShrink: 0, width: 18, height: 18 }} />
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 14, color: p.done ? "var(--text3)" : "var(--text)", textDecoration: p.done ? "line-through" : "none", wordBreak: "break-word" }}>{p.text}</span>
+                  <button type="button" onClick={() => deleteTask(p.id)} title="מחק" style={{ border: "none", background: "transparent", cursor: "pointer", color: "#ef4444", flexShrink: 0, display: "flex", padding: 6, borderRadius: 6 }}>
                     <Trash2 size={16} strokeWidth={1.75} />
                   </button>
                 </div>
@@ -133,7 +143,7 @@ function TodayTasksPanel() {
           <div style={{ display: "flex", gap: 6 }}>
             <input value={newTask} onChange={e => setNewTask(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") addTask(); }} maxLength={200} placeholder="הוסף משימה…"
-              style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg)", color: "var(--text)", fontSize: 13 }} />
+              style={{ flex: 1, minWidth: 0, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--bg)", color: "var(--text)", fontSize: 16 }} />
             <button type="button" onClick={addTask} disabled={busy || !newTask.trim()} title="הוסף"
               style={{ border: "none", borderRadius: 8, background: "var(--accent)", color: "#0a0c10", padding: "0 12px", cursor: busy || !newTask.trim() ? "default" : "pointer", opacity: busy || !newTask.trim() ? 0.5 : 1, display: "flex", alignItems: "center" }}>
               <Plus size={18} strokeWidth={2} />
