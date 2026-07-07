@@ -1798,6 +1798,59 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
   const groupedCategories = (selectedCats.length > 0 ? selectedCats : visibleCategories)
     .filter(c => filtered.some(e => e.category === c));
 
+  // Export the currently-filtered equipment list to PDF (browser-print pattern,
+  // Hebrew/RTL-safe — mirrors exportPDF in ReservationsPage.jsx). Reflects the
+  // active filters exactly: it renders `filtered` grouped by `groupedCategories`.
+  const exportEquipmentPdf = () => {
+    if (filtered.length === 0) {
+      showToast("info", "אין ציוד להצגה בסינון הנוכחי");
+      return;
+    }
+    const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+    const filterParts = [];
+    if (selectedCats.length > 0) filterParts.push(`קטגוריה: ${selectedCats.join(", ")}`);
+    if (search.trim()) filterParts.push(`חיפוש: "${search.trim()}"`);
+    if (typeFilter !== "הכל") filterParts.push(`סוג: ${typeFilter}`);
+    const filterDesc = filterParts.length ? filterParts.join(" · ") : "כל הציוד";
+    const sections = groupedCategories.map(c => {
+      const rows = filtered.filter(e => e.category === c).map(e => `
+        <tr>
+          <td style="padding:9px 14px;border-bottom:1px solid #eee;font-size:14px">${esc(e.name)}</td>
+          <td style="padding:9px 14px;border-bottom:1px solid #eee;font-size:14px;text-align:center">${Number(e.total_quantity) || 0}</td>
+        </tr>`).join("");
+      const count = filtered.filter(e => e.category === c).length;
+      return `
+      <div class="section">
+        <div class="section-title">${esc(c)} <span style="color:#999;font-weight:400">(${count})</span></div>
+        <table><thead><tr><th>שם הציוד</th><th style="text-align:center;width:80px">כמות</th></tr></thead>
+        <tbody>${rows}</tbody></table>
+      </div>`;
+    }).join("");
+    const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8">
+    <style>
+      body{font-family:Arial,sans-serif;padding:40px;color:#1a1a1a;direction:rtl}
+      h1{font-size:22px;margin-bottom:4px;color:#1a1a1a}
+      .sub{font-size:13px;color:#666;margin-bottom:32px}
+      .section{margin-bottom:24px}
+      .section-title{font-size:13px;font-weight:700;color:#f5a623;margin-bottom:10px;border-bottom:2px solid #f5a623;padding-bottom:6px}
+      table{width:100%;border-collapse:collapse;margin-top:4px}
+      th{background:#f5f5f5;padding:9px 14px;text-align:right;font-size:12px;font-weight:700;color:#666}
+      .footer{margin-top:40px;padding-top:16px;border-top:1px solid #eee;font-size:11px;color:#999;text-align:center}
+      @media print{body{padding:20px}}
+    </style></head><body>
+    <h1>רשימת ציוד — מחסן קמרה</h1>
+    <div class="sub">הופק ב-${new Date().toLocaleDateString("he-IL")} • ${esc(filterDesc)} • סה"כ פריטים: ${filtered.length}</div>
+    ${sections}
+    <div class="footer">מסמך זה הופק אוטומטית ממערכת ניהול המחסן • machsan.vercel.app</div>
+    </body></html>`;
+    const w = window.open("", "_blank", "width=800,height=900");
+    if (!w) { showToast("error", "החלון נחסם — אפשר חלונות קופצים ונסה שוב"); return; }
+    w.document.write(html);
+    w.document.close();
+    w.document.title = `רשימת ציוד - ${new Date().toLocaleDateString("he-IL")}`;
+    setTimeout(() => w.print(), 400);
+  };
+
   return (
     <div className="page">
       {/* Sub-view tabs */}
@@ -1871,6 +1924,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
             onImportSuccess={handleAiEquipmentImport}
           />
           <button className="btn btn-primary btn-full" onClick={()=>setModal({type:"loan-types"})}>🗂️ סיווג לסוגי ההשאלות</button>
+          <button className="btn btn-secondary" onClick={exportEquipmentPdf} title="ייצוא PDF של רשימת הציוד המסוננת">🖨️ ייצוא PDF</button>
           <button className="btn btn-primary btn-full" onClick={()=>setModal({type:"add"})}>➕ הוסף ציוד</button>
         </div>
       </div>
