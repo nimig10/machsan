@@ -3498,11 +3498,19 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
     setSaving(false);
   };
 
+  // Today (local YYYY-MM-DD) — used to visually distinguish past vs future
+  // sessions in the schedule table.
+  const todayStr = today();
   return (
     <div className="card" style={{marginBottom:20}}>
       <div className="card-header">
         <div className="card-title" style={{display:"flex",alignItems:"center",gap:6}}><Video size={15} strokeWidth={1.75}/> {initial ? (name.trim() ? `עריכת קורס · ${name.trim()}` : "עריכת קורס") : (name.trim() ? `קורס חדש · ${name.trim()}` : "קורס חדש")}</div>
-        <button className="btn btn-secondary btn-sm" onClick={onCancel}><X size={16} strokeWidth={1.75} color="var(--text3)" /> ביטול</button>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <button className="btn btn-primary btn-sm" style={{background:"#9b59b6",borderColor:"#9b59b6"}} onClick={handleSave} disabled={saving}>
+            {saving?<><Clock size={16} strokeWidth={1.75} /> שומר...</>:`💾 ${initial?"עדכן":"צור"} קורס`}
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={onCancel}><X size={16} strokeWidth={1.75} color="var(--text3)" /> ביטול</button>
+        </div>
       </div>
 
       {localMsg && (
@@ -3684,10 +3692,12 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
             <div style={{fontWeight:700,fontSize:12,color:"#9b59b6",marginBottom:4}}><Calendar size={16} strokeWidth={1.75} /> {schedule.length} שיעורים בלוח:</div>
 
             {isMobile ? (
-              /* ── מובייל: כרטיס לכל מפגש ── */
-              <div style={{display:"flex",flexDirection:"column",gap:8,maxHeight:420,overflowY:"auto"}}>
-                {schedule.map((s,i)=>(
-                  <div key={s._key || `${s.date}-${s.startTime}-${i}`} style={{background:"var(--surface2)",border:"1px solid rgba(155,89,182,0.2)",borderRadius:10,padding:"10px 12px"}}>
+              /* ── מובייל: כרטיס לכל מפגש (גובה אדפטיבי — ללא גלילה פנימית) ── */
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {schedule.map((s,i)=>{
+                  const isPast = !!(s.date && s.date < todayStr);
+                  return (
+                  <div key={s._key || `${s.date}-${s.startTime}-${i}`} style={{background:isPast?"rgba(128,128,128,0.10)":"var(--surface2)",border:"1px solid "+(isPast?"rgba(128,128,128,0.22)":"rgba(155,89,182,0.2)"),borderRadius:10,padding:"10px 12px",opacity:isPast?0.6:1}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                       <span style={{fontWeight:800,color:"#9b59b6",fontSize:12}}>#{i+1}</span>
                       <button onClick={()=>setSchedule(prev=>prev.filter((_,j)=>j!==i))}
@@ -3780,7 +3790,8 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               /* ── דסקטופ: grid עם עמודות גמישות ── */
@@ -3810,13 +3821,14 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                     </div>
                   ))}
                 </div>
-                <div style={{maxHeight:300,overflow:"auto",display:"flex",flexDirection:"column",gap:2}}>
+                <div style={{display:"flex",flexDirection:"column",gap:2}}>
                   {schedule.map((s,i)=>{
                     const sessionIds = Array.isArray(s.studioIds) ? s.studioIds.map(String) : [];
                     const sessionLecturerIds = Array.isArray(s.lecturerIds) ? s.lecturerIds.map(String) : [];
+                    const isPast = !!(s.date && s.date < todayStr);
                     return (
-                    <div key={s._key || `${s.date}-${s.startTime}-${i}`} style={{display:"grid",gridTemplateColumns:gridTemplate,alignItems:"center",gap:0,fontSize:12,background:"var(--surface2)",border:"1px solid rgba(155,89,182,0.12)",borderTop:"none"}}>
-                      <div style={{fontWeight:800,color:"#9b59b6",fontSize:11,textAlign:"center",padding:"4px 2px",borderRight:"1px solid rgba(155,89,182,0.15)"}}>#{i+1}</div>
+                    <div key={s._key || `${s.date}-${s.startTime}-${i}`} style={{display:"grid",gridTemplateColumns:gridTemplate,alignItems:"center",gap:0,fontSize:12,background:isPast?"rgba(128,128,128,0.10)":"var(--surface2)",border:"1px solid "+(isPast?"rgba(128,128,128,0.18)":"rgba(155,89,182,0.12)"),borderTop:"none",opacity:isPast?0.6:1}}>
+                      <div style={{fontWeight:800,color:isPast?"var(--text3)":"#9b59b6",fontSize:11,textAlign:"center",padding:"4px 2px",borderRight:"1px solid rgba(155,89,182,0.15)"}} title={isPast?"מפגש שחלף":"מפגש עתידי"}>#{i+1}</div>
                       <LessonDateInput value={s.date} style={{padding:"3px 6px",fontSize:12,height:28,width:"100%",boxSizing:"border-box"}} onChange={value=>updateSessionField(i,"date",value)}/>
                       <select className="form-select" value={s.startTime} style={{padding:"3px 4px",fontSize:12,height:28,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"startTime",e.target.value)}>
                         {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
