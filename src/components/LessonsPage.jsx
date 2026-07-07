@@ -747,7 +747,11 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const findBookingConflicts = (lesson) => {
     const found = [];
     const seenIds = new Set();
+    const todayStr = today();
     for (const session of (lesson.schedule || [])) {
+      // Only future sessions are actionable — a past session conflicting with a
+      // past booking is not something the admin can (or should) resolve.
+      if (session.date && session.date < todayStr) continue;
       for (const stId of getLessonSessionStudioIds(session, lesson)) {
         if (!stId) continue;
         const sessionWindow = { date: session.date, startTime: session.startTime || "00:00", endTime: session.endTime || "23:59", isNight: false };
@@ -789,8 +793,10 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
   // Single-lesson check (manual save). Returns first overlap found, or null.
   const findLecturerConflict = (lesson, lessonsList = lessons) => {
+    const todayStr = today();
     for (const session of (lesson.schedule || [])) {
       if (!session?.date) continue;
+      if (session.date < todayStr) continue; // past sessions are not actionable
       const key = lecturerKeyForSession(lesson, session);
       if (!key) continue;
       const sS = session.startTime || "00:00", sE = session.endTime || "23:59";
@@ -819,10 +825,12 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   // share a lecturer key on the same date with overlapping windows is a
   // conflict. Deduped by (lessonA, lessonB, date).
   const findLecturerConflictsAcross = (lessonsList) => {
+    const todayStr = today();
     const buckets = new Map(); // `${key}|${date}` -> [{lesson, session}]
     for (const l of (lessonsList || [])) {
       for (const s of (l.schedule || [])) {
         if (!s?.date) continue;
+        if (s.date < todayStr) continue; // past sessions are not actionable
         const key = lecturerKeyForSession(l, s);
         if (!key) continue;
         const bk = `${key}|${s.date}`;
@@ -861,7 +869,9 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   };
 
   const findLessonConflict = (lesson) => {
+    const todayStr = today();
     for (const session of (lesson.schedule || [])) {
+      if (session.date && session.date < todayStr) continue; // past sessions are not actionable
       const sS = session.startTime || "00:00", sE = session.endTime || "23:59";
       for (const stId of getLessonSessionStudioIds(session, lesson)) {
         if (!stId) continue;
@@ -889,8 +899,10 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const findAllLessonRoomConflicts = (lesson, lessonsList = lessons) => {
     const out = [];
     const seen = new Set();
+    const todayStr = today();
     (lesson.schedule || []).forEach((session, currentSessionIdx) => {
       if (!session?.date) return;
+      if (session.date < todayStr) return; // past sessions are not actionable
       const sS = session.startTime || "00:00", sE = session.endTime || "23:59";
       for (const stId of getLessonSessionStudioIds(session, lesson)) {
         if (!stId) continue;
@@ -927,8 +939,10 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   const findAllLessonLecturerConflicts = (lesson, lessonsList = lessons) => {
     const out = [];
     const seen = new Set();
+    const todayStr = today();
     (lesson.schedule || []).forEach((session, currentSessionIdx) => {
       if (!session?.date) return;
+      if (session.date < todayStr) return; // past sessions are not actionable
       const key = lecturerKeyForSession(lesson, session);
       if (!key) return;
       const sS = session.startTime || "00:00", sE = session.endTime || "23:59";
@@ -1345,7 +1359,9 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
   );
 
   const findRoomConflictInList = (candidate, lessonsList) => {
+    const todayStr = today();
     for (const session of (candidate.schedule || [])) {
+      if (session.date && session.date < todayStr) continue; // past sessions are not actionable
       const sS = session.startTime || "00:00", sE = session.endTime || "23:59";
       for (const stId of getLessonSessionStudioIds(session, candidate)) {
         if (!stId) continue;

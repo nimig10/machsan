@@ -93,7 +93,15 @@ function getLessonScheduleEntries(lesson) {
       startTime: session.startTime || "09:00",
       endTime: session.endTime || "12:00",
       topic: String(session.topic || "").trim(),
-      studioIds: getSessionStudioIdsLegacy(session),
+      // Preserve the explicit per-session array (position + empty slots) so
+      // getEffectiveLessonStudioIds can honor "ללא שיוך" — an all-empty array
+      // means "no room" and must NOT inherit the course-level default. Legacy
+      // sessions with no array keep their scalar fields for the fallback path.
+      studioIds: Array.isArray(session?.studioIds)
+        ? session.studioIds.map((v) => (v === null || v === undefined ? "" : String(v).trim()))
+        : undefined,
+      studioId: session.studioId,
+      secondaryStudioId: session.secondaryStudioId,
       kitId: session.kitId || null,
       lecturerId: session.lecturerId || session.alternateLecturerId || null,
       lecturerIds: normalizeSessionLecturerIdList(session),
@@ -103,8 +111,15 @@ function getLessonScheduleEntries(lesson) {
 }
 
 export function getEffectiveLessonStudioIds(session, lesson) {
-  const sessionIds = getSessionStudioIdsLegacy(session);
-  if (sessionIds.length) return sessionIds;
+  // An explicit per-session studioIds array is authoritative — even when it is
+  // all-empty ("ללא שיוך"), which means "no room" and must NOT fall back to the
+  // course-level default. Only legacy sessions that carry no studioIds array
+  // fall back: scalar fields first, then the course-level rooms.
+  if (Array.isArray(session?.studioIds)) {
+    return normalizeStudioIdList(session.studioIds);
+  }
+  const scalarIds = getSessionStudioIdsLegacy(session);
+  if (scalarIds.length) return scalarIds;
   return getLessonCourseStudioIds(lesson);
 }
 
