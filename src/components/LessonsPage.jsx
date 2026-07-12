@@ -3524,6 +3524,13 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
         </div>
       )}
 
+      {/* Two-column layout: right column (RTL start) = course details + classrooms
+          + email; left column (RTL end) = schedule + certificate. Collapses to a
+          single column on mobile. */}
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0, 0.9fr) minmax(0, 1.5fr)",gap:16,alignItems:"start"}}>
+      {/* ── Right column (RTL start) ── */}
+      <div style={{minWidth:0}}>
+
       {/* Course & Instructor details */}
       <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
         <div style={{fontWeight:800,fontSize:13,color:"#9b59b6",marginBottom:12}}>פרטי הקורס והמרצה</div>
@@ -3655,6 +3662,21 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
           <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}><Lightbulb size={16} strokeWidth={1.75} /> סמן חדר כ"כיתת לימוד" ברובריקת חדרים כדי שיופיע כאן.</div>
         )}
       </div>
+
+      {/* Email to teacher */}
+      {selectedLecturerObj?.email && (
+        <div style={{background:"rgba(52,152,219,0.06)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
+          <div style={{fontWeight:800,fontSize:13,color:"#3498db",marginBottom:10,display:"flex",alignItems:"center",gap:6}}><Mail size={13} strokeWidth={1.75}/> שליחת מייל למרצה</div>
+          <textarea className="form-textarea" rows={3} placeholder="נוסח ההודעה למרצה..." value={teacherMessage} onChange={e=>setTeacherMessage(e.target.value)}/>
+          <button className="btn btn-secondary" style={{marginTop:8,display:"inline-flex",alignItems:"center",gap:6}} onClick={sendTeacherEmail} disabled={teacherEmailSending}>
+            {teacherEmailSending?<><Clock size={16} strokeWidth={1.75} /> שולח...</>:<><Mail size={14} strokeWidth={1.75}/> שלח מייל למרצה</>}
+          </button>
+        </div>
+      )}
+
+      </div>{/* ── close right column ── */}
+      {/* ── Left column (RTL end): schedule + certificate ── */}
+      <div style={{minWidth:0}}>
 
       {/* Schedule builder — FIRST */}
       <div style={{background:"rgba(155,89,182,0.06)",border:"1px solid rgba(155,89,182,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
@@ -3794,8 +3816,9 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                 })}
               </div>
             ) : (
-              /* ── דסקטופ: grid עם עמודות גמישות ── */
-              <>
+              /* ── דסקטופ: grid עם עמודות גמישות (גלילה אופקית כשהטור צר — בלי
+                 גובה קבוע כדי לא להחזיר סרגל אנכי, ראה לקח #30) ── */
+              <div style={{overflowX:"auto"}}>
                 <div style={{display:"grid",gridTemplateColumns:gridTemplate,gap:0,fontSize:11,color:"var(--text-muted)",marginBottom:2,userSelect:"none",background:"var(--surface2)",borderRadius:"6px 6px 0 0",border:"1px solid rgba(155,89,182,0.2)"}}>
                   {[
                     { label: "", resizable: false, centered: true },
@@ -3888,7 +3911,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                     </div>
                   );})}
                 </div>
-              </>
+              </div>
             )}
 
             <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
@@ -4014,6 +4037,9 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
         )}
       </div>
 
+      </div>{/* ── close left column ── */}
+      </div>{/* ── close two-column grid ── */}
+
       {/* Student-status floating panel — admin/secretariat read-only view.
           Mirrors what the lecturer sees in the portal but cannot be edited
           here (lecturer is source of truth). Closes on backdrop click, ESC,
@@ -4111,17 +4137,6 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
               </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Email to teacher */}
-      {selectedLecturerObj?.email && (
-        <div style={{background:"rgba(52,152,219,0.06)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
-          <div style={{fontWeight:800,fontSize:13,color:"#3498db",marginBottom:10,display:"flex",alignItems:"center",gap:6}}><Mail size={13} strokeWidth={1.75}/> שליחת מייל למרצה</div>
-          <textarea className="form-textarea" rows={3} placeholder="נוסח ההודעה למרצה..." value={teacherMessage} onChange={e=>setTeacherMessage(e.target.value)}/>
-          <button className="btn btn-secondary" style={{marginTop:8,display:"inline-flex",alignItems:"center",gap:6}} onClick={sendTeacherEmail} disabled={teacherEmailSending}>
-            {teacherEmailSending?<><Clock size={16} strokeWidth={1.75} /> שולח...</>:<><Mail size={14} strokeWidth={1.75}/> שלח מייל למרצה</>}
-          </button>
         </div>
       )}
 
