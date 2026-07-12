@@ -2946,6 +2946,10 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
   //     re-sync when `inferredTemplateType` itself changes).
   const lastInferredRef = useRef(null);
   useEffect(() => {
+    // For a NEW course the certificate type must default to "ללא תעודה"
+    // (empty) and change only when the admin explicitly picks one — never
+    // auto-inferred from the track. Only existing courses follow the track.
+    if (!initial) return;
     // First call: just record the baseline; never overwrite a saved value.
     if (lastInferredRef.current === null) {
       lastInferredRef.current = inferredTemplateType;
@@ -3674,8 +3678,110 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
         </div>
       )}
 
+      {/* Certificate template — global type selection */}
+      <div style={{background:"rgba(245,166,35,0.07)",border:"1px solid rgba(245,166,35,0.25)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
+        <div style={{fontWeight:800,fontSize:13,color:"#f5a623",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+          <Award size={14} strokeWidth={1.75}/> תעודת גמר
+        </div>
+        <div style={{fontSize:12,color:"var(--text3)",marginBottom:10,lineHeight:1.5}}>
+          בחר את סוג תבנית התעודה לקורס זה. הטמפלטים מוגדרים ברובריקת <b>הגדרות → תבניות תעודות</b>.
+        </div>
+
+        {/* Type selector — pill buttons with lucide outline icons (matches
+            the rest of the admin UI). Default value is inferred from the
+            track classification (see useEffect above), but the admin can
+            still flip between options. */}
+        <div className="form-group" style={{marginBottom:10}}>
+          <label className="form-label">סוג תבנית תעודה</label>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {[
+              { value: "", icon: <X size={14} strokeWidth={1.75} color="var(--accent)"/>, label: "ללא תעודה", disabled: false, missing: false },
+              { value: "cinema", icon: <Film size={14} strokeWidth={1.75} color="var(--accent)"/>, label: "קולנוע", disabled: !siteSettings?.certificateTemplates?.cinema?.url, missing: !siteSettings?.certificateTemplates?.cinema?.url },
+              { value: "sound", icon: <Mic size={14} strokeWidth={1.75} color="var(--accent)"/>, label: "סאונד", disabled: !siteSettings?.certificateTemplates?.sound?.url, missing: !siteSettings?.certificateTemplates?.sound?.url },
+            ].map((opt) => {
+              const active = certificateTemplateType === opt.value;
+              return (
+                <button
+                  key={opt.value || "none"}
+                  type="button"
+                  onClick={() => !opt.disabled && setCertificateTemplateType(opt.value)}
+                  disabled={opt.disabled}
+                  title={opt.missing ? "לא הועלתה תבנית — ניתן להעלות בהגדרות → תבניות תעודות" : ""}
+                  style={{
+                    display:"inline-flex",
+                    alignItems:"center",
+                    gap:6,
+                    padding:"8px 14px",
+                    borderRadius:10,
+                    border:`2px solid ${active ? "var(--accent)" : "var(--border)"}`,
+                    background: active ? "rgba(245,166,35,0.12)" : "var(--surface2)",
+                    color: active ? "var(--accent)" : (opt.disabled ? "var(--text3)" : "var(--text2)"),
+                    fontWeight: active ? 800 : 700,
+                    fontSize: 13,
+                    cursor: opt.disabled ? "not-allowed" : "pointer",
+                    opacity: opt.disabled ? 0.55 : 1,
+                    transition:"all 0.15s",
+                  }}
+                >
+                  {opt.icon} {opt.label}{opt.missing ? " (חסרה תבנית)" : ""}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Generate button — shown when a valid type is selected.
+            Disabled until the lecturer marks every track-student as
+            "סיים" or "לא סיים" via the lecturer portal. */}
+        {certificateTemplateType && siteSettings?.certificateTemplates?.[certificateTemplateType]?.url && (
+          <div style={{marginTop:4}}>
+            <div style={{fontSize:12,color:"var(--text3)",marginBottom:8}}>
+              {track.trim()
+                ? <>סטודנטים במסלול <b>{track}</b>: <b style={{color:"var(--text)"}}>{studentsInTrack.length}</b>
+                    {studentsInTrack.length > 0 && <> · סומנו על-ידי המרצה: <b style={{color:"var(--text)"}}>{decidedStudents.length}</b>/{studentsInTrack.length} (מתוכם <b style={{color:"#2ecc71"}}>{passedStudents.length}</b> סיימו)</>}
+                  </>
+                : <>יש לבחור מסלול לימודים לפני ייצור תעודות.</>
+              }
+            </div>
+            {track.trim() && studentsInTrack.length > 0 && !allStudentsDecided && (
+              <div style={{fontSize:12,color:"#f5a623",marginBottom:8,padding:"8px 10px",background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:8,lineHeight:1.5}}>
+                המרצה צריך לסמן סטטוס (סיים / לא סיים) לכל תלמיד לפני שניתן ליצור תעודות.
+                תזכורת אוטומטית תישלח למרצה 7 ימים לפני סיום הקורס.
+              </div>
+            )}
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{background:"#f5a623",borderColor:"#f5a623",color:"#0a0c10",display:"inline-flex",alignItems:"center",gap:6}}
+                onClick={generateCertificates}
+                disabled={certGenerating || !track.trim() || studentsInTrack.length === 0 || !allStudentsDecided || passedStudents.length === 0}
+                title={!allStudentsDecided ? "המרצה עדיין לא סימן את כל התלמידים" : passedStudents.length === 0 ? "אין תלמידים שסומנו כ\"סיים\"" : ""}
+              >
+                {certGenerating ? <><Clock size={16} strokeWidth={1.75}/> מייצר...</> : <><Download size={14} strokeWidth={1.75}/> ייצר תעודות ({passedStudents.length})</>}
+              </button>
+              {/* Read-only roster — opens the floating panel rendered below.
+                  Always available once a track is selected so the secretariat
+                  can verify exactly who the lecturer marked, regardless of
+                  whether the gate is open. */}
+              {track.trim() && studentsInTrack.length > 0 && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={()=>setShowStudentStatuses(true)}
+                  style={{background:"rgba(155,89,182,0.1)",border:"2px solid rgba(155,89,182,0.4)",color:"#9b59b6",fontWeight:800,fontSize:13,padding:"8px 14px",borderRadius:10,display:"inline-flex",alignItems:"center",gap:6,cursor:"pointer"}}
+                  title="הצג פאנל צף עם רשימת התלמידים והסטטוס שסומן על-ידי המרצה"
+                >
+                  <GraduationCap size={14} strokeWidth={1.75}/> צפה ברשימת תלמידים
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
       </div>{/* ── close right column ── */}
-      {/* ── Left column (RTL end): schedule + certificate ── */}
+      {/* ── Left column (RTL end): schedule only ── */}
       <div style={{minWidth:0}}>
 
       {/* Schedule builder — FIRST */}
@@ -3930,108 +4036,6 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                 title={lecturerColumnCount <= 1 ? "נשארה עמודת מרצה אחת בלבד" : "הסר את עמודת המרצה האחרונה (כולל הבחירות בה)"}
               >👤 הסר עמודת מרצה</button>
               <button className="btn btn-secondary btn-sm" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>setSchedule([])}>🗑️ נקה הכל</button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Certificate template — global type selection */}
-      <div style={{background:"rgba(245,166,35,0.07)",border:"1px solid rgba(245,166,35,0.25)",borderRadius:"var(--r-sm)",padding:"14px 16px",marginBottom:16}}>
-        <div style={{fontWeight:800,fontSize:13,color:"#f5a623",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
-          <Award size={14} strokeWidth={1.75}/> תעודת גמר
-        </div>
-        <div style={{fontSize:12,color:"var(--text3)",marginBottom:10,lineHeight:1.5}}>
-          בחר את סוג תבנית התעודה לקורס זה. הטמפלטים מוגדרים ברובריקת <b>הגדרות → תבניות תעודות</b>.
-        </div>
-
-        {/* Type selector — pill buttons with lucide outline icons (matches
-            the rest of the admin UI). Default value is inferred from the
-            track classification (see useEffect above), but the admin can
-            still flip between options. */}
-        <div className="form-group" style={{marginBottom:10}}>
-          <label className="form-label">סוג תבנית תעודה</label>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {[
-              { value: "", icon: <X size={14} strokeWidth={1.75} color="var(--accent)"/>, label: "ללא תעודה", disabled: false, missing: false },
-              { value: "cinema", icon: <Film size={14} strokeWidth={1.75} color="var(--accent)"/>, label: "קולנוע", disabled: !siteSettings?.certificateTemplates?.cinema?.url, missing: !siteSettings?.certificateTemplates?.cinema?.url },
-              { value: "sound", icon: <Mic size={14} strokeWidth={1.75} color="var(--accent)"/>, label: "סאונד", disabled: !siteSettings?.certificateTemplates?.sound?.url, missing: !siteSettings?.certificateTemplates?.sound?.url },
-            ].map((opt) => {
-              const active = certificateTemplateType === opt.value;
-              return (
-                <button
-                  key={opt.value || "none"}
-                  type="button"
-                  onClick={() => !opt.disabled && setCertificateTemplateType(opt.value)}
-                  disabled={opt.disabled}
-                  title={opt.missing ? "לא הועלתה תבנית — ניתן להעלות בהגדרות → תבניות תעודות" : ""}
-                  style={{
-                    display:"inline-flex",
-                    alignItems:"center",
-                    gap:6,
-                    padding:"8px 14px",
-                    borderRadius:10,
-                    border:`2px solid ${active ? "var(--accent)" : "var(--border)"}`,
-                    background: active ? "rgba(245,166,35,0.12)" : "var(--surface2)",
-                    color: active ? "var(--accent)" : (opt.disabled ? "var(--text3)" : "var(--text2)"),
-                    fontWeight: active ? 800 : 700,
-                    fontSize: 13,
-                    cursor: opt.disabled ? "not-allowed" : "pointer",
-                    opacity: opt.disabled ? 0.55 : 1,
-                    transition:"all 0.15s",
-                  }}
-                >
-                  {opt.icon} {opt.label}{opt.missing ? " (חסרה תבנית)" : ""}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Generate button — shown when a valid type is selected.
-            Disabled until the lecturer marks every track-student as
-            "סיים" or "לא סיים" via the lecturer portal. */}
-        {certificateTemplateType && siteSettings?.certificateTemplates?.[certificateTemplateType]?.url && (
-          <div style={{marginTop:4}}>
-            <div style={{fontSize:12,color:"var(--text3)",marginBottom:8}}>
-              {track.trim()
-                ? <>סטודנטים במסלול <b>{track}</b>: <b style={{color:"var(--text)"}}>{studentsInTrack.length}</b>
-                    {studentsInTrack.length > 0 && <> · סומנו על-ידי המרצה: <b style={{color:"var(--text)"}}>{decidedStudents.length}</b>/{studentsInTrack.length} (מתוכם <b style={{color:"#2ecc71"}}>{passedStudents.length}</b> סיימו)</>}
-                  </>
-                : <>יש לבחור מסלול לימודים לפני ייצור תעודות.</>
-              }
-            </div>
-            {track.trim() && studentsInTrack.length > 0 && !allStudentsDecided && (
-              <div style={{fontSize:12,color:"#f5a623",marginBottom:8,padding:"8px 10px",background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:8,lineHeight:1.5}}>
-                המרצה צריך לסמן סטטוס (סיים / לא סיים) לכל תלמיד לפני שניתן ליצור תעודות.
-                תזכורת אוטומטית תישלח למרצה 7 ימים לפני סיום הקורס.
-              </div>
-            )}
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{background:"#f5a623",borderColor:"#f5a623",color:"#0a0c10",display:"inline-flex",alignItems:"center",gap:6}}
-                onClick={generateCertificates}
-                disabled={certGenerating || !track.trim() || studentsInTrack.length === 0 || !allStudentsDecided || passedStudents.length === 0}
-                title={!allStudentsDecided ? "המרצה עדיין לא סימן את כל התלמידים" : passedStudents.length === 0 ? "אין תלמידים שסומנו כ\"סיים\"" : ""}
-              >
-                {certGenerating ? <><Clock size={16} strokeWidth={1.75}/> מייצר...</> : <><Download size={14} strokeWidth={1.75}/> ייצר תעודות ({passedStudents.length})</>}
-              </button>
-              {/* Read-only roster — opens the floating panel rendered below.
-                  Always available once a track is selected so the secretariat
-                  can verify exactly who the lecturer marked, regardless of
-                  whether the gate is open. */}
-              {track.trim() && studentsInTrack.length > 0 && (
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={()=>setShowStudentStatuses(true)}
-                  style={{background:"rgba(155,89,182,0.1)",border:"2px solid rgba(155,89,182,0.4)",color:"#9b59b6",fontWeight:800,fontSize:13,padding:"8px 14px",borderRadius:10,display:"inline-flex",alignItems:"center",gap:6,cursor:"pointer"}}
-                  title="הצג פאנל צף עם רשימת התלמידים והסטטוס שסומן על-ידי המרצה"
-                >
-                  <GraduationCap size={14} strokeWidth={1.75}/> צפה ברשימת תלמידים
-                </button>
-              )}
             </div>
           </div>
         )}
