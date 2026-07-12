@@ -161,6 +161,64 @@ async function findEligibleRecord(normalizedEmail) {
   return null;
 }
 
+// ── Multi-role flag sync ──────────────────────────────────────────────────────
+// public.users.is_student / is_lecturer are DERIVED flags — the live source of
+// truth is membership in the students / lecturers tables. Unlike
+// findEligibleRecord (first-match, used only for the eligibility yes/no and
+// the display name), this checks BOTH tables independently so a multi-role
+// user (e.g. lecturer+student) gets both flags.
+// NOTE: the fetch helpers return null both on "absent" and on transient fetch
+// errors; trusting null as "absent" matches the existing risk posture —
+// handleDeleteStudentAuth trusts the same helpers for auth-user deletion.
+async function computeLiveRoleFlags(normalizedEmail) {
+  const [lecturer, student] = await Promise.all([
+    fetchActiveLecturerByEmail(normalizedEmail),
+    fetchStudentByEmail(normalizedEmail),
+  ]);
+  return { is_lecturer: !!lecturer, is_student: !!student };
+}
+
+// Creates or merges the public.users row with live role flags. Shared by
+// handleEnsureUser and handleSendResetEmail (previously two duplicated blocks
+// that each set only the FIRST matching role, leaving multi-role users with
+// stale flags).
+// INSERT: both derived flags come from live truth, so a lecturer+student
+// first login gets BOTH (not just the first match).
+// MERGE: is_student/is_lecturer are set to live truth — set AND clear (a flag
+// whose table row was removed is cleared, generalizing the one-off delete-path
+// sync in handleDeleteStudentAuth). is_admin/is_warehouse are AUTHORITATIVE in
+// public.users and are never cleared here.
+async function upsertPublicUserWithLiveFlags(authUser, normalizedEmail, record) {
+  const live = await computeLiveRoleFlags(normalizedEmail);
+  const existing = await sbQuery(`users?id=eq.${authUser.id}&select=id`);
+  if (!existing || existing.length === 0) {
+    await fetch(`${SB_URL}/rest/v1/users`, {
+      method: "POST",
+      headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
+      body: JSON.stringify({
+        id: authUser.id,
+        email: normalizedEmail,
+        full_name: record.name || "",
+        ...live,
+        // record.role can only be admin/staff when an existing users row
+        // produced it, which never reaches this INSERT branch — kept for
+        // symmetry with the reset-email path's original behavior.
+        is_admin: record.role === "admin",
+        is_warehouse: record.role === "staff",
+      }),
+    }).catch(() => {});
+  } else {
+    const updates = { updated_at: new Date().toISOString(), ...live };
+    if (record.role === "admin") updates.is_admin = true;
+    if (record.role === "staff") updates.is_warehouse = true;
+    await fetch(`${SB_URL}/rest/v1/users?id=eq.${authUser.id}`, {
+      method: "PATCH",
+      headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
+      body: JSON.stringify(updates),
+    }).catch(() => {});
+  }
+}
+
 // Looks up an existing auth user by email.
 // NOTE: Supabase GoTrue's Admin API does NOT support `?email=` as a real
 // filter — it silently ignores unknown query params and returns the full
@@ -332,43 +390,13 @@ async function handleEnsureUser(req, res) {
   // When provision=true (called from forgot-password flow), make sure the
   // auth.users row exists so resetPasswordForEmail can deliver the link.
   if (provision) {
-    const result = await ensureAuthUserExists(normalizedEmail, record.name);
+    await ensureAuthUserExists(normalizedEmail, record.name);
 
-    // Also ensure public.users row exists with proper role flags
+    // Also ensure the public.users row exists with LIVE role flags — checks
+    // students + lecturers independently so multi-role users get all flags.
     const authUser = await findAuthUserByEmail(normalizedEmail);
     if (authUser) {
-      const roleFlags = {
-        is_student: record.role === "student",
-        is_lecturer: record.role === "lecturer",
-      };
-      // Upsert: create if missing, merge role flags if exists
-      const existing = await sbQuery(`users?id=eq.${authUser.id}&select=id,is_student,is_lecturer,is_admin,is_warehouse`);
-      if (!existing || existing.length === 0) {
-        await fetch(`${SB_URL}/rest/v1/users`, {
-          method: "POST",
-          headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
-          body: JSON.stringify({
-            id: authUser.id,
-            email: normalizedEmail,
-            full_name: record.name || "",
-            ...roleFlags,
-            is_admin: false,
-            is_warehouse: false,
-          }),
-        }).catch(() => {});
-      } else {
-        // Merge: set the role flag true without clearing other roles
-        const updates = { updated_at: new Date().toISOString() };
-        if (record.role === "student")  updates.is_student   = true;
-        if (record.role === "lecturer") updates.is_lecturer  = true;
-        if (record.role === "admin")    updates.is_admin     = true;
-        if (record.role === "staff")    updates.is_warehouse = true;
-        await fetch(`${SB_URL}/rest/v1/users?id=eq.${authUser.id}`, {
-          method: "PATCH",
-          headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
-          body: JSON.stringify(updates),
-        }).catch(() => {});
-      }
+      await upsertPublicUserWithLiveFlags(authUser, normalizedEmail, record);
     }
   }
 
@@ -857,41 +885,14 @@ async function handleSendResetEmail(req, res) {
   // 2. Provision auth.users row if this is the first login
   await ensureAuthUserExists(normalizedEmail, record.name);
 
-  // 2b. Also provision public.users row with the right role flags so the
-  // first login after reset routes correctly without an extra ensure-user
-  // round-trip. Non-destructive — existing flags are merged, not cleared.
+  // 2b. Also provision the public.users row with LIVE role flags so the first
+  // login after reset routes correctly without an extra ensure-user
+  // round-trip. Checks students + lecturers independently (multi-role safe);
+  // is_admin/is_warehouse are never cleared.
   try {
     const authUser = await findAuthUserByEmail(normalizedEmail);
     if (authUser) {
-      const existing = await sbQuery(`users?id=eq.${authUser.id}&select=id`);
-      if (!existing || existing.length === 0) {
-        await fetch(`${SB_URL}/rest/v1/users`, {
-          method: "POST",
-          headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
-          body: JSON.stringify({
-            id: authUser.id,
-            email: normalizedEmail,
-            full_name: record.name || "",
-            is_student:   record.role === "student",
-            is_lecturer:  record.role === "lecturer",
-            is_admin:     record.role === "admin",
-            is_warehouse: record.role === "staff",
-          }),
-        }).catch(() => {});
-      } else {
-        const updates = { updated_at: new Date().toISOString() };
-        if (record.role === "student")  updates.is_student   = true;
-        if (record.role === "lecturer") updates.is_lecturer  = true;
-        if (record.role === "admin")    updates.is_admin     = true;
-        if (record.role === "staff")    updates.is_warehouse = true;
-        if (Object.keys(updates).length > 1) {
-          await fetch(`${SB_URL}/rest/v1/users?id=eq.${authUser.id}`, {
-            method: "PATCH",
-            headers: { ...SERVICE_HEADERS, Prefer: "return=minimal" },
-            body: JSON.stringify(updates),
-          }).catch(() => {});
-        }
-      }
+      await upsertPublicUserWithLiveFlags(authUser, normalizedEmail, record);
     }
   } catch (err) {
     console.warn("send-reset-email: public.users provisioning warning:", err);

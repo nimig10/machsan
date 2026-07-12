@@ -971,9 +971,18 @@ export function LecturerPortal({
                 <button
                   className="btn"
                   onClick={() => { sessionStorage.setItem("active_role", "staff"); sessionStorage.removeItem("lecturer_portal_user"); window.location.assign("/"); }}
-                  style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.3)", color: "#8b5cf6", fontWeight: 600 }}
+                  style={{ background: "#f5a623", border: "1px solid #f5a623", color: "#0a0c10", fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 6 }}
                 >
-                  ניהול מערכת
+                  <Shield size={14} strokeWidth={1.75} /> ניהול מערכת
+                </button>
+              )}
+              {(() => { try { return !!(loggedInLecturer || {}).is_student; } catch { return false; } })() && (
+                <button
+                  className="btn"
+                  onClick={() => { sessionStorage.setItem("active_role", "student"); sessionStorage.removeItem("lecturer_portal_user"); window.location.assign("/"); }}
+                  style={{ background: "#f5a623", border: "1px solid #f5a623", color: "#0a0c10", fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 6 }}
+                >
+                  <GraduationCap size={14} strokeWidth={1.75} /> מעבר לתצוגת סטודנט
                 </button>
               )}
             </div>

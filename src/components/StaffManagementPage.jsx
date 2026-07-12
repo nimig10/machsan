@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { Modal } from "./ui.jsx";
 import { isValidEmailAddress, logActivity, getAuthToken } from "../utils.js";
 import { syncAllTeamMembers } from "../utils/teamMembersApi.js";
+import { listStudents } from "../utils/studentsApi.js";
 import { saveCollegeManager } from "../utils/collegeManagerApi.js";
 import { upsertDeptHead, deleteDeptHead } from "../utils/deptHeadsApi.js";
 import { BookOpen, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Mic, Package, Settings, Shield, X } from "lucide-react";
@@ -39,6 +40,17 @@ const DEFAULT_PERMISSIONS = {
   canEditDailyLessons: false,
 };
 
+// Split a single full name into first (first token) + last (the rest), mirroring
+// StudentsPage's splitName so name entry is consistent across the app. public.users
+// stores a single full_name; the two inputs are recombined on save.
+function splitFullName(full) {
+  const parts = String(full || "").trim().split(/\s+/).filter(Boolean);
+  return { first_name: parts[0] || "", last_name: parts.slice(1).join(" ") };
+}
+function joinName(first, last) {
+  return [first, last].map(x => String(x || "").trim()).filter(Boolean).join(" ");
+}
+
 function mergePerms(p) {
   return { ...DEFAULT_PERMISSIONS, ...(p || {}) };
 }
@@ -58,13 +70,15 @@ function toggleArr(arr, val) {
 }
 
 // ─── Tab: אנשי צוות (public.users in Supabase) ─────────────────────────────
-function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setReservations }) {
+function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setReservations, lecturers }) {
   const [staff, setStaff]       = useState([]);
   const [loading, setLoading]   = useState(true);
   const [editUser, setEditUser] = useState(null);
   const [saving, setSaving]     = useState(false);
   const [deleting, setDeleting] = useState(null);
-  const [showPw, setShowPw]     = useState(false);
+  // Autocomplete source: students + lecturers already registered in the system
+  const [students, setStudents] = useState([]);
+  const [suggestFocus, setSuggestFocus] = useState(null); // "name" | "email" | null
 
   const fetchStaff = async () => {
     try {
@@ -80,22 +94,55 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
   };
 
   useEffect(() => { fetchStaff(); }, []);
+  // Load students for the add-staff autocomplete (admin is authenticated → RLS ok)
+  useEffect(() => { listStudents().then(rows => setStudents(Array.isArray(rows) ? rows : [])).catch(() => {}); }, []);
 
-  const openNew = () => { setShowPw(false); setEditUser({ full_name: "", email: "", role: "staff", password: "", permissions: { ...DEFAULT_PERMISSIONS } }); };
-  const openEdit = (s) => { setShowPw(false); setEditUser({ ...s, password: "", permissions: mergePerms(s.permissions) }); };
+  // Candidate list for autocomplete = students ∪ lecturers, deduped by email,
+  // EXCLUDING emails already registered as staff/admin (no reason to re-add).
+  const staffEmails = new Set((staff || []).map(s => String(s.email || "").toLowerCase().trim()).filter(Boolean));
+  const suggestCandidates = (() => {
+    const byEmail = new Map();
+    const add = (name, email, source) => {
+      const e = String(email || "").toLowerCase().trim();
+      if (!e || staffEmails.has(e) || byEmail.has(e)) return;
+      byEmail.set(e, { name: String(name || "").trim(), email: e, source });
+    };
+    (students || []).forEach(s => add(s.name, s.email, "student"));
+    (lecturers || []).forEach(l => { if (l.isActive !== false) add(l.fullName || l.full_name, l.email, "lecturer"); });
+    return [...byEmail.values()];
+  })();
+
+  const suggestQuery = String(
+    suggestFocus === "email" ? editUser?.email
+    : suggestFocus === "name" ? joinName(editUser?.first_name, editUser?.last_name)
+    : ""
+  ).toLowerCase().trim();
+  const suggestMatches = (!editUser || editUser.id || !suggestFocus || suggestQuery.length < 1)
+    ? []
+    : suggestCandidates
+        .filter(c => c.name.toLowerCase().includes(suggestQuery) || c.email.includes(suggestQuery))
+        .slice(0, 8);
+
+  const applySuggestion = (c) => {
+    const { first_name, last_name } = splitFullName(c.name);
+    setEditUser(p => ({ ...p, first_name, last_name, email: c.email }));
+    setSuggestFocus(null);
+  };
+
+  const openNew = () => { setEditUser({ first_name: "", last_name: "", email: "", role: "staff", permissions: { ...DEFAULT_PERMISSIONS } }); };
+  const openEdit = (s) => { setEditUser({ ...s, ...splitFullName(s.full_name), permissions: mergePerms(s.permissions) }); };
   const setPerms = (patch) => setEditUser(p => ({ ...p, permissions: { ...p.permissions, ...patch } }));
 
   const handleSave = async () => {
     if (!editUser) return;
-    const { id, full_name, email, role, password, permissions } = editUser;
-    if (!full_name?.trim() || !email?.trim()) { showToast?.("error", "שם ואימייל הם שדות חובה"); return; }
-    if (!id && !password?.trim()) { showToast?.("error", "יש להזין סיסמה למשתמש חדש"); return; }
+    const { id, first_name, last_name, email, role, permissions } = editUser;
+    const full_name = joinName(first_name, last_name);
+    if (!full_name || !email?.trim()) { showToast?.("error", "שם פרטי ואימייל הם שדות חובה"); return; }
     setSaving(true);
     try {
       const token = await getAuthToken();
       const body = { action: id ? "update" : "create", full_name: full_name.trim(), email: email.trim(), role: role || "staff", permissions };
       if (id) body.id = id;
-      if (!id && password?.trim()) body.password = password.trim();
       const res = await fetch("/api/staff", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
       const data = await res.json();
       if (res.ok) {
@@ -156,7 +203,7 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
             }
           } catch {}
         }
-        showToast?.("success", id ? "המשתמש עודכן" : "המשתמש נוצר"); setEditUser(null); fetchStaff();
+        showToast?.("success", id ? "המשתמש עודכן" : (data.promoted ? "המשתמש שודרג לאיש צוות" : "המשתמש נוצר")); setEditUser(null); fetchStaff();
       }
       else {
           const msg = data.error === "last_admin" ? "לא ניתן להוריד את המנהל האחרון — חייב להישאר לפחות מנהל אחד במערכת" : (data.error || "שגיאה בשמירה");
@@ -172,6 +219,7 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
       const token = await getAuthToken();
       const res = await fetch("/api/staff", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ action: "delete", id }) });
       if (res.ok) {
+          const data = await res.json().catch(() => ({}));
           // Remove from teamMembers too
           const current = Array.isArray(teamMembers) ? teamMembers : [];
           const deleted = staff.find(s => s.id === id);
@@ -179,10 +227,16 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
             const updated = current.filter(m => m.id !== id && m.email?.toLowerCase() !== deleted.email?.toLowerCase());
             if (updated.length !== current.length) { setTeamMembers(updated); syncAllTeamMembers(updated).catch(err => console.warn("[stage11] team_members sync failed:", err)); }
           }
-          showToast?.("success", "המשתמש נמחק", {
-            aggregateKey: "staff-user-delete",
-            pluralize: n => `${n} משתמשים נמחקו`,
-          });
+          if (data.downgraded) {
+            // Role removed but the person stays registered (student/lecturer) —
+            // their login/password is preserved.
+            showToast?.("success", "התפקיד הוסר — המשתמש נשאר רשום כסטודנט/מרצה");
+          } else {
+            showToast?.("success", "המשתמש נמחק", {
+              aggregateKey: "staff-user-delete",
+              pluralize: n => `${n} משתמשים נמחקו`,
+            });
+          }
           fetchStaff();
         }
       else {
@@ -240,7 +294,7 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
                 <button className="btn btn-secondary btn-sm" style={{ color: isLastAdmin(s) ? "var(--text3)" : "#ef4444" }}
                   disabled={deleting === s.id || isLastAdmin(s)}
                   title={isLastAdmin(s) ? "לא ניתן למחוק את המנהל האחרון" : ""}
-                  onClick={() => { if (confirm(`למחוק את ${s.full_name}?`)) handleDelete(s.id); }}>
+                  onClick={() => { if (confirm(`להסיר את ${s.full_name} מאנשי הצוות?`)) handleDelete(s.id); }}>
                   {deleting === s.id ? "..." : "🗑️"}
                 </button>
               </div>
@@ -266,12 +320,47 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div className="form-group">
-                <label className="form-label">שם מלא *</label>
-                <input className="form-input" value={editUser.full_name || ""} onChange={e => setEditUser(p => ({ ...p, full_name: e.target.value }))} />
+                <label className="form-label">שם פרטי *</label>
+                <input className="form-input" value={editUser.first_name || ""}
+                  onChange={e => setEditUser(p => ({ ...p, first_name: e.target.value }))}
+                  onFocus={() => !editUser.id && setSuggestFocus("name")}
+                  onBlur={() => setTimeout(() => setSuggestFocus(f => f === "name" ? null : f), 150)} />
               </div>
               <div className="form-group">
+                <label className="form-label">שם משפחה</label>
+                <input className="form-input" value={editUser.last_name || ""}
+                  onChange={e => setEditUser(p => ({ ...p, last_name: e.target.value }))}
+                  onFocus={() => !editUser.id && setSuggestFocus("name")}
+                  onBlur={() => setTimeout(() => setSuggestFocus(f => f === "name" ? null : f), 150)} />
+              </div>
+              {suggestMatches.length > 0 && (
+                <div className="form-group" style={{ gridColumn: "1 / -1", marginTop: -6 }}>
+                  <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 4 }}>משתמשים רשומים במערכת — לחץ לשיוך אוטומטי:</div>
+                  <div style={{ border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", maxHeight: 220, overflowY: "auto" }}>
+                    {suggestMatches.map(c => (
+                      <button key={c.email} type="button"
+                        onMouseDown={(e) => { e.preventDefault(); applySuggestion(c); }}
+                        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "9px 12px", background: "var(--surface)", border: "none", borderBottom: "1px solid var(--border)", cursor: "pointer", textAlign: "right" }}
+                        onMouseEnter={e => e.currentTarget.style.background = "var(--surface2)"}
+                        onMouseLeave={e => e.currentTarget.style.background = "var(--surface)"}>
+                        <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>{c.name || "(ללא שם)"}</span>
+                          <span style={{ fontSize: 12, color: "var(--text2)", direction: "ltr", textAlign: "right" }}>{c.email}</span>
+                        </span>
+                        <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 8, background: c.source === "lecturer" ? "rgba(14,165,233,0.15)" : "rgba(245,166,35,0.15)", color: c.source === "lecturer" ? "#0ea5e9" : "#f5a623" }}>
+                          {c.source === "lecturer" ? "מרצה" : "סטודנט"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="form-group">
                 <label className="form-label">אימייל *</label>
-                <input className="form-input" type="email" dir="ltr" value={editUser.email || ""} onChange={e => setEditUser(p => ({ ...p, email: e.target.value }))} />
+                <input className="form-input" type="email" dir="ltr" value={editUser.email || ""}
+                  onChange={e => setEditUser(p => ({ ...p, email: e.target.value }))}
+                  onFocus={() => !editUser.id && setSuggestFocus("email")}
+                  onBlur={() => setTimeout(() => setSuggestFocus(f => f === "email" ? null : f), 150)} />
               </div>
               <div className="form-group">
                 <label className="form-label">תפקיד</label>
@@ -287,14 +376,10 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
                 )}
               </div>
               {!editUser.id && (
-              <div className="form-group">
-                <label className="form-label">סיסמה *</label>
-                <div style={{ position: "relative" }}>
-                  <input className="form-input" type={showPw ? "text" : "password"} dir="ltr" value={editUser.password || ""} onChange={e => setEditUser(p => ({ ...p, password: e.target.value }))} placeholder="" style={{ paddingLeft: 36 }} />
-                  <button type="button" onClick={() => setShowPw(p => !p)}
-                    style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%", background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "var(--text3)", padding: 0 }}>
-                    {showPw ? "🙈" : "👁️"}
-                  </button>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px", fontSize: 12.5, color: "var(--text2)", lineHeight: 1.5 }}>
+                  <span style={{ fontSize: 15 }}>🔑</span>
+                  <span>הסיסמה נוצרת ע"י המשתמש עצמו — בכניסה הראשונה הוא לוחץ <strong>"שכחת סיסמה?"</strong> ליצירת סיסמה, כמו כל משתמש במערכת.</span>
                 </div>
               </div>
               )}
@@ -774,7 +859,7 @@ export function StaffManagementPage({ showToast, teamMembers, setTeamMembers, de
         ))}
       </div>
 
-      {tab === "staff"  && <StaffTab showToast={showToast} teamMembers={teamMembers} setTeamMembers={setTeamMembers} reservations={reservations} setReservations={setReservations} />}
+      {tab === "staff"  && <StaffTab showToast={showToast} teamMembers={teamMembers} setTeamMembers={setTeamMembers} reservations={reservations} setReservations={setReservations} lecturers={lecturers} />}
       {tab === "legacy" && <LegacyTeamTab teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} collegeManager={collegeManager} setCollegeManager={setCollegeManager} managerToken={managerToken} showToast={showToast} lecturers={lecturers}/>}
     </div>
   );

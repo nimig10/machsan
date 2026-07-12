@@ -5,7 +5,7 @@
 // rendered AFTER the auth checks succeed.
 
 import { useState } from "react";
-import { ClipboardList, Film, GraduationCap, LogOut, BookOpen, Settings, Download } from "lucide-react";
+import { ClipboardList, Film, GraduationCap, LogOut, BookOpen, Settings, Download, Shield } from "lucide-react";
 
 export function StudentHub({
   student,
@@ -17,6 +17,8 @@ export function StudentHub({
   canInstall = false,
   onInstall = () => {},
   pendingProductionRequests = 0,
+  roles = {},
+  onSwitchRole = () => {},
 }) {
   const [hovered, setHovered] = useState(null);
 
@@ -36,6 +38,25 @@ export function StudentHub({
       color: "#8b5cf6",
       badge: pendingProductionRequests > 0 ? pendingProductionRequests : null,
     },
+    // Multi-role cards — shown only when the user's public.users flags grant
+    // access to another interface. Single-role students see exactly the two
+    // cards above. Clicking switches interface via the active_role mechanism.
+    ...(roles.is_lecturer ? [{
+      key: "lecturer-portal",
+      switchRole: "lecturer",
+      icon: <BookOpen size={42} strokeWidth={1.5} />,
+      title: "פורטל מרצה",
+      desc: "הקורסים שלי, לוח שיעורים ואישורי השאלות",
+      color: "#0ea5e9",
+    }] : []),
+    ...((roles.is_admin || roles.is_warehouse) ? [{
+      key: "staff-admin",
+      switchRole: "staff",
+      icon: <Shield size={42} strokeWidth={1.5} />,
+      title: "ניהול מערכת",
+      desc: "תפעול מחסן, אדמיניסטרציה ולוז עובדים",
+      color: "#22c55e",
+    }] : []),
   ];
 
   const handleInstallClick = () => { if (canInstall) void onInstall(); };
@@ -93,11 +114,11 @@ export function StudentHub({
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 20, flexWrap: "wrap", justifyContent: "center", maxWidth: 600, width: "100%" }}>
+          <div style={{ display: "flex", gap: 20, flexWrap: "wrap", justifyContent: "center", maxWidth: apps.length > 2 ? 900 : 600, width: "100%" }}>
             {apps.map(opt => (
               <button
                 key={opt.key}
-                onClick={() => onSelectApp(opt.key)}
+                onClick={() => opt.switchRole ? onSwitchRole(opt.switchRole) : onSelectApp(opt.key)}
                 onMouseEnter={() => setHovered(opt.key)}
                 onMouseLeave={() => setHovered(null)}
                 style={{

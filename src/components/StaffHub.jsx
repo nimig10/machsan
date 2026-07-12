@@ -343,14 +343,18 @@ export function StaffHub({ user, logo, myToday, refreshMyToday, onNavigate, onLo
                   onMouseLeave={() => setHovered(null)}
                   style={{
                     padding: "8px 20px",
-                    border: `1.5px solid ${hovered === "switch-student" ? "#8b5cf6" : "var(--border)"}`,
+                    border: "1.5px solid #f5a623",
                     borderRadius: 8,
-                    background: hovered === "switch-student" ? "rgba(139,92,246,0.12)" : "var(--surface)",
-                    color: hovered === "switch-student" ? "#8b5cf6" : "var(--text2)",
+                    background: "#f5a623",
+                    color: "#0a0c10",
                     cursor: "pointer",
                     fontSize: 13,
-                    fontWeight: 600,
+                    fontWeight: 800,
                     transition: "all 0.2s",
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                    opacity: hovered === "switch-student" ? 0.9 : 1,
+                    transform: hovered === "switch-student" ? "translateY(-1px)" : "none",
+                    boxShadow: hovered === "switch-student" ? "0 6px 18px rgba(245,166,35,0.35)" : "none",
                   }}
                 >
                   <GraduationCap size={16} strokeWidth={1.75} /> מעבר לתצוגת סטודנט
@@ -363,14 +367,18 @@ export function StaffHub({ user, logo, myToday, refreshMyToday, onNavigate, onLo
                   onMouseLeave={() => setHovered(null)}
                   style={{
                     padding: "8px 20px",
-                    border: `1.5px solid ${hovered === "switch-lecturer" ? "#0ea5e9" : "var(--border)"}`,
+                    border: "1.5px solid #f5a623",
                     borderRadius: 8,
-                    background: hovered === "switch-lecturer" ? "rgba(14,165,233,0.12)" : "var(--surface)",
-                    color: hovered === "switch-lecturer" ? "#0ea5e9" : "var(--text2)",
+                    background: "#f5a623",
+                    color: "#0a0c10",
                     cursor: "pointer",
                     fontSize: 13,
-                    fontWeight: 600,
+                    fontWeight: 800,
                     transition: "all 0.2s",
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                    opacity: hovered === "switch-lecturer" ? 0.9 : 1,
+                    transform: hovered === "switch-lecturer" ? "translateY(-1px)" : "none",
+                    boxShadow: hovered === "switch-lecturer" ? "0 6px 18px rgba(245,166,35,0.35)" : "none",
                   }}
                 >
                   <BookOpen size={16} strokeWidth={1.75} /> מעבר לתצוגת מרצה
