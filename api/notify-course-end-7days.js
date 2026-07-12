@@ -166,6 +166,11 @@ export default async function handler(req, res) {
       const lesson = lessons[i];
       if (!lesson || lesson.lecturerNotifiedAt7d) continue;
 
+      // Courses set to "ללא תעודה" (no certificate template) never generate
+      // certificates, so there is nothing for the lecturer to mark — do not
+      // send them the end-of-course reminder at all.
+      if (!String(lesson.certificateTemplateType || "").trim()) continue;
+
       const lastDate = lastMeetingDate(lesson);
       if (!lastDate) continue;
 
