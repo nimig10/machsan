@@ -3922,9 +3922,10 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                 })}
               </div>
             ) : (
-              /* ── דסקטופ: grid עם עמודות גמישות (גלילה אופקית כשהטור צר — בלי
-                 גובה קבוע כדי לא להחזיר סרגל אנכי, ראה לקח #30) ── */
-              <div style={{overflowX:"auto"}}>
+              /* ── דסקטופ: grid עם עמודות גמישות. גלילה אופקית בלבד כשהטור צר;
+                 overflowY:"hidden" מפורש מונע מהדפדפן לקדם את הציר האנכי ל-auto
+                 (שהחזיר סרגל אנכי) — אין maxHeight אז שום דבר לא נחתך. לקח #30. ── */
+              <div style={{overflowX:"auto",overflowY:"hidden"}}>
                 <div style={{display:"grid",gridTemplateColumns:gridTemplate,gap:0,fontSize:11,color:"var(--text-muted)",marginBottom:2,userSelect:"none",background:"var(--surface2)",borderRadius:"6px 6px 0 0",border:"1px solid rgba(155,89,182,0.2)"}}>
                   {[
                     { label: "", resizable: false, centered: true },
