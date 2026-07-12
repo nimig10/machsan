@@ -2011,6 +2011,18 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [loggedInStudent, setLoggedInStudent] = useState(() => {
     try { const s = sessionStorage.getItem("public_student"); return s ? JSON.parse(s) : null; } catch { return null; }
   });
+  // ── Role-switch transition ────────────────────────────────────────────────
+  // A role switch (StudentHub / footer / lecturer / staff buttons) sets
+  // active_role, clears the identity keys and reloads "/". On that fresh load
+  // loggedInStudent is null while routeByRoles re-dispatches, which would
+  // otherwise flash the login screen. When we detect a pending switch
+  // (active_role set + identity cleared) show a lightweight "מעביר…" screen
+  // instead of the login form. A safety timeout falls back to login if
+  // routing never completes.
+  const [switching, setSwitching] = useState(() => {
+    try { return !!sessionStorage.getItem("active_role") && !sessionStorage.getItem("public_student"); }
+    catch { return false; }
+  });
   // ── Password auth state ──────────────────────────────────────────────────
   const [authView, setAuthView] = useState("login"); // "login" | "forgot" | "forgot-sent"
   const [loginEmail, setLoginEmail] = useState("");
@@ -2624,26 +2636,77 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
         await supabase.auth.signOut();
         return;
       }
-      // Continue with the newly created row
-      return await routeByRolesInner(retryRow, authUserId, authEmail);
+      // Continue with the newly created row (ensure-user just wrote live
+      // flags for ALL roles — no drift check needed on this fresh row).
+      return await routeByRolesInner(retryRow, authUserId, authEmail, freshStudents);
     }
 
-    return await routeByRolesInner(userRow, authUserId, authEmail);
+    // ── Role-flag drift detection ────────────────────────────────────────────
+    // public.users.is_student/is_lecturer go stale when an admin adds an
+    // existing user's email to students/lecturers AFTER the users row was
+    // created (ensure-user only runs when the row is missing). Detect drift
+    // locally and let the server (service role) reconcile — the client cannot
+    // write to public.users (RLS). The /api/auth call runs only on detected
+    // drift; the listStudents() result is reused by routeToStudent below so
+    // student logins pay no extra round-trip.
+    //
+    // SKIPPED during a role switch (active_role hint set): the flags were
+    // already reconciled at the original login, so a switch must not pay for
+    // the extra listStudents() + ensure-user round-trip — that latency is
+    // exactly what made switches feel slow.
+    let effectiveRow = userRow;
+    let freshStudents;
+    const midSwitch = (() => { try { return !!sessionStorage.getItem("active_role"); } catch { return false; } })();
+    if (!midSwitch) {
+      freshStudents = (await listStudents()) ?? [];
+      const liveIsStudent = freshStudents.some(
+        (s) => s.email?.toLowerCase().trim() === authEmail,
+      );
+      const liveIsLecturer = (lecturers || []).some(
+        (l) => l.isActive !== false && l.email?.toLowerCase().trim() === authEmail,
+      );
+      if (!!userRow.is_student !== liveIsStudent || !!userRow.is_lecturer !== liveIsLecturer) {
+        // Note: a not-yet-hydrated lecturers prop can trigger a spurious drift
+        // call — harmless, the server recomputes from DB truth and is the
+        // tiebreaker; the client never writes flags.
+        try {
+          await fetch("/api/auth", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "ensure-user", email: authEmail, provision: true }),
+          });
+          const { data: synced } = await supabase
+            .from("users")
+            .select("id,full_name,email,phone,is_student,is_lecturer,is_warehouse,is_admin,permissions")
+            .eq("id", authUserId)
+            .single();
+          if (synced) effectiveRow = synced;
+        } catch {}
+      }
+    }
+
+    return await routeByRolesInner(effectiveRow, authUserId, authEmail, freshStudents);
   };
 
-  const routeByRolesInner = async (userRow, authUserId, authEmail) => {
+  const routeByRolesInner = async (userRow, authUserId, authEmail, preloadedStudents) => {
     const isStaff = userRow.is_admin || userRow.is_warehouse;
     const roleFlags = { is_admin: userRow.is_admin, is_warehouse: userRow.is_warehouse, is_student: userRow.is_student, is_lecturer: userRow.is_lecturer };
 
     // ── active_role hint: let multi-role users override default priority ──
+    // If the hinted route fails (entity record missing — e.g. transient fetch
+    // failure), clear the stale hint and fall through to default priority
+    // instead of stranding the user on the login screen.
     const activeRole = sessionStorage.getItem("active_role");
     if (activeRole === "student" && userRow.is_student) {
-      return await routeToStudent(authUserId, authEmail, userRow, roleFlags);
+      if (await routeToStudent(authUserId, authEmail, userRow, roleFlags, preloadedStudents)) return;
+      sessionStorage.removeItem("active_role");
     }
     if (activeRole === "lecturer" && userRow.is_lecturer) {
-      return await routeToLecturer(authUserId, authEmail, userRow, roleFlags);
+      if (await routeToLecturer(authUserId, authEmail, userRow, roleFlags)) return;
+      sessionStorage.removeItem("active_role");
     }
     if (activeRole === "staff" && isStaff) {
+      // sessionStorage-only write — cannot fail, no fallthrough needed
       return routeToStaff(userRow, roleFlags);
     }
     // hint invalid or missing → fall through to default priority
@@ -2659,11 +2722,12 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 
     // 3. Student
     if (userRow.is_student) {
-      const routed = await routeToStudent(authUserId, authEmail, userRow, roleFlags);
+      const routed = await routeToStudent(authUserId, authEmail, userRow, roleFlags, preloadedStudents);
       if (routed) return;
     }
 
     // 4. No matching role — deny access
+    setSwitching(false);
     setLoginError("המשתמש לא נמצא במערכת. פנה/י למנהל.");
     await supabase.auth.signOut();
   };
@@ -2702,11 +2766,12 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     return true;
   };
 
-  const routeToStudent = async (authUserId, authEmail, userRow, roleFlags) => {
+  const routeToStudent = async (authUserId, authEmail, userRow, roleFlags, preloadedStudents) => {
     // Stage 6 step 7 fix: anon role can't read public.students (RLS), so the
     // mount-time studentsFromTable may be empty. We're authenticated now —
-    // re-fetch directly to get current state.
-    const freshStudents = (await listStudents()) ?? [];
+    // use the list already fetched by routeByRolesCore's drift check when
+    // available, otherwise re-fetch directly to get current state.
+    const freshStudents = preloadedStudents ?? ((await listStudents()) ?? []);
     const stuList = freshStudents.length > 0 ? freshStudents : studentsFromTable;
     const matchedStudent = stuList.find(
       (s) => s.email?.toLowerCase().trim() === authEmail,
@@ -2720,6 +2785,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       sessionStorage.setItem("public_student_roles", JSON.stringify(roleFlags));
     } catch {}
     setLoggedInStudent(matchedStudent);
+    setSwitching(false);
     setLoginError("");
     applyStudentIdentity(matchedStudent);
     set("email", matchedStudent.email);
@@ -2791,15 +2857,28 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     // Small delay: give onAuthStateChange a chance to fire first (it's the
     // primary handler). This is a fallback for cases where the listener
     // misses the event (e.g. session already existed before subscription).
+    // During a role switch a session already exists (we never sign out), so
+    // onAuthStateChange may not re-fire SIGNED_IN — route immediately with no
+    // 300ms wait to keep the transition snappy.
+    let mid = false;
+    try { mid = !!sessionStorage.getItem("active_role"); } catch {}
     const t = setTimeout(() => {
       supabase.auth.getSession().then(({ data: { session } }) => {
-        if (!session?.user?.email) return;
+        if (!session?.user?.email) { setSwitching(false); return; }
         if (recoveryModeRef.current) return;
         routeByRolesLatest.current(session);
       });
-    }, 300);
+    }, mid ? 0 : 300);
     return () => clearTimeout(t);
   }, []);
+
+  // Safety net: never leave the user stuck on the "מעביר…" transition screen.
+  // If routing hasn't resolved within 7s, fall back to the login form.
+  useEffect(() => {
+    if (!switching) return undefined;
+    const t = setTimeout(() => setSwitching(false), 7000);
+    return () => clearTimeout(t);
+  }, [switching]);
 
   // Validate any student state restored from sessionStorage against the active
   // Supabase session. A manually injected sessionStorage value alone must not
@@ -4033,6 +4112,26 @@ ${inventory}
     </div>
   );
 
+  // ── Role-switch transition screen ──
+  // Shown instead of the login form while a role switch re-dispatches, so the
+  // user never sees the login screen flash mid-transition.
+  if (!loggedInStudent && switching) return (
+    <div className="form-page" style={{"--accent": siteSettings.accentColor||"#f5a623"}}>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:16,direction:"rtl"}}>
+        {siteSettings.logo
+          ? <img src={siteSettings.logo} alt="לוגו" style={{height:72,maxWidth:180,objectFit:"contain"}}/>
+          : <Film size={48} strokeWidth={1.75} color="var(--accent)" />}
+        <div style={{
+          width:34,height:34,borderRadius:"50%",
+          border:"3px solid var(--border)",borderTopColor:"var(--accent)",
+          animation:"spin 0.8s linear infinite",
+        }}/>
+        <div style={{fontSize:15,fontWeight:700,color:"var(--text2)"}}>מעביר…</div>
+      </div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+
   // ── Password login gate ──
   if (!loggedInStudent) return (
     <div className="form-page" style={{"--accent": siteSettings.accentColor||"#f5a623"}}>
@@ -4199,6 +4298,13 @@ ${inventory}
       .filter(p => String(p.directorEmail || "").toLowerCase() === String(loggedInStudent.email || "").toLowerCase())
       .reduce((acc, p) => acc + (p.crew || []).filter(c => c.status === "invited" && c.invitedBy === "self").length, 0);
 
+    // Role flags written by routeToStudent — power the multi-role cards
+    // ("פורטל מרצה" / "ניהול מערכת") on the hub. Single-role students get {}.
+    const studentRoles = (() => {
+      try { return JSON.parse(sessionStorage.getItem("public_student_roles") || "{}") || {}; }
+      catch { return {}; }
+    })();
+
     return (
       <>
         <StudentHub
@@ -4208,6 +4314,19 @@ ${inventory}
           onInstall={onInstall}
           pendingProductionRequests={pendingProductionRequests}
           onSelectApp={(key) => setStudentApp(key)}
+          roles={studentRoles}
+          onSwitchRole={(role) => {
+            // Same pattern as the forms-footer switch button: set the hint,
+            // clear this interface's identity keys, and let routeByRoles
+            // re-dispatch on reload. student_app is cleared so the return
+            // trip lands back on the hub rather than a stale sub-app.
+            sessionStorage.setItem("active_role", role);
+            sessionStorage.removeItem("public_student");
+            sessionStorage.removeItem("public_student_roles");
+            sessionStorage.removeItem("public_view");
+            sessionStorage.removeItem("student_app");
+            window.location.assign("/");
+          }}
           onOpenAccountSettings={() => setShowAccountSettings(true)}
           onOpenUserGuide={userGuidePdf ? () => {
             const link = document.createElement("a");
@@ -5256,9 +5375,9 @@ ${inventory}
             <button
               type="button"
               onClick={() => { sessionStorage.setItem("active_role", "staff"); sessionStorage.removeItem("public_student"); sessionStorage.removeItem("public_student_roles"); sessionStorage.removeItem("public_view"); window.location.assign("/"); }}
-              style={{background:"rgba(139,92,246,0.1)",border:"1px solid rgba(139,92,246,0.3)",color:"#8b5cf6",fontSize:13,cursor:"pointer",padding:"8px 20px",borderRadius:8,transition:"all 0.15s",fontWeight:600,marginTop:8}}
-              onMouseEnter={e=>{e.currentTarget.style.background="rgba(139,92,246,0.2)";}}
-              onMouseLeave={e=>{e.currentTarget.style.background="rgba(139,92,246,0.1)";}}
+              style={{background:"#f5a623",border:"1px solid #f5a623",color:"#0a0c10",fontSize:13,cursor:"pointer",padding:"8px 20px",borderRadius:8,transition:"all 0.15s",fontWeight:800,marginTop:8}}
+              onMouseEnter={e=>{e.currentTarget.style.opacity="0.9";}}
+              onMouseLeave={e=>{e.currentTarget.style.opacity="1";}}
             >
               ניהול מערכת
             </button>

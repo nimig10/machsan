@@ -108,24 +108,56 @@ async function handleList(req, res, callerRole) {
 }
 
 async function handleCreate(req, res) {
-  const { full_name, email, password, permissions } = req.body || {};
+  const { full_name, email, permissions } = req.body || {};
   const normEmail = normalizeEmail(email);
   if (!full_name?.trim()) return res.status(400).json({ error: "missing_name" });
   if (!isValidEmail(normEmail)) return res.status(400).json({ error: "invalid_email" });
 
-  const existing = await sbFetch(`users?email=eq.${encodeURIComponent(normEmail)}&select=id`);
+  const flags = roleFlagsFromBody(req.body || {});
+
+  // Email already has a public.users row → PROMOTE to multi-role instead of
+  // erroring. The email might already be a student/lecturer who created their
+  // own password; adding a staff role must (a) never touch their password,
+  // (b) never drop an existing role. Merge staff flags with OR, keep
+  // is_student/is_lecturer untouched.
+  const existing = await sbFetch(`users?email=eq.${encodeURIComponent(normEmail)}&select=id,is_admin,is_warehouse,permissions`);
   if (existing.ok && Array.isArray(existing.data) && existing.data.length > 0) {
-    return res.status(409).json({ error: "email_exists" });
+    const row = existing.data[0];
+    const patch = {
+      full_name: full_name.trim(),
+      is_admin: !!row.is_admin || flags.is_admin,
+      is_warehouse: !!row.is_warehouse || flags.is_warehouse,
+      permissions: { ...DEFAULT_PERMISSIONS, ...(row.permissions || {}), ...(permissions || {}) },
+      updated_at: new Date().toISOString(),
+    };
+    const upd = await sbFetch(`users?id=eq.${encodeURIComponent(row.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+    if (!upd.ok) {
+      return res.status(upd.status).json({ error: upd.data?.message || "promote_failed" });
+    }
+    // Keep the auth user's metadata full_name in sync (password untouched).
+    const authUser = await findAuthUserByEmail(normEmail);
+    if (authUser) {
+      await fetch(`${SB_URL}/auth/v1/admin/users/${authUser.id}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ user_metadata: { ...(authUser.user_metadata || {}), full_name: full_name.trim() } }),
+      }).catch(() => {});
+    }
+    const promoted = Array.isArray(upd.data) ? upd.data[0] : upd.data;
+    return res.status(200).json({ success: true, promoted: true, user: toStaffUser(promoted) });
   }
 
-  const flags = roleFlagsFromBody(req.body || {});
   let authUserId = null;
   const existingAuth = await findAuthUserByEmail(normEmail);
   if (existingAuth) {
+    // Auth user exists but no public.users row (e.g. student who logged in
+    // before). Update metadata only — never touch their self-created password.
     const authUpdate = {
       user_metadata: { ...(existingAuth.user_metadata || {}), full_name: full_name.trim() },
     };
-    if (password) authUpdate.password = password;
     const updateRes = await fetch(`${SB_URL}/auth/v1/admin/users/${existingAuth.id}`, {
       method: "PUT",
       headers,
@@ -136,12 +168,14 @@ async function handleCreate(req, res) {
     }
     authUserId = existingAuth.id;
   } else {
+    // Brand-new user — provision the auth row WITHOUT a password (like the
+    // ensure-user onboarding flow). The user sets their own password via
+    // "forgot password?" on first login.
     const authBody = {
       email: normEmail,
       email_confirm: true,
       user_metadata: { full_name: full_name.trim() },
     };
-    if (password) authBody.password = password;
     const createRes = await fetch(`${SB_URL}/auth/v1/admin/users`, {
       method: "POST",
       headers,
@@ -223,13 +257,38 @@ async function handleUpdate(req, res) {
 async function handleDelete(req, res) {
   const { id } = req.body || {};
   if (!id) return res.status(400).json({ error: "missing_id" });
-  const target = await sbFetch(`users?id=eq.${encodeURIComponent(id)}&select=is_admin`);
+  const target = await sbFetch(`users?id=eq.${encodeURIComponent(id)}&select=is_admin,email`);
   if (!target.ok || !Array.isArray(target.data) || target.data.length === 0) {
     return res.status(404).json({ error: "not_found" });
   }
   if (target.data[0]?.is_admin && (await adminCount()) <= 1) {
     return res.status(400).json({ error: "last_admin" });
   }
+
+  // "Delete staff" = remove the STAFF ROLE, not destroy the person. If the
+  // email is still registered as a student or active lecturer, only clear the
+  // staff flags — NEVER delete the public.users row or the auth user, so their
+  // login (password) and student/lecturer access survive. Mirrors the guard in
+  // api/auth.js handleDeleteStudentAuth. Only a truly orphaned email (no other
+  // role anywhere) gets a full delete.
+  const email = normalizeEmail(target.data[0]?.email || "");
+  const [stu, lec] = await Promise.all([
+    email ? sbFetch(`students?email=eq.${encodeURIComponent(email)}&select=id&limit=1`) : Promise.resolve({ ok: true, data: [] }),
+    email ? sbFetch(`lecturers?email=ilike.${encodeURIComponent(email)}&is_active=eq.true&select=id&limit=1`) : Promise.resolve({ ok: true, data: [] }),
+  ]);
+  const stillStudent = Array.isArray(stu.data) && stu.data.length > 0;
+  const stillLecturer = Array.isArray(lec.data) && lec.data.length > 0;
+
+  if (stillStudent || stillLecturer) {
+    const upd = await sbFetch(`users?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_admin: false, is_warehouse: false, updated_at: new Date().toISOString() }),
+    });
+    if (!upd.ok) return res.status(upd.status).json({ error: "downgrade_failed" });
+    return res.status(200).json({ success: true, downgraded: true });
+  }
+
+  // No other role anywhere → full offboard (users row + auth user).
   const delResult = await sbFetch(`users?id=eq.${encodeURIComponent(id)}`, { method: "DELETE" });
   if (!delResult.ok) return res.status(delResult.status).json({ error: "delete_failed" });
   const remaining = await sbFetch(`users?id=eq.${encodeURIComponent(id)}&select=id`);
