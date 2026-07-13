@@ -385,62 +385,12 @@ export async function deleteProduction(id) {
   }
 }
 
-// ─── crew self-service ─────────────────────────────────────────────────────
-
-export async function requestJoinProduction(productionId, role, blob) {
-  if (!productionId || !role) return { ok: false, error: "missing productionId or role" };
-  try {
-    const row = {
-      id:              `pc_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
-      production_id:   String(productionId),
-      role,
-      role_label:      role === "custom" && blob?.roleLabel ? String(blob.roleLabel).trim().slice(0, 40) : null,
-      student_id:      blob?.studentId ? String(blob.studentId) : null,
-      free_text_name:  blob?.freeTextName ? String(blob.freeTextName) : null,
-      status:          "invited",
-      invited_by:      "self",
-      crew_email:      String(blob?.crewEmail || "").toLowerCase() || null,
-      notes:           blob?.notes ? String(blob.notes) : null,
-    };
-    if (!row.crew_email) return { ok: false, error: "missing crew_email" };
-    if (row.role === "photographer" || row.role === "sound") {
-      if (!row.student_id) return { ok: false, error: "photographer/sound requires student_id" };
-    }
-    if (row.role === "custom" && !row.role_label) {
-      return { ok: false, error: "custom role requires roleLabel" };
-    }
-
-    // One student = one role per production (across all roles).
-    if (row.student_id) {
-      const { data: crewRows, error: crErr } = await supabase
-        .from("production_crew").select("status, student_id")
-        .eq("production_id", row.production_id);
-      if (crErr) throw crErr;
-      const dup = (crewRows || []).some(c => c.status !== "rejected" && String(c.student_id || "") === String(row.student_id));
-      if (dup) {
-        return { ok: false, error: "סטודנט כבר משויך לתפקיד אחר בהפקה הזו" };
-      }
-    }
-
-    const { error } = await supabase.from("production_crew").insert(row);
-    if (error) throw error;
-    return { ok: true, id: row.id };
-  } catch (err) {
-    console.warn("[productionsApi.requestJoinProduction]", err);
-    return { ok: false, error: err?.message || String(err) };
-  }
-}
-
-export async function withdrawJoinRequest(crewId) {
-  if (!crewId) return { ok: false, error: "missing crewId" };
-  try {
-    const { error } = await supabase.from("production_crew").delete().eq("id", String(crewId));
-    if (error) throw error;
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err?.message || String(err) };
-  }
-}
+// ─── crew approval (director-only, automatic) ──────────────────────────────
+// The self-join / invitation-acceptance flow was removed (2026-07): the
+// director composes the crew directly and rows are auto-approved on save via
+// production_approve_crew_v1 (which also runs the reservation cert-recheck +
+// crew-snapshot refresh for photographer/sound — the recheck RPC itself is
+// service_role-only, so this RPC is the only client-reachable path to it).
 
 function translateCrewError(rawMsg) {
   const msg = String(rawMsg || "");
@@ -485,41 +435,18 @@ export async function approveCrewMember(crewId) {
   }
 }
 
-export async function rejectCrewMember(crewId) {
-  if (!crewId) return { ok: false, error: "missing crewId" };
-  try {
-    const { data, error } = await supabase.rpc("production_approve_crew_v1", {
-      p_crew_id:  String(crewId),
-      p_decision: "rejected",
-    });
-    if (error) throw error;
-    return { ok: true, result: data };
-  } catch (err) {
-    return { ok: false, error: translateCrewError(err?.message || String(err)) };
+// Auto-approve director-composed crew rows after a save. Sequential (few
+// rows), best-effort: a failed row stays 'invited' and converges on the next
+// save (the RPC no-ops on already-approved rows). Only rows the editor wrote
+// as pending are targeted — self-join zombies (legacy) are never touched.
+export async function autoApproveDirectorCrew(crew) {
+  const targets = (crew || []).filter(c =>
+    c.status === "invited" && (c.invitedBy || "director") !== "self" && c.studentId);
+  const approvedIds = [], failures = [];
+  for (const c of targets) {
+    const r = await approveCrewMember(c.id);
+    if (r.ok) approvedIds.push(c.id);
+    else failures.push({ id: c.id, error: r.error });
   }
-}
-
-export async function removeCrewMember(crewId) {
-  if (!crewId) return { ok: false, error: "missing crewId" };
-  try {
-    const { error } = await supabase.from("production_crew").delete().eq("id", String(crewId));
-    if (error) throw error;
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err?.message || String(err) };
-  }
-}
-
-export async function checkCrewConflict(studentId, productionId) {
-  if (!studentId || !productionId) return { ok: false, error: "missing studentId or productionId" };
-  try {
-    const { data, error } = await supabase.rpc("production_check_crew_conflict_v1", {
-      p_student_id:    String(studentId),
-      p_production_id: String(productionId),
-    });
-    if (error) throw error;
-    return { ok: true, result: data };
-  } catch (err) {
-    return { ok: false, error: err?.message || String(err) };
-  }
+  return { ok: failures.length === 0, approvedIds, failures };
 }

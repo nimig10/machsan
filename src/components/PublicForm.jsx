@@ -4294,10 +4294,6 @@ ${inventory}
   // Mirrors the StaffHub pattern. Forms and productions live as separate
   // "apps" so the PublicForm tab strip can stay focused on the loan flow.
   if (loggedInStudent && studentApp === "hub") {
-    const pendingProductionRequests = (productions || [])
-      .filter(p => String(p.directorEmail || "").toLowerCase() === String(loggedInStudent.email || "").toLowerCase())
-      .reduce((acc, p) => acc + (p.crew || []).filter(c => c.status === "invited" && c.invitedBy === "self").length, 0);
-
     // Role flags written by routeToStudent — power the multi-role cards
     // ("פורטל מרצה" / "ניהול מערכת") on the hub. Single-role students get {}.
     const studentRoles = (() => {
@@ -4312,7 +4308,6 @@ ${inventory}
           logo={siteSettings.logo}
           canInstall={canInstall}
           onInstall={onInstall}
-          pendingProductionRequests={pendingProductionRequests}
           onSelectApp={(key) => setStudentApp(key)}
           roles={studentRoles}
           onSwitchRole={(role) => {
@@ -4399,13 +4394,28 @@ ${inventory}
               reservations={reservations}
               showToast={(msg, type="info") => showToast(type, msg)}
               refresh={refreshProductions}
-              onOpenLoanForm={(p) => {
+              onOpenLoanForm={(p, dateId) => {
+                // dateId (optional) — a specific shoot range to pre-select
+                // (comes from the per-range "הגש רשימת ציוד" buttons). Seeds the
+                // borrow/return fields exactly like clicking the range chip in
+                // step 2 would.
+                const target = dateId
+                  ? (p?.dates || []).find(x => String(x.id) === String(dateId))
+                  : null;
                 setForm(f => ({
                   ...f,
                   loan_type: "הפקה",
                   project_name: p?.title || f.project_name,
                   production_id: p?.id || "",
-                  production_date_id: p?.dates?.length === 1 ? p.dates[0].id : "",
+                  production_date_id: target
+                    ? target.id
+                    : (p?.dates?.length === 1 ? p.dates[0].id : ""),
+                  ...(target ? {
+                    borrow_date: target.startDate,
+                    return_date: target.endDate,
+                    borrow_time: target.startTime || "",
+                    return_time: target.endTime || "",
+                  } : {}),
                   production_reason: p?.description || "",
                   ...deriveProductionCrewSnapshot(p, studentsFromTable),
                 }));

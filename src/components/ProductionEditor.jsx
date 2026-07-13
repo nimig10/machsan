@@ -2,9 +2,10 @@
 // Director-only. Sections: title + description, dates, crew, status CTA + delete.
 
 import { useMemo, useState, useRef, useEffect } from "react";
-import { Plus, Trash2, Save, Send, AlertTriangle, Check, X as XIcon, ExternalLink } from "lucide-react";
+import { Plus, Trash2, Save, Send, AlertTriangle, ExternalLink } from "lucide-react";
 import { Modal } from "./ui.jsx";
-import { upsertProduction, notifyProductionCrewInvites, publishProduction, deleteProduction, approveCrewMember, rejectCrewMember } from "../utils/productionsApi.js";
+import { upsertProduction, notifyProductionCrewInvites, publishProduction, deleteProduction, autoApproveDirectorCrew } from "../utils/productionsApi.js";
+import { isLegacyProduction, submittedDateIds } from "../utils/productionVisibility.js";
 
 // Only photographer + sound are predefined: the equipment-loan certification
 // check (crewIsCertifiedForEq) validates exactly these two roles, so they
@@ -84,6 +85,11 @@ function fmtDeadline(startDate) {
   const diff = Math.floor((d - today) / (24*3600*1000));
   return { date: d.toLocaleDateString("he-IL", { day:"2-digit", month:"2-digit" }), diff };
 }
+// "13/07/2026 – 15/07/2026" (or a single date when the range is one day).
+function fmtRangeHe(d) {
+  const f = (iso) => String(iso || "").split("-").reverse().join("/");
+  return d.startDate === d.endDate ? f(d.startDate) : `${f(d.startDate)} – ${f(d.endDate)}`;
+}
 
 export function ProductionEditor({ initial, currentStudent, students = [], kits = [], showToast, onClose, onSaved, onDeleted, onOpenLoanForm, onOpenMyReservations, reservations = [] }) {
   const [title, setTitle]             = useState(initial?.title || "");
@@ -93,7 +99,13 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
   const [selectedKitId, setSelectedKitId] = useState(initial?.kitId || "");
   const [dates, setDates]             = useState(() => Array.isArray(initial?.dates) ? initial.dates : []);
   const [crew, setCrew]               = useState(() => {
-    if (Array.isArray(initial?.crew) && initial.crew.length > 0) return initial.crew;
+    // Legacy zombie guard: self-join requests (invited_by='self') that were
+    // never approved belong to the removed join/approval flow — hide them here;
+    // the next save's crew diff deletes their DB rows. Approved self rows
+    // (joined under the old mechanism) are kept as regular crew.
+    const existing = (Array.isArray(initial?.crew) ? initial.crew : [])
+      .filter(c => !((c.invitedBy || "director") === "self" && c.status !== "approved"));
+    if (existing.length > 0) return existing;
     // New production: seed with a photographer row — minimum crew required to take equipment out.
     return [{
       id: genId("pc"),
@@ -110,6 +122,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
   const [saving, setSaving]           = useState(false);
   const [publishing, setPublishing]   = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [postSavePrompt, setPostSavePrompt] = useState(null); // { blob, pending: [dateRange] } | null
   const [errorField, setErrorField]   = useState(null);
   const [customRolePrompt, setCustomRolePrompt] = useState({ open: false, value: "" });
   const descriptionRef = useRef(null);
@@ -134,15 +147,16 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
     (reservations || []).filter(r => r.production_id === productionId),
     [reservations, productionId]);
   // Per-date-range lock: only the specific date range that already has an
-  // active equipment-list reservation is locked. Other ranges (and adding new
-  // ones) stay editable. Set of production_date_ids that are committed.
-  const lockedDateIds = useMemo(() => {
-    const ids = new Set();
-    for (const r of linkedReservations) {
-      if (r.production_date_id) ids.add(String(r.production_date_id));
-    }
-    return ids;
-  }, [linkedReservations]);
+  // active (non-cancelled) equipment-list reservation is locked. Other ranges
+  // (and adding new ones) stay editable. Shared helper — also skips 'בוטל'
+  // reservations, so cancelling a list re-opens its range for editing.
+  const lockedDateIds = useMemo(() =>
+    submittedDateIds({ id: productionId }, reservations),
+    [reservations, productionId]);
+  // Board-gate exemption: productions created before the cutoff keep the old
+  // behavior (no pending warnings / post-save prompt). A brand-new production
+  // (no `initial`) is always gated.
+  const isLegacy = initial ? isLegacyProduction(initial) : false;
   const anyDateLocked = lockedDateIds.size > 0;
   const allDatesLocked = dates.length > 0 && dates.every(d => lockedDateIds.has(String(d.id)));
 
@@ -254,7 +268,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
       return { ok: false, sent: 0 };
     }
     if (res.sent > 0) {
-      showToast?.("מיילים נשלחו לחברי צוות ההפקה הרלוונטיים שנבחרו", "success");
+      showToast?.("נשלח עדכון במייל לחברי הצוות ששובצו", "success");
     }
     return { ok: true, sent: res.sent || 0 };
   }
@@ -355,12 +369,29 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
       crew,
     };
     const res = await upsertProduction(blob);
-    setSaving(false);
     if (!res.ok) {
+      setSaving(false);
       console.error("[ProductionEditor.persist]", { blob, error: res.error, raw: res });
       const detail = String(res.error || "").slice(0, 200);
       showToast?.(`שגיאה בשמירה: ${detail || "ראה Console"}`, "error");
       return null;
+    }
+    // No approval flow: director-composed crew rows are auto-approved right
+    // after the save. Rows are still WRITTEN as 'invited' (do not change that —
+    // the approved→invited UPDATE is what fires the DB recheck trigger), and
+    // production_approve_crew_v1 flips them + runs the cert-recheck/snapshot
+    // refresh for photographer/sound. Best-effort: a failed row stays
+    // 'invited' and converges on the next save.
+    const auto = await autoApproveDirectorCrew(blob.crew);
+    setSaving(false);
+    if (auto.approvedIds.length > 0) {
+      const flip = c => auto.approvedIds.includes(c.id) ? { ...c, status: "approved" } : c;
+      blob.crew = blob.crew.map(flip);
+      setCrew(prev => prev.map(flip));
+    }
+    if (auto.failures.length > 0) {
+      const detail = String(auto.failures[0].error || "").slice(0, 120);
+      showToast?.(`ההפקה נשמרה, אך שיבוץ איש צוות נכשל${detail ? `: ${detail}` : ""} — שמרו שוב כדי לנסות שוב`, "error");
     }
     return blob;
   }
@@ -374,14 +405,27 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
     }
   }
 
+  // After a successful publish/update: a gated (non-legacy) published production
+  // that still has ranges without a submitted equipment list gets a blocking
+  // prompt — those ranges are NOT shown on the public board until a list is
+  // submitted. Legacy productions close silently, exactly as before.
+  function closeOrPromptPending(blob) {
+    const pending = isLegacy ? [] : (blob.dates || []).filter(d => !lockedDateIds.has(String(d.id)));
+    if (blob.status === "published" && pending.length > 0) {
+      setPostSavePrompt({ blob, pending });
+    } else {
+      onClose();
+    }
+  }
+
   async function onPublish() {
     if (initial?.status === "published") {
       const blob = await persist("published");
       if (blob) {
         showToast?.("עודכן", "success");
         onSaved?.(blob);
-        onClose();
         void notifyCrewInvites(blob, { onlyNew: true });
+        closeOrPromptPending(blob);
       }
       return;
     }
@@ -399,30 +443,8 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
     const publishedBlob = { ...blob, status: "published", publishedAt: new Date().toISOString() };
     showToast?.("ההפקה פורסמה", "success");
     onSaved?.(publishedBlob);
-    onClose();
     void notifyCrewInvites(publishedBlob, { onlyNew: false });
-  }
-
-  // Director-side approve/reject for self-enrolled crew (invited_by='self', status='invited').
-  // Calls the RPC (server-side conflict guard against overlapping productions) then
-  // mirrors the new status into local state so a subsequent save doesn't overwrite it.
-  async function handleApproveCrew(crewId) {
-    const r = await approveCrewMember(crewId);
-    if (!r.ok) {
-      showToast?.(`שגיאה באישור: ${r.error}`, "error");
-      return;
-    }
-    setCrew(prev => prev.map(c => c.id === crewId ? { ...c, status: "approved" } : c));
-    showToast?.("אושר", "success");
-  }
-  async function handleRejectCrew(crewId) {
-    const r = await rejectCrewMember(crewId);
-    if (!r.ok) {
-      showToast?.(`שגיאה בדחייה: ${r.error}`, "error");
-      return;
-    }
-    setCrew(prev => prev.map(c => c.id === crewId ? { ...c, status: "rejected" } : c));
-    showToast?.("נדחה", "success");
+    closeOrPromptPending(publishedBlob);
   }
 
   // Saves current state and opens the equipment-loan form pre-filled with this production.
@@ -697,9 +719,14 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
                     padding:"6px 10px", borderRadius:6,
                     background:bg, border:`1px solid ${border}`,
                     marginTop:4,
-                    display:"flex", alignItems:"center", gap:6,
+                    display:"flex", flexDirection:"column", gap:4,
                   }}>
-                    ⏱ {text}
+                    <span style={{display:"flex", alignItems:"center", gap:6}}>⏱ {text}</span>
+                    {!isLegacy && (
+                      <span style={{fontSize:12, fontWeight:400}}>
+                        הטווח לא יופיע בלוח ההפקות עד להגשת רשימת ציוד לטווח זה
+                      </span>
+                    )}
                   </div>
                 );
               })()}
@@ -802,17 +829,12 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
                   ))}
                 </datalist>
                 {(() => {
+                  // No approval flow: a filled row is simply "assigned" (auto-
+                  // approved on save); an empty row is an open placeholder.
                   const isOpenSlot = !c.studentId && !c.freeTextName && !c.crewEmail;
-                  let statusColor, statusBg, statusLabel;
-                  if (isOpenSlot) {
-                    statusColor = "#3498db"; statusBg = "rgba(52,152,219,0.15)"; statusLabel = "תפקיד פנוי";
-                  } else if (c.status === "approved") {
-                    statusColor = "#2ecc71"; statusBg = "rgba(46,204,113,0.15)"; statusLabel = "מאושר";
-                  } else if (c.status === "invited") {
-                    statusColor = "#f5a623"; statusBg = "rgba(245,166,35,0.15)"; statusLabel = "ממתין";
-                  } else {
-                    statusColor = "#e74c3c"; statusBg = "rgba(231,76,60,0.15)"; statusLabel = "נדחה";
-                  }
+                  const statusColor = isOpenSlot ? "#3498db" : "#2ecc71";
+                  const statusBg    = isOpenSlot ? "rgba(52,152,219,0.15)" : "rgba(46,204,113,0.15)";
+                  const statusLabel = isOpenSlot ? "תפקיד פנוי" : "משובץ";
                   return (
                     <span style={{
                       fontSize:12, fontWeight:700, whiteSpace:"nowrap",
@@ -823,16 +845,6 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
                     }}>{statusLabel}</span>
                   );
                 })()}
-                {c.status === "invited" && c.invitedBy === "self" && (
-                  <>
-                    <button type="button" className="btn btn-primary btn-sm" onClick={() => handleApproveCrew(c.id)} title="אשר בקשת הצטרפות">
-                      <Check size={12}/> אשר
-                    </button>
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleRejectCrew(c.id)} title="דחה בקשת הצטרפות" style={{color:"#e74c3c",borderColor:"#e74c3c"}}>
-                      <XIcon size={12}/> דחה
-                    </button>
-                  </>
-                )}
               </div>
               <button className="btn btn-secondary btn-sm btn-icon" onClick={() => removeCrew(c.id)}><Trash2 size={14}/></button>
             </div>
@@ -862,6 +874,49 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
             />
             <div style={{fontSize:11,color:"var(--text3)",marginTop:6,textAlign:"left"}}>
               {customRolePrompt.value.length}/40
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {postSavePrompt && (
+        <Modal title="ההפקה פורסמה — נותרו טווחים ללא רשימת ציוד"
+          onClose={() => { setPostSavePrompt(null); onClose(); }}
+          footer={
+            <div style={{display:"flex",gap:8,justifyContent:"end",alignItems:"center",flexWrap:"wrap"}}>
+              <button className="btn btn-secondary btn-sm" onClick={() => { setPostSavePrompt(null); onClose(); }}>
+                אחר כך
+              </button>
+              {hasApprovedPhotographer ? (
+                <button className="btn btn-primary btn-sm" onClick={() => {
+                  const pend = postSavePrompt.pending;
+                  onOpenLoanForm?.(postSavePrompt.blob, pend.length === 1 ? pend[0].id : undefined);
+                }}>
+                  <ExternalLink size={14}/> הגש רשימת ציוד עכשיו
+                </button>
+              ) : (
+                <span style={{fontSize:12,color:"#e74c3c",fontWeight:700}}>
+                  ⚠ יש לשבץ צלם ראשי לפני הגשת רשימת ציוד
+                </span>
+              )}
+            </div>
+          }>
+          <div style={{display:"flex",gap:10,alignItems:"start"}}>
+            <AlertTriangle size={22} color="#e74c3c" style={{flexShrink:0,marginTop:2}}/>
+            <div>
+              <p style={{margin:"0 0 8px",fontWeight:700}}>
+                {postSavePrompt.pending.length === 1
+                  ? "טווח צילום אחד עדיין ללא רשימת ציוד מוגשת."
+                  : `${postSavePrompt.pending.length} טווחי צילום עדיין ללא רשימת ציוד מוגשת.`}
+              </p>
+              <p style={{margin:"0 0 10px",fontSize:13,color:"var(--text2)",lineHeight:1.6}}>
+                טווחים אלה <strong>לא יוצגו בלוח ההפקות</strong> לשאר הסטודנטים עד שתוגש עבורם רשימת ציוד.
+              </p>
+              <ul style={{margin:0,paddingInlineStart:20,fontSize:13}}>
+                {postSavePrompt.pending.map(d => (
+                  <li key={d.id} style={{marginBottom:2}}>{fmtRangeHe(d)}</li>
+                ))}
+              </ul>
             </div>
           </div>
         </Modal>
