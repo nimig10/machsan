@@ -184,10 +184,11 @@ function DeadlineChip({ p, reservations }) {
 }
 
 function ProductionCard({ p, reservations, onClick, showPending = false }) {
-  // Board gate: viewers without pending-visibility (other students) only see
-  // ranges that already have a submitted equipment list. Legacy productions
-  // (pre-cutoff) always show everything.
-  const visibleDates = showPending ? (p.dates || []) : boardVisibleDates(p, reservations);
+  // Board gate: a range shows on the card's "next date" ONLY once an equipment
+  // list is submitted for it — for everyone, the director included. Legacy
+  // productions (pre-cutoff) show everything. The director still gets the red
+  // pending-count notice below (showPending) so they know to submit a list.
+  const visibleDates = boardVisibleDates(p, reservations);
   const next = nextDateOf(visibleDates);
   const pendingList = showPending ? pendingDates(p, reservations) : [];
   // Only show role chips for approved AND filled slots (a placeholder with
@@ -578,7 +579,9 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
       </div>
 
       {(tab === "board" || tab === "archive") && (
-        <div>
+        // Layout order: filters → calendar (שיבוצי הפקות) → production cards.
+        // The card sections carry order:1 so they drop below the calendar.
+        <div style={{display:"flex",flexDirection:"column"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
             <label style={{fontSize:13,color:"var(--text2)",fontWeight:700}}>סינון לפי סטודנט:</label>
             <input
@@ -631,7 +634,7 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
             const visibleMine = mineList.filter(p => matchesStudentFilter(p) && belongsToTab(p));
             if (visibleMine.length === 0) return null;
             return (
-              <div style={{marginBottom:24}}>
+              <div style={{marginBottom:24,order:1}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                   <Users size={16} color="var(--accent)"/>
                   <h3 style={{margin:0,fontSize:15,color:"var(--accent)"}}>ההפקות שלי {visibleMine.length ? `(${visibleMine.length})` : ""}</h3>
@@ -654,7 +657,7 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
               (!monthActive || productionInMonth(p, calYr, calMo, datesForViewer(p)))
             );
             return (
-              <div style={{marginBottom:24}}>
+              <div style={{marginBottom:24,order:1}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                   <Film size={16} color="var(--accent)"/>
                   <h3 style={{margin:0,fontSize:15,color:"var(--accent)"}}>{tab === "archive" ? "ארכיון" : "הפקות אחרות"} {others.length ? `(${others.length})` : ""}</h3>
@@ -696,16 +699,17 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
               outOfMonthDays.push(new Date(yr, mo+1, nextDay++));
             }
             const productionBlocks = published.filter(belongsToTab).flatMap(prod => {
-              // Board gate: pending (list-less) ranges render only for the
-              // director/staff — faded, so it's clear they're not public yet.
-              // Legacy productions: subIds=null → everything renders as today.
-              const canPend = showPendingFor(prod);
+              // A date range shows on the board ONLY once an equipment list has
+              // been submitted for it — for EVERYONE, the director included. A
+              // list-less range never renders here (the director still sees it as
+              // a draft in the editor + the production-detail view). Legacy
+              // productions: subIds=null → everything renders as before.
               const subIds = isLegacyProduction(prod) ? null : submittedDateIds(prod, reservations);
               return (prod.dates || [])
-                .filter(d => !subIds || canPend || subIds.has(String(d.id)))
+                .filter(d => !subIds || subIds.has(String(d.id)))
                 .map(d => ({
                   id: `${prod.id}__${d.id}`,
-                  student_name: prod.title,
+                  student_name: prod.directorName ? `${prod.directorName} · ${prod.title}` : prod.title,
                   borrow_date: d.startDate,
                   return_date: d.endDate,
                   borrow_time: d.startTime,
@@ -713,12 +717,11 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
                   loan_type: "הפקה",
                   _productionId: prod.id,
                   _color: prod.archivedAt ? ARCHIVED_COLOR : (prod.color || DEFAULT_PRODUCTION_COLOR),
-                  _pending: !!subIds && !subIds.has(String(d.id)),
                 }));
             });
             const colorMap = {};
             productionBlocks.forEach(b => {
-              colorMap[b.id] = [hexToRgba(b._color, b._pending ? 0.35 : 0.75), pickTextColor(b._color)];
+              colorMap[b.id] = [hexToRgba(b._color, 0.75), pickTextColor(b._color)];
             });
             return (
               <div>

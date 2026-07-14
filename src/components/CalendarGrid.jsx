@@ -98,8 +98,10 @@ export function CalendarGrid({ days, outOfMonthDays=[], activeRes, colorMap, tod
                   right, top, width, height:EVENT_H,
                   background:b.bg,
                   borderRadius: isResStart&&isResEnd?"4px": isResStart?"0 4px 4px 0": isResEnd?"4px 0 0 4px":"0",
-                  display:"flex",alignItems:"center",justifyContent:"flex-end",
-                  paddingLeft:isResStart?8:2, paddingRight:isResEnd?6:2,
+                  // RTL: flex-start packs the label to the RIGHT edge so Hebrew
+                  // reads naturally right-to-left; padding hugs the start (right).
+                  display:"flex",alignItems:"center",justifyContent:"flex-start",
+                  paddingRight:isResStart?8:2, paddingLeft:isResEnd?6:2,
                   overflow:"hidden",whiteSpace:"nowrap",
                   fontSize, color:b.color, fontWeight:700,
                   cursor: onBarClick ? "pointer" : "default",

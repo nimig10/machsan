@@ -11,8 +11,10 @@
 // productions created after the feature ships run the new gate. A missing
 // createdAt is treated as legacy — the safe default.
 
-// Adjust to the actual merge/deploy date before merging to main.
-export const LEGACY_PRODUCTION_CUTOFF_ISO = "2026-07-13";
+// Merge/deploy date of PR #75 — every production created before this day keeps
+// the old behavior forever; verified against prod: newest production predates
+// this by 9 days (2026-07-05), so ALL pre-existing productions are legacy.
+export const LEGACY_PRODUCTION_CUTOFF_ISO = "2026-07-14";
 
 export function isLegacyProduction(p) {
   const created = String(p?.createdAt || "");

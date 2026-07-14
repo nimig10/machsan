@@ -2,7 +2,7 @@
 // Director-only. Sections: title + description, dates, crew, status CTA + delete.
 
 import { useMemo, useState, useRef, useEffect } from "react";
-import { Plus, Trash2, Save, Send, AlertTriangle, ExternalLink } from "lucide-react";
+import { Plus, Trash2, Send, AlertTriangle, ExternalLink } from "lucide-react";
 import { Modal } from "./ui.jsx";
 import { upsertProduction, notifyProductionCrewInvites, publishProduction, deleteProduction, autoApproveDirectorCrew } from "../utils/productionsApi.js";
 import { isLegacyProduction, submittedDateIds } from "../utils/productionVisibility.js";
@@ -30,6 +30,9 @@ const COLOR_PALETTE = [
   "#e74c3c",  // אדום
 ];
 const DEFAULT_COLOR = "#e67e22";
+// Yellow highlight shared by every "add" button (+ תאריך / + צלם ראשי /
+// + איש סאונד / + תפקיד מותאם) so they read clearly as add actions.
+const ADD_BTN_STYLE = { background: "#f5a623", color: "#1a1a1a", border: "1px solid #f5a623", fontWeight: 700 };
 function getRoleLabel(c) {
   if (c?.role === "custom") return c.roleLabel || "תפקיד מותאם";
   return ROLE_LABELS[c?.role] || c?.role || "";
@@ -75,15 +78,6 @@ function minShootISO() {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
-}
-function fmtDeadline(startDate) {
-  if (!startDate) return null;
-  const d = new Date(startDate);
-  d.setDate(d.getDate() - 7); // 8 days inclusive = 7 calendar days between
-  const today = new Date();
-  today.setHours(0,0,0,0);
-  const diff = Math.floor((d - today) / (24*3600*1000));
-  return { date: d.toLocaleDateString("he-IL", { day:"2-digit", month:"2-digit" }), diff };
 }
 // "13/07/2026 – 15/07/2026" (or a single date when the range is one day).
 function fmtRangeHe(d) {
@@ -138,10 +132,18 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
   // `genId("prod")` every render, a failed publish retry would insert a NEW
   // row each time (root cause of the "3 duplicates created" bug).
   const [productionId] = useState(() => initial?.id || genId("prod"));
+  // True once the production exists in the DB (existing on open, or after the
+  // first successful persist). Gates the on-close pruning of list-less ranges —
+  // a brand-new production that was never published has nothing to clean up.
+  const persistedRef = useRef(!!initial?.id);
   const isPublished = initial?.status === "published";
   // Live (not persisted) check — uses local crew state so the button reflects
   // edits made in this session even before save.
   const hasApprovedPhotographer = crew.some(c => c.role === "photographer" && c.status === "approved" && c.studentId);
+  // A photographer is ASSIGNED as soon as a student is picked — even before the
+  // save auto-approves the row (status is still 'invited' pre-save). Gates the
+  // per-range "הגש רשימת ציוד" shortcut in create mode.
+  const hasPhotographerAssigned = crew.some(c => c.role === "photographer" && c.studentId);
 
   const linkedReservations = useMemo(() =>
     (reservations || []).filter(r => r.production_id === productionId),
@@ -157,8 +159,13 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
   // behavior (no pending warnings / post-save prompt). A brand-new production
   // (no `initial`) is always gated.
   const isLegacy = initial ? isLegacyProduction(initial) : false;
-  const anyDateLocked = lockedDateIds.size > 0;
   const allDatesLocked = dates.length > 0 && dates.every(d => lockedDateIds.has(String(d.id)));
+  // Iron rule: you may add a new date range only once every existing range has a
+  // submitted equipment list. This guarantees at most ONE list-less range at any
+  // time (the last one added), so submitting a list for one range can never leave
+  // a sibling range dangling on the board. Legacy productions are exempt, and the
+  // very first range (none yet) is always allowed.
+  const canAddDate = isLegacy || dates.length === 0 || allDatesLocked;
 
   // Kits filtered to those usable for production loans.
   const productionKits = useMemo(
@@ -189,6 +196,10 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
 
   const minShoot = minShootISO();
   function addDate() {
+    if (!canAddDate) {
+      showToast?.("יש להגיש רשימת ציוד לטווח הקיים לפני הוספת טווח תאריכים נוסף", "error");
+      return;
+    }
     setDates(prev => [...prev, {
       id: genId("pd"),
       startDate: minShoot,
@@ -343,16 +354,10 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
     return null;
   }
 
-  async function persist(targetStatus) {
-    const err = validate();
-    if (err) {
-      setErrorField(err.field);
-      showToast?.(err.message, "error");
-      return null;
-    }
-    setErrorField(null);
-    setSaving(true);
-    const blob = {
+  // Build the production blob from the current editor state. Shared by persist()
+  // and the on-close cleanup so both write an identical shape.
+  function buildBlob(targetStatus) {
+    return {
       id:                 productionId,
       title:              title.trim(),
       description,
@@ -368,6 +373,18 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
       dates,
       crew,
     };
+  }
+
+  async function persist(targetStatus) {
+    const err = validate();
+    if (err) {
+      setErrorField(err.field);
+      showToast?.(err.message, "error");
+      return null;
+    }
+    setErrorField(null);
+    setSaving(true);
+    const blob = buildBlob(targetStatus);
     const res = await upsertProduction(blob);
     if (!res.ok) {
       setSaving(false);
@@ -376,6 +393,9 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
       showToast?.(`שגיאה בשמירה: ${detail || "ראה Console"}`, "error");
       return null;
     }
+    // The production (and its date rows) now exist in the DB — the on-close
+    // cleanup may need to prune list-less ranges.
+    persistedRef.current = true;
     // No approval flow: director-composed crew rows are auto-approved right
     // after the save. Rows are still WRITTEN as 'invited' (do not change that —
     // the approved→invited UPDATE is what fires the DB recheck trigger), and
@@ -396,19 +416,10 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
     return blob;
   }
 
-  async function onSaveDraft() {
-    const blob = await persist("draft");
-    if (blob) {
-      showToast?.("נשמר כטיוטה", "success");
-      onSaved?.(blob);
-      onClose();
-    }
-  }
-
   // After a successful publish/update: a gated (non-legacy) published production
-  // that still has ranges without a submitted equipment list gets a blocking
-  // prompt — those ranges are NOT shown on the public board until a list is
-  // submitted. Legacy productions close silently, exactly as before.
+  // that still has ranges without a submitted equipment list gets a BLOCKING
+  // prompt. The director must either submit a list for each range or discard
+  // them — there is no "later". Legacy productions close silently, as before.
   function closeOrPromptPending(blob) {
     const pending = isLegacy ? [] : (blob.dates || []).filter(d => !lockedDateIds.has(String(d.id)));
     if (blob.status === "published" && pending.length > 0) {
@@ -418,43 +429,83 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
     }
   }
 
-  async function onPublish() {
+  // Persist + publish (or re-save if already published), returning the published
+  // blob (null on failure). Shared by the "פרסם"/"עדכן" button and the per-range
+  // "הגש רשימת ציוד" shortcut. Handles toast + onSaved + crew-invite mail; the
+  // CALLER decides what happens next (pending-ranges prompt, or the loan form).
+  async function persistAndPublish() {
     if (initial?.status === "published") {
       const blob = await persist("published");
-      if (blob) {
-        showToast?.("עודכן", "success");
-        onSaved?.(blob);
-        void notifyCrewInvites(blob, { onlyNew: true });
-        closeOrPromptPending(blob);
-      }
-      return;
+      if (!blob) return null;
+      showToast?.("עודכן", "success");
+      onSaved?.(blob);
+      void notifyCrewInvites(blob, { onlyNew: true });
+      return blob;
     }
     setPublishing(true);
     const blob = await persist("draft");
-    if (!blob) { setPublishing(false); return; }
+    if (!blob) { setPublishing(false); return null; }
     const pubRes = await publishProduction(productionId);
     setPublishing(false);
     if (!pubRes.ok) {
       console.error("[ProductionEditor.publish]", { productionId, error: pubRes.error, raw: pubRes });
       const detail = String(pubRes.error || "").slice(0, 200);
       showToast?.(`שגיאה בפרסום: ${detail || "ראה Console"}`, "error");
-      return;
+      return null;
     }
     const publishedBlob = { ...blob, status: "published", publishedAt: new Date().toISOString() };
     showToast?.("ההפקה פורסמה", "success");
     onSaved?.(publishedBlob);
     void notifyCrewInvites(publishedBlob, { onlyNew: false });
-    closeOrPromptPending(publishedBlob);
+    return publishedBlob;
   }
 
-  // Saves current state and opens the equipment-loan form pre-filled with this production.
-  // Requires: existing production, published status, approved photographer.
-  async function onClickLoanForm() {
-    const targetStatus = initial?.status === "published" ? "published" : "draft";
-    const blob = await persist(targetStatus);
+  async function onPublish() {
+    const blob = await persistAndPublish();
+    if (blob) closeOrPromptPending(blob);
+  }
+
+  // Per-range shortcut ("הגש רשימת ציוד"): publish the production (so the range +
+  // crew exist in the DB and the production is board-eligible), then jump
+  // straight to the equipment step of the loan form pre-filled for THIS range.
+  // Needs a photographer — the loan's cert snapshot derives from the approved
+  // photographer/sound.
+  async function submitListForRange(dateId) {
+    if (!hasPhotographerAssigned) {
+      showToast?.("יש לשבץ צלם ראשי לפני הגשת רשימת ציוד", "error");
+      return;
+    }
+    const blob = await persistAndPublish();
     if (!blob) return;
-    onSaved?.(blob);
-    onOpenLoanForm?.(blob);
+    onOpenLoanForm?.(blob, dateId);
+    onClose();
+  }
+
+  // Close the editor. A date range the director entered but never submitted an
+  // equipment list for is pruned automatically — a range only stays on the board
+  // once its list is in. upsertProduction diffs the dates array and DELETEs the
+  // production_dates rows no longer present (a DELETE does not fire the
+  // director-overlap trigger). Only runs for a persisted non-legacy production;
+  // navigating to the loan form (submitListForRange) uses raw onClose() and does
+  // NOT prune, so other pending ranges survive until the next real close.
+  async function handleEditorClose() {
+    const pending = (persistedRef.current && !isLegacy)
+      ? dates.filter(d => !lockedDateIds.has(String(d.id)))
+      : [];
+    if (pending.length === 0) { onClose(); return; }
+    const dropIds = new Set(pending.map(d => String(d.id)));
+    const keptDates = dates.filter(d => !dropIds.has(String(d.id)));
+    const blob = { ...buildBlob("published"), dates: keptDates };
+    const res = await upsertProduction(blob);
+    if (res.ok) {
+      onSaved?.(blob);
+      showToast?.(
+        pending.length === 1 ? "טווח תאריכים ללא רשימת ציוד הוסר מההפקה" : `${pending.length} טווחי תאריכים ללא רשימה הוסרו מההפקה`,
+        "info"
+      );
+    } else {
+      showToast?.(`שגיאה בהסרת טווח ללא רשימה: ${String(res.error || "").slice(0, 120)}`, "error");
+    }
     onClose();
   }
 
@@ -473,7 +524,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
   return (
     <Modal
       title={isNew ? "הפקה חדשה" : `עריכת הפקה: ${initial?.title || ""}`}
-      onClose={onClose}
+      onClose={handleEditorClose}
       size="modal-lg"
       footer={
         <div style={{display:"flex",gap:8,justifyContent:"space-between",flexWrap:"wrap"}}>
@@ -487,21 +538,11 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
             )}
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            <button className="btn btn-secondary btn-sm" onClick={onClose}>סגירה</button>
-            {!isPublished && (
-              <button className="btn btn-secondary btn-sm" onClick={onSaveDraft} disabled={saving}>
-                <Save size={14} /> שמור טיוטה
-              </button>
-            )}
+            <button className="btn btn-secondary btn-sm" onClick={handleEditorClose}>סגירה</button>
+            {/* No drafts — a created production is published to everyone immediately. */}
             <button className="btn btn-primary btn-sm" onClick={onPublish} disabled={publishing}>
               <Send size={14} /> {isPublished ? "עדכן" : "פרסם"}
             </button>
-            {!isNew && isPublished && hasApprovedPhotographer && onOpenLoanForm && !allDatesLocked && (
-              <button className="btn btn-primary btn-sm" onClick={onClickLoanForm} disabled={saving}
-                title="שמירה ומעבר לטופס השאלת הציוד">
-                <ExternalLink size={14}/> השאלת ציוד להפקה
-              </button>
-            )}
             {!isNew && isPublished && allDatesLocked && onOpenMyReservations && (
               <button className="btn btn-secondary btn-sm" onClick={onOpenMyReservations}
                 title="הוגשו רשימות לכל הטווחים — מעבר ל'ההזמנות שלי' לעריכה/מחיקה">
@@ -511,33 +552,6 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
           </div>
         </div>
       }>
-      {/* ── סוג ההפקה (kit binding) — first field, sets the equipment scope ── */}
-      <div style={{marginBottom:18}}>
-        <label className="form-label">סוג ההפקה</label>
-        <select
-          className="form-input"
-          value={selectedKitId}
-          onChange={e => setSelectedKitId(e.target.value)}
-          disabled={kitFieldLocked}
-          title={kitFieldLocked ? "לא ניתן לשנות לאחר שהוגשה רשימת ציוד לכל הטווחים" : undefined}
-          style={kitFieldLocked ? {opacity:0.6, cursor:"not-allowed"} : undefined}
-        >
-          <option value="">כללית — ללא הגבלת ציוד</option>
-          {productionKits.map(k => (
-            <option key={k.id} value={k.id}>{k.name}</option>
-          ))}
-          {legacyKit && (
-            <option key={legacyKit.id} value={legacyKit.id}>
-              {legacyKit.name} (לא זמינה יותר)
-            </option>
-          )}
-        </select>
-        <div style={{fontSize:12,color:"var(--text3)",marginTop:6}}>
-          בחירת ערכה מגבילה את הצוות לפריטי ציוד בתוך הערכה בלבד בעת מילוי טופס ההשאלה.
-          {kitFieldLocked && <span style={{color:"#2ecc71",marginInlineStart:6,fontWeight:700}}>🔒 נעול — הוגשה רשימת ציוד לכל הטווחים.</span>}
-        </div>
-      </div>
-
       {/* ── כותרת + תיאור ── */}
       <div style={{marginBottom:18}}>
         <label className="form-label">שם ההפקה</label>
@@ -605,26 +619,56 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
         </div>
       </div>
 
+      {/* ── סוג ההפקה (kit binding) — sets the equipment scope; sits right above the dates ── */}
+      <div style={{marginBottom:18}}>
+        <label className="form-label">סוג ההפקה</label>
+        <select
+          className="form-input"
+          value={selectedKitId}
+          onChange={e => setSelectedKitId(e.target.value)}
+          disabled={kitFieldLocked}
+          title={kitFieldLocked ? "לא ניתן לשנות לאחר שהוגשה רשימת ציוד לכל הטווחים" : undefined}
+          style={kitFieldLocked ? {opacity:0.6, cursor:"not-allowed"} : undefined}
+        >
+          <option value="">כללית — ללא הגבלת ציוד</option>
+          {productionKits.map(k => (
+            <option key={k.id} value={k.id}>{k.name}</option>
+          ))}
+          {legacyKit && (
+            <option key={legacyKit.id} value={legacyKit.id}>
+              {legacyKit.name} (לא זמינה יותר)
+            </option>
+          )}
+        </select>
+        <div style={{fontSize:12,color:"var(--text3)",marginTop:6}}>
+          בחירת ערכה מגבילה את הצוות לפריטי ציוד בתוך הערכה בלבד בעת מילוי טופס ההשאלה.
+          {kitFieldLocked && <span style={{color:"#2ecc71",marginInlineStart:6,fontWeight:700}}>🔒 נעול — הוגשה רשימת ציוד לכל הטווחים.</span>}
+        </div>
+      </div>
+
       {/* ── תאריכי צילום ── */}
       <div style={{marginBottom:18}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
           <h4 style={{margin:0, color: errorField === "dates" ? "#e74c3c" : undefined}}>
             תאריכי צילום {errorField === "dates" && <span style={{fontSize:12}}>⚠</span>}
           </h4>
-          <button className="btn btn-secondary btn-sm" onClick={() => { addDate(); if (errorField === "dates") setErrorField(null); }}>
+          <button className="btn btn-secondary btn-sm"
+            style={{...ADD_BTN_STYLE, ...(canAddDate ? {} : {opacity:0.5, cursor:"not-allowed"})}}
+            disabled={!canAddDate}
+            title={canAddDate ? undefined : "יש להגיש רשימת ציוד לטווח הקיים לפני הוספת טווח תאריכים נוסף"}
+            onClick={() => { addDate(); if (errorField === "dates") setErrorField(null); }}>
             <Plus size={14}/> תאריך
           </button>
         </div>
-        {anyDateLocked && (
-          <div style={{background:"rgba(231,76,60,0.08)",border:"1px solid #e74c3c",borderRadius:6,padding:"10px 12px",marginBottom:10,fontSize:13,color:"var(--text)",lineHeight:1.5}}>
-            🔒 <strong style={{color:"#e74c3c"}}>חלק מהתאריכים נעולים</strong> — טווחי תאריכים שכבר הוגשה עליהם רשימת ציוד לא ניתנים לעריכה. אפשר עדיין להוסיף/לערוך טווחים אחרים.
+        {!canAddDate && dates.length > 0 && !isLegacy && (
+          <div style={{fontSize:12,color:"var(--text2)",background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:6,padding:"8px 10px",marginBottom:10}}>
+            💡 יש להגיש רשימת ציוד לטווח הקיים לפני הוספת טווח תאריכים נוסף.
           </div>
         )}
         {dates.length === 0 && <p style={{color:"var(--text3)",fontSize:13}}>הוסיפו לפחות תאריך אחד</p>}
         {dates.map((d, origIdx) => ({d, idx: origIdx}))
           .sort((a, b) => String(a.d.startDate || "").localeCompare(String(b.d.startDate || "")))
           .map(({d, idx}) => {
-          const dl = fmtDeadline(d.startDate);
           const dateLocked = lockedDateIds.has(String(d.id));
           // Max end date = startDate + 6 days (7-day window incl). Use local
           // components — toISOString() shifts to UTC and off-by-ones in IDT.
@@ -699,37 +743,25 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
                   )}
                 </div>
               )}
-              {!dateLocked && dl && (() => {
-                let text, color, bg, border;
-                if (dl.diff > 0) {
-                  text = `${dl.diff} ימים להגשת רשימת הציוד`;
-                  if (dl.diff <= 3) { color = "#f5a623"; bg = "rgba(245,166,35,0.12)"; border = "rgba(245,166,35,0.4)"; }
-                  else { color = "#e67e22"; bg = "rgba(230,126,34,0.12)"; border = "rgba(230,126,34,0.4)"; }
-                } else if (dl.diff === 0) {
-                  text = "חובה עליך להגיש היום רשימת ציוד";
-                  color = "#e74c3c"; bg = "rgba(231,76,60,0.15)"; border = "#e74c3c";
-                } else {
-                  text = `עבר הדדליין (${Math.abs(dl.diff)} ימים)`;
-                  color = "#e74c3c"; bg = "rgba(231,76,60,0.15)"; border = "#e74c3c";
-                }
-                return (
-                  <div style={{
-                    flex:"1 1 100%",
-                    fontSize:13, color, fontWeight:700,
-                    padding:"6px 10px", borderRadius:6,
-                    background:bg, border:`1px solid ${border}`,
-                    marginTop:4,
-                    display:"flex", flexDirection:"column", gap:4,
-                  }}>
-                    <span style={{display:"flex", alignItems:"center", gap:6}}>⏱ {text}</span>
-                    {!isLegacy && (
-                      <span style={{fontSize:12, fontWeight:400}}>
-                        הטווח לא יופיע בלוח ההפקות עד להגשת רשימת ציוד לטווח זה
-                      </span>
-                    )}
-                  </div>
-                );
-              })()}
+              {/* Per-range shortcut: submit the equipment list for THIS range.
+                  A range without a list won't appear on the board (and is
+                  removed on close) — so this is the primary path, not optional.
+                  Button on the right (RTL start); explanation flows to its left. */}
+              {!dateLocked && !isLegacy && (
+                <div style={{flex:"1 1 100%",marginTop:4,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  {hasPhotographerAssigned ? (
+                    <button className="btn btn-primary btn-sm" onClick={() => submitListForRange(d.id)} disabled={saving || publishing}
+                      title="פרסום ההפקה ומעבר ישיר להגשת רשימת ציוד לטווח זה">
+                      🎬 הגש רשימת ציוד
+                    </button>
+                  ) : (
+                    <span style={{fontSize:12,color:"#e74c3c",fontWeight:700}}>⚠ יש לשבץ צלם ראשי לפני הגשת רשימת ציוד</span>
+                  )}
+                  <span style={{fontSize:12.5,color:"#f5a623",fontWeight:800}}>
+                    ⚠ טווח התאריכים יופיע בלוח רק לאחר הגשת רשימת ציוד — אחרת יימחק
+                  </span>
+                </div>
+              )}
             </div>
           );
         })}
@@ -743,13 +775,13 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
           </h4>
           <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
             {ROLE_ORDER.map(role => (
-              <button key={role} className="btn btn-secondary btn-sm"
+              <button key={role} className="btn btn-secondary btn-sm" style={ADD_BTN_STYLE}
                 onClick={() => { addCrew(role); if (errorField === "crew") setErrorField(null); }}
                 title={role === "photographer" ? "חובה — צלם ראשי נדרש להגשת רשימת ציוד" : undefined}>
                 <Plus size={12}/> {ROLE_LABELS[role]}
               </button>
             ))}
-            <button className="btn btn-secondary btn-sm"
+            <button className="btn btn-secondary btn-sm" style={ADD_BTN_STYLE}
               onClick={() => { openCustomRolePrompt(); if (errorField === "crew") setErrorField(null); }}
               title="הוסף תפקיד עם שם מותאם (למשל: תאורן, צבע, מנהל הפקה)">
               <Plus size={12}/> תפקיד מותאם
@@ -880,43 +912,48 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
       )}
 
       {postSavePrompt && (
-        <Modal title="ההפקה פורסמה — נותרו טווחים ללא רשימת ציוד"
-          onClose={() => { setPostSavePrompt(null); onClose(); }}
+        <Modal title="חובה להגיש רשימת ציוד לכל טווח תאריכים"
+          onClose={() => setPostSavePrompt(null)}
           footer={
             <div style={{display:"flex",gap:8,justifyContent:"end",alignItems:"center",flexWrap:"wrap"}}>
-              <button className="btn btn-secondary btn-sm" onClick={() => { setPostSavePrompt(null); onClose(); }}>
-                אחר כך
+              {/* No delete button here — closing this dialog just returns to the
+                  editor. Any range still without a list is pruned only when the
+                  editor itself is closed (handleEditorClose). */}
+              <button className="btn btn-secondary btn-sm" onClick={() => setPostSavePrompt(null)}>
+                חזרה לעריכה
               </button>
-              {hasApprovedPhotographer ? (
-                <button className="btn btn-primary btn-sm" onClick={() => {
-                  const pend = postSavePrompt.pending;
-                  onOpenLoanForm?.(postSavePrompt.blob, pend.length === 1 ? pend[0].id : undefined);
-                }}>
-                  <ExternalLink size={14}/> הגש רשימת ציוד עכשיו
-                </button>
-              ) : (
-                <span style={{fontSize:12,color:"#e74c3c",fontWeight:700}}>
-                  ⚠ יש לשבץ צלם ראשי לפני הגשת רשימת ציוד
-                </span>
-              )}
             </div>
           }>
           <div style={{display:"flex",gap:10,alignItems:"start"}}>
             <AlertTriangle size={22} color="#e74c3c" style={{flexShrink:0,marginTop:2}}/>
-            <div>
+            <div style={{flex:1,minWidth:0}}>
               <p style={{margin:"0 0 8px",fontWeight:700}}>
                 {postSavePrompt.pending.length === 1
-                  ? "טווח צילום אחד עדיין ללא רשימת ציוד מוגשת."
-                  : `${postSavePrompt.pending.length} טווחי צילום עדיין ללא רשימת ציוד מוגשת.`}
+                  ? "טווח תאריכים אחד עדיין ללא רשימת ציוד."
+                  : `${postSavePrompt.pending.length} טווחי תאריכים עדיין ללא רשימת ציוד.`}
               </p>
-              <p style={{margin:"0 0 10px",fontSize:13,color:"var(--text2)",lineHeight:1.6}}>
-                טווחים אלה <strong>לא יוצגו בלוח ההפקות</strong> לשאר הסטודנטים עד שתוגש עבורם רשימת ציוד.
+              <p style={{margin:"0 0 12px",fontSize:13,color:"var(--text2)",lineHeight:1.6}}>
+                טווח תאריכים יופיע בלוח ההפקות <strong>רק</strong> אחרי שתוגש לו רשימת ציוד.
+                טווח תאריכים שתשאיר ללא רשימה <strong style={{color:"#e74c3c"}}>יוסר</strong> מההפקה בעת סגירת החלון.
               </p>
-              <ul style={{margin:0,paddingInlineStart:20,fontSize:13}}>
+              {!hasApprovedPhotographer && (
+                <p style={{margin:"0 0 10px",fontSize:12,color:"#e74c3c",fontWeight:700}}>
+                  ⚠ יש לשבץ צלם ראשי לפני הגשת רשימת ציוד
+                </p>
+              )}
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {postSavePrompt.pending.map(d => (
-                  <li key={d.id} style={{marginBottom:2}}>{fmtRangeHe(d)}</li>
+                  <div key={d.id} style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"space-between",border:"1px solid var(--border)",borderRadius:6,padding:"8px 10px",background:"var(--surface2)"}}>
+                    <span style={{fontSize:13,fontWeight:700}}>{fmtRangeHe(d)}</span>
+                    {hasApprovedPhotographer && (
+                      <button className="btn btn-primary btn-sm"
+                        onClick={() => onOpenLoanForm?.(postSavePrompt.blob, d.id)}>
+                        <ExternalLink size={14}/> הגש רשימת ציוד
+                      </button>
+                    )}
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
           </div>
         </Modal>
