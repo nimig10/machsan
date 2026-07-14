@@ -16,7 +16,6 @@ export function StudentHub({
   onOpenUserGuide,
   canInstall = false,
   onInstall = () => {},
-  pendingProductionRequests = 0,
   roles = {},
   onSwitchRole = () => {},
 }) {
@@ -36,7 +35,6 @@ export function StudentHub({
       title: "לוח הפקות",
       desc: "ניהול הפקות, צוות ותאריכי צילום",
       color: "#8b5cf6",
-      badge: pendingProductionRequests > 0 ? pendingProductionRequests : null,
     },
     // Multi-role cards — shown only when the user's public.users flags grant
     // access to another interface. Single-role students see exactly the two
@@ -136,16 +134,6 @@ export function StudentHub({
                   boxShadow: hovered === opt.key ? `0 8px 24px ${opt.color}20` : "0 2px 8px rgba(0,0,0,0.06)",
                 }}
               >
-                {opt.badge && (
-                  <span style={{
-                    position: "absolute", top: 12, left: 12,
-                    background: "#ef4444", color: "#fff",
-                    fontSize: 11, fontWeight: 900,
-                    minWidth: 22, height: 22, borderRadius: 11,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    padding: "0 6px",
-                  }}>{opt.badge}</span>
-                )}
                 <span style={{ color: opt.color }}>{opt.icon}</span>
                 <span style={{ fontSize: 20, fontWeight: 800, color: "var(--text)" }}>{opt.title}</span>
                 <span style={{ fontSize: 14, color: "var(--text2)", fontWeight: 600, textAlign: "center", lineHeight: 1.5 }}>{opt.desc}</span>

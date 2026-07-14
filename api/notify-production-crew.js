@@ -113,12 +113,12 @@ function buildEmail({ studentName, directorName, roleLabel, appUrl }) {
     <div style="padding:30px;direction:rtl;text-align:right">
       <div style="background:#f5a6231a;border:1px solid #f5a623;border-radius:10px;padding:18px;text-align:center;margin-bottom:24px">
         <div style="font-size:32px;margin-bottom:6px">&#127916;</div>
-        <h2 style="color:#f5a623;margin:0;font-size:18px;text-align:center">הזמנה להשתתפות בהפקה</h2>
+        <h2 style="color:#f5a623;margin:0;font-size:18px;text-align:center">שובצת להפקה</h2>
       </div>
       <p style="font-size:15px;line-height:1.8;color:#e8eaf0;margin:0 0 14px">שלום רב <strong>${safeStudent}</strong>,</p>
       <p style="font-size:14px;line-height:1.9;color:#8891a8;margin:0 0 26px">
-        הבמאי <strong style="color:#e8eaf0">${safeDirector}</strong> הזמין אותך להשתתף בהפקה שלו בתפקיד <strong style="color:#e8eaf0">${safeRole}</strong>.<br/>
-        אנא כנס/י ללוח ההפקות על מנת לאשר את השתתפותך בהפקה.
+        הבמאי <strong style="color:#e8eaf0">${safeDirector}</strong> שיבץ אותך לצוות ההפקה שלו בתפקיד <strong style="color:#e8eaf0">${safeRole}</strong>.<br/>
+        אין צורך באישור מצדך — השיבוץ נכנס לתוקף אוטומטית. ניתן לצפות בפרטי ההפקה ובתאריכי הצילום בלוח ההפקות.
       </p>
       <div style="text-align:center;margin:28px 0 10px">
         <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:16px 34px;background:#f5a623;color:#0a0c10;font-weight:900;font-size:15px;border-radius:10px;text-decoration:none;box-shadow:0 4px 18px rgba(245,166,35,0.35);font-family:Arial,'Helvetica Neue',Helvetica,sans-serif">
@@ -187,7 +187,7 @@ export default async function handler(req, res) {
         await transporter.sendMail({
           from: `"מכללת קמרה אובסקורה וסאונד" <${GMAIL_USER}>`,
           to,
-          subject: "הזמנה להשתתפות בהפקה - לוח הפקות",
+          subject: "שובצת לצוות הפקה - לוח הפקות",
           html: buildEmail({
             studentName: student?.name || to.split("@")[0],
             directorName: production.director_name || user.email,

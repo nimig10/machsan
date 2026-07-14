@@ -4294,10 +4294,6 @@ ${inventory}
   // Mirrors the StaffHub pattern. Forms and productions live as separate
   // "apps" so the PublicForm tab strip can stay focused on the loan flow.
   if (loggedInStudent && studentApp === "hub") {
-    const pendingProductionRequests = (productions || [])
-      .filter(p => String(p.directorEmail || "").toLowerCase() === String(loggedInStudent.email || "").toLowerCase())
-      .reduce((acc, p) => acc + (p.crew || []).filter(c => c.status === "invited" && c.invitedBy === "self").length, 0);
-
     // Role flags written by routeToStudent — power the multi-role cards
     // ("פורטל מרצה" / "ניהול מערכת") on the hub. Single-role students get {}.
     const studentRoles = (() => {
@@ -4312,7 +4308,6 @@ ${inventory}
           logo={siteSettings.logo}
           canInstall={canInstall}
           onInstall={onInstall}
-          pendingProductionRequests={pendingProductionRequests}
           onSelectApp={(key) => setStudentApp(key)}
           roles={studentRoles}
           onSwitchRole={(role) => {
@@ -4399,19 +4394,39 @@ ${inventory}
               reservations={reservations}
               showToast={(msg, type="info") => showToast(type, msg)}
               refresh={refreshProductions}
-              onOpenLoanForm={(p) => {
+              onOpenLoanForm={(p, dateId) => {
+                // dateId (optional) — a specific shoot range to pre-select
+                // (comes from the per-range "הגש רשימת ציוד" buttons). Seeds the
+                // borrow/return fields exactly like clicking the range chip in
+                // step 2 would. Falls back to the sole range for a single-date
+                // production so we can still land directly on the equipment step.
+                const target = dateId
+                  ? (p?.dates || []).find(x => String(x.id) === String(dateId))
+                  : (p?.dates?.length === 1 ? p.dates[0] : null);
                 setForm(f => ({
                   ...f,
                   loan_type: "הפקה",
                   project_name: p?.title || f.project_name,
                   production_id: p?.id || "",
-                  production_date_id: p?.dates?.length === 1 ? p.dates[0].id : "",
+                  production_date_id: target ? target.id : "",
+                  ...(target ? {
+                    borrow_date: target.startDate,
+                    return_date: target.endDate,
+                    borrow_time: target.startTime || "",
+                    return_time: target.endTime || "",
+                  } : {}),
                   production_reason: p?.description || "",
                   ...deriveProductionCrewSnapshot(p, studentsFromTable),
                 }));
                 setStudentApp("forms");
                 setPublicView("equipment");
-                setStep(2);
+                // With a resolved range the dates are seeded, so jump straight to
+                // the equipment step (step 3) — steps 1 (identity, auto-filled for
+                // the logged-in director) and 2 (dates) are already satisfied.
+                // Without one (multi-date production, no dateId) fall back to the
+                // dates step so the director picks a range first — availEq needs
+                // borrow/return dates or the equipment grid renders empty.
+                setStep(target ? 3 : 2);
                 showToast("info", `הופנית להשאלת ציוד עבור: ${p?.title || ""}`);
               }}
               onOpenMyReservations={() => {
@@ -4829,8 +4844,16 @@ ${inventory}
                         {[...availableDates]
                           .sort((a, b) => String(a.startDate || "").localeCompare(String(b.startDate || "")))
                           .map(d => {
-                          const isActive = form.borrow_date === d.startDate && form.return_date === d.endDate
-                            && form.borrow_time === d.startTime && form.return_time === d.endTime;
+                          // Match on production_date_id first — it's the canonical
+                          // id the "הגש רשימת ציוד" bridge pre-seeds. Falling back to
+                          // date/time comparison is fragile: the bridge seeds times
+                          // from the editor blob ("09:00") while these chips come from
+                          // the DB-loaded production ("09:00:00"), so the strings differ
+                          // and the pre-selected chip wouldn't highlight on step-back.
+                          const isActive = form.production_date_id
+                            ? String(form.production_date_id) === String(d.id)
+                            : (form.borrow_date === d.startDate && form.return_date === d.endDate
+                               && form.borrow_time === d.startTime && form.return_time === d.endTime);
                           const fmtCh = (s) => { try { return new Date(s + "T00:00:00").toLocaleDateString("he-IL", { day:"2-digit", month:"2-digit" }); } catch { return s; } };
                           const trimT = (t) => String(t || "").slice(0,5); // "17:30:00" → "17:30"
                           return (
@@ -5371,17 +5394,6 @@ ${inventory}
           >
             ← חזרה לדף הכניסה
           </button>
-          {(() => { try { const r = JSON.parse(sessionStorage.getItem("public_student_roles")||"{}"); return r.is_admin || r.is_warehouse; } catch { return false; } })() && (
-            <button
-              type="button"
-              onClick={() => { sessionStorage.setItem("active_role", "staff"); sessionStorage.removeItem("public_student"); sessionStorage.removeItem("public_student_roles"); sessionStorage.removeItem("public_view"); window.location.assign("/"); }}
-              style={{background:"#f5a623",border:"1px solid #f5a623",color:"#0a0c10",fontSize:13,cursor:"pointer",padding:"8px 20px",borderRadius:8,transition:"all 0.15s",fontWeight:800,marginTop:8}}
-              onMouseEnter={e=>{e.currentTarget.style.opacity="0.9";}}
-              onMouseLeave={e=>{e.currentTarget.style.opacity="1";}}
-            >
-              ניהול מערכת
-            </button>
-          )}
         </div>
       </div>
     </div>
