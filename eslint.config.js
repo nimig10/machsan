@@ -44,13 +44,18 @@ export default defineConfig([
       // crash (e.g. a missing import). CI must fail on it. See the formatTime /
       // updateReservationStatus / deleteReservation incidents.
       'no-undef': 'error',
+      // ERROR-level: a conditional hook (e.g. a useMemo after an early return)
+      // shifts the hook order between renders and throws "Rendered more hooks
+      // than during the previous render" — a hard crash, latent until the guard
+      // first fires. Same reasoning as no-undef above. The other react-hooks
+      // rules stay warn-level: they flag style/staleness, not guaranteed crashes.
+      'react-hooks/rules-of-hooks': 'error',
       'no-useless-escape': 'warn',
       'no-constant-binary-expression': 'warn',
       'no-dupe-keys': 'warn',
       'react-refresh/only-export-components': 'warn',
       'react-hooks/static-components': 'warn',
       'react-hooks/refs': 'warn',
-      'react-hooks/rules-of-hooks': 'warn',
       'react-hooks/purity': 'warn',
       'react-hooks/set-state-in-effect': 'warn',
       'react-hooks/preserve-manual-memoization': 'warn',
