@@ -251,16 +251,19 @@ function ProductionCard({ p, reservations, onClick, showPending = false }) {
 }
 
 function ProductionDetail({ p, currentStudent, students, kits = [], reservations = [], showPending = false, onClose, onEdit, onOpenLoanForm, onOpenMyReservations }) {
+  // Date ranges that already have an active (non-cancelled) equipment reservation
+  // attached. The director must remove the reservation via "ההזמנות שלי" before
+  // submitting a new list for the same range.
+  // Hooks must run before any early return — a conditional hook changes the hook
+  // order between renders and throws "Rendered more hooks than during the
+  // previous render". Hence the null-guard lives inside the memo, not above it.
+  const lockedDateIds = useMemo(() => (p ? submittedDateIds(p, reservations) : new Set()), [p, reservations]);
   if (!p) return null;
   const isDirector = currentStudent && p.directorEmail &&
     String(currentStudent.email || "").toLowerCase() === String(p.directorEmail).toLowerCase();
   const hasApprovedPhotographer = (p.crew || []).some(c => c.role === "photographer" && c.status === "approved" && c.studentId);
   const isLegacy = isLegacyProduction(p);
 
-  // Date ranges that already have an active (non-cancelled) equipment reservation
-  // attached. The director must remove the reservation via "ההזמנות שלי" before
-  // submitting a new list for the same range.
-  const lockedDateIds = useMemo(() => submittedDateIds(p, reservations), [reservations, p]);
   const totalDates = (p.dates || []).length;
   const allDatesLocked = totalDates > 0 && (p.dates || []).every(d => lockedDateIds.has(String(d.id)));
 
