@@ -586,6 +586,30 @@ export function normalizeEquipmentTagFlags(list = [], categoryTypes = {}) {
     return normalized;
   });
 }
+
+// Equipment type filter ("all" | "sound" | "photo") over the per-item
+// soundOnly/photoOnly flags. An item tagged with neither — or with both — is
+// "general" gear (cables, memory cards) shared by both disciplines, so it
+// matches every filter. Never narrow this to a strict flag test: it would
+// strand the untagged categories, unreachable under any filter but "all".
+export function matchesEquipmentTypeFilter(eq, filter) {
+  if (filter !== "sound" && filter !== "photo") return true;
+  const isGeneral = (!eq?.soundOnly && !eq?.photoOnly) || (eq?.soundOnly && eq?.photoOnly);
+  if (isGeneral) return true;
+  return filter === "sound" ? !!eq?.soundOnly : !!eq?.photoOnly;
+}
+
+// Category chips must be derived from the same pool the item sections render,
+// or a visible chip filters down to an empty list. Preserves the admin
+// ordering of `categories` and appends categories that exist on items but are
+// missing from the admin list.
+export function deriveVisibleCategories(categories, pool) {
+  const present = new Set((pool || []).map((eq) => eq?.category).filter(Boolean));
+  const known = (categories || []).filter((category) => present.has(category));
+  const knownSet = new Set(known);
+  return [...known, ...[...present].filter((category) => !knownSet.has(category))];
+}
+
 export function formatLocalDateInput(date) {
   return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
 }

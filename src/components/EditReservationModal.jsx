@@ -10,9 +10,11 @@ import {
   getReservationApprovalConflicts,
   cloudinaryThumb,
   getAuthToken,
+  matchesEquipmentTypeFilter,
+  deriveVisibleCategories,
 } from "../utils.js";
 
-export function EditReservationModal({ reservation, equipment, reservations, onSave, onApprove, onClose, collegeManager={}, managerToken="", siteSettings={}, loanHandlers=[] }) {
+export function EditReservationModal({ reservation, equipment, reservations, onSave, onApprove, onClose, collegeManager={}, managerToken="", siteSettings={}, loanHandlers=[], categories=[] }) {
   // Loan-request staff coordination (decoupled side-table) — read-only display here.
   const loanOut = (loanHandlers||[]).find(h=>String(h.reservation_id)===String(reservation.id)&&h.kind==="out");
   const loanReturn = (loanHandlers||[]).find(h=>String(h.reservation_id)===String(reservation.id)&&h.kind==="return");
@@ -60,31 +62,31 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
     setReportSending(false);
   };
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
-  const overdueEqItems = items
-    .map((item) => {
-      const eq = equipment.find((e) => e.id == item.equipment_id) || {};
-      return {
-        ...item,
-        id: item.equipment_id,
-        name: item.name || eq.name || "?",
-        category: eq.category || "",
-        image: eq.image || null,
-        soundOnly: !!eq.soundOnly,
-        photoOnly: !!eq.photoOnly,
-      };
-    })
-    .filter((item) => {
-      const searchText = editSearch.trim().toLowerCase();
-      if (searchText) {
-        const haystack = `${item.name||""} ${item.category||""}`.toLowerCase();
-        if (!haystack.includes(searchText)) return false;
-      }
-      if (editTypeFilter === "sound" && !item.soundOnly) return false;
-      if (editTypeFilter === "photo" && !item.photoOnly) return false;
-      if (editCategoryFilters.length && !editCategoryFilters.includes(item.category)) return false;
-      return true;
-    });
-  const overdueEquipmentCategories = [...new Set(overdueEqItems.map((item) => item.category).filter(Boolean))];
+  // Overdue mode lists only the gear that actually went out. Enrichment is kept
+  // separate from filtering so the category chips can be derived from the whole
+  // loaned pool rather than from an already-category-filtered list.
+  const overdueEqAll = items.map((item) => {
+    const eq = equipment.find((e) => e.id == item.equipment_id) || {};
+    return {
+      ...item,
+      id: item.equipment_id,
+      name: item.name || eq.name || "?",
+      category: eq.category || "",
+      image: eq.image || null,
+      soundOnly: !!eq.soundOnly,
+      photoOnly: !!eq.photoOnly,
+    };
+  });
+  const overdueEqItems = overdueEqAll.filter((item) => {
+    const searchText = editSearch.trim().toLowerCase();
+    if (searchText) {
+      const haystack = `${item.name||""} ${item.category||""}`.toLowerCase();
+      if (!haystack.includes(searchText)) return false;
+    }
+    if (!matchesEquipmentTypeFilter(item, editTypeFilter)) return false;
+    if (editCategoryFilters.length && !editCategoryFilters.includes(item.category)) return false;
+    return true;
+  });
   const sendOverdueMailFromEdit = async () => {
     if (!reservation?.email || !overdueEditMailText.trim()) return;
     setOverdueEditMailSending(true);
@@ -151,7 +153,12 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
   };
   const getQty = (eqId) => items.find(i=>i.equipment_id==eqId)?.quantity||0;
 
-  const equipmentCategories = [...new Set(equipment.map(e=>e.category).filter(Boolean))];
+  // Chips come from the same pool the sections below render, minus the category
+  // filter itself — including it would hide every other chip and make a second
+  // selection impossible.
+  const chipPool = (isOverdueReservation ? overdueEqAll : equipment)
+    .filter((eq) => matchesEquipmentTypeFilter(eq, editTypeFilter));
+  const equipmentCategories = deriveVisibleCategories(categories, chipPool);
   const toggleEditCategoryFilter = (category) => {
     setEditCategoryFilters((prev) => prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category]);
   };
@@ -161,9 +168,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
       const haystack = `${eq.name||""} ${eq.category||""}`.toLowerCase();
       if (!haystack.includes(searchText)) return false;
     }
-    const isGeneral = (!eq.soundOnly && !eq.photoOnly) || (eq.soundOnly && eq.photoOnly);
-    if (editTypeFilter === "sound" && !eq.soundOnly && !isGeneral) return false;
-    if (editTypeFilter === "photo" && !eq.photoOnly && !isGeneral) return false;
+    if (!matchesEquipmentTypeFilter(eq, editTypeFilter)) return false;
     if (editCategoryFilters.length && !editCategoryFilters.includes(eq.category)) return false;
     if (showLoanedOnly && getQty(eq.id) <= 0) return false;
     return true;
@@ -291,7 +296,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                     key={k}
                     type="button"
                     className={`btn btn-sm ${editTypeFilter===k?"btn-primary":"btn-secondary"}`}
-                    onClick={()=>setEditTypeFilter(k)}
+                    onClick={()=>{setEditTypeFilter(k);setEditCategoryFilters([]);}}
                   >
                     {l}
                   </button>
@@ -324,7 +329,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                 ? "הציוד כבר יצא מהמחסן. כאן מוצגת רק רשימת הפריטים שהושאלו בפועל, עם פילטרים לצפייה נוחה."
                 : <>המערכת סופרת מלאי רק מול בקשות <strong>מאושרות</strong> שחופפות בזמן לבקשה הזאת. אם ציוד חסום, יוצגו כאן שמות הסטודנטים והכמויות שחוסמות אותו כדי שתוכל לעבור לבקשות החופפות ולהפחית משם.</>}
             </div>
-            {(isOverdueReservation ? overdueEquipmentCategories : equipmentCategories).map(cat=>{
+            {equipmentCategories.map(cat=>{
               const catEq = isOverdueReservation
                 ? overdueEqItems.filter(item=>item.category===cat)
                 : equipment.filter(e=>e.category===cat && matchesEditEquipmentFilters(e));
