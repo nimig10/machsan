@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { AlertTriangle, AudioLines, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, Clock, ClipboardList, Download, FileText, Film, GraduationCap, HelpCircle, Info, Link, Lightbulb, LogOut, Mail, Mic, Minus, Package, Pencil, Phone, Plus, Save, Search, Settings, Shield, ShoppingCart, SlidersHorizontal, Trash2, Triangle, Upload, User, Video, Wrench, X, XCircle } from "lucide-react";
-import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, deleteReservation, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB, equipmentWriteInFlight, getValidTokenDirect, groupReservationItemsByCategory } from "./utils.js";
+import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, deleteReservation, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB, equipmentWriteInFlight, getValidTokenDirect, groupReservationItemsByCategory, matchesEquipmentTypeFilter, deriveVisibleCategories } from "./utils.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
 import { CalendarGrid } from "./components/CalendarGrid.jsx";
@@ -2600,195 +2600,6 @@ function Step3Buttons({ items, equipment, onBack, onNext, privateLoanLimitExceed
   );
 }
 
-// ─── STEP 3 EQUIPMENT SELECTOR ───────────────────────────────────────────────
-function Step3Equipment({ isSoundLoan, kits, loanType, categories, availEq, equipment, setItems, getItem, setQty, canBorrowEq=()=>true, studentRecord, certificationTypes=[] }) {
-  const [activeKit, setActiveKit] = useState(null);
-  const [privateFilter, setPrivateFilter] = useState("all");
-  const [selectedCats, setSelectedCats] = useState([]); // multi-select, empty = all
-  const [showSelectedOnly, setShowSelectedOnly] = useState(false);
-
-  const relevantKits = (kits||[]).filter(k => !(k.loanTypes||[]).includes("שיעור") && (!(k.loanTypes||[]).length || (k.loanTypes||[]).includes(loanType)));
-
-  const selectKit = (kit) => {
-    if (activeKit?.id === kit.id) {
-      setActiveKit(null);
-      setItems([]);
-      return;
-    }
-    setActiveKit(kit);
-    const newItems = [];
-    for (const ki of kit.items||[]) {
-      const avail = availEq.find(e=>e.id==ki.equipment_id)?.avail||0;
-      if(avail<=0) continue;
-      const qty = Math.min(ki.quantity, avail);
-      const name = equipment.find(e=>e.id==ki.equipment_id)?.name||"";
-      newItems.push({equipment_id:ki.equipment_id,quantity:qty,name});
-    }
-    setItems(newItems);
-  };
-
-  const toggleCat = (cat) => setSelectedCats(prev =>
-    prev.includes(cat) ? prev.filter(c=>c!==cat) : [...prev, cat]
-  );
-
-  // Equipment to display: if a kit is active, only show that kit's items
-  const kitEqIds = activeKit ? new Set((activeKit.items||[]).map(i=>String(i.equipment_id))) : null;
-  const equipmentFilter = isSoundLoan ? "sound" : loanType==="הפקה" ? "photo" : privateFilter;
-  const visibleAvailEq = availEq.filter((eq) => {
-    const isGeneral = (!eq.soundOnly && !eq.photoOnly) || (eq.soundOnly && eq.photoOnly);
-    if (equipmentFilter === "sound") return !!eq.soundOnly || isGeneral;
-    if (equipmentFilter === "photo") return !!eq.photoOnly || isGeneral;
-    return true;
-  });
-  const baseCategories = categories.filter((category) => visibleAvailEq.some((eq) => eq.category === category));
-  const filteredCategories = selectedCats.length===0 ? baseCategories : baseCategories.filter(c=>selectedCats.includes(c));
-  const selectedItemCount = visibleAvailEq.filter(e=>getItem(e.id).quantity>0).length;
-
-  return (
-    <>
-      <div className="form-section-title">
-        בחירת ציוד
-        {loanType==="סאונד"&&<span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>· מוצגים רק פריטים שסומנו כציוד סאונד</span>}
-        {loanType==="הפקה"&&<span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>· מוצגים רק פריטים שסומנו כציוד צילום</span>}
-        {loanType==="פרטית"&&<span style={{fontSize:11,color:"var(--text3)",fontWeight:400,marginRight:8}}>· בהשאלה פרטית אפשר לראות את כל ציוד המחסן או לסנן לפי תיוג</span>}
-      </div>
-
-      {loanType==="פרטית" && (
-        <div style={{marginBottom:18,padding:"14px 16px",background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
-          <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",marginBottom:10,letterSpacing:0.5}}>סינון ציוד לפי מסלול לימודים</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-            {[
-              { key:"all", label:"כל הציוד", icon:<Package size={14} strokeWidth={1.75}/> },
-              { key:"sound", label:"ציוד סאונד", icon:<Mic size={14} strokeWidth={1.75}/> },
-              { key:"photo", label:"ציוד צילום", icon:<Camera size={11} strokeWidth={1.75}/> },
-            ].map((filterOption) => {
-              const isActive = privateFilter === filterOption.key;
-              return (
-                <button
-                  key={filterOption.key}
-                  type="button"
-                  onClick={()=>setPrivateFilter(filterOption.key)}
-                  style={{padding:"7px 16px",borderRadius:20,border:`2px solid ${isActive?"var(--accent)":"var(--border)"}`,background:isActive?"var(--accent)":"var(--surface3)",color:isActive?"#000":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer",transition:"all 0.15s",display:"flex",alignItems:"center",gap:6}}
-                >
-                  <span>{filterOption.icon}</span>
-                  <span>{filterOption.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── Category filter + selected toggle ── */}
-      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12,alignItems:"center"}}>
-        <button type="button" onClick={()=>{ if(!showSelectedOnly) setSelectedCats([]); setShowSelectedOnly(p=>!p); }}
-          style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${showSelectedOnly?"var(--green)":selectedItemCount>0?"var(--accent)":"var(--border)"}`,background:showSelectedOnly?"rgba(46,204,113,0.12)":selectedItemCount>0?"var(--accent-glow)":"transparent",color:showSelectedOnly?"var(--green)":selectedItemCount>0?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap",boxShadow:selectedItemCount>0&&!showSelectedOnly?"0 0 0 3px rgba(255,193,7,0.15)":"none",transition:"all 0.2s"}}>
-          {showSelectedOnly?<><CheckCircle size={12} strokeWidth={1.75}/> הצג הכל</>:<><CheckCircle size={12} strokeWidth={1.75}/> הצג נבחרים{selectedItemCount>0?` (${selectedItemCount})`:""}</>}
-        </button>
-        <div style={{width:1,height:20,background:"var(--border)",flexShrink:0}}/>
-        {baseCategories.map(cat=>{
-          const active = selectedCats.includes(cat);
-          return (
-            <button key={cat} type="button" onClick={()=>toggleCat(cat)}
-              style={{padding:"4px 10px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>
-              {cat}
-            </button>
-          );
-        })}
-        {selectedCats.length>0&&(
-          <button type="button" onClick={()=>setSelectedCats([])}
-            style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
-            <X size={10} strokeWidth={1.75} color="var(--text3)"/> נקה
-          </button>
-        )}
-      </div>
-
-      {/* ── Kit selector ── */}
-      {relevantKits.length>0 && (
-        <div style={{marginBottom:20,padding:"14px 16px",background:"var(--surface2)",borderRadius:"var(--r)",border:"1px solid var(--border)"}}>
-          <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",marginBottom:10,letterSpacing:0.5,display:"flex",alignItems:"center",gap:4}}><Package size={12} strokeWidth={1.75}/> ערכות מוכנות לסוג השאלה זה</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:activeKit?10:0}}>
-            {/* "All equipment" pill */}
-            <button type="button"
-              onClick={()=>setActiveKit(null)}
-              style={{padding:"7px 14px",borderRadius:20,border:`2px solid ${!activeKit?"var(--text2)":"var(--border)"}`,background:!activeKit?"var(--surface3)":"transparent",color:!activeKit?"var(--text)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",transition:"all 0.15s"}}>
-              <Package size={13} strokeWidth={1.75}/> כל הציוד
-            </button>
-            {relevantKits.map(kit=>{
-              const isActive = activeKit?.id===kit.id;
-              return (
-                <button key={kit.id} type="button"
-                  onClick={()=>selectKit(kit)}
-                  style={{padding:"7px 16px",borderRadius:20,border:`2px solid ${isActive?"var(--accent)":"var(--border)"}`,background:isActive?"var(--accent)":"var(--surface3)",color:isActive?"#000":"var(--text2)",fontWeight:700,fontSize:13,cursor:"pointer",transition:"all 0.15s",display:"flex",alignItems:"center",gap:6}}>
-                  <Package size={13} strokeWidth={1.75}/> {kit.name}
-                  {isActive&&<span style={{fontSize:10,opacity:0.7,display:"inline-flex",alignItems:"center",gap:2}}><Check size={9} strokeWidth={2}/> פעיל</span>}
-                </button>
-              );
-            })}
-          </div>
-          {activeKit&&(
-            <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>
-              מציג ציוד מערכת <strong style={{color:"var(--accent)"}}>{activeKit.name}</strong> בלבד · לחץ שוב לביטול הסינון
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Equipment list ── */}
-      {filteredCategories.map(c=>{
-        let catEq = visibleAvailEq.filter(e=>e.category===c);
-        if(kitEqIds) catEq = catEq.filter(e=>kitEqIds.has(String(e.id)));
-        if(showSelectedOnly) catEq = catEq.filter(e=>getItem(e.id).quantity>0);
-        if(!catEq.length) return null;
-        return (
-          <div key={c} style={{marginBottom:20}}>
-            <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>{c}</div>
-            {catEq.map(eq=>{
-              const itm = getItem(eq.id);
-              // In kit mode: max qty is BOTH avail AND kit quantity — whichever is lower
-              const kitEntry = activeKit ? (activeKit.items||[]).find(i=>i.equipment_id==eq.id) : null;
-              const kitMax   = kitEntry ? Number(kitEntry.quantity) : Infinity;
-              const effectiveMax = activeKit ? Math.min(eq.avail, kitMax) : eq.avail;
-              const atMax = itm.quantity >= effectiveMax;
-              return (
-                <div key={eq.id} className="item-row" style={{opacity:effectiveMax===0?0.4:1}}>
-                  {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
-                    ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:36,height:36,objectFit:"cover",borderRadius:6}}/>
-                    : <span style={{fontSize:26}}>{eq.image||<Package size={26} strokeWidth={1.75} color="var(--text3)"/>}</span>}
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:600,fontSize:14}}>{eq.name}</div>
-                    <div style={{fontSize:12,color:"var(--text3)"}}>
-                      זמין: <span style={{color:eq.avail===0?"var(--red)":eq.avail<=2?"var(--yellow)":"var(--green)",fontWeight:700}}>{eq.avail}</span>
-                      {activeKit&&kitEntry&&<span style={{color:"var(--accent)",marginRight:6,fontWeight:700}}>· מקס׳ בערכה: {kitMax}</span>}
-                    </div>
-                  </div>
-                  {!canBorrowEq(eq)
-                    ? <div style={{fontSize:11,color:"var(--yellow)",fontWeight:700,textAlign:"center",maxWidth:120,lineHeight:1.3,padding:"4px 6px",background:"rgba(241,196,15,0.12)",borderRadius:6,border:"1px solid rgba(241,196,15,0.3)",display:"flex",alignItems:"center",gap:3,justifyContent:"center"}}>
-                        <Shield size={11} strokeWidth={1.75}/> טרם עבר/ה הסמכה
-                      </div>
-                    : effectiveMax>0
-                    ? <div className="qty-ctrl">
-                        <button className="qty-btn" onClick={()=>setQty(eq.id, Math.min(itm.quantity-1, effectiveMax))}>−</button>
-                        <span className="qty-num">{itm.quantity}</span>
-                        <button className="qty-btn" disabled={atMax} style={{opacity:atMax?0.3:1}}
-                          onClick={()=>{ if(!atMax) setQty(eq.id, Math.min(itm.quantity+1, effectiveMax)); }}>+</button>
-                      </div>
-                    : eq.overdueBlocked
-                    ? <div style={{fontSize:11,color:"#e67e22",fontWeight:700,textAlign:"center",maxWidth:130,lineHeight:1.3,padding:"5px 8px",background:"rgba(230,126,34,0.1)",borderRadius:6,border:"1px solid rgba(230,126,34,0.35)"}}>
-                        <span style={{display:"inline-flex",alignItems:"center",gap:4}}><AlertTriangle size={12} strokeWidth={1.75} /> חסום ע״י השאלה באיחור</span>
-                      </div>
-                    : <span className="badge badge-red">לא זמין</span>
-                  }
-                </div>
-              );
-            })}
-          </div>
-        );
-      })}
-    </>
-  );
-}
-
 // ─── STEP 4 CONFIRM ───────────────────────────────────────────────────────────
 function Step4Confirm({ form, items, equipment, agreed, setAgreed, submitting, submit, onBack, policies, loanType, canSubmit }) {
   const [showPolicies, setShowPolicies] = useState(false);
@@ -4092,7 +3903,7 @@ function StudentKitForm({ initial, onDone, kits, setKits, equipment, categories,
               <button
                 key={k}
                 type="button"
-                onClick={()=>setEqTypeF(k)}
+                onClick={()=>{setEqTypeF(k);setEqCatF([]);}}
                 style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}
               >
                 {l}
@@ -4100,7 +3911,7 @@ function StudentKitForm({ initial, onDone, kits, setKits, equipment, categories,
             );
           })}
           <span style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
-          {(categories||[]).map(cat=>{
+          {deriveVisibleCategories(categories, equipment.filter(e=>matchesEquipmentTypeFilter(e, eqTypeF))).map(cat=>{
             const active=eqCatF.includes(cat);
             return (
               <button
@@ -4134,11 +3945,7 @@ function StudentKitForm({ initial, onDone, kits, setKits, equipment, categories,
         </div>
       </div>
       {(()=>{
-        const matchesType = (eq) => {
-          if (eqTypeF === "sound") return !!eq.soundOnly;
-          if (eqTypeF === "photo") return !!eq.photoOnly;
-          return true;
-        };
+        const matchesType = (eq) => matchesEquipmentTypeFilter(eq, eqTypeF);
         const matchesSearch = (eq) => !eqSearch || String(eq.name||"").toLowerCase().includes(eqSearch.toLowerCase());
         const visibleCats = (eqCatF.length>0 ? eqCatF : (categories||[])).filter(cat =>
           equipment.some(eq =>
@@ -7533,7 +7340,7 @@ export default function App() {
                 ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean)
                 : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
               <div style={{display:page==="policies"?"block":"none"}}><PoliciesPage policies={policies} setPolicies={setPolicies} showToast={showToast}/></div>
-              <div style={{display:page==="certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment} onlyMode="equipment" certSaveInFlightRef={certSaveInFlightRef}/></div>
+              <div style={{display:page==="certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment} categories={categories} onlyMode="equipment" certSaveInFlightRef={certSaveInFlightRef}/></div>
               <div style={{display:page==="settings"?"block":"none"}}><SettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast} settingsRole="warehouse"/></div>
             </>}
           </div>
@@ -7605,7 +7412,7 @@ export default function App() {
             {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <>
               <div style={{display:secretaryPage==="dashboard"?"block":"none"}}><SecretaryDashboardPage certifications={certifications} studios={studios} studioBookings={studioBookings} lessons={lessons}/></div>
               <div style={{display:secretaryPage==="studios"?"block":"none"}}><StudioBookingPage showToast={showToast} teamMembers={teamMembers} certifications={certifications} role="admin" studios={studios} setStudios={setStudios} bookings={studioBookings} setBookings={setStudioBookings} siteSettings={siteSettings} setSiteSettings={setSiteSettings} isActive={secretaryPage==="studios"} currentUser={staffUser} lessons={lessons} setLessons={setLessons} onNavigateToLesson={(lessonId) => { setEditLessonId(lessonId); setSecretaryPage("lessons"); }}/></div>
-              <div style={{display:secretaryPage==="studio-certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment} onlyMode="studio" certSaveInFlightRef={certSaveInFlightRef}/></div>
+              <div style={{display:secretaryPage==="studio-certifications"?"block":"none"}}><CertificationsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} studios={studios} setStudios={setStudios} equipment={equipment} setEquipment={setEquipment} categories={categories} onlyMode="studio" certSaveInFlightRef={certSaveInFlightRef}/></div>
               <div style={{display:secretaryPage==="lessons"?"block":"none"}}><LessonsPage lessons={lessons} setLessons={setLessons} studios={studios} kits={kits} showToast={showToast} reservations={reservations} setReservations={setReservations} equipment={equipment} studioBookings={studioBookings} setStudioBookings={setStudioBookings} certifications={certifications} openLessonId={editLessonId} onOpenLessonConsumed={() => setEditLessonId(null)} lecturers={lecturers} setLecturers={setLecturers} teamMembers={teamMembers} siteSettings={siteSettings} trackOptions={Array.isArray(certifications?.trackSettings) && certifications.trackSettings.length ? certifications.trackSettings.map(setting => String(setting?.name || "").trim()).filter(Boolean) : [...new Set((certifications?.students || []).map(student => String(student?.track || "").trim()).filter(Boolean))]}/></div>
               <div style={{display:secretaryPage==="lecturers"?"block":"none"}}><LecturersPage lecturers={lecturers} setLecturers={setLecturers} showToast={showToast} lessons={lessons} trackOptions={Array.isArray(certifications?.trackSettings)&&certifications.trackSettings.length?certifications.trackSettings.map(s=>String(s?.name||"").trim()).filter(Boolean):[...new Set((certifications?.students||[]).map(s=>String(s?.track||"").trim()).filter(Boolean))]}/></div>
               <div style={{display:secretaryPage==="students"?"block":"none"}}><StudentsPage certifications={certifications} setCertifications={setCertifications} showToast={showToast} onLogCreated={attachLogIdToUndo} studioBookings={studioBookings} setStudioBookings={setStudioBookings} reservations={reservations} setReservations={setReservations}/></div>

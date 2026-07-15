@@ -932,7 +932,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
           </>}
         </>
       }
-      {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations} collegeManager={collegeManager} managerToken={managerToken} loanHandlers={loanHandlers}
+      {editing && <EditReservationModal reservation={editing} equipment={equipment} reservations={reservations} categories={categories} collegeManager={collegeManager} managerToken={managerToken} loanHandlers={loanHandlers}
   onSave={saveEditedReservation}
   onApprove={(editing.status==="נדחה" || editing.status==="ממתין") ? async(updated)=>{
     // Persist item/time edits FIRST (silent — no toast/close), then approve.

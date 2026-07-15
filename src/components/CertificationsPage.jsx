@@ -1,7 +1,7 @@
 // CertificationsPage.jsx — certifications management with equipment/studio modes
 import { useRef, useState } from "react";
 import { Camera, CheckCircle, ClipboardList, GraduationCap, Lightbulb, Mic, Package, Pencil, Search, X } from "lucide-react";
-import { cloudinaryThumb, writeEquipmentToDB } from "../utils.js";
+import { cloudinaryThumb, writeEquipmentToDB, matchesEquipmentTypeFilter, deriveVisibleCategories } from "../utils.js";
 import { dualWriteCertifications, setStudentCertStatus } from "../utils/studentsApi.js";
 import { syncAllStudios } from "../utils/studiosApi.js";
 import { Modal } from "./ui.jsx";
@@ -24,7 +24,7 @@ const buildTrackSettings = (students = [], existingTrackSettings = []) => {
   });
 };
 
-export function CertificationsPage({ certifications, setCertifications, showToast, studios=[], setStudios, equipment=[], setEquipment, onlyMode=null, certSaveInFlightRef=null }) {
+export function CertificationsPage({ certifications, setCertifications, showToast, studios=[], setStudios, equipment=[], setEquipment, onlyMode=null, certSaveInFlightRef=null, categories=[] }) {
   const { types = [], students = [] } = certifications;
   const trackSettings = buildTrackSettings(students, certifications?.trackSettings);
   const [certMode, setCertMode] = useState(onlyMode || "equipment");
@@ -87,7 +87,12 @@ export function CertificationsPage({ certifications, setCertifications, showToas
   const equipmentTypes = types.filter(t => !isStudioType(t));
   const studioTypes = types.filter(t => isStudioType(t));
   const activeTypes = certMode === "equipment" ? equipmentTypes : studioTypes;
-  const equipmentCategories = [...new Set((equipment || []).map(eq => eq.category).filter(Boolean))];
+  // Chips come from the same pool the sections below render, minus the category
+  // filter itself — including it would hide every other chip.
+  const equipmentCategories = deriveVisibleCategories(
+    categories,
+    (equipment || []).filter(eq => matchesEquipmentTypeFilter(eq, eqTypeF)),
+  );
 
   const hasNightCert = types.some(t => t.id === NIGHT_CERT_ID);
 
@@ -621,7 +626,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                 {[{k:"all",l:<><Package size={16} strokeWidth={1.75} /> הכל</>},{k:"sound",l:<><Mic size={16} strokeWidth={1.75} /> ציוד סאונד</>},{k:"photo",l:<><Camera size={16} strokeWidth={1.75}/> ציוד צילום</>}].map(({k,l})=>{
                   const active = eqTypeF===k;
                   return (
-                    <button key={k} type="button" onClick={()=>setEqTypeF(k)}
+                    <button key={k} type="button" onClick={()=>{setEqTypeF(k);setEqCatF([]);}}
                       style={{padding:"4px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"var(--border)"}`,background:active?"var(--accent-glow)":"transparent",color:active?"var(--accent)":"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
                       {l}
                     </button>
@@ -653,11 +658,7 @@ export function CertificationsPage({ certifications, setCertifications, showToas
 
             <div style={{maxHeight:"52vh",overflowY:"auto",paddingLeft:4}}>
               {(()=>{
-                const matchesType = (eq) => {
-                  if (eqTypeF === "sound") return !!eq.soundOnly;
-                  if (eqTypeF === "photo") return !!eq.photoOnly;
-                  return true;
-                };
+                const matchesType = (eq) => matchesEquipmentTypeFilter(eq, eqTypeF);
                 const matchesSearch = (eq) => !eqSearch || String(eq.name||"").toLowerCase().includes(eqSearch.toLowerCase());
                 const visibleCats = (eqCatF.length>0 ? eqCatF : equipmentCategories).filter(cat =>
                   (equipment || []).some(eq =>
