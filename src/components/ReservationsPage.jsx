@@ -646,7 +646,16 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       }
       const updated = normalizeReservationsForArchive(reservations.map((r) => {
         if (r.id !== id) return r;
-        return status === "הוחזר" ? markReservationReturned(r) : { ...r, status };
+        if (status !== "הוחזר") return { ...r, status };
+        // Carry the server's actor stamp into local state so the archive shows
+        // the name without waiting for the realtime refetch. `|| null` and not
+        // `?? r.returned_by_name` on purpose: if the stamp write failed the DB
+        // holds null, and keeping a stale client value would display a lie.
+        return {
+          ...markReservationReturned(r),
+          returned_by_staff_id: rpcResult.returned_by_staff_id || null,
+          returned_by_name:     rpcResult.returned_by_name || null,
+        };
       }));
       setReservations(updated);
       showToast("success", `סטטוס עודכן ל-${status}`);
@@ -875,7 +884,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       </div>
 
       {/* Archive sub-view */}
-      {subView==="archive" && <ArchivePage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}/>}
+      {subView==="archive" && <ArchivePage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast} loanHandlers={loanHandlers}/>}
 
       {/* Active / Rejected sub-views */}
       {subView!=="archive" && <>

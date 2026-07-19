@@ -614,8 +614,16 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                         if(showToast) showToast("error", "שגיאה ברישום ההחזרה בשרת");
                         return;
                       }
+                      // Same actor-stamp carry-over as ReservationsPage — see the
+                      // note there on why this uses `|| null` rather than `??`.
                       const updated = normalizeReservationsForArchive(reservations.map(r =>
-                        r.id === res.id ? markReservationReturned(r) : r
+                        r.id === res.id
+                          ? {
+                              ...markReservationReturned(r),
+                              returned_by_staff_id: rpcResult.returned_by_staff_id || null,
+                              returned_by_name:     rpcResult.returned_by_name || null,
+                            }
+                          : r
                       ));
                       setReservations(updated);
                       if(showToast) showToast("success", `הציוד של ${res.student_name} הוחזר`);

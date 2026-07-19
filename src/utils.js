@@ -311,8 +311,11 @@ export async function createLessonReservations(kitId, reservations, items, optio
 // refresh. If the blob write races, the next mirror cycle reconciles it.
 //
 // Returns:
-//   { ok: true,  id, old_status, new_status, changed }   on success
-//   { ok: false, error, detail }                          on failure
+//   { ok: true,  id, old_status, new_status, changed,
+//                returned_by_staff_id, returned_by_name }  on success
+//   { ok: false, error, detail }                           on failure
+// returned_by_* are non-null only when a staff caller set status="הוחזר";
+// the server derives them from the JWT (see api/update-reservation-status.js).
 //
 // Callers should check `ok` before updating local state / sending emails.
 export async function updateReservationStatus(id, status, options = {}) {
@@ -346,6 +349,9 @@ export async function updateReservationStatus(id, status, options = {}) {
       old_status: data.old_status,
       new_status: data.new_status,
       changed:    data.changed,
+      // Explicit whitelist — anything the API adds is dropped unless listed here.
+      returned_by_staff_id: data.returned_by_staff_id ?? null,
+      returned_by_name:     data.returned_by_name ?? null,
     };
   } catch (e) {
     console.error("updateReservationStatus network error:", e);

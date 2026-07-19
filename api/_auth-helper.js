@@ -93,27 +93,27 @@ export async function resolveUserRole(req) {
   const authHeader = req.headers.authorization || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
   const authUser = await verifyToken(token);
-  if (!authUser) return { role: "anon", email: null, id: null };
+  if (!authUser) return { role: "anon", email: null, id: null, full_name: null };
 
   const email = String(authUser.email || "").toLowerCase();
   try {
     const r = await fetch(
-      `${SB_URL}/rest/v1/users?id=eq.${encodeURIComponent(authUser.id)}&select=is_admin,is_warehouse,is_student,is_lecturer&limit=1`,
+      `${SB_URL}/rest/v1/users?id=eq.${encodeURIComponent(authUser.id)}&select=is_admin,is_warehouse,is_student,is_lecturer,full_name&limit=1`,
       { headers: SERVICE_HEADERS }
     );
     if (r.ok) {
       const rows = await r.json();
       const u = rows?.[0];
       if (u && (u.is_admin || u.is_warehouse)) {
-        return { role: "staff", email, id: authUser.id };
+        return { role: "staff", email, id: authUser.id, full_name: u.full_name || null };
       }
       if (u && (u.is_student || u.is_lecturer)) {
-        return { role: "user", email, id: authUser.id };
+        return { role: "user", email, id: authUser.id, full_name: u.full_name || null };
       }
     }
   } catch {}
-  // Authenticated but no row in public.users — treat as regular user.
-  return { role: "user", email, id: authUser.id };
+  // Authenticated but no row in public.users — treat as regular user (no name).
+  return { role: "user", email, id: authUser.id, full_name: null };
 }
 
 // Like requireStaff but also enforces role === "admin".
