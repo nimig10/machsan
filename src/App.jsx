@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { AlertTriangle, AudioLines, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, Clock, ClipboardList, Download, FileText, Film, GraduationCap, HelpCircle, Info, Link, Lightbulb, LogOut, Mail, Mic, Minus, Package, Pencil, Phone, Plus, Save, Search, Settings, Shield, ShoppingCart, SlidersHorizontal, Trash2, Triangle, Upload, User, Video, Wrench, X, XCircle } from "lucide-react";
-import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, deleteReservation, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB, equipmentWriteInFlight, getValidTokenDirect, groupReservationItemsByCategory, matchesEquipmentTypeFilter, deriveVisibleCategories } from "./utils.js";
+import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, deleteReservation, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB, equipmentWriteInFlight, getValidTokenDirect, groupReservationItemsByCategory, matchesEquipmentTypeFilter, deriveVisibleCategories, stretchOverdueForCalendar } from "./utils.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
 import { CalendarGrid } from "./components/CalendarGrid.jsx";
@@ -4433,12 +4433,15 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
   for(let d=1;d<=new Date(yr,mo+1,0).getDate();d++) days.push(new Date(yr,mo,d));
   while(days.length<42) days.push(null);
 
-  const activeRes = localRes.filter(r =>
+  // Overdue loans keep occupying the calendar until the gear is physically back.
+  // `localRes` is a mount-time snapshot that is never re-synced, so the helper's
+  // getEffectiveStatus check (not r.status) is what keeps this accurate here.
+  const activeRes = stretchOverdueForCalendar(localRes.filter(r =>
     r.status !== "הוחזר" && r.borrow_date && r.return_date &&
     !(r.loan_type === "שיעור" && r.status !== "מאושר") &&
     (statusF.length===0 || statusF.includes(r.status)) &&
     (loanTypeF==="הכל" || r.loan_type===loanTypeF)
-  );
+  ));
   const colorMap = {};
   activeRes.forEach((r,i) => { colorMap[r.id] = SPAN_COLORS[i % SPAN_COLORS.length]; });
 
@@ -4522,16 +4525,19 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
       {monthRes.length===0
         ? <div style={{textAlign:"center",color:"var(--text3)",padding:"24px",fontSize:14}}>אין בקשות בחודש זה</div>
         : <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {/* Selection is compared by id, not object identity: an overdue row is
+              rebuilt by stretchOverdueForCalendar on every render, so an identity
+              check would never match again and its panel would refuse to open. */}
           {monthRes.map(r=>(
-            <div key={r.id} onClick={()=>setSelected(r===selected?null:r)}
-              style={{background:"var(--surface)",border:`1px solid ${selected===r?"var(--accent)":"var(--border)"}`,borderRadius:"var(--r)",padding:"12px 16px",cursor:"pointer",transition:"border-color 0.15s"}}>
+            <div key={r.id} onClick={()=>setSelected(String(selected?.id)===String(r.id)?null:r)}
+              style={{background:"var(--surface)",border:`1px solid ${String(selected?.id)===String(r.id)?"var(--accent)":"var(--border)"}`,borderRadius:"var(--r)",padding:"12px 16px",cursor:"pointer",transition:"border-color 0.15s"}}>
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                 <span style={{fontWeight:800,fontSize:14}}>{r.student_name}</span>
                 <span style={{fontSize:12,color:"var(--text3)",display:"inline-flex",alignItems:"center",gap:3}}>{LOAN_ICONS[r.loan_type]||<Package size={11} strokeWidth={1.75}/>} {r.loan_type}</span>
-                <span style={{fontSize:11,color:"var(--text3)",display:"inline-flex",alignItems:"center",gap:3}}><Calendar size={11} strokeWidth={1.75}/> {formatDate(r.borrow_date)} → {formatDate(r.return_date)}</span>
+                <span style={{fontSize:11,color:"var(--text3)",display:"inline-flex",alignItems:"center",gap:3}}><Calendar size={11} strokeWidth={1.75}/> {formatDate(r.borrow_date)} → {formatDate(r.overdue_since || r.return_date)}</span>
                 <span className={`badge badge-${STATUS_BADGE[r.status]||"yellow"}`} style={{marginRight:"auto"}}>{r.status}</span>
               </div>
-              {selected===r&&(
+              {String(selected?.id)===String(r.id)&&(
                 <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid var(--border)",display:"flex",flexDirection:"column",gap:12}} onClick={e=>e.stopPropagation()}>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}}>
                     {r.email&&(

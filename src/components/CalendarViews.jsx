@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient.js';
 import { useState } from "react";
 import { BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Film, Mic, Package, Phone, Shield, User, Video, X } from "lucide-react";
 import { CalendarGrid } from "./CalendarGrid.jsx";
-import { formatDate, today, cloudinaryThumb, getLoanTypeColor, normalizeName, updateReservationStatus } from "../utils.js";
+import { formatDate, today, cloudinaryThumb, getLoanTypeColor, normalizeName, updateReservationStatus, stretchOverdueForCalendar } from "../utils.js";
 
 export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equipment=[], siteSettings={}, certifications={types:[],students:[]} }) {
   const [calDate, setCalDate]     = useState(new Date());
@@ -41,11 +41,15 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
   const STATUS_COLORS  = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","אישור ראש מחלקה":"#9b59b6" };
   const LOAN_ICONS     = { "פרטית":<User size={16} strokeWidth={1.75}/>,"הפקה":<Film size={16} strokeWidth={1.75} />,"סאונד":<Mic size={16} strokeWidth={1.75} />,"קולנוע יומית":<Camera size={16} strokeWidth={1.75}/>,"צוות":<Briefcase size={16} strokeWidth={1.75}/>,"הכל":<Package size={16} strokeWidth={1.75} /> };
 
-  const activeRes = reservations.filter(r =>
+  // Overdue loans keep occupying the calendar until the gear is physically back.
+  // This portal pushes raw Supabase rows into state after every approve/reject,
+  // so the helper's getEffectiveStatus check (not r.status) is what keeps this
+  // working past the user's first click.
+  const activeRes = stretchOverdueForCalendar(reservations.filter(r =>
     !["הוחזר", "בוטל", "מבוטל"].includes(r.status) && r.borrow_date && r.return_date &&
     (statusF.length===0 || statusF.includes(r.status)) &&
     (loanTypeF==="הכל" || r.loan_type===loanTypeF)
-  );
+  ));
   const colorMap = {};
   activeRes.forEach(r => { colorMap[r.id] = getLoanTypeColor(r.loan_type); });
 
@@ -125,7 +129,7 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
         ? <div style={{textAlign:"center",color:"var(--text3)",padding:"24px",fontSize:14}}>אין בקשות בחודש זה</div>
         : <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {monthRes.map(r=>(
-            <div key={r.id} onClick={()=>setSelected(r===selected?null:r)}
+            <div key={r.id} onClick={()=>setSelected(String(selected?.id)===String(r.id)?null:r)}
               style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"12px 16px",cursor:"pointer",transition:"border-color 0.15s"}}
               onMouseEnter={e=>e.currentTarget.style.borderColor="var(--accent)"}
               onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}
@@ -133,12 +137,15 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                 <span style={{fontWeight:800,fontSize:14}}>{r.student_name}</span>
                 <span style={{fontSize:12,color:"var(--text3)"}}>{LOAN_ICONS[r.loan_type]||<Package size={16} strokeWidth={1.75} />} {r.loan_type}</span>
-                <span style={{fontSize:11,color:"var(--text3)"}}><Calendar size={16} strokeWidth={1.75} /> {formatDate(r.borrow_date)} → {formatDate(r.return_date)}</span>
+                <span style={{fontSize:11,color:"var(--text3)"}}><Calendar size={16} strokeWidth={1.75} /> {formatDate(r.borrow_date)} → {formatDate(r.overdue_since || r.return_date)}</span>
                 <span className={`badge badge-${r.status==="מאושר"?"green":r.status==="ממתין"?"yellow":r.status==="נדחה"?"red":r.status==="באיחור"?"orange":"purple"}`} style={{marginRight:"auto"}}>
                   {r.status}
                 </span>
               </div>
-              {selected===r&&(
+              {/* Compared by id, not object identity: an overdue row is rebuilt
+                  by stretchOverdueForCalendar on every render, so an identity
+                  check would never match again and its panel would refuse to open. */}
+              {String(selected?.id)===String(r.id)&&(
                 <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid var(--border)"}}>
                   {/* פרטי סטודנט */}
                   <div style={{display:"flex",flexWrap:"wrap",gap:14,marginBottom:14}}>
@@ -366,7 +373,7 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                 <span style={{fontWeight:800,fontSize:14}}>{r.student_name}</span>
                 <span style={{fontSize:12,color:"var(--text3)"}}>{LOAN_ICONS[r.loan_type]||<Package size={16} strokeWidth={1.75} />} {r.loan_type}</span>
-                <span style={{fontSize:11,color:"var(--text3)"}}><Calendar size={16} strokeWidth={1.75} /> {formatDate(r.borrow_date)} → {formatDate(r.return_date)}</span>
+                <span style={{fontSize:11,color:"var(--text3)"}}><Calendar size={16} strokeWidth={1.75} /> {formatDate(r.borrow_date)} → {formatDate(r.overdue_since || r.return_date)}</span>
                 <span className={`badge badge-${STATUS_BADGE[r.status]||"yellow"}`} style={{marginRight:"auto"}}>{r.status}</span>
               </div>
               {selected===r&&(
