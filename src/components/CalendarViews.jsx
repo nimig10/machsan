@@ -129,7 +129,7 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
         ? <div style={{textAlign:"center",color:"var(--text3)",padding:"24px",fontSize:14}}>אין בקשות בחודש זה</div>
         : <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {monthRes.map(r=>(
-            <div key={r.id} onClick={()=>setSelected(r===selected?null:r)}
+            <div key={r.id} onClick={()=>setSelected(String(selected?.id)===String(r.id)?null:r)}
               style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r)",padding:"12px 16px",cursor:"pointer",transition:"border-color 0.15s"}}
               onMouseEnter={e=>e.currentTarget.style.borderColor="var(--accent)"}
               onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}
@@ -142,7 +142,10 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
                   {r.status}
                 </span>
               </div>
-              {selected===r&&(
+              {/* Compared by id, not object identity: an overdue row is rebuilt
+                  by stretchOverdueForCalendar on every render, so an identity
+                  check would never match again and its panel would refuse to open. */}
+              {String(selected?.id)===String(r.id)&&(
                 <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid var(--border)"}}>
                   {/* פרטי סטודנט */}
                   <div style={{display:"flex",flexWrap:"wrap",gap:14,marginBottom:14}}>

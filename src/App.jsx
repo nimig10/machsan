@@ -4525,16 +4525,19 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
       {monthRes.length===0
         ? <div style={{textAlign:"center",color:"var(--text3)",padding:"24px",fontSize:14}}>אין בקשות בחודש זה</div>
         : <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {/* Selection is compared by id, not object identity: an overdue row is
+              rebuilt by stretchOverdueForCalendar on every render, so an identity
+              check would never match again and its panel would refuse to open. */}
           {monthRes.map(r=>(
-            <div key={r.id} onClick={()=>setSelected(r===selected?null:r)}
-              style={{background:"var(--surface)",border:`1px solid ${selected===r?"var(--accent)":"var(--border)"}`,borderRadius:"var(--r)",padding:"12px 16px",cursor:"pointer",transition:"border-color 0.15s"}}>
+            <div key={r.id} onClick={()=>setSelected(String(selected?.id)===String(r.id)?null:r)}
+              style={{background:"var(--surface)",border:`1px solid ${String(selected?.id)===String(r.id)?"var(--accent)":"var(--border)"}`,borderRadius:"var(--r)",padding:"12px 16px",cursor:"pointer",transition:"border-color 0.15s"}}>
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                 <span style={{fontWeight:800,fontSize:14}}>{r.student_name}</span>
                 <span style={{fontSize:12,color:"var(--text3)",display:"inline-flex",alignItems:"center",gap:3}}>{LOAN_ICONS[r.loan_type]||<Package size={11} strokeWidth={1.75}/>} {r.loan_type}</span>
                 <span style={{fontSize:11,color:"var(--text3)",display:"inline-flex",alignItems:"center",gap:3}}><Calendar size={11} strokeWidth={1.75}/> {formatDate(r.borrow_date)} → {formatDate(r.overdue_since || r.return_date)}</span>
                 <span className={`badge badge-${STATUS_BADGE[r.status]||"yellow"}`} style={{marginRight:"auto"}}>{r.status}</span>
               </div>
-              {selected===r&&(
+              {String(selected?.id)===String(r.id)&&(
                 <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid var(--border)",display:"flex",flexDirection:"column",gap:12}} onClick={e=>e.stopPropagation()}>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}}>
                     {r.email&&(
