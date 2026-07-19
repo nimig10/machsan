@@ -1,7 +1,7 @@
 // StaffSchedulePage.jsx — Staff weekly schedule + daily activity summary
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
 import { Modal } from "./ui.jsx";
-import { getAuthToken, groupReservationItemsByCategory, normalizeReservationStatus } from "../utils.js";
+import { getAuthToken, groupReservationItemsByCategory, normalizeReservationStatus, stretchOverdueForCalendar } from "../utils.js";
 
 /* Reservation-status → color, matching the badge palette in "תפעול מחסן"
    (statusBadge in ui.jsx / .badge-* CSS in App.jsx). Keeps loan chips
@@ -69,7 +69,9 @@ function shiftCoversTime(shiftType, startTime, endTime, hhmm) {
 // Student loan requests touching a day — OUT (pickup) + RETURN occurrences.
 // Mirrors the LoansRow filter exactly: drops נדחה/הוחזר and lesson loans.
 function getDayStudentLoans(reservations, date) {
-  const active = (reservations || []).filter(r => r.status !== "נדחה" && r.status !== "הוחזר" && r.loan_type !== "שיעור");
+  // Stretched so an overdue loan's RETURN stays an open task on today's column
+  // instead of being stranded on a return date that already passed.
+  const active = stretchOverdueForCalendar(reservations || []).filter(r => r.status !== "נדחה" && r.status !== "הוחזר" && r.loan_type !== "שיעור");
   // Group per reservation so each request shows its OUT then its RETURN directly below it,
   // and groups are ordered by pickup time (by return time when the loan only returns today).
   const groups = [];
@@ -1600,7 +1602,9 @@ function LoanChip({ r, isReturn, onClick, loanHandlers = [] }) {
 }
 
 function LoansRow({ workDays, reservations, today, onSelectLoan, loanHandlers = [] }) {
-  const activeRes = (reservations || []).filter(r => r.status !== "נדחה" && r.status !== "הוחזר");
+  // Same stretch as getDayStudentLoans — an overdue return stays visible as an
+  // open task on today rather than sitting on a return date that already passed.
+  const activeRes = stretchOverdueForCalendar(reservations || []).filter(r => r.status !== "נדחה" && r.status !== "הוחזר");
 
   return (
     <Fragment>

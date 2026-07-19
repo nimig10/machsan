@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient.js';
 import { useState } from "react";
 import { BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Film, Mic, Package, Phone, Shield, User, Video, X } from "lucide-react";
 import { CalendarGrid } from "./CalendarGrid.jsx";
-import { formatDate, today, cloudinaryThumb, getLoanTypeColor, normalizeName, updateReservationStatus } from "../utils.js";
+import { formatDate, today, cloudinaryThumb, getLoanTypeColor, normalizeName, updateReservationStatus, stretchOverdueForCalendar } from "../utils.js";
 
 export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[], equipment=[], siteSettings={}, certifications={types:[],students:[]} }) {
   const [calDate, setCalDate]     = useState(new Date());
@@ -41,11 +41,15 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
   const STATUS_COLORS  = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","אישור ראש מחלקה":"#9b59b6" };
   const LOAN_ICONS     = { "פרטית":<User size={16} strokeWidth={1.75}/>,"הפקה":<Film size={16} strokeWidth={1.75} />,"סאונד":<Mic size={16} strokeWidth={1.75} />,"קולנוע יומית":<Camera size={16} strokeWidth={1.75}/>,"צוות":<Briefcase size={16} strokeWidth={1.75}/>,"הכל":<Package size={16} strokeWidth={1.75} /> };
 
-  const activeRes = reservations.filter(r =>
+  // Overdue loans keep occupying the calendar until the gear is physically back.
+  // This portal pushes raw Supabase rows into state after every approve/reject,
+  // so the helper's getEffectiveStatus check (not r.status) is what keeps this
+  // working past the user's first click.
+  const activeRes = stretchOverdueForCalendar(reservations.filter(r =>
     !["הוחזר", "בוטל", "מבוטל"].includes(r.status) && r.borrow_date && r.return_date &&
     (statusF.length===0 || statusF.includes(r.status)) &&
     (loanTypeF==="הכל" || r.loan_type===loanTypeF)
-  );
+  ));
   const colorMap = {};
   activeRes.forEach(r => { colorMap[r.id] = getLoanTypeColor(r.loan_type); });
 

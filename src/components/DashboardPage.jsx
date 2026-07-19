@@ -1,6 +1,6 @@
 // DashboardPage.jsx — admin dashboard page
 import { useState } from "react";
-import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, syncReservationStatusToBlob, getLoanTypeColor, normalizeName, groupReservationItemsByCategory } from "../utils.js";
+import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, syncReservationStatusToBlob, getLoanTypeColor, normalizeName, groupReservationItemsByCategory, stretchOverdueForCalendar } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import { Activity, AlertTriangle, ArrowUpFromLine, Briefcase, Calendar, Camera, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Layers, MessageSquare, Mic, Package, RefreshCw, Shield, User, Wrench, X, XCircle } from "lucide-react";
@@ -96,11 +96,13 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
   ];
   const LOAN_TYPE_ICON = { "פרטית":<User size={16} strokeWidth={1.75} color="var(--accent)" />,"הפקה":<Film size={16} strokeWidth={1.75} color="var(--accent)" />,"סאונד":<Mic size={16} strokeWidth={1.75} color="var(--accent)" />,"שיעור":<GraduationCap size={16} strokeWidth={1.75} color="var(--accent)" />,"קולנוע יומית":<Camera size={16} strokeWidth={1.75} color="var(--accent)" />,"צוות":<Briefcase size={16} strokeWidth={1.75} color="var(--accent)" /> };
 
-  const activeRes = reservations.filter(r =>
+  // Overdue loans keep occupying the calendar until the gear is physically back
+  // (shared helper — same behaviour on every calendar in the app).
+  const activeRes = stretchOverdueForCalendar(reservations.filter(r =>
     r.status !== "הוחזר" && r.borrow_date && r.return_date &&
     (calStatusF.length===0 || calStatusF.includes(getEffectiveStatus(r))) &&
     (calLoanTypeF==="הכל" || r.loan_type===calLoanTypeF)
-  );
+  ));
   const colorMap = {};
   const lessonResIds = new Set(activeRes.filter(r=>r.loan_type==="שיעור").map(r=>r.id));
   activeRes.forEach(r => { colorMap[r.id] = getLoanTypeColor(r.loan_type); });

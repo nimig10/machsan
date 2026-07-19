@@ -1,7 +1,7 @@
 // PublicForm.jsx — public loan request form
 import { AlertTriangle, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mail, Mic, Minus, Moon, Package, Pencil, Phone, Save, School, Search, Settings, Shield, ShieldCheck, Trash2, User, X, XCircle } from "lucide-react";
 import { useEffect, useState, useRef, useMemo } from "react";
-import { formatDate, formatTime, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, EXTERNAL_LOAN_TYPES, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR, groupReservationItemsByCategory } from "../utils.js";
+import { formatDate, formatTime, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, EXTERNAL_LOAN_TYPES, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR, groupReservationItemsByCategory, stretchOverdueForCalendar } from "../utils.js";
 import { supabase } from "../supabaseClient.js";
 import { listStudents } from "../utils/studentsApi.js";
 import { listLessons } from "../utils/lessonsApi.js";
@@ -269,13 +269,9 @@ function PublicMiniCalendar({ reservations, lessons=[], initialLoanType="הכל"
     // Exclude reservations linked to a deleted lesson (orphaned lesson_id)
     (!r.lesson_id || lessonIdSet.has(String(r.lesson_id)))
   );
-  // For "באיחור" reservations whose return_date is in the past, extend to today so they appear on the calendar
-  const activeResForCalendar = activeRes.map(r => {
-    if (r.status === "באיחור" && r.return_date < todayStr) {
-      return {...r, return_date: todayStr};
-    }
-    return r;
-  });
+  // Overdue loans keep occupying the calendar until the gear is physically back.
+  // Was an inline copy of this rule; now the shared helper every calendar uses.
+  const activeResForCalendar = stretchOverdueForCalendar(activeRes, todayStr);
   // Add preview entry for user's selected dates
   const previewRes = previewStart && previewEnd ? [{
     id:"__preview__", student_name:previewName, borrow_date:previewStart,
@@ -380,7 +376,10 @@ function ActiveListsPanel({ reservations=[], lessons=[], equipment=[], calSnapsh
   const monthStartStr = toISO(monthStart);
   const monthEndStr   = toISO(monthEnd);
 
-  const panelRes = (reservations||[]).filter(r =>
+  // Stretched first so the month-overlap test below matches the calendar: an
+  // overdue loan whose real return_date fell in a previous month is still shown
+  // on the grid, and must not silently drop out of this mirror panel.
+  const panelRes = stretchOverdueForCalendar(reservations||[]).filter(r =>
     (isPendingFilter
       ? r.status === "ממתין"
       : isDeptHeadFilter

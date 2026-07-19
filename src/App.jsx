@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { AlertTriangle, AudioLines, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, Clock, ClipboardList, Download, FileText, Film, GraduationCap, HelpCircle, Info, Link, Lightbulb, LogOut, Mail, Mic, Minus, Package, Pencil, Phone, Plus, Save, Search, Settings, Shield, ShoppingCart, SlidersHorizontal, Trash2, Triangle, Upload, User, Video, Wrench, X, XCircle } from "lucide-react";
-import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, deleteReservation, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB, equipmentWriteInFlight, getValidTokenDirect, groupReservationItemsByCategory, matchesEquipmentTypeFilter, deriveVisibleCategories } from "./utils.js";
+import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, deleteReservation, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB, equipmentWriteInFlight, getValidTokenDirect, groupReservationItemsByCategory, matchesEquipmentTypeFilter, deriveVisibleCategories, stretchOverdueForCalendar } from "./utils.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
 import { CalendarGrid } from "./components/CalendarGrid.jsx";
@@ -4433,12 +4433,15 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
   for(let d=1;d<=new Date(yr,mo+1,0).getDate();d++) days.push(new Date(yr,mo,d));
   while(days.length<42) days.push(null);
 
-  const activeRes = localRes.filter(r =>
+  // Overdue loans keep occupying the calendar until the gear is physically back.
+  // `localRes` is a mount-time snapshot that is never re-synced, so the helper's
+  // getEffectiveStatus check (not r.status) is what keeps this accurate here.
+  const activeRes = stretchOverdueForCalendar(localRes.filter(r =>
     r.status !== "הוחזר" && r.borrow_date && r.return_date &&
     !(r.loan_type === "שיעור" && r.status !== "מאושר") &&
     (statusF.length===0 || statusF.includes(r.status)) &&
     (loanTypeF==="הכל" || r.loan_type===loanTypeF)
-  );
+  ));
   const colorMap = {};
   activeRes.forEach((r,i) => { colorMap[r.id] = SPAN_COLORS[i % SPAN_COLORS.length]; });
 
