@@ -41,6 +41,17 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
       : <span style={{fontSize:size*0.8}}>{img}</span>;
   };
 
+  // The archive documents what physically LEFT the warehouse, which is not always
+  // what reservation_items holds at the end: a partial return of an overdue loan
+  // decrements (and eventually deletes) those rows to release stock back into the
+  // pool. `original_items` is the frozen snapshot taken before the first such
+  // decrement — when it exists it is the truthful record. NULL (the overwhelming
+  // majority: no partial return ever happened) falls back to the live items.
+  const archiveItems = (r) => {
+    const snapshot = Array.isArray(r?.original_items) ? r.original_items : null;
+    return snapshot && snapshot.length ? snapshot : (r?.items || []);
+  };
+
   const LOAN_ICONS = {"פרטית":"👤","הפקה":<Film size={11} strokeWidth={1.75} color="var(--accent)" />,"סאונד":<Mic size={11} strokeWidth={1.75} color="var(--accent)" />,"קולנוע יומית":"🎥","שיעור":"📽️"};
   const sortByReturned = arr => [...arr].sort((a,b)=>(new Date(b.returned_at||b.return_date).getTime())-(new Date(a.returned_at||a.return_date).getTime()));
 
@@ -80,11 +91,11 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
         <div style={{marginTop:10,display:"flex",gap:16,fontSize:12,color:"var(--text2)",flexWrap:"wrap"}}>
           <span><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> {formatDate(r.borrow_date)}{r.borrow_time&&<strong style={{color:"var(--accent)",marginRight:4}}> {formatTime(r.borrow_time)}</strong>}</span>
           <span>↩ {formatDate(r.return_date)}{r.return_time&&<strong style={{color:"var(--accent)",marginRight:4}}> {formatTime(r.return_time)}</strong>}</span>
-          <span><Package size={14} strokeWidth={1.75} color="var(--accent)" /> {r.items?.length||0} פריטים</span>
+          <span><Package size={14} strokeWidth={1.75} color="var(--accent)" /> {archiveItems(r).length} פריטים</span>
           {r.returned_at&&<span style={{color:"var(--text3)"}}>🕐 הוחזר: {new Date(r.returned_at).toLocaleDateString("he-IL")}</span>}
         </div>
         <div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:4}}>
-          {r.items?.map((i,j)=><span key={j} className="chip"><EqImg id={i.equipment_id}/> {eqName(i.equipment_id)} ×{i.quantity}</span>)}
+          {archiveItems(r).map((i,j)=><span key={j} className="chip"><EqImg id={i.equipment_id}/> {eqName(i.equipment_id)} ×{i.quantity}</span>)}
         </div>
       </div>
     );
@@ -190,7 +201,7 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
               </div>
               <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"14px 16px"}}>
                 <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>ציוד שהושאל</div>
-                {viewRes.items?.map((i,j)=>(
+                {archiveItems(viewRes).map((i,j)=>(
                   <div key={j} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
                     <EqImg id={i.equipment_id} size={28}/>
                     <span style={{flex:1,fontSize:13,fontWeight:600}}>{eqName(i.equipment_id)}</span>
@@ -198,7 +209,7 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
                   </div>
                 ))}
                 <div style={{marginTop:8,fontSize:12,color:"var(--text3)"}}>
-                  סה״כ: <strong style={{color:"var(--text)"}}>{viewRes.items?.reduce((s,i)=>s+i.quantity,0)||0}</strong> יחידות
+                  סה״כ: <strong style={{color:"var(--text)"}}>{archiveItems(viewRes).reduce((s,i)=>s+(Number(i.quantity)||0),0)}</strong> יחידות
                 </div>
                 {viewRes.returned_at&&(
                   <div style={{marginTop:8,fontSize:12,color:"var(--text3)"}}>

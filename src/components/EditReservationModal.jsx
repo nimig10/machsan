@@ -22,6 +22,22 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
   const isOverdueReservation = reservation.status==="באיחור";
   const [form, setForm]   = useState({...reservation});
   const [items, setItems] = useState(reservation.items ? [...reservation.items] : []);
+  // Overdue mode edits quantities of gear that is already out of the warehouse.
+  // The rendered row list must stay anchored to what ORIGINALLY went out, for two
+  // reasons: a row would otherwise vanish the moment its quantity hits 0 (setQty
+  // drops the entry) with no way to undo, and the archive must document the loan
+  // exactly as it stood while "פעילה".
+  //
+  // Seeding order matters. `original_items` is the frozen snapshot stamped on the
+  // FIRST partial return; once it exists it is the only truthful source. Reading
+  // `reservation.items` instead would re-seed from the already-reduced list, so a
+  // second staff member editing hours later would silently shrink the record.
+  const [originalItems] = useState(() => {
+    const stamped = Array.isArray(reservation.original_items) ? reservation.original_items : null;
+    const src = stamped && stamped.length ? stamped : (reservation.items || []);
+    return [...src];
+  });
+  const originalQtyFor = (eqId) => Number(originalItems.find(i => i.equipment_id == eqId)?.quantity) || 0;
   const [saving, setSaving] = useState(false);
   const [editConflicts, setEditConflicts] = useState([]);
   const [showLoanedOnly, setShowLoanedOnly] = useState(false);
@@ -65,7 +81,9 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
   // Overdue mode lists only the gear that actually went out. Enrichment is kept
   // separate from filtering so the category chips can be derived from the whole
   // loaned pool rather than from an already-category-filtered list.
-  const overdueEqAll = items.map((item) => {
+  // Source is `originalItems`, NOT `items` — see the note at its declaration:
+  // a row zeroed out during the edit must stay on screen so it can be restored.
+  const overdueEqAll = originalItems.map((item) => {
     const eq = equipment.find((e) => e.id == item.equipment_id) || {};
     return {
       ...item,
@@ -144,8 +162,12 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
   const getAvail = (eqId) => getEquipmentBlockingDetails(eqId).available;
 
   const setQty = (eqId, qty) => {
-    const totalAvail = getAvail(eqId);
-    const q = Math.max(0, Math.min(qty, totalAvail));
+    // Overdue: the gear already left the warehouse, so the ceiling is what
+    // physically went out — not current availability. Staying at-or-below the
+    // original quantity means the edit can only RELEASE stock back to the pool,
+    // never worsen anyone else's availability, so no over-booking is possible.
+    const ceiling = isOverdueReservation ? originalQtyFor(eqId) : getAvail(eqId);
+    const q = Math.max(0, Math.min(qty, ceiling));
     const name = equipment.find(e=>e.id==eqId)?.name||"";
     setItems(prev => q===0 ? prev.filter(i=>i.equipment_id!=eqId)
       : prev.find(i=>i.equipment_id==eqId) ? prev.map(i=>i.equipment_id==eqId?{...i,quantity:q}:i)
@@ -186,7 +208,24 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
 
   const save = async () => {
     const updatedReservation = { ...form, id: reservation.id, status: reservation.status, items };
-    if (reservation.status === "מאושר") {
+
+    // Partial return of an overdue loan: freeze what physically went out before
+    // the decrements erase it. Stamped once — an existing snapshot is never
+    // overwritten, so repeated partial returns keep converging on the same
+    // record instead of shrinking it. The archive reads this, nothing else does.
+    if (isOverdueReservation && !(Array.isArray(reservation.original_items) && reservation.original_items.length)) {
+      updatedReservation.original_items = originalItems.map(i => ({
+        equipment_id: i.equipment_id,
+        name: i.name || "",
+        quantity: Number(i.quantity) || 0,
+      }));
+    }
+
+    // באיחור holds stock just like מאושר, so it gets the same availability gate.
+    // With the ceiling pinned to the original quantity this can never actually
+    // fire today — it is here so the guard is already in place if that ceiling
+    // is ever relaxed.
+    if (reservation.status === "מאושר" || isOverdueReservation) {
       const conflicts = getReservationApprovalConflicts(updatedReservation, reservations, equipment);
       if (conflicts.length) {
         setEditConflicts(conflicts);
@@ -326,7 +365,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
             </div>
             <div className="highlight-box" style={{marginBottom:16}}>
               {isOverdueReservation
-                ? "הציוד כבר יצא מהמחסן. כאן מוצגת רק רשימת הפריטים שהושאלו בפועל, עם פילטרים לצפייה נוחה."
+                ? "הציוד כבר יצא מהמחסן. אפשר לעדכן כמויות במקרה של החזרה חלקית — הפחתת כמות משחררת מיד את היחידות שחזרו חזרה למלאי. אי אפשר להוסיף ציוד חדש או לחרוג מהכמות שיצאה."
                 : <>המערכת סופרת מלאי רק מול בקשות <strong>מאושרות</strong> שחופפות בזמן לבקשה הזאת. אם ציוד חסום, יוצגו כאן שמות הסטודנטים והכמויות שחוסמות אותו כדי שתוכל לעבור לבקשות החופפות ולהפחית משם.</>}
             </div>
             {equipmentCategories.map(cat=>{
@@ -338,7 +377,10 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                 <div key={cat} style={{marginBottom:16}}>
                   <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>{cat}</div>
                   {catEq.map(eq=>{
-                    const qty = isOverdueReservation ? Number(eq.quantity) || 0 : getQty(eq.id);
+                    // Live quantity in both modes — in overdue mode the row is
+                    // rendered from the original-loan snapshot, so reading the
+                    // snapshot's static `eq.quantity` here would freeze the counter.
+                    const qty = getQty(eq.id);
                     const details = isOverdueReservation ? { available: 0, usedByOthers: 0, total: 0, blockers: [] } : getEquipmentBlockingDetails(eq.id);
                     const totalAvail = details.available;
                     const remaining = Math.max(0, totalAvail - qty);
@@ -378,13 +420,17 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                               </div>
                             )}
                           </div>
-                          {!isOverdueReservation && (
-                            <div className="qty-ctrl">
-                              <button className="qty-btn" onClick={()=>setQty(eq.id,qty-1)}>−</button>
-                              <span className="qty-num">{qty}</span>
-                              <button className="qty-btn" disabled={remaining<=0} onClick={()=>setQty(eq.id,qty+1)}>+</button>
-                            </div>
-                          )}
+                          <div className="qty-ctrl">
+                            <button className="qty-btn" onClick={()=>setQty(eq.id,qty-1)}>−</button>
+                            <span className="qty-num">{qty}</span>
+                            {/* Overdue is capped at the quantity that physically
+                                went out; normal editing is capped by availability. */}
+                            <button
+                              className="qty-btn"
+                              disabled={isOverdueReservation ? qty>=originalQtyFor(eq.id) : remaining<=0}
+                              onClick={()=>setQty(eq.id,qty+1)}
+                            >+</button>
+                          </div>
                         </div>
                         {!isOverdueReservation && details.blockers.length > 0 && (
                           <div style={{background:"rgba(241,196,15,0.1)",border:"1px solid rgba(241,196,15,0.28)",borderRadius:10,padding:10,marginBottom:6}}>
@@ -487,7 +533,10 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                 setSaving(false);
               }}><CheckCircle size={16} strokeWidth={1.75} /> שמור ואשר</button>
             )}
-            {!isOverdueReservation && <button className="btn btn-primary" disabled={saving} onClick={save}>{saving?"שומר...":"שמור שינויים"}</button>}
+            {/* Overdue loans save too — that is how a partial return is recorded.
+                The approve/reject/strip buttons above stay hidden; they belong to
+                ממתין/נדחה and have no meaning once the gear is already out. */}
+            <button className="btn btn-primary" disabled={saving} onClick={save}>{saving?"שומר...":"שמור שינויים"}</button>
           </div>
         </div>
       </div>

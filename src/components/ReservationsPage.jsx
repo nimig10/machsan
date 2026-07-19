@@ -739,6 +739,11 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       borrow_time:   rowFields.borrow_time,
       return_time:   rowFields.return_time,
       overdue_student_note: rowFields.overdue_student_note || null,
+      // Frozen snapshot of the gear as it went out, stamped by the overdue
+      // partial-return flow. `form` spreads the reservation, so an already-
+      // stamped value flows straight back through — every other edit is a
+      // no-op preserve. Never derived here; see migration 20260719120000.
+      original_items: rowFields.original_items ?? null,
     }).eq("id", updated.id);
     if (updErr) {
       console.error("saveEditedReservation update error:", updErr);
