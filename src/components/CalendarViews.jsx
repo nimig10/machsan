@@ -137,7 +137,7 @@ export function DeptHeadCalendarPage({ reservations: initialReservations, kits=[
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                 <span style={{fontWeight:800,fontSize:14}}>{r.student_name}</span>
                 <span style={{fontSize:12,color:"var(--text3)"}}>{LOAN_ICONS[r.loan_type]||<Package size={16} strokeWidth={1.75} />} {r.loan_type}</span>
-                <span style={{fontSize:11,color:"var(--text3)"}}><Calendar size={16} strokeWidth={1.75} /> {formatDate(r.borrow_date)} → {formatDate(r.return_date)}</span>
+                <span style={{fontSize:11,color:"var(--text3)"}}><Calendar size={16} strokeWidth={1.75} /> {formatDate(r.borrow_date)} → {formatDate(r.overdue_since || r.return_date)}</span>
                 <span className={`badge badge-${r.status==="מאושר"?"green":r.status==="ממתין"?"yellow":r.status==="נדחה"?"red":r.status==="באיחור"?"orange":"purple"}`} style={{marginRight:"auto"}}>
                   {r.status}
                 </span>
@@ -370,7 +370,7 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                 <span style={{fontWeight:800,fontSize:14}}>{r.student_name}</span>
                 <span style={{fontSize:12,color:"var(--text3)"}}>{LOAN_ICONS[r.loan_type]||<Package size={16} strokeWidth={1.75} />} {r.loan_type}</span>
-                <span style={{fontSize:11,color:"var(--text3)"}}><Calendar size={16} strokeWidth={1.75} /> {formatDate(r.borrow_date)} → {formatDate(r.return_date)}</span>
+                <span style={{fontSize:11,color:"var(--text3)"}}><Calendar size={16} strokeWidth={1.75} /> {formatDate(r.borrow_date)} → {formatDate(r.overdue_since || r.return_date)}</span>
                 <span className={`badge badge-${STATUS_BADGE[r.status]||"yellow"}`} style={{marginRight:"auto"}}>{r.status}</span>
               </div>
               {selected===r&&(

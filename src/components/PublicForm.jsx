@@ -510,7 +510,7 @@ function ActiveLoanCard({ reservation, equipById }) {
             <Calendar size={13} strokeWidth={1.75} color="var(--accent)" />
             {formatDate(r.borrow_date)}{r.borrow_time ? ` · ${formatTime(r.borrow_time)}` : ""}
             <span style={{color:"var(--text3)",fontWeight:400,margin:"0 3px"}}>←</span>
-            {formatDate(r.return_date)}{r.return_time ? ` · ${formatTime(r.return_time)}` : ""}
+            {formatDate(r.overdue_since || r.return_date)}{r.return_time ? ` · ${formatTime(r.return_time)}` : ""}
           </span>
           {r.loan_type && (
             <span style={{padding:"2px 8px",borderRadius:10,background:loanTypeColor[0],color:loanTypeColor[1],fontSize:10,fontWeight:800,border:`1px solid ${loanTypeColor[1]}`}}>

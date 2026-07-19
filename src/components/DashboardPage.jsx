@@ -435,7 +435,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4,direction:"rtl"}}>
             {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,color:"var(--text3)",padding:"4px 0"}}>{d}</div>)}
           </div>
-          <CalendarGrid days={days} outOfMonthDays={outOfMonthDays} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={90} fontSize={10} lessonIds={lessonResIds} onBarClick={setDashViewRes}/>
+          <CalendarGrid days={days} outOfMonthDays={outOfMonthDays} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={90} fontSize={10} lessonIds={lessonResIds} onBarClick={(r)=>setDashViewRes(reservations.find(x=>String(x.id)===String(r.id))||r)}/>
         </div>
       </div>
 
@@ -451,7 +451,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
             <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4,direction:"rtl"}}>
               {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:13,fontWeight:700,color:"var(--text3)",padding:"6px 0"}}>{d}</div>)}
             </div>
-            <CalendarGrid days={days} outOfMonthDays={outOfMonthDays} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={130} fontSize={13} lessonIds={lessonResIds} onBarClick={setDashViewRes}/>
+            <CalendarGrid days={days} outOfMonthDays={outOfMonthDays} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={130} fontSize={13} lessonIds={lessonResIds} onBarClick={(r)=>setDashViewRes(reservations.find(x=>String(x.id)===String(r.id))||r)}/>
           </div>
         </div>
       )}
