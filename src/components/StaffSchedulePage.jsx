@@ -193,6 +193,11 @@ async function scheduleApi(action, body = {}) {
 /* ══════════════════════ Main Component ══════════════════════ */
 export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBookings = [], reservations = [], lessons = [], setLessons, onNavigateToLesson, equipment = [], loanHandlers = [], setLoanHandlers, reloadLoanHandlers }) {
   const isAdmin = staffUser?.role === "admin";
+  // Roster placement view of the reservations: an overdue loan's return is
+  // carried to today (same rule as every calendar). Anything that decides WHICH
+  // COLUMN a loan-related marker sits on must read this list, so the 🔧 marker
+  // stays on the same day as the return chip.
+  const rosterRes = stretchOverdueForCalendar(reservations);
   const canEditLessons = isAdmin || !!staffUser?.permissions?.canEditDailyLessons;
   const currentStaffId = staffUser?.id;
   // public.users.id for the current staff user.
@@ -929,7 +934,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                                 {/* 🔧 warehouse-ops marker — this worker handles a loan pickup/return this day */}
                                 {(() => {
                                   const handled = (loanHandlers || []).filter(h => String(h.staff_id) === String(block.memberId) && (() => {
-                                    const r = (reservations || []).find(x => String(x.id) === String(h.reservation_id));
+                                    const r = rosterRes.find(x => String(x.id) === String(h.reservation_id));
                                     return r && (h.kind === "out" ? r.borrow_date === date : r.return_date === date);
                                   })());
                                   if (handled.length === 0) return null;
