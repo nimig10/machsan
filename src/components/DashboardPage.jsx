@@ -51,6 +51,14 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
   const [calDate, setCalDate]       = useState(new Date());
   const [calFS, setCalFS]           = useState(false);
   const [dashViewRes, setDashViewRes] = useState(null);
+  // The calendar hands back a STRETCHED row (its return_date was pushed to today
+  // so an overdue bar keeps occupying the grid). Every detail surface must show
+  // the real return date and time instead — the stretch is geometry, never data.
+  // Resolve to the live row; if that ever misses, undo the stretch from
+  // overdue_since so a stretched date can never reach a text field.
+  const unstretch = (r) =>
+    reservations.find(x => String(x.id) === String(r?.id)) ||
+    (r?.overdue_since ? { ...r, return_date: r.overdue_since } : r);
   const [dashApprovalConflict, setDashApprovalConflict] = useState(null);
   const [dashConsecutiveWarning, setDashConsecutiveWarning] = useState(null);
   const [approvingId, setApprovingId] = useState(null);
@@ -435,7 +443,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4,direction:"rtl"}}>
             {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,color:"var(--text3)",padding:"4px 0"}}>{d}</div>)}
           </div>
-          <CalendarGrid days={days} outOfMonthDays={outOfMonthDays} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={90} fontSize={10} lessonIds={lessonResIds} onBarClick={(r)=>setDashViewRes(reservations.find(x=>String(x.id)===String(r.id))||r)}/>
+          <CalendarGrid days={days} outOfMonthDays={outOfMonthDays} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={90} fontSize={10} lessonIds={lessonResIds} onBarClick={(r)=>setDashViewRes(unstretch(r))}/>
         </div>
       </div>
 
@@ -451,7 +459,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
             <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4,direction:"rtl"}}>
               {HE_D.map(d=><div key={d} style={{textAlign:"center",fontSize:13,fontWeight:700,color:"var(--text3)",padding:"6px 0"}}>{d}</div>)}
             </div>
-            <CalendarGrid days={days} outOfMonthDays={outOfMonthDays} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={130} fontSize={13} lessonIds={lessonResIds} onBarClick={(r)=>setDashViewRes(reservations.find(x=>String(x.id)===String(r.id))||r)}/>
+            <CalendarGrid days={days} outOfMonthDays={outOfMonthDays} activeRes={activeRes} colorMap={colorMap} todayStr={todayStr} cellHeight={130} fontSize={13} lessonIds={lessonResIds} onBarClick={(r)=>setDashViewRes(unstretch(r))}/>
           </div>
         </div>
       )}
