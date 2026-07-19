@@ -103,6 +103,10 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
     }
     if (!matchesEquipmentTypeFilter(item, editTypeFilter)) return false;
     if (editCategoryFilters.length && !editCategoryFilters.includes(item.category)) return false;
+    // "פריטים בלבד" — only gear still out; rows zeroed by a partial return hide.
+    // Same semantics as matchesEditEquipmentFilters in normal mode. Reads `items`
+    // directly (not getQty — it is declared further down and this filter runs now).
+    if (showLoanedOnly && !(Number(items.find(i => i.equipment_id == item.id)?.quantity) > 0)) return false;
     return true;
   });
   const sendOverdueMailFromEdit = async () => {
@@ -312,15 +316,15 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
           <div>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:8}}>
               <div className="form-section-title" style={{marginBottom:0}}>ציוד ({items.reduce((s,i)=>s+i.quantity,0)} פריטים)</div>
-              {!isOverdueReservation && (
-                <button
-                  type="button"
-                  className={`btn btn-sm ${showLoanedOnly ? "btn-primary" : "btn-secondary"}`}
-                  onClick={()=>setShowLoanedOnly(prev=>!prev)}
-                >
-                  פריטים בלבד
-                </button>
-              )}
+              {/* In overdue mode this hides rows already fully returned (qty 0
+                  after a partial return), leaving only the gear still out. */}
+              <button
+                type="button"
+                className={`btn btn-sm ${showLoanedOnly ? "btn-primary" : "btn-secondary"}`}
+                onClick={()=>setShowLoanedOnly(prev=>!prev)}
+              >
+                פריטים בלבד
+              </button>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:14}}>
               <input
