@@ -1,7 +1,7 @@
 // StaffSchedulePage.jsx — Staff weekly schedule + daily activity summary
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
 import { Modal } from "./ui.jsx";
-import { getAuthToken, groupReservationItemsByCategory, normalizeReservationStatus } from "../utils.js";
+import { getAuthToken, groupReservationItemsByCategory, normalizeReservationStatus, stretchOverdueForCalendar } from "../utils.js";
 
 /* Reservation-status → color, matching the badge palette in "תפעול מחסן"
    (statusBadge in ui.jsx / .badge-* CSS in App.jsx). Keeps loan chips
@@ -69,7 +69,9 @@ function shiftCoversTime(shiftType, startTime, endTime, hhmm) {
 // Student loan requests touching a day — OUT (pickup) + RETURN occurrences.
 // Mirrors the LoansRow filter exactly: drops נדחה/הוחזר and lesson loans.
 function getDayStudentLoans(reservations, date) {
-  const active = (reservations || []).filter(r => r.status !== "נדחה" && r.status !== "הוחזר" && r.loan_type !== "שיעור");
+  // Stretched so an overdue loan's RETURN stays an open task on today's column
+  // instead of being stranded on a return date that already passed.
+  const active = stretchOverdueForCalendar(reservations || []).filter(r => r.status !== "נדחה" && r.status !== "הוחזר" && r.loan_type !== "שיעור");
   // Group per reservation so each request shows its OUT then its RETURN directly below it,
   // and groups are ordered by pickup time (by return time when the loan only returns today).
   const groups = [];
@@ -191,6 +193,11 @@ async function scheduleApi(action, body = {}) {
 /* ══════════════════════ Main Component ══════════════════════ */
 export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBookings = [], reservations = [], lessons = [], setLessons, onNavigateToLesson, equipment = [], loanHandlers = [], setLoanHandlers, reloadLoanHandlers }) {
   const isAdmin = staffUser?.role === "admin";
+  // Roster placement view of the reservations: an overdue loan's return is
+  // carried to today (same rule as every calendar). Anything that decides WHICH
+  // COLUMN a loan-related marker sits on must read this list, so the 🔧 marker
+  // stays on the same day as the return chip.
+  const rosterRes = stretchOverdueForCalendar(reservations);
   const canEditLessons = isAdmin || !!staffUser?.permissions?.canEditDailyLessons;
   const currentStaffId = staffUser?.id;
   // public.users.id for the current staff user.
@@ -927,7 +934,7 @@ export function StaffSchedulePage({ staffUser, showToast, studios = [], studioBo
                                 {/* 🔧 warehouse-ops marker — this worker handles a loan pickup/return this day */}
                                 {(() => {
                                   const handled = (loanHandlers || []).filter(h => String(h.staff_id) === String(block.memberId) && (() => {
-                                    const r = (reservations || []).find(x => String(x.id) === String(h.reservation_id));
+                                    const r = rosterRes.find(x => String(x.id) === String(h.reservation_id));
                                     return r && (h.kind === "out" ? r.borrow_date === date : r.return_date === date);
                                   })());
                                   if (handled.length === 0) return null;
@@ -1600,7 +1607,9 @@ function LoanChip({ r, isReturn, onClick, loanHandlers = [] }) {
 }
 
 function LoansRow({ workDays, reservations, today, onSelectLoan, loanHandlers = [] }) {
-  const activeRes = (reservations || []).filter(r => r.status !== "נדחה" && r.status !== "הוחזר");
+  // Same stretch as getDayStudentLoans — an overdue return stays visible as an
+  // open task on today rather than sitting on a return date that already passed.
+  const activeRes = stretchOverdueForCalendar(reservations || []).filter(r => r.status !== "נדחה" && r.status !== "הוחזר");
 
   return (
     <Fragment>

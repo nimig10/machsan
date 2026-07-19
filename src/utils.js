@@ -721,6 +721,33 @@ export function normalizeReservationsForArchive(reservations, now = new Date()) 
   });
 }
 
+// Single source of truth for how an OVERDUE loan is drawn on every calendar.
+//
+// Gear that never came back is still out of the warehouse, so its bar must keep
+// occupying the calendar up to today instead of stopping at a return date that
+// never happened. Without this, a one-day loan that is three weeks late simply
+// vanishes from the current month and nobody sees the gear is missing.
+//
+// Keyed on getEffectiveStatus, NOT on r.status — that distinction is load
+// bearing. Several surfaces (the dept-head portal, the college-manager
+// calendar) push raw Supabase rows straight into state, where an overdue loan
+// still reads "מאושר"; a raw-status check silently stops working there after
+// the user's first action. getEffectiveStatus is a superset that derives
+// "באיחור" from both raw and normalized rows, and already excludes lessons
+// (they auto-archive to "הוחזר" and are never overdue).
+//
+// DISPLAY ONLY. `overdue_since` carries the real return date so CalendarGrid can
+// tint the overrun and avoid claiming the loan came back today. Availability is
+// untouched: computeEquipmentAvailability reads the original rows and applies
+// OVERDUE_BLOCK_BUFFER_MS, and never sees a stretched copy.
+export function stretchOverdueForCalendar(reservations, todayString = today()) {
+  return (reservations || []).map(r => {
+    if (!r?.return_date || r.return_date >= todayString) return r;
+    if (getEffectiveStatus(r) !== "באיחור") return r;
+    return { ...r, return_date: todayString, overdue_since: r.return_date };
+  });
+}
+
 // Far-future timestamp used for overdue reservations — item is physically missing, blocks all future requests
 export const FAR_FUTURE = new Date("2099-12-31T23:59:00").getTime();
 // באיחור reservations still tie up inventory until the gear is physically

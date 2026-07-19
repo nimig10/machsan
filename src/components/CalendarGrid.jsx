@@ -89,14 +89,33 @@ export function CalendarGrid({ days, outOfMonthDays=[], activeRes, colorMap, tod
               const startCell = effective[b.sc];
               const endCell   = effective[b.ec];
               const isResStart = !!(startCell && dateToLocal(startCell) === b.r.borrow_date);
-              const isResEnd   = !!(endCell && dateToLocal(endCell) === b.r.return_date);
+              // `overdue_since` marks a bar that stretchOverdueForCalendar pushed
+              // out to today because the gear never came back. Its end is "still
+              // out", not a return, so it must NOT get the rounded end cap or the
+              // "↩ returned" label — that would claim the loan closed today.
+              const overdueSince = b.r.overdue_since || null;
+              const isResEnd   = !overdueSince && !!(endCell && dateToLocal(endCell) === b.r.return_date);
+              // Mark the overrun with a thin red rule along the bottom edge — the
+              // bar keeps its loan-type colour end to end, so a month full of late
+              // returns still reads as a calendar rather than a wall of red.
+              // Layered background: a 2px strip on top of the normal fill. No extra
+              // DOM, and the bar geometry (sc/ec/slots) is untouched. RTL: the bar
+              // starts at its right edge, so the overrun grows leftwards.
+              let background = b.bg;
+              if (overdueSince) {
+                const overCol = effective.findIndex((d,i) => i>=b.sc && i<=b.ec && d && dateToLocal(d) > overdueSince);
+                if (overCol >= 0) {
+                  const pct = ((overCol - b.sc) / (b.ec - b.sc + 1)) * 100;
+                  background = `linear-gradient(to left, transparent 0 ${pct}%, var(--red) ${pct}% 100%) bottom/100% 2px no-repeat, ${b.bg}`;
+                }
+              }
               return (
                 <div key={bi}
                   onClick={onBarClick ? (e) => { e.stopPropagation(); onBarClick(b.r); } : undefined}
                   style={{
                   position:"absolute",
                   right, top, width, height:EVENT_H,
-                  background:b.bg,
+                  background,
                   borderRadius: isResStart&&isResEnd?"4px": isResStart?"0 4px 4px 0": isResEnd?"4px 0 0 4px":"0",
                   // RTL: flex-start packs the label to the RIGHT edge so Hebrew
                   // reads naturally right-to-left; padding hugs the start (right).
