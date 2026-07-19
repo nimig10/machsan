@@ -13,10 +13,12 @@
 // PROTOCOL:
 //   POST /api/update-reservation-status
 //   body: { id: string, status: string, returned_at?: ISO string }
-//   200:  { ok: true, id, old_status, new_status, changed: boolean }
+//   200:  { ok: true, id, old_status, new_status, changed: boolean,
+//           returned_by_staff_id, returned_by_name }   // the last two are
+//           non-null only when a staff caller set status="הוחזר"
 //   400:  validation error
 //   404:  reservation not found
-//   409:  conflict (currently unused — reserved for future use)
+//   409:  approve_overbook — not enough units to approve (since PR #55)
 //   5xx:  server/network error
 //
 // NOTES:
@@ -130,7 +132,63 @@ export default async function handler(req, res) {
 
     // The RPC returns a JSONB object { id, old_status, new_status, changed }.
     const body = await r.json();
-    return res.status(200).json({ ok: true, ...body });
+
+    // ── Record WHO actually processed the return ──────────────────────────
+    // Deliberately a separate PATCH rather than a parameter on the RPC:
+    // update_reservation_status_v1 is guard-heavy (approve-overbook,
+    // peak-concurrent) and adding a parameter would force DROP + full
+    // re-declaration — the exact mechanism that broke production in PR #45.
+    //
+    // Identity comes from the JWT, never from the client, so it cannot be
+    // spoofed; and because it lives here it covers every caller of this
+    // endpoint, including the dashboard button which has no staff identity
+    // client-side at all.
+    //
+    // Display-only metadata: on failure we log and still return 200. The
+    // status change already committed, and surfacing an error would show a
+    // red toast for a cosmetic write.
+    let stampedId = null;
+    let stampedName = null;
+    if (status === "הוחזר" && caller.kind === "staff") {
+      stampedId = role.id || null;
+      stampedName = String(role.full_name || role.email || "").trim() || null;
+      try {
+        // The status filter is the guard: if a concurrent action flipped the
+        // row out of "הוחזר" between the RPC commit and here, zero rows match
+        // and no stale actor is written. Not gated on body.changed — a failed
+        // stamp would then be unrecoverable, since the return button is gone
+        // once the row is archived. Overwrites unconditionally: a re-return by
+        // a different person must update, otherwise the archive shows a lie.
+        const stampRes = await fetch(
+          `${SB_URL}/rest/v1/reservations_new?id=eq.${encodeURIComponent(String(id))}&status=eq.${encodeURIComponent("הוחזר")}`,
+          {
+            method: "PATCH",
+            headers: {
+              apikey: SB_KEY,
+              Authorization: `Bearer ${SB_KEY}`,
+              "Content-Type": "application/json",
+              Prefer: "return=minimal",
+            },
+            body: JSON.stringify({
+              returned_by_staff_id: stampedId,
+              returned_by_name: stampedName,
+            }),
+          }
+        );
+        if (!stampRes.ok) {
+          console.error("update-reservation-status: returned_by stamp failed:", stampRes.status, await stampRes.text());
+        }
+      } catch (e) {
+        console.error("update-reservation-status: returned_by stamp error:", e.message);
+      }
+    }
+
+    return res.status(200).json({
+      ok: true,
+      ...body,
+      returned_by_staff_id: stampedId,
+      returned_by_name: stampedName,
+    });
   } catch (e) {
     console.error("update-reservation-status network error:", e);
     return res.status(500).json({ ok: false, error: "network_error", detail: e.message });

@@ -1,9 +1,9 @@
 // ArchivePage.jsx — archive of returned reservations
 import { useState } from "react";
-import { formatDate, formatTime, deleteReservation as deleteReservationRpc } from "../utils.js";
+import { formatDate, formatTime, deleteReservation as deleteReservationRpc, groupReservationItemsByCategory } from "../utils.js";
 import { Calendar, Film, Mic, Package, X } from "lucide-react";
 
-export function ArchivePage({ reservations, setReservations, equipment, showToast }) {
+export function ArchivePage({ reservations, setReservations, equipment, showToast, loanHandlers = [] }) {
   const archived = reservations.filter(r => r.status === "הוחזר");
   const [search, setSearch] = useState("");
   const [sectionF, setSectionF] = useState("הכל"); // "הכל" | "השאלות" | "שיעורים"
@@ -52,6 +52,37 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
     return snapshot && snapshot.length ? snapshot : (r?.items || []);
   };
 
+  // Who handled the return. Two different facts, never conflated:
+  //   returned_by_name  — who ACTUALLY clicked הוחזר (JWT-derived, trustworthy)
+  //   reservation_staff_assignments(kind='return') — who was PLANNED to, in the
+  //   staff roster. Shown only as a muted fallback, with different wording, so
+  //   a name under "איש צוות מטפל" always means the person really did it.
+  // Lessons auto-archive on a clock with no human involved, and the roster
+  // never covers them, so they render nothing at all.
+  const returnActorFor = (r) => {
+    if (r?.loan_type === "שיעור") return null;
+    const actual = String(r?.returned_by_name || "").trim();
+    if (actual) return { kind: "actual", name: actual };
+    const planned = (loanHandlers || []).find(
+      (h) => String(h.reservation_id) === String(r?.id) && h.kind === "return"
+    );
+    const plannedName = String(planned?.staff_name || "").trim();
+    if (plannedName) return { kind: "planned", name: plannedName };
+    return { kind: "none" };
+  };
+
+  const ReturnActor = ({ r, style }) => {
+    const actor = returnActorFor(r);
+    if (!actor) return null;
+    if (actor.kind === "planned") {
+      return <span style={{color:"var(--text2)",fontStyle:"italic",...style}}>🗓 אחראי החזרה (מתוכנן): <strong style={{color:"var(--text)"}}>{actor.name}</strong></span>;
+    }
+    if (actor.kind === "none") {
+      return <span style={{color:"var(--text2)",...style}}>👤 איש צוות מטפל: לא נרשם</span>;
+    }
+    return <span style={{color:"var(--text2)",...style}}>👤 איש צוות מטפל: <strong style={{color:"var(--accent)",fontWeight:800}}>{actor.name}</strong></span>;
+  };
+
   const LOAN_ICONS = {"פרטית":"👤","הפקה":<Film size={11} strokeWidth={1.75} color="var(--accent)" />,"סאונד":<Mic size={11} strokeWidth={1.75} color="var(--accent)" />,"קולנוע יומית":"🎥","שיעור":"📽️"};
   const sortByReturned = arr => [...arr].sort((a,b)=>(new Date(b.returned_at||b.return_date).getTime())-(new Date(a.returned_at||a.return_date).getTime()));
 
@@ -93,6 +124,7 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
           <span>↩ {formatDate(r.return_date)}{r.return_time&&<strong style={{color:"var(--accent)",marginRight:4}}> {formatTime(r.return_time)}</strong>}</span>
           <span><Package size={14} strokeWidth={1.75} color="var(--accent)" /> {archiveItems(r).length} פריטים</span>
           {r.returned_at&&<span style={{color:"var(--text3)"}}>🕐 הוחזר: {new Date(r.returned_at).toLocaleDateString("he-IL")}</span>}
+          <ReturnActor r={r}/>
         </div>
         <div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:4}}>
           {archiveItems(r).map((i,j)=><span key={j} className="chip"><EqImg id={i.equipment_id}/> {eqName(i.equipment_id)} ×{i.quantity}</span>)}
@@ -184,6 +216,13 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
                     <span style={{fontWeight:600,textAlign:"left",direction:"ltr"}}>{v}</span>
                   </div>
                 ))}
+                {/* Who handled the return — sits with the people facts, not with
+                    the equipment list at the bottom of the modal. */}
+                {returnActorFor(viewRes) && (
+                  <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid var(--border)",fontSize:13}}>
+                    <ReturnActor r={viewRes}/>
+                  </div>
+                )}
               </div>
               <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"14px 16px"}}>
                 <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>תאריכים</div>
@@ -201,11 +240,19 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
               </div>
               <div style={{background:"var(--surface2)",borderRadius:"var(--r-sm)",padding:"14px 16px"}}>
                 <div style={{fontSize:11,fontWeight:800,color:"var(--text3)",marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>ציוד שהושאל</div>
-                {archiveItems(viewRes).map((i,j)=>(
-                  <div key={j} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
-                    <EqImg id={i.equipment_id} size={28}/>
-                    <span style={{flex:1,fontSize:13,fontWeight:600}}>{eqName(i.equipment_id)}</span>
-                    <span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:6,padding:"2px 10px",fontWeight:700,fontSize:13,color:"var(--accent)"}}>×{i.quantity}</span>
+                {/* Grouped by category — long archived loans are hard to scan flat.
+                    Source is archiveItems (not viewRes.items) so the original-loan
+                    snapshot from a partial return keeps being what is documented. */}
+                {groupReservationItemsByCategory(archiveItems(viewRes), equipment).map(group=>(
+                  <div key={group.category}>
+                    <div style={{fontSize:11,fontWeight:800,color:"var(--accent)",marginTop:8,marginBottom:2}}>{group.category}</div>
+                    {group.entries.map(({item,index})=>(
+                      <div key={index} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
+                        <EqImg id={item.equipment_id} size={28}/>
+                        <span style={{flex:1,fontSize:13,fontWeight:600}}>{eqName(item.equipment_id)}</span>
+                        <span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:6,padding:"2px 10px",fontWeight:700,fontSize:13,color:"var(--accent)"}}>×{item.quantity}</span>
+                      </div>
+                    ))}
                   </div>
                 ))}
                 <div style={{marginTop:8,fontSize:12,color:"var(--text3)"}}>
