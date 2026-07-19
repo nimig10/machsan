@@ -101,6 +101,7 @@
 
 `reservations_new` קיבל FK אופציונליים: `production_id` + `production_date_id` (ON DELETE SET NULL).
 `reservations_new.original_items` jsonb (PR #78, מיגרציה `20260719120000`) — סנאפ-שוט תיעודי **מוקפא** של רשימת הציוד כפי שיצאה מהמחסן (`[{equipment_id,name,quantity}]`), נחתם פעם אחת בהחזרה החלקית הראשונה של בקשה `באיחור`. display-only — אף guard/RPC/חישוב זמינות לא קורא אותו; NULL = הארכיון נופל ל-`reservation_items` החי. ראה לקח #35.
+`reservations_new.returned_by_staff_id` uuid + `returned_by_name` text (PR #80, מיגרציה `20260719130000`) — חותמת **המבצע בפועל** של ההחזרה, נכתבת ב-PATCH נפרד ב-[api/update-reservation-status.js](api/update-reservation-status.js) מזהות שנגזרת **בשרת מה-JWT**. **בלי FK במכוון** — השם חייב לשרוד מחיקת משתמש (כמו `crew_photographer_name`). display-only: אף guard/RPC/חישוב זמינות לא קורא אותן. NULL = לא נרשם מבצע (שורה מלפני הפיצ'ר, או שהחותמת נכשלה) → נפילה לשיבוץ המתוכנן או "לא נרשם". ראה לקח #37.
 `productions.kit_id` (FK → `kits`, ON DELETE SET NULL) — כש-set, הזמנת ההפקה מוגבלת לפריטי הערכה.
 `equipment` קיבל 2 עמודות הגבלת-השאלת-חוץ (PR #51, מיגרציה `20260623120000`): `external_loan_restricted boolean DEFAULT false` (חוסם את הפריט כולו מ-`פרטית`/`הפקה`) + `external_loan_hold_count integer DEFAULT 0` (כמה יחידות להחזיק בקמפוס). **על `equipment` ולא `equipment_units`** — טופס ההשאלה טוען ציוד דרך `select("*")` ולא מושך unit rows, אז flag ברמת-unit לא היה עושה round-trip. ראה סעיף "🚫 הגבלת השאלת-חוץ".
 
@@ -116,8 +117,8 @@
 ### Triggers
 `touch_updated_at`, `set_updated_at`, `update_users_updated_at`, `production_crew_after_change_trigger`, `production_dates_director_overlap_trg`, `productions_status_director_overlap_trg`, `production_crew_photographer_sound_must_be_student`.
 
-### מצב חי בפרוד (2026-05-25; `productions` עודכן 2026-07-14)
-`auth.users`=107, `public.users`=107 (מיושר), `students`=168, `lecturers`=31, `lessons`=145, `studio_bookings`=295, `reservations_new`=87, `productions`=**23** (כולן legacy מול cutoff של PR #75; 5 מהן בארכיון), `staff_members`=9 (legacy, אין FK), `auth_rate_limits`=4.
+### מצב חי בפרוד (2026-05-25; `productions` עודכן 2026-07-14; ספירות ההשאלות/ציוד אומתו 2026-07-19)
+`auth.users`=107, `public.users`=107 (מיושר), `students`=168, `lecturers`=31, `lessons`=145, `studio_bookings`=295, `reservations_new`=**167** (+`reservation_items`=1,379), `equipment`=131 (+`equipment_units`=321), `reservation_staff_assignments`=24, `productions`=**23** (כולן legacy מול cutoff של PR #75; 5 מהן בארכיון), `staff_members`=9 (legacy, אין FK), `auth_rate_limits`=4.
 
 ---
 
