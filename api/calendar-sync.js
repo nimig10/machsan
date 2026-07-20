@@ -174,15 +174,30 @@ async function loadCtx() {
   return { lecturersById, studiosById };
 }
 
-async function allLessonIds() {
-  const [a, b] = await Promise.all([
-    sbGet("lessons?select=id"),
-    sbGet("lesson_calendar_events?select=lesson_id&status=eq.active"),
+// Bulk prefetch for reconcile=all. The per-lesson loop used to issue 2
+// sequential REST round-trips per course (lesson row + mapping rows); at 166
+// production courses that is ~330 serial calls ≈ 60s+ and the nightly dry-run
+// cron died on FUNCTION_INVOCATION_TIMEOUT. Two bulk reads replace them all.
+// Either fetch failing returns null (NOT empty maps) — an empty lessons map
+// would make every course look deleted and report/send mass cancellations.
+async function prefetchAll() {
+  const [lessonRows, eventRows] = await Promise.all([
+    sbGet("lessons?select=*"),
+    sbGet("lesson_calendar_events?select=*"),
   ]);
-  const ids = new Set();
-  for (const r of Array.isArray(a) ? a : []) ids.add(String(r.id));
-  for (const r of Array.isArray(b) ? b : []) ids.add(String(r.lesson_id));
-  return [...ids];
+  if (!Array.isArray(lessonRows) || !Array.isArray(eventRows)) return null;
+  const lessonsById = new Map(lessonRows.map((r) => [String(r.id), r]));
+  const eventsByLesson = new Map();
+  const ids = new Set(lessonsById.keys());
+  for (const r of eventRows) {
+    const k = String(r.lesson_id);
+    if (!eventsByLesson.has(k)) eventsByLesson.set(k, []);
+    eventsByLesson.get(k).push(r);
+    // Deleted courses have no lessons row but still hold active mapping rows —
+    // they must be reconciled too (that is how deletion cancels get reported).
+    if (r.status === "active") ids.add(k);
+  }
+  return { lessonsById, eventsByLesson, lessonIds: [...ids] };
 }
 
 // ─── Email ────────────────────────────────────────────────────────────────
@@ -312,9 +327,14 @@ async function sendCourseEmail({ baseUrl, to, recipientName, type, courseName, s
 
 // ─── Reconcile one lesson ──────────────────────────────────────────────────
 async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
-  const { lecturersById, studiosById, baseUrl } = ctx;
-  const lessonRows = await sbGet(`lessons?id=eq.${enc(lessonId)}&select=*&limit=1`);
-  const row = Array.isArray(lessonRows) && lessonRows[0] ? lessonRows[0] : null;
+  const { lecturersById, studiosById, baseUrl, prefetch } = ctx;
+  // reconcile=all supplies ctx.prefetch (bulk-loaded); the single-lesson paths
+  // (POST after save / force_test) keep their own targeted reads.
+  const row = prefetch
+    ? (prefetch.lessonsById.get(String(lessonId)) || null)
+    : await sbGet(`lessons?id=eq.${enc(lessonId)}&select=*&limit=1`).then(
+        (r) => (Array.isArray(r) && r[0] ? r[0] : null),
+      );
   const todayISO = todayInIsrael();
 
   const courseName = String(row?.name || "").trim();
@@ -376,7 +396,9 @@ async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
     }
   }
 
-  const rows = await sbGet(`lesson_calendar_events?lesson_id=eq.${enc(lessonId)}&select=*`);
+  const rows = prefetch
+    ? (prefetch.eventsByLesson.get(String(lessonId)) || [])
+    : await sbGet(`lesson_calendar_events?lesson_id=eq.${enc(lessonId)}&select=*`);
   const existing = Array.isArray(rows) ? rows : [];
   const existingByKey = new Map(existing.map((r) => [`${r.session_key}__${r.lecturer_id}`, r]));
 
@@ -563,10 +585,13 @@ export default async function handler(req, res) {
   try {
     const q = req.query || {};
     let lessonIds = [];
+    let prefetch = null;
 
     if (req.method === "GET") {
       if (String(q.reconcile || "") === "all") {
-        lessonIds = await allLessonIds();
+        prefetch = await prefetchAll();
+        if (!prefetch) return res.status(500).json({ ok: false, error: "prefetch failed" });
+        lessonIds = prefetch.lessonIds;
       } else if (q.force_test) {
         lessonIds = [String(q.force_test)];
       } else {
@@ -589,6 +614,7 @@ export default async function handler(req, res) {
 
     const ctx = await loadCtx();
     ctx.baseUrl = baseUrlFor(req);
+    ctx.prefetch = prefetch; // null on single-lesson paths → targeted reads
     const results = [];
     for (const id of lessonIds) results.push(await reconcileLesson(id, ctx, { dryRun }));
 
