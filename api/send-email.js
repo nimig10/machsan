@@ -69,6 +69,10 @@ function buildEmail({
   teacher_message,
   lesson_message,
   lesson_kit_name,
+  course_name,
+  sessions_html,
+  changes_html,
+  course_deleted,
   logo_url,
   sound_logo_url,
 }) {
@@ -85,6 +89,8 @@ function buildEmail({
   const isLessonConflict  = type === "studio_lesson_conflict";
   const isCourseEndNotice = type === "course_end_notice";
   const isProductionDeadline = type === "production_deadline";
+  const isCalendarInvite  = type === "course_calendar_invite";
+  const isSessionsChanged = type === "course_sessions_changed";
 
   const finalTeacherMessage =
     teacher_message || custom_message || lesson_message || report_note || "";
@@ -103,6 +109,8 @@ function buildEmail({
     : isLessonKitReady ? "#3498db"
     : isCourseEndNotice ? "#9b59b6"
     : isProductionDeadline ? "#f5a623"
+    : isCalendarInvite ? "#3498db"
+    : isSessionsChanged ? (course_deleted ? "#e74c3c" : "#f5a623")
     : (isOverdue || isOverdueTeam) ? "#e74c3c"
     : (isNew || isTeamNotify) ? "#f5a623"
     : "#e74c3c";
@@ -116,6 +124,8 @@ function buildEmail({
     : isLessonKitReady ? "📚"
     : isCourseEndNotice ? "🎓"
     : isProductionDeadline ? "⏰"
+    : isCalendarInvite ? "📅"
+    : isSessionsChanged ? (course_deleted ? "✖" : "🔁")
     : (isOverdue || isOverdueTeam) ? "🚨"
     : (isNew || isTeamNotify) ? "⏳"
     : "❌";
@@ -129,6 +139,8 @@ function buildEmail({
     : isLessonKitReady ? "ערכת השיעור מוכנה לבדיקה"
     : isCourseEndNotice ? "הקורס מסתיים בעוד שבוע — נא לעדכן סטטוסים"
     : isProductionDeadline ? "מחר היום האחרון להגשת רשימת ציוד!"
+    : isCalendarInvite ? "מפגשי הקורס — להוספה ליומן"
+    : isSessionsChanged ? (course_deleted ? "הקורס בוטל" : "עדכון במפגשי הקורס")
     : isOverdue ? "⚠️ הציוד לא הוחזר — נדרשת פעולה מיידית"
     : isOverdueTeam ? `🚨 ציוד לא הוחזר — ${student_name || ""}`
     : isTeamNotify ? `בקשת השאלה חדשה — ${loan_type || ""}`
@@ -139,6 +151,7 @@ function buildEmail({
     : isOverdueTeam ? (recipient_name || "צוות המחסן")
     : isLessonKitReady ? (recipient_name || student_name || "המורה")
     : isCourseEndNotice ? (recipient_name || "המרצה")
+    : (isCalendarInvite || isSessionsChanged) ? (recipient_name || "המרצה")
     : student_name;
 
   const body = isLessonConflict
@@ -194,6 +207,26 @@ function buildEmail({
        }<br/><br/>
        עליך להזדרז ולהכין את הרשימה בהקדם האפשרי!!<br/><br/>
        שיהיה המון בהצלחה בהפקה — המכללה שמחה לעזור תמיד 🎬`
+    : isCalendarInvite
+    ? `להלן מפגשי הקורס <strong style="color:#e8eaf0">"${escapeHtml(course_name || "")}"</strong>.<br/><br/>
+       לחיצה אחת על <strong style="color:#3498db">"Add to Calendar"</strong> בקובץ המצורף תוסיף את <strong>כל</strong> המפגשים ליומן גוגל שלך.${
+         sessions_html
+           ? `<br/><br/><div style="border-right:3px solid #3498db;background:rgba(52,152,219,0.08);padding:14px 16px;border-radius:8px"><div style="font-weight:800;color:#3498db;margin-bottom:8px;font-size:14px">📅 המפגשים</div>${sessions_html}</div>`
+           : ""
+       }`
+    : isSessionsChanged
+    ? (course_deleted
+        ? `הקורס <strong style="color:#e8eaf0">"${escapeHtml(course_name || "")}"</strong> בוטל, וכל המפגשים שלו כבר אינם מתקיימים.<br/><br/>
+           <strong style="color:#e74c3c">יש להסיר אותם מיומן גוגל האישי שלך.</strong>`
+        : `חלו שינויים במפגשי הקורס <strong style="color:#e8eaf0">"${escapeHtml(course_name || "")}"</strong>.<br/><br/>
+           <strong style="color:#f5a623">יש לעדכן את היומן האישי שלך בהתאם לפירוט הבא.</strong>`) +
+      (changes_html
+        ? `<br/><br/><div style="border-right:3px solid #f5a623;background:rgba(245,166,35,0.08);padding:14px 16px;border-radius:8px">${changes_html}</div>`
+        : "") +
+      // Only newly added sessions ship a calendar file; a moved or cancelled
+      // session cannot be updated in place by Gmail once it was added via
+      // "Add to Calendar", so re-sending it would create a duplicate.
+      `<br/><div style="color:#9aa3b8;font-size:13px">מפגשים <strong>חדשים</strong> מצורפים כקובץ יומן להוספה בלחיצה. מפגשים שהשתנו או בוטלו — נא לעדכן ידנית ביומן.</div>`
     : isNew
     ? `בקשת ההשאלה שלך <strong style="color:#f5a623">התקבלה</strong> וממתינה לאישור.`
     : `לצערנו בקשת ההשאלה שלך <strong style="color:#e74c3c">נדחתה</strong>.`;
@@ -271,7 +304,8 @@ function buildEmail({
       </a>
     </div>` : "";
 
-  const showDetails = (!isManagerReport || student_name !== "צוות המחסן") && !isCourseEndNotice && !isProductionDeadline;
+  const showDetails = (!isManagerReport || student_name !== "צוות המחסן") && !isCourseEndNotice && !isProductionDeadline
+    && !isCalendarInvite && !isSessionsChanged;
 
   return `
 <!DOCTYPE html>
@@ -363,6 +397,12 @@ export default async function handler(req, res) {
     teacher_message,
     lesson_message,
     lesson_kit_name,
+    course_name,
+    sessions_html,
+    changes_html,
+    course_deleted,
+    ics_base64,
+    ics_method,
     logo_url,
     sound_logo_url,
   } = req.body;
@@ -406,6 +446,10 @@ export default async function handler(req, res) {
     course_end_notice: `🎓 הקורס "${project_name || lesson_kit_name || ""}" מסתיים בעוד שבוע — נא לעדכן סטטוסים`,
     production_deadline: `⏰ תזכורת: מחר היום האחרון להגשת רשימת ציוד${project_name ? ` — ${project_name}` : ""}`,
     studio_lesson_conflict: `❌ קביעת החדר${project_name ? ` ב-${project_name}` : ""} בוטלה לטובת שיעור – מכללת קמרה אובסקורה וסאונד`,
+    course_calendar_invite: `📅 מפגשי הקורס ליומן${course_name ? ` — ${course_name}` : ""}`,
+    course_sessions_changed: course_deleted
+      ? `✖ הקורס${course_name ? ` "${course_name}"` : ""} בוטל — נא להסיר את המפגשים מהיומן`
+      : `🔁 עדכון במפגשי הקורס${course_name ? ` — ${course_name}` : ""}`,
   };
 
   // Convert base64 data URIs to inline CID attachments (email clients block data: URIs)
@@ -428,12 +472,25 @@ export default async function handler(req, res) {
     }
   }
 
+  // Optional iCalendar payload (course→calendar sync). Deliberately does NOT
+  // set `encoding`: nodemailer's default (quoted-printable for Hebrew) is what
+  // Gmail actually accepts. Forcing base64 makes Gmail answer "Unable to load
+  // event" — verified against Gmail 2026-07-20. See the contract in api/_ics.js.
+  const icalEvent = ics_base64
+    ? {
+        method: ics_method || "PUBLISH",
+        filename: "course.ics",
+        content: Buffer.from(String(ics_base64), "base64").toString("utf8"),
+      }
+    : null;
+
   try {
     await transporter.sendMail({
       from:    `"מכללת קמרה אובסקורה וסאונד" <${GMAIL_USER}>`,
       to,
       subject: subjects[type] || "עדכון מהמחסן",
       attachments,
+      ...(icalEvent ? { icalEvent } : {}),
       html:    buildEmail({
         type,
         recipient_name,
@@ -458,6 +515,10 @@ export default async function handler(req, res) {
         teacher_message,
         lesson_message,
         lesson_kit_name,
+        course_name,
+        sessions_html,
+        changes_html,
+        course_deleted,
         logo_url:       finalLogoUrl,
         sound_logo_url: finalSoundLogoUrl,
       }),

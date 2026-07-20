@@ -325,12 +325,17 @@ function ConflictResolverCard({ conflict, otherLesson, studios = [], classroomSt
 }
 
 function normalizeScheduleEntry(entry = {}) {
-  const isLegacyKey = !entry?._key || /^sk-\d+$/.test(entry._key);
+  // `_key` is preserved whenever it exists — it is the identity the calendar
+  // sync keys on. Regenerating a key that merely LOOKS legacy (`sk-7`) reads
+  // downstream as "session cancelled + new session added" and mails the
+  // lecturer a change notice for an edit that never happened. Real collisions
+  // are resolved at schedule level by normalizeSchedule() below, which is the
+  // only thing the old pattern test was actually guarding against.
   const lecturerIds = normalizeScheduleLecturerIds(entry);
   const lecturerId = lecturerIds[0] || entry?.lecturerId || entry?.alternateLecturerId || null;
   const instructorName = String(entry?.instructorName || entry?.alternateInstructorName || "").trim();
   return {
-    _key: isLegacyKey ? newScheduleKey() : entry._key,
+    _key: entry?._key || newScheduleKey(),
     date: entry?.date || "",
     startTime: entry?.startTime || "09:00",
     endTime: entry?.endTime || "12:00",
@@ -341,6 +346,21 @@ function normalizeScheduleEntry(entry = {}) {
     lecturerIds,
     instructorName,
   };
+}
+
+// Normalize a whole schedule and guarantee `_key` uniqueness within it.
+// The first holder of a key keeps it; any later duplicate gets a fresh one.
+// This replaces the old "regenerate anything matching /^sk-\d+$/" heuristic:
+// the original bug was a module-scoped counter producing COLLISIONS, not the
+// key format itself, so only genuine duplicates need a new identity.
+function normalizeSchedule(entries = []) {
+  const seen = new Set();
+  return (Array.isArray(entries) ? entries : []).map((entry) => {
+    const normalized = normalizeScheduleEntry(entry);
+    if (seen.has(normalized._key)) normalized._key = newScheduleKey();
+    seen.add(normalized._key);
+    return normalized;
+  });
 }
 
 function normalizeScheduleLecturerIds(entry = {}) {
@@ -371,8 +391,15 @@ function normalizeScheduleStudioIds(entry = {}) {
 
 function dedupeScheduleEntries(entries = []) {
   const byTime = new Map();
-  for (const entry of sortScheduleEntries(entries)) {
-    const normalized = normalizeScheduleEntry(entry);
+  // normalizeSchedule() is the single place `_key` uniqueness is enforced, and
+  // every schedule-level path in this file funnels through here, so applying it
+  // once at the top covers them all. Keyed by index so `sourceRows` still lines
+  // up with the original entry.
+  const sorted = sortScheduleEntries(entries);
+  const normalizedAll = normalizeSchedule(sorted);
+  for (let idx = 0; idx < sorted.length; idx += 1) {
+    const entry = sorted[idx];
+    const normalized = normalizedAll[idx];
     if (Array.isArray(entry?.sourceRows)) normalized.sourceRows = entry.sourceRows;
     const key = `${normalized.date}__${normalized.startTime}__${normalized.endTime}`;
     const existing = byTime.get(key);
@@ -741,8 +768,13 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     } else {
       showToast("success", `קורס "${lesson.name}" ${editTarget?"עודכן":"נוצר"}`);
       // Fire-and-forget: push the course sessions to the lecturers' Google
-      // Calendars (create/update ICS invites). Never blocks the save.
-      syncLessonCalendar(lesson.id);
+      // Calendars (create/update ICS invites). Never blocks the save — but a
+      // failure must not stay invisible, or a lecturer silently gets no calendar.
+      syncLessonCalendar(lesson.id).then((r) => {
+        if (r && r.ok === false && r.reason !== "no-session") {
+          showToast("error", "הקורס נשמר, אך אירועי היומן לא נשלחו למרצים.");
+        }
+      });
     }
     setMode(null);
     setEditTarget(null);
@@ -1016,6 +1048,9 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       showToast("error", "התיקון לא נשמר בשרת. רענן את הדף ונסה שוב.");
       return;
     }
+    // This resolver edits a session of a DIFFERENT course, so its lecturer must
+    // be told too — that course never passes through doSaveLesson.
+    syncLessonCalendar(otherIdStr);
     if (!pendingLesson) {
       setLessonConflicts([]);
       return;
@@ -1816,6 +1851,14 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     const synced = await syncImportedLecturers(updatedLessons, importedLessonIds);
     setLessons(synced);
     await syncAllLessons(synced);
+
+    // Push the calendar sync for every course the import touched — an import can
+    // create or reschedule many sessions at once, and none of them go through
+    // doSaveLesson. Throttled to 3 at a time so a large sheet doesn't fire
+    // dozens of parallel requests (same reasoning as inBatches in studentsApi).
+    for (let i = 0; i < importedLessonIds.length; i += 3) {
+      await Promise.all(importedLessonIds.slice(i, i + 3).map((id) => syncLessonCalendar(id)));
+    }
 
     finishReport(
       partialReport,

@@ -54,6 +54,22 @@ function esc(value) {
     .replace(/\r?\n/g, "\\n");
 }
 
+// Escape a PARAMETER value per RFC 5545 §3.2 (param-text / quoted-string).
+// Backslash escaping is NOT defined for parameters — `esc()` here produces a
+// parse error. A bare `:` would also terminate the property early. So: strip
+// the forbidden characters and wrap in DQUOTE. Matters for real data — a
+// lecturer named `כהן, דני` breaks the file under esc().
+const PARAM_FORBIDDEN = new Set(["\\", '"', ";", ":", ","]);
+function escParam(value) {
+  let out = "";
+  for (const ch of String(value == null ? "" : value)) {
+    const code = ch.codePointAt(0);
+    if (code < 0x20 || code === 0x7f) continue; // control characters
+    out += PARAM_FORBIDDEN.has(ch) ? " " : ch;
+  }
+  return `"${out.replace(/\s+/g, " ").trim()}"`;
+}
+
 // Fold a content line to <=75 octets with CRLF + single-space continuation.
 function fold(line) {
   const bytes = Buffer.from(line, "utf8");
@@ -76,16 +92,29 @@ function line(key, value) {
   return fold(`${key}:${value}`);
 }
 
-// events: [{
-//   uid, sequence, date, startTime, endTime,
-//   summary, description, location,
-//   organizerName, organizerEmail, attendeeName, attendeeEmail,
-//   cancelled?  // STATUS:CANCELLED when true
-// }]
-// method: "REQUEST" | "CANCEL"
-export function buildIcs(events, { method = "REQUEST" } = {}) {
+// events: [{ uid, date, startTime, endTime, summary, description, location,
+//            organizerName?, organizerEmail?, attendeeName?, attendeeEmail?,
+//            sequence?, cancelled? }]
+//
+// method: "PUBLISH" (default) | "REQUEST" | "CANCEL"
+//
+// PUBLISH is what we send. It means "here are events you may add", which is
+// exactly the product behaviour: one email, one "Add to Calendar" click, all
+// the course sessions land in the lecturer's calendar. It also carries no
+// attendee semantics, so ORGANIZER/ATTENDEE are omitted — those belong to
+// REQUEST, and emitting them here only adds parse surface for no benefit.
+//
+// REQUEST (an actual RSVP invitation) was tried first and rejected by Gmail:
+// with several VEVENTs carrying DIFFERENT UIDs it is not a conformant iTIP
+// REQUEST (RFC 5546 — a REQUEST carries one UID), so Gmail refused to treat it
+// as an invitation and fell back to scraping the message body. Verified
+// 2026-07-20 against Gmail: PUBLISH + 4 VEVENTs + Hebrew renders "Add to
+// Calendar" and one click adds all four. Do not "upgrade" this back to REQUEST
+// without re-testing that whole path end to end.
+export function buildIcs(events, { method = "PUBLISH" } = {}) {
   const list = Array.isArray(events) ? events : [];
   const stamp = fmtUTC(new Date());
+  const isPublish = method === "PUBLISH";
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -98,25 +127,28 @@ export function buildIcs(events, { method = "REQUEST" } = {}) {
     const dtStart = fmtUTC(wallTimeToDate(ev.date, ev.startTime));
     const dtEnd = fmtUTC(wallTimeToDate(ev.date, ev.endTime || ev.startTime));
     if (!dtStart || !dtEnd) continue;
-    const orgName = esc(ev.organizerName || "");
-    const attName = esc(ev.attendeeName || ev.attendeeEmail || "");
     lines.push(
       "BEGIN:VEVENT",
       line("UID", ev.uid),
-      line("SEQUENCE", String(ev.sequence || 0)),
       line("DTSTAMP", stamp),
       line("DTSTART", dtStart),
       line("DTEND", dtEnd),
       line("SUMMARY", esc(ev.summary || "")),
     );
+    if (!isPublish) lines.push(line("SEQUENCE", String(ev.sequence || 0)));
     if (ev.description) lines.push(line("DESCRIPTION", esc(ev.description)));
     if (ev.location) lines.push(line("LOCATION", esc(ev.location)));
-    if (ev.organizerEmail) lines.push(line(`ORGANIZER;CN=${orgName}`, `mailto:${ev.organizerEmail}`));
-    if (ev.attendeeEmail) {
-      lines.push(line(
-        `ATTENDEE;CN=${attName};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE`,
-        `mailto:${ev.attendeeEmail}`,
-      ));
+    if (!isPublish) {
+      if (ev.organizerEmail) {
+        lines.push(line(`ORGANIZER;CN=${escParam(ev.organizerName)}`, `mailto:${ev.organizerEmail}`));
+      }
+      if (ev.attendeeEmail) {
+        lines.push(line(
+          `ATTENDEE;CN=${escParam(ev.attendeeName || ev.attendeeEmail)};` +
+            "ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE",
+          `mailto:${ev.attendeeEmail}`,
+        ));
+      }
     }
     lines.push(
       line("STATUS", ev.cancelled ? "CANCELLED" : "CONFIRMED"),
@@ -130,4 +162,4 @@ export function buildIcs(events, { method = "REQUEST" } = {}) {
 }
 
 // Exposed for unit sanity checks / reuse.
-export const _internal = { wallTimeToDate, fmtUTC, esc, fold, tzOffsetMinutes };
+export const _internal = { wallTimeToDate, fmtUTC, esc, escParam, fold, tzOffsetMinutes };

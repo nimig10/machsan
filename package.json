@@ -9,7 +9,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test:db": "node scripts/run-db-smoke.mjs"
+    "test:db": "node scripts/run-db-smoke.mjs",
+    "test:ics": "node scripts/run-ics-smoke.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.102.1",

@@ -1,14 +1,28 @@
-// calendar-sync.js — sync course sessions to lecturers' Google Calendars via
-// emailed iCalendar (ICS) invites. Reconcile-based, decoupled from the client
-// save path: given a lessonId (or all lessons), it derives the DESIRED events
-// from the live `lessons` row and reconciles them against the
-// `lesson_calendar_events` mapping table:
-//   * new / changed (session × lecturer) -> METHOD:REQUEST (same UID, SEQ++),
-//   * removed session / lecturer / whole course -> METHOD:CANCEL,
-//   * unchanged -> nothing (idempotent).
+// calendar-sync.js — keep each lecturer's Google Calendar in step with the
+// courses they teach.
 //
-// Because it reads desired state from the DB, deleting a course "just works":
-// the row is gone -> zero desired events -> every active mapping row is cancelled.
+// TWO KINDS OF MESSAGE, and the distinction is the whole design:
+//   * FIRST time we ever mail a lecturer about a course -> an INVITE carrying an
+//     iCalendar file (METHOD:PUBLISH). One click on "Add to Calendar" drops all
+//     their sessions in at once.
+//   * EVERY time after that -> a plain-language CHANGE NOTICE spelling out what
+//     was added / moved (before → after) / cancelled, which the lecturer applies
+//     to their calendar by hand. Only NEWLY ADDED sessions ship a calendar file,
+//     because those cannot collide with anything already in the calendar.
+//
+// Gmail will not update an event that was added via "Add to Calendar", so there
+// is deliberately no attempt to push edits into the calendar automatically. That
+// was tried (iMIP REQUEST + SEQUENCE) and does not work — see api/_ics.js.
+//
+// Reconcile-based and decoupled from the client save path: given a lessonId it
+// derives the DESIRED sessions from the live `lessons` row and diffs them against
+// the snapshot stored in `lesson_calendar_events` (which holds the date/time/room
+// we last told this lecturer about — that is what makes "before → after"
+// possible). Deleting a course therefore "just works": the row is gone, nothing
+// is desired, every active mapping row reports as cancelled.
+//
+// State is written ONLY after a send succeeds, so a mail failure stays retryable
+// instead of leaving a lecturer silently out of sync.
 //
 // AUTH: staff JWT (requireStaff) for the client ping, OR the internal cron
 // secret (X-Cron-Secret header, or `Authorization: Bearer {CRON_SECRET}`).
@@ -17,27 +31,28 @@
 //   POST { lessonId }                  -> reconcile one course (client, on save/delete)
 //   GET  ?force_test=<lessonId>        -> reconcile one course (manual test; cron secret)
 //   GET  ?reconcile=all                -> reconcile every course + orphaned mappings
+//   GET  ?reconcile=all&dryrun=1       -> report drift, send nothing, persist nothing
 //
-// NOTE: reconcile=all will email every lecturer their future sessions on first
-// run (onboarding/backfill). It is intentionally NOT registered as an automatic
-// cron in vercel.json — enable it deliberately when you want that blast.
+// NOTE: `reconcile=all` WITHOUT dryrun will invite every lecturer in the college
+// on first run. Only the dryrun variant is registered as a cron in vercel.json.
 
-import nodemailer from "nodemailer";
 import crypto from "crypto";
 import { requireStaff } from "./_auth-helper.js";
 import { buildIcs } from "./_ics.js";
 
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const GMAIL_USER = process.env.GMAIL_USER;
-const GMAIL_PASS = process.env.GMAIL_PASS;
 const CRON_SECRET = process.env.CRON_SECRET;
 
-const ORG_NAME = "מכללת קמרה אובסקורה וסאונד";
-// College physical location — appended to every event so Google Calendar can
-// geocode it (the "מסלול"/directions button works) and the lecturer sees where
-// to go. The floor goes in the description as a note.
-const COLLEGE_ADDRESS = "רחוב ריבל 5, תל אביב";
+// Official college address, and every character here is deliberate.
+//
+// The street name is an abbreviation and needs its gershayim — plain "ריבל"
+// geocodes to the wrong place. But it MUST be the Hebrew gershayim U+05F4 (״),
+// not an ASCII double quote: Google Calendar HTML-escapes a `"` when it stores
+// the location, so the Directions button ends up searching the literal string
+// `רחוב ריב&quot;ל 5` and finds nothing. Verified 2026-07-20 — our own ICS was
+// byte-correct, the entity was introduced on Google's side.
+const COLLEGE_ADDRESS = "רחוב ריב״ל 5, תל אביב";
 const COLLEGE_FLOOR_NOTE = "בכניסה לבניין יורדים במדרגות לקומה מינוס 2";
 
 const SERVICE_HEADERS = {
@@ -45,17 +60,6 @@ const SERVICE_HEADERS = {
   Authorization: `Bearer ${SB_KEY}`,
   "Content-Type": "application/json",
 };
-
-let _transporter = null;
-function transporter() {
-  if (!_transporter) {
-    _transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: { user: GMAIL_USER, pass: GMAIL_PASS },
-    });
-  }
-  return _transporter;
-}
 
 // ─── Supabase REST helpers (service role, PostgREST) ──────────────────────
 async function sbGet(path) {
@@ -173,46 +177,117 @@ function dateHe(d) {
   return y && m && dd ? `${dd}/${m}/${y}` : "";
 }
 
-// One email per lecturer carrying ALL their events for this course (a single
-// VCALENDAR with multiple VEVENTs) — the lecturer gets a single message.
-async function sendIcs(to, courseName, method, events) {
-  const isCancel = method === "CANCEL";
-  const safe = String(courseName || "").replace(/</g, "&lt;");
-  const subject = isCancel ? `ביטול מפגשים – ${courseName}` : `מפגשי הקורס ליומן – ${courseName}`;
-  const intro = isCancel
-    ? "המפגשים הבאים בוטלו ולכן יוסרו מיומן גוגל שלך:"
-    : "מצורפים מפגשי הקורס להוספה/עדכון ביומן גוגל שלך:";
-  const rows = events.map((e) => {
-    const loc = e.location ? ` · ${String(e.location).replace(/</g, "&lt;")}` : "";
-    return `<li style="margin-bottom:4px">${dateHe(e.date)} · ${e.startTime}–${e.endTime}${loc}</li>`;
-  }).join("");
-  const html =
-    `<div dir="rtl" style="font-family:Arial,Helvetica,sans-serif;line-height:1.7;color:#1a1a1a">` +
-    `<p>שלום,</p><p>${intro}</p>` +
-    `<p><strong>קורס:</strong> ${safe}</p>` +
-    `<ul style="padding-inline-start:18px">${rows}</ul>` +
-    (isCancel ? "" : `<p>אשרו את ההזמנה כדי שהמפגשים יתווספו ליומן.</p>`) +
-    `<p style="color:#666;font-size:13px">מכללת קמרה אובסקורה וסאונד</p></div>`;
-  const ics = buildIcs(events, { method });
+const h = (s) =>
+  String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
+// "20/07/2026 · 10:00–13:00 · DIGITAL MIX ROOM"
+function slotText(e) {
+  const room = e?.location ? ` · ${e.location}` : "";
+  return `${dateHe(e?.date)} · ${e?.startTime}–${e?.endTime}${room}`;
+}
+
+const LINE = 'style="margin-bottom:6px;color:#e8eaf0;font-size:14px;line-height:1.8"';
+
+function renderSessions(list) {
+  return list.map((e) => `<div ${LINE}>${h(slotText(e))}</div>`).join("");
+}
+
+// Spell out what actually moved, so the lecturer can fix their calendar without
+// cross-referencing anything. `before` comes from the stored snapshot.
+function renderChanges({ added, changed, removed }) {
+  const parts = [];
+  if (added.length) {
+    parts.push(
+      `<div style="margin-bottom:10px"><div style="color:#4ade80;font-weight:700;margin-bottom:6px">➕ מפגשים שנוספו</div>` +
+        renderSessions(added.map((c) => c.after)) +
+        `</div>`,
+    );
+  }
+  if (changed.length) {
+    const rows = changed.map((c) => {
+      const extra =
+        c.before.location && c.after.location && c.before.location !== c.after.location
+          ? `<div style="color:#9aa3b8;font-size:13px">החדר שונה: ${h(c.before.location)} ← ${h(c.after.location)}</div>`
+          : "";
+      return (
+        `<div ${LINE}><span style="color:#9aa3b8">${h(slotText(c.before))}</span>` +
+        `<br/><span style="color:#f5a623;font-weight:700">↓ ${h(slotText(c.after))}</span>${extra}</div>`
+      );
+    }).join("");
+    parts.push(
+      `<div style="margin-bottom:10px"><div style="color:#f5a623;font-weight:700;margin-bottom:6px">🔁 מפגשים שהשתנו</div>${rows}</div>`,
+    );
+  }
+  if (removed.length) {
+    parts.push(
+      `<div style="margin-bottom:10px"><div style="color:#ef4444;font-weight:700;margin-bottom:6px">✖ מפגשים שבוטלו</div>` +
+        removed.map((e) => `<div ${LINE}><s style="color:#9aa3b8">${h(slotText(e))}</s></div>`).join("") +
+        `</div>`,
+    );
+  }
+  return parts.join("");
+}
+
+// Where to reach /api/send-email from inside this function.
+//
+// The request's own headers come FIRST and deliberately so: they are present on
+// every invocation including Vercel's cron, whereas the VERCEL_* env vars are
+// not guaranteed in every execution context. Getting this wrong is invisible —
+// the base URL silently falls back to localhost, every send fails in production,
+// and because we only persist after a successful send, nothing is ever recorded.
+function baseUrlFor(req) {
+  const host = req?.headers?.["x-forwarded-host"] || req?.headers?.host;
+  if (host) {
+    const proto = req.headers["x-forwarded-proto"] || (String(host).startsWith("localhost") ? "http" : "https");
+    return `${proto}://${host}`;
+  }
+  const prod = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (prod) return `https://${prod}`;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return "http://localhost:5174";
+}
+
+// Send through the shared /api/send-email so these messages get the same
+// branded RTL chrome as every other email in the app (logo, dark card, footer)
+// and there is only one nodemailer transport in the codebase. Same pattern as
+// api/production-deadline-reminder.js.
+async function sendCourseEmail({ baseUrl, to, recipientName, type, courseName, sessionsHtml, changesHtml, icsEvents, courseDeleted }) {
+  const body = {
+    to,
+    recipient_name: recipientName || "",
+    type,
+    course_name: courseName || "קורס",
+    sessions_html: sessionsHtml || "",
+    changes_html: changesHtml || "",
+    course_deleted: !!courseDeleted,
+  };
+  // PUBLISH, never REQUEST — see the contract note in api/_ics.js.
+  if (icsEvents && icsEvents.length) {
+    body.ics_base64 = Buffer.from(buildIcs(icsEvents, { method: "PUBLISH" }), "utf8").toString("base64");
+    body.ics_method = "PUBLISH";
+  }
   try {
-    await transporter().sendMail({
-      from: `"${ORG_NAME}" <${GMAIL_USER}>`,
-      to,
-      subject,
-      text: intro,
-      html,
-      icalEvent: { method, filename: "invite.ics", content: ics },
+    const r = await fetch(`${baseUrl}/api/send-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Cron-Secret": CRON_SECRET || "" },
+      body: JSON.stringify(body),
     });
+    if (!r.ok) {
+      console.error("calendar-sync sendCourseEmail failed", to, type, r.status, await r.text());
+      return false;
+    }
     return true;
   } catch (e) {
-    console.error("calendar-sync sendIcs failed", to, method, e.message);
+    console.error("calendar-sync sendCourseEmail threw", to, type, e.message);
     return false;
   }
 }
 
 // ─── Reconcile one lesson ──────────────────────────────────────────────────
-async function reconcileLesson(lessonId, ctx) {
-  const { lecturersById, studiosById } = ctx;
+async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
+  const { lecturersById, studiosById, baseUrl } = ctx;
   const lessonRows = await sbGet(`lessons?id=eq.${enc(lessonId)}&select=*&limit=1`);
   const row = Array.isArray(lessonRows) && lessonRows[0] ? lessonRows[0] : null;
   const todayISO = todayInIsrael();
@@ -240,7 +315,11 @@ async function reconcileLesson(lessonId, ctx) {
     const studioIds = effStudioIds(s, row);
     // Location: room name(s) + college address so directions/geocoding work.
     const rooms = studioIds.map((id) => studiosById.get(String(id))).filter(Boolean).join(" · ");
-    const location = rooms ? `${rooms} · ${COLLEGE_ADDRESS}` : COLLEGE_ADDRESS;
+    // LOCATION is the college address and nothing else — Google geocodes this
+    // field verbatim, so prefixing it with a room name ("DIGITAL MIX ROOM · …")
+    // drops the pin somewhere wrong and the Directions button sends the lecturer
+    // to the wrong place. The room is carried in DESCRIPTION instead.
+    const location = COLLEGE_ADDRESS;
     const startTime = String(s?.startTime || "09:00");
     const endTime = String(s?.endTime || "12:00");
     const topic = String(s?.topic || "").trim();
@@ -255,17 +334,19 @@ async function reconcileLesson(lessonId, ctx) {
     for (const lid of lecIds) {
       const key = `${sessionKey}__${lid}`;
       allKeys.add(key);
-      if (date < todayISO) continue; // manage future sessions only for REQUEST
+      // Future sessions only. A past session that still exists is left exactly
+      // as-is: never re-sent, never reported as cancelled.
+      if (date < todayISO) continue;
       const lec = lecturersById.get(String(lid));
       const email = String(lec?.email || "").trim();
       if (!email) continue;
       const name = String(lec?.full_name || "").trim() || courseLecNames.get(String(lid)) || "";
       const hash = sha1([summary, location, description, date, startTime, endTime].join("|"));
       futureByKey.set(key, {
-        sessionKey, lecturerId: lid, email, name, hash, date, startTime, endTime,
+        sessionKey, lecturerId: lid, email, name, hash,
+        date, startTime, endTime, summary, description, location,
         uid: uidFor(lessonId, sessionKey, lid),
-        event: { date, startTime, endTime, summary, description, location, attendeeEmail: email, attendeeName: name },
-        summary,
+        event: { uid: uidFor(lessonId, sessionKey, lid), date, startTime, endTime, summary, description, location },
       });
     }
   }
@@ -274,90 +355,145 @@ async function reconcileLesson(lessonId, ctx) {
   const existing = Array.isArray(rows) ? rows : [];
   const existingByKey = new Map(existing.map((r) => [`${r.session_key}__${r.lecturer_id}`, r]));
 
-  const requests = []; // { email, event, upsertRow }
-  const cancels = [];  // { email, event, upsertRow }
+  // ── Delta, computed per lecturer ────────────────────────────────────────
+  // The stored row IS the "before": it holds the snapshot we last told this
+  // lecturer about (date/time/room/summary). Comparing it to the live schedule
+  // is what lets the change email say "the 20/07 session moved to 25/07"
+  // instead of just re-sending everything.
+  const byLecturer = new Map();
+  const lecturerOf = (id, email, name) => {
+    const k = String(id);
+    if (!byLecturer.has(k)) {
+      byLecturer.set(k, { lecturerId: k, email, name: "", firstSync: true, added: [], changed: [], removed: [] });
+    }
+    const e = byLecturer.get(k);
+    if (!e.email && email) e.email = email;
+    // Name is only for the greeting, so any source will do — but it must be
+    // resolved even for a deleted course, where the live lessons row is gone
+    // and the only survivor is the lecturers table.
+    if (!e.name) {
+      e.name = String(name || "").trim()
+        || String(lecturersById.get(k)?.full_name || "").trim()
+        || courseLecNames.get(k)
+        || "";
+    }
+    return e;
+  };
 
-  // Existing mapping rows: update / leave / cancel.
+  const snapOf = (r) => ({
+    date: r.event_date, startTime: r.start_time, endTime: r.end_time,
+    summary: r.summary, location: r.location,
+  });
+
   for (const r of existing) {
+    const ent = lecturerOf(r.lecturer_id, r.lecturer_email);
+    ent.firstSync = false; // this lecturer has been told about this course before
     const key = `${r.session_key}__${r.lecturer_id}`;
     const want = futureByKey.get(key);
     if (want) {
-      const changed = r.status !== "active" || r.last_hash !== want.hash;
-      if (!changed) continue;
-      const seq = (r.sequence || 0) + 1;
-      const uid = r.uid || want.uid;
-      requests.push({
-        email: want.email,
-        event: { ...want.event, uid, sequence: seq, organizerName: ORG_NAME, organizerEmail: GMAIL_USER },
-        upsertRow: {
-          lesson_id: lessonId, session_key: want.sessionKey, lecturer_id: want.lecturerId,
-          lecturer_email: want.email, uid, sequence: seq, last_hash: want.hash, status: "active",
-          event_date: want.date, start_time: want.startTime, end_time: want.endTime, summary: want.summary,
-        },
-      });
+      if (r.status === "active" && r.last_hash === want.hash) continue; // unchanged
+      ent.changed.push({ key, before: snapOf(r), after: want, row: r });
     } else if (allKeys.has(key)) {
-      // Past session that still exists — leave untouched (do not cancel).
-      continue;
+      continue; // past session that still exists — untouched
     } else if (r.status === "active") {
-      // Removed session / lecturer / course — cancel.
-      const seq = (r.sequence || 0) + 1;
-      cancels.push({
-        email: r.lecturer_email,
-        event: {
-          uid: r.uid, sequence: seq, cancelled: true,
-          date: r.event_date || "1970-01-01", startTime: r.start_time || "00:00", endTime: r.end_time || "00:00",
-          summary: r.summary || "(בוטל)",
-          organizerName: ORG_NAME, organizerEmail: GMAIL_USER, attendeeEmail: r.lecturer_email,
-        },
-        upsertRow: {
-          lesson_id: lessonId, session_key: r.session_key, lecturer_id: r.lecturer_id,
-          lecturer_email: r.lecturer_email, uid: r.uid, sequence: seq, last_hash: r.last_hash, status: "cancelled",
-          event_date: r.event_date, start_time: r.start_time, end_time: r.end_time, summary: r.summary,
-        },
-      });
+      ent.removed.push({ key, snap: snapOf(r), row: r });
     }
   }
 
-  // New future items with no mapping row yet.
   for (const [key, want] of futureByKey) {
     if (existingByKey.has(key)) continue;
-    requests.push({
-      email: want.email,
-      event: { ...want.event, uid: want.uid, sequence: 0, organizerName: ORG_NAME, organizerEmail: GMAIL_USER },
-      upsertRow: {
-        lesson_id: lessonId, session_key: want.sessionKey, lecturer_id: want.lecturerId,
-        lecturer_email: want.email, uid: want.uid, sequence: 0, last_hash: want.hash, status: "active",
-        event_date: want.date, start_time: want.startTime, end_time: want.endTime, summary: want.summary,
-      },
-    });
+    lecturerOf(want.lecturerId, want.email, want.name).added.push({ key, after: want });
   }
 
-  // One email per lecturer: all their changed/new sessions in a single REQUEST
-  // message, plus a single CANCEL message only if something was removed.
-  const byEmail = new Map();
-  for (const r of requests) {
-    if (!byEmail.has(r.email)) byEmail.set(r.email, { req: [], can: [] });
-    byEmail.get(r.email).req.push(r);
-  }
-  for (const c of cancels) {
-    if (!byEmail.has(c.email)) byEmail.set(c.email, { req: [], can: [] });
-    byEmail.get(c.email).can.push(c);
-  }
-
+  const courseDeleted = !row;
   const toPersist = [];
   let emailed = 0;
-  for (const [email, { req, can }] of byEmail) {
-    let ok = true;
-    if (req.length) {
-      ok = (await sendIcs(email, courseName || "קורס", "REQUEST", req.map((r) => r.event))) && ok;
+  let invites = 0;
+  let notices = 0;
+
+  for (const ent of byLecturer.values()) {
+    const { added, changed, removed, email, name } = ent;
+    if (!email) continue;
+    if (!added.length && !changed.length && !removed.length) continue; // idempotent
+
+    // A lecturer we have never emailed about this course gets the invite, even
+    // if some of their sessions were also edited in the same save — they have
+    // nothing in their calendar yet, so "what changed" would be meaningless.
+    const isInvite = ent.firstSync && !changed.length && !removed.length;
+
+    // Drift report: compute the delta, send nothing, persist nothing.
+    if (dryRun) {
+      if (isInvite) invites++; else notices++;
+      continue;
     }
-    if (ok && can.length) {
-      ok = (await sendIcs(email, courseName || "קורס", "CANCEL", can.map((c) => c.event))) && ok;
+
+    let ok;
+    if (isInvite) {
+      const events = added.map((a) => a.after.event);
+      ok = await sendCourseEmail({
+        baseUrl,
+        to: email,
+        recipientName: name,
+        type: "course_calendar_invite",
+        courseName,
+        sessionsHtml: renderSessions(added.map((a) => a.after)),
+        icsEvents: events,
+      });
+      if (ok) invites++;
+    } else {
+      ok = await sendCourseEmail({
+        baseUrl,
+        to: email,
+        recipientName: name,
+        type: "course_sessions_changed",
+        courseName: courseName || String(existing[0]?.summary || "קורס"),
+        changesHtml: renderChanges({
+          added: added,
+          changed: changed,
+          removed: removed.map((r) => r.snap),
+        }),
+        // Only NEW sessions carry a calendar file. Moved/cancelled ones are
+        // described in words and fixed by hand — Gmail will not update an event
+        // that was added via "Add to Calendar", and re-sending it would just
+        // create a duplicate.
+        icsEvents: added.map((a) => a.after.event),
+        courseDeleted,
+      });
+      if (ok) notices++;
     }
-    if (ok) {
-      emailed++;
-      for (const r of req) toPersist.push(r.upsertRow);
-      for (const c of can) toPersist.push(c.upsertRow);
+
+    // Persist only after a successful send, so a mail failure stays retryable
+    // and never leaves the lecturer silently out of sync.
+    if (!ok) continue;
+    emailed++;
+    for (const a of added) {
+      const w = a.after;
+      toPersist.push({
+        lesson_id: lessonId, session_key: w.sessionKey, lecturer_id: w.lecturerId,
+        lecturer_email: w.email, uid: w.uid, sequence: 0, last_hash: w.hash, status: "active",
+        event_date: w.date, start_time: w.startTime, end_time: w.endTime,
+        summary: w.summary, location: w.location,
+      });
+    }
+    for (const c of changed) {
+      const w = c.after;
+      toPersist.push({
+        lesson_id: lessonId, session_key: w.sessionKey, lecturer_id: w.lecturerId,
+        lecturer_email: w.email, uid: c.row.uid || w.uid, sequence: c.row.sequence || 0,
+        last_hash: w.hash, status: "active",
+        event_date: w.date, start_time: w.startTime, end_time: w.endTime,
+        summary: w.summary, location: w.location,
+      });
+    }
+    for (const rm of removed) {
+      const r = rm.row;
+      toPersist.push({
+        lesson_id: lessonId, session_key: r.session_key, lecturer_id: r.lecturer_id,
+        lecturer_email: r.lecturer_email, uid: r.uid, sequence: r.sequence || 0,
+        last_hash: r.last_hash, status: "cancelled",
+        event_date: r.event_date, start_time: r.start_time, end_time: r.end_time,
+        summary: r.summary, location: r.location,
+      });
     }
   }
 
@@ -365,7 +501,15 @@ async function reconcileLesson(lessonId, ctx) {
     await sbUpsert("lesson_calendar_events?on_conflict=lesson_id,session_key,lecturer_id", toPersist);
   }
 
-  return { lessonId, requests: requests.length, cancels: cancels.length, emailed };
+  const totals = [...byLecturer.values()].reduce(
+    (a, e) => ({
+      added: a.added + e.added.length,
+      changed: a.changed + e.changed.length,
+      removed: a.removed + e.removed.length,
+    }),
+    { added: 0, changed: 0, removed: 0 },
+  );
+  return { lessonId, ...totals, invites, notices, emailed };
 }
 
 // ─── Handler ───────────────────────────────────────────────────────────────
@@ -379,7 +523,9 @@ export default async function handler(req, res) {
   }
 
   if (!SB_URL || !SB_KEY) return res.status(500).json({ ok: false, error: "supabase env missing" });
-  if (!GMAIL_USER || !GMAIL_PASS) return res.status(500).json({ ok: false, error: "gmail env missing" });
+  // Mail goes out through /api/send-email, which is authenticated with the same
+  // shared secret — without it every send would 401 and nothing would persist.
+  if (!CRON_SECRET) return res.status(500).json({ ok: false, error: "CRON_SECRET missing" });
 
   try {
     const q = req.query || {};
@@ -403,11 +549,24 @@ export default async function handler(req, res) {
       return res.status(405).json({ ok: false, error: "method not allowed" });
     }
 
-    const ctx = await loadCtx();
-    const results = [];
-    for (const id of lessonIds) results.push(await reconcileLesson(id, ctx));
+    // ?dryrun=1 reports drift without sending or persisting anything. This is
+    // the variant registered as a cron — `reconcile=all` on its own would mail
+    // every lecturer in the college on first run.
+    const dryRun = String(q.dryrun || "") === "1" || String(q.dryrun || "") === "true";
 
-    return res.status(200).json({ ok: true, lessons: results.length, results });
+    const ctx = await loadCtx();
+    ctx.baseUrl = baseUrlFor(req);
+    const results = [];
+    for (const id of lessonIds) results.push(await reconcileLesson(id, ctx, { dryRun }));
+
+    const drifted = results.filter((r) => r.added || r.changed || r.removed);
+    return res.status(200).json({
+      ok: true,
+      dry_run: dryRun,
+      lessons: results.length,
+      drifted: drifted.length,
+      results: dryRun ? drifted : results,
+    });
   } catch (e) {
     console.error("calendar-sync error", e);
     return res.status(500).json({ ok: false, error: e.message });

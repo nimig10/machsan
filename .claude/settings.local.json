@@ -79,7 +79,8 @@
       "Bash(netstat -ano)",
       "Bash(taskkill //PID 41168 //F)",
       "Bash(ls dist/assets/*.js)",
-      "Bash(grep -l \"student_first_name\" dist/assets/*.js)"
+      "Bash(grep -l \"student_first_name\" dist/assets/*.js)",
+      "Bash(gh pr *)"
     ]
   }
 }
