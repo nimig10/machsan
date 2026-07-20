@@ -6,6 +6,7 @@ import { formatDate, formatLocalDateInput, parseLocalDate, today, getAuthToken }
 import { listStudents } from "../utils/studentsApi.js";
 import { syncAllStudioBookings } from "../utils/studioBookingsApi.js";
 import { syncAllLessons } from "../utils/lessonsApi.js";
+import { syncLessonCalendar } from "../utils/calendarSyncApi.js";
 import { getEffectiveLessonStudioIds } from "../utils/lessonBookings.js";
 import { rangesOverlap } from "../utils/studioOverlap.js";
 
@@ -739,6 +740,9 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       showToast("error", "השינויים נשמרו מקומית אך לא נשמרו בשרת. נסה שוב מאוחר יותר.");
     } else {
       showToast("success", `קורס "${lesson.name}" ${editTarget?"עודכן":"נוצר"}`);
+      // Fire-and-forget: push the course sessions to the lecturers' Google
+      // Calendars (create/update ICS invites). Never blocks the save.
+      syncLessonCalendar(lesson.id);
     }
     setMode(null);
     setEditTarget(null);
@@ -1133,6 +1137,9 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
     const updated = lessons.filter(l => l.id !== id);
     setLessons(updated);
     await syncAllLessons(updated);
+    // Fire-and-forget: the course row is now gone, so reconcile finds zero
+    // sessions and cancels every calendar event previously sent for it.
+    syncLessonCalendar(id);
     showToast("success", "הקורס נמחק. ניתן לשחזר עם לחצן ↩ בטל פעולה למעלה.", {
       aggregateKey: "lesson-delete",
       pluralize: n => `${n} קורסים נמחקו. ניתן לשחזר עם לחצן ↩ בטל פעולה למעלה.`,
