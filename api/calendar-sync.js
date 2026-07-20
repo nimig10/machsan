@@ -34,6 +34,11 @@ const GMAIL_PASS = process.env.GMAIL_PASS;
 const CRON_SECRET = process.env.CRON_SECRET;
 
 const ORG_NAME = "מכללת קמרה אובסקורה וסאונד";
+// College physical location — appended to every event so Google Calendar can
+// geocode it (the "מסלול"/directions button works) and the lecturer sees where
+// to go. The floor goes in the description as a note.
+const COLLEGE_ADDRESS = "רחוב ריבל 5, תל אביב";
+const COLLEGE_FLOOR_NOTE = "קומה -2";
 
 const SERVICE_HEADERS = {
   apikey: SB_KEY,
@@ -218,7 +223,9 @@ async function reconcileLesson(lessonId, ctx) {
 
     const lecIds = effLecturerIds(s, row);
     const studioIds = effStudioIds(s, row);
-    const location = studioIds.map((id) => studiosById.get(String(id))).filter(Boolean).join(" + ");
+    // Location: room name(s) + college address so directions/geocoding work.
+    const rooms = studioIds.map((id) => studiosById.get(String(id))).filter(Boolean).join(" · ");
+    const location = rooms ? `${rooms} · ${COLLEGE_ADDRESS}` : COLLEGE_ADDRESS;
     const startTime = String(s?.startTime || "09:00");
     const endTime = String(s?.endTime || "12:00");
     const topic = String(s?.topic || "").trim();
@@ -226,6 +233,7 @@ async function reconcileLesson(lessonId, ctx) {
     const descParts = [];
     if (track) descParts.push(`מסלול: ${track}`);
     if (courseDesc) descParts.push(courseDesc);
+    descParts.push(COLLEGE_FLOOR_NOTE);
     const description = descParts.join("\n");
 
     for (const lid of lecIds) {
