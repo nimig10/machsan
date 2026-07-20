@@ -38,7 +38,7 @@ const ORG_NAME = "מכללת קמרה אובסקורה וסאונד";
 // geocode it (the "מסלול"/directions button works) and the lecturer sees where
 // to go. The floor goes in the description as a note.
 const COLLEGE_ADDRESS = "רחוב ריבל 5, תל אביב";
-const COLLEGE_FLOOR_NOTE = "קומה -2";
+const COLLEGE_FLOOR_NOTE = "בכניסה לבניין יורדים במדרגות לקומה מינוס 2";
 
 const SERVICE_HEADERS = {
   apikey: SB_KEY,
