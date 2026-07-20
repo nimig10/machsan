@@ -168,18 +168,32 @@ async function allLessonIds() {
 }
 
 // ─── Email ────────────────────────────────────────────────────────────────
-async function sendIcs(to, courseName, method, icsContent, dateHe) {
+function dateHe(d) {
+  const [y, m, dd] = String(d || "").split("-");
+  return y && m && dd ? `${dd}/${m}/${y}` : "";
+}
+
+// One email per lecturer carrying ALL their events for this course (a single
+// VCALENDAR with multiple VEVENTs) — the lecturer gets a single message.
+async function sendIcs(to, courseName, method, events) {
   const isCancel = method === "CANCEL";
-  const suffix = dateHe ? ` (${dateHe})` : "";
-  const subject = isCancel ? `ביטול מפגש – ${courseName}${suffix}` : `מפגש ליומן – ${courseName}${suffix}`;
+  const safe = String(courseName || "").replace(/</g, "&lt;");
+  const subject = isCancel ? `ביטול מפגשים – ${courseName}` : `מפגשי הקורס ליומן – ${courseName}`;
   const intro = isCancel
-    ? "המפגשים הבאים בוטלו/הוסרו ולכן יוסרו מיומן גוגל שלך."
-    : "מצורפים מפגשי הקורס להוספה/עדכון ביומן גוגל שלך. אשרו את ההזמנה כדי שהאירועים יתווספו.";
+    ? "המפגשים הבאים בוטלו ולכן יוסרו מיומן גוגל שלך:"
+    : "מצורפים מפגשי הקורס להוספה/עדכון ביומן גוגל שלך:";
+  const rows = events.map((e) => {
+    const loc = e.location ? ` · ${String(e.location).replace(/</g, "&lt;")}` : "";
+    return `<li style="margin-bottom:4px">${dateHe(e.date)} · ${e.startTime}–${e.endTime}${loc}</li>`;
+  }).join("");
   const html =
     `<div dir="rtl" style="font-family:Arial,Helvetica,sans-serif;line-height:1.7;color:#1a1a1a">` +
     `<p>שלום,</p><p>${intro}</p>` +
-    `<p><strong>קורס:</strong> ${String(courseName || "").replace(/</g, "&lt;")}</p>` +
+    `<p><strong>קורס:</strong> ${safe}</p>` +
+    `<ul style="padding-inline-start:18px">${rows}</ul>` +
+    (isCancel ? "" : `<p>אשרו את ההזמנה כדי שהמפגשים יתווספו ליומן.</p>`) +
     `<p style="color:#666;font-size:13px">מכללת קמרה אובסקורה וסאונד</p></div>`;
+  const ics = buildIcs(events, { method });
   try {
     await transporter().sendMail({
       from: `"${ORG_NAME}" <${GMAIL_USER}>`,
@@ -187,7 +201,7 @@ async function sendIcs(to, courseName, method, icsContent, dateHe) {
       subject,
       text: intro,
       html,
-      icalEvent: { method, filename: "invite.ics", content: icsContent },
+      icalEvent: { method, filename: "invite.ics", content: ics },
     });
     return true;
   } catch (e) {
@@ -318,27 +332,32 @@ async function reconcileLesson(lessonId, ctx) {
     });
   }
 
-  // ONE email per event. Gmail/Outlook process each event through its own
-  // invite card, so add/update/cancel apply reliably. Bundling several VEVENTs
-  // in a single email makes SEQUENCE updates land inconsistently.
-  const dateHe = (d) => {
-    const [y, m, dd] = String(d || "").split("-");
-    return y && m && dd ? `${dd}/${m}/${y}` : "";
-  };
-  const toPersist = [];
-  let emailed = 0;
+  // One email per lecturer: all their changed/new sessions in a single REQUEST
+  // message, plus a single CANCEL message only if something was removed.
+  const byEmail = new Map();
   for (const r of requests) {
-    const ics = buildIcs([r.event], { method: "REQUEST" });
-    if (await sendIcs(r.email, courseName || "קורס", "REQUEST", ics, dateHe(r.event.date))) {
-      toPersist.push(r.upsertRow);
-      emailed++;
-    }
+    if (!byEmail.has(r.email)) byEmail.set(r.email, { req: [], can: [] });
+    byEmail.get(r.email).req.push(r);
   }
   for (const c of cancels) {
-    const ics = buildIcs([c.event], { method: "CANCEL" });
-    if (await sendIcs(c.email, courseName || "קורס", "CANCEL", ics, dateHe(c.event.date))) {
-      toPersist.push(c.upsertRow);
+    if (!byEmail.has(c.email)) byEmail.set(c.email, { req: [], can: [] });
+    byEmail.get(c.email).can.push(c);
+  }
+
+  const toPersist = [];
+  let emailed = 0;
+  for (const [email, { req, can }] of byEmail) {
+    let ok = true;
+    if (req.length) {
+      ok = (await sendIcs(email, courseName || "קורס", "REQUEST", req.map((r) => r.event))) && ok;
+    }
+    if (ok && can.length) {
+      ok = (await sendIcs(email, courseName || "קורס", "CANCEL", can.map((c) => c.event))) && ok;
+    }
+    if (ok) {
       emailed++;
+      for (const r of req) toPersist.push(r.upsertRow);
+      for (const c of can) toPersist.push(c.upsertRow);
     }
   }
 
