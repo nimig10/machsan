@@ -233,6 +233,7 @@ async function reconcileLesson(lessonId, ctx) {
     const descParts = [];
     if (track) descParts.push(`מסלול: ${track}`);
     if (courseDesc) descParts.push(courseDesc);
+    if (rooms) descParts.push(`חדר: ${rooms}`);
     descParts.push(COLLEGE_FLOOR_NOTE);
     const description = descParts.join("\n");
 
