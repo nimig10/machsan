@@ -149,6 +149,68 @@ check("sends are paced, not fired in parallel", () => {
     : null;
 });
 
+// ── recurrence grouping (Gmail's ~7-VEVENT chip limit) ────────────────────
+const weekly = (n, { startTime = "12:30", endTime = "15:00", from = "2026-08-10" } = {}) => {
+  const out = [];
+  let ms = Date.parse(`${from}T00:00:00Z`);
+  for (let i = 0; i < n; i++) {
+    out.push({
+      ...SESSION,
+      uid: `machsan-l1-sk${i}-lec1@camera.org.il`,
+      date: new Date(ms).toISOString().slice(0, 10),
+      startTime, endTime,
+    });
+    ms += 7 * 86400000;
+  }
+  return out;
+};
+
+check("a weekly course collapses to one VEVENT with RDATE", () => {
+  // Gmail renders 6 VEVENTs and fails at 8 ("Unable to load event"), measured
+  // 2026-07-20. A 13-session weekly course must not ship 13 VEVENTs.
+  const ics = buildIcs(weekly(13), { method: "PUBLISH" });
+  const count = (ics.match(/BEGIN:VEVENT/g) || []).length;
+  if (count !== 1) return `expected 1 VEVENT for a uniform weekly course, got ${count}`;
+  const rdate = ics.replace(/\r\n /g, "").match(/^RDATE;VALUE=DATE-TIME:(.+)$/m);
+  if (!rdate) return "no RDATE emitted — the other 12 sessions were dropped";
+  const occurrences = rdate[1].split(",").length + 1; // + DTSTART
+  return occurrences === 13 ? null : `${occurrences} occurrences, expected 13`;
+});
+
+check("sessions at a different time split into their own VEVENT", () => {
+  // RDATE occurrences inherit the master's duration, so a session that runs
+  // longer cannot ride the same series or it would silently change length.
+  const ics = buildIcs([...weekly(3), ...weekly(1, { endTime: "15:30", from: "2026-11-02" })], {
+    method: "PUBLISH",
+  });
+  const count = (ics.match(/BEGIN:VEVENT/g) || []).length;
+  return count === 2 ? null : `expected 2 VEVENTs (2 distinct durations), got ${count}`;
+});
+
+check("a series spanning the DST change keeps its wall-clock time", () => {
+  // Israel leaves DST on 2026-10-25. 12:30 local is 09:30Z before and 10:30Z
+  // after — explicit per-occurrence RDATEs are exactly why we don't use RRULE.
+  const ics = buildIcs(weekly(14, { from: "2026-10-12" }), { method: "PUBLISH" }).replace(/\r\n /g, "");
+  const all = [
+    ...(ics.match(/^DTSTART:(\d{8}T\d{6}Z)$/m) || []).slice(1),
+    ...((ics.match(/^RDATE;VALUE=DATE-TIME:(.+)$/m) || [])[1] || "").split(",").filter(Boolean),
+  ];
+  const before = all.filter((s) => s < "20261025");
+  const after = all.filter((s) => s >= "20261025");
+  if (!before.length || !after.length) return "test data did not span the DST boundary";
+  if (!before.every((s) => s.endsWith("T093000Z"))) return "pre-DST occurrences are not 09:30Z";
+  return after.every((s) => s.endsWith("T103000Z")) ? null : "post-DST occurrences are not 10:30Z";
+});
+
+check("grouping is PUBLISH-only", () => {
+  // REQUEST/CANCEL carry per-event iTIP semantics (SEQUENCE, ATTENDEE, a cancel
+  // aimed at one occurrence) and must stay one VEVENT per event.
+  const ics = buildIcs(weekly(5), { method: "CANCEL" });
+  const count = (ics.match(/BEGIN:VEVENT/g) || []).length;
+  if (count !== 5) return `CANCEL was grouped: ${count} VEVENTs instead of 5`;
+  return /RDATE/.test(ics) ? "CANCEL emitted an RDATE" : null;
+});
+
 check("reconcile=all bulk-prefetches instead of per-lesson reads", () => {
   // 2 serial REST calls per course × 166 prod courses ≈ 60s+ — the nightly
   // dry-run cron died on FUNCTION_INVOCATION_TIMEOUT until reads were bulked.
