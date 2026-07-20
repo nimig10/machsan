@@ -1854,10 +1854,13 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
 
     // Push the calendar sync for every course the import touched — an import can
     // create or reschedule many sessions at once, and none of them go through
-    // doSaveLesson. Throttled to 3 at a time so a large sheet doesn't fire
-    // dozens of parallel requests (same reasoning as inBatches in studentsApi).
-    for (let i = 0; i < importedLessonIds.length; i += 3) {
-      await Promise.all(importedLessonIds.slice(i, i + 3).map((id) => syncLessonCalendar(id)));
+    // doSaveLesson. Strictly ONE COURSE AT A TIME: each request mails that
+    // course's lecturers, so the binding constraint is Gmail's tolerance for
+    // bursts, not our throughput. Nothing here is time-critical (it runs in the
+    // background after the import report is already on screen), so a 20-course
+    // sheet taking ~a minute is a fine price for never getting throttled.
+    for (const lessonId of importedLessonIds) {
+      await syncLessonCalendar(lessonId);
     }
 
     finishReport(

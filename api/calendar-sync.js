@@ -24,6 +24,15 @@
 // State is written ONLY after a send succeeds, so a mail failure stays retryable
 // instead of leaving a lecturer silently out of sync.
 //
+// TIMING: one request handles one course and mails its lecturers SEQUENTIALLY
+// (~2.3s per message, measured). A course taught by 3-4 lecturers on different
+// dates is normal here, so `vercel.json` raises maxDuration to 60s for this
+// route — the platform default would cut the run off part-way through and some
+// lecturers would silently get nothing. 60s covers ~25 lecturers on one course.
+// Sending stays sequential on purpose: Gmail throttles bursts (we hit real
+// connection timeouts during development), and one course is never so large
+// that serialising it costs anything that matters.
+//
 // AUTH: staff JWT (requireStaff) for the client ping, OR the internal cron
 // secret (X-Cron-Secret header, or `Authorization: Bearer {CRON_SECRET}`).
 //
@@ -54,6 +63,11 @@ const CRON_SECRET = process.env.CRON_SECRET;
 // byte-correct, the entity was introduced on Google's side.
 const COLLEGE_ADDRESS = "רחוב ריב״ל 5, תל אביב";
 const COLLEGE_FLOOR_NOTE = "בכניסה לבניין יורדים במדרגות לקומה מינוס 2";
+
+// Gap between two outgoing messages within one course. Nothing here is
+// time-critical — it all runs in the background after a save — so we trade a few
+// seconds for not handing Gmail a burst it might throttle.
+const SEND_GAP_MS = 1000;
 
 const SERVICE_HEADERS = {
   apikey: SB_KEY,
@@ -268,20 +282,31 @@ async function sendCourseEmail({ baseUrl, to, recipientName, type, courseName, s
     body.ics_base64 = Buffer.from(buildIcs(icsEvents, { method: "PUBLISH" }), "utf8").toString("base64");
     body.ics_method = "PUBLISH";
   }
-  try {
-    const r = await fetch(`${baseUrl}/api/send-email`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Cron-Secret": CRON_SECRET || "" },
-      body: JSON.stringify(body),
-    });
-    if (!r.ok) {
-      console.error("calendar-sync sendCourseEmail failed", to, type, r.status, await r.text());
-      return false;
+  // Retry transient failures. Gmail throttles bursts and drops connections —
+  // during development a run of sends started returning ETIMEDOUT and recovered
+  // on its own minutes later. Without a retry, a bulk XL import would leave some
+  // lecturers with no calendar and nothing would fix it automatically (the daily
+  // cron only REPORTS drift). A 4xx is a real rejection and is never retried.
+  const DELAYS_MS = [1000, 4000];
+  for (let attempt = 0; ; attempt += 1) {
+    let retryable = false;
+    try {
+      const r = await fetch(`${baseUrl}/api/send-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Cron-Secret": CRON_SECRET || "" },
+        body: JSON.stringify(body),
+      });
+      if (r.ok) return true;
+      const detail = await r.text();
+      retryable = r.status >= 500;
+      console.error("calendar-sync send failed", to, type, r.status, detail.slice(0, 200));
+    } catch (e) {
+      retryable = true; // network-level: connection refused / timeout / DNS
+      console.error("calendar-sync send threw", to, type, e.message);
     }
-    return true;
-  } catch (e) {
-    console.error("calendar-sync sendCourseEmail threw", to, type, e.message);
-    return false;
+    if (!retryable || attempt >= DELAYS_MS.length) return false;
+    await new Promise((r) => setTimeout(r, DELAYS_MS[attempt]));
+    console.warn(`calendar-sync retrying send to ${to} (attempt ${attempt + 2})`);
   }
 }
 
@@ -410,6 +435,7 @@ async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
   let emailed = 0;
   let invites = 0;
   let notices = 0;
+  let sentSoFar = 0;
 
   for (const ent of byLecturer.values()) {
     const { added, changed, removed, email, name } = ent;
@@ -426,6 +452,13 @@ async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
       if (isInvite) invites++; else notices++;
       continue;
     }
+
+    // Pace the sends. One message at a time with a gap between them, so a course
+    // with several lecturers never hands Gmail a burst — bursts are what made it
+    // start dropping connections during development. The gap only applies
+    // BETWEEN messages, so the common single-lecturer course pays nothing.
+    if (sentSoFar > 0) await new Promise((r) => setTimeout(r, SEND_GAP_MS));
+    sentSoFar += 1;
 
     let ok;
     if (isInvite) {

@@ -127,6 +127,36 @@ check("calendar part does not force base64 encoding", () => {
     : null;
 });
 
+// ── 6. Throughput guarantees ──────────────────────────────────────────────
+check("calendar-sync has a raised maxDuration", () => {
+  // Measured: ~2.3s per message, sent one at a time with a gap. A course taught
+  // by 4 lecturers took 10.4s end to end — already past Vercel's default, which
+  // would truncate the run and leave some lecturers with no calendar at all.
+  const vercelCfg = JSON.parse(readFileSync(resolve(ROOT, "vercel.json"), "utf8"));
+  const d = vercelCfg?.functions?.["api/calendar-sync.js"]?.maxDuration;
+  if (!d) return "no maxDuration configured for api/calendar-sync.js";
+  return d >= 60 ? null : `maxDuration is ${d}s — too low for a multi-lecturer course`;
+});
+
+check("sends are paced, not fired in parallel", () => {
+  if (!/SEND_GAP_MS\s*=\s*\d+/.test(calendarSyncSrc)) return "SEND_GAP_MS is gone";
+  if (!calendarSyncSrc.includes("await new Promise((r) => setTimeout(r, SEND_GAP_MS))")) {
+    return "the inter-message gap is no longer applied";
+  }
+  // Promise.all over lecturers would hand Gmail a burst; it throttles those.
+  return /Promise\.all\([^)]*byLecturer/.test(calendarSyncSrc)
+    ? "lecturer sends were parallelised — Gmail throttles bursts"
+    : null;
+});
+
+check("the daily cron is dry-run only", () => {
+  const vercelCfg = JSON.parse(readFileSync(resolve(ROOT, "vercel.json"), "utf8"));
+  const cron = (vercelCfg.crons || []).find((c) => String(c.path).includes("calendar-sync"));
+  if (!cron) return null; // not registered at all is also safe
+  // `reconcile=all` without dryrun invites every lecturer in the college.
+  return /dryrun=1/.test(cron.path) ? null : `cron would SEND: ${cron.path}`;
+});
+
 // ── report ────────────────────────────────────────────────────────────────
 const total = passed + failures.length;
 if (failures.length) {
