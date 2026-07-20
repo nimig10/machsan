@@ -149,6 +149,20 @@ check("sends are paced, not fired in parallel", () => {
     : null;
 });
 
+check("reconcile=all bulk-prefetches instead of per-lesson reads", () => {
+  // 2 serial REST calls per course × 166 prod courses ≈ 60s+ — the nightly
+  // dry-run cron died on FUNCTION_INVOCATION_TIMEOUT until reads were bulked.
+  if (!/async function prefetchAll\(/.test(calendarSyncSrc)) return "prefetchAll() is gone";
+  if (!/prefetch = await prefetchAll\(\)/.test(calendarSyncSrc)) {
+    return "reconcile=all no longer uses the bulk prefetch";
+  }
+  // A failed bulk read must abort, not proceed with empty maps — an empty
+  // lessons map makes every course look deleted (mass cancellation report).
+  return /if \(!prefetch\) return res\.status\(500\)/.test(calendarSyncSrc)
+    ? null
+    : "prefetch failure no longer aborts the request";
+});
+
 check("the daily cron is dry-run only", () => {
   const vercelCfg = JSON.parse(readFileSync(resolve(ROOT, "vercel.json"), "utf8"));
   const cron = (vercelCfg.crons || []).find((c) => String(c.path).includes("calendar-sync"));
