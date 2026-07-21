@@ -213,8 +213,12 @@ const h = (s) =>
 
 // "20/07/2026 · 10:00–13:00 · DIGITAL MIX ROOM"
 function slotText(e) {
-  const room = e?.location ? ` · ${e.location}` : "";
-  return `${dateHe(e?.date)} · ${e?.startTime}–${e?.endTime}${room}`;
+  // Prefer the classroom — it is what the lecturer needs per line. The address
+  // is identical on every row and is stated once in the venue block instead.
+  // Snapshot rows read back from the DB have no `rooms` column, so they keep
+  // falling back to `location` (that is all they ever carried).
+  const where = e?.rooms || e?.location || "";
+  return `${dateHe(e?.date)} · ${e?.startTime}–${e?.endTime}${where ? ` · ${where}` : ""}`;
 }
 
 const LINE = 'style="margin-bottom:6px;color:#e8eaf0;font-size:14px;line-height:1.8"';
@@ -282,7 +286,7 @@ function baseUrlFor(req) {
 // branded RTL chrome as every other email in the app (logo, dark card, footer)
 // and there is only one nodemailer transport in the codebase. Same pattern as
 // api/production-deadline-reminder.js.
-async function sendCourseEmail({ baseUrl, to, recipientName, type, courseName, sessionsHtml, changesHtml, icsEvents, courseDeleted }) {
+async function sendCourseEmail({ baseUrl, to, recipientName, type, courseName, sessionsHtml, changesHtml, icsEvents, courseDeleted, roomsText }) {
   const body = {
     to,
     recipient_name: recipientName || "",
@@ -291,6 +295,12 @@ async function sendCourseEmail({ baseUrl, to, recipientName, type, courseName, s
     sessions_html: sessionsHtml || "",
     changes_html: changesHtml || "",
     course_deleted: !!courseDeleted,
+    // Venue block for the invite: the classrooms this lecturer actually teaches
+    // in, plus how to reach them. Sent from here so the address and the entrance
+    // note have one source of truth shared with the calendar file.
+    rooms_text: roomsText || "",
+    venue_address: COLLEGE_ADDRESS,
+    venue_note: COLLEGE_FLOOR_NOTE,
   };
   // PUBLISH, never REQUEST — see the contract note in api/_ics.js.
   if (icsEvents && icsEvents.length) {
@@ -388,7 +398,10 @@ async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
       const name = String(lec?.full_name || "").trim() || courseLecNames.get(String(lid)) || "";
       const hash = sha1([summary, location, description, date, startTime, endTime].join("|"));
       futureByKey.set(key, {
-        sessionKey, lecturerId: lid, email, name, hash,
+        // `rooms` is display-only and deliberately NOT part of the hash — the
+        // room already lives inside `description`, which IS hashed, so adding
+        // it here changes no hash and triggers no false "changed" email.
+        sessionKey, lecturerId: lid, email, name, hash, rooms,
         date, startTime, endTime, summary, description, location,
         uid: uidFor(lessonId, sessionKey, lid),
         event: { uid: uidFor(lessonId, sessionKey, lid), date, startTime, endTime, summary, description, location },
@@ -485,6 +498,16 @@ async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
     let ok;
     if (isInvite) {
       const events = added.map((a) => a.after.event);
+      // Every distinct classroom this lecturer teaches in, in the order they
+      // first appear. A course taught across several rooms lists them all.
+      const roomsText = [
+        ...new Set(
+          added
+            .flatMap((a) => String(a.after.rooms || "").split(" · "))
+            .map((r) => r.trim())
+            .filter(Boolean),
+        ),
+      ].join(" · ");
       ok = await sendCourseEmail({
         baseUrl,
         to: email,
@@ -493,6 +516,7 @@ async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
         courseName,
         sessionsHtml: renderSessions(added.map((a) => a.after)),
         icsEvents: events,
+        roomsText,
       });
       if (ok) invites++;
     } else {

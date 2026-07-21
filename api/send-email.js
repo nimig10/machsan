@@ -73,6 +73,9 @@ function buildEmail({
   sessions_html,
   changes_html,
   course_deleted,
+  rooms_text,
+  venue_address,
+  venue_note,
   logo_url,
   sound_logo_url,
 }) {
@@ -212,6 +215,28 @@ function buildEmail({
        לחיצה אחת על <strong style="color:#3498db">"Add to Calendar"</strong> בקובץ המצורף תוסיף את <strong>כל</strong> המפגשים ליומן גוגל שלך.${
          sessions_html
            ? `<br/><br/><div style="border-right:3px solid #3498db;background:rgba(52,152,219,0.08);padding:14px 16px;border-radius:8px"><div style="font-weight:800;color:#3498db;margin-bottom:8px;font-size:14px">📅 המפגשים</div>${sessions_html}</div>`
+           : ""
+       }${
+         // Where to go and how to get in. Stated once here rather than repeated
+         // on every session line, and carried in the calendar file as well.
+         (rooms_text || venue_address || venue_note)
+           ? `<br/><div style="border-right:3px solid #2ecc71;background:rgba(46,204,113,0.08);padding:14px 16px;border-radius:8px">
+                <div style="font-weight:800;color:#2ecc71;margin-bottom:8px;font-size:14px">📍 מקום הלימוד</div>${
+                  rooms_text
+                    ? `<div style="color:#e8eaf0;font-size:14px;line-height:1.9"><strong>${
+                        rooms_text.includes("·") ? "כיתות הלימוד" : "כיתת הלימוד"
+                      }:</strong> ${escapeHtml(rooms_text)}</div>`
+                    : ""
+                }${
+                  venue_address
+                    ? `<div style="color:#e8eaf0;font-size:14px;line-height:1.9"><strong>כתובת:</strong> ${escapeHtml(venue_address)}</div>`
+                    : ""
+                }${
+                  venue_note
+                    ? `<div style="color:#9aa3b8;font-size:13px;line-height:1.8;margin-top:6px">${escapeHtml(venue_note)}</div>`
+                    : ""
+                }
+              </div>`
            : ""
        }`
     : isSessionsChanged
@@ -401,6 +426,9 @@ export default async function handler(req, res) {
     sessions_html,
     changes_html,
     course_deleted,
+    rooms_text,
+    venue_address,
+    venue_note,
     ics_base64,
     ics_method,
     logo_url,
@@ -519,6 +547,9 @@ export default async function handler(req, res) {
         sessions_html,
         changes_html,
         course_deleted,
+        rooms_text,
+        venue_address,
+        venue_note,
         logo_url:       finalLogoUrl,
         sound_logo_url: finalSoundLogoUrl,
       }),
