@@ -266,14 +266,18 @@ function ConflictResolverCard({ conflict, otherLesson, studios = [], classroomSt
         </div>
         <div>
           <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>שעת התחלה</div>
-          <select className="form-select" value={startTime} onChange={e=>setStartTime(e.target.value)} style={{fontSize:12,padding:"4px 6px",height:32,width:"100%",boxSizing:"border-box"}}>
+          <select className="form-select" value={startTime} onChange={e=>{
+            const next = e.target.value;
+            setStartTime(next);
+            if (!isLessonEndValid(next, endTime)) setEndTime(nextLessonEndTime(next));
+          }} style={{fontSize:12,padding:"4px 6px",height:32,width:"100%",boxSizing:"border-box"}}>
             {LESSON_TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
         <div>
           <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>שעת סיום</div>
           <select className="form-select" value={endTime} onChange={e=>setEndTime(e.target.value)} style={{fontSize:12,padding:"4px 6px",height:32,width:"100%",boxSizing:"border-box"}}>
-            {LESSON_TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+            {lessonEndTimeOptions(startTime, endTime).map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
         <div>
@@ -509,6 +513,31 @@ function buildLessonTimeOptions(startHour = 7, endHour = 23) {
 }
 
 const LESSON_TIME_OPTIONS = buildLessonTimeOptions();
+
+// A session cannot end before it starts, so the end-time list is always the
+// slots AFTER the chosen start. Midnight is offered as the latest possible end
+// (an evening class starting 21:00 may run to 00:00) — it is deliberately not a
+// START option, which is why it is appended rather than filtered in.
+const LESSON_END_OF_DAY = "00:00";
+function lessonEndTimeOptions(startTime, currentValue) {
+  const start = String(startTime || "");
+  const options = LESSON_TIME_OPTIONS.filter((t) => t > start);
+  options.push(LESSON_END_OF_DAY);
+  // An already-saved value that no longer qualifies stays selectable, so opening
+  // an old session never silently rewrites what the user stored.
+  const current = String(currentValue || "");
+  if (current && !options.includes(current)) options.unshift(current);
+  return options;
+}
+// First legal end after a given start — used to pull an end time along when the
+// start moves past it, instead of leaving an impossible range on screen.
+function nextLessonEndTime(startTime) {
+  return LESSON_TIME_OPTIONS.find((t) => t > String(startTime || "")) || LESSON_END_OF_DAY;
+}
+function isLessonEndValid(startTime, endTime) {
+  const end = String(endTime || "");
+  return end === LESSON_END_OF_DAY || end > String(startTime || "");
+}
 
 export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showToast, reservations=[], setReservations, equipment=[], trackOptions=[], studioBookings=[], setStudioBookings, certifications={}, openLessonId=null, onOpenLessonConsumed=null, lecturers=[], setLecturers, teamMembers=[], siteSettings={} }) {
   const [mode, setMode] = useState(null); // null | "add" | "edit"
@@ -3167,11 +3196,17 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
 
   const updateSessionField = (index, field, value) => {
     setSchedule(prev => {
-      const updated = prev.map((session, sessionIndex) => (
-        sessionIndex === index
-          ? { ...session, [field]: (field === "topic" || field === "lecturerId" || field === "instructorName") ? value : value || (field === "date" ? "" : session[field]) }
-          : session
-      ));
+      const updated = prev.map((session, sessionIndex) => {
+        if (sessionIndex !== index) return session;
+        const next = { ...session, [field]: (field === "topic" || field === "lecturerId" || field === "instructorName") ? value : value || (field === "date" ? "" : session[field]) };
+        // Moving the start past the end would leave an impossible range on the
+        // row; pull the end to the first legal slot instead. Handled here so the
+        // mobile cards and the desktop grid both get it.
+        if (field === "startTime" && !isLessonEndValid(next.startTime, next.endTime)) {
+          next.endTime = nextLessonEndTime(next.startTime);
+        }
+        return next;
+      });
       return field === "date" ? sortScheduleEntries(updated) : updated;
     });
   };
@@ -3848,14 +3883,19 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
           </div>
           <div className="form-group" style={{flex:"0 0 90px"}}>
             <label className="form-label">שעת התחלה</label>
-            <select className="form-select" value={manStartTime} onChange={e=>setManStartTime(e.target.value)}>
+            <select className="form-select" value={manStartTime} onChange={e=>{
+              const next = e.target.value;
+              setManStartTime(next);
+              // Drag the end along when the new start swallows it.
+              if (!isLessonEndValid(next, manEndTime)) setManEndTime(nextLessonEndTime(next));
+            }}>
               {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
             </select>
           </div>
           <div className="form-group" style={{flex:"0 0 90px"}}>
             <label className="form-label">שעת סיום</label>
             <select className="form-select" value={manEndTime} onChange={e=>setManEndTime(e.target.value)}>
-              {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+              {lessonEndTimeOptions(manStartTime, manEndTime).map(t=><option key={t} value={t}>{t}</option>)}
             </select>
           </div>
           <div className="form-group" style={{flex:"0 0 80px"}}>
@@ -3898,7 +3938,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                       <div style={{flex:"0 0 84px"}}>
                         <div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>סיום</div>
                         <select className="form-select" value={s.endTime} style={{fontSize:13,padding:"4px 6px",height:32,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"endTime",e.target.value)}>
-                          {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+                          {lessonEndTimeOptions(s.startTime, s.endTime).map(t=><option key={t} value={t}>{t}</option>)}
                         </select>
                       </div>
                     </div>
@@ -4017,7 +4057,7 @@ function LessonForm({ initial, onSave, onCancel, studios, equipment, reservation
                         {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
                       </select>
                       <select className="form-select" value={s.endTime} style={{padding:"3px 4px",fontSize:12,height:28,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"endTime",e.target.value)}>
-                        {LESSON_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+                        {lessonEndTimeOptions(s.startTime, s.endTime).map(t=><option key={t} value={t}>{t}</option>)}
                       </select>
                       <input className="form-input" placeholder="אופציונלי" value={s.topic||""} style={{padding:"3px 6px",fontSize:12,height:28,width:"100%",boxSizing:"border-box"}} onChange={e=>updateSessionField(i,"topic",e.target.value)}/>
                       {Array.from({ length: lecturerColumnCount }, (_, colIdx) => {

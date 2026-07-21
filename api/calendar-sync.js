@@ -229,35 +229,63 @@ function renderSessions(list) {
 
 // Spell out what actually moved, so the lecturer can fix their calendar without
 // cross-referencing anything. `before` comes from the stored snapshot.
+// Name what actually moved. The lecturer applies these by hand, so "the date
+// moved" has to be readable at a glance instead of inferred by eyeballing two
+// near-identical lines.
+function changeLabel(before, after) {
+  const moved = [];
+  if (String(before?.date || "") !== String(after?.date || "")) moved.push("התאריך");
+  if (
+    String(before?.startTime || "") !== String(after?.startTime || "") ||
+    String(before?.endTime || "") !== String(after?.endTime || "")
+  ) moved.push("השעה");
+  if (String(before?.location || "") !== String(after?.location || "")) moved.push("המיקום");
+  if (!moved.length) return "עודכנו פרטי המפגש";
+  return `השתנה: ${moved.join(" ו")}`;
+}
+
 function renderChanges({ added, changed, removed }) {
   const parts = [];
   if (added.length) {
     parts.push(
-      `<div style="margin-bottom:10px"><div style="color:#4ade80;font-weight:700;margin-bottom:6px">➕ מפגשים שנוספו</div>` +
+      `<div style="margin-bottom:14px"><div style="color:#4ade80;font-weight:700;margin-bottom:8px">➕ ${
+        added.length === 1 ? "מפגש שנוסף" : `${added.length} מפגשים שנוספו`
+      }</div>` +
+        `<div style="padding:12px 14px;background:rgba(74,222,128,0.07);border:1px solid rgba(74,222,128,0.25);border-radius:8px">` +
         renderSessions(added.map((c) => c.after)) +
-        `</div>`,
+        `<div style="color:#9aa3b8;font-size:12px;margin-top:6px">אלה מצורפים כקובץ יומן — לחיצה אחת מוסיפה אותם.</div>` +
+        `</div></div>`,
     );
   }
   if (changed.length) {
-    const rows = changed.map((c) => {
-      const extra =
-        c.before.location && c.after.location && c.before.location !== c.after.location
-          ? `<div style="color:#9aa3b8;font-size:13px">החדר שונה: ${h(c.before.location)} ← ${h(c.after.location)}</div>`
-          : "";
-      return (
-        `<div ${LINE}><span style="color:#9aa3b8">${h(slotText(c.before))}</span>` +
-        `<br/><span style="color:#f5a623;font-weight:700">↓ ${h(slotText(c.after))}</span>${extra}</div>`
-      );
-    }).join("");
+    const rows = changed.map((c) => (
+      `<div style="margin-bottom:12px;padding:12px 14px;background:rgba(245,166,35,0.07);border:1px solid rgba(245,166,35,0.25);border-radius:8px">` +
+        `<div style="color:#8b93a7;font-size:13px;line-height:1.7">` +
+          `<span style="display:inline-block;min-width:52px;font-weight:700">היה:</span>` +
+          `<s>${h(slotText(c.before))}</s>` +
+        `</div>` +
+        `<div style="color:#f5a623;font-size:15px;font-weight:800;line-height:1.9;margin-top:5px">` +
+          `<span style="display:inline-block;min-width:52px">עכשיו:</span>` +
+          `${h(slotText(c.after))}` +
+        `</div>` +
+        `<div style="color:#9aa3b8;font-size:12px;margin-top:6px">${h(changeLabel(c.before, c.after))}</div>` +
+      `</div>`
+    )).join("");
     parts.push(
-      `<div style="margin-bottom:10px"><div style="color:#f5a623;font-weight:700;margin-bottom:6px">🔁 מפגשים שהשתנו</div>${rows}</div>`,
+      `<div style="margin-bottom:14px"><div style="color:#f5a623;font-weight:700;margin-bottom:8px">🔁 ${
+        changed.length === 1 ? "מפגש שהשתנה" : `${changed.length} מפגשים שהשתנו`
+      }</div>${rows}</div>`,
     );
   }
   if (removed.length) {
     parts.push(
-      `<div style="margin-bottom:10px"><div style="color:#ef4444;font-weight:700;margin-bottom:6px">✖ מפגשים שבוטלו</div>` +
-        removed.map((e) => `<div ${LINE}><s style="color:#9aa3b8">${h(slotText(e))}</s></div>`).join("") +
-        `</div>`,
+      `<div style="margin-bottom:14px"><div style="color:#ef4444;font-weight:700;margin-bottom:8px">✖ ${
+        removed.length === 1 ? "מפגש שבוטל" : `${removed.length} מפגשים שבוטלו`
+      }</div>` +
+        `<div style="padding:12px 14px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.25);border-radius:8px">` +
+        removed.map((e) => `<div ${LINE}><s style="color:#8b93a7">${h(slotText(e))}</s></div>`).join("") +
+        `<div style="color:#9aa3b8;font-size:12px;margin-top:6px">יש למחוק אותם מהיומן האישי.</div>` +
+        `</div></div>`,
     );
   }
   return parts.join("");
