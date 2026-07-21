@@ -213,12 +213,17 @@ const h = (s) =>
 
 // "20/07/2026 · 10:00–13:00 · DIGITAL MIX ROOM"
 function slotText(e) {
-  // Prefer the classroom — it is what the lecturer needs per line. The address
-  // is identical on every row and is stated once in the venue block instead.
-  // Snapshot rows read back from the DB have no `rooms` column, so they keep
-  // falling back to `location` (that is all they ever carried).
-  const where = e?.rooms || e?.location || "";
-  return `${dateHe(e?.date)} · ${e?.startTime}–${e?.endTime}${where ? ` · ${where}` : ""}`;
+  // The classroom, and deliberately NOT the address: the address is identical
+  // on every row and is stated once in the venue block.
+  //
+  // No fallback to `location` either. Snapshot rows read back from the DB carry
+  // an address but no room, while live entries carry a room — falling back
+  // would render a change email as
+  //   היה:   06/08 · 10:00–13:00 · רחוב ריב״ל 5, תל אביב
+  //   עכשיו: 13/08 · 10:00–13:00 · MAIN CONTROL
+  // which reads as if the location moved when only the date did.
+  const room = e?.rooms || "";
+  return `${dateHe(e?.date)} · ${e?.startTime}–${e?.endTime}${room ? ` · ${room}` : ""}`;
 }
 
 const LINE = 'style="margin-bottom:6px;color:#e8eaf0;font-size:14px;line-height:1.8"';

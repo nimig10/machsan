@@ -328,6 +328,9 @@ predicate: `isWithoutLecturer(lesson)` ([:716](src/components/LessonsPage.jsx#L7
 - **מתי**: על load (`getLessonDisplaySchedule` [:175](src/components/LessonsPage.jsx#L175)), בייבוא ([:1206](src/components/LessonsPage.jsx#L1206)), על שמירה ב-edit form ([:2074](src/components/LessonsPage.jsx#L2074), [:2458](src/components/LessonsPage.jsx#L2458)).
 - **התנהגות במיזוג**: מערכים זוכים לעדיפות לפי הראשון שיש בו `topic`/`kitId`/`lecturerId`. אם N שורות שונות בכיתה — כל ה-studioIds מתאחדים ל-`session.studioIds[]` במערך אחד (PR #20).
 
+### שעת סיום מוגבלת לשעות שאחרי ההתחלה (PR #84)
+`lessonEndTimeOptions(start, current)` ב-[LessonsPage.jsx](src/components/LessonsPage.jsx) מסנן את רשימת שעות הסיום לשעות שאחרי ההתחלה. **`00:00` מתווסף במפורש בסוף ואינו מסונן פנימה** — הוא סיום חוקי (שיעור ערב עד חצות) אבל **לא שעת התחלה**; מיון מחרוזות היה מציב אותו ראשון ומוציא אותו מהרשימה. **ערך שמור שכבר לא עומד בכלל נשאר ברשימה** כדי שפתיחת מפגש ישן לא תשכתב אותו בשקט. הזזת ההתחלה מעבר לסיום גוררת את הסיום (`nextLessonEndTime`) — ממומש פעם אחת ב-`updateSessionField` כדי שהמובייל והדסקטופ לא ייפרדו. חל על 4 נקודות בחירה: בונה הלוח, שורת מפגש מובייל/דסקטופ, ומודאל ההתנגשויות.
+
 ### "שיוך כיתות לימוד" panel (PR #21)
 מנהל את `course_studios` של הקורס כ-chips ניתנים להוספה/הסרה. dropdown מציג את **כל הכיתות במערכת**. position-based binding (`value={sessionIds[colIdx]}` — לא לפי studioId, אחרת החלפת ערך בעמודה תיצור orphan). chip שאינו ב-course_studios אבל יש מפגש שמשתמש בו = override של מפגש בלבד, לא דולף לרמת הקורס.
 
