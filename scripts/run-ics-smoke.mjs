@@ -211,6 +211,25 @@ check("grouping is PUBLISH-only", () => {
   return /RDATE/.test(ics) ? "CANCEL emitted an RDATE" : null;
 });
 
+check("only a move in TIME mails the lecturer", () => {
+  // A renamed classroom, an edited course description, or a snapshot column
+  // that did not exist when the row was written all shift the hash while the
+  // lecturer's calendar entry stays correct. Mailing "something changed" over
+  // two identical-looking lines is noise. Product decision, 2026-07-21.
+  if (!/const timingMoved =/.test(calendarSyncSrc)) return "the timing gate is gone";
+  if (!/silentRefresh\.push/.test(calendarSyncSrc)) {
+    return "non-timing drift no longer refreshes silently";
+  }
+  // The silent path must still persist, or the same drift resurfaces forever.
+  if (!/if \(!dryRun\) \{[\s\S]{0,400}?silentRefresh/.test(calendarSyncSrc)) {
+    return "silent refreshes are not persisted (or not skipped on dry runs)";
+  }
+  // ...and it must never reach the change email.
+  return /ent\.changed\.push[\s\S]{0,200}?silentRefresh/.test(calendarSyncSrc)
+    ? "a silently-refreshed row can still reach ent.changed"
+    : null;
+});
+
 check("reconcile=all bulk-prefetches instead of per-lesson reads", () => {
   // 2 serial REST calls per course × 166 prod courses ≈ 60s+ — the nightly
   // dry-run cron died on FUNCTION_INVOCATION_TIMEOUT until reads were bulked.

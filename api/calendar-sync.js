@@ -213,8 +213,17 @@ const h = (s) =>
 
 // "20/07/2026 · 10:00–13:00 · DIGITAL MIX ROOM"
 function slotText(e) {
-  const room = e?.location ? ` · ${e.location}` : "";
-  return `${dateHe(e?.date)} · ${e?.startTime}–${e?.endTime}${room}`;
+  // The classroom, and deliberately NOT the address: the address is identical
+  // on every row and is stated once in the venue block.
+  //
+  // No fallback to `location` either. Snapshot rows read back from the DB carry
+  // an address but no room, while live entries carry a room — falling back
+  // would render a change email as
+  //   היה:   06/08 · 10:00–13:00 · רחוב ריב״ל 5, תל אביב
+  //   עכשיו: 13/08 · 10:00–13:00 · MAIN CONTROL
+  // which reads as if the location moved when only the date did.
+  const room = e?.rooms || "";
+  return `${dateHe(e?.date)} · ${e?.startTime}–${e?.endTime}${room ? ` · ${room}` : ""}`;
 }
 
 const LINE = 'style="margin-bottom:6px;color:#e8eaf0;font-size:14px;line-height:1.8"';
@@ -225,35 +234,63 @@ function renderSessions(list) {
 
 // Spell out what actually moved, so the lecturer can fix their calendar without
 // cross-referencing anything. `before` comes from the stored snapshot.
+// Name what actually moved. The lecturer applies these by hand, so "the date
+// moved" has to be readable at a glance instead of inferred by eyeballing two
+// near-identical lines.
+function changeLabel(before, after) {
+  // Only date and time reach here — a session that did not move in time is
+  // refreshed silently and never rendered. Nothing else is ever reported.
+  const moved = [];
+  if (String(before?.date || "") !== String(after?.date || "")) moved.push("התאריך");
+  if (
+    String(before?.startTime || "") !== String(after?.startTime || "") ||
+    String(before?.endTime || "") !== String(after?.endTime || "")
+  ) moved.push("השעה");
+  return moved.length ? `השתנה: ${moved.join(" ו")}` : "עודכנו פרטי המפגש";
+}
+
 function renderChanges({ added, changed, removed }) {
   const parts = [];
   if (added.length) {
     parts.push(
-      `<div style="margin-bottom:10px"><div style="color:#4ade80;font-weight:700;margin-bottom:6px">➕ מפגשים שנוספו</div>` +
+      `<div style="margin-bottom:14px"><div style="color:#4ade80;font-weight:700;margin-bottom:8px">➕ ${
+        added.length === 1 ? "מפגש שנוסף" : `${added.length} מפגשים שנוספו`
+      }</div>` +
+        `<div style="padding:12px 14px;background:rgba(74,222,128,0.07);border:1px solid rgba(74,222,128,0.25);border-radius:8px">` +
         renderSessions(added.map((c) => c.after)) +
-        `</div>`,
+        `<div style="color:#9aa3b8;font-size:12px;margin-top:6px">אלה מצורפים כקובץ יומן — לחיצה אחת מוסיפה אותם.</div>` +
+        `</div></div>`,
     );
   }
   if (changed.length) {
-    const rows = changed.map((c) => {
-      const extra =
-        c.before.location && c.after.location && c.before.location !== c.after.location
-          ? `<div style="color:#9aa3b8;font-size:13px">החדר שונה: ${h(c.before.location)} ← ${h(c.after.location)}</div>`
-          : "";
-      return (
-        `<div ${LINE}><span style="color:#9aa3b8">${h(slotText(c.before))}</span>` +
-        `<br/><span style="color:#f5a623;font-weight:700">↓ ${h(slotText(c.after))}</span>${extra}</div>`
-      );
-    }).join("");
+    const rows = changed.map((c) => (
+      `<div style="margin-bottom:12px;padding:12px 14px;background:rgba(245,166,35,0.07);border:1px solid rgba(245,166,35,0.25);border-radius:8px">` +
+        `<div style="color:#8b93a7;font-size:13px;line-height:1.7">` +
+          `<span style="display:inline-block;min-width:52px;font-weight:700">היה:</span>` +
+          `<s>${h(slotText(c.before))}</s>` +
+        `</div>` +
+        `<div style="color:#f5a623;font-size:15px;font-weight:800;line-height:1.9;margin-top:5px">` +
+          `<span style="display:inline-block;min-width:52px">עכשיו:</span>` +
+          `${h(slotText(c.after))}` +
+        `</div>` +
+        `<div style="color:#9aa3b8;font-size:12px;margin-top:6px">${h(changeLabel(c.before, c.after))}</div>` +
+      `</div>`
+    )).join("");
     parts.push(
-      `<div style="margin-bottom:10px"><div style="color:#f5a623;font-weight:700;margin-bottom:6px">🔁 מפגשים שהשתנו</div>${rows}</div>`,
+      `<div style="margin-bottom:14px"><div style="color:#f5a623;font-weight:700;margin-bottom:8px">🔁 ${
+        changed.length === 1 ? "מפגש שהשתנה" : `${changed.length} מפגשים שהשתנו`
+      }</div>${rows}</div>`,
     );
   }
   if (removed.length) {
     parts.push(
-      `<div style="margin-bottom:10px"><div style="color:#ef4444;font-weight:700;margin-bottom:6px">✖ מפגשים שבוטלו</div>` +
-        removed.map((e) => `<div ${LINE}><s style="color:#9aa3b8">${h(slotText(e))}</s></div>`).join("") +
-        `</div>`,
+      `<div style="margin-bottom:14px"><div style="color:#ef4444;font-weight:700;margin-bottom:8px">✖ ${
+        removed.length === 1 ? "מפגש שבוטל" : `${removed.length} מפגשים שבוטלו`
+      }</div>` +
+        `<div style="padding:12px 14px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.25);border-radius:8px">` +
+        removed.map((e) => `<div ${LINE}><s style="color:#8b93a7">${h(slotText(e))}</s></div>`).join("") +
+        `<div style="color:#9aa3b8;font-size:12px;margin-top:6px">יש למחוק אותם מהיומן האישי.</div>` +
+        `</div></div>`,
     );
   }
   return parts.join("");
@@ -282,7 +319,7 @@ function baseUrlFor(req) {
 // branded RTL chrome as every other email in the app (logo, dark card, footer)
 // and there is only one nodemailer transport in the codebase. Same pattern as
 // api/production-deadline-reminder.js.
-async function sendCourseEmail({ baseUrl, to, recipientName, type, courseName, sessionsHtml, changesHtml, icsEvents, courseDeleted }) {
+async function sendCourseEmail({ baseUrl, to, recipientName, type, courseName, sessionsHtml, changesHtml, icsEvents, courseDeleted, roomsText }) {
   const body = {
     to,
     recipient_name: recipientName || "",
@@ -291,6 +328,12 @@ async function sendCourseEmail({ baseUrl, to, recipientName, type, courseName, s
     sessions_html: sessionsHtml || "",
     changes_html: changesHtml || "",
     course_deleted: !!courseDeleted,
+    // Venue block for the invite: the classrooms this lecturer actually teaches
+    // in, plus how to reach them. Sent from here so the address and the entrance
+    // note have one source of truth shared with the calendar file.
+    rooms_text: roomsText || "",
+    venue_address: COLLEGE_ADDRESS,
+    venue_note: COLLEGE_FLOOR_NOTE,
   };
   // PUBLISH, never REQUEST — see the contract note in api/_ics.js.
   if (icsEvents && icsEvents.length) {
@@ -388,7 +431,10 @@ async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
       const name = String(lec?.full_name || "").trim() || courseLecNames.get(String(lid)) || "";
       const hash = sha1([summary, location, description, date, startTime, endTime].join("|"));
       futureByKey.set(key, {
-        sessionKey, lecturerId: lid, email, name, hash,
+        // `rooms` is display-only and deliberately NOT part of the hash — the
+        // room already lives inside `description`, which IS hashed, so adding
+        // it here changes no hash and triggers no false "changed" email.
+        sessionKey, lecturerId: lid, email, name, hash, rooms,
         date, startTime, endTime, summary, description, location,
         uid: uidFor(lessonId, sessionKey, lid),
         event: { uid: uidFor(lessonId, sessionKey, lid), date, startTime, endTime, summary, description, location },
@@ -407,6 +453,9 @@ async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
   // lecturer about (date/time/room/summary). Comparing it to the live schedule
   // is what lets the change email say "the 20/07 session moved to 25/07"
   // instead of just re-sending everything.
+  // Rows whose stored snapshot drifted without the session actually moving in
+  // time. They are re-saved as-is and never generate mail.
+  const silentRefresh = [];
   const byLecturer = new Map();
   const lecturerOf = (id, email, name) => {
     const k = String(id);
@@ -439,6 +488,21 @@ async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
     const want = futureByKey.get(key);
     if (want) {
       if (r.status === "active" && r.last_hash === want.hash) continue; // unchanged
+      // Only a move in TIME is worth an email. Everything else the hash covers —
+      // a renamed classroom, an edited course description, a column that did not
+      // exist when the row was first written — leaves the lecturer's calendar
+      // entry correct as it stands, and mailing "something changed" over two
+      // identical-looking lines is noise. Product decision, 2026-07-21.
+      const timingMoved =
+        String(r.event_date || "") !== String(want.date || "") ||
+        String(r.start_time || "") !== String(want.startTime || "") ||
+        String(r.end_time || "") !== String(want.endTime || "");
+      if (!timingMoved) {
+        // Refresh the stored snapshot silently, so the drift does not resurface
+        // on every later run, and send nothing.
+        silentRefresh.push({ after: want, row: r });
+        continue;
+      }
       ent.changed.push({ key, before: snapOf(r), after: want, row: r });
     } else if (allKeys.has(key)) {
       continue; // past session that still exists — untouched
@@ -485,6 +549,16 @@ async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
     let ok;
     if (isInvite) {
       const events = added.map((a) => a.after.event);
+      // Every distinct classroom this lecturer teaches in, in the order they
+      // first appear. A course taught across several rooms lists them all.
+      const roomsText = [
+        ...new Set(
+          added
+            .flatMap((a) => String(a.after.rooms || "").split(" · "))
+            .map((r) => r.trim())
+            .filter(Boolean),
+        ),
+      ].join(" · ");
       ok = await sendCourseEmail({
         baseUrl,
         to: email,
@@ -493,6 +567,7 @@ async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
         courseName,
         sessionsHtml: renderSessions(added.map((a) => a.after)),
         icsEvents: events,
+        roomsText,
       });
       if (ok) invites++;
     } else {
@@ -552,6 +627,20 @@ async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
     }
   }
 
+  // Silent snapshot refreshes are not gated on a send — there is no send. They
+  // are skipped on a dry run like everything else that writes.
+  if (!dryRun) {
+    for (const { after: w, row } of silentRefresh) {
+      toPersist.push({
+        lesson_id: lessonId, session_key: w.sessionKey, lecturer_id: w.lecturerId,
+        lecturer_email: w.email, uid: row.uid || w.uid, sequence: row.sequence || 0,
+        last_hash: w.hash, status: "active",
+        event_date: w.date, start_time: w.startTime, end_time: w.endTime,
+        summary: w.summary, location: w.location,
+      });
+    }
+  }
+
   if (toPersist.length) {
     await sbUpsert("lesson_calendar_events?on_conflict=lesson_id,session_key,lecturer_id", toPersist);
   }
@@ -564,7 +653,9 @@ async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
     }),
     { added: 0, changed: 0, removed: 0 },
   );
-  return { lessonId, ...totals, invites, notices, emailed };
+  // `refreshed` is reported so a drift report stays honest about rows that were
+  // re-saved without mailing anyone.
+  return { lessonId, ...totals, refreshed: silentRefresh.length, invites, notices, emailed };
 }
 
 // ─── Handler ───────────────────────────────────────────────────────────────
@@ -618,7 +709,9 @@ export default async function handler(req, res) {
     const results = [];
     for (const id of lessonIds) results.push(await reconcileLesson(id, ctx, { dryRun }));
 
-    const drifted = results.filter((r) => r.added || r.changed || r.removed);
+    // `refreshed` counts too — it is real drift the report should not hide, even
+    // though it mails nobody.
+    const drifted = results.filter((r) => r.added || r.changed || r.removed || r.refreshed);
     return res.status(200).json({
       ok: true,
       dry_run: dryRun,
