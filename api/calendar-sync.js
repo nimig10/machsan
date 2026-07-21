@@ -238,15 +238,15 @@ function renderSessions(list) {
 // moved" has to be readable at a glance instead of inferred by eyeballing two
 // near-identical lines.
 function changeLabel(before, after) {
+  // Only date and time reach here — a session that did not move in time is
+  // refreshed silently and never rendered. Nothing else is ever reported.
   const moved = [];
   if (String(before?.date || "") !== String(after?.date || "")) moved.push("התאריך");
   if (
     String(before?.startTime || "") !== String(after?.startTime || "") ||
     String(before?.endTime || "") !== String(after?.endTime || "")
   ) moved.push("השעה");
-  if (String(before?.location || "") !== String(after?.location || "")) moved.push("המיקום");
-  if (!moved.length) return "עודכנו פרטי המפגש";
-  return `השתנה: ${moved.join(" ו")}`;
+  return moved.length ? `השתנה: ${moved.join(" ו")}` : "עודכנו פרטי המפגש";
 }
 
 function renderChanges({ added, changed, removed }) {
@@ -453,6 +453,9 @@ async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
   // lecturer about (date/time/room/summary). Comparing it to the live schedule
   // is what lets the change email say "the 20/07 session moved to 25/07"
   // instead of just re-sending everything.
+  // Rows whose stored snapshot drifted without the session actually moving in
+  // time. They are re-saved as-is and never generate mail.
+  const silentRefresh = [];
   const byLecturer = new Map();
   const lecturerOf = (id, email, name) => {
     const k = String(id);
@@ -485,6 +488,21 @@ async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
     const want = futureByKey.get(key);
     if (want) {
       if (r.status === "active" && r.last_hash === want.hash) continue; // unchanged
+      // Only a move in TIME is worth an email. Everything else the hash covers —
+      // a renamed classroom, an edited course description, a column that did not
+      // exist when the row was first written — leaves the lecturer's calendar
+      // entry correct as it stands, and mailing "something changed" over two
+      // identical-looking lines is noise. Product decision, 2026-07-21.
+      const timingMoved =
+        String(r.event_date || "") !== String(want.date || "") ||
+        String(r.start_time || "") !== String(want.startTime || "") ||
+        String(r.end_time || "") !== String(want.endTime || "");
+      if (!timingMoved) {
+        // Refresh the stored snapshot silently, so the drift does not resurface
+        // on every later run, and send nothing.
+        silentRefresh.push({ after: want, row: r });
+        continue;
+      }
       ent.changed.push({ key, before: snapOf(r), after: want, row: r });
     } else if (allKeys.has(key)) {
       continue; // past session that still exists — untouched
@@ -609,6 +627,20 @@ async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
     }
   }
 
+  // Silent snapshot refreshes are not gated on a send — there is no send. They
+  // are skipped on a dry run like everything else that writes.
+  if (!dryRun) {
+    for (const { after: w, row } of silentRefresh) {
+      toPersist.push({
+        lesson_id: lessonId, session_key: w.sessionKey, lecturer_id: w.lecturerId,
+        lecturer_email: w.email, uid: row.uid || w.uid, sequence: row.sequence || 0,
+        last_hash: w.hash, status: "active",
+        event_date: w.date, start_time: w.startTime, end_time: w.endTime,
+        summary: w.summary, location: w.location,
+      });
+    }
+  }
+
   if (toPersist.length) {
     await sbUpsert("lesson_calendar_events?on_conflict=lesson_id,session_key,lecturer_id", toPersist);
   }
@@ -621,7 +653,9 @@ async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
     }),
     { added: 0, changed: 0, removed: 0 },
   );
-  return { lessonId, ...totals, invites, notices, emailed };
+  // `refreshed` is reported so a drift report stays honest about rows that were
+  // re-saved without mailing anyone.
+  return { lessonId, ...totals, refreshed: silentRefresh.length, invites, notices, emailed };
 }
 
 // ─── Handler ───────────────────────────────────────────────────────────────
@@ -675,7 +709,9 @@ export default async function handler(req, res) {
     const results = [];
     for (const id of lessonIds) results.push(await reconcileLesson(id, ctx, { dryRun }));
 
-    const drifted = results.filter((r) => r.added || r.changed || r.removed);
+    // `refreshed` counts too — it is real drift the report should not hide, even
+    // though it mails nobody.
+    const drifted = results.filter((r) => r.added || r.changed || r.removed || r.refreshed);
     return res.status(200).json({
       ok: true,
       dry_run: dryRun,
