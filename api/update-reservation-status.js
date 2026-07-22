@@ -79,7 +79,15 @@ export default async function handler(req, res) {
   } else if (role.role === "user" && role.email && (await isDeptHead(role.email))) {
     caller = { kind: "dept_head", email: role.email };
   } else {
-    return res.status(403).json({ error: "Forbidden" });
+    // Diagnostic: a warehouse staff member whose "הוחזר" click is rejected 403
+    // should show up here with WHY (anon token vs recognized-but-not-staff), so
+    // the exact cause is visible in Vercel logs on the next failed attempt.
+    console.warn(
+      "update-reservation-status: 403 Forbidden —",
+      `role=${role.role} email=${role.email || "(none)"}`,
+      role.role === "anon" ? "(token missing/invalid — likely stale session)" : "(authenticated but not staff/dept_head)"
+    );
+    return res.status(403).json({ error: "Forbidden", reason: role.role === "anon" ? "no_valid_session" : "not_staff" });
   }
 
   const { id, status, returned_at } = req.body || {};
@@ -152,6 +160,12 @@ export default async function handler(req, res) {
     if (status === "הוחזר" && caller.kind === "staff") {
       stampedId = role.id || null;
       stampedName = String(role.full_name || role.email || "").trim() || null;
+      // Cap the stamp round-trip at 2.5s with its own AbortController. The RPC
+      // status change has already committed; this cosmetic write must never
+      // stretch the total response time toward the client's abort ceiling (a
+      // slow stamp used to make a SUCCESSFUL return look like a failure).
+      const stampCtrl = new AbortController();
+      const stampTimer = setTimeout(() => stampCtrl.abort(), 2500);
       try {
         // The status filter is the guard: if a concurrent action flipped the
         // row out of "הוחזר" between the RPC commit and here, zero rows match
@@ -173,6 +187,7 @@ export default async function handler(req, res) {
               returned_by_staff_id: stampedId,
               returned_by_name: stampedName,
             }),
+            signal: stampCtrl.signal,
           }
         );
         if (!stampRes.ok) {
@@ -180,6 +195,8 @@ export default async function handler(req, res) {
         }
       } catch (e) {
         console.error("update-reservation-status: returned_by stamp error:", e.message);
+      } finally {
+        clearTimeout(stampTimer);
       }
     }
 
