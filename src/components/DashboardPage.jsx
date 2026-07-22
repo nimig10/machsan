@@ -3,6 +3,7 @@ import { useState } from "react";
 import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, syncReservationStatusToBlob, getLoanTypeColor, normalizeName, groupReservationItemsByCategory, stretchOverdueForCalendar } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
+import { UpdateReviewModal } from "./UpdateReviewModal.jsx";
 import { Activity, AlertTriangle, ArrowUpFromLine, Briefcase, Calendar, Camera, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Layers, MessageSquare, Mic, Package, RefreshCw, Shield, User, Wrench, X, XCircle } from "lucide-react";
 
 const HE_DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
@@ -12,7 +13,7 @@ function getDayName(dateStr) {
   return HE_DAYS[d.getDay()] || "";
 }
 
-export function DashboardPage({ equipment, reservations, setReservations, showToast, siteSettings = {}, equipmentReports = [], certifications = { types: [], students: [] }, loanHandlers = [] }) {
+export function DashboardPage({ equipment, reservations, setReservations, showToast, siteSettings = {}, equipmentReports = [], certifications = { types: [], students: [] }, loanHandlers = [], reservationUpdates = [], refreshReservationUpdates = async () => {}, refreshReservations = async () => {} }) {
   const todayStr = today();
   const nowMs = Date.now();
 
@@ -51,6 +52,31 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
   const [calDate, setCalDate]       = useState(new Date());
   const [calFS, setCalFS]           = useState(false);
   const [dashViewRes, setDashViewRes] = useState(null);
+  const [dashUpdateReview, setDashUpdateReview] = useState(null);
+  const pendingUpdateFor = reservation => (reservationUpdates || []).find(update =>
+    String(update.id) === String(reservation?.pending_update_id) && update.review_status === "pending");
+  const pendingItemCountFor = reservation => (pendingUpdateFor(reservation)?.items || [])
+    .filter(item => item.review_state === "pending").length;
+  // Fetch before tearing down the quick-view: closing first and then finding no
+  // pending update leaves the user on an empty screen with no feedback.
+  const openUpdateReview = async reservation => {
+    let known = reservationUpdates;
+    if (!pendingUpdateFor(reservation)) {
+      const fresh = await refreshReservationUpdates();
+      if (Array.isArray(fresh)) known = fresh;
+    }
+    const found = (known || []).find(update =>
+      String(update.id) === String(reservation?.pending_update_id) && update.review_status === "pending");
+    if (!found) {
+      showToast?.("info", "אין כרגע עדכון שממתין לבדיקה בבקשה זו.");
+      return;
+    }
+    setDashViewRes(null);
+    setDashUpdateReview(reservation);
+  };
+  const refreshAfterUpdateReview = async () => {
+    await Promise.all([refreshReservationUpdates(), refreshReservations()]);
+  };
   // The calendar hands back a STRETCHED row (its return_date was pushed to today
   // so an overdue bar keeps occupying the grid). Every detail surface must show
   // the real return date and time instead — the stretch is geometry, never data.
@@ -319,8 +345,9 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                   </div>
                 </div>
               </div>
-              <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,flexWrap:"wrap",justifyContent:"flex-end"}}>
                 {equipmentReports.some(rp=>rp.reservation_id===String(r.id)&&rp.status==="open")&&<span title="דיווח תקלה פתוח" style={{color:"#e74c3c",fontSize:14}}>⚠️</span>}
+                {r.pending_update_id&&<button className="btn btn-sm" style={{background:"#e67e22",borderColor:"#e67e22",color:"#fff",fontWeight:900,padding:"5px 9px"}} onClick={event=>{event.stopPropagation();openUpdateReview(r);}}><Clock size={13} strokeWidth={2} /> בדיקת עדכון ({pendingItemCountFor(r)||"…"})</button>}
                 {statusBadge(getEffectiveStatus(r))}
               </div>
             </div>
@@ -473,6 +500,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
               <div>
                 <div style={{fontWeight:900,fontSize:17,display:"flex",alignItems:"center",gap:8}}>
                   {dashViewRes.loan_type==="שיעור"?<Film size={16} strokeWidth={1.75} color="var(--accent)" />:<ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" />} {dashViewRes.student_name}
+                  {dashViewRes.pending_update_id&&statusBadge("בדיקת עדכון")}
                   {statusBadge(getEffectiveStatus(dashViewRes))}
                 </div>
                 <div style={{fontSize:12,marginTop:8,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
@@ -730,10 +758,38 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                 </div>
                 );
               })()}
+              {dashViewRes.pending_update_id && (
+                <div style={{borderTop:"1px solid var(--border)",paddingTop:14,display:"flex",justifyContent:"center"}}>
+                  <button className="btn" style={{width:"100%",justifyContent:"center",background:"#e67e22",borderColor:"#e67e22",color:"#fff",fontWeight:900,fontSize:14,padding:"11px 20px"}} onClick={()=>openUpdateReview(dashViewRes)}>
+                    <Clock size={16} strokeWidth={2} /> בדיקת עדכון ({pendingItemCountFor(dashViewRes)||"…"})
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
+
+      {dashUpdateReview && (() => {
+        const liveReservation = reservations.find(reservation => String(reservation.id) === String(dashUpdateReview.id)) || dashUpdateReview;
+        const pendingUpdate = pendingUpdateFor(liveReservation);
+        if (!pendingUpdate) return null;
+        const updatesUsed = (reservationUpdates || []).filter(update =>
+          String(update.reservation_id) === String(liveReservation.id)).length;
+        return (
+          <UpdateReviewModal
+            key={pendingUpdate.id}
+            reservation={liveReservation}
+            pendingUpdate={pendingUpdate}
+            updatesUsed={updatesUsed}
+            equipment={equipment}
+            certifications={certifications}
+            showToast={showToast}
+            onReviewed={refreshAfterUpdateReview}
+            onClose={() => setDashUpdateReview(null)}
+          />
+        );
+      })()}
 
       {/* Dashboard — Hard block conflict dialog */}
       {dashApprovalConflict && (()=>{

@@ -76,6 +76,8 @@ function buildEmail({
   rooms_text,
   venue_address,
   venue_note,
+  update_outcome,
+  update_details_html,
   logo_url,
   sound_logo_url,
 }) {
@@ -94,6 +96,11 @@ function buildEmail({
   const isProductionDeadline = type === "production_deadline";
   const isCalendarInvite  = type === "course_calendar_invite";
   const isSessionsChanged = type === "course_sessions_changed";
+  // Student notice after warehouse review of an equipment-list update:
+  // update_outcome is 'rejected' (nothing approved) or 'partial' (some items
+  // approved, some rejected/reduced). Full approvals send no email.
+  const isUpdateReview    = type === "reservation_update_review";
+  const isUpdateRejected  = isUpdateReview && update_outcome === "rejected";
 
   const finalTeacherMessage =
     teacher_message || custom_message || lesson_message || report_note || "";
@@ -103,7 +110,8 @@ function buildEmail({
   const effectiveLogoUrl =
     logo_url || "https://app.camera.org.il/LOGON1.png";
 
-  const color = isLessonConflict ? "#e74c3c"
+  const color = isUpdateReview ? (isUpdateRejected ? "#e74c3c" : "#f5a623")
+    : isLessonConflict ? "#e74c3c"
     : isStudioApproved ? "#2ecc71"
     : isStudioDeleted ? "#e74c3c"
     : isApproved ? "#2ecc71"
@@ -118,7 +126,8 @@ function buildEmail({
     : (isNew || isTeamNotify) ? "#f5a623"
     : "#e74c3c";
 
-  const icon = isLessonConflict ? "❌"
+  const icon = isUpdateReview ? (isUpdateRejected ? "✖" : "🔁")
+    : isLessonConflict ? "❌"
     : isStudioApproved ? "🎙️"
     : isStudioDeleted ? "❌"
     : isApproved ? "✅"
@@ -133,7 +142,8 @@ function buildEmail({
     : (isNew || isTeamNotify) ? "⏳"
     : "❌";
 
-  const title = isLessonConflict ? "קביעת החדר בוטלה לטובת שיעור"
+  const title = isUpdateReview ? (isUpdateRejected ? "עדכון הבקשה נדחה" : "עדכון הבקשה אושר חלקית")
+    : isLessonConflict ? "קביעת החדר בוטלה לטובת שיעור"
     : isStudioApproved ? "קביעת החדר אושרה! 🎙️"
     : isStudioDeleted ? "קביעת החדר בוטלה"
     : isApproved ? "הבקשה אושרה!"
@@ -157,7 +167,16 @@ function buildEmail({
     : (isCalendarInvite || isSessionsChanged) ? (recipient_name || "המרצה")
     : student_name;
 
-  const body = isLessonConflict
+  const body = isUpdateReview
+    ? (isUpdateRejected
+        ? `בקשת עדכון הציוד ששלחת עבור ההזמנה${project_name ? ` <strong style="color:#e8eaf0">"${escapeHtml(project_name)}"</strong>` : ""} <strong style="color:#e74c3c">נדחתה</strong> על ידי צוות המחסן.<br/><br/>
+           <strong style="color:#e8eaf0">רשימת הציוד המאושרת שלך נשארה ללא שינוי.</strong>`
+        : `בקשת עדכון הציוד ששלחת עבור ההזמנה${project_name ? ` <strong style="color:#e8eaf0">"${escapeHtml(project_name)}"</strong>` : ""} <strong style="color:#f5a623">אושרה חלקית</strong> על ידי צוות המחסן.<br/><br/>
+           חלק מהפריטים אושרו וצורפו להזמנה, וחלק נדחו או אושרו בכמות מוקטנת — הפירוט המלא מטה.`) +
+      (update_details_html
+        ? `<br/><br/><div style="border-right:3px solid ${isUpdateRejected ? "#e74c3c" : "#f5a623"};background:${isUpdateRejected ? "rgba(231,76,60,0.08)" : "rgba(245,166,35,0.08)"};padding:14px 16px;border-radius:8px">${update_details_html}</div>`
+        : "")
+    : isLessonConflict
     ? `אנו מתנצלים, אך המכללה נאלצה לבטל את קביעת החדר שלך לטובת שיעור.<br/><br/>
        קביעת החדר <strong style="color:#e8eaf0">${project_name || "החדר"}</strong>${borrow_date ? ` בתאריך <strong style="color:#e8eaf0">${borrow_date}</strong>` : ""}${borrow_time ? ` בין השעות <strong style="color:#e8eaf0">${borrow_time}–${return_time || ""}</strong>` : ""} <strong style="color:#e74c3c">בוטלה</strong>.<br/><br/>
        אתה מוזמן לנסות ולקבוע חדר חלופי בלוח קביעת החדרים, או לנסות ולקבוע את החדר <strong style="color:#e8eaf0">${project_name || "החדר"}</strong> ביום אחר.${
@@ -270,7 +289,7 @@ function buildEmail({
 
   // studio_lesson_conflict renders custom_message inline in the body (above) —
   // exclude it here so we don't double-render the admin's note.
-  const studentMessageSection = custom_message && !isLessonConflict && (isApproved || isOverdue || (!isNew && !isTeamNotify && !isDeptHead && !isManagerReport && !isLessonKitReady && !isOverdueTeam)) ? `
+  const studentMessageSection = custom_message && !isLessonConflict && !isUpdateReview && (isApproved || isOverdue || (!isNew && !isTeamNotify && !isDeptHead && !isManagerReport && !isLessonKitReady && !isOverdueTeam)) ? `
     <div style="background:#1a1d26;border:1px solid #2d3244;border-radius:8px;padding:16px;margin:16px 0;direction:rtl">
       <div style="font-size:13px;color:${isApproved ? "#2ecc71" : isOverdue ? "#f5a623" : "#e74c3c"};font-weight:700;margin-bottom:10px">${isApproved ? "דיווח מצוות המחסן על אישור הבקשה" : isOverdue ? "הודעה נוספת מצוות המחסן על האיחור" : "הסבר מצוות המחסן על סיבת הדחייה"}</div>
       <div style="font-size:13px;color:#e8eaf0;white-space:pre-wrap;line-height:1.7">${custom_message}</div>
@@ -429,6 +448,8 @@ export default async function handler(req, res) {
     rooms_text,
     venue_address,
     venue_note,
+    update_outcome,
+    update_details_html,
     ics_base64,
     ics_method,
     logo_url,
@@ -451,6 +472,12 @@ export default async function handler(req, res) {
     const role = await resolveUserRole(req);
     if (role.role === "anon" && !ANON_ALLOWED_TYPES.has(type)) {
       return res.status(401).json({ error: "Unauthorized" });
+    }
+    // A reservation-update review is a verified warehouse decision. Requiring
+    // merely "some authenticated user" would let a student call this endpoint
+    // directly and spoof a rejection/partial-approval email to any address.
+    if (type === "reservation_update_review" && role.role !== "staff") {
+      return res.status(403).json({ error: "Staff authorization required" });
     }
   }
 
@@ -478,6 +505,9 @@ export default async function handler(req, res) {
     course_sessions_changed: course_deleted
       ? `✖ הקורס${course_name ? ` "${course_name}"` : ""} בוטל — נא להסיר את המפגשים מהיומן`
       : `🔁 עדכון במפגשי הקורס${course_name ? ` — ${course_name}` : ""}`,
+    reservation_update_review: update_outcome === "rejected"
+      ? "✖ עדכון הבקשה נדחה – מכללת קמרה אובסקורה וסאונד"
+      : "🔁 עדכון הבקשה אושר חלקית – מכללת קמרה אובסקורה וסאונד",
   };
 
   // Convert base64 data URIs to inline CID attachments (email clients block data: URIs)
@@ -550,6 +580,8 @@ export default async function handler(req, res) {
         rooms_text,
         venue_address,
         venue_note,
+        update_outcome,
+        update_details_html,
         logo_url:       finalLogoUrl,
         sound_logo_url: finalSoundLogoUrl,
       }),

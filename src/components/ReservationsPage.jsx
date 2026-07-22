@@ -8,16 +8,13 @@ import { ArchivePage } from "./ArchivePage.jsx";
 import { syncAllLessons } from "../utils/lessonsApi.js";
 import { listKits, syncAllKits } from "../utils/kitsApi.js";
 import { markReservationDeleting, unmarkReservationDeleting } from "../pendingDeletes.js";
+import { UpdateReviewModal } from "./UpdateReviewModal.jsx";
+import { getProductionCertBlockers } from "../utils/reservationUpdateReview.js";
 import { AlertTriangle, BookOpen, Briefcase, Camera, Calendar, CheckCircle, ClipboardList, Clock, FileText, Film, MessageSquare, Mic, Package, Pencil, RotateCcw, Save, Shield, Trash2, User, X, XCircle } from "lucide-react";
 
-// ── Production Certification Gate ─────────────────────────────────────────
-// Given a "הפקה" reservation, return the items whose required certification
-// is not held by either the photographer OR the sound person.
-// Returns []: nothing blocks approval. Returns [...]: array of blockers
-// — each `{ equipment_name, certification_name }` — to display in a modal.
-// Match crew member to a student record by full name (name is the source of
-// truth). Phone is optional and used only as a tie-breaker when multiple
-// students share the same normalized name.
+// Match production crew members to certification records for existing
+// reservation approval surfaces. The update-review modal uses the shared
+// blocker helper from reservationUpdateReview.js.
 function matchByNamePhone(students, name, phone) {
   const normalizeP = (p) => String(p || "").replace(/[^0-9]/g, "");
   const normN = normalizeName(name || "");
@@ -33,43 +30,8 @@ function matchByNamePhone(students, name, phone) {
   return byName[0];
 }
 
-function getProductionCertBlockers(reservation, equipment, certificationsState) {
-  if (reservation?.loan_type !== "הפקה") return [];
-  const students = certificationsState?.students || [];
-  const certTypes = certificationsState?.types || [];
-  const photog = matchByNamePhone(students, reservation.crew_photographer_name, reservation.crew_photographer_phone);
-  const sound  = reservation.crew_sound_name
-    ? matchByNamePhone(students, reservation.crew_sound_name, reservation.crew_sound_phone)
-    : null;
-  const photogCerts = photog?.certs || {};
-  const soundCerts  = sound?.certs  || {};
-  const blockers = [];
-  for (const item of (reservation.items || [])) {
-    const eq = equipment.find(e => String(e.id) === String(item.equipment_id));
-    if (!eq?.certification_id) continue;
-    const certId = eq.certification_id;
-    const ok = photogCerts[certId] === "עבר" || soundCerts[certId] === "עבר";
-    if (!ok) {
-      const certType = certTypes.find(c => c.id === certId);
-      blockers.push({
-        equipment_name: eq.name,
-        certification_name: certType?.name || certId,
-      });
-    }
-  }
-  return blockers;
-}
-
-// ── Staff Loan Form (module-scope component) ──
-// איש צוות יוצר לעצמו בקשת השאלה. הטופס מזהה אוטומטית את המשתמש המחובר
-// מתוך sessionStorage.staff_user. אם התאריכים לא חופפים עם השאלות קיימות,
-// הבקשה עוברת מיידית ל-status="מאושר" עם loan_type="צוות". החזרה ידנית
-// בלבד (לחיצה על כפתור "הוחזר"), ו-check-overdue.js לא יהפוך אותה ל"באיחור".
-// IMPORTANT: declared at module scope (not inside ReservationsPage) so React
-// keeps the same component type across parent re-renders. Previously it was
-// an inner component, causing the entire form state to reset whenever the
-// parent re-rendered (e.g. on a `showToast`/`setReservations` call inside
-// mSave), which is exactly what happened when an overlap error came back.
+// Staff-created loan form. Kept at module scope so parent re-renders never
+// reset the form while it is open.
 function StaffLoanForm({ onClose, showToast, reservations, setReservations, teamMembers, equipment, categories }) {
   const ALL_TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
   // Identify the logged-in staff member from sessionStorage. Fall back to
@@ -303,9 +265,10 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
 
 export function ReservationsPage({ reservations, setReservations, equipment, showToast,
     search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy, mode="active", initialSubView="active", collegeManager={}, managerToken="",
-    categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], siteSettings={}, onLogCreated = () => {}, equipmentReports=[], lessons=[], setLessons=null, loanHandlers=[] }) {
+    categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], siteSettings={}, onLogCreated = () => {}, equipmentReports=[], lessons=[], setLessons=null, loanHandlers=[], reservationUpdates=[], refreshReservationUpdates=()=>{}, refreshReservations=async()=>{} }) {
   const [subView, setSubView] = useState("active"); // "active" | "rejected" | "archive"
   const [selected, setSelected] = useState(null);
+  const [updateReviewReservation, setUpdateReviewReservation] = useState(null);
   // Loan-request staff coordination (decoupled side-table) — display-only here.
   // Map reservation_id → { out, return } handler rows for quick lookup.
   const loanHandlerMap = useMemo(() => {
@@ -324,6 +287,11 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
     const fresh = reservations.find(r => String(r.id) === String(selected.id));
     if (fresh && fresh !== selected) setSelected(fresh);
   }, [reservations]);
+  useEffect(() => {
+    if (!updateReviewReservation) return;
+    const fresh = reservations.find(r => String(r.id) === String(updateReviewReservation.id));
+    if (fresh && fresh !== updateReviewReservation) setUpdateReviewReservation(fresh);
+  }, [reservations, updateReviewReservation]);
   const [editing, setEditing]   = useState(null);
   const [approvalConflict, setApprovalConflict] = useState(null);
   const [consecutiveWarning, setConsecutiveWarning] = useState(null); // {reservation, warnings}
@@ -335,6 +303,70 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
   useEffect(() => {
     setSubView(initialSubView === "archive" ? "archive" : initialSubView === "rejected" ? "rejected" : "active");
   }, [initialSubView]);
+
+  // Whenever a reservation with a pending student update is opened, pull fresh
+  // update data on demand — the "בדיקת עדכון" review panel must appear even if
+  // the App-level realtime refetch hasn't landed (or realtime is unavailable,
+  // as on the dev project). Cheap: one indexed read of a tiny table.
+  useEffect(() => {
+    if (selected?.pending_update_id) refreshReservationUpdates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id, selected?.pending_update_id]);
+
+  // After the warehouse reviews an update, refresh both the ledger (so the
+  // review panel collapses) and THIS reservation row (so the "בדיקת עדכון"
+  // badge clears and any newly-approved gear shows) — without waiting on
+  // realtime. Targeted single-row refetch keeps other rows / lesson-autos intact.
+  const reloadReservationAfterReview = async (resId) => {
+    await refreshReservationUpdates();
+    try {
+      const { data } = await supabase
+        .from("reservations_new")
+        .select("*, reservation_items(*)")
+        .eq("id", resId)
+        .limit(1);
+      const fresh = Array.isArray(data) && data[0]
+        ? { ...data[0], items: data[0].reservation_items || [] }
+        : null;
+      if (fresh) {
+        setReservations(prev => Array.isArray(prev)
+          ? prev.map(r => String(r.id) === String(resId) ? fresh : r)
+          : prev);
+        setSelected(prev => (prev && String(prev.id) === String(resId)) ? fresh : prev);
+      }
+    } catch { /* ignore — realtime / next open will catch up */ }
+    // The RPC also recomputes equipment.available_units, and the targeted row
+    // above bypasses the app's normalizer. Run the app-level refresh so stock
+    // figures and row normalization match the dashboard path exactly.
+    try { await refreshReservations(); } catch { /* best effort */ }
+  };
+  const pendingUpdateFor = (reservation) => (reservationUpdates || []).find(update =>
+    String(update.id) === String(reservation?.pending_update_id) && update.review_status === "pending");
+  const pendingItemCountFor = (reservation) => (pendingUpdateFor(reservation)?.items || [])
+    .filter(item => item.review_state === "pending").length;
+  // Only tear down the open reservation modal once the update data is actually
+  // in hand. Fetching first avoids the dead-end where the modal closes, the
+  // review host finds no pending update and renders null, and the click just
+  // looks broken — which is the guaranteed path whenever realtime hasn't
+  // delivered the ledger yet.
+  const openUpdateReview = async (reservation) => {
+    let known = reservationUpdates;
+    if (!pendingUpdateFor(reservation)) {
+      const fresh = await refreshReservationUpdates();
+      if (Array.isArray(fresh)) known = fresh;
+    }
+    const found = (known || []).find(update =>
+      String(update.id) === String(reservation?.pending_update_id) && update.review_status === "pending");
+    if (!found) {
+      // Stale pending_update_id (already reviewed elsewhere). Leave the current
+      // modal open rather than closing it onto an empty screen.
+      showToast?.("info", "אין כרגע עדכון שממתין לבדיקה בבקשה זו.");
+      return;
+    }
+    setSelected(null);
+    setOverdueEmailText("");
+    setUpdateReviewReservation(reservation);
+  };
   const isRejectedPage = subView === "rejected";
   const rejectedCount = reservations.filter(r=>r.status==="נדחה"||r.status==="באיחור").length;
   const archivedCount = reservations.filter(r=>r.status==="הוחזר").length;
@@ -826,6 +858,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
                   {equipmentReports.some(rp=>rp.reservation_id===String(r.id)&&rp.status==="open")&&<AlertTriangle size={14} strokeWidth={1.75} color="#e74c3c" title="דיווח תקלה פתוח" />}
                   {r.lecturer_notes && <MessageSquare size={14} strokeWidth={2} color="#4fb3ec" title={`הערה מהמרצה: ${r.lecturer_notes}`} />}
+                  {r.pending_update_id&&statusBadge("בדיקת עדכון")}
                   {statusBadge(getEffectiveStatus(r))}
                   <span style={{fontSize:11,color:"var(--text3)"}}>{formatDate(r.created_at)}</span>
                 </div>
@@ -846,6 +879,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                 </div>
               </div>
               <div className="res-card-actions" onClick={e=>e.stopPropagation()}>
+                {r.pending_update_id&&<button className="btn btn-sm" style={{background:"#e67e22",borderColor:"#e67e22",color:"#fff",fontWeight:900}} onClick={()=>openUpdateReview(r)}><Clock size={14} strokeWidth={2} /> בדיקת עדכון ({pendingItemCountFor(r)||"…"})</button>}
                 <button className="btn btn-secondary btn-sm" onClick={()=>exportPDF(r)}><><FileText size={14} strokeWidth={1.75} /> PDF</></button>
                 {(r.status==="ממתין"||r.status==="מאושר"||r.status==="נדחה"||r.status==="באיחור")&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}><><Pencil size={14} strokeWidth={1.75} /> עריכת בקשה</></button>}
                 {r.status==="ממתין"&&(() => {
@@ -1090,6 +1124,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
           {/* Action buttons hoisted to the top of the modal so warehouse staff
               reach אשר/דחה/עריכה without scrolling past a long equipment list. */}
           <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:20,paddingBottom:16,borderBottom:"1px solid var(--border)"}}>
+            {selected.pending_update_id&&<button className="btn" style={{background:"#e67e22",borderColor:"#e67e22",color:"#fff",fontWeight:900}} onClick={()=>openUpdateReview(selected)}><Clock size={15} strokeWidth={2} /> בדיקת עדכון ({pendingItemCountFor(selected)||"…"})</button>}
             {(selected.status==="ממתין"||selected.status==="מאושר"||selected.status==="נדחה"||selected.status==="באיחור")&&<button className="btn btn-secondary" onClick={()=>{setEditing(selected);setSelected(null);setOverdueEmailText("");}}>✏️ עריכת בקשה</button>}
             {selected.status==="ממתין"&&(() => {
               const certBlocked = getProductionCertBlockers(selected, equipment, certifications).length > 0;
@@ -1180,7 +1215,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
               <div style={{marginTop:12,textAlign:"center"}}>{statusBadge(selected.status)}</div>
             </div>
             <div>
-              <div className="form-section-title">ציוד מבוקש ({selected.items?.length||0} פריטים)</div>
+              <div className="form-section-title">{selected.pending_update_id?"✅ ציוד מאושר":"ציוד מבוקש"} ({selected.items?.length||0} פריטים)</div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {(() => {
                   // Production cert reminder for warehouse staff in the expanded
@@ -1250,6 +1285,25 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
           )}
         </Modal>
       )}
+      {updateReviewReservation && (() => {
+        const pendingUpdate = pendingUpdateFor(updateReviewReservation);
+        if (!pendingUpdate) return null;
+        const updatesUsed = (reservationUpdates || []).filter(update =>
+          String(update.reservation_id) === String(updateReviewReservation.id)).length;
+        return (
+          <UpdateReviewModal
+            key={pendingUpdate.id}
+            reservation={updateReviewReservation}
+            pendingUpdate={pendingUpdate}
+            updatesUsed={updatesUsed}
+            equipment={equipment}
+            certifications={certifications}
+            showToast={showToast}
+            onReviewed={() => reloadReservationAfterReview(updateReviewReservation.id)}
+            onClose={() => setUpdateReviewReservation(null)}
+          />
+        );
+      })()}
       </>}
     </div>
   );
