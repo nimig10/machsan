@@ -4,6 +4,7 @@ import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, toda
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import { UpdateReviewModal } from "./UpdateReviewModal.jsx";
+import { ApprovedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
 import { Activity, AlertTriangle, ArrowUpFromLine, Briefcase, Calendar, Camera, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Layers, MessageSquare, Mic, Package, RefreshCw, Shield, User, Wrench, X, XCircle } from "lucide-react";
 
 const HE_DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
@@ -546,6 +547,14 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                   </div>
                 );
               })()}
+              {/* Who approved the request + who reviewed the student's item-updates
+                  (display-only, JWT-derived). Guarded so the box never renders empty. */}
+              {(dashViewRes.approved_by_name || (reservationUpdates||[]).some(u=>String(u.reservation_id)===String(dashViewRes.id)&&u.review_status!=="pending")) && (
+                <div style={{background:"var(--surface2)",borderRadius:10,padding:"10px 14px",fontSize:12,display:"flex",flexDirection:"column",gap:6}}>
+                  <ApprovedByLabel reservation={dashViewRes} style={{fontSize:13}} />
+                  <UpdateHistoryList updates={reservationUpdates} reservationId={dashViewRes.id} />
+                </div>
+              )}
               {/* Production crew */}
               {(dashViewRes.crew_photographer_name||dashViewRes.crew_sound_name)&&(
                 <div style={{background:"var(--surface2)",borderRadius:10,padding:"10px 14px",fontSize:12,display:"flex",gap:16,flexWrap:"wrap"}}>
@@ -723,8 +732,9 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                           return;
                         }
                         // Optimistic local update — pulls from stale prop, good enough
-                        // until the blob sync returns the fresh list below.
-                        setReservations(reservations.map(r=>r.id===res.id?{...r,status:"מאושר"}:r));
+                        // until the blob sync returns the fresh list below. Carry the
+                        // server's JWT-derived approver stamp (|| null, not ??).
+                        setReservations(reservations.map(r=>r.id===res.id?{...r,status:"מאושר",approved_by_staff_id:rpcResult.approved_by_staff_id||null,approved_by_name:rpcResult.approved_by_name||null}:r));
                         // Persist to the JSONB blob. Internally re-reads from server
                         // first so a full-list write doesn't trip shrink_guard when
                         // the dashboard's cache is behind by new student submissions.
@@ -859,7 +869,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                   if(showToast) showToast("error", "שגיאה באישור הבקשה בשרת");
                   return;
                 }
-                const updated = reservations.map(r=>r.id===res.id?{...r,status:"מאושר"}:r);
+                const updated = reservations.map(r=>r.id===res.id?{...r,status:"מאושר",approved_by_staff_id:rpcResult.approved_by_staff_id||null,approved_by_name:rpcResult.approved_by_name||null}:r);
                 setReservations(updated);
                 if(showToast) showToast("success",`הבקשה של ${res.student_name} אושרה`);
                 setDashConsecutiveWarning(null);

@@ -2,8 +2,9 @@
 import { useState } from "react";
 import { formatDate, formatTime, deleteReservation as deleteReservationRpc, groupReservationItemsByCategory } from "../utils.js";
 import { Calendar, Film, Mic, Package, X } from "lucide-react";
+import { ApprovedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
 
-export function ArchivePage({ reservations, setReservations, equipment, showToast, loanHandlers = [] }) {
+export function ArchivePage({ reservations, setReservations, equipment, showToast, loanHandlers = [], reservationUpdates = [] }) {
   const archived = reservations.filter(r => r.status === "הוחזר");
   const [search, setSearch] = useState("");
   const [sectionF, setSectionF] = useState("הכל"); // "הכל" | "השאלות" | "שיעורים"
@@ -125,6 +126,7 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
           <span><Package size={14} strokeWidth={1.75} color="var(--accent)" /> {archiveItems(r).length} פריטים</span>
           {r.returned_at&&<span style={{color:"var(--text3)"}}>🕐 הוחזר: {new Date(r.returned_at).toLocaleDateString("he-IL")}</span>}
           <ReturnActor r={r}/>
+          <ApprovedByLabel reservation={r}/>
         </div>
         <div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:4}}>
           {archiveItems(r).map((i,j)=><span key={j} className="chip"><EqImg id={i.equipment_id}/> {eqName(i.equipment_id)} ×{i.quantity}</span>)}
@@ -218,9 +220,11 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
                 ))}
                 {/* Who handled the return — sits with the people facts, not with
                     the equipment list at the bottom of the modal. */}
-                {returnActorFor(viewRes) && (
-                  <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid var(--border)",fontSize:13}}>
+                {(returnActorFor(viewRes) || viewRes.approved_by_name || (reservationUpdates||[]).some(u=>String(u.reservation_id)===String(viewRes.id)&&u.review_status!=="pending")) && (
+                  <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid var(--border)",fontSize:13,display:"flex",flexDirection:"column",gap:6}}>
                     <ReturnActor r={viewRes}/>
+                    <ApprovedByLabel reservation={viewRes}/>
+                    <UpdateHistoryList updates={reservationUpdates} reservationId={viewRes.id}/>
                   </div>
                 )}
               </div>

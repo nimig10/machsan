@@ -3,23 +3,49 @@ import { useState, useEffect } from "react";
 import { getAuthToken } from "../utils.js";
 import { LayoutDashboard } from "lucide-react";
 
+// Ordered by workflow — the reservation flow first, since that is what staff
+// most need to audit. Object key order drives the filter dropdown order.
+// Any action present in the data but missing here is appended raw at the end
+// (see the dropdown), so nothing is ever hidden.
 const ACTION_LABELS = {
-  login:                "כניסה למערכת",
+  // ── זרימת בקשות השאלה ──
+  reservation_approve:  "אישור השאלה",
+  reservation_reject:   "דחיית השאלה",
+  reservation_return:   "החזרת ציוד",
+  cancel_reservation:   "ביטול בקשה",
+  reservation_delete:   "מחיקת בקשה",
+  staff_loan_create:    "יצירת השאלת צוות",
+  lesson_loan_cancel:   "ביטול השאלת שיעור",
+  // ── ציוד ──
   equipment_add:        "הוספת ציוד",
   equipment_edit:       "עריכת ציוד",
   equipment_delete:     "מחיקת ציוד",
   equipment_qty_update: "עדכון כמות ציוד",
+  // ── קטגוריות ──
+  category_add:         "הוספת קטגוריה",
+  category_rename:      "שינוי שם קטגוריה",
+  category_delete:      "מחיקת קטגוריה",
+  // ── ערכות ──
+  kit_add:              "הוספת ערכה",
+  kit_edit:             "עריכת ערכה",
+  kit_delete:           "מחיקת ערכה",
+  // ── צוות וראשי מחלקה ──
   staff_create:         "יצירת איש צוות",
   staff_update:         "עדכון איש צוות",
   staff_delete:         "מחיקת איש צוות",
+  team_member_add:      "הוספת איש צוות",
+  team_member_edit:     "עריכת איש צוות",
+  team_member_delete:   "מחיקת איש צוות",
+  dept_head_add:        "הוספת ראש מחלקה",
+  dept_head_edit:       "עריכת ראש מחלקה",
+  dept_head_delete:     "מחיקת ראש מחלקה",
+  // ── סטודנטים ──
   student_add:          "הוספת סטודנט",
   student_edit:         "עריכת סטודנט",
   student_delete:       "מחיקת סטודנט",
-  reservation_approve:  "אישור השאלה",
-  reservation_reject:   "דחיית השאלה",
-  reservation_return:   "החזרת ציוד",
-  reservation_delete:   "מחיקת בקשה",
+  // ── מערכת ──
   settings_save:        "שמירת הגדרות",
+  login:                "כניסה למערכת",
 };
 
 function formatDate(iso) {
@@ -87,7 +113,10 @@ export function ActivityLogsPage({ showToast, teamMembers = [] }) {
           <select className="form-select" value={filterAction} onChange={e => setFilterAction(e.target.value)}
             style={{ minWidth: 180, padding: "6px 10px", fontSize: 13 }}>
             <option value="">הכל</option>
-            {actionTypes.map(a => (
+            {/* Ordered curated list first (guarantees every meaningful action
+                shows, in workflow order), then any data-only actions not in the
+                map appended raw — so nothing is ever cut off by the API. */}
+            {[...Object.keys(ACTION_LABELS), ...actionTypes.filter(a => !(a in ACTION_LABELS))].map(a => (
               <option key={a} value={a}>{ACTION_LABELS[a] || a}</option>
             ))}
           </select>

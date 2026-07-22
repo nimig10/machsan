@@ -9,6 +9,7 @@ import { syncAllLessons } from "../utils/lessonsApi.js";
 import { listKits, syncAllKits } from "../utils/kitsApi.js";
 import { markReservationDeleting, unmarkReservationDeleting } from "../pendingDeletes.js";
 import { UpdateReviewModal } from "./UpdateReviewModal.jsx";
+import { ApprovedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
 import { getProductionCertBlockers } from "../utils/reservationUpdateReview.js";
 import { AlertTriangle, BookOpen, Briefcase, Camera, Calendar, CheckCircle, ClipboardList, Clock, FileText, Film, MessageSquare, Mic, Package, Pencil, RotateCcw, Save, Shield, Trash2, User, X, XCircle } from "lucide-react";
 
@@ -304,12 +305,14 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
     setSubView(initialSubView === "archive" ? "archive" : initialSubView === "rejected" ? "rejected" : "active");
   }, [initialSubView]);
 
-  // Whenever a reservation with a pending student update is opened, pull fresh
-  // update data on demand — the "בדיקת עדכון" review panel must appear even if
-  // the App-level realtime refetch hasn't landed (or realtime is unavailable,
-  // as on the dev project). Cheap: one indexed read of a tiny table.
+  // Whenever a reservation is opened, pull fresh update data on demand — both
+  // for the "בדיקת עדכון" review panel (pending update) AND the update-history
+  // display (already-reviewed updates, whose pending_update_id is already
+  // cleared). Cheap: one indexed read of a tiny table. Works even if the
+  // App-level realtime refetch hasn't landed (or realtime is unavailable, as on
+  // the dev project).
   useEffect(() => {
-    if (selected?.pending_update_id) refreshReservationUpdates();
+    if (selected?.id) refreshReservationUpdates();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, selected?.pending_update_id]);
 
@@ -600,10 +603,18 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
         return false;
       }
       // Optimistic update from local (possibly stale) state — UI flips to מאושר
-      // right away. Blob sync below refreshes from the server to avoid tripping
-      // shrink_guard when students have submitted since page load.
+      // right away. Carry the server's JWT-derived approver stamp so "מאשר
+      // הבקשה" shows without waiting for the refetch. `|| null` (not `??`): if
+      // the stamp write failed the DB holds null, and a stale client value
+      // would display a lie. Blob sync below refreshes from the server to avoid
+      // tripping shrink_guard when students have submitted since page load.
       setReservations(normalizeReservationsForArchive(reservations.map((r) =>
-        r.id === reservationToApprove.id ? { ...reservationToApprove, status: "מאושר" } : r
+        r.id === reservationToApprove.id ? {
+          ...reservationToApprove,
+          status: "מאושר",
+          approved_by_staff_id: rpcResult.approved_by_staff_id || null,
+          approved_by_name:     rpcResult.approved_by_name || null,
+        } : r
       )));
       const sync = await syncReservationStatusToBlob(reservationToApprove.id, "מאושר");
       if (!sync.ok) {
@@ -923,7 +934,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       </div>
 
       {/* Archive sub-view */}
-      {subView==="archive" && <ArchivePage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast} loanHandlers={loanHandlers}/>}
+      {subView==="archive" && <ArchivePage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast} loanHandlers={loanHandlers} reservationUpdates={reservationUpdates}/>}
 
       {/* Active / Rejected sub-views */}
       {subView!=="archive" && <>
@@ -1218,6 +1229,11 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                 )}
               </div>
               <div style={{marginTop:12,textAlign:"center"}}>{statusBadge(selected.status)}</div>
+              {/* Who approved + history of who reviewed the student's item-updates */}
+              <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:6,alignItems:"center",textAlign:"center"}}>
+                <ApprovedByLabel reservation={selected} style={{fontSize:13}} />
+                <UpdateHistoryList updates={reservationUpdates} reservationId={selected.id} />
+              </div>
             </div>
             <div>
               <div className="form-section-title">{selected.pending_update_id?"✅ ציוד מאושר":"ציוד מבוקש"} ({selected.items?.length||0} פריטים)</div>
