@@ -377,6 +377,8 @@ export async function updateReservationStatus(id, status, options = {}) {
       // Explicit whitelist — anything the API adds is dropped unless listed here.
       returned_by_staff_id: data.returned_by_staff_id ?? null,
       returned_by_name:     data.returned_by_name ?? null,
+      approved_by_staff_id: data.approved_by_staff_id ?? null,
+      approved_by_name:     data.approved_by_name ?? null,
     };
   } catch (e) {
     // Distinguish a client-side abort (timeout) from a real network failure so

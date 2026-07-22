@@ -63,11 +63,16 @@ export default async function handler(req, res) {
     return res.status(result.ok ? 200 : 500).json(result.data || []);
   }
 
-  // ACTIONS — get distinct action types for filter dropdown
+  // ACTIONS — distinct action types actually present in the data. Only used to
+  // append data-only extras beyond the curated client list, so ordering here is
+  // irrelevant. Ordered by created_at.desc with a high cap (NOT action.asc): the
+  // old alphabetical order + PostgREST's 1000-row cap let thousands of "login"
+  // rows fill the window and truncate every action after "login" alphabetically
+  // (reservation_*, staff_*, student_*…), hiding them from the filter entirely.
   if (action === "actions") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const result = await sbFetch("activity_logs?select=action&order=action.asc");
+    const result = await sbFetch("activity_logs?select=action&order=created_at.desc&limit=5000");
     const unique = [...new Set((result.data || []).map(r => r.action))];
     return res.status(200).json(unique);
   }

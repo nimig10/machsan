@@ -141,7 +141,7 @@ export default async function handler(req, res) {
     // The RPC returns a JSONB object { id, old_status, new_status, changed }.
     const body = await r.json();
 
-    // ── Record WHO actually processed the return ──────────────────────────
+    // ── Record WHO actually performed a status change ─────────────────────
     // Deliberately a separate PATCH rather than a parameter on the RPC:
     // update_reservation_status_v1 is guard-heavy (approve-overbook,
     // peak-concurrent) and adding a parameter would force DROP + full
@@ -149,32 +149,28 @@ export default async function handler(req, res) {
     //
     // Identity comes from the JWT, never from the client, so it cannot be
     // spoofed; and because it lives here it covers every caller of this
-    // endpoint, including the dashboard button which has no staff identity
+    // endpoint, including the dashboard buttons which have no staff identity
     // client-side at all.
     //
-    // Display-only metadata: on failure we log and still return 200. The
-    // status change already committed, and surfacing an error would show a
-    // red toast for a cosmetic write.
-    let stampedId = null;
-    let stampedName = null;
-    if (status === "הוחזר" && caller.kind === "staff") {
-      stampedId = role.id || null;
-      stampedName = String(role.full_name || role.email || "").trim() || null;
-      // Cap the stamp round-trip at 2.5s with its own AbortController. The RPC
-      // status change has already committed; this cosmetic write must never
-      // stretch the total response time toward the client's abort ceiling (a
-      // slow stamp used to make a SUCCESSFUL return look like a failure).
-      const stampCtrl = new AbortController();
-      const stampTimer = setTimeout(() => stampCtrl.abort(), 2500);
+    // Two actors are recorded, each on its own transition:
+    //   הוחזר → returned_by_*   (who returned the equipment — PR #80)
+    //   מאושר → approved_by_*   (who moved the request to approved)
+    //
+    // Display-only metadata: on failure we log and still return 200. The status
+    // change already committed, and surfacing an error would show a red toast
+    // for a cosmetic write.
+    //
+    // The status filter (status=eq.<matchStatus>) is the guard: if a concurrent
+    // action flipped the row out of that status between the RPC commit and here,
+    // zero rows match and no stale actor is written. Own 2.5s AbortController so
+    // this cosmetic write can never stretch the response toward the client's
+    // abort ceiling (a slow stamp used to make a SUCCESSFUL action look failed).
+    const stampActor = async (matchStatus, fields) => {
+      const c = new AbortController();
+      const t = setTimeout(() => c.abort(), 2500);
       try {
-        // The status filter is the guard: if a concurrent action flipped the
-        // row out of "הוחזר" between the RPC commit and here, zero rows match
-        // and no stale actor is written. Not gated on body.changed — a failed
-        // stamp would then be unrecoverable, since the return button is gone
-        // once the row is archived. Overwrites unconditionally: a re-return by
-        // a different person must update, otherwise the archive shows a lie.
-        const stampRes = await fetch(
-          `${SB_URL}/rest/v1/reservations_new?id=eq.${encodeURIComponent(String(id))}&status=eq.${encodeURIComponent("הוחזר")}`,
+        const sres = await fetch(
+          `${SB_URL}/rest/v1/reservations_new?id=eq.${encodeURIComponent(String(id))}&status=eq.${encodeURIComponent(matchStatus)}`,
           {
             method: "PATCH",
             headers: {
@@ -183,28 +179,41 @@ export default async function handler(req, res) {
               "Content-Type": "application/json",
               Prefer: "return=minimal",
             },
-            body: JSON.stringify({
-              returned_by_staff_id: stampedId,
-              returned_by_name: stampedName,
-            }),
-            signal: stampCtrl.signal,
+            body: JSON.stringify(fields),
+            signal: c.signal,
           }
         );
-        if (!stampRes.ok) {
-          console.error("update-reservation-status: returned_by stamp failed:", stampRes.status, await stampRes.text());
+        if (!sres.ok) {
+          console.error("update-reservation-status: actor stamp failed:", matchStatus, sres.status, await sres.text());
         }
       } catch (e) {
-        console.error("update-reservation-status: returned_by stamp error:", e.message);
+        console.error("update-reservation-status: actor stamp error:", matchStatus, e.message);
       } finally {
-        clearTimeout(stampTimer);
+        clearTimeout(t);
+      }
+    };
+
+    let returnedById = null, returnedByName = null;
+    let approvedById = null, approvedByName = null;
+    if (caller.kind === "staff") {
+      const actorId   = role.id || null;
+      const actorName = String(role.full_name || role.email || "").trim() || null;
+      if (status === "הוחזר") {
+        returnedById = actorId; returnedByName = actorName;
+        await stampActor("הוחזר", { returned_by_staff_id: actorId, returned_by_name: actorName });
+      } else if (status === "מאושר") {
+        approvedById = actorId; approvedByName = actorName;
+        await stampActor("מאושר", { approved_by_staff_id: actorId, approved_by_name: actorName });
       }
     }
 
     return res.status(200).json({
       ok: true,
       ...body,
-      returned_by_staff_id: stampedId,
-      returned_by_name: stampedName,
+      returned_by_staff_id: returnedById,
+      returned_by_name: returnedByName,
+      approved_by_staff_id: approvedById,
+      approved_by_name: approvedByName,
     });
   } catch (e) {
     console.error("update-reservation-status network error:", e);
