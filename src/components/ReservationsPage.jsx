@@ -1,7 +1,7 @@
 import { supabase } from '../supabaseClient.js';
 // ReservationsPage.jsx — admin reservations management page (includes rejected + archive tabs)
 import { useEffect, useState, useMemo } from "react";
-import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, createReservation, deleteReservation as deleteReservationRpc, getAuthToken, syncReservationStatusToBlob, groupReservationItemsByCategory } from "../utils.js";
+import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, reservationStatusErrorMessage, createReservation, deleteReservation as deleteReservationRpc, getAuthToken, syncReservationStatusToBlob, groupReservationItemsByCategory } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
@@ -658,7 +658,12 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
 
   const updateStatus = async (id, status) => {
     const res = reservations.find(r=>r.id===id);
-    if (!res) return;
+    if (!res) {
+      // Never fail silently — a missing row (stale client state) used to make
+      // the "הוחזר" click do nothing with zero feedback.
+      showToast("error", "הבקשה לא נמצאה — רענן/י את הדף ונסה/י שוב");
+      return;
+    }
 
     if (status === "מאושר") return approveReservation({ ...res, status: "מאושר" });
 
@@ -673,7 +678,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       const rpcResult = await updateReservationStatus(id, status, { returned_at: returnedAt });
       if (!rpcResult.ok) {
         console.error("updateStatus RPC failed:", rpcResult);
-        showToast("error", "שגיאה בעדכון הסטטוס בשרת");
+        showToast("error", reservationStatusErrorMessage(rpcResult));
         return false;
       }
       const updated = normalizeReservationsForArchive(reservations.map((r) => {

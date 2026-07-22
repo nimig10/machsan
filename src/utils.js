@@ -319,28 +319,53 @@ export async function createLessonReservations(kitId, reservations, items, optio
 //
 // Callers should check `ok` before updating local state / sending emails.
 export async function updateReservationStatus(id, status, options = {}) {
-  const { returned_at = null, timeoutMs = 8000 } = options;
+  // 15s (was 8s): since PR #80 this endpoint makes TWO sequential Supabase
+  // round-trips for a return (status RPC + returned_by stamp), so the old 8s
+  // ceiling could abort a genuinely-successful return on a slow mobile link.
+  const { returned_at = null, timeoutMs = 15000 } = options;
   if (!id || !status) {
     return { ok: false, error: "missing_arg", detail: "id and status are required" };
   }
-  try {
+
+  // A single HTTP attempt. Resolves { res, data }; throws on network/abort.
+  const attempt = async () => {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
-    const token = await getAuthToken();
-    const res = await fetch("/api/update-reservation-status", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body:    JSON.stringify({ id: String(id), status, returned_at }),
-      signal:  ctrl.signal,
-    });
-    clearTimeout(t);
-    const data = await res.json().catch(() => ({}));
+    try {
+      const token = await getAuthToken();
+      const res = await fetch("/api/update-reservation-status", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body:    JSON.stringify({ id: String(id), status, returned_at }),
+        signal:  ctrl.signal,
+      });
+      const data = await res.json().catch(() => ({}));
+      return { res, data };
+    } finally {
+      clearTimeout(t);
+    }
+  };
+
+  try {
+    let { res, data } = await attempt();
+
+    // A stale / rotated JWT is the most common real cause of a staff member's
+    // "הוחזר" click silently failing (the server can't confirm the staff role
+    // → 403). Refresh the Supabase session once, drop the cached token, and
+    // retry a single time before surfacing the error to the user.
+    if ((res.status === 401 || res.status === 403) && !res.ok) {
+      try { await supabase.auth.refreshSession(); } catch { /* fall through to retry with whatever token we have */ }
+      invalidateAuthTokenCache();
+      ({ res, data } = await attempt());
+    }
+
     if (!res.ok || data.ok === false) {
       console.error("updateReservationStatus error:", res.status, data);
       return {
-        ok:     false,
-        error:  data.error  || "rpc_error",
-        detail: data.detail || `HTTP ${res.status}`,
+        ok:         false,
+        error:      data.error  || "rpc_error",
+        detail:     data.detail || `HTTP ${res.status}`,
+        httpStatus: res.status,
       };
     }
     return {
@@ -354,9 +379,35 @@ export async function updateReservationStatus(id, status, options = {}) {
       returned_by_name:     data.returned_by_name ?? null,
     };
   } catch (e) {
-    console.error("updateReservationStatus network error:", e);
-    return { ok: false, error: "network_error", detail: e.message };
+    // Distinguish a client-side abort (timeout) from a real network failure so
+    // the UI can tell the user "slow network, try again" vs a generic error.
+    const aborted = e?.name === "AbortError";
+    console.error("updateReservationStatus", aborted ? "timeout" : "network error:", e);
+    return { ok: false, error: aborted ? "timeout" : "network_error", detail: e.message };
   }
+}
+
+// Map a failed updateReservationStatus() result to a specific, actionable
+// Hebrew toast. A generic "server error" hid the real cause (most often a
+// stale session → 403) and made staff think the return button was broken.
+// Shared by every caller (ReservationsPage, DashboardPage) so the message is
+// consistent everywhere.
+export function reservationStatusErrorMessage(rpcResult) {
+  const http = rpcResult?.httpStatus;
+  const err  = rpcResult?.error;
+  if (http === 401 || http === 403 || err === "Forbidden") {
+    return "אין הרשאת מחסן או שההתחברות פגה — התנתק/י והתחבר/י מחדש ונסה/י שוב";
+  }
+  if (err === "timeout") {
+    return "השרת לא הגיב בזמן (רשת איטית) — נסה/י שוב";
+  }
+  if (err === "network_error") {
+    return "בעיית רשת — בדוק/י את החיבור ונסה/י שוב";
+  }
+  if (err === "not_found") {
+    return "הבקשה לא נמצאה — רענן/י את הדף ונסה/י שוב";
+  }
+  return "שגיאה בעדכון הסטטוס בשרת — נסה/י שוב";
 }
 
 // ─── DELETE RESERVATION (atomic, no flicker) ──────────────────────────────────

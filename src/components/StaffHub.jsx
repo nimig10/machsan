@@ -136,7 +136,10 @@ function TodayTasksPanel({ myToday, refreshMyToday }) {
           {/* Equipment-loan requests this staff member handles today (out/return + time) */}
           {today?.loanHandling?.length > 0 && (
             <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 6 }}>בקשות השאלה שלי</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 2 }}>בקשות השאלה שלי</div>
+              <div style={{ fontSize: 10.5, color: "var(--text3)", marginBottom: 6, lineHeight: 1.3 }}>
+                סימון אישי בלבד — <b>אינו מבצע החזרה במערכת</b>. להחזרת ציוד יש ללחוץ "הוחזר" בבקשה עצמה (תפעול מחסן ← בקשות).
+              </div>
               {today.loanHandling.map(l => (
                 <div key={l.assignmentId || (l.reservationId + l.kind)} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 4 }}>
                   <input type="checkbox" checked={!!l.done} onChange={e => toggleLoan(l.assignmentId, e.target.checked)} style={{ cursor: "pointer", flexShrink: 0, width: 18, height: 18 }} />

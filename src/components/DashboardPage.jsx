@@ -1,6 +1,6 @@
 // DashboardPage.jsx — admin dashboard page
 import { useState } from "react";
-import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, getAuthToken, syncReservationStatusToBlob, getLoanTypeColor, normalizeName, groupReservationItemsByCategory, stretchOverdueForCalendar } from "../utils.js";
+import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, reservationStatusErrorMessage, getAuthToken, syncReservationStatusToBlob, getLoanTypeColor, normalizeName, groupReservationItemsByCategory, stretchOverdueForCalendar } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import { UpdateReviewModal } from "./UpdateReviewModal.jsx";
@@ -639,7 +639,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                       const rpcResult = await updateReservationStatus(res.id, "הוחזר", { returned_at: returnedAt });
                       if (!rpcResult.ok) {
                         console.error("return RPC failed:", rpcResult);
-                        if(showToast) showToast("error", "שגיאה ברישום ההחזרה בשרת");
+                        if(showToast) showToast("error", reservationStatusErrorMessage(rpcResult));
                         return;
                       }
                       // Same actor-stamp carry-over as ReservationsPage — see the
