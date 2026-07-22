@@ -18,6 +18,7 @@ DECLARE
 BEGIN
   DELETE FROM public.reservations_new WHERE id LIKE 'test-upd-v3-%';
   DELETE FROM public.equipment WHERE id LIKE 'test-upd-v3-%';
+  DELETE FROM public.activity_logs WHERE entity_id LIKE 'test-upd-v3-%';
 
   INSERT INTO public.equipment (id, name, category, total_quantity) VALUES
     (eq_old, 'ציוד ישן v3', 'טסט', 2),
@@ -80,6 +81,7 @@ BEGIN
 
   DELETE FROM public.reservations_new WHERE id LIKE 'test-upd-v3-%';
   DELETE FROM public.equipment WHERE id LIKE 'test-upd-v3-%';
+  DELETE FROM public.activity_logs WHERE entity_id LIKE 'test-upd-v3-%';
 END;
 $function$;
 
