@@ -1,7 +1,7 @@
 // PublicForm.jsx — public loan request form
 import { AlertTriangle, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mail, Mic, Minus, Moon, Package, Pencil, Phone, Save, School, Search, Settings, Shield, ShieldCheck, Trash2, User, X, XCircle } from "lucide-react";
 import { useEffect, useState, useRef, useMemo } from "react";
-import { formatDate, formatTime, formatLocalDateInput, parseLocalDate, today, getAvailable, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, EXTERNAL_LOAN_TYPES, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR, groupReservationItemsByCategory, stretchOverdueForCalendar } from "../utils.js";
+import { formatDate, formatTime, formatLocalDateInput, parseLocalDate, today, getAvailable, computeEquipmentAvailability, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, EXTERNAL_LOAN_TYPES, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR, groupReservationItemsByCategory, deriveVisibleCategories, stretchOverdueForCalendar } from "../utils.js";
 import { supabase } from "../supabaseClient.js";
 import { listStudents } from "../utils/studentsApi.js";
 import { listLessons } from "../utils/lessonsApi.js";
@@ -9,6 +9,8 @@ import { listStudios } from "../utils/studiosApi.js";
 import { listStudioBookings, upsertStudioBooking, deleteStudioBooking } from "../utils/studioBookingsApi.js";
 import { buildLessonStudioBookings } from "../utils/lessonBookings.js";
 import { rangesOverlap } from "../utils/studioOverlap.js";
+import { loanMaxDays, computeMinBorrowDate, SOUND_MIN_LEAD_TIME_MS, getUpdateLeadTimeState, computeUpdateDeadline } from "../utils/loanPolicy.js";
+import { listReservationUpdates, submitReservationUpdate, MAX_RESERVATION_UPDATES } from "../utils/reservationUpdatesApi.js";
 import { useNotifications } from "../hooks/useNotifications.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import AIChatBot from "./AIChatBot.jsx";
@@ -1225,6 +1227,49 @@ function clearFormDraft() {
   try { sessionStorage.removeItem(FORM_DRAFT_KEY); } catch { /* ignore */ }
 }
 
+// ── Equipment-UPDATE draft persistence (localStorage) ──────────────────────
+// Unlike the creation draft above (sessionStorage), an in-progress equipment
+// update on an EXISTING reservation must survive the browser closing entirely
+// — a student can start a draft, quit the app, and come back days later to the
+// same staged changes. So it lives in localStorage, keyed by the student's
+// email (a shared device never leaks one student's draft to another) and, per
+// email, by reservation id (a student may have a draft on more than one
+// reservation over time). Entries carry a savedAt so stale drafts are pruned,
+// and the restore path re-validates each op against the live reservation
+// before re-hydrating it (see restore effect). Shape:
+//   { [emailLower]: { [reservationId]: { ops:[...], savedAt: ms } } }
+const UPDATE_DRAFT_KEY = "reservation_update_draft_v1";
+const UPDATE_DRAFT_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+function readUpdateDraftStore() {
+  try {
+    const raw = localStorage.getItem(UPDATE_DRAFT_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch { return {}; }
+}
+function writeUpdateDraftStore(store) {
+  try { localStorage.setItem(UPDATE_DRAFT_KEY, JSON.stringify(store)); } catch { /* quota — ignore */ }
+}
+function saveUpdateDraft(email, resId, ops) {
+  const key = String(email || "").toLowerCase().trim();
+  if (!key || !resId) return;
+  const store = readUpdateDraftStore();
+  const mine = store[key] && typeof store[key] === "object" ? store[key] : {};
+  if (Array.isArray(ops) && ops.length > 0) mine[String(resId)] = { ops, savedAt: Date.now() };
+  else delete mine[String(resId)];
+  store[key] = mine;
+  writeUpdateDraftStore(store);
+}
+function clearUpdateDraft(email, resId) {
+  const key = String(email || "").toLowerCase().trim();
+  if (!key) return;
+  const store = readUpdateDraftStore();
+  if (!store[key]) return;
+  delete store[key][String(resId)];
+  writeUpdateDraftStore(store);
+}
+
 // ── Production crew snapshot (single source of truth) ───────────────────────
 // Crew is defined ONCE at the production level (production_crew, roles
 // photographer/sound, status 'approved') — there is NO per-date-range crew.
@@ -2096,6 +2141,19 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   // between setState and `disabled` reflecting on the DOM, so a fast double-click
   // can fire onClick twice. The ref updates immediately and blocks the second call.
   const inflightModifyRef = useRef(new Set());
+  // ── Student equipment-list UPDATES (add / increase) ──────────────────────
+  // The client-side DRAFT is the only "not yet committed" stage: ops are
+  // staged locally and sent together as ONE update. Submission is final and
+  // counted (max 2 per reservation) — there is no withdrawal after sending.
+  const [reservationUpdates, setReservationUpdates] = useState([]); // ledger rows + nested pending items
+  const [updDraft, setUpdDraft] = useState(null);           // {resId, ops:[{action,equipment_id?,name?,quantity,item_id?,target_eq_id?}]}
+  const [updPicker, setUpdPicker] = useState(null);         // {resId}
+  const [updPickerSearch, setUpdPickerSearch] = useState("");
+  const [updPickerType, setUpdPickerType] = useState("all"); // sound/photo type filter
+  const [updPickerCats, setUpdPickerCats] = useState([]);    // selected category chips (empty = all)
+  const restoredUpdateDraftRef = useRef(false);              // one-shot restore guard per session
+  const [updSubmitting, setUpdSubmitting] = useState(false);
+  const [confirmSubmitUpdate, setConfirmSubmitUpdate] = useState(null); // {resId} — the irreversible-commit gate
   const fmtDate = (d) => { if (!d) return ""; const [y,m,dd] = d.split("-"); return `${dd}.${m}.${y}`; };
   const [showEquipmentAiModal, setShowEquipmentAiModal] = useState(false);
   const [equipmentAiPrompt, setEquipmentAiPrompt] = useState("");
@@ -2293,6 +2351,13 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       setReservations(res);
       loadMyReports(res);
     }
+    // Update ledger + pending items for the "ההזמנות שלי" cards (counter,
+    // "בדיקת עדכון" badge, pending-items panel). Read-only; tiny table.
+    try {
+      setReservationUpdates(await listReservationUpdates());
+    } catch (e) {
+      console.warn("[PublicForm] listReservationUpdates failed", e?.message || e);
+    }
   };
 
   // Pull the student's own equipment reports for their active reservations so the
@@ -2405,6 +2470,154 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       setBusyItemIds(prev => { const next = new Set(prev); next.delete(busyKey); return next; });
     }
   };
+
+  // ── Equipment-list update draft (add / increase only) ─────────────────────
+  // How many units of `eq` can still be added to reservation `rRow` given the
+  // current draft: other blocking loans (excluding self — its own approved
+  // items don't compete with its own additions), minus the external hold,
+  // minus what's already on the reservation, minus what the draft already
+  // stages. Mirrors the final-fit check both new RPCs run server-side.
+  const availForUpdate = (rRow, eq, draftOps = []) => {
+    if (!rRow?.borrow_date || !rRow?.return_date || !eq) return 0;
+    const reqStart = toDateTime(rRow.borrow_date, rRow.borrow_time || "00:00");
+    const reqEnd = toDateTime(rRow.return_date, rRow.return_time || "23:59");
+    const base = computeEquipmentAvailability(eq.id, reqStart, reqEnd, reservations, equipment, rRow.id).available;
+    const extHold = EXTERNAL_LOAN_TYPES.includes(rRow.loan_type) ? (Number(eq.externalLoanHoldCount) || 0) : 0;
+    const curQty = (rRow.items || [])
+      .filter(i => String(i.equipment_id) === String(eq.id))
+      .reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+    const staged = draftOps.reduce((s, o) => {
+      if (o.action === "add" && String(o.equipment_id) === String(eq.id)) return s + o.quantity;
+      if (o.action === "increase" && String(o.target_eq_id) === String(eq.id)) return s + o.quantity;
+      return s;
+    }, 0);
+    return Math.max(0, base - extHold - curQty - staged);
+  };
+
+  // Hypothetical private-loan limited quantity after the draft is applied —
+  // exact getPrivateLoanLimitedQty semantics on the merged list.
+  const draftPrivateQty = (rRow, draftOps = []) => {
+    if (rRow?.loan_type !== "פרטית") return 0;
+    const mergedItems = [
+      ...(rRow.items || []),
+      ...draftOps.map(o => ({
+        equipment_id: o.action === "increase" ? o.target_eq_id : o.equipment_id,
+        quantity: o.quantity,
+      })),
+    ];
+    return getPrivateLoanLimitedQty(mergedItems, equipment);
+  };
+
+  // Stage one op into the draft; merges consecutive increases on the same item.
+  const stageDraftOp = (rRow, op) => {
+    setUpdDraft(prev => {
+      if (!prev || String(prev.resId) !== String(rRow.id)) return prev;
+      if (op.action === "increase") {
+        const existing = prev.ops.find(o => o.action === "increase" && Number(o.item_id) === Number(op.item_id));
+        if (existing) {
+          return { ...prev, ops: prev.ops.map(o => o === existing ? { ...o, quantity: o.quantity + op.quantity } : o) };
+        }
+      }
+      return { ...prev, ops: [...prev.ops, op] };
+    });
+  };
+
+  // Final commit — irreversible and counted. Only reached through the confirm
+  // modal (the draft itself is the "not yet committed" safety stage).
+  const submitUpdateDraft = async () => {
+    if (!updDraft || !updDraft.ops.length || updSubmitting) return;
+    setUpdSubmitting(true);
+    const ops = updDraft.ops.map(o => ({
+      action: o.action,
+      quantity: o.quantity,
+      ...(o.equipment_id ? { equipment_id: String(o.equipment_id), name: o.name || "" } : {}),
+      ...(o.item_id != null ? { item_id: Number(o.item_id) } : {}),
+    }));
+    const submittedResId = String(updDraft.resId);
+    const resu = await submitReservationUpdate(submittedResId, ops);
+    setUpdSubmitting(false);
+    setConfirmSubmitUpdate(null);
+    if (resu?.ok) {
+      clearUpdateDraft(loggedInStudent?.email, submittedResId); // committed → forget the draft
+      setUpdDraft(null);
+      showToast("success", resu.mode === "pending"
+        ? "העדכון נשלח לבדיקת צוות המחסן — תתקבל הודעה לאחר הבדיקה"
+        : "העדכון בוצע והפריטים נוספו לבקשה");
+    } else {
+      const msg = resu?.error === "lead_time" ? (resu.reason || "חלון ההתראה של סוג ההשאלה נסגר — לא ניתן להוסיף פריטים.")
+        : resu?.error === "update_limit" ? "נוצלו 2 מתוך 2 העדכונים לבקשה זו."
+        : resu?.error === "update_pending" ? "עדכון קודם עדיין ממתין לבדיקת המחסן."
+        : resu?.error === "private_limit" ? "שים לב אין לחרוג מ-4 פריטים בהשאלה פרטית."
+        : resu?.error === "not_available" ? "אחד הפריטים כבר אינו זמין בתאריכים אלה — רענן ונסה שוב."
+        : resu?.error === "external_restricted" ? "אחד הפריטים מוגבל להשאלת חוץ ולא ניתן להוסיפו."
+        : resu?.error === "already_started" ? "מועד האיסוף כבר הגיע — לא ניתן לעדכן את הבקשה."
+        : resu?.error === "status_not_editable" ? "הבקשה כבר אינה במצב שניתן לעדכן."
+        : "שליחת העדכון נכשלה. נסה שוב.";
+      showToast("error", msg);
+    }
+    // Either way — refresh so counter/badge/pending panel reflect the DB truth.
+    loadReservationsData();
+  };
+
+  // Persist the active update draft to localStorage on every change, so it
+  // survives a full app close. Keyed by student email + reservation id.
+  // Cancel and submit clear their own entry explicitly; here we only write the
+  // live draft (or remove it once its ops are emptied).
+  useEffect(() => {
+    const email = loggedInStudent?.email;
+    if (!email || !updDraft) return;
+    saveUpdateDraft(email, updDraft.resId, updDraft.ops);
+  }, [updDraft, loggedInStudent?.email]);
+
+  // Restore a saved draft when the student returns (once per session). Runs
+  // only after reservations + equipment are loaded so op targets can be
+  // validated. A draft is dropped if the reservation is gone / no longer
+  // editable / past its lead-time / at the 2-update cap / already has a pending
+  // update; individual ops are dropped if their target item or equipment no
+  // longer exists. Whatever remains is re-hydrated into the draft and its card
+  // is opened, so the student lands exactly where they left off.
+  useEffect(() => {
+    if (restoredUpdateDraftRef.current) return;
+    const email = String(loggedInStudent?.email || "").toLowerCase().trim();
+    if (!email || reservations.length === 0 || equipment.length === 0) return;
+    restoredUpdateDraftRef.current = true;
+
+    const store = readUpdateDraftStore();
+    const mine = store[email] && typeof store[email] === "object" ? store[email] : {};
+    const now = Date.now();
+    let changed = false;
+    let best = null; // most-recently-saved still-valid draft → auto-open
+
+    for (const [resId, entry] of Object.entries(mine)) {
+      const drop = () => { delete mine[resId]; changed = true; };
+      if (!entry || !Array.isArray(entry.ops) || (now - (entry.savedAt || 0)) > UPDATE_DRAFT_TTL_MS) { drop(); continue; }
+      const rRow = reservations.find(x => String(x.id) === String(resId));
+      if (!rRow) { drop(); continue; }
+      const st = getEffectiveStatus(rRow);
+      const editable = (st === "ממתין" || st === "אישור ראש מחלקה" || st === "מאושר") &&
+        rRow.loan_type !== "שיעור" && rRow.booking_kind !== "lesson";
+      const upds = reservationUpdates.filter(u => String(u.reservation_id) === String(resId));
+      const hasPending = upds.some(u => u.review_status === "pending");
+      const leadOk = getUpdateLeadTimeState(rRow).allowed;
+      if (!editable || hasPending || upds.length >= MAX_RESERVATION_UPDATES || !leadOk) { drop(); continue; }
+      // keep only ops whose targets still exist
+      const validOps = entry.ops.filter(o => {
+        if (o.action === "increase") return (rRow.items || []).some(i => Number(i.id) === Number(o.item_id));
+        if (o.action === "add") return equipment.some(e => String(e.id) === String(o.equipment_id));
+        return false;
+      });
+      if (validOps.length === 0) { drop(); continue; }
+      if (validOps.length !== entry.ops.length) { entry.ops = validOps; changed = true; }
+      if (!best || (entry.savedAt || 0) > (best.savedAt || 0)) best = { resId: String(resId), ops: validOps, savedAt: entry.savedAt };
+    }
+
+    if (changed) { store[email] = mine; writeUpdateDraftStore(store); }
+    if (best) {
+      setUpdDraft({ resId: best.resId, ops: best.ops });
+      setExpandedResId(best.resId);
+      showToast("info", "שוחזרה טיוטת עדכון שלא נשלחה");
+    }
+  }, [reservations, equipment, reservationUpdates, loggedInStudent?.email]);
 
   const loadDailySchedule = async () => {
     const lessons = await listLessons();
@@ -3055,9 +3268,10 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     }));
   };
 
-  // "8-day notice" for הפקה is INCLUSIVE — counting both the submission day
-  // and the borrow day — so the calendar gap is 7 days. Mirrored in ProductionEditor.minShootISO().
-  const minDays = form.loan_type==="פרטית" ? 1 : form.loan_type==="סאונד" ? 0 : form.loan_type==="קולנוע יומית" ? 0 : form.loan_type==="הפקה" ? 7 : 7;
+  // Lead-time / duration rules live in loanPolicy.js — the ONE source shared
+  // with the reservation-update flow and its server-side re-check. The "8-day
+  // notice" for הפקה is INCLUSIVE — counting both the submission day and the
+  // borrow day — so the calendar gap is 7 days. Mirrored in ProductionEditor.minShootISO().
   const isCinemaLoan = form.loan_type==="קולנוע יומית";
   const isWeekend = (dateStr) => {
     if(!dateStr) return false;
@@ -3067,11 +3281,6 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const addDaysLocal = (dateStr, days) => {
     const d = parseLocalDate(dateStr);
     d.setDate(d.getDate() + days);
-    return formatLocalDateInput(d);
-  };
-  const moveToNextWeekday = (dateStr) => {
-    const d = parseLocalDate(dateStr);
-    while (d.getDay() === 5 || d.getDay() === 6) d.setDate(d.getDate() + 1);
     return formatLocalDateInput(d);
   };
   const getPastLoanTimeError = (candidateForm) => {
@@ -3094,13 +3303,8 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 
     const candidateIsCinema = loanType === "קולנוע יומית";
     const candidateIsSound = loanType === "סאונד";
-    const candidateMinDays = loanType === "פרטית" ? 1 : candidateIsSound ? 0 : candidateIsCinema ? 0 : 7;
-    const candidateMinDate = (() => {
-      const date = new Date();
-      date.setDate(date.getDate() + (candidateIsCinema ? 1 : candidateMinDays));
-      return moveToNextWeekday(formatLocalDateInput(date));
-    })();
-    const candidateMaxDays = loanType === "פרטית" ? 4 : candidateIsCinema ? 1 : 7;
+    const candidateMinDate = computeMinBorrowDate(loanType);
+    const candidateMaxDays = loanMaxDays(loanType);
     const candidateBorrowWeekend = isWeekend(borrowDate);
     const candidateReturnWeekend = isWeekend(returnDate);
     const candidateReturnBeforeBorrow = parseLocalDate(returnDate) < parseLocalDate(borrowDate);
@@ -3143,18 +3347,8 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   };
   const borrowWeekend = isWeekend(form.borrow_date);
   const returnWeekend = isWeekend(form.return_date);
-  const minDate = (() => {
-    if (isCinemaLoan) {
-      // Cinema: 24h ahead minimum
-      const d = new Date();
-      d.setDate(d.getDate() + 1);
-      return moveToNextWeekday(formatLocalDateInput(d));
-    }
-    const d = new Date();
-    d.setDate(d.getDate() + minDays);
-    return moveToNextWeekday(formatLocalDateInput(d));
-  })();
-  const maxDays = form.loan_type==="פרטית" ? 4 : isCinemaLoan ? 1 : 7;
+  const minDate = computeMinBorrowDate(form.loan_type);
+  const maxDays = loanMaxDays(form.loan_type);
   const tooSoon = form.loan_type!=="סאונד" && !isCinemaLoan && !!form.borrow_date && form.borrow_date < minDate;
   const cinemaTooSoon = isCinemaLoan && !!form.borrow_date && form.borrow_date < minDate;
   const loanDays = (form.borrow_date && form.return_date)
@@ -3371,7 +3565,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   // Sound loan: equipment must be requested at least 3 hours before the
   // start of the studio session it's tied to. (Only relevant for sound —
   // private/production/cinema loans use their own lead-time rules above.)
-  const SOUND_MIN_LEAD_TIME_MS = 3 * 60 * 60 * 1000;
+  // SOUND_MIN_LEAD_TIME_MS is imported from loanPolicy.js — single source.
   const soundLeadMs = (isSoundLoan && form.studio_booking_id && form.borrow_date && form.borrow_time)
     ? (toDateTime(form.borrow_date, form.borrow_time) - Date.now())
     : null;
@@ -5208,6 +5402,19 @@ ${inventory}
             return myRes.map(r=>{
               const isExp=expandedResId===r.id;
               const st=getEffectiveStatus(r);
+              // ── equipment-update gate for this card ──
+              const updsForRes=reservationUpdates.filter(u=>String(u.reservation_id)===String(r.id));
+              const updatesUsed=updsForRes.length;
+              const pendingUpd=updsForRes.find(u=>u.review_status==="pending")||null;
+              const updLead=getUpdateLeadTimeState(r);
+              const updDeadline=computeUpdateDeadline(r);
+              const isEditableStatus=(st==="ממתין"||st==="אישור ראש מחלקה"||st==="מאושר")&&r.loan_type!=="שיעור"&&r.booking_kind!=="lesson";
+              const canStartUpdate=isEditableStatus&&!pendingUpd&&updatesUsed<MAX_RESERVATION_UPDATES&&updLead.allowed;
+              const updateBlockReason=!isEditableStatus?""
+                :pendingUpd?"עדכון קודם ממתין לבדיקת המחסן — לא ניתן לשלוח עדכון נוסף עד לסיום הבדיקה."
+                :updatesUsed>=MAX_RESERVATION_UPDATES?"נוצלו 2 מתוך 2 העדכונים לבקשה זו. ניתן עדיין להחסיר פריטים."
+                :!updLead.allowed?updLead.reason:"";
+              const inUpdateDraft=!!updDraft&&String(updDraft.resId)===String(r.id);
               const cardBg=st==="פעילה"?"rgba(100,181,246,0.08)":st==="באיחור"?"rgba(230,126,34,0.08)":r.loan_type==="סאונד"?"rgba(245,166,35,0.06)":r.loan_type==="הפקה"?"rgba(52,152,219,0.06)":r.loan_type==="קולנוע יומית"?"rgba(52,152,219,0.08)":r.loan_type==="שיעור"?"rgba(155,89,182,0.1)":"var(--surface2)";
               const cardBorder=st==="פעילה"?"rgba(100,181,246,0.35)":st==="באיחור"?"rgba(230,126,34,0.45)":r.loan_type==="סאונד"?"rgba(245,166,35,0.25)":r.loan_type==="הפקה"?"rgba(52,152,219,0.25)":r.loan_type==="קולנוע יומית"?"rgba(52,152,219,0.3)":r.loan_type==="שיעור"?"rgba(155,89,182,0.3)":"var(--border)";
               return (<div key={r.id} style={{borderRadius:10,border:`1px solid ${cardBorder}`,marginBottom:10,overflow:"hidden"}}>
@@ -5216,10 +5423,63 @@ ${inventory}
                     <div style={{fontWeight:700,fontSize:13}}>
                       <Calendar size={14} strokeWidth={1.75} color="var(--accent)" style={{flexShrink:0}} /> {fmtDate(r.borrow_date)}{r.borrow_time&&<span style={{color:"var(--accent)",marginRight:4}}> {formatTime(r.borrow_time)}</span>} ← {fmtDate(r.return_date)}{r.return_time&&<span style={{color:"var(--accent)",marginRight:4}}> {formatTime(r.return_time)}</span>}
                     </div>
-                    <div style={{fontSize:13,color:"var(--text)",marginTop:4,fontWeight:700}}>{r.loan_type&&<span style={{marginLeft:8,color:"var(--accent)"}}>{r.loan_type}</span>}{r.items?.length||0} פריטים</div>
+                    <div style={{fontSize:13,color:"var(--text)",marginTop:4,fontWeight:700,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                      <span>{r.loan_type&&<span style={{marginLeft:8,color:"var(--accent)"}}>{r.loan_type}</span>}{r.items?.length||0} פריטים</span>
+                      {/* Update allowance at a glance. The full counter banner only
+                          opens with the update draft, so these two dots are the
+                          always-visible, low-noise version of the same information. */}
+                      {isEditableStatus&&(()=>{
+                        const used=updatesUsed, cUsed=used>=MAX_RESERVATION_UPDATES?"#e67e22":used===1?"#f5a623":"#2ecc71";
+                        return (<span title={`בוצעו ${used} מתוך ${MAX_RESERVATION_UPDATES} עדכונים`} style={{display:"inline-flex",alignItems:"center",gap:4,flexShrink:0}}>
+                          {[0,1].map(i=>(
+                            <span key={i} style={{width:9,height:9,borderRadius:"50%",background:used>i?cUsed:"transparent",border:`1.5px solid ${used>i?cUsed:"rgba(245,166,35,0.5)"}`}}/>
+                          ))}
+                        </span>);
+                      })()}
+                    </div>
                   </div>
-                  <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0,flexWrap:"wrap",justifyContent:"flex-end"}}>
+                    {pendingUpd&&<span style={{background:"rgba(230,126,34,0.16)",color:"#e67e22",border:"1px solid rgba(230,126,34,0.45)",borderRadius:100,padding:"2px 10px",fontSize:11,fontWeight:800,whiteSpace:"nowrap"}}>בדיקת עדכון</span>}
                     <span style={{background:sBg(st),color:sColor(st),border:`1px solid ${sBorder(st)}`,borderRadius:100,padding:"2px 10px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{st}</span>
+                    {isEditableStatus&&(()=>{
+                      // Add-item entry point. Blocked states keep the button
+                      // visible but disabled — the reason renders inside the
+                      // expanded body (tooltips don't exist on mobile).
+                      if(inUpdateDraft){
+                        return (<button
+                          onClick={e=>{e.stopPropagation();clearUpdateDraft(loggedInStudent?.email,r.id);setUpdDraft(null);setUpdPicker(null);}}
+                          style={{background:"rgba(231,76,60,0.14)",color:"#e74c3c",border:"1px solid rgba(231,76,60,0.4)",borderRadius:4,padding:"3px 9px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}
+                        >בטל עדכון</button>);
+                      }
+                      return (<button
+                        disabled={!canStartUpdate}
+                        title={canStartUpdate?"":updateBlockReason}
+                        onClick={e=>{
+                          e.stopPropagation();
+                          if(!canStartUpdate){ if(!isExp) setExpandedResId(r.id); return; }
+                          // Re-open a saved draft for THIS reservation if one exists
+                          // (a student may hold drafts on several reservations; only
+                          // one auto-restores on load). Otherwise start fresh.
+                          const saved=readUpdateDraftStore()[String(loggedInStudent?.email||"").toLowerCase().trim()]?.[String(r.id)];
+                          const savedOps=Array.isArray(saved?.ops)?saved.ops.filter(o=>{
+                            if(o.action==="add") return equipment.some(e2=>String(e2.id)===String(o.equipment_id));
+                            if(o.action==="increase") return (r.items||[]).some(i=>Number(i.id)===Number(o.item_id));
+                            return false;
+                          }):[];
+                          setUpdDraft({resId:String(r.id),ops:savedOps});
+                          setRemovingItemsForResId(null);
+                          if(!isExp) setExpandedResId(r.id);
+                        }}
+                        style={{
+                          background:canStartUpdate?"rgba(46,204,113,0.14)":"var(--surface2)",
+                          color:canStartUpdate?"#2ecc71":"var(--text3)",
+                          border:canStartUpdate?"1px solid rgba(46,204,113,0.45)":"1px solid var(--border)",
+                          borderRadius:4,padding:"3px 9px",fontSize:11,fontWeight:700,
+                          cursor:canStartUpdate?"pointer":"not-allowed",whiteSpace:"nowrap",
+                          opacity:canStartUpdate?1:0.6,
+                        }}
+                      >➕ הוסף פריטים</button>);
+                    })()}
                     {(st==="ממתין"||st==="אישור ראש מחלקה"||st==="מאושר")&&r.loan_type!=="שיעור"&&r.booking_kind!=="lesson"&&(()=>{
                       const inRemoveMode=removingItemsForResId===r.id;
                       return (<button
@@ -5229,13 +5489,15 @@ ${inventory}
                             setRemovingItemsForResId(null);
                           } else {
                             setRemovingItemsForResId(r.id);
+                            setUpdDraft(null);
+                            setUpdPicker(null);
                             if(!isExp) setExpandedResId(r.id);
                           }
                         }}
                         style={{
-                          background:inRemoveMode?"rgba(231,76,60,0.14)":"var(--accent)",
-                          color:inRemoveMode?"#e74c3c":"#000",
-                          border:inRemoveMode?"1px solid rgba(231,76,60,0.4)":"none",
+                          background:inRemoveMode?"rgba(231,76,60,0.24)":"rgba(231,76,60,0.14)",
+                          color:"#e74c3c",
+                          border:"1px solid rgba(231,76,60,0.48)",
                           borderRadius:4,
                           padding:inRemoveMode?"3px 9px":"4px 10px",
                           fontSize:11,
@@ -5246,7 +5508,7 @@ ${inventory}
                           alignItems:"center",
                           gap:3,
                         }}
-                      >{inRemoveMode?"סיים":"החסרת פריטים"}</button>);
+                      >{inRemoveMode?"סיים":"− החסר פריטים"}</button>);
                     })()}
                     <span style={{fontSize:13,color:"var(--text3)",display:"inline-block",transform:isExp?"rotate(180deg)":"rotate(0deg)",transition:"transform 0.2s"}}>▾</span>
                   </div>
@@ -5266,6 +5528,83 @@ ${inventory}
                   const photogResCerts = photogRec?.certs || {};
                   const soundResCerts = soundRec?.certs || {};
                   return (<div style={{padding:"12px 14px",borderTop:`1px solid ${sBorder(st)}`,display:"flex",flexDirection:"column",gap:10}}>
+                  {/* ── update counter + status strip (prominent) ── */}
+                  {isEditableStatus&&(()=>{
+                    const usedUp=updatesUsed>=MAX_RESERVATION_UPDATES;
+                    // Prominent counter banner: a 2-dot progress + bold text, colored
+                    // by how many updates remain (green→amber→red).
+                    const dotOn=updatesUsed>=1, dotOn2=updatesUsed>=2;
+                    const accent=usedUp?"#e67e22":updatesUsed===1?"#f5a623":"#2ecc71";
+                    return (<div style={{display:"flex",flexDirection:"column",gap:8}}>
+                      {/* The full banner is heavy, so it is reserved for the moment
+                          the student actually enters update mode ("הוסף פריטים").
+                          Outside of that, the two dots beside the item count in the
+                          card header carry the same allowance information. */}
+                      {inUpdateDraft&&(
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",background:`${accent}14`,border:`1.5px solid ${accent}66`,borderRadius:10,padding:"10px 14px"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:10}}>
+                          <span style={{fontSize:20}}>🔁</span>
+                          <div>
+                            <div style={{fontSize:14,fontWeight:900,color:accent,lineHeight:1.2}}>
+                              {usedUp?`נוצלו כל ${MAX_RESERVATION_UPDATES} העדכונים`:`בוצעו ${updatesUsed} מתוך ${MAX_RESERVATION_UPDATES} עדכונים`}
+                            </div>
+                            {/* The "X of 2" headline already carries the count —
+                                a second line restating it read as noise. Kept
+                                only for the used-up case, where it says what is
+                                still possible rather than repeating the number. */}
+                            {usedUp&&(
+                              <div style={{fontSize:11,color:"var(--text3)",fontWeight:600,marginTop:2}}>
+                                ניתן עדיין להחסיר פריטים בלבד
+                              </div>
+                            )}
+                            {!usedUp&&(
+                              <div style={{fontSize:11,color:"#f5a623",fontWeight:800,marginTop:5,display:"flex",alignItems:"center",gap:4}}>
+                                <AlertTriangle size={12} strokeWidth={2.25} /> שים לב: הוספת פריטים נחשבת לעדכון.
+                              </div>
+                            )}
+                            {/* When does the ability to update close? */}
+                            {!usedUp&&!pendingUpd&&updLead.allowed&&updDeadline&&(
+                              <div style={{fontSize:11,color:"#f5a623",fontWeight:800,marginTop:4,display:"flex",alignItems:"center",gap:4}}>
+                                ⏳ ניתן להוסיף ולעדכן פריטים עד {fmtDate(updDeadline.date)} בשעה {updDeadline.time}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {/* 2-dot progress indicator. The empty dot used var(--border),
+                            which is nearly invisible on the dark panel — its outline is
+                            now an accent tint so "how many are left" reads at a glance. */}
+                        <div style={{display:"flex",gap:6,flexShrink:0}}>
+                          <span style={{width:14,height:14,borderRadius:"50%",background:dotOn?accent:"transparent",border:`2px solid ${dotOn?accent:"rgba(245,166,35,0.55)"}`,boxShadow:dotOn?`0 0 0 2px ${accent}22`:"none"}}/>
+                          <span style={{width:14,height:14,borderRadius:"50%",background:dotOn2?accent:"transparent",border:`2px solid ${dotOn2?accent:"rgba(245,166,35,0.55)"}`,boxShadow:dotOn2?`0 0 0 2px ${accent}22`:"none"}}/>
+                        </div>
+                      </div>
+                      )}
+                      {/* No "last update outcome" line: the student already gets a
+                          full breakdown by email (approved / reduced / rejected +
+                          the staff note), so repeating a one-word verdict here was
+                          redundant noise on the card. */}
+                      {!inUpdateDraft&&updateBlockReason&&(
+                        <div style={{fontSize:12,color:"#e67e22",fontWeight:700,lineHeight:1.6,background:"rgba(230,126,34,0.08)",border:"1px solid rgba(230,126,34,0.3)",borderRadius:8,padding:"8px 12px"}}>
+                          ⓘ {updateBlockReason}
+                        </div>
+                      )}
+                    </div>);
+                  })()}
+                  {/* ── pending items panel ("פריטים בבדיקה") ── */}
+                  {pendingUpd&&(pendingUpd.items||[]).filter(pi=>pi.review_state==="pending").length>0&&(
+                    <div style={{border:"1px solid rgba(230,126,34,0.45)",background:"rgba(230,126,34,0.08)",borderRadius:8,padding:"10px 12px"}}>
+                      <div style={{fontSize:12,fontWeight:800,color:"#e67e22",marginBottom:6}}>🕓 פריטים בבדיקה — ממתינים לאישור המחסן</div>
+                      {(pendingUpd.items||[]).filter(pi=>pi.review_state==="pending").map(pi=>(
+                        <div key={pi.id} style={{fontSize:12,color:"var(--text)",fontWeight:600,lineHeight:1.9}}>
+                          {pi.action==="increase"
+                            ?<>➕ {pi.name||"פריט"} — תוספת כמות: {pi.quantity}</>
+                            :<>➕ {pi.name||"פריט"} — כמות: {pi.quantity}</>}
+                        </div>
+                      ))}
+                      <div style={{fontSize:10,color:"var(--text3)",marginTop:6}}>הפריטים יתווספו לבקשה רק לאחר אישור צוות המחסן. הציוד המאושר שלך נשאר ללא שינוי.</div>
+                    </div>
+                  )}
+                  {pendingUpd&&<div style={{fontSize:12,fontWeight:800,color:"var(--accent)"}}>✅ ציוד מאושר</div>}
                   {groupReservationItemsByCategory(r.items, equipment).map(group=>(
                   <div key={group.category} style={{display:"flex",flexDirection:"column",gap:10}}>
                   <div style={{fontSize:12,fontWeight:800,color:"var(--accent)",paddingTop:6}}>{group.category}</div>
@@ -5284,8 +5623,25 @@ ${inventory}
                           :<span style={{fontSize:30,flexShrink:0}}>{img||<Package size={30} strokeWidth={1.75} color="var(--accent)" />}</span>}
                         <div style={{flex:1}}>
                           <div style={{fontWeight:700,fontSize:13}}>{eq?.name||item.name||"פריט"}</div>
-                          <div style={{fontSize:13,color:"var(--text)",fontWeight:700,marginTop:2,display:"flex",alignItems:"center",gap:8}}>
+                          <div style={{fontSize:13,color:"var(--text)",fontWeight:700,marginTop:2,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                             <span>כמות: <span style={{color:"var(--accent)"}}>{item.quantity}</span></span>
+                            {inUpdateDraft&&(()=>{
+                              // Draft-mode control: stage +1 (increase) on an existing item.
+                              const stagedInc=updDraft.ops.find(o=>o.action==="increase"&&Number(o.item_id)===Number(item.id));
+                              const eqRow=equipment.find(e=>String(e.id)===String(item.equipment_id));
+                              const canInc=eqRow?availForUpdate(r,eqRow,updDraft.ops)>0:false;
+                              const privBlocked=r.loan_type==="פרטית"&&draftPrivateQty(r,updDraft.ops)>=4&&!(eqRow?.privateLoanUnlimited);
+                              return (<>
+                                <button
+                                  type="button"
+                                  disabled={!canInc||privBlocked}
+                                  title={privBlocked?"אין לחרוג מ-4 פריטים בהשאלה פרטית":!canInc?"אין יחידות זמינות בתאריכים אלה":"הוסף יחידה (בטיוטה)"}
+                                  onClick={e=>{e.stopPropagation();if(!canInc||privBlocked)return;stageDraftOp(r,{action:"increase",item_id:Number(item.id),target_eq_id:String(item.equipment_id),name:eqRow?.name||item.name||"פריט",quantity:1});}}
+                                  style={{background:(!canInc||privBlocked)?"var(--surface2)":"rgba(46,204,113,0.14)",color:(!canInc||privBlocked)?"var(--text3)":"#2ecc71",border:(!canInc||privBlocked)?"1px solid var(--border)":"1px solid rgba(46,204,113,0.45)",borderRadius:6,width:22,height:22,padding:0,fontSize:14,fontWeight:700,cursor:(!canInc||privBlocked)?"not-allowed":"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",lineHeight:1,opacity:(!canInc||privBlocked)?0.5:1}}
+                                >+</button>
+                                {stagedInc&&<span style={{fontSize:11,fontWeight:800,color:"#2ecc71"}}>+{stagedInc.quantity} בטיוטה</span>}
+                              </>);
+                            })()}
                             {removingItemsForResId===r.id&&(st==="ממתין"||st==="אישור ראש מחלקה"||st==="מאושר")&&r.loan_type!=="שיעור"&&r.booking_kind!=="lesson"&&(()=>{
                               const itemBusy=busyItemIds.has(Number(item.id));
                               return (<button
@@ -5351,6 +5707,52 @@ ${inventory}
                   })}
                   </div>
                   ))}
+                  {/* ── update draft panel ── */}
+                  {inUpdateDraft&&(
+                    <div style={{border:"1.5px solid rgba(46,204,113,0.45)",background:"rgba(46,204,113,0.06)",borderRadius:10,padding:"12px 14px",display:"flex",flexDirection:"column",gap:8}}>
+                      <div style={{fontSize:13,fontWeight:800,color:"#2ecc71"}}>📝 טיוטת עדכון — {updDraft.ops.length===0?"עדיין לא נוספו שינויים":`${updDraft.ops.length} שינויים`}</div>
+                      {updDraft.ops.map((o,oi)=>{
+                        // Resolve the equipment (image + name) for both op kinds:
+                        // add carries equipment_id, increase carries target_eq_id.
+                        const opEqId=o.action==="increase"?o.target_eq_id:o.equipment_id;
+                        const opEq=equipment.find(e=>String(e.id)===String(opEqId));
+                        const opImg=opEq?.image;
+                        return (<div key={oi} style={{display:"flex",alignItems:"center",gap:10,background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:8,padding:"8px 10px"}}>
+                          {opImg?.startsWith("data:")||opImg?.startsWith("http")
+                            ?<img src={opImg} alt="" style={{width:36,height:36,objectFit:"cover",borderRadius:6,flexShrink:0}}/>
+                            :<span style={{width:36,height:36,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{opImg||<Package size={26} strokeWidth={1.75} color="var(--accent)"/>}</span>}
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontWeight:800,fontSize:13,color:"var(--text)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{opEq?.name||o.name||"פריט"}</div>
+                            <div style={{fontSize:10,fontWeight:700,color:o.action==="increase"?"#f5a623":"#2ecc71"}}>
+                              {o.action==="increase"?"הגדלת כמות לפריט קיים":"פריט חדש בבקשה"}
+                            </div>
+                          </div>
+                          <span style={{fontSize:13,fontWeight:900,color:"var(--accent)",background:"var(--accent-glow)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:8,padding:"3px 10px",flexShrink:0,whiteSpace:"nowrap"}}>כמות: {o.quantity}</span>
+                          <button type="button" onClick={e=>{e.stopPropagation();setUpdDraft(prev=>prev?{...prev,ops:prev.ops.filter((_,i)=>i!==oi)}:prev);}}
+                            style={{background:"rgba(231,76,60,0.12)",color:"#e74c3c",border:"1px solid rgba(231,76,60,0.35)",borderRadius:6,width:24,height:24,padding:0,fontSize:12,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                            title="הסר מהטיוטה"><X size={13} strokeWidth={2}/></button>
+                        </div>);
+                      })}
+                      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:2}}>
+                        <button type="button"
+                          onClick={e=>{e.stopPropagation();setUpdPickerSearch("");setUpdPickerType("all");setUpdPickerCats([]);setUpdPicker({resId:String(r.id),mode:"add"});}}
+                          style={{background:"rgba(46,204,113,0.14)",color:"#2ecc71",border:"1px solid rgba(46,204,113,0.45)",borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:800,cursor:"pointer"}}
+                        >➕ הוסף פריט חדש</button>
+                        <button type="button"
+                          disabled={updDraft.ops.length===0||updSubmitting}
+                          onClick={e=>{e.stopPropagation();if(updDraft.ops.length===0)return;setConfirmSubmitUpdate({resId:String(r.id)});}}
+                          style={{background:updDraft.ops.length===0?"var(--surface2)":"var(--accent)",color:updDraft.ops.length===0?"var(--text3)":"#000",border:"none",borderRadius:8,padding:"8px 16px",fontSize:12,fontWeight:900,cursor:updDraft.ops.length===0?"not-allowed":"pointer",opacity:updDraft.ops.length===0?0.6:1}}
+                        >📤 עדכן בקשה</button>
+                      </div>
+                      <div style={{display:"flex",alignItems:"flex-start",gap:8,background:"rgba(245,166,35,0.1)",border:"1.5px solid rgba(245,166,35,0.4)",borderRadius:8,padding:"10px 12px",marginTop:2}}>
+                        <span style={{fontSize:16,flexShrink:0,lineHeight:1.3}}>⚠️</span>
+                        <div style={{fontSize:12,color:"var(--text)",lineHeight:1.7,fontWeight:600}}>
+                          <div>השינויים נשמרים כ<b>טיוטה</b> עד הלחיצה על <b>"עדכן בקשה"</b>.</div>
+                          <div style={{color:"#f5a623",fontWeight:800,marginTop:2}}>שליחת עדכון היא סופית ונספרת במונה.</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {removingItemsForResId===r.id && (r.items?.length||0)>0 && (
                     <button
                       type="button"
@@ -5396,6 +5798,210 @@ ${inventory}
         </div>
       </div>
     </div>
+    {/* ── equipment picker for the update draft (add only) ── */}
+    {updPicker&&(()=>{
+      const rRow=reservations.find(x=>String(x.id)===String(updPicker.resId));
+      if(!rRow||!updDraft||String(updDraft.resId)!==String(updPicker.resId)){ return null; }
+      const pickerDraftOps=updDraft.ops;
+      // Production-kit gate: a production tied to a kit may only pick kit items.
+      const prodKit=(()=>{
+        if(rRow.loan_type!=="הפקה"||!rRow.production_id) return null;
+        const p=(productions||[]).find(x=>String(x.id)===String(rRow.production_id));
+        if(!p?.kitId) return null;
+        return (kits||[]).find(k=>String(k.id)===String(p.kitId))||null;
+      })();
+      const kitEqIds=prodKit?new Set((prodKit.items||[]).map(i=>String(i.equipment_id))):null;
+      const searchLc=updPickerSearch.trim().toLowerCase();
+      const privAtCap=rRow.loan_type==="פרטית"&&draftPrivateQty(rRow,updDraft.ops)>=4;
+
+      // Same classification model the creation form uses (Step3Equipment):
+      // loan-type → allowed classifications → sound/photo type filter + category chips.
+      const allowedClass=getLoanTypeEquipmentClassifications(rRow.loan_type,categoryLoanTypes);
+      const enabledTypeFilters=["סאונד","צילום"].filter(c=>allowedClass.includes(c));
+      const showTypeFilters=enabledTypeFilters.length>1;
+      const matchesTypeFilter=(eq)=>{
+        const isGeneral=(!eq.soundOnly&&!eq.photoOnly)||(eq.soundOnly&&eq.photoOnly);
+        if(!showTypeFilters||updPickerType==="all") return true;
+        if(updPickerType==="sound") return !!eq.soundOnly||isGeneral;
+        if(updPickerType==="photo") return !!eq.photoOnly||isGeneral;
+        return true;
+      };
+      // Pool eligible for THIS loan (before search / category / type filters) —
+      // the source both the category chips and the item list derive from.
+      const loanPool=equipment.filter(eq=>{
+        if(!matchesEquipmentLoanType(eq,rRow.loan_type,categoryLoanTypes)) return false;
+        if(EXTERNAL_LOAN_TYPES.includes(rRow.loan_type)&&eq.externalLoanRestricted) return false;
+        if(!canBorrowEqForForm({loan_type:rRow.loan_type},eq)) return false;
+        if(kitEqIds&&!kitEqIds.has(String(eq.id))) return false;
+        return true;
+      });
+      // Category chips derive from the type-filtered pool (chips must agree with
+      // the list — lesson #34), ordered by the admin `categories` list.
+      const typePool=loanPool.filter(matchesTypeFilter);
+      const chipCategories=deriveVisibleCategories(categories,typePool);
+      const eligible=typePool.filter(eq=>{
+        if(updPickerCats.length&&!updPickerCats.includes(eq.category)) return false;
+        if(searchLc&&!String(eq.name||"").toLowerCase().includes(searchLc)) return false;
+        return true;
+      });
+      const pick=(eq)=>{
+        const avail=availForUpdate(rRow,eq,pickerDraftOps);
+        if(avail<=0) return;
+        if(privAtCap&&!eq.privateLoanUnlimited){ showToast("error","שים לב אין לחרוג מ-4 פריטים בהשאלה פרטית"); return; }
+        // clicking an equipment already staged as `add` bumps its quantity
+        const existing=updDraft.ops.find(o=>o.action==="add"&&String(o.equipment_id)===String(eq.id));
+        if(existing){
+          setUpdDraft(prev=>prev?{...prev,ops:prev.ops.map(o=>o===existing?{...o,quantity:o.quantity+1}:o)}:prev);
+        } else {
+          stageDraftOp(rRow,{action:"add",equipment_id:String(eq.id),name:eq.name,quantity:1});
+        }
+      };
+      return (<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setUpdPicker(null)}>
+        <div className="modal" style={{maxWidth:760,width:"94vw"}}>
+          <div className="modal-header">
+            <span className="modal-title" style={{display:"inline-flex",alignItems:"center",gap:6}}>
+              ➕ הוספת פריט לבקשה
+            </span>
+            <button className="btn btn-secondary btn-sm btn-icon" onClick={()=>setUpdPicker(null)}>
+              <X size={16} strokeWidth={1.75} color="var(--text3)"/>
+            </button>
+          </div>
+          <div className="modal-body" style={{direction:"rtl",maxHeight:"70vh",overflowY:"auto"}}>
+            <input
+              type="text"
+              value={updPickerSearch}
+              onChange={e=>setUpdPickerSearch(e.target.value)}
+              placeholder="חיפוש ציוד…"
+              style={{width:"100%",padding:"10px 12px",borderRadius:8,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",fontSize:14,marginBottom:10,boxSizing:"border-box"}}
+            />
+            {/* type filter (sound / photo) — only when the loan type allows both */}
+            {showTypeFilters&&(
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginBottom:8}}>
+                <span style={{fontSize:11,fontWeight:900,color:"var(--text3)",marginLeft:2}}>סוג ציוד:</span>
+                {[
+                  {key:"all",label:<><Package size={12} strokeWidth={1.75}/> הכל</>,en:true},
+                  {key:"sound",label:<><Mic size={12} strokeWidth={1.75}/> סאונד</>,en:enabledTypeFilters.includes("סאונד")},
+                  {key:"photo",label:<><Camera size={12} strokeWidth={1.75}/> צילום</>,en:enabledTypeFilters.includes("צילום")},
+                ].filter(o=>o.key==="all"||o.en).map(o=>{
+                  const active=updPickerType===o.key;
+                  return (<button key={o.key} type="button" onClick={()=>{setUpdPickerType(o.key);setUpdPickerCats([]);}}
+                    style={{padding:"6px 12px",borderRadius:20,border:`2px solid ${active?"var(--accent)":"rgba(148,163,184,0.34)"}`,background:active?"var(--accent)":"rgba(18,24,34,0.9)",color:active?"#0b0f14":"#dbe7ff",fontWeight:900,fontSize:11,cursor:"pointer",whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:4}}>
+                    {o.label}
+                  </button>);
+                })}
+              </div>
+            )}
+            {/* category chips */}
+            {chipCategories.length>0&&(
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginBottom:10,paddingTop:8,borderTop:"1px solid rgba(148,163,184,0.18)"}}>
+                <span style={{fontSize:11,fontWeight:900,color:"var(--text3)",marginLeft:2}}>קטגוריות:</span>
+                {chipCategories.map(cat=>{
+                  const active=updPickerCats.includes(cat);
+                  return (<button key={cat} type="button" onClick={()=>setUpdPickerCats(prev=>prev.includes(cat)?prev.filter(c=>c!==cat):[...prev,cat])}
+                    style={{padding:"5px 10px",borderRadius:20,border:`1.5px solid ${active?"var(--accent)":"rgba(148,163,184,0.32)"}`,background:active?"rgba(245,166,35,0.16)":"rgba(18,24,34,0.88)",color:active?"var(--accent)":"#dbe7ff",fontWeight:800,fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>
+                    {cat}
+                  </button>);
+                })}
+                {updPickerCats.length>0&&(
+                  <button type="button" onClick={()=>setUpdPickerCats([])}
+                    style={{padding:"4px 8px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}>
+                    <X size={13} strokeWidth={1.75} color="var(--text3)"/> נקה
+                  </button>
+                )}
+              </div>
+            )}
+            {prodKit&&<div style={{fontSize:11,color:"#3498db",fontWeight:700,marginBottom:8}}>🎬 הפקה עם ערכה — ניתן לבחור רק ציוד מתוך "{prodKit.name}"</div>}
+            <div style={{fontSize:10,color:"var(--text3)",marginBottom:8}}>לחיצה על פריט מוסיפה אותו לטיוטה · לחצני − / + לשינוי הכמות</div>
+            {eligible.length===0
+              ?<div style={{textAlign:"center",color:"var(--text3)",padding:"18px 0",fontSize:13}}>לא נמצא ציוד מתאים</div>
+              :<div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {eligible.map(eq=>{
+                  const avail=availForUpdate(rRow,eq,pickerDraftOps);
+                  const img=eq.image;
+                  const privBlockedEq=privAtCap&&!eq.privateLoanUnlimited;
+                  const stagedAdd=updDraft.ops.find(o=>o.action==="add"&&String(o.equipment_id)===String(eq.id));
+                  // A staged row stays interactive even at avail 0 — the − button
+                  // must keep working; only ADDING more is capped.
+                  const blocked=(avail<1&&!stagedAdd)||privBlockedEq;
+                  const canAddMore=avail>0&&!privBlockedEq;
+                  const decStaged=()=>{
+                    setUpdDraft(prev=>prev?{...prev,ops:prev.ops.flatMap(o=>
+                      o!==stagedAdd?[o]:(o.quantity<=1?[]:[{...o,quantity:o.quantity-1}])
+                    )}:prev);
+                  };
+                  // div (not button): the staged row nests real +/− buttons,
+                  // and nested <button> inside <button> is invalid HTML.
+                  return (<div key={eq.id} role="button" tabIndex={blocked?-1:0}
+                    onClick={()=>{if(blocked||(stagedAdd&&!canAddMore))return;pick(eq);}}
+                    onKeyDown={e=>{if((e.key==="Enter"||e.key===" ")&&!blocked&&!(stagedAdd&&!canAddMore)){e.preventDefault();pick(eq);}}}
+                    style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,border:stagedAdd?"1.5px solid rgba(46,204,113,0.55)":"1px solid var(--border)",background:stagedAdd?"rgba(46,204,113,0.08)":"var(--surface2)",cursor:blocked?"not-allowed":"pointer",opacity:blocked?0.45:1,textAlign:"right",width:"100%",boxSizing:"border-box"}}>
+                    {img?.startsWith("data:")||img?.startsWith("http")
+                      ?<img src={img} alt="" style={{width:34,height:34,objectFit:"cover",borderRadius:6,flexShrink:0}}/>
+                      :<span style={{fontSize:24,flexShrink:0}}>{img||<Package size={24} strokeWidth={1.75} color="var(--accent)"/>}</span>}
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontWeight:700,fontSize:13,color:"var(--text)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{eq.name}</div>
+                      <div style={{fontSize:11,color:avail>0?"var(--text3)":"#e74c3c",fontWeight:600}}>{eq.category||""} · זמין: {avail}</div>
+                    </div>
+                    {stagedAdd&&(
+                      /* explicit − ×N + stepper — surfaces the moment the item
+                         is staged, so adding more units is one obvious tap */
+                      <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}} onClick={e=>e.stopPropagation()}>
+                        <button type="button" onClick={decStaged} title="הורד יחידה מהטיוטה" className="upd-step-btn"
+                          style={{background:"rgba(231,76,60,0.14)",color:"#e74c3c",border:"1px solid rgba(231,76,60,0.4)",borderRadius:8,width:28,height:28,padding:0,fontSize:16,fontWeight:900,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",lineHeight:1}}
+                        >−</button>
+                        <span style={{fontSize:13,fontWeight:900,color:"#2ecc71",minWidth:26,textAlign:"center"}}>×{stagedAdd.quantity}</span>
+                        <button type="button" disabled={!canAddMore} onClick={()=>pick(eq)} className="upd-step-btn"
+                          title={canAddMore?"הוסף יחידה":privBlockedEq?"אין לחרוג מ-4 פריטים בהשאלה פרטית":"אין יחידות זמינות נוספות"}
+                          style={{background:canAddMore?"#2ecc71":"var(--surface3)",color:canAddMore?"#0b0f14":"var(--text3)",border:"none",borderRadius:8,width:28,height:28,padding:0,fontSize:16,fontWeight:900,cursor:canAddMore?"pointer":"not-allowed",display:"inline-flex",alignItems:"center",justifyContent:"center",lineHeight:1,opacity:canAddMore?1:0.5}}
+                        >+</button>
+                      </div>
+                    )}
+                  </div>);
+                })}
+              </div>}
+          </div>
+        </div>
+      </div>);
+    })()}
+    {/* ── final-commit confirmation: submission is counted and irreversible ── */}
+    {confirmSubmitUpdate&&updDraft&&(()=>{
+      const rRow=reservations.find(x=>String(x.id)===String(confirmSubmitUpdate.resId));
+      if(!rRow) return null;
+      const usedSoFar=reservationUpdates.filter(u=>String(u.reservation_id)===String(rRow.id)).length;
+      const isApprovedRes=getEffectiveStatus(rRow)==="מאושר";
+      return (<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&!updSubmitting&&setConfirmSubmitUpdate(null)}>
+        <div className="modal" style={{maxWidth:440}}>
+          <div className="modal-header">
+            <span className="modal-title" style={{display:"inline-flex",alignItems:"center",gap:6}}>
+              <AlertTriangle size={16} strokeWidth={1.75} color="#f59e0b"/> שליחת עדכון בקשה
+            </span>
+            <button className="btn btn-secondary btn-sm btn-icon" disabled={updSubmitting} onClick={()=>setConfirmSubmitUpdate(null)}>
+              <X size={16} strokeWidth={1.75} color="var(--text3)"/>
+            </button>
+          </div>
+          <div className="modal-body" style={{direction:"rtl"}}>
+            <div style={{fontSize:13,lineHeight:1.7,marginBottom:10}}>
+              {updDraft.ops.map((o,oi)=>(
+                <div key={oi} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,fontWeight:700,padding:"3px 0"}}>
+                  <span>{o.action==="increase"?"⬆️ הגדלת כמות":"➕ הוספת פריט"} — <b>{o.name||"פריט"}</b></span>
+                  <span style={{color:"var(--accent)",fontWeight:900,whiteSpace:"nowrap"}}>כמות: {o.quantity}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{fontSize:12,color:"#e67e22",fontWeight:700,lineHeight:1.7,background:"rgba(230,126,34,0.08)",border:"1px solid rgba(230,126,34,0.35)",borderRadius:8,padding:"10px 12px"}}>
+              ⚠️ שליחת העדכון היא סופית ונספרת במונה ({usedSoFar+1} מתוך {MAX_RESERVATION_UPDATES}).
+              {isApprovedRes&&<><br/>הפריטים יעברו לבדיקת צוות המחסן ויתווספו רק לאחר אישור.</>}
+            </div>
+          </div>
+          <div className="modal-footer" style={{display:"flex",gap:8,justifyContent:"flex-start"}}>
+            <button className="btn btn-primary" disabled={updSubmitting} onClick={submitUpdateDraft}>
+              {updSubmitting?"שולח…":"📤 עדכן בקשה"}
+            </button>
+            <button className="btn btn-secondary" disabled={updSubmitting} onClick={()=>setConfirmSubmitUpdate(null)}>חזרה לעריכה</button>
+          </div>
+        </div>
+      </div>);
+    })()}
     {confirmRemoveItem&&(()=>{
       const modalBusy=busyItemIds.has(confirmRemoveItem.isLastInReservation?`res:${confirmRemoveItem.reservationId}`:Number(confirmRemoveItem.itemId));
       return (<div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&!modalBusy&&setConfirmRemoveItem(null)}>

@@ -6,7 +6,10 @@ import loadingData from "../assets/loading-logo2.json";
 import { normalizeReservationStatus } from "../utils.js";
 export function statusBadge(s) {
   const normalizedStatus = normalizeReservationStatus(s);
-  const m = { "מאושר":"badge-green","פעילה":"badge-teal","ממתין":"badge-yellow","נדחה":"badge-red","הוחזר":"badge-blue","באיחור":"badge-orange","אישור ראש מחלקה":"badge-purple","תקין":"badge-green","פגום":"badge-red","בתיקון":"badge-yellow","נעלם":"badge-red" };
+  // "בדיקת עדכון" is a DISPLAY state (a pending student equipment-update on an
+  // approved reservation, derived from reservations_new.pending_update_id) —
+  // never a base status, and deliberately NOT in the inventory-blocking set.
+  const m = { "מאושר":"badge-green","פעילה":"badge-teal","ממתין":"badge-yellow","נדחה":"badge-red","הוחזר":"badge-blue","באיחור":"badge-orange","אישור ראש מחלקה":"badge-purple","בדיקת עדכון":"badge-orange","תקין":"badge-green","פגום":"badge-red","בתיקון":"badge-yellow","נעלם":"badge-red" };
   return <span className={`badge ${m[normalizedStatus]||"badge-gray"}`}>{normalizedStatus}</span>;
 }
 export function Toast({ toasts }) {

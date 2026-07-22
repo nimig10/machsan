@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test:db": "node scripts/run-db-smoke.mjs",
-    "test:ics": "node scripts/run-ics-smoke.mjs"
+    "test:ics": "node scripts/run-ics-smoke.mjs",
+    "test:policy": "node scripts/run-loan-policy-tests.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.102.1",

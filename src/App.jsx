@@ -1063,6 +1063,17 @@ const css = `
     .btn { padding:7px 11px; font-size:12px; }
     .btn-sm { padding:5px 9px; font-size:11px; }
     .topbar-title { font-size:14px; line-height:1.25; }
+    /* Equipment-update review (staff) + student update draft — phone/PWA tuning.
+       Three side-by-side footer actions squeeze to unreadable widths on a phone,
+       and the quantity steppers are the most tap-sensitive controls in the flow. */
+    .upd-review-footer { flex-direction:column !important; align-items:stretch !important; gap:8px !important; }
+    .upd-review-footer > *, .upd-review-footer .btn { width:100%; }
+    .upd-review-footer > div { display:flex; flex-direction:column; gap:8px; }
+    .upd-review-footer .btn { justify-content:center; padding:11px 14px; font-size:13px; }
+    /* Comfortable tap targets for −/+ without inflating the desktop density. */
+    .upd-step-btn { min-width:38px; min-height:38px; justify-content:center; font-size:16px !important; }
+    /* 16px stops iOS from zooming the viewport when the field takes focus. */
+    .upd-msg-box { font-size:16px !important; }
     /* When .flex-between holds a search-bar + actions row, stack them vertically */
     .toolbar-stack { flex-direction:column !important; align-items:stretch !important; }
     .toolbar-stack > * { width:100%; }
@@ -5358,6 +5369,10 @@ export default function App() {
   const [reservations, _setReservations] = useState([]);
   // Loan-request staff coordination (decoupled side-table; display/coordination only).
   const [loanHandlers, setLoanHandlers] = useState([]);
+  // Student equipment-list updates (ledger + pending items) — read-only here;
+  // writes go through the two authenticated endpoints. Feeds the "בדיקת עדכון"
+  // review panel in ReservationsPage.
+  const [reservationUpdates, setReservationUpdates] = useState([]);
   const [categories, _setCategories]   = useState(DEFAULT_CATEGORIES);
   const [categoryTypes, _setCategoryTypes] = useState({});
   const [categoryLoanTypes, _setCategoryLoanTypes] = useState({});
@@ -5642,6 +5657,62 @@ export default function App() {
       if (channel) { try { supabase.removeChannel(channel); } catch {} }
     };
   }, [loadLoanHandlers]);
+
+  // ── Student equipment-update ledger (reservation_item_updates + pending
+  // items) — same read-all/realtime pattern as loan handlers above. Both new
+  // tables funnel into ONE refetch; either changing means the review panel
+  // and the "בדיקת עדכון" badges need fresh data.
+  const loadReservationUpdates = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("reservation_item_updates")
+        .select("*, items:reservation_pending_items(*)")
+        .order("submitted_at", { ascending: false });
+      // These tables are RLS-gated (staff / own-email only), so a denial comes
+      // back as `error`, NOT as a throw — without reading it, a rejected read
+      // is indistinguishable from "there are no updates" and the review badges
+      // silently never appear.
+      if (error) {
+        console.warn("[loadReservationUpdates]", error.message || error);
+        return null;
+      }
+      setReservationUpdates(data || []);
+      // Returned so a caller that just awaited the refresh can read the result
+      // immediately, instead of waiting for the re-rendered prop.
+      return data || [];
+    } catch (e) { console.warn("[loadReservationUpdates]", e?.message || e); return null; }
+  }, []);
+  useEffect(() => {
+    loadReservationUpdates();
+    let debounce;
+    let channel;
+    const refetch = () => {
+      clearTimeout(debounce);
+      debounce = setTimeout(() => void loadReservationUpdates(), 400);
+    };
+    try {
+      channel = supabase
+        .channel("reservation-updates-live")
+        .on("postgres_changes", { event: "*", schema: "public", table: "reservation_item_updates" }, refetch)
+        .on("postgres_changes", { event: "*", schema: "public", table: "reservation_pending_items" }, refetch)
+        .subscribe();
+    } catch { /* realtime optional */ }
+    // Re-read once the session changes. Unlike the read-all side tables, these
+    // two are RLS-gated, so the mount-time fetch returns nothing when it runs
+    // before sign-in (staff logging in without a page reload) — and the badges
+    // would then stay hidden until something else happened to refetch.
+    let authSub;
+    try {
+      authSub = supabase.auth.onAuthStateChange((event) => {
+        if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") refetch();
+      })?.data?.subscription;
+    } catch { /* auth listener optional */ }
+    return () => {
+      clearTimeout(debounce);
+      if (channel) { try { supabase.removeChannel(channel); } catch {} }
+      if (authSub) { try { authSub.unsubscribe(); } catch {} }
+    };
+  }, [loadReservationUpdates]);
 
   // ── Staff Hub "משימות להיום" — loaded at the app level so the panel is instant
   // when navigating to the hub (no per-mount client fetch/flash). The result
@@ -7333,12 +7404,12 @@ export default function App() {
               )}
             </div>
             {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <>
-              <div style={{display:page==="dashboard"?"block":"none"}}><DashboardPage equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} siteSettings={siteSettings} equipmentReports={equipmentReports} certifications={certifications} loanHandlers={loanHandlers}/></div>
+              <div style={{display:page==="dashboard"?"block":"none"}}><DashboardPage equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} siteSettings={siteSettings} equipmentReports={equipmentReports} certifications={certifications} loanHandlers={loanHandlers} reservationUpdates={reservationUpdates} refreshReservationUpdates={loadReservationUpdates} refreshReservations={refreshPublicInventory}/></div>
               <div style={{display:page==="equipment"?"block":"none"}}><EquipmentPage equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} categoryLoanTypes={categoryLoanTypes} setCategoryLoanTypes={setCategoryLoanTypes} certifications={certifications} studios={studios} collegeManager={collegeManager} managerToken={managerToken} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports} fetchEquipmentReports={fetchEquipmentReports}/></div>
               <div style={{display:page==="reservations"?"block":"none"}}><ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}
-                initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} siteSettings={siteSettings} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports} lessons={lessons} setLessons={setLessons} loanHandlers={loanHandlers}/></div>
+                initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} siteSettings={siteSettings} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports} lessons={lessons} setLessons={setLessons} loanHandlers={loanHandlers} reservationUpdates={reservationUpdates} refreshReservationUpdates={loadReservationUpdates} refreshReservations={refreshPublicInventory}/></div>
               <div style={{display:page==="team"?"block":"none"}}><TeamPage teamMembers={teamMembers} setTeamMembers={setTeamMembers} deptHeads={deptHeads} setDeptHeads={setDeptHeads} collegeManager={collegeManager} setCollegeManager={setCollegeManager} showToast={showToast} managerToken={managerToken}/></div>
               <div style={{display:page==="kits"?"block":"none"}}><KitsPage kits={kits} setKits={setKits} equipment={equipment} categories={categories} showToast={showToast} reservations={reservations} setReservations={setReservations} lessons={lessons} setLessons={setLessons} lecturers={lecturers}/></div>
               <div style={{display:page==="productions"?"block":"none"}}><ProductionsPage productions={productions} setProductions={setProductions} currentStudent={null} students={certifications?.students || []} kits={kits} reservations={reservations} showToast={showToast} refresh={async () => { const v = await listProductions({ onlyPublished: false }); _setProductions(Array.isArray(v) ? v : []); }} onOpenLoanForm={() => showToast?.("הטופס פתוח רק לסטודנטים מחוברים", "info")}/></div>
