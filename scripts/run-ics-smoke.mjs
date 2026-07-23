@@ -244,6 +244,32 @@ check("reconcile=all bulk-prefetches instead of per-lesson reads", () => {
     : "prefetch failure no longer aborts the request";
 });
 
+check("a live reconcile=all requires the cron secret, not just staff auth", () => {
+  // requireStaff alone let any warehouse member fire a run that mails EVERY
+  // lecturer in the college straight from a browser. The dry-run report and
+  // the POST {lessonId} path the client uses stay open to staff.
+  if (!/!dryRun && !cronOk/.test(calendarSyncSrc)) {
+    return "reconcile=all is no longer gated on the cron secret";
+  }
+  // The gate must be evaluated before the work starts, not after.
+  const gateIdx = calendarSyncSrc.indexOf("!dryRun && !cronOk");
+  const workIdx = calendarSyncSrc.indexOf("prefetch = await prefetchAll()");
+  return gateIdx > -1 && workIdx > -1 && gateIdx < workIdx
+    ? null
+    : "the cron-secret gate no longer precedes the bulk prefetch";
+});
+
+check("a failed snapshot persist is surfaced, not swallowed", () => {
+  // The mail is already gone by then; a silent failure means the next run
+  // recomputes the same delta and mails the lecturer the SAME notice again.
+  if (!/persisted = await sbUpsert\(/.test(calendarSyncSrc)) {
+    return "sbUpsert's result is discarded again";
+  }
+  return /return \{ lessonId,[^}]*persisted/.test(calendarSyncSrc)
+    ? null
+    : "reconcileLesson no longer reports `persisted`";
+});
+
 check("the daily cron is dry-run only", () => {
   const vercelCfg = JSON.parse(readFileSync(resolve(ROOT, "vercel.json"), "utf8"));
   const cron = (vercelCfg.crons || []).find((c) => String(c.path).includes("calendar-sync"));

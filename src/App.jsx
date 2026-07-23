@@ -5950,11 +5950,14 @@ export default function App() {
     });
   };
 
+  // Undo removes the log line it created. The endpoint requires a staff JWT
+  // (an unauthenticated delete-by-id was open to anyone), so send the token.
   const deleteActivityLog = async (logId) => {
     try {
+      const token = await getAuthToken();
       await fetch("/api/activity-log", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ action: "delete", id: logId }),
       });
     } catch {}

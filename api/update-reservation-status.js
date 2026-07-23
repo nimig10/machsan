@@ -51,17 +51,36 @@ const ALLOWED_STATUSES = new Set([
 // that's the warehouse's job.
 const DEPT_HEAD_ALLOWED_STATUSES = new Set(["ממתין", "נדחה"]);
 
-async function isDeptHead(email) {
-  if (!email) return false;
+// A dept-head acts on exactly one step of the chain, and their portal already
+// shows them only the rows they may touch: LecturerPortal's pendingDhRequests
+// filters on status === "אישור ראש מחלקה" AND loan_type ∈ their loan_types.
+// The server used to enforce neither — it only checked that the email existed
+// in dept_heads, then ran the service-role RPC. That let a dept-head who knew
+// any reservation id push it to "ממתין"/"נדחה" from ANY status, including
+// "מאושר"/"פעילה" — which releases held inventory and breaks a live loan.
+//
+// Both checks below mirror the portal exactly, so a legitimate dept-head never
+// sees a difference; only calls the UI would never have produced are refused.
+//
+// Returns null when the email is not a dept-head, otherwise the union of the
+// loan types across their rows (union, not first-match, so an extra row can
+// only widen — never wrongly block someone the portal would let through).
+async function getDeptHeadScope(email) {
+  if (!email) return null;
   try {
     const r = await fetch(
-      `${SB_URL}/rest/v1/dept_heads?email=eq.${encodeURIComponent(email)}&select=id&limit=1`,
+      `${SB_URL}/rest/v1/dept_heads?email=eq.${encodeURIComponent(email)}&select=id,loan_types`,
       { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } }
     );
-    if (!r.ok) return false;
+    if (!r.ok) return null;
     const rows = await r.json();
-    return Array.isArray(rows) && rows.length > 0;
-  } catch { return false; }
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+    const loanTypes = new Set();
+    for (const row of rows) {
+      for (const t of row.loan_types || []) loanTypes.add(String(t));
+    }
+    return { loanTypes };
+  } catch { return null; }
 }
 
 export default async function handler(req, res) {
@@ -74,9 +93,10 @@ export default async function handler(req, res) {
   //   2) dept-head (row in public.dept_heads) — limited to "ממתין"/"נדחה"
   const role = await resolveUserRole(req);
   let caller = null;
+  let deptHeadScope = null;
   if (role.role === "staff") {
     caller = { kind: "staff", email: role.email };
-  } else if (role.role === "user" && role.email && (await isDeptHead(role.email))) {
+  } else if (role.role === "user" && role.email && (deptHeadScope = await getDeptHeadScope(role.email))) {
     caller = { kind: "dept_head", email: role.email };
   } else {
     // Diagnostic: a warehouse staff member whose "הוחזר" click is rejected 403
@@ -103,6 +123,46 @@ export default async function handler(req, res) {
   }
   if (returned_at != null && typeof returned_at !== "string") {
     return res.status(400).json({ ok: false, error: "returned_at must be an ISO string" });
+  }
+
+  // Dept-head only: the row must actually be sitting on their step of the chain
+  // and belong to a loan type they handle (see getDeptHeadScope). One extra read
+  // on a rare path; the staff path is untouched, and update_reservation_status_v1
+  // is not touched at all (lessons #22 / #25 / #55).
+  if (caller.kind === "dept_head") {
+    let row = null;
+    try {
+      const rr = await fetch(
+        `${SB_URL}/rest/v1/reservations_new?id=eq.${encodeURIComponent(String(id))}&select=status,loan_type&limit=1`,
+        { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } }
+      );
+      if (rr.ok) row = (await rr.json())?.[0] || null;
+    } catch (e) {
+      console.error("update-reservation-status: dept_head scope read failed:", e.message);
+      return res.status(500).json({ ok: false, error: "network_error", detail: e.message });
+    }
+    if (!row) return res.status(404).json({ ok: false, error: "not_found" });
+
+    if (row.status !== "אישור ראש מחלקה") {
+      console.warn(
+        "update-reservation-status: dept_head blocked —",
+        `email=${caller.email} id=${id} current_status=${row.status} target=${status}`
+      );
+      return res.status(403).json({
+        ok: false, error: "Forbidden",
+        detail: "dept_head can only act on a reservation awaiting dept-head approval",
+      });
+    }
+    if (!deptHeadScope?.loanTypes?.has(String(row.loan_type))) {
+      console.warn(
+        "update-reservation-status: dept_head blocked —",
+        `email=${caller.email} id=${id} loan_type=${row.loan_type} out of scope`
+      );
+      return res.status(403).json({
+        ok: false, error: "Forbidden",
+        detail: "dept_head is not responsible for this loan type",
+      });
+    }
   }
 
   try {
