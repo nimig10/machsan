@@ -5392,6 +5392,22 @@ ${inventory}
             const sColor=s=>s==="מאושר"?"#1a7a4a":s==="פעילה"?"#64b5f6":s==="ממתין"||s==="אישור ראש מחלקה"?"#b8860b":s==="נדחה"?"#c0392b":s==="באיחור"?"#e67e22":s==="הוחזר"?"#2471a3":"var(--text3)";
             const sBg=s=>s==="מאושר"?"rgba(46,204,113,0.15)":s==="פעילה"?"rgba(100,181,246,0.15)":s==="ממתין"||s==="אישור ראש מחלקה"?"rgba(241,196,15,0.15)":s==="נדחה"?"rgba(231,76,60,0.15)":s==="באיחור"?"rgba(230,126,34,0.18)":s==="הוחזר"?"rgba(52,152,219,0.15)":"var(--surface2)";
             const sBorder=s=>s==="מאושר"?"rgba(46,204,113,0.25)":s==="פעילה"?"rgba(100,181,246,0.3)":s==="ממתין"||s==="אישור ראש מחלקה"?"rgba(241,196,15,0.25)":s==="נדחה"?"rgba(231,76,60,0.3)":s==="באיחור"?"rgba(230,126,34,0.4)":s==="הוחזר"?"rgba(52,152,219,0.25)":"var(--border)";
+            // The card header lays the action buttons out in a ROW next to the
+            // dates. On a phone that row cannot fit — the card clips it
+            // (overflow:hidden) and "− החסר פריטים" was cut off at the screen
+            // edge once the update feature added a second button. Below 600px
+            // (the breakpoint this file already uses for .info-detail-row) the
+            // buttons stack into a COLUMN beside the date block instead, which
+            // is space the header already occupies, and get phone-sized touch
+            // targets. Desktop keeps the original row.
+            const isMobile = typeof window !== "undefined" && window.innerWidth < 600;
+            // No explicit width: the column is alignItems:"stretch", so every
+            // button widens to the widest one on its own. Forcing width:100%
+            // inside a shrink-to-fit column invites circular sizing.
+            const hdrBtn = isMobile
+              ? { padding:"10px 12px", fontSize:12, minHeight:36, justifyContent:"center" }
+              : {};
+            const hdrChip = isMobile ? { textAlign:"center", padding:"5px 10px" } : {};
             const myRes=[...reservations].filter(r=>{
               const stEmail=String(loggedInStudent?.email||"").toLowerCase().trim();
               const rEmail=String(r.email||"").toLowerCase().trim();
@@ -5418,8 +5434,10 @@ ${inventory}
               const cardBg=st==="פעילה"?"rgba(100,181,246,0.08)":st==="באיחור"?"rgba(230,126,34,0.08)":r.loan_type==="סאונד"?"rgba(245,166,35,0.06)":r.loan_type==="הפקה"?"rgba(52,152,219,0.06)":r.loan_type==="קולנוע יומית"?"rgba(52,152,219,0.08)":r.loan_type==="שיעור"?"rgba(155,89,182,0.1)":"var(--surface2)";
               const cardBorder=st==="פעילה"?"rgba(100,181,246,0.35)":st==="באיחור"?"rgba(230,126,34,0.45)":r.loan_type==="סאונד"?"rgba(245,166,35,0.25)":r.loan_type==="הפקה"?"rgba(52,152,219,0.25)":r.loan_type==="קולנוע יומית"?"rgba(52,152,219,0.3)":r.loan_type==="שיעור"?"rgba(155,89,182,0.3)":"var(--border)";
               return (<div key={r.id} style={{borderRadius:10,border:`1px solid ${cardBorder}`,marginBottom:10,overflow:"hidden"}}>
-                <div style={{background:cardBg,padding:"12px 14px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}} onClick={()=>setExpandedResId(isExp?null:r.id)}>
-                  <div>
+                <div style={{background:cardBg,padding:"12px 14px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:isMobile?"flex-start":"center",gap:8}} onClick={()=>setExpandedResId(isExp?null:r.id)}>
+                  {/* minWidth:0 lets the date block wrap instead of pushing the
+                      button column past the card edge. */}
+                  <div style={{minWidth:0,flex:"1 1 auto"}}>
                     <div style={{fontWeight:700,fontSize:13}}>
                       <Calendar size={14} strokeWidth={1.75} color="var(--accent)" style={{flexShrink:0}} /> {fmtDate(r.borrow_date)}{r.borrow_time&&<span style={{color:"var(--accent)",marginRight:4}}> {formatTime(r.borrow_time)}</span>} ← {fmtDate(r.return_date)}{r.return_time&&<span style={{color:"var(--accent)",marginRight:4}}> {formatTime(r.return_time)}</span>}
                     </div>
@@ -5438,9 +5456,9 @@ ${inventory}
                       })()}
                     </div>
                   </div>
-                  <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0,flexWrap:"wrap",justifyContent:"flex-end"}}>
-                    {pendingUpd&&<span style={{background:"rgba(230,126,34,0.16)",color:"#e67e22",border:"1px solid rgba(230,126,34,0.45)",borderRadius:100,padding:"2px 10px",fontSize:11,fontWeight:800,whiteSpace:"nowrap"}}>בדיקת עדכון</span>}
-                    <span style={{background:sBg(st),color:sColor(st),border:`1px solid ${sBorder(st)}`,borderRadius:100,padding:"2px 10px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{st}</span>
+                  <div style={{display:"flex",flexDirection:isMobile?"column":"row",alignItems:isMobile?"stretch":"center",gap:isMobile?6:8,flexShrink:0,flexWrap:isMobile?"nowrap":"wrap",justifyContent:"flex-end"}}>
+                    {pendingUpd&&<span style={{background:"rgba(230,126,34,0.16)",color:"#e67e22",border:"1px solid rgba(230,126,34,0.45)",borderRadius:100,padding:"2px 10px",fontSize:11,fontWeight:800,whiteSpace:"nowrap",...hdrChip}}>בדיקת עדכון</span>}
+                    <span style={{background:sBg(st),color:sColor(st),border:`1px solid ${sBorder(st)}`,borderRadius:100,padding:"2px 10px",fontSize:11,fontWeight:700,whiteSpace:"nowrap",...hdrChip}}>{st}</span>
                     {isEditableStatus&&(()=>{
                       // Add-item entry point. Blocked states keep the button
                       // visible but disabled — the reason renders inside the
@@ -5448,7 +5466,7 @@ ${inventory}
                       if(inUpdateDraft){
                         return (<button
                           onClick={e=>{e.stopPropagation();clearUpdateDraft(loggedInStudent?.email,r.id);setUpdDraft(null);setUpdPicker(null);}}
-                          style={{background:"rgba(231,76,60,0.14)",color:"#e74c3c",border:"1px solid rgba(231,76,60,0.4)",borderRadius:4,padding:"3px 9px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}
+                          style={{background:"rgba(231,76,60,0.14)",color:"#e74c3c",border:"1px solid rgba(231,76,60,0.4)",borderRadius:4,padding:"3px 9px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",...hdrBtn}}
                         >בטל עדכון</button>);
                       }
                       return (<button
@@ -5477,6 +5495,7 @@ ${inventory}
                           borderRadius:4,padding:"3px 9px",fontSize:11,fontWeight:700,
                           cursor:canStartUpdate?"pointer":"not-allowed",whiteSpace:"nowrap",
                           opacity:canStartUpdate?1:0.6,
+                          display:"inline-flex",alignItems:"center",...hdrBtn,
                         }}
                       >➕ הוסף פריטים</button>);
                     })()}
@@ -5507,10 +5526,11 @@ ${inventory}
                           display:"inline-flex",
                           alignItems:"center",
                           gap:3,
+                          ...hdrBtn,
                         }}
                       >{inRemoveMode?"סיים":"− החסר פריטים"}</button>);
                     })()}
-                    <span style={{fontSize:13,color:"var(--text3)",display:"inline-block",transform:isExp?"rotate(180deg)":"rotate(0deg)",transition:"transform 0.2s"}}>▾</span>
+                    <span style={{fontSize:13,color:"var(--text3)",display:"inline-block",alignSelf:isMobile?"center":"auto",transform:isExp?"rotate(180deg)":"rotate(0deg)",transition:"transform 0.2s"}}>▾</span>
                   </div>
                 </div>
                 {isExp&&(() => {
