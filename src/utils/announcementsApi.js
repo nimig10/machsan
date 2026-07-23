@@ -49,6 +49,8 @@ export async function markAnnouncementSeen(id) {
 // ─── admin ─────────────────────────────────────────────────────────────────
 
 export function adminGetAnnouncement()          { return post({ action: "admin-get" }); }
+// Who saw the live announcement and when — one entry per person.
+export function adminGetAnnouncementViewers()   { return post({ action: "viewers" }); }
 // Edit in place — the id survives, so people who already read it are not
 // shown it again.
 export function adminSaveAnnouncement(payload)  { return post({ action: "save", ...payload }); }

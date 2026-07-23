@@ -194,6 +194,52 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, announcement: row, viewers });
     }
 
+    if (action === "viewers") {
+      // Who has actually seen the live announcement, and when. One entry per
+      // PERSON (not per view) so the list length matches the "נצפתה ע״י N"
+      // counter next to the button that opens it — a 2-day notice writes two
+      // rows for the same reader and a flat list would look like double the
+      // audience.
+      const { row, error } = await loadActiveAnnouncement();
+      if (error) return res.status(500).json({ ok: false, error: "load_failed" });
+      if (!row) return res.status(200).json({ ok: true, viewers: [], title: "" });
+
+      const v = await sb(
+        `announcement_views?announcement_id=eq.${enc(row.id)}&select=user_id,seen_on,created_at&order=created_at.asc`
+      );
+      const rows = v.ok && Array.isArray(v.data) ? v.data : [];
+
+      const byUser = new Map();
+      for (const r of rows) {
+        const cur = byUser.get(r.user_id) || { userId: r.user_id, dates: [], firstSeen: r.created_at, lastSeen: r.created_at };
+        cur.dates.push(r.seen_on);
+        if (String(r.created_at) < String(cur.firstSeen)) cur.firstSeen = r.created_at;
+        if (String(r.created_at) > String(cur.lastSeen)) cur.lastSeen = r.created_at;
+        byUser.set(r.user_id, cur);
+      }
+
+      // Names come from a single unfiltered read rather than an id=in.(...)
+      // list: the college is ~110 users, while an in-list of that many uuids
+      // makes a ~4KB URL that proxies start truncating.
+      let byId = new Map();
+      if (byUser.size) {
+        const u = await sb("users?select=id,full_name,email");
+        if (u.ok && Array.isArray(u.data)) byId = new Map(u.data.map(x => [x.id, x]));
+      }
+
+      const viewers = [...byUser.values()]
+        .map(x => ({
+          ...x,
+          // A deleted user still counts as a view; label them instead of
+          // dropping the row, so the total never silently disagrees.
+          name: byId.get(x.userId)?.full_name || "(משתמש שנמחק)",
+          email: byId.get(x.userId)?.email || "",
+        }))
+        .sort((a, b) => String(b.lastSeen).localeCompare(String(a.lastSeen)));
+
+      return res.status(200).json({ ok: true, viewers, title: row.title || "" });
+    }
+
     if (action === "save") {
       // Edit in place: the id is preserved, so announcement_views survive and
       // whoever already read it is NOT shown it again. This is the "fix a typo"
