@@ -67,6 +67,19 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
   const [annViewers, setAnnViewers] = useState(0);
   const [annBusy, setAnnBusy] = useState(false);
   const [annPreview, setAnnPreview] = useState(null);
+  // The body textarea fits itself to its content. Reset to "auto" first —
+  // scrollHeight can only grow past an explicit height, never report that the
+  // text now needs LESS room, so without the reset the box would never shrink
+  // back after deleting lines.
+  const annBodyRef = useRef(null);
+  const autoGrow = (el) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  };
+  // Runs for typing AND for the async load of an existing announcement, which
+  // arrives long after the first render with a body the box has never measured.
+  useEffect(() => { autoGrow(annBodyRef.current); }, [annDraft.body]);
 
   useEffect(() => {
     let cancelled = false;
@@ -319,10 +332,17 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
 
           <div>
             <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 4 }}>תוכן ההודעה</label>
-            <textarea rows={5} value={annDraft.body}
+            {/* Grows with the text instead of scrolling inside a fixed box —
+                the admin should see the whole notice while writing it, the way
+                the reader will. overflow:"hidden" is required, not cosmetic:
+                with it left at "auto" the element keeps its own scrollbar and
+                scrollHeight stops reporting the full content. resize:"none"
+                because a hand-dragged height would fight the auto-fit on the
+                very next keystroke. */}
+            <textarea ref={annBodyRef} rows={1} value={annDraft.body}
               placeholder={"מה השתנה, ואיפה זה נמצא במסך.\nירידת שורה נשמרת כמו שהיא."}
-              onChange={e => setAnnDraft(p => ({ ...p, body: e.target.value }))}
-              style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 16, fontFamily: "inherit", resize: "vertical", lineHeight: 1.6 }} />
+              onChange={e => { const v = e.target.value; setAnnDraft(p => ({ ...p, body: v })); autoGrow(e.target); }}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 16, fontFamily: "inherit", resize: "none", overflow: "hidden", lineHeight: 1.6, minHeight: 110, display: "block" }} />
           </div>
 
           <div>
