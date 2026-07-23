@@ -1,15 +1,48 @@
 // ArchivePage.jsx — archive of returned reservations
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { formatDate, formatTime, deleteReservation as deleteReservationRpc, groupReservationItemsByCategory } from "../utils.js";
-import { Calendar, Film, Mic, Package, X } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, Film, Mic, Package, X } from "lucide-react";
 import { ApprovedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
 
-export function ArchivePage({ reservations, setReservations, equipment, showToast, loanHandlers = [], reservationUpdates = [] }) {
+const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+
+// Does the loan window [borrow_date, return_date] touch [fromISO, toISO]?
+// Same overlap semantics as the productions board (productionInMonth): a loan
+// that went out in June and came back in July belongs to BOTH months, which is
+// exactly what forensics needs — "who was holding this item during that time".
+// Dates are YYYY-MM-DD strings, so plain string comparison is correct. Either
+// bound may be empty (open-ended range).
+function loanOverlapsRange(r, fromISO, toISO) {
+  const start = String(r?.borrow_date || "");
+  const end = String(r?.return_date || r?.borrow_date || "");
+  if (!start) return false;
+  if (fromISO && end < fromISO) return false;
+  if (toISO && start > toISO) return false;
+  return true;
+}
+
+const monthBounds = (yr, mo /* 0-based */) => ({
+  from: `${yr}-${String(mo + 1).padStart(2, "0")}-01`,
+  to: `${yr}-${String(mo + 1).padStart(2, "0")}-${String(new Date(yr, mo + 1, 0).getDate()).padStart(2, "0")}`,
+});
+
+export function ArchivePage({ reservations, setReservations, equipment, showToast, loanHandlers = [], reservationUpdates = [], categories = [] }) {
   const archived = reservations.filter(r => r.status === "הוחזר");
   const [search, setSearch] = useState("");
   const [sectionF, setSectionF] = useState("הכל"); // "הכל" | "השאלות" | "שיעורים"
   const [loanTypeF, setLoanTypeF] = useState("הכל");
   const [viewRes, setViewRes] = useState(null);
+  // ── time filter ──  mode: "all" | "month" | "range"
+  const [timeMode, setTimeMode] = useState("all");
+  const now = new Date();
+  const [calYr, setCalYr] = useState(now.getFullYear());
+  const [calMo, setCalMo] = useState(now.getMonth());
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  // ── equipment filter ──  set of equipment ids (as strings), OR semantics
+  const [eqFilter, setEqFilter] = useState([]);
+  const [eqPickerOpen, setEqPickerOpen] = useState(false);
+  const [eqPickerSearch, setEqPickerSearch] = useState("");
 
   const deleteRes = async (id) => {
     if(!window.confirm("למחוק בקשה זו מהארכיון לצמיתות?")) return;
@@ -89,12 +122,67 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
 
   const matchesSearch = r => !search || r.student_name?.includes(search) || r.email?.includes(search) || r.course?.includes(search);
 
-  const lessonArchive = sortByReturned(archived.filter(r=>r.loan_type==="שיעור"&&matchesSearch(r)));
-  const studentArchive = sortByReturned(archived.filter(r=>r.loan_type!=="שיעור"&&matchesSearch(r)&&(loanTypeF==="הכל"||r.loan_type===loanTypeF)));
+  // ── time + equipment filters ─────────────────────────────────────────────
+  const activeRange = timeMode === "month" ? monthBounds(calYr, calMo)
+    : timeMode === "range" ? { from: fromDate, to: toDate }
+    : null;
+  const eqSet = new Set(eqFilter.map(String));
+  const matchesTime = r => !activeRange || loanOverlapsRange(r, activeRange.from, activeRange.to);
+  // Matched against archiveItems — the frozen original_items snapshot, NOT the
+  // live rows (lesson #35): after a partial return reservation_items shrinks,
+  // and forensics must find the loan by what actually LEFT the warehouse.
+  const matchesEq = r => eqSet.size === 0 || archiveItems(r).some(i => eqSet.has(String(i.equipment_id)));
+
+  // How many archived reservations used each equipment id — the picker shows
+  // this next to every item, which directly answers "how often was this
+  // borrowed". Counted once per reservation, not per row.
+  const eqUsage = useMemo(() => {
+    const map = new Map();
+    for (const r of reservations) {
+      if (r.status !== "הוחזר") continue;
+      const snapshot = Array.isArray(r?.original_items) && r.original_items.length ? r.original_items : (r?.items || []);
+      const seen = new Set();
+      for (const i of snapshot) {
+        const id = String(i.equipment_id);
+        if (seen.has(id)) continue;
+        seen.add(id);
+        map.set(id, (map.get(id) || 0) + 1);
+      }
+    }
+    return map;
+  }, [reservations]);
+
+  const lessonArchive = sortByReturned(archived.filter(r=>r.loan_type==="שיעור"&&matchesSearch(r)&&matchesTime(r)&&matchesEq(r)));
+  const studentArchive = sortByReturned(archived.filter(r=>r.loan_type!=="שיעור"&&matchesSearch(r)&&matchesTime(r)&&matchesEq(r)&&(loanTypeF==="הכל"||r.loan_type===loanTypeF)));
 
   const showLessons  = sectionF==="הכל"||sectionF==="שיעורים";
   const showStudents = sectionF==="הכל"||sectionF==="השאלות";
   const totalShown   = (showLessons?lessonArchive.length:0)+(showStudents?studentArchive.length:0);
+
+  // Count for the month pager label: everything the current NON-time filters
+  // pass, inside the paged month — so the number always matches what the list
+  // will show when this month is selected.
+  const monthCount = (() => {
+    if (timeMode !== "month") return null;
+    const { from, to } = monthBounds(calYr, calMo);
+    return archived.filter(r =>
+      matchesSearch(r) && matchesEq(r) && loanOverlapsRange(r, from, to)
+      && (showLessons || r.loan_type !== "שיעור") && (showStudents || r.loan_type === "שיעור")
+      && (r.loan_type === "שיעור" || loanTypeF === "הכל" || r.loan_type === loanTypeF)
+    ).length;
+  })();
+
+  const anyFilterActive = !!search || timeMode !== "all" || eqFilter.length > 0 || loanTypeF !== "הכל" || sectionF !== "הכל";
+  const clearAllFilters = () => {
+    setSearch(""); setSectionF("הכל"); setLoanTypeF("הכל");
+    setTimeMode("all"); setFromDate(""); setToDate("");
+    setEqFilter([]); setEqPickerOpen(false); setEqPickerSearch("");
+  };
+
+  const stepMonth = (delta) => {
+    const d = new Date(calYr, calMo + delta, 1);
+    setCalYr(d.getFullYear()); setCalMo(d.getMonth());
+  };
 
   const ResCard = ({r}) => {
     const isLesson = r.loan_type==="שיעור";
@@ -145,10 +233,147 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
   return (
     <div className="page">
       {/* ── Filters bar ── */}
-      <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+      <div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
         <div className="search-bar" style={{flex:1,minWidth:160}}><span>🔍</span><input placeholder="חיפוש לפי שם, מייל או קורס..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
-        <span style={{fontSize:13,color:"var(--text3)"}}>סה״כ: <strong style={{color:"var(--text)"}}>{totalShown}</strong> בקשות</span>
+        <span style={{fontSize:13,color:"var(--text3)"}}>
+          מציג <strong style={{color:"var(--text)"}}>{totalShown}</strong> מתוך <strong style={{color:"var(--text)"}}>{archived.length}</strong>
+        </span>
+        {anyFilterActive&&(
+          <button type="button" onClick={clearAllFilters}
+            style={{background:"transparent",color:"#e74c3c",border:"1px solid rgba(231,76,60,0.4)",borderRadius:8,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",minHeight:36}}>
+            ✕ נקה סינון
+          </button>
+        )}
       </div>
+
+      {/* ── Time filter row ── */}
+      <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+        <span style={{fontSize:12,fontWeight:800,color:"var(--text3)"}}>🕐 זמן:</span>
+        {[["all","הכל"],["month","לפי חודש"],["range","טווח מותאם"]].map(([val,label])=>(
+          <button key={val} type="button" onClick={()=>setTimeMode(val)}
+            style={{padding:"6px 14px",borderRadius:20,border:`1.5px solid ${timeMode===val?"var(--accent)":"var(--border)"}`,background:timeMode===val?"var(--accent-glow)":"transparent",color:timeMode===val?"var(--accent)":"var(--text2)",fontWeight:timeMode===val?800:400,fontSize:13,cursor:"pointer",minHeight:34}}>
+            {label}
+          </button>
+        ))}
+        {timeMode==="month"&&(
+          <div style={{display:"flex",alignItems:"stretch",gap:8}}>
+            {/* Solid accent nav buttons — RTL: older months sit to the RIGHT */}
+            <button type="button" title="חודש קודם" onClick={()=>stepMonth(-1)}
+              style={{background:"var(--accent)",border:"none",borderRadius:10,color:"#000",cursor:"pointer",width:42,minHeight:46,display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 6px rgba(245,166,35,0.25)"}}>
+              <ChevronRight size={20} strokeWidth={2.6}/>
+            </button>
+            {/* month + year stacked, with the count as its own labelled line */}
+            <div style={{display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center",background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:"5px 18px",minWidth:120,gap:1}}>
+              <div style={{display:"flex",alignItems:"baseline",gap:7}}>
+                <span style={{fontWeight:900,fontSize:15,color:"var(--text)"}}>{HE_MONTHS[calMo]}</span>
+                <span style={{fontWeight:800,fontSize:15,color:"var(--accent)"}}>{calYr}</span>
+              </div>
+              {monthCount!=null&&(
+                <span style={{fontSize:11,fontWeight:700,color:monthCount>0?"var(--text2)":"var(--text3)"}}>
+                  {monthCount>0?`${monthCount} בקשות`:"אין בקשות"}
+                </span>
+              )}
+            </div>
+            <button type="button" title="חודש הבא" onClick={()=>stepMonth(1)}
+              style={{background:"var(--accent)",border:"none",borderRadius:10,color:"#000",cursor:"pointer",width:42,minHeight:46,display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 6px rgba(245,166,35,0.25)"}}>
+              <ChevronLeft size={20} strokeWidth={2.6}/>
+            </button>
+          </div>
+        )}
+        {timeMode==="range"&&(
+          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+            <label style={{fontSize:12,color:"var(--text3)"}}>מ-</label>
+            <input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)}
+              style={{padding:"7px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",fontSize:16}}/>
+            <label style={{fontSize:12,color:"var(--text3)"}}>עד</label>
+            <input type="date" value={toDate} onChange={e=>setToDate(e.target.value)}
+              style={{padding:"7px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",fontSize:16}}/>
+          </div>
+        )}
+      </div>
+
+      {/* ── Equipment filter row ── */}
+      <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+        <button type="button" onClick={()=>setEqPickerOpen(o=>!o)}
+          style={{padding:"6px 14px",borderRadius:20,border:`1.5px solid ${eqFilter.length?"var(--accent)":eqPickerOpen?"var(--accent)":"var(--border)"}`,background:eqFilter.length?"var(--accent-glow)":"transparent",color:eqFilter.length||eqPickerOpen?"var(--accent)":"var(--text2)",fontWeight:eqFilter.length?800:600,fontSize:13,cursor:"pointer",minHeight:34,display:"inline-flex",alignItems:"center",gap:6}}>
+          <Package size={14} strokeWidth={1.75}/> סינון לפי ציוד{eqFilter.length>0&&` (${eqFilter.length})`} {eqPickerOpen?"▴":"▾"}
+        </button>
+        {eqFilter.map(id=>(
+          <span key={id} style={{display:"inline-flex",alignItems:"center",gap:5,background:"var(--surface2)",border:"1px solid var(--accent)",borderRadius:20,padding:"4px 10px",fontSize:12,fontWeight:700,color:"var(--text)"}}>
+            <EqImg id={id} size={16}/> {eqName(id)}
+            <button type="button" title="הסר" onClick={()=>setEqFilter(f=>f.filter(x=>String(x)!==String(id)))}
+              style={{background:"transparent",border:"none",color:"#e74c3c",cursor:"pointer",padding:0,display:"inline-flex",alignItems:"center"}}>
+              <X size={13} strokeWidth={2.4}/>
+            </button>
+          </span>
+        ))}
+      </div>
+
+      {/* ── Equipment picker panel ── */}
+      {eqPickerOpen&&(()=>{
+        const searchLc = eqPickerSearch.trim().toLowerCase();
+        // Only equipment that actually appears in the archive — picking anything
+        // else can only produce an empty list (lesson #34: the chips and the
+        // list must agree). Sorted by how often it was borrowed.
+        const pool = equipment
+          .filter(e=>eqUsage.has(String(e.id)))
+          .filter(e=>!searchLc||String(e.name||"").toLowerCase().includes(searchLc));
+        const byCat = new Map();
+        for (const e of pool) {
+          const cat = e.category||"ללא קטגוריה";
+          if(!byCat.has(cat)) byCat.set(cat, []);
+          byCat.get(cat).push(e);
+        }
+        // Admin category order first (same order the equipment pages use),
+        // then anything left over.
+        const orderedCats = [
+          ...categories.filter(c=>byCat.has(c)),
+          ...[...byCat.keys()].filter(c=>!categories.includes(c)),
+        ];
+        return (
+          // Single-column list with full names, capped narrow (420px) and
+          // dropped under the button like a menu — the original problem was a
+          // panel that spanned the whole page, not the list format itself.
+          <div style={{maxWidth:420,background:"var(--surface)",border:"1px solid var(--accent)",borderRadius:12,padding:"12px 14px",marginBottom:14,boxShadow:"0 8px 24px rgba(0,0,0,0.25)"}}>
+            <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,flexWrap:"wrap"}}>
+              <div className="search-bar" style={{flex:1,minWidth:150}}>
+                <span>🔍</span>
+                <input placeholder="חיפוש פריט ציוד..." value={eqPickerSearch} onChange={e=>setEqPickerSearch(e.target.value)} style={{fontSize:16}}/>
+              </div>
+              {eqFilter.length>0&&(
+                <button type="button" onClick={()=>setEqFilter([])}
+                  style={{background:"transparent",color:"#e74c3c",border:"1px solid rgba(231,76,60,0.4)",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+                  נקה בחירה
+                </button>
+              )}
+            </div>
+            <div style={{fontSize:11,color:"var(--text3)",marginBottom:8}}>המספר ליד כל פריט = בכמה בקשות מוחזרות הוא הופיע</div>
+            <div style={{maxHeight:320,overflowY:"auto",display:"flex",flexDirection:"column",gap:2,paddingLeft:4}}>
+              {pool.length===0&&<div style={{textAlign:"center",color:"var(--text3)",fontSize:13,padding:"16px 0"}}>לא נמצא ציוד תואם בארכיון</div>}
+              {orderedCats.map(cat=>(
+                <div key={cat}>
+                  <div style={{fontSize:11,fontWeight:800,color:"var(--accent)",margin:"8px 2px 4px"}}>{cat}</div>
+                  {byCat.get(cat).map(e=>{
+                    const id=String(e.id);
+                    const on=eqSet.has(id);
+                    return (
+                      <button key={id} type="button"
+                        onClick={()=>setEqFilter(f=>on?f.filter(x=>String(x)!==id):[...f,id])}
+                        style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 9px",minHeight:40,borderRadius:8,border:`1px solid ${on?"var(--accent)":"transparent"}`,background:on?"var(--accent-glow)":"transparent",color:"var(--text)",fontSize:13,cursor:"pointer",textAlign:"right"}}>
+                        <span style={{width:16,height:16,borderRadius:4,border:`1.5px solid ${on?"var(--accent)":"var(--border)"}`,background:on?"var(--accent)":"transparent",display:"inline-flex",alignItems:"center",justifyContent:"center",color:"#000",fontSize:11,fontWeight:900,flexShrink:0}}>{on?"✓":""}</span>
+                        <EqImg id={e.id} size={22}/>
+                        {/* full name, wraps if long — never truncated */}
+                        <span style={{flex:1,fontWeight:on?800:600,overflowWrap:"anywhere"}}>{e.name}</span>
+                        <span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"0 8px",fontSize:11,fontWeight:700,color:"var(--text2)",flexShrink:0}}>{eqUsage.get(id)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Section chips */}
       <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>

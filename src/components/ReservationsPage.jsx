@@ -934,7 +934,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       </div>
 
       {/* Archive sub-view */}
-      {subView==="archive" && <ArchivePage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast} loanHandlers={loanHandlers} reservationUpdates={reservationUpdates}/>}
+      {subView==="archive" && <ArchivePage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast} loanHandlers={loanHandlers} reservationUpdates={reservationUpdates} categories={categories}/>}
 
       {/* Active / Rejected sub-views */}
       {subView!=="archive" && <>
