@@ -7263,7 +7263,15 @@ export default function App() {
                 <span className="topbar-title" style={{flex:1}}>הגדרות מערכת</span>
               </div>
             </div>
-            <SystemSettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast}/>
+            {/* Not mounted until site_settings has actually loaded. The page
+                seeds its draft from this prop once, and a draft seeded from the
+                placeholder above (which carries an empty userGuideVideos) is
+                one שמור away from wiping the real lists. The admin view is
+                restored from sessionStorage, so refreshing while on this page
+                hits that race every time. */}
+            {loading
+              ? <div style={{padding:"40px 20px",textAlign:"center",color:"var(--text3)",fontSize:14}}>טוען הגדרות…</div>
+              : <SystemSettingsPage siteSettings={siteSettings} setSiteSettings={setSiteSettings} showToast={showToast}/>}
           </div>
         </div>
       )}
