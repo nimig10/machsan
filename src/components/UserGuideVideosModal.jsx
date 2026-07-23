@@ -4,11 +4,11 @@
 // fullscreen iframe overlay that respects per-video orientation
 // (landscape 16:9 vs vertical 9:16).
 //
-// videoEmbedSrc and the overlay markup are duplicated here on purpose —
-// PublicForm.jsx has its own copy that the student panel still uses, and
-// refactoring the public flow to import from here would be out of scope.
+// The overlay markup is still duplicated with PublicForm's student panel;
+// videoEmbedSrc is not — it lives in src/utils.js and is shared.
 import { useEffect, useRef, useState } from "react";
 import { BookOpen, FileText, X } from "lucide-react";
+import { videoEmbedSrc } from "../utils.js";
 
 function downloadPdfFromBase64(base64, filename) {
   const binary = atob(base64);
@@ -18,16 +18,6 @@ function downloadPdfFromBase64(base64, filename) {
   const a = document.createElement("a");
   a.href = url; a.download = filename || "user-guide.pdf"; a.click();
   URL.revokeObjectURL(url);
-}
-
-function videoEmbedSrc(rawUrl) {
-  const url = String(rawUrl || "").trim();
-  if (!url) return null;
-  let m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
-  if (m) return `https://www.youtube.com/embed/${m[1]}`;
-  m = url.match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)/);
-  if (m) return `https://drive.google.com/file/d/${m[1]}/preview`;
-  return null;
 }
 
 export function UserGuideVideosModal({ open, onClose, title = "המדריך למשתמש", videos = [], accentColor, pdfAsset = null, pdfButtonLabel = "הוראות הפעלה" }) {

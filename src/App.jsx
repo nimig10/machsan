@@ -18,6 +18,7 @@ import { SecretaryDashboardPage } from "./components/SecretaryDashboardPage.jsx"
 import { PublicDisplayPage } from "./components/PublicDisplayPage.jsx";
 import { PublicDailyTablePage } from "./components/PublicDailyTablePage.jsx";
 import { StaffHub } from "./components/StaffHub.jsx";
+import { DailyAnnouncementModal } from "./components/DailyAnnouncementModal.jsx";
 import { UserGuideVideosPage } from "./components/UserGuideVideosPage.jsx";
 import { StaffManagementPage } from "./components/StaffManagementPage.jsx";
 import { SystemSettingsPage } from "./components/SystemSettingsPage.jsx";
@@ -7155,6 +7156,16 @@ export default function App() {
   return (
     <>
       <style>{css}</style>
+
+      {/* ── הודעה יומית חד-פעמית ──
+          מותקן פעם אחת לכל המסכים: App הוא השורש של כל המסלולים, והרכיב
+          מזהה את המשתמש בעצמו דרך ה-session (הזהות שמורה במקום אחר בכל
+          מסלול, אבל הסשן משותף). ללא סשן — לא קורה כלום.
+          מסכי הקיוסק והלוחות הציבוריים מוחרגים מפורשות: אין שם משתמש,
+          ותצוגת /daily-table רצה ללא השגחה ואסור שיופיע עליה חלון (לקח #24). */}
+      {!isPublicDisplayView && !isPublicDailyTableView && !isCalendarView && !isManagerCalendarView && (
+        <DailyAnnouncementModal/>
+      )}
 
       {/* ── דף לוז יומי ציבורי ── */}
       {isPublicDisplayView && <PublicDisplayPage/>}

@@ -110,6 +110,27 @@ export async function logActivity({ user_id, user_name, action, entity, entity_i
 // Adds auto-format + auto-quality + width transforms to Cloudinary URLs for CDN delivery
 // e.g. cloudinaryThumb("https://res.cloudinary.com/.../upload/v123/img.jpg", 200)
 //   → "https://res.cloudinary.com/.../upload/w_200,q_auto,f_auto/v123/img.jpg"
+// ─── VIDEO EMBEDS ─────────────────────────────────────────────────────────
+// Convert a YouTube or Google Drive share URL into an embeddable iframe src.
+// Returns null for unsupported hosts so the caller can render a fallback.
+//
+// THE single source of truth. It used to be copy-pasted in PublicForm.jsx and
+// UserGuideVideosModal.jsx; the daily-announcement modal would have made three
+// copies of a regex that decides whether a video plays at all, so the two were
+// folded in here instead (lesson #34: one implementation, no drift).
+export function videoEmbedSrc(rawUrl) {
+  const url = String(rawUrl || "").trim();
+  if (!url) return null;
+  // YouTube — covers watch?v= / share / embed / shorts / live / v
+  // (includes m.youtube.com / music.youtube.com because we don't anchor to start)
+  let m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+  if (m) return `https://www.youtube.com/embed/${m[1]}`;
+  // Google Drive file share link
+  m = url.match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)/);
+  if (m) return `https://drive.google.com/file/d/${m[1]}/preview`;
+  return null;
+}
+
 export function cloudinaryThumb(url, width = 400) {
   if (!url || !url.includes("res.cloudinary.com")) return url;
   return url.replace("/upload/", `/upload/w_${width},q_auto,f_auto/`);
