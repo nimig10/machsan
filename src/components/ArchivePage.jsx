@@ -240,7 +240,7 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
         </span>
         {anyFilterActive&&(
           <button type="button" onClick={clearAllFilters}
-            style={{background:"transparent",color:"#e74c3c",border:"1px solid rgba(231,76,60,0.4)",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer",minHeight:32}}>
+            style={{background:"transparent",color:"#e74c3c",border:"1px solid rgba(231,76,60,0.4)",borderRadius:8,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",minHeight:36}}>
             ✕ נקה סינון
           </button>
         )}
@@ -256,19 +256,27 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
           </button>
         ))}
         {timeMode==="month"&&(
-          <div style={{display:"flex",alignItems:"center",gap:6,background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:"4px 8px"}}>
-            {/* RTL: older months sit to the RIGHT of the timeline */}
+          <div style={{display:"flex",alignItems:"stretch",gap:8}}>
+            {/* Solid accent nav buttons — RTL: older months sit to the RIGHT */}
             <button type="button" title="חודש קודם" onClick={()=>stepMonth(-1)}
-              style={{background:"transparent",border:"none",color:"var(--text2)",cursor:"pointer",padding:6,minWidth:38,minHeight:38,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>
-              <ChevronRight size={18} strokeWidth={2}/>
+              style={{background:"var(--accent)",border:"none",borderRadius:10,color:"#000",cursor:"pointer",width:42,minHeight:46,display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 6px rgba(245,166,35,0.25)"}}>
+              <ChevronRight size={20} strokeWidth={2.6}/>
             </button>
-            <span style={{fontWeight:800,fontSize:14,color:"var(--text)",minWidth:110,textAlign:"center"}}>
-              {HE_MONTHS[calMo]} {calYr}
-              {monthCount!=null&&<span style={{marginRight:6,background:"var(--accent-glow)",color:"var(--accent)",border:"1px solid rgba(245,166,35,0.35)",borderRadius:20,padding:"0 8px",fontSize:11,fontWeight:800}}>{monthCount}</span>}
-            </span>
+            {/* month + year stacked, with the count as its own labelled line */}
+            <div style={{display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center",background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:"5px 18px",minWidth:120,gap:1}}>
+              <div style={{display:"flex",alignItems:"baseline",gap:7}}>
+                <span style={{fontWeight:900,fontSize:15,color:"var(--text)"}}>{HE_MONTHS[calMo]}</span>
+                <span style={{fontWeight:800,fontSize:15,color:"var(--accent)"}}>{calYr}</span>
+              </div>
+              {monthCount!=null&&(
+                <span style={{fontSize:11,fontWeight:700,color:monthCount>0?"var(--text2)":"var(--text3)"}}>
+                  {monthCount>0?`${monthCount} בקשות`:"אין בקשות"}
+                </span>
+              )}
+            </div>
             <button type="button" title="חודש הבא" onClick={()=>stepMonth(1)}
-              style={{background:"transparent",border:"none",color:"var(--text2)",cursor:"pointer",padding:6,minWidth:38,minHeight:38,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>
-              <ChevronLeft size={18} strokeWidth={2}/>
+              style={{background:"var(--accent)",border:"none",borderRadius:10,color:"#000",cursor:"pointer",width:42,minHeight:46,display:"inline-flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 6px rgba(245,166,35,0.25)"}}>
+              <ChevronLeft size={20} strokeWidth={2.6}/>
             </button>
           </div>
         )}
@@ -351,7 +359,7 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
                     return (
                       <button key={id} type="button"
                         onClick={()=>setEqFilter(f=>on?f.filter(x=>String(x)!==id):[...f,id])}
-                        style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"7px 9px",borderRadius:8,border:`1px solid ${on?"var(--accent)":"transparent"}`,background:on?"var(--accent-glow)":"transparent",color:"var(--text)",fontSize:13,cursor:"pointer",textAlign:"right"}}>
+                        style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 9px",minHeight:40,borderRadius:8,border:`1px solid ${on?"var(--accent)":"transparent"}`,background:on?"var(--accent-glow)":"transparent",color:"var(--text)",fontSize:13,cursor:"pointer",textAlign:"right"}}>
                         <span style={{width:16,height:16,borderRadius:4,border:`1.5px solid ${on?"var(--accent)":"var(--border)"}`,background:on?"var(--accent)":"transparent",display:"inline-flex",alignItems:"center",justifyContent:"center",color:"#000",fontSize:11,fontWeight:900,flexShrink:0}}>{on?"✓":""}</span>
                         <EqImg id={e.id} size={22}/>
                         {/* full name, wraps if long — never truncated */}
