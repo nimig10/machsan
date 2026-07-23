@@ -85,11 +85,17 @@ export async function getValidTokenDirect() {
 }
 
 // ─── ACTIVITY LOGGING ────────────────────────────────────────────────────────
+// Fire-and-forget: callers either ignore the result or use the returned id to
+// attach the log to an undo entry. The endpoint now requires a staff JWT, so
+// the token goes with every write — a missing/expired token means no log line,
+// which is exactly how a failed write already behaved (returns null, the action
+// itself is unaffected).
 export async function logActivity({ user_id, user_name, action, entity, entity_id, details }) {
   try {
+    const token = await getAuthToken();
     const res = await fetch("/api/activity-log", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ action: "write", user_id, user_name, activity: action, entity, entity_id, details }),
     });
     const data = await res.json();

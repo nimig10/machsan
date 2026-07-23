@@ -35,12 +35,14 @@
 //
 // AUTH: staff JWT (requireStaff) for the client ping, OR the internal cron
 // secret (X-Cron-Secret header, or `Authorization: Bearer {CRON_SECRET}`).
+// ONE EXCEPTION: a live `reconcile=all` requires the cron secret specifically —
+// staff auth is not enough for something that mails the whole college.
 //
 // PROTOCOL:
 //   POST { lessonId }                  -> reconcile one course (client, on save/delete)
 //   GET  ?force_test=<lessonId>        -> reconcile one course (manual test; cron secret)
-//   GET  ?reconcile=all                -> reconcile every course + orphaned mappings
-//   GET  ?reconcile=all&dryrun=1       -> report drift, send nothing, persist nothing
+//   GET  ?reconcile=all                -> reconcile every course + orphaned mappings (cron secret ONLY)
+//   GET  ?reconcile=all&dryrun=1       -> report drift, send nothing, persist nothing (staff OK)
 //
 // NOTE: `reconcile=all` WITHOUT dryrun will invite every lecturer in the college
 // on first run. Only the dryrun variant is registered as a cron in vercel.json.
@@ -641,8 +643,21 @@ async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
     }
   }
 
+  // The persist is gated on a successful send (see `if (ok)` above), but the
+  // persist's own result used to be discarded. When it fails the mail is
+  // already gone and the snapshot still holds the old values, so the next run
+  // recomputes the identical delta and mails the lecturer the SAME change
+  // notice again. Surfacing it in the result makes that visible instead of
+  // silent — no retry, no reordering.
+  let persisted = true;
   if (toPersist.length) {
-    await sbUpsert("lesson_calendar_events?on_conflict=lesson_id,session_key,lecturer_id", toPersist);
+    persisted = await sbUpsert("lesson_calendar_events?on_conflict=lesson_id,session_key,lecturer_id", toPersist);
+    if (!persisted) {
+      console.error(
+        "calendar-sync: mail sent but snapshot NOT persisted for lesson",
+        lessonId, `(${toPersist.length} rows) — next run will re-report the same delta`
+      );
+    }
   }
 
   const totals = [...byLecturer.values()].reduce(
@@ -655,7 +670,7 @@ async function reconcileLesson(lessonId, ctx, { dryRun = false } = {}) {
   );
   // `refreshed` is reported so a drift report stays honest about rows that were
   // re-saved without mailing anyone.
-  return { lessonId, ...totals, refreshed: silentRefresh.length, invites, notices, emailed };
+  return { lessonId, ...totals, refreshed: silentRefresh.length, invites, notices, emailed, persisted };
 }
 
 // ─── Handler ───────────────────────────────────────────────────────────────
@@ -678,8 +693,23 @@ export default async function handler(req, res) {
     let lessonIds = [];
     let prefetch = null;
 
+    // ?dryrun=1 reports drift without sending or persisting anything. Read up
+    // front because the bulk path's authorization depends on it.
+    const dryRun = String(q.dryrun || "") === "1" || String(q.dryrun || "") === "true";
+
     if (req.method === "GET") {
       if (String(q.reconcile || "") === "all") {
+        // A live `reconcile=all` mails every lecturer in the college (see the
+        // header note). Staff auth alone is too weak a gate for that: any
+        // warehouse member could fire it from a browser by accident. Only the
+        // cron secret may run it for real; staff keep the dry-run report and
+        // the POST {lessonId} path the client actually uses.
+        if (!dryRun && !cronOk) {
+          return res.status(403).json({
+            ok: false, error: "Forbidden",
+            detail: "reconcile=all without dryrun requires the cron secret (it mails every lecturer)",
+          });
+        }
         prefetch = await prefetchAll();
         if (!prefetch) return res.status(500).json({ ok: false, error: "prefetch failed" });
         lessonIds = prefetch.lessonIds;
@@ -698,11 +728,9 @@ export default async function handler(req, res) {
       return res.status(405).json({ ok: false, error: "method not allowed" });
     }
 
-    // ?dryrun=1 reports drift without sending or persisting anything. This is
-    // the variant registered as a cron — `reconcile=all` on its own would mail
-    // every lecturer in the college on first run.
-    const dryRun = String(q.dryrun || "") === "1" || String(q.dryrun || "") === "true";
-
+    // (dryRun is read above — the bulk path's authorization depends on it.)
+    // dryrun=1 is the variant registered as a cron; `reconcile=all` on its own
+    // would mail every lecturer in the college on first run.
     const ctx = await loadCtx();
     ctx.baseUrl = baseUrlFor(req);
     ctx.prefetch = prefetch; // null on single-lesson paths → targeted reads

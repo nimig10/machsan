@@ -1,5 +1,21 @@
 // activity-log.js — write + read activity logs
-import { requireAdmin } from "./_auth-helper.js";
+//
+// AUTH: every action requires a staff JWT. `write` and `delete` used to run
+// unauthenticated straight through the service_role key, which left the audit
+// trail open to anyone on the internet — forged entries, and deletion of any
+// row whose id was known. Nothing in the app reads activity_logs as a data
+// source (lesson #37 rejects it explicitly), so the exposure was audit
+// integrity plus an uncapped public INSERT rather than an inventory risk.
+//
+// Gating them on requireStaff costs nothing operationally: every one of the
+// ~25 logActivity() call sites is staff-side (equipment, categories, dept
+// heads, team members, students, reservations, staff session recovery), and
+// PublicForm never logs activity at all — there is no anonymous caller.
+//
+// user_id/user_name still come from the request body rather than the JWT.
+// Deriving them server-side would change the names already displayed in the
+// log; the token now only proves the caller is staff.
+import { requireAdmin, requireStaff } from "./_auth-helper.js";
 
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -22,8 +38,10 @@ export default async function handler(req, res) {
 
   const { action } = req.body || {};
 
-  // WRITE — returns created log id
+  // WRITE — returns created log id (staff only)
   if (action === "write") {
+    const staff = await requireStaff(req, res);
+    if (!staff) return;
     const { user_id, user_name, activity, entity, entity_id, details } = req.body;
     if (!activity) return res.status(400).json({ error: "Missing activity" });
     const result = await sbFetch("activity_logs", {
@@ -41,8 +59,10 @@ export default async function handler(req, res) {
     return res.status(result.ok ? 201 : 500).json({ ok: result.ok, id });
   }
 
-  // DELETE — remove a log entry by id (used when undo reverts the action)
+  // DELETE — remove a log entry by id (used when undo reverts the action; staff only)
   if (action === "delete") {
+    const staff = await requireStaff(req, res);
+    if (!staff) return;
     const { id } = req.body;
     if (!id) return res.status(400).json({ error: "Missing id" });
     const result = await sbFetch(`activity_logs?id=eq.${encodeURIComponent(id)}`, { method: "DELETE" });
