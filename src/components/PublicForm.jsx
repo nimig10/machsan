@@ -5408,6 +5408,20 @@ ${inventory}
               ? { padding:"10px 12px", fontSize:12, minHeight:36, justifyContent:"center" }
               : {};
             const hdrChip = isMobile ? { textAlign:"center", padding:"5px 10px" } : {};
+            // The two mode buttons are TOGGLES: press to enter, press again to
+            // leave. That only works if "pressed" is unmistakable, so the on
+            // state flips from a translucent tint to a SOLID fill with inverted
+            // text and a halo — the same button, obviously switched on. There is
+            // no separate exit control anywhere; the header button is it.
+            //
+            // ONLY PAINT PROPERTIES CHANGE — never the label, the glyph, the
+            // font weight or the border width. Any of those alters the measured
+            // width and makes the button visibly jump the instant it is pressed.
+            // box-shadow is outside the box model, so the halo costs no layout.
+            const modeOn = (color, text) => ({
+              background:color, color:text, borderColor:color,
+              boxShadow:`0 0 0 3px ${color}40`,
+            });
             const myRes=[...reservations].filter(r=>{
               const stEmail=String(loggedInStudent?.email||"").toLowerCase().trim();
               const rEmail=String(r.email||"").toLowerCase().trim();
@@ -5463,17 +5477,24 @@ ${inventory}
                       // Add-item entry point. Blocked states keep the button
                       // visible but disabled — the reason renders inside the
                       // expanded body (tooltips don't exist on mobile).
-                      if(inUpdateDraft){
-                        return (<button
-                          onClick={e=>{e.stopPropagation();clearUpdateDraft(loggedInStudent?.email,r.id);setUpdDraft(null);setUpdPicker(null);}}
-                          style={{background:"rgba(231,76,60,0.14)",color:"#e74c3c",border:"1px solid rgba(231,76,60,0.4)",borderRadius:4,padding:"3px 9px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",...hdrBtn}}
-                        >בטל עדכון</button>);
-                      }
+                      //
+                      // The header keeps ONE button per mode and never swaps its
+                      // label: while the draft is open it just looks pressed.
+                      // Leaving a mode is done by the ✕ in the corner of the
+                      // panel that mode opened, where the user is already
+                      // looking — the header used to grow an extra button
+                      // ("בטל עדכון" / "סיים") that pushed the row off a phone.
                       return (<button
-                        disabled={!canStartUpdate}
-                        title={canStartUpdate?"":updateBlockReason}
+                        disabled={!inUpdateDraft&&!canStartUpdate}
+                        aria-pressed={inUpdateDraft}
+                        title={inUpdateDraft?"לחיצה נוספת סוגרת את מצב העריכה":canStartUpdate?"":updateBlockReason}
                         onClick={e=>{
                           e.stopPropagation();
+                          // Pressed → close the panel. The draft itself is kept
+                          // (it lives in localStorage and is restored below), so
+                          // this is never destructive; discarding is the
+                          // explicit "בטל טיוטה" inside the panel.
+                          if(inUpdateDraft){ setUpdDraft(null); setUpdPicker(null); return; }
                           if(!canStartUpdate){ if(!isExp) setExpandedResId(r.id); return; }
                           // Re-open a saved draft for THIS reservation if one exists
                           // (a student may hold drafts on several reservations; only
@@ -5492,16 +5513,20 @@ ${inventory}
                           background:canStartUpdate?"rgba(46,204,113,0.14)":"var(--surface2)",
                           color:canStartUpdate?"#2ecc71":"var(--text3)",
                           border:canStartUpdate?"1px solid rgba(46,204,113,0.45)":"1px solid var(--border)",
-                          borderRadius:4,padding:"3px 9px",fontSize:11,fontWeight:700,
-                          cursor:canStartUpdate?"pointer":"not-allowed",whiteSpace:"nowrap",
-                          opacity:canStartUpdate?1:0.6,
-                          display:"inline-flex",alignItems:"center",...hdrBtn,
+                          borderRadius:4,padding:"4px 10px",fontSize:11,fontWeight:700,
+                          cursor:(inUpdateDraft||canStartUpdate)?"pointer":"not-allowed",whiteSpace:"nowrap",
+                          opacity:(inUpdateDraft||canStartUpdate)?1:0.6,
+                          display:"inline-flex",alignItems:"center",gap:4,
+                          ...hdrBtn,
+                          ...(inUpdateDraft?modeOn("#2ecc71","#08130c"):{}),
                         }}
                       >➕ הוסף פריטים</button>);
                     })()}
                     {(st==="ממתין"||st==="אישור ראש מחלקה"||st==="מאושר")&&r.loan_type!=="שיעור"&&r.booking_kind!=="lesson"&&(()=>{
                       const inRemoveMode=removingItemsForResId===r.id;
                       return (<button
+                        aria-pressed={inRemoveMode}
+                        title={inRemoveMode?"לחיצה נוספת סוגרת את מצב ההחסרה":"החסרת פריטים מהבקשה"}
                         onClick={e=>{
                           e.stopPropagation();
                           if(inRemoveMode){
@@ -5514,21 +5539,22 @@ ${inventory}
                           }
                         }}
                         style={{
-                          background:inRemoveMode?"rgba(231,76,60,0.24)":"rgba(231,76,60,0.14)",
+                          background:"rgba(231,76,60,0.14)",
                           color:"#e74c3c",
                           border:"1px solid rgba(231,76,60,0.48)",
                           borderRadius:4,
-                          padding:inRemoveMode?"3px 9px":"4px 10px",
+                          padding:"4px 10px",
                           fontSize:11,
                           fontWeight:700,
                           cursor:"pointer",
                           whiteSpace:"nowrap",
                           display:"inline-flex",
                           alignItems:"center",
-                          gap:3,
+                          gap:4,
                           ...hdrBtn,
+                          ...(inRemoveMode?modeOn("#e74c3c","#fff"):{}),
                         }}
-                      >{inRemoveMode?"סיים":"− החסר פריטים"}</button>);
+                      >− החסר פריטים</button>);
                     })()}
                     <span style={{fontSize:13,color:"var(--text3)",display:"inline-block",alignSelf:isMobile?"center":"auto",transform:isExp?"rotate(180deg)":"rotate(0deg)",transition:"transform 0.2s"}}>▾</span>
                   </div>
@@ -5645,23 +5671,21 @@ ${inventory}
                           <div style={{fontWeight:700,fontSize:13}}>{eq?.name||item.name||"פריט"}</div>
                           <div style={{fontSize:13,color:"var(--text)",fontWeight:700,marginTop:2,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                             <span>כמות: <span style={{color:"var(--accent)"}}>{item.quantity}</span></span>
-                            {inUpdateDraft&&(()=>{
-                              // Draft-mode control: stage +1 (increase) on an existing item.
-                              const stagedInc=updDraft.ops.find(o=>o.action==="increase"&&Number(o.item_id)===Number(item.id));
-                              const eqRow=equipment.find(e=>String(e.id)===String(item.equipment_id));
-                              const canInc=eqRow?availForUpdate(r,eqRow,updDraft.ops)>0:false;
-                              const privBlocked=r.loan_type==="פרטית"&&draftPrivateQty(r,updDraft.ops)>=4&&!(eqRow?.privateLoanUnlimited);
-                              return (<>
-                                <button
-                                  type="button"
-                                  disabled={!canInc||privBlocked}
-                                  title={privBlocked?"אין לחרוג מ-4 פריטים בהשאלה פרטית":!canInc?"אין יחידות זמינות בתאריכים אלה":"הוסף יחידה (בטיוטה)"}
-                                  onClick={e=>{e.stopPropagation();if(!canInc||privBlocked)return;stageDraftOp(r,{action:"increase",item_id:Number(item.id),target_eq_id:String(item.equipment_id),name:eqRow?.name||item.name||"פריט",quantity:1});}}
-                                  style={{background:(!canInc||privBlocked)?"var(--surface2)":"rgba(46,204,113,0.14)",color:(!canInc||privBlocked)?"var(--text3)":"#2ecc71",border:(!canInc||privBlocked)?"1px solid var(--border)":"1px solid rgba(46,204,113,0.45)",borderRadius:6,width:22,height:22,padding:0,fontSize:14,fontWeight:700,cursor:(!canInc||privBlocked)?"not-allowed":"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",lineHeight:1,opacity:(!canInc||privBlocked)?0.5:1}}
-                                >+</button>
-                                {stagedInc&&<span style={{fontSize:11,fontWeight:800,color:"#2ecc71"}}>+{stagedInc.quantity} בטיוטה</span>}
-                              </>);
-                            })()}
+                            {/* No per-item "+" here on purpose. Adding used to have
+                                two entry points — this button (an `increase` op) and
+                                the picker (an `add` op) — and using both on the same
+                                equipment listed it TWICE in the draft, once as
+                                "הגדלת כמות לפריט קיים" and once as "פריט חדש בבקשה",
+                                for what is one item. The picker is now the only way
+                                in: picking equipment that is already on the
+                                reservation merges into its existing row
+                                (student_submit_reservation_update_v1 updates by
+                                equipment_id and inserts only IF NOT FOUND), so the
+                                quantity simply grows and nothing is duplicated.
+                                `increase` itself stays supported everywhere — saved
+                                localStorage drafts and updates already awaiting
+                                review can still contain it. We only stopped
+                                producing new ones. */}
                             {removingItemsForResId===r.id&&(st==="ממתין"||st==="אישור ראש מחלקה"||st==="מאושר")&&r.loan_type!=="שיעור"&&r.booking_kind!=="lesson"&&(()=>{
                               const itemBusy=busyItemIds.has(Number(item.id));
                               return (<button
@@ -5730,7 +5754,19 @@ ${inventory}
                   {/* ── update draft panel ── */}
                   {inUpdateDraft&&(
                     <div style={{border:"1.5px solid rgba(46,204,113,0.45)",background:"rgba(46,204,113,0.06)",borderRadius:10,padding:"12px 14px",display:"flex",flexDirection:"column",gap:8}}>
-                      <div style={{fontSize:13,fontWeight:800,color:"#2ecc71"}}>📝 טיוטת עדכון — {updDraft.ops.length===0?"עדיין לא נוספו שינויים":`${updDraft.ops.length} שינויים`}</div>
+                      {/* Header: title at the RTL start (right), and the
+                          destructive "discard" pinned to the opposite corner —
+                          far from "עדכן בקשה" so the two can't be confused. */}
+                      <div style={{display:"flex",alignItems:"center",gap:10}}>
+                        <div style={{flex:1,minWidth:0,fontSize:13,fontWeight:800,color:"#2ecc71"}}>📝 טיוטת עדכון — {updDraft.ops.length===0?"עדיין לא נוספו שינויים":`${updDraft.ops.length} שינויים`}</div>
+                        {updDraft.ops.length>0&&(
+                          <button type="button"
+                            onClick={e=>{e.stopPropagation();clearUpdateDraft(loggedInStudent?.email,r.id);setUpdDraft(null);setUpdPicker(null);}}
+                            title="מחיקת כל השינויים שנאספו בטיוטה"
+                            style={{background:"transparent",color:"#e74c3c",border:"1px solid rgba(231,76,60,0.45)",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,flexShrink:0,whiteSpace:"nowrap"}}
+                          ><X size={13} strokeWidth={2.4}/> בטל טיוטה</button>
+                        )}
+                      </div>
                       {updDraft.ops.map((o,oi)=>{
                         // Resolve the equipment (image + name) for both op kinds:
                         // add carries equipment_id, increase carries target_eq_id.
