@@ -1,9 +1,12 @@
 // SystemSettingsPage.jsx — global system settings (admin only)
 import { useEffect, useRef, useState } from "react";
-import { Camera, FileText, FileSpreadsheet, Film, Mic, Video, Trash2, Plus, ChevronDown, ChevronUp, Save } from "lucide-react";
+import { Camera, FileText, FileSpreadsheet, Film, Mic, Video, Trash2, Plus, ChevronDown, ChevronUp, Save, Megaphone } from "lucide-react";
 import { syncAllSiteSettings } from "../utils/siteSettingsApi.js";
 import { USER_GUIDE_SLOTS, loadUserGuideAsset, upsertUserGuideAsset, deleteUserGuideAsset } from "../utils/userGuideAssetsApi.js";
 import { XL_TEMPLATE_SLOTS, loadXlTemplate, upsertXlTemplate, deleteXlTemplate } from "../utils/xlTemplatesApi.js";
+import { AUDIENCE_LABELS } from "../utils/announcementPolicy.js";
+import { adminGetAnnouncement, adminSaveAnnouncement, adminPublishAnnouncement, adminDeactivateAnnouncement } from "../utils/announcementsApi.js";
+import { DailyAnnouncementModal } from "./DailyAnnouncementModal.jsx";
 
 const PDF_MAX_BYTES = 5 * 1024 * 1024; // 5MB
 const XL_MAX_BYTES = 2 * 1024 * 1024;  // 2MB
@@ -52,6 +55,18 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
   const [xlDrafts, setXlDrafts] = useState({});
   const [xlInitial, setXlInitial] = useState({});
   const [xlUploading, setXlUploading] = useState({});
+  // Daily announcement — its own load/save cycle through /api/announcement,
+  // NOT part of `draft`/syncAllSiteSettings. It lives in its own table (the
+  // text must not ship to every client inside the site_settings blob), and it
+  // has two distinct save semantics that a single "שמור" button cannot express.
+  const [annDraft, setAnnDraft] = useState({
+    title: "", body: "", audience: "all", displayDays: 1,
+    videoUrl: "", videoTitle: "", videoOrientation: "landscape",
+  });
+  const [annActive, setAnnActive] = useState(null); // the published row, or null
+  const [annViewers, setAnnViewers] = useState(0);
+  const [annBusy, setAnnBusy] = useState(false);
+  const [annPreview, setAnnPreview] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,6 +94,26 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
         setXlInitial(map);
       } catch (err) {
         console.warn("[SystemSettingsPage] load XL templates failed", err);
+      }
+    })();
+    (async () => {
+      try {
+        const r = await adminGetAnnouncement();
+        if (cancelled || !r.ok) return;
+        setAnnActive(r.announcement || null);
+        setAnnViewers(r.viewers || 0);
+        if (r.announcement) {
+          const a = r.announcement;
+          setAnnDraft({
+            title: a.title || "", body: a.body || "",
+            audience: a.audience || "all",
+            displayDays: a.display_days === 2 ? 2 : 1,
+            videoUrl: a.video_url || "", videoTitle: a.video_title || "",
+            videoOrientation: a.video_orientation || "landscape",
+          });
+        }
+      } catch (err) {
+        console.warn("[SystemSettingsPage] load announcement failed", err);
       }
     })();
     return () => { cancelled = true; };
@@ -201,6 +236,211 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
     } finally {
       setSaving(false);
     }
+  };
+
+  // ── Daily announcement ───────────────────────────────────────────────────
+  // Every video already in the system, flattened into one picker and tagged
+  // with the library it came from. The announcement audience and the library
+  // audience are independent on purpose: a clip filmed for the student guide is
+  // often exactly what the staff needs to see too.
+  const announcementVideoOptions = [
+    { key: "userGuideVideos", tag: "סטודנטים" },
+    { key: "staffUserGuideVideos", tag: "צוות" },
+    { key: "lecturerUserGuideVideos", tag: "מרצים" },
+  ].flatMap(({ key, tag }) =>
+    (Array.isArray(draft[key]) ? draft[key] : [])
+      .filter(v => v && String(v.url || "").trim())
+      .map(v => ({
+        value: v.url,
+        label: `[${tag}] ${v.title || v.description || v.url}`,
+        title: v.title || "",
+        orientation: v.orientation === "vertical" ? "vertical" : "landscape",
+      }))
+  );
+
+  const annPayload = () => ({
+    title: annDraft.title, body: annDraft.body,
+    audience: annDraft.audience, displayDays: annDraft.displayDays,
+    videoUrl: annDraft.videoUrl, videoTitle: annDraft.videoTitle,
+    videoOrientation: annDraft.videoOrientation,
+  });
+
+  const applyAnnResult = (r) => {
+    setAnnActive(r.announcement || null);
+    // A fresh row has no views yet; an in-place edit keeps whatever it had.
+    if (r.announcement && annActive && r.announcement.id !== annActive.id) setAnnViewers(0);
+  };
+
+  const runAnn = async (fn, okMsg) => {
+    if (!annDraft.title.trim()) { showToast("error", "צריך כותרת להודעה"); return; }
+    setAnnBusy(true);
+    try {
+      const r = await fn();
+      if (!r.ok) { showToast("error", "שגיאה בשמירת ההודעה — נסה שוב"); return; }
+      applyAnnResult(r);
+      showToast("success", okMsg);
+    } finally { setAnnBusy(false); }
+  };
+
+  const renderAnnouncementPanel = () => {
+    const audienceOpts = ["all", "students", "lecturers", "staff"];
+    const chosenVideo = announcementVideoOptions.find(o => o.value === annDraft.videoUrl) || null;
+    return (
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-header">
+          <div className="card-title" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Megaphone size={16} strokeWidth={1.75} color="var(--accent)" /> הודעה יומית למשתמשים
+          </div>
+        </div>
+        <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.6 }}>
+            הודעה שתקפוץ בחלון צף למשתמש <strong>בכניסה הראשונה שלו באותו יום</strong> — ואז לא תוצג לו שוב.
+            מיועדת להודיע על עדכון גדול באפליקציה כדי שהמשתמש ידע עליו וילמד אותו בעצמו.
+          </div>
+
+          {annActive ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "8px 12px", borderRadius: 8, background: "rgba(46,204,113,0.08)", border: "1px solid rgba(46,204,113,0.3)", fontSize: 12 }}>
+              <span style={{ fontWeight: 800, color: "#2ecc71" }}>● הודעה פעילה</span>
+              <span style={{ color: "var(--text3)" }}>נצפתה ע״י <strong style={{ color: "var(--text2)" }}>{annViewers}</strong> משתמשים</span>
+            </div>
+          ) : (
+            <div style={{ padding: "8px 12px", borderRadius: 8, background: "var(--surface2)", border: "1px dashed var(--border)", fontSize: 12, color: "var(--text3)" }}>
+              אין הודעה פעילה כרגע. מלאו את הפרטים ולחצו על "פרסם כהודעה חדשה".
+            </div>
+          )}
+
+          <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 4 }}>כותרת</label>
+            <input type="text" value={annDraft.title}
+              placeholder="לדוגמה: חדש — אפשר להוסיף פריטים לבקשת השאלה קיימת"
+              onChange={e => setAnnDraft(p => ({ ...p, title: e.target.value }))}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 16 }} />
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 4 }}>תוכן ההודעה</label>
+            <textarea rows={5} value={annDraft.body}
+              placeholder={"מה השתנה, ואיפה זה נמצא במסך.\nירידת שורה נשמרת כמו שהיא."}
+              onChange={e => setAnnDraft(p => ({ ...p, body: e.target.value }))}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 16, fontFamily: "inherit", resize: "vertical", lineHeight: 1.6 }} />
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 6 }}>למי להציג</label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {audienceOpts.map(a => {
+                const on = annDraft.audience === a;
+                return (
+                  <button type="button" key={a} onClick={() => setAnnDraft(p => ({ ...p, audience: a }))}
+                    style={{ padding: "9px 16px", borderRadius: 8, border: `2px solid ${on ? "var(--accent)" : "var(--border)"}`, background: on ? "var(--accent-glow)" : "var(--surface)", color: on ? "var(--accent)" : "var(--text2)", fontWeight: on ? 800 : 600, fontSize: 13, cursor: "pointer", minHeight: 38 }}>
+                    {AUDIENCE_LABELS[a]}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 6, lineHeight: 1.5 }}>
+              מי שרשום בכמה תפקידים (למשל סטודנט שהוא גם איש צוות) יראה הודעה שמכוונת לכל אחד מהתפקידים שלו.
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 6 }}>כמה פעמים להציג</label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {[
+                { n: 1, label: "פעם אחת", hint: "ביום הראשון בלבד" },
+                { n: 2, label: "פעמיים", hint: "בשני ימים שונים" },
+              ].map(o => {
+                const on = annDraft.displayDays === o.n;
+                return (
+                  <button type="button" key={o.n} onClick={() => setAnnDraft(p => ({ ...p, displayDays: o.n }))}
+                    style={{ padding: "9px 16px", borderRadius: 8, border: `2px solid ${on ? "var(--accent)" : "var(--border)"}`, background: on ? "var(--accent-glow)" : "var(--surface)", color: on ? "var(--accent)" : "var(--text2)", fontWeight: on ? 800 : 600, fontSize: 13, cursor: "pointer", display: "inline-flex", flexDirection: "column", alignItems: "flex-start", gap: 2, minHeight: 38 }}>
+                    <span>{o.label}</span>
+                    <span style={{ fontSize: 10, fontWeight: 500, color: on ? "var(--accent)" : "var(--text3)" }}>{o.hint}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 6, lineHeight: 1.5 }}>
+              בכל מקרה ההודעה מוצגת <strong>פעם אחת ביום לכל היותר</strong>. "פעמיים" = פעם ביום הראשון שהמשתמש נכנס, ופעם נוספת ביום הבא שהוא נכנס.
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 4 }}>סרטון מצורף (אופציונלי)</label>
+            <select
+              value={annDraft.videoUrl}
+              onChange={e => {
+                const url = e.target.value;
+                const opt = announcementVideoOptions.find(o => o.value === url);
+                // Snapshot the video into the announcement: editing or deleting
+                // it in the library afterwards must not break a published notice.
+                setAnnDraft(p => ({ ...p, videoUrl: url, videoTitle: opt?.title || "", videoOrientation: opt?.orientation || "landscape" }));
+              }}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 16 }}>
+              <option value="">— ללא סרטון —</option>
+              {announcementVideoOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 6, lineHeight: 1.5 }}>
+              {announcementVideoOptions.length === 0
+                ? "אין עדיין סרטונים במערכת — הוסיפו סרטון באחד מפאנלי \"המדריך למשתמש\" למטה."
+                : `מתוך מאגר הסרטונים הקיים (${announcementVideoOptions.length} סרטונים). הסרטון נשמר בתוך ההודעה, כך ששינוי במאגר לא ישבור אותה.`}
+              {chosenVideo && <> · פורמט: <strong>{chosenVideo.orientation === "vertical" ? "📱 אנכי" : "🖥️ אופקי"}</strong></>}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", paddingTop: 6, borderTop: "1px solid var(--border)" }}>
+            <button type="button" className="btn btn-secondary" disabled={!annDraft.title.trim()}
+              onClick={() => setAnnPreview({
+                id: "preview", title: annDraft.title, body: annDraft.body,
+                videoUrl: annDraft.videoUrl, videoTitle: annDraft.videoTitle,
+                videoOrientation: annDraft.videoOrientation,
+              })}
+              style={{ fontSize: 13, minHeight: 40 }}>
+              👁 תצוגה מקדימה
+            </button>
+
+            {annActive && (
+              <button type="button" className="btn btn-secondary" disabled={annBusy}
+                onClick={() => runAnn(() => adminSaveAnnouncement(annPayload()), "ההודעה עודכנה")}
+                style={{ fontSize: 13, minHeight: 40 }}>
+                💾 שמור שינויים
+              </button>
+            )}
+
+            <button type="button" className="btn btn-primary" disabled={annBusy}
+              onClick={() => {
+                if (annActive && !window.confirm("לפרסם כהודעה חדשה?\n\nכל מי שכבר ראה את ההודעה הנוכחית יראה את החדשה מחדש. לתיקון טעות כתיב בלבד השתמשו ב\"שמור שינויים\".")) return;
+                runAnn(() => adminPublishAnnouncement(annPayload()), "ההודעה פורסמה");
+              }}
+              style={{ fontSize: 13, fontWeight: 800, minHeight: 40 }}>
+              📣 פרסם כהודעה חדשה
+            </button>
+
+            {annActive && (
+              <button type="button" className="btn btn-secondary" disabled={annBusy}
+                onClick={async () => {
+                  if (!window.confirm("להפסיק להציג את ההודעה למשתמשים?")) return;
+                  setAnnBusy(true);
+                  try {
+                    const r = await adminDeactivateAnnouncement();
+                    if (!r.ok) { showToast("error", "שגיאה — נסה שוב"); return; }
+                    setAnnActive(null); setAnnViewers(0);
+                    showToast("success", "ההודעה הופסקה");
+                  } finally { setAnnBusy(false); }
+                }}
+                style={{ fontSize: 13, minHeight: 40, color: "#e74c3c", borderColor: "rgba(231,76,60,0.4)" }}>
+                ⏹ הפסק להציג
+              </button>
+            )}
+          </div>
+
+          <div style={{ fontSize: 11, color: "var(--text3)", lineHeight: 1.6 }}>
+            <strong>שמור שינויים</strong> — מתקן את ההודעה הפעילה בלי להציג אותה שוב למי שכבר ראה.<br />
+            <strong>פרסם כהודעה חדשה</strong> — מאפס את הצפיות; כל מי שבקהל היעד יראה אותה מחדש.
+          </div>
+        </div>
+      </div>
+    );
   };
 
   // Renders one audience-specific video-management panel (students / staff /
@@ -477,6 +717,11 @@ export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast })
           </div>
         </div>
       </div>
+
+      {renderAnnouncementPanel()}
+      {/* Preview renders the very same component the users get — the only way
+          to be sure what was written is what will be seen. */}
+      {annPreview && <DailyAnnouncementModal preview={annPreview} onClosePreview={() => setAnnPreview(null)} />}
 
       {/* User Guide Videos — three independent panels, one per audience:
           - userGuideVideos          → students (PublicForm "המדריך למשתמש" tab)

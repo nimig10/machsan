@@ -1,7 +1,7 @@
 // PublicForm.jsx — public loan request form
 import { AlertTriangle, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mail, Mic, Minus, Moon, Package, Pencil, Phone, Save, School, Search, Settings, Shield, ShieldCheck, Trash2, User, X, XCircle } from "lucide-react";
 import { useEffect, useState, useRef, useMemo } from "react";
-import { formatDate, formatTime, formatLocalDateInput, parseLocalDate, today, getAvailable, computeEquipmentAvailability, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, EXTERNAL_LOAN_TYPES, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR, groupReservationItemsByCategory, deriveVisibleCategories, stretchOverdueForCalendar } from "../utils.js";
+import { formatDate, formatTime, formatLocalDateInput, parseLocalDate, today, getAvailable, computeEquipmentAvailability, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, EXTERNAL_LOAN_TYPES, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR, groupReservationItemsByCategory, deriveVisibleCategories, stretchOverdueForCalendar, videoEmbedSrc } from "../utils.js";
 import { supabase } from "../supabaseClient.js";
 import { listStudents } from "../utils/studentsApi.js";
 import { listLessons } from "../utils/lessonsApi.js";
@@ -1307,21 +1307,6 @@ function deriveProductionCrewSnapshot(production, studentsList) {
     crew_sound_first_name: sp.first, crew_sound_last_name: sp.last,
     crew_sound_name: sound?.name || "", crew_sound_phone: sound?.phone || "",
   };
-}
-
-// Convert a YouTube or Google Drive share URL into an embeddable iframe src.
-// Returns null for unsupported hosts so the caller can render a fallback.
-function videoEmbedSrc(rawUrl) {
-  const url = String(rawUrl || "").trim();
-  if (!url) return null;
-  // YouTube — covers watch?v= / share / embed / shorts / live / v
-  // (includes m.youtube.com / music.youtube.com because we don't anchor to start)
-  let m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
-  if (m) return `https://www.youtube.com/embed/${m[1]}`;
-  // Google Drive file share link
-  m = url.match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)/);
-  if (m) return `https://drive.google.com/file/d/${m[1]}/preview`;
-  return null;
 }
 
 function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColor, commitmentPdf, commitmentPdfCompressed, commitmentPdfName, certifications, userGuideVideos = [], userGuidePdf = null }) {
