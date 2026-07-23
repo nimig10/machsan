@@ -1,5 +1,5 @@
 // SystemSettingsPage.jsx — global system settings (admin only)
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Camera, FileText, FileSpreadsheet, Film, Mic, Video, Trash2, Plus, ChevronDown, ChevronUp, Save } from "lucide-react";
 import { syncAllSiteSettings } from "../utils/siteSettingsApi.js";
 import { USER_GUIDE_SLOTS, loadUserGuideAsset, upsertUserGuideAsset, deleteUserGuideAsset } from "../utils/userGuideAssetsApi.js";
@@ -10,6 +10,36 @@ const XL_MAX_BYTES = 2 * 1024 * 1024;  // 2MB
 
 export function SystemSettingsPage({ siteSettings, setSiteSettings, showToast }) {
   const [draft, setDraft] = useState({ aiMaxRequests: 5, publicDisplayInterval: 18, ...siteSettings });
+
+  // DATA-LOSS GUARD — do not remove without reading this.
+  //
+  // `draft` is seeded by a useState initializer, which runs EXACTLY ONCE. If
+  // this page mounts before App finishes loading site_settings (it does: the
+  // admin view is restored from sessionStorage, so a refresh while sitting on
+  // this page re-mounts it immediately), `draft` freezes on App's placeholder —
+  // which contains `userGuideVideos: []`. The panels then show "אין סרטונים"
+  // for lists that are perfectly intact in the DB, and pressing שמור writes
+  // that empty array straight over them, because syncAllSiteSettings upserts
+  // every key present in the blob.
+  //
+  // The rule below only ever FILLS IN blanks: a key already holding something
+  // in the draft is never overwritten, so an edit in progress survives, while a
+  // stale-empty list gets repaired the moment the real settings arrive.
+  const seededFrom = useRef(siteSettings);
+  useEffect(() => {
+    if (siteSettings === seededFrom.current) return; // same object, nothing new
+    seededFrom.current = siteSettings;
+    setDraft(prev => {
+      const next = { ...prev };
+      for (const [k, v] of Object.entries(siteSettings || {})) {
+        const cur = next[k];
+        const blank = cur === undefined || cur === null || cur === ""
+          || (Array.isArray(cur) && cur.length === 0);
+        if (blank) next[k] = v;
+      }
+      return next;
+    });
+  }, [siteSettings]);
   const [saving, setSaving] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   const [soundLogoUploading, setSoundLogoUploading] = useState(false);
