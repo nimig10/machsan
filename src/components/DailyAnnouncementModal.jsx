@@ -158,9 +158,11 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
   if (!shown) return null;
 
   const src = videoEmbedSrc(shown.videoUrl);
-  const isVertical = shown.videoOrientation === "vertical";
-  // Orientation only decides the shape of the FULLSCREEN player now — the
-  // notice itself renders a poster, never a frame (see the comment on it).
+  // videoOrientation is deliberately NOT read here any more. It existed to pick
+  // an aspect-ratio box, and every such box turned out to be a way to crop the
+  // clip. The notice shows a poster and the player gets the whole screen, so
+  // both surfaces are shape-agnostic and a portrait clip needs no special case.
+  // The field is still stored and still drives the admin preview.
 
   // Where this viewer can find the guide videos again after closing the notice.
   // The three audiences keep their libraries in three different places, so the
@@ -329,21 +331,21 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
             <X size={20} strokeWidth={2.5} color="#0a0c10" />
             <span>סגור</span>
           </button>
-          <div
-            style={{
-              background: "#000",
-              position: "relative",
-              ...(isVertical
-                ? { height: "100vh", aspectRatio: "9 / 16", maxWidth: "100vw" }
-                : { width: "100vw", aspectRatio: "16 / 9", maxHeight: "100vh" }),
-            }}
-          >
+          {/* The frame takes the WHOLE viewport — no aspect-ratio box.
+              Forcing one is what cropped the video: a 16:9 box on a portrait
+              phone is only about a fifth of the screen tall, and Drive's fixed
+              toolbar then eats a quarter of THAT, so the clip lost its bottom.
+              Given the full screen, both players letterbox the video themselves
+              and centre it — which is what they are built to do and what a
+              fullscreen viewer should look like. Nothing is constrained, so
+              nothing can be cut, in either orientation. */}
+          <div style={{ position: "absolute", inset: 0, background: "#000" }}>
             <iframe
               src={src}
               title={shown.videoTitle || shown.title || "announcement video"}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }}
+              style={{ width: "100%", height: "100%", border: 0, display: "block" }}
             />
           </div>
         </div>

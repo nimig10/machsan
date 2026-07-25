@@ -1718,20 +1718,21 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
             <span>סגור</span>
           </button>
           {(() => {
-            const isVertical = activeVideo.orientation === "vertical";
-            // Vertical: cap width by viewport height * 9/16 so the 9:16 frame
-            // fits in the viewport. Landscape: cap height by viewport width * 9/16.
-            const wrapStyle = isVertical
-              ? { height: "100vh", aspectRatio: "9 / 16", maxWidth: "100vw" }
-              : { width: "100vw", aspectRatio: "16 / 9", maxHeight: "100vh" };
+            // Full viewport, no aspect-ratio box. Forcing a ratio is what
+            // cropped the clip: a 16:9 box on a portrait phone is about a fifth
+            // of the screen tall, and Google Drive's fixed toolbar — drawn
+            // INSIDE its own cross-origin frame, so it can never be measured
+            // from here — then ate a quarter of that. Handed the whole screen,
+            // both players letterbox and centre the video themselves. Nothing
+            // is constrained, so nothing can be cut, in either orientation.
             return (
-              <div style={{ ...wrapStyle, background: "#000", position: "relative" }}>
+              <div style={{ position: "absolute", inset: 0, background: "#000" }}>
                 <iframe
                   src={activeVideo.src}
                   title={activeVideo.description || "user guide video"}
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
-                  style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }}
+                  style={{ width: "100%", height: "100%", border: 0, display: "block" }}
                 />
               </div>
             );
