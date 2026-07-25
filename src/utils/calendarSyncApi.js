@@ -30,13 +30,26 @@ export async function syncLessonCalendar(lessonId) {
       console.warn("[calendarSyncApi] server returned", res.status);
       return { ok: false, reason: `http-${res.status}` };
     }
-    // The endpoint answers 200 even when a send fails, so read the body: a
-    // course with pending invites but emailed === 0 means nothing went out.
+    // The endpoint answers 200 even when a send fails, so read the body. The
+    // per-lesson result is { added, changed, removed, refreshed, invites,
+    // notices, emailed, persisted } — these field names are the contract; an
+    // earlier version checked `requests`/`cancels`, which the server has never
+    // returned, so the condition was always false and this whole check was dead.
     const body = await res.json().catch(() => null);
     const r = body?.results?.[0];
-    if (r && (r.requests || r.cancels) && !r.emailed) {
+    // A delta was computed but nothing left the building: SMTP rejected it after
+    // its own retries. The lecturer has no calendar and only this line says so.
+    const delta = (r?.added || 0) + (r?.changed || 0) + (r?.removed || 0);
+    if (r && delta > 0 && !r.emailed) {
       console.warn("[calendarSyncApi] nothing emailed", r);
       return { ok: false, reason: "send-failed", detail: r };
+    }
+    // Mail went out but the snapshot did not save (PR #89 reports this and
+    // nobody read it). The next run recomputes the identical delta and mails
+    // the SAME change notice again — worth surfacing before that happens.
+    if (r && r.persisted === false) {
+      console.warn("[calendarSyncApi] snapshot not persisted", r);
+      return { ok: false, reason: "not-persisted", detail: r };
     }
     return { ok: true, detail: r || null };
   } catch (e) {
