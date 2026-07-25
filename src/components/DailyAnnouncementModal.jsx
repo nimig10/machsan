@@ -240,14 +240,19 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
               <div
                 style={{
                   position: "relative",
-                  width: "100%",
                   background: "#05070a",
                   border: "1px solid var(--border)",
                   borderRadius: 10,
                   overflow: "hidden",
+                  // Vertical keeps the 9:16 geometry it always had: a narrow,
+                  // centred, height-capped column. A full-width box was tried
+                  // and was wrong — Drive lays its controls out to the frame's
+                  // width, so a wide box spread play/skip/volume/CC/settings
+                  // across the whole screen and squeezed the clip into the
+                  // middle. The frame must be the SHAPE of the video.
                   ...(isVertical
-                    ? { height: "min(58vh, 460px)" }
-                    : { height: 0, paddingBottom: "56.25%" }),
+                    ? { alignSelf: "center", width: "min(100%, 46vh)", aspectRatio: "9 / 16", maxHeight: "58vh" }
+                    : { width: "100%", height: 0, paddingBottom: "56.25%" }),
                 }}
               >
                 {playing && isVertical ? (
