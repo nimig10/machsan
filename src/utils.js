@@ -131,6 +131,26 @@ export function videoEmbedSrc(rawUrl) {
   return null;
 }
 
+// Poster frame for a video, so a player that has not been started yet can show
+// the clip instead of a blank box. Same input as videoEmbedSrc; null when the
+// host has no public thumbnail endpoint.
+//
+// Both URLs are public and need no key. Drive's only answers for files shared
+// as "anyone with the link" — which is already required for /preview to embed
+// at all, so a video that plays here has a thumbnail here. Callers must still
+// handle onError: sharing can be tightened after the fact, and a broken image
+// icon inside an announcement looks like a bug.
+export function videoThumbnailSrc(rawUrl) {
+  const url = String(rawUrl || "").trim();
+  if (!url) return null;
+  let m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+  // hqdefault exists for every video; maxresdefault 404s on older uploads.
+  if (m) return `https://img.youtube.com/vi/${m[1]}/hqdefault.jpg`;
+  m = url.match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)/);
+  if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w640`;
+  return null;
+}
+
 export function cloudinaryThumb(url, width = 400) {
   if (!url || !url.includes("res.cloudinary.com")) return url;
   return url.replace("/upload/", `/upload/w_${width},q_auto,f_auto/`);

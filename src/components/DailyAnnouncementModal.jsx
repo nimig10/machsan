@@ -12,9 +12,9 @@
 // Every decision about WHO sees WHAT is made server-side in /api/announcement
 // from the caller's JWT. This component only renders what it is handed.
 import { useEffect, useRef, useState } from "react";
-import { X, Megaphone, Play } from "lucide-react";
+import { X, Megaphone, Play, Maximize2 } from "lucide-react";
 import { supabase } from "../supabaseClient.js";
-import { videoEmbedSrc } from "../utils.js";
+import { videoEmbedSrc, videoThumbnailSrc } from "../utils.js";
 import { fetchMyAnnouncement, markAnnouncementSeen } from "../utils/announcementsApi.js";
 
 // Long enough for the loading screen and the post-login routing to settle, so
@@ -103,6 +103,12 @@ function AnnouncementBody({ body }) {
 export function DailyAnnouncementModal({ preview = null, onClosePreview = null }) {
   const [item, setItem] = useState(null);
   const [fullscreen, setFullscreen] = useState(false);
+  // The inline frame is mounted only once the viewer asks for it: until then the
+  // notice shows a poster. That keeps a third-party player off the screen of
+  // everyone who just wants to read the text, and it is what makes a real
+  // preview image possible at all.
+  const [playing, setPlaying] = useState(false);
+  const [thumbFailed, setThumbFailed] = useState(false);
   // Guards against a double fetch when getSession and onAuthStateChange both
   // fire for the same login.
   const loadedForRef = useRef(null);
@@ -158,11 +164,23 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
   if (!shown) return null;
 
   const src = videoEmbedSrc(shown.videoUrl);
-  // videoOrientation is deliberately NOT read here any more. It existed to pick
-  // an aspect-ratio box, and every such box turned out to be a way to crop the
-  // clip. The notice shows a poster and the player gets the whole screen, so
-  // both surfaces are shape-agnostic and a portrait clip needs no special case.
-  // The field is still stored and still drives the admin preview.
+  const thumb = videoThumbnailSrc(shown.videoUrl);
+  // Google Drive's /preview draws a fixed-height toolbar INSIDE its own
+  // cross-origin frame, so the clip never gets the full box. A plain 16:9 box
+  // therefore CROPS it, and the frame cannot be measured from here to correct
+  // for that exactly.
+  //
+  // So the box is deliberately over-allocated rather than fitted: the error is
+  // asymmetric. Too much height costs a thin black band; too little cuts the
+  // bottom off the video, which is the bug being fixed. 68px comfortably clears
+  // the ~55px toolbar, and Drive letterboxes into whatever is left over instead
+  // of cropping — the same reason the fullscreen player simply fills the screen.
+  // YouTube overlays its controls and needs no allowance.
+  const isDrive = !!src && src.includes("drive.google.com");
+  // videoOrientation is deliberately NOT read. It used to pick an aspect-ratio
+  // box, and every such box turned out to be a way to crop the clip; a portrait
+  // video letterboxes inside this one with no special case. The field is still
+  // stored and still drives the admin preview.
 
   // Where this viewer can find the guide videos again after closing the notice.
   // The three audiences keep their libraries in three different places, so the
@@ -215,51 +233,77 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
                   ▶ {shown.videoTitle}
                 </div>
               )}
-              {/* NO INLINE IFRAME — deliberately. Google Drive's /preview player
-                  draws a fixed-height toolbar inside its own frame and fits the
-                  clip into whatever is left, so in a box this small it scaled to
-                  width and cropped: a landscape video came out clipped with its
-                  play/pause control out of reach on a phone. The frame is
-                  cross-origin, so its internals cannot be measured — every
-                  "add N px for the chrome" constant is a guess that re-breaks on
-                  a different width, DPR, or Drive UI change (one was tried and
-                  did not hold).
-
-                  So the notice shows a poster and the player gets the whole
-                  screen — the same shape UserGuideVideosModal and PublicForm's
-                  guide panel already use, where no iframe is ever rendered
-                  inline. Nothing here can crop, at any size. */}
+              {/* One box, two states: poster until the viewer taps, then the
+                  live player IN PLACE. Height is over-allocated (see isDrive
+                  above) rather than fitted to a ratio, so the player letterboxes
+                  inside it and the clip is never cut. */}
+              <div
+                style={{
+                  position: "relative",
+                  width: "100%",
+                  height: 0,
+                  paddingBottom: `calc(56.25% + ${isDrive ? 68 : 0}px)`,
+                  background: "#05070a",
+                  border: "1px solid var(--border)",
+                  borderRadius: 10,
+                  overflow: "hidden",
+                }}
+              >
+                {playing ? (
+                  <iframe
+                    src={src}
+                    title={shown.videoTitle || shown.title || "announcement video"}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0, display: "block" }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setPlaying(true)}
+                    aria-label={`נגן את הסרטון${shown.videoTitle ? `: ${shown.videoTitle}` : ""}`}
+                    style={{
+                      position: "absolute", inset: 0, width: "100%", height: "100%",
+                      border: 0, padding: 0, cursor: "pointer", fontFamily: "inherit",
+                      background: thumb && !thumbFailed ? "#000" : "linear-gradient(160deg, #141922, #05070a)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                  >
+                    {thumb && !thumbFailed && (
+                      // contain, not cover: cover would crop the poster and that
+                      // is the whole complaint this panel exists to answer.
+                      <img
+                        src={thumb}
+                        alt=""
+                        onError={() => setThumbFailed(true)}
+                        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }}
+                      />
+                    )}
+                    <span
+                      style={{
+                        position: "relative",
+                        width: 64, height: 64, borderRadius: "50%", background: "var(--accent)",
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        boxShadow: "0 6px 20px rgba(0,0,0,0.55)",
+                      }}
+                    >
+                      {/* Nudged off-centre because a triangle's optical centre
+                          sits left of its bounding box. */}
+                      <Play size={27} strokeWidth={2} color="#0a0c10" fill="#0a0c10" style={{ marginInlineStart: 4 }} />
+                    </span>
+                  </button>
+                )}
+              </div>
+              {/* Kept even now that the video plays in place: the inline box
+                  shares a phone screen with a title, body, footnote and button,
+                  so it can only ever be small. */}
               <button
                 type="button"
                 onClick={() => setFullscreen(true)}
-                aria-label={`נגן את הסרטון${shown.videoTitle ? `: ${shown.videoTitle}` : ""}`}
-                style={{
-                  width: "100%",
-                  border: "1px solid var(--border)",
-                  borderRadius: 10,
-                  background: "linear-gradient(160deg, #141922, #05070a)",
-                  cursor: "pointer",
-                  padding: "26px 16px",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: 10,
-                  fontFamily: "inherit",
-                }}
+                className="btn btn-secondary btn-sm"
+                style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 7, minHeight: 38, fontSize: 13.5 }}
               >
-                <span
-                  style={{
-                    width: 64, height: 64, borderRadius: "50%", background: "var(--accent)",
-                    display: "inline-flex", alignItems: "center", justifyContent: "center",
-                    boxShadow: "0 6px 20px rgba(0,0,0,0.45)",
-                  }}
-                >
-                  {/* Nudged off-centre because a triangle's optical centre sits
-                      left of its bounding box. */}
-                  <Play size={27} strokeWidth={2} color="#0a0c10" fill="#0a0c10" style={{ marginInlineStart: 4 }} />
-                </span>
-                <span style={{ fontSize: 15, fontWeight: 800, color: "var(--text)" }}>צפייה בסרטון</span>
-                <span style={{ fontSize: 12.5, color: "var(--text3)" }}>נפתח במסך מלא</span>
+                <Maximize2 size={15} strokeWidth={2} /> צפייה במסך מלא
               </button>
               {/* Standing footnote on every announcement that carries a video —
                   not something the admin writes. The notice is shown once and
