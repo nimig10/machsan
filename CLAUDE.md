@@ -20,6 +20,11 @@
 | מה השתנה ומתי | **📜 היסטוריית PRs** — שורה אחת ל-PR |
 | איך בודקים לפני merge | **זרימת העבודה** למטה + **🛡️ Guardrails חיים** |
 
+> 📏 **תקציב הקובץ: ~65K תווים.** הוא נטען בכל סשן ובא על חשבון המקום לעבוד בקוד.
+> פיצ'ר חדש מוסיף **שורה אחת** ל-📜 היסטוריה. לקח חדש נוסף **רק אם משהו נשבר בפועל**,
+> ובפורמט כלל+נימוק — לא סיפור. חורגים מהתקציב → **מקצצים לפני שמוסיפים**.
+> אל תשכפל: אם זה כבר בלקח, הסעיף הנושאי מפנה אליו ולא חוזר עליו.
+
 ## 🎯 רעיון האפליקציה
 
 אפליקציית ניהול לבית ספר לקולנוע/סאונד בישראל ("קמרה"). מערכת בעברית עם RTL.
@@ -96,6 +101,12 @@
 > - לבדיקת **עיצוב מיילים** מהנייד: לרנדר את ה-HTML דרך `buildEmail` ולשלוח **תמונת PNG** (headless chromium ב-`/opt/pw-browsers/...`) — קל יותר מ-HTML לגלילה בנייד.
 > - תיקוני **חירום/hotfix** נדחפים ל-main באישור מפורש של המשתמש בלבד.
 > - **שאר חוקי הברזל ללא שינוי** — שינויי DB/schema/migration עדיין dev-first ובאישור מפורש, ואין merge בלי אישור המשתמש.
+>
+> ⚠️ **מלכודת: כתובת Preview היא פר-דפלוימנט וקפואה.** כל push יוצר URL חדש
+> (`machsan-<hash>-…vercel.app`); הישן **לא** מתעדכן לעולם. משתמש שנשאר על לשונית
+> קודמת בודק build מלפני כמה סבבים ומדווח שהתיקון לא עבד — **זה קרה, ובזבז סבבים
+> שלמים**. אחרי כל push למסור את ה-URL **החדש**, או להפנות לפרודקשן אחרי merge.
+> אם דיווח לא מסתדר עם הקוד — לבדוק את ה-hash בכתובת **לפני** שמחפשים באג.
 
 > 📧 **כתובת מייל לבדיקות:** `nimig10@gmail.com` — כל בדיקת מיילים (תצוגות עיצוב, `force_test` של קרונים וכו') נשלחת לכתובת הזו.
 
@@ -110,65 +121,83 @@
 
 ## 🗄️ מבנה DB — Tables-only (אין `public.store`)
 
-ה-blob (`public.store`) הוסר ב-`20260430220000` יחד עם כל המנגנון מסביבו. כל ישות יושבת בטבלה נורמלית.
+ה-blob (`public.store`) הוסר ב-`20260430220000`. כל ישות יושבת בטבלה נורמלית.
 
 ### טבלאות domain
 
 | ישות | טבלה(ות) | API util |
-|------|----------|----------|
-| ציוד | `equipment` + `equipment_units` | `writeEquipmentToDB` ב-`utils.js` (RPC) |
+|---|---|---|
+| ציוד | `equipment` + `equipment_units` | `writeEquipmentToDB` (RPC) ב-utils.js |
 | השאלות | `reservations_new` + `reservation_items` | `createReservation`, `updateReservationStatus` |
-| קיטים | `kits` | `kitsApi.js` |
-| צוות | `team_members` | `teamMembersApi.js` |
-| קטגוריות + סינון | `categories` + `loan_type_filters` | `categoriesApi.js` |
-| מרצים | `lecturers` | `lecturersApi.js` |
-| שיעורים | `lessons` | `lessonsApi.js` |
-| אולפנים | `studios` | `studiosApi.js` |
-| הזמנות אולפנים | `studio_bookings` | `studioBookingsApi.js` |
-| מדיניות | `policies` + `policy_assets` (Base64 PDFs) | `policiesApi.js` |
-| הגדרות אתר | `site_settings` | `siteSettingsApi.js` |
-| מנהל מכללה | `college_manager` | `collegeManagerApi.js` |
-| ראשי מחלקה | `dept_heads` | `deptHeadsApi.js` |
+| קיטים / צוות / קטגוריות | `kits` · `team_members` · `categories`+`loan_type_filters` | `kitsApi` · `teamMembersApi` · `categoriesApi` |
+| מרצים / שיעורים / אולפנים | `lecturers` · `lessons` · `studios` | `lecturersApi` · `lessonsApi` · `studiosApi` |
+| הזמנות אולפן | `studio_bookings` | `studioBookingsApi.js` |
+| מדיניות | `policies` + `policy_assets` (Base64 PDF + טמפלטי XL) | `policiesApi.js` |
+| הגדרות / מנהל / ראשי מחלקה | `site_settings` · `college_manager` · `dept_heads` | `siteSettingsApi` · `collegeManagerApi` · `deptHeadsApi` |
 | סטודנטים | `students` + `certification_types` + `student_certifications` + `tracks` | `studentsApi.js` |
-| לוח הפקות | `productions` + `production_dates` + `production_crew` + `production_slots` | `productionsApi.js` |
-| מפגשי קורס ליומן המרצה | `lesson_calendar_events` | `api/calendar-sync.js` (שרת) + `calendarSyncApi.js` (טריגר) |
-| הודעה יומית למשתמשים | `announcements` + `announcement_views` | `api/announcement.js` (שרת) + `announcementsApi.js` + `announcementPolicy.js` (PR #93) |
-| עדכוני ציוד בבקשה קיימת | `reservation_item_updates` (ledger/מונה) + `reservation_pending_items` (פריטים בבדיקה) | `reservationUpdatesApi.js` + 2 endpoints (PR #85) |
+| לוח הפקות | `productions` + `production_dates`/`_crew`/`_slots` | `productionsApi.js` |
+| יומן המרצה | `lesson_calendar_events` | `api/calendar-sync.js` + `calendarSyncApi.js` |
+| הודעה יומית | `announcements` + `announcement_views` | `api/announcement.js` + `announcementPolicy.js` |
+| עדכון פריטים בבקשה | `reservation_item_updates` + `reservation_pending_items` | `reservationUpdatesApi.js` + 2 endpoints |
 
-טבלאות תומכות: `users` (מראת auth, source הפעיל להרשאות), `staff_members` (legacy, fallback הוסר), `activity_logs`, `equipment_reports`, `auth_entity_map`, `staff_schedule_assignments`, `staff_schedule_preferences`, `staff_daily_tasks`, `reservation_staff_assignments` (טבלת-צד מנותקת לשיוך איש-צוות מטפל להוצאה/החזרה של בקשת השאלה — PR #58, FK חד-כיווני `ON DELETE CASCADE`, **לא נוגעת בלוגיקת ההשאלות**; + עמודת `done` display-only למעקב עצמי — PR #68), `staff_personal_tasks` (משימות ידניות של עובד ל-Staff Hub, פר staff+יום — PR #68), `staff_hub_checkoffs` (מעקב-ביצוע מאוחד למשמרת-היום/הערות בפאנל "משימות להיום", presence=בוצע — PR #68), `auth_rate_limits`, `lesson_calendar_events` (סנאפ-שוט של מה שנמסר לכל מרצה על כל מפגש — הבסיס לחישוב "מה השתנה"; RLS-on ללא policies, API-only דרך `/api/calendar-sync` — PR #81). (3 האחרונות RLS-on ללא policies, API-only דרך `/api/staff-schedule`.)
+**טבלאות תומכות**: `users` (מראת auth — **המקור הפעיל להרשאות**), `activity_logs`,
+`equipment_reports`, `auth_entity_map`, `auth_rate_limits`, `staff_members` (legacy,
+ה-fallback הוסר), `staff_schedule_assignments`/`_preferences`, `staff_daily_tasks`,
+`staff_personal_tasks`, `staff_hub_checkoffs`, `reservation_staff_assignments`.
 
-`reservations_new` קיבל FK אופציונליים: `production_id` + `production_date_id` (ON DELETE SET NULL).
-`reservations_new.original_items` jsonb (PR #78, מיגרציה `20260719120000`) — סנאפ-שוט תיעודי **מוקפא** של רשימת הציוד כפי שיצאה מהמחסן (`[{equipment_id,name,quantity}]`), נחתם פעם אחת בהחזרה החלקית הראשונה של בקשה `באיחור`. display-only — אף guard/RPC/חישוב זמינות לא קורא אותו; NULL = הארכיון נופל ל-`reservation_items` החי. ראה לקח #35.
-`reservations_new.approved_by_staff_id` uuid + `approved_by_name` text (PR #88, מיגרציה `20260722170000` — בפרוד רשומה כ-`20260722214226`) — חותמת **מי אישר בפועל** את הבקשה (`מאושר`), נכתבת באותו PATCH-אחרי-RPC ומאותה זהות-JWT כמו `returned_by_*` (helper משותף `stampActor`). **בלי FK**, display-only, NULL = לא נרשם מאשר. מוצגת דרך `ApprovedByLabel` ב-[reservationActors.jsx](src/components/reservationActors.jsx).
-`reservations_new.returned_by_staff_id` uuid + `returned_by_name` text (PR #80, מיגרציה `20260719130000`) — חותמת **המבצע בפועל** של ההחזרה, נכתבת ב-PATCH נפרד ב-[api/update-reservation-status.js](api/update-reservation-status.js) מזהות שנגזרת **בשרת מה-JWT**. **בלי FK במכוון** — השם חייב לשרוד מחיקת משתמש (כמו `crew_photographer_name`). display-only: אף guard/RPC/חישוב זמינות לא קורא אותן. NULL = לא נרשם מבצע (שורה מלפני הפיצ'ר, או שהחותמת נכשלה) → נפילה לשיבוץ המתוכנן או "לא נרשם". ראה לקח #37.
-`productions.kit_id` (FK → `kits`, ON DELETE SET NULL) — כש-set, הזמנת ההפקה מוגבלת לפריטי הערכה.
-`equipment` קיבל 2 עמודות הגבלת-השאלת-חוץ (PR #51, מיגרציה `20260623120000`): `external_loan_restricted boolean DEFAULT false` (חוסם את הפריט כולו מ-`פרטית`/`הפקה`) + `external_loan_hold_count integer DEFAULT 0` (כמה יחידות להחזיק בקמפוס). **על `equipment` ולא `equipment_units`** — טופס ההשאלה טוען ציוד דרך `select("*")` ולא מושך unit rows, אז flag ברמת-unit לא היה עושה round-trip. ראה סעיף "🚫 הגבלת השאלת-חוץ".
+> **RLS-on ללא policies, API-only**: `staff_schedule_*`, `staff_personal_tasks`,
+> `staff_hub_checkoffs`, `lesson_calendar_events`, `announcements`(+`_views`).
+> אין להם גישת-קליינט ישירה — רק דרך ה-endpoint שלהם.
+
+**עמודות שנוספו ל-`reservations_new`** — כולן **display-only**; אף guard/RPC/חישוב
+זמינות לא קורא אותן, וכולן **בלי FK** במכוון כדי לשרוד מחיקת משתמש:
+`production_id`+`production_date_id` (FK אופציונליים, SET NULL) ·
+`original_items` jsonb (סנאפ-שוט מוקפא של מה שיצא — לקח #35+#44) ·
+`returned_by_staff_id`+`returned_by_name` (מי החזיר בפועל) ·
+`approved_by_staff_id`+`approved_by_name` (מי אישר בפועל) — שתי האחרונות נגזרות-JWT
+בשרת דרך helper משותף `stampActor`, לקח #37+#41.
+בנוסף: `productions.kit_id` (מגביל את ההזמנה לפריטי הערכה) ו-2 עמודות השאלת-חוץ על
+`equipment` — **על `equipment` ולא `equipment_units`**, כי הטופס טוען `select("*")`
+ולא מושך unit rows (לקח #21).
 
 ### RPCs פעילות
 
-- **ציוד**: `sync_equipment_from_json` (**עודכן ב-PR #51, מיגרציה `20260623120100`** — ממראה גם את `external_loan_restricted`/`external_loan_hold_count` מ-JSON keys `externalLoanRestricted`/`externalLoanHoldCount`; שאר הלוגיקה byte-for-byte זהה. ⚠️ **delete+reinsert של units + COALESCE ל-false/0** — לכן App.jsx חייב לשטח את העמודות ל-camelCase על כל row, אחרת כתיבת-מערך-מלא תאפס את הערכים השמורים).
-- **הזמנות**: `create_reservation_v2` (**עודכן ב-PR #51, מיגרציה `20260623120200`** — נוסף **guard רביעי: הגבלת השאלת-חוץ** ל-`פרטית`/`הפקה` בלבד — `external_loan_restricted=TRUE`→זריקה `external_restricted`; `external_loan_hold_count=N`→מקטין את ה-available pool ב-N. נבנה **byte-for-byte על `20260613153000`** ושומר את כל 3 ה-guards הקודמים. baseline קודם PR #45 `20260604120000` — crew snapshot מ-`production_crew` המאושר; **לוגיקת availability/overlap זהה ל-`20260516160000`** — חוסם רק מאושר/באיחור/פעילה), `create_lesson_reservations_v1`, **`update_reservation_status_v1` (עודכן ב-PR #55, מיגרציה `20260625120000`** — נוסף **guard אטומי נגד הקצאת-יתר באישור**: במעבר לתוך `מאושר` מסטטוס שאינו חוסם, `FOR UPDATE` על שורות הציוד + בדיקת `healthy − overlapping_blocking_demand (r.id<>self) ≥ qty`, אחרת `approve_overbook`. אישור-חוזר ו-`באיחור`/`פעילה`→`מאושר` מדולגים. שאר הלוגיקה byte-for-byte. סוגר את ה-race ש-`getReservationApprovalConflicts` בקליינט לבדו לא כיסה), `delete_reservation_v1`, `restore_reservation_v1`, `student_modify_reservation_item_v1`, `mark_overdue_email_sent`.
-- **לוח הפקות**: `production_approve_crew_v1`, `production_check_crew_conflict_v1`, `production_crew_change_recheck_v1`, **`production_delete_v1` (HARD_DELETE, atomic — 2026-05-25)**, `crew_is_certified_for_equipment`, `check_director_no_overlap_for_production`, `run_productions_regression_tests`.
-- **בדיקות overlap**: `assert_reservation_overlap_ok`, `run_reservation_overlap_tests`, `run_student_overlap_tests` (5 תרחישים — per-student guard, PR #47), `run_studio_overlap_tests` (6 תרחישים — studio EXCLUDE guard, PR #48).
-- **קביעות אולפן**: `studio_booking_tsrange(date,start,end)` — פונקציית helper IMMUTABLE שבונה `tsrange` משדות TEXT (עם wrap-around של לילה 21:30→08:00), משמשת את ה-`EXCLUDE constraint` `studio_bookings_no_overlap` (PR #48, מיגרציה `20260621120000`). ראו סעיף "הזמנות אולפן".
-- **Auth helpers**: `is_admin`, `is_staff_member`, `is_known_lecturer_email`, `link_auth_to_entity`.
-- **עדכון פריטים בבקשה קיימת** (PR #85): `student_submit_reservation_update_v3` (המעטפת הנקראת מה-API — בעלות + **חלון התראה תחת נעילת שורה** + חסימת `replace`, ואז האצלה ל-v1) → `student_submit_reservation_update_v1` (המנוע: סטטוס, "כבר התחיל", מונה, מגבלת-4 בפרטית, השאלת-חוץ, זמינות peak-concurrent, ושני המסלולים מיידי/ממתין). `staff_review_reservation_update_v3` → `_v1` (בדיקת הצוות: נעילה, זמינות מחדש, החלה אטומית, ניקוי `pending_update_id`). **כל ארבעתן `service_role` בלבד** — ה-`_v1` מנועות מ-`anon/authenticated` כדי שלא ניתן יהיה לעקוף את שער ה-lead-time. + `run_reservation_update_tests` / `run_reservation_update_v3_tests`.
+- **ציוד** — `sync_equipment_from_json` ⚠️ **delete+reinsert של units + COALESCE**,
+  ולכן דגלים שלא שוטחו ל-camelCase נמחקים בשקט (לקח #21).
+- **הזמנות** — `create_reservation_v2` (**4 guards**: per-student overlap,
+  זמינות peak-concurrent, crew-derive, השאלת-חוץ) · `update_reservation_status_v1`
+  (**guard אטומי נגד הקצאת-יתר באישור**, לקח #22) · `create_lesson_reservations_v1` ·
+  `delete_reservation_v1` · `restore_reservation_v1` ·
+  `student_modify_reservation_item_v1` · `mark_overdue_email_sent`.
+- **עדכון פריטים בבקשה** — `student_submit_reservation_update_v3`→`_v1` ו-
+  `staff_review_reservation_update_v3`→`_v1`. **כל ארבעתן `service_role` בלבד**;
+  ה-`_v1` חסומות ל-`anon/authenticated` כדי שלא יעקפו את שער ה-lead-time (לקח #40).
+- **לוח הפקות** — `production_approve_crew_v1` · `production_crew_change_recheck_v1` ·
+  `production_delete_v1` (**HARD delete אטומי**) · `productions_refresh_archive_v1` ·
+  `crew_is_certified_for_equipment` · `check_director_no_overlap_for_production` ·
+  `production_check_crew_conflict_v1` (inert — נותק מהקליינט ב-PR #75).
+- **אולפנים** — `studio_booking_tsrange` (IMMUTABLE, מזין את ה-`EXCLUDE constraint`).
+- **Auth** — `is_admin`, `is_staff_member`, `is_known_lecturer_email`, `link_auth_to_entity`.
+- **טסטים** — `run_*_tests` (ראה 🛡️ Guardrails). ⚠️ כולן `SECURITY DEFINER` וניתנות
+  להרצה ע"י `anon` בפרוד; דפוס ותיק ולא רגרסיה (נוגעות רק בשורות `test-`), אך
+  הזדמנות הקשחה: `REVOKE ... FROM anon, authenticated`.
 
 ### Triggers
-`touch_updated_at`, `set_updated_at`, `update_users_updated_at`, `production_crew_after_change_trigger`, `production_dates_director_overlap_trg`, `productions_status_director_overlap_trg`, `production_crew_photographer_sound_must_be_student`.
+`touch_updated_at` · `set_updated_at` · `update_users_updated_at` ·
+`production_crew_after_change_trigger` · `production_dates_director_overlap_trg` ·
+`productions_status_director_overlap_trg` ·
+`production_crew_photographer_sound_must_be_student`.
 
-### סדרי גודל בפרוד — סנאפ-שוט ישן, לא מצב חי
+### סדרי גודל בפרוד — סנאפ-שוט, לא מצב חי
 
-⚠️ **המספרים האלה נמדדו ב-2026-05-25** (ספירות השאלות/ציוד אומתו 2026-07-19,
-`productions` ב-2026-07-14) ו**מאז לא רועננו**. הם שימושיים כ**סדר גודל** — למשל
-להערכת עומס לפני פיצ'ר שעובר על אוסף (לקח #39) — אבל **אין להסתמך עליהם כמצב נוכחי**.
+⚠️ נמדד **2026-05-25** (השאלות/ציוד אומתו 2026-07-19) ומאז לא רוענן. שימושי כסדר
+גודל — למשל להערכת עומס לפני פיצ'ר שעובר על אוסף (לקח #39) — **אבל לא כמצב נוכחי.**
 לספירה אמיתית: `execute_sql` מול `wxkyqgwwraojnbmyyfco`.
 
-`auth.users`≈107, `public.users`≈107 (מיושר), `students`≈168, `lecturers`≈31,
-`lessons`≈145 (הקרון מדד 166 ב-2026-07-20), `studio_bookings`≈295,
-`reservations_new`≈167 (+`reservation_items`≈1,379), `equipment`≈131
-(+`equipment_units`≈321), `reservation_staff_assignments`≈24, `productions`≈23
-(כולן legacy מול cutoff של PR #75), `staff_members`=9 (legacy, אין FK).
+`users`≈107 · `students`≈168 · `lecturers`≈31 · `lessons`≈145 (הקרון מדד 166
+ב-07-20) · `studio_bookings`≈295 · `reservations_new`≈167 (+`reservation_items`≈1,379)
+· `equipment`≈131 (+`equipment_units`≈321) · `productions`≈23 (כולן legacy מול
+ה-cutoff של PR #75) · `staff_members`=9 (legacy).
 
 ---
 
@@ -248,206 +277,169 @@
 
 ## 🎙️ הזמנות אולפן — `studio_bookings`
 
-הטבלה מכילה **4 סוגי הזמנות** (שדה `bookingKind` או נגזר):
+**4 סוגי הזמנות** בטבלה אחת:
 
-| סוג | מי יוצר | מקור | זיהוי בקוד |
-|-----|---------|------|------------|
-| `lesson` | אדמין | **נגזר אוטומטית** מ-`lessons.schedule[]` ע"י `buildLessonStudioBookings()` ב-[src/utils/lessonBookings.js](src/utils/lessonBookings.js) — לא persisted | `lesson_auto: true` / `lesson_id` |
-| `team` | אדמין/איש צוות | קביעת זמן באולפן לטכנאי/מדריך | `teamMemberId` / `bookingKind === "team"` |
-| `student` | סטודנט | טופס PublicForm "הזמנת אולפן" יום | `studentName` + לא בלילה |
-| `night` | סטודנט | אותו טופס, slot לילה 21:30+ | `isNight === true` |
+| סוג | מי יוצר | זיהוי בקוד | הערה |
+|---|---|---|---|
+| `lesson` | אדמין | `lesson_auto:true` / `lesson_id` | **נגזר מ-`lessons.schedule[]` ע"י `buildLessonStudioBookings()` — לא persisted** |
+| `team` | אדמין/צוות | `teamMemberId` | קביעה לטכנאי/מדריך |
+| `student` | סטודנט | `studentName`, לא לילה | טופס "הזמנת אולפן" |
+| `night` | סטודנט | `isNight:true` | slot לילה 21:30+ |
 
-### 🛡️ Guard נגד double-booking של אולפן (PR #48 — race-proof ב-DB)
-**הבעיה ההיסטורית**: לא הייתה שום אכיפה בצד השרת — כל בדיקות החפיפה היו בצד הלקוח בלבד מול מערך בזיכרון שעלול להיות מיושן, ואז כתיבה ישירה. תחת race / state מיושן (במיוחד מובייל) שני קובעים עברו בדיקה מקומית ושניהם כתבו = כפילות.
+### 🛡️ Guard נגד double-booking (race-proof ב-DB)
 
-**התיקון (מיגרציה `20260621120000`, הוחלה ב-dev וב-prod):**
-- **`EXCLUDE constraint` `studio_bookings_no_overlap`** עם `btree_gist`: `EXCLUDE USING gist (studio_id WITH =, studio_booking_tsrange(date,start_time,end_time) WITH &&)` ב-`WHERE (lesson_auto=false AND status<>'נדחה' AND start_time/end_time NOT NULL)`. חוסם **פיזית ואטומית** שתי קביעות persisted חופפות על אותו חדר — **עמיד ל-race**.
-- **`studio_booking_tsrange`** IMMUTABLE: בונה `tsrange` מ-TEXT עם `make_timestamp` (לא `text::timestamp` — STABLE) + wrap-around לילה (`end<=start → +1 יום`). שורות לילה שומרות 21:30/08:00 ולכן מטופלות גנרית.
-- **מיפוי שגיאה**: `23P01` (exclusion_violation) → `error:"studio_overlap"` ב-[studioBookingsApi.js](src/utils/studioBookingsApi.js) (`upsert` + `syncAll`) → הודעת עברית ב-PublicForm/StudioBookingPage (revert אופטימי + toast).
-- **פערי לילה בקליינט נסגרו**: הוסרו gates ה-`!isNight` שגרמו לקביעות לילה (סטודנט+צוות) ועריכות-לילה לדלג על בדיקת החפיפה. כל בדיקות החפיפה אוחדו דרך helper משותף מנרמל-לילה [src/utils/studioOverlap.js](src/utils/studioOverlap.js) (`rangesOverlap`/`buildStudioBookingInterval`).
-- טסט CI `run_studio_overlap_tests` (6 תרחישים) → smoke **30/30**.
+היסטורית לא הייתה אכיפת-שרת בכלל: כל הבדיקות היו בקליינט מול מערך בזיכרון, ותחת
+race שני קובעים עברו בדיקה מקומית ושניהם כתבו.
 
-**מה מכוסה ומה לא:**
-- ✅ **race-proof ב-DB** לכל הצירופים של קביעות persisted: `student↔student`, `student↔team`, `team↔team`, וכל שילובי יום/לילה.
-- ⚠️ **שיעור↔קביעה — בדיקת לקוח בלבד** (לא ב-DB): שיעורים **לא persisted** (anti-regression), אז ה-`EXCLUDE` לא "רואה" אותם. החסימה בפועל מתבצעת ע"י בדיקות הלקוח ([PublicForm.jsx](src/components/PublicForm.jsx) `getStudioBookingValidationError` + [LessonsPage.jsx](src/components/LessonsPage.jsx) `findBookingConflicts`, מנורמלות לילה ועוברות על כל N הכיתות). **נשאר פער תיאורטי לתרחיש race/state-מיושן מול שיעור** — מודע ומקובל (שיעורים נוצרים ע"י אדמין, concurrency נמוך). בעל המוצר בחר להישאר עם זה (2026-06-21).
+`EXCLUDE constraint` **`studio_bookings_no_overlap`** (btree_gist, מיגרציה
+`20260621120000`) חוסם פיזית ואטומית שתי קביעות **persisted** חופפות על אותו חדר.
+ה-`WHERE` שלו: `lesson_auto=false AND status<>'נדחה' AND start/end NOT NULL`.
+הפונקציה `studio_booking_tsrange` היא IMMUTABLE ובונה `tsrange` מ-TEXT עם
+`make_timestamp` (לא `text::timestamp`, שהוא STABLE) כולל **wrap-around לילה**
+(`end<=start → +1 יום`). שגיאת `23P01` ממופה ל-`error:"studio_overlap"` ב-
+[studioBookingsApi.js](src/utils/studioBookingsApi.js) → toast עברית + revert אופטימי.
 
-**Anti-regression**:
-1. כל `CREATE OR REPLACE` של ה-constraint/הפונקציה — לשמר את ה-`WHERE` (lesson_auto + נדחה + NOT NULL) ואת ה-wrap-around של הלילה.
-2. **לפני הוספת ה-constraint חובה דה-דופ** של כפילויות קיימות (אחרת `ALTER` נכשל). שאילתת הזיהוי (self-join על `studio_booking_tsrange &&`) מתועדת כהערה במיגרציה. בפרוד נמצאה ונוקתה כפילות אחת (טל ארז, ANALOG MIX ROOM, 2026-05-11).
-3. **שארית נדחתה (Layer B)**: נתיב הכתיבה של הצוות עדיין `syncAllStudioBookings` מערך-מלא (delete-missing) — באג נפרד של אובדן קביעות מקבילות (clobber). ה-constraint מונע כפילות אך לא את ה-delete-missing. מומלץ follow-up: מעבר לכתיבות שורה-בודדת.
+**מכוסה**: כל צירוף של קביעות persisted (student↔student, student↔team, team↔team),
+יום ולילה. **לא מכוסה**: שיעור↔קביעה — שיעורים לא persisted ולכן ה-`EXCLUDE` לא רואה
+אותם; החסימה שם היא בקליינט בלבד. פער מודע ומקובל (שיעורים נוצרים ע"י אדמין,
+concurrency נמוך) — החלטת בעל המוצר 2026-06-21.
 
-### N כיתות לקורס/מפגש (PR #20, PR #21)
-שיעור יכול להחזיק **מערך של N כיתות** — `lesson.studios[]` ברמת הקורס, ו-`session.studioIds[]` ברמת המפגש. החליף את הזוג `studioId`+`secondaryStudioId` (PR #17). `buildLessonStudioBookings` יוצר N derived rows — אחד לכל אולפן. בדיקת חפיפה ב-`findLessonConflict` ([LessonsPage.jsx](src/components/LessonsPage.jsx)) קוראת ל-`getLessonSessionStudioIds` → `getEffectiveLessonStudioIds` שמחזיר את כל ה-N אולפנים → **בדיקת קונפליקט תופסת את כל הכיתות במקביל**.
+> **פער פתוח (Layer B)**: נתיב הכתיבה של הצוות עדיין `syncAllStudioBookings`
+> מערך-מלא עם delete-missing, שיכול לדרוס קביעות מקבילות. ה-constraint מונע כפילות
+> אך לא clobber. follow-up מומלץ: כתיבות שורה-בודדת.
 
-**Backwards compatibility בקריאה**: `normalizeSessionStudioIds` ב-[lessonsApi.js](src/utils/lessonsApi.js) — אם השורה הישנה מכילה `studioId`/`secondaryStudioId` בלבד, הם נארזים למערך. **השמירה תמיד יוצאת כ-`studioIds[]`**.
+**לפני הוספת/החלפת ה-constraint — חובה דה-דופ** של כפילויות קיימות, אחרת ה-`ALTER`
+נכשל; שאילתת הזיהוי מתועדת כהערה במיגרציה. שאר כללי ה-anti-regression: לקח #20.
 
-### `course_studios` JSONB column (PR #21)
-ברמת הקורס יש עמודה ייעודית `lessons.course_studios jsonb` (מיגרציה `20260525150000`) שמחליפה את הגזירה האוטומטית של איחוד `union(schedule[].studioIds)`. למה: ב-PR הקודם כל override מפגש "דלף" לרמת הקורס וגרם ל-phantom column אחרי reload. עכשיו: chips של הקורס נשמרים ישירות, overrides של מפגש נשארים inline.
+### N כיתות ו-N מרצים למפגש
 
-- **Helper**: `normalizeCourseStudiosColumn` + `buildCourseStudiosFromLesson` ב-[lessonsApi.js:36](src/utils/lessonsApi.js#L36).
-- **Read fallback**: אם השורה מהDB ריקה בעמודה החדשה (legacy) — נגזר union משדות ישנים.
-- **UI**: dropdown בפאנל "שיוך כיתות לימוד" מציג את **כל הכיתות במערכת** (לא רק את אלה שכבר בקורס).
+מפגש מחזיק **מערכים**: `session.studioIds[]` ו-`session.lecturerIds[]`, שניהם
+position-preserving (מחרוזת ריקה שומרת עמודה במקומה). ברמת הקורס יש **עמודות jsonb
+ייעודיות** — `lessons.course_studios` ו-`lessons.course_lecturers` — ולא גזירת union
+מהמפגשים (לקחים #10, #14).
 
-### N מרצים למפגש + `course_lecturers` JSONB column (PR #24)
+- **קריאה תואמת-אחורה**: שורה ישנה עם `studioId`/`secondaryStudioId` סקלריים נארזת
+  למערך. **השמירה תמיד יוצאת כמערך.**
+- **`session.lecturerId` הסקלרי נשמר כ-shim** ל-code paths שעוד קוראים אותו
+  (LecturerPortal, PublicDisplay, buildLessonStudioBookings) ותמיד נגזר מ-`[0]`.
+- **הבדל מכוון בין כיתות למרצים**: chip ב"מרצי הקורס" **לא** מוסיף עמודה ל-grid —
+  רק לחיצה על "הוסף עמודת מרצה" מוסיפה. אצל כיתות זה כן אוטומטי. לקח #15.
+- `instructorName` של booking נגזר הוא **join של כל מרצי המפגש ב-`" + "`**.
+- מרצה רואה שיעור אם הוא ב-`lesson.lecturers[]` **או** ב-`session.lecturerIds[]` —
+  לא מסתפקים בסקלר.
 
-**רעיון**: מפגש בודד יכול להיות משויך ל-N מרצים מתוך `courseLecturers` (chips של הקורס) — דפוס מקביל ל-N כיתות אבל **לא זהה**.
+ה-helpers חיים ב-[lessonsApi.js](src/utils/lessonsApi.js) (`normalize*`,
+`buildCourse*`, `trimTrailingEmpties`), ב-[lessonBookings.js](src/utils/lessonBookings.js)
+(`getEffectiveLesson*Ids`) וב-[LessonsPage.jsx](src/components/LessonsPage.jsx)
+(`updateSession*Slot`, `add/removeLecturerColumn`) — `grep` לפי השם.
 
-**הבדל מהותי מול כיתות**: chip ב-"מרצי הקורס" **לא** מוסיף עמודה ל-grid אוטומטית. עמודה נוספת מתווספת רק על ידי לחיצה מפורשת על "👤 הוסף עמודת מרצה" ב-row הכפתורים, ונסגרת על ידי "👤 הסר עמודת מרצה". הרצפה תמיד 1, התקרה היא `courseLecturers.length`.
+### Toggle ידני "צרף סטודיו הקלטות"
 
-**Shape**:
-- `session.lecturerIds[]` — מערך position-preserving, mirror של `session.studioIds[]`. עמודה ריקה = `""`. trailing empties נחתכים ב-`blobToRow` ([lessonsApi.js:159](src/utils/lessonsApi.js#L159)).
-- `session.lecturerId` (סקלר) — נשמר כ-shim ל-legacy code paths (LecturerPortal filter, PublicDisplay, buildLessonStudioBookings). תמיד נגזר מ-`lecturerIds[0]`.
-- `lesson.lecturers[]` (course-level chips) — `[{lecturerId, instructorName}]`. נשמר ב-`course_lecturers jsonb` (מיגרציה `20260526200000`).
-
-**Helpers ב-[lessonsApi.js](src/utils/lessonsApi.js)**:
-- `normalizeSessionLecturerIds(session)` ([:38](src/utils/lessonsApi.js#L38)) — mirror של `normalizeSessionStudioIds`. legacy scalar `lecturerId` → `[lecturerId]`.
-- `normalizeCourseLecturersColumn(raw)` ([:80](src/utils/lessonsApi.js#L80)) — מקבל JSONB → `[{lecturerId, instructorName}]` עם dedup.
-- `buildCourseLecturersFromLesson(rawLesson)` ([:104](src/utils/lessonsApi.js#L104)) — fallback derivation לrows legacy: union של `lecturer_id` + `session.lecturerIds[]`.
-- `trimTrailingEmpties(arr)` ([:48](src/utils/lessonsApi.js#L48)) — משותף ל-studios + lecturers.
-
-**Helpers ב-[LessonsPage.jsx](src/components/LessonsPage.jsx)**:
-- `normalizeScheduleLecturerIds(entry)` ([:343](src/components/LessonsPage.jsx#L343)) — מירור של `normalizeScheduleStudioIds`. כלול ב-`normalizeScheduleEntry`.
-- `updateSessionLecturerSlot(sessionIndex, colIdx, value)` ([:3013](src/components/LessonsPage.jsx#L3013)) — mirror של `updateSessionStudioSlot`. מעדכן `lecturerIds[colIdx]` + `lecturerId` (סקלר) + `instructorName`.
-- `addLecturerColumn()` ([:3037](src/components/LessonsPage.jsx#L3037)) — appends empty slot. cap = `courseLecturers.length`.
-- `removeLecturerColumn()` ([:3050](src/components/LessonsPage.jsx#L3050)) — drops last slot. floor = 1. מוחק גם ערכים שיש בעמודה האחרונה (כפתור "ביטול" של הטופס משמש כ-undo רחב).
-- **state**: `lecturerColumnCount` ([:2802](src/components/LessonsPage.jsx#L2802)) — מאותחל לפי `max(1, widest session.lecturerIds.length)`.
-
-**Helper ב-[lessonBookings.js](src/utils/lessonBookings.js)**:
-- `normalizeSessionLecturerIdList(session)` ([:22](src/utils/lessonBookings.js#L22)) — position-independent (filtered empties) — לקריאה בלבד.
-- `getEffectiveLessonLecturerIds(session, lesson)` ([:40](src/utils/lessonBookings.js#L40)) — מירור של `getEffectiveLessonStudioIds`.
-- `buildLessonStudioBookings` ([:130](src/utils/lessonBookings.js#L130)) — `instructorName` של booking הוא **join של כל מרצי המפגש ב-" + "** (separator עם רווחים). לדוגמה: "נעם מאירי + יבגני יאנוב".
-
-**XL import** ([LessonsPage.jsx:1411-1416](src/components/LessonsPage.jsx#L1411)):
-- `instructorIdxs = findAllH("מרצה", "מורה", "lecturer", "teacher", "instructor")` — תופס את כל עמודות "מרצה 1", "מרצה 2", "מרצה N" באותה שורה.
-- `rowInfo.instructorNames` — מערך של כל השמות בעמודות (תאים ריקים מסוננים).
-- `importSessionMergeKey` ([:1283](src/components/LessonsPage.jsx#L1283)) — **ללא lecturer**: שתי שורות XL עם אותו `(date, start, end, topic)` מתמזגות למפגש אחד עם `lecturerIds[]` מאוחד (כמו classrooms).
-- בfunction merge ([:1568-1601](src/components/LessonsPage.jsx#L1568)) — `mergedLecturerIds` נבנה בנוסף ל-`mergedStudioIds`.
-
-**LecturerPortal filter** ([LecturerPortal.jsx:274-285](src/components/LecturerPortal.jsx#L274)):
-- מרצה רואה שיעור גם אם הוא ב-`lesson.lecturers[]` (chips) או ב-`session.lecturerIds[]` (column 2+). לא מסתפק ב-`lesson.lecturerId` סקלר.
-
-**מיגרציה `20260526200000_lessons_course_lecturers.sql`** (הוחלה ב-dev **וב-prod** — אומת 2026-05-29 ש-`public.lessons.course_lecturers jsonb DEFAULT '[]'` קיים בפרוד):
-```sql
-ALTER TABLE public.lessons
-  ADD COLUMN IF NOT EXISTS course_lecturers jsonb NOT NULL DEFAULT '[]'::jsonb;
-```
-עמודה אופציונלית עם DEFAULT — אין נזק לrows קיימים.
-
-### Toggle ידני "צרף סטודיו הקלטות" (PR #17)
-קיים רק ב-**team + student bookings** ב-MAIN CONTROL/DIGITAL MIX ROOM. **לא בשיעורים** (הוסר ב-`6c89345`).
-
-- **UI**: checkbox עם `name="addRecordingStudio"` ב-[PublicForm.jsx](src/components/PublicForm.jsx) (create + edit). תנאי: `isControlRoomStudio(selectedStudio) && studios.some(isRecordingStudio)`.
-- **DB**: כשmarked, נוצרות **2 רשומות נפרדות** ב-`studio_bookings` עם תאריך/שעה זהים. **אין עמודת `companion_booking_id`** ב-schema.
-- **Edit**: matching של ה-companion נעשה ב-runtime לפי tuple (`date+studioId+studentEmail+startTime+endTime`). אם המשתמש מסיר את ה-toggle בעריכה → DELETE על ה-companion ([PublicForm.jsx:6053-6062](src/components/PublicForm.jsx#L6053)).
-- **Team edit** ב-[StudioBookingPage.jsx:456](src/components/StudioBookingPage.jsx#L456): `teamAddRecordingStudio` מאותחל ב-`Boolean(hasRecordingCompanion)` בפתיחת modal עריכה.
-
-**Anti-regression**: אסור להחזיר auto-coupling ב-lesson path. שיעור ב-MAIN CONTROL לא ייצור booking ב-הקלטות אוטומטית — רק אם המשתמש בחר `secondaryStudioId = הקלטות`.
+קיים **רק ב-team + student bookings** ב-MAIN CONTROL/DIGITAL MIX ROOM — **לא
+בשיעורים** (לקח #7). כשמסומן נוצרות **2 רשומות נפרדות** באותם תאריך/שעה; **אין
+עמודת `companion_booking_id`**, וההתאמה בעריכה נעשית ב-runtime לפי
+`date+studioId+studentEmail+startTime+endTime`. הסרת ה-toggle בעריכה מוחקת את
+ה-companion.
 
 ---
 
-## 📊 ייבוא XL לשיעורים (PR #19)
+## 📊 ייבוא XL לשיעורים
 
-זרימה מלאה: file picker → mode dialog → parser → validation עם partial save → דוח שגיאות עם עריכה+retry.
+file picker → מודאל מצב → parser → validation עם **שמירה חלקית** → דוח שגיאות
+שאפשר לערוך ולנסות שוב. כל ה-pipeline ב-[LessonsPage.jsx](src/components/LessonsPage.jsx),
+ספריית `xlsx`.
 
-### זרימה
-1. **כפתור ייבוא** ב-[LessonsPage.jsx:1839](src/components/LessonsPage.jsx#L1839) → file input מקבל `.csv,.tsv,.xlsx,.xls`. ספריה: `xlsx` (import line 3).
-2. **Pre-import mode dialog** ([:1480-1510](src/components/LessonsPage.jsx#L1480)) — radio: `"upsert"` (עדכון+יצירה) או `"create_only"` (יצירה בלבד). state: `pendingImportMode` ([:279](src/components/LessonsPage.jsx#L279)).
-3. **Parser** `readImportRowsFromFile()` ([:949-1011](src/components/LessonsPage.jsx#L949)) — `XLSX.read()` → `XLSX.utils.sheet_to_json()` → column-matching לפי שמות עבריים ("קורס","תאריך","התחלה"...). מחזיר `{sheets, importRows, importErrors}`.
-4. **Grouping + validation** `buildImportGroups()` ([:1014-1112](src/components/LessonsPage.jsx#L1014)) — בודק שורה-שורה: קורס/מסלול/מרצה קיים/תאריך/חלון שעות/חדר. שגיאות → `reportErrors` array (`addImportError`, [:1029](src/components/LessonsPage.jsx#L1029)).
-5. **Partial save** `runLessonImportRows()` ([:1114-1275](src/components/LessonsPage.jsx#L1114)) — שורות תקינות נכנסות ל-groups → לולאת sessions per group, conflict checks (lecturer + room) → sessions תקינות מצטברות ל-`baseLesson.schedule`. **קורסים עם 0 sessions תקינים נופלים מהדוח**.
+1. **מודאל מצב** — `upsert` (עדכון+יצירה) או `create_only`.
+2. **`readImportRowsFromFile()`** — `XLSX.read` → `sheet_to_json` → התאמת עמודות לפי
+   שמות עבריים ("קורס"/"תאריך"/"התחלה"…).
+3. **`buildImportGroups()`** — ולידציה שורה-שורה: קורס, מסלול, מרצה קיים, תאריך,
+   חלון שעות, חדר. כשלים נאספים ל-`reportErrors`.
+4. **`runLessonImportRows()`** — שורות תקינות נכנסות, נבדקות מול התנגשויות מרצה+חדר,
+   ומצטברות ל-`baseLesson.schedule`. **קורס שכל מפגשיו נפסלו נופל לדוח.**
+5. **retry** — עריכת שורה כושלת בדוח מריצה אותה שוב **באותו pipeline**
+   (`runLessonImportRows([row],{retry:true})`), ואם עברה היא יוצאת מהדוח.
 
-### דוח שגיאות עם עריכה ו-retry
-- **Shape של error row** ([:825-841](src/components/LessonsPage.jsx#L825)): `{sheet, rowNumber, courseName, track, instructorName, date, startTime, endTime, studioName, topic, notes, kitName, phone, email, reason}`.
-- **עריכת שורה כושלת**: state `editingImportErrorKey` ([:1313](src/components/LessonsPage.jsx#L1313)) + `importErrorDraft` ([:1314-1329](src/components/LessonsPage.jsx#L1314)).
-- **Retry**: `retryImportErrorDraft()` ([:1341-1374](src/components/LessonsPage.jsx#L1341)) — ממיר draft → import format → קורא ל-`runLessonImportRows([row], {retry: true, replaceErrorIdentities: [originalKey]})`. רץ באותו pipeline. אם תקין — הקורס נוצר/מתעדכן והשורה יוצאת מהדוח.
+**`splitImportCellValues` חותך תאים לפי `,;،，` — רק בעמודת הכיתה.** עמודת המרצה
+לא נחתכת; כל מרצה הוא עמודה נפרדת ("מרצה 1/2/3") או שורה נפרדת. ריבוי-מרצים הוא
+column-based — לקח #16.
 
-### מרצים מרובים לקורס
-- **Shape**: `lesson.lecturers = [{lecturerId?, instructorName}, ...]`.
-- **Normalize**: `normalizeLessonLecturerList(lesson)` ([:352-370](src/components/LessonsPage.jsx#L352)) — מאחד 3 מקורות: primary (`lesson.lecturerId`/`instructorName`) + `lesson.lecturers[]` + `lesson.schedule[].lecturerId`/`instructorName`. dedupe לפי id-or-normalized-name.
-- **חיפוש** (hotfix `e2dac20`): [LessonsPage.jsx:746](src/components/LessonsPage.jsx#L746) משתמש ב-`normalizeLessonLecturerList` במקום ב-`lesson.instructorName` בלבד → תופס גם מרצי-קורס נוספים וגם מרצי-מפגש.
+**`dedupeScheduleEntries`** מאחד מפגשים כפולים לפי `date__startTime__endTime`, ורץ
+בטעינה, בייבוא ובשמירה. במיזוג, שדות נלקחים מהראשון שיש בו ערך, וכל ה-`studioIds`
+מתאחדים למערך אחד.
 
-### "ללא מרצה" filter
-predicate: `isWithoutLecturer(lesson)` ([:716](src/components/LessonsPage.jsx#L716)) = `!hasAssignedLecturer(lesson)`. `hasAssignedLecturer` ([:707-715](src/components/LessonsPage.jsx#L707)) = true אם יש לפחות אחד מ: `lecturerId`/`instructorName`/`lecturers[]`/per-session lecturer. toggle: `showUnassignedLecturerOnly` ([:1801-1818](src/components/LessonsPage.jsx#L1801)).
+**`normalizeLessonLecturerList`** מאחד 3 מקורות למרצי הקורס (סקלר + `lecturers[]` +
+מרצי-מפגש) עם dedup לפי id-או-שם-מנורמל. **החיפוש חייב לעבור דרכו** ולא דרך
+`instructorName` בלבד, אחרת מרצים משניים לא נמצאים. אותו predicate מזין את פילטר
+"ללא מרצה".
 
-### איחוד מפגשים כפולים (`dedupeScheduleEntries`)
-- **מיקום**: [LessonsPage.jsx:144-172](src/components/LessonsPage.jsx#L144).
-- **מפתח dedup**: `date__startTime__endTime`.
-- **מתי**: על load (`getLessonDisplaySchedule` [:175](src/components/LessonsPage.jsx#L175)), בייבוא ([:1206](src/components/LessonsPage.jsx#L1206)), על שמירה ב-edit form ([:2074](src/components/LessonsPage.jsx#L2074), [:2458](src/components/LessonsPage.jsx#L2458)).
-- **התנהגות במיזוג**: מערכים זוכים לעדיפות לפי הראשון שיש בו `topic`/`kitId`/`lecturerId`. אם N שורות שונות בכיתה — כל ה-studioIds מתאחדים ל-`session.studioIds[]` במערך אחד (PR #20).
+### שעת סיום — כללים לא-אינטואיטיביים
+`lessonEndTimeOptions(start, current)` מסנן לשעות שאחרי ההתחלה, אבל:
+**`00:00` מתווסף במפורש בסוף ואינו מסונן פנימה** — הוא סיום חוקי (ערב עד חצות) אך
+לא שעת התחלה, ומיון מחרוזות היה מציב אותו ראשון ומעיף אותו. **ערך שמור שכבר לא
+עומד בכלל נשאר ברשימה**, כדי שפתיחת מפגש ישן לא תשכתב אותו בשקט. גרירת הסיום
+כשההתחלה עוברת אותו ממומשת **פעם אחת** ב-`updateSessionField`, כדי שמובייל ודסקטופ
+לא ייפרדו. חל על 4 נקודות בחירה.
 
-### שעת סיום מוגבלת לשעות שאחרי ההתחלה (PR #84)
-`lessonEndTimeOptions(start, current)` ב-[LessonsPage.jsx](src/components/LessonsPage.jsx) מסנן את רשימת שעות הסיום לשעות שאחרי ההתחלה. **`00:00` מתווסף במפורש בסוף ואינו מסונן פנימה** — הוא סיום חוקי (שיעור ערב עד חצות) אבל **לא שעת התחלה**; מיון מחרוזות היה מציב אותו ראשון ומוציא אותו מהרשימה. **ערך שמור שכבר לא עומד בכלל נשאר ברשימה** כדי שפתיחת מפגש ישן לא תשכתב אותו בשקט. הזזת ההתחלה מעבר לסיום גוררת את הסיום (`nextLessonEndTime`) — ממומש פעם אחת ב-`updateSessionField` כדי שהמובייל והדסקטופ לא ייפרדו. חל על 4 נקודות בחירה: בונה הלוח, שורת מפגש מובייל/דסקטופ, ומודאל ההתנגשויות.
+### פאנל "שיוך כיתות לימוד"
+מנהל את `course_studios` כ-chips; ה-dropdown מציג את **כל** הכיתות במערכת.
+ה-binding הוא **לפי מיקום** (`value={sessionIds[colIdx]}`) ולא לפי studioId — אחרת
+החלפת ערך בעמודה יוצרת orphan. chip שיש רק במפגש ולא ב-`course_studios` הוא override
+של המפגש ואינו דולף לרמת הקורס.
 
-### "שיוך כיתות לימוד" panel (PR #21)
-מנהל את `course_studios` של הקורס כ-chips ניתנים להוספה/הסרה. dropdown מציג את **כל הכיתות במערכת**. position-based binding (`value={sessionIds[colIdx]}` — לא לפי studioId, אחרת החלפת ערך בעמודה תיצור orphan). chip שאינו ב-course_studios אבל יש מפגש שמשתמש בו = override של מפגש בלבד, לא דולף לרמת הקורס.
-
-### Conflict resolver modal (PR #20, PR #21)
-חפיפה (חדר או מרצה) פותחת **modal לפתרון inline** ([ConflictResolverCard ב-LessonsPage.jsx:131](src/components/LessonsPage.jsx#L131)):
-- מציג את כל המפגשים בקונפליקט (`findAllLessonRoomConflicts` / `findAllLessonLecturerConflicts` → arrays).
-- מאפשר לשנות כיתה/מרצה של ה-**מפגש האחר** ישירות (`applyOtherLessonFix`).
-- Textarea להודעה מותאמת + כפתור WhatsApp deep-link (`wa.me/<phone>?text=<encoded>`).
-- אם הסיבה לקונפליקט היא חדר אחר — שולח מייל אוטומטי `studio_lesson_conflict` ([api/send-email.js](api/send-email.js)) עם block "💬 הודעה מהמכללה" אופציונלי. **לא לכפול את ה-`custom_message`** ב-`studentMessageSection` הישן (כבר טופל).
-
-### Splitting classroom column values ב-XL import (PR #20)
-`splitImportCellValues` ב-[LessonsPage.jsx:585](src/components/LessonsPage.jsx#L585) חותך תאי "כיתה" לפי `,;،，` וכו'. **רק עמודת הכיתה** — עמודת המרצה לא נחתכת (יש לעצב כל מרצה כשורה נפרדת ב-XL).
+### מודאל פתרון התנגשויות
+חפיפת חדר או מרצה פותחת `ConflictResolverCard`: מציג את כל המפגשים המתנגשים, מאפשר
+לשנות כיתה/מרצה של **המפגש האחר** ישירות, ומציע הודעה מותאמת + deep-link ל-WhatsApp.
+בהתנגשות חדר נשלח מייל `studio_lesson_conflict` — ה-`custom_message` שלו מוצג
+**רק** בבלוק "💬 הודעה מהמכללה" (לקח #12).
 
 ---
 
-## 📅 מפגשי קורס ליומן המרצה (PR #81)
+## 📅 מפגשי קורס ליומן המרצה
 
-מרצה מקבל את מפגשי הקורס שלו ליומן גוגל, והיומן נשאר מעודכן — **בלי Google Calendar API ובלי OAuth**, דרך קובץ iCalendar במייל.
+מרצה מקבל את מפגשיו ליומן גוגל והיומן נשאר מעודכן — **בלי Google Calendar API ובלי
+OAuth**, דרך קובץ iCalendar במייל. **כל כללי הפורמט והקצב הם לקח #38 — הם נקבעו
+אמפירית מול Gmail ואסור לשנותם בלי בדיקה מקצה-לקצה מול תיבה אמיתית.**
 
-### הזרימה — שני סוגי מייל בלבד
+### שני סוגי מייל, וזהו
 
-| מתי | מה נשלח | ICS מצורף? |
-|-----|---------|-----------|
-| **פעם ראשונה** שמודיעים למרצה על הקורס | **הזמנה** — `course_calendar_invite`. לחיצה אחת על **"Add to Calendar"** פורסת את **כל** מפגשיו | ✅ כל המפגשים |
-| **כל שינוי אחר כך** (הוזז / נוסף / בוטל / הקורס נמחק) | **הודעת שינויים** — `course_sessions_changed`, בשפה ברורה עם **לפני←אחרי** | ✅ **רק מפגשים שנוספו** |
+| מתי | מה נשלח | ICS? |
+|---|---|---|
+| פעם ראשונה שמודיעים למרצה על הקורס | **הזמנה** `course_calendar_invite` — "Add to Calendar" אחד פורס את כל מפגשיו | ✅ הכל |
+| כל שינוי אחר כך (הוזז/נוסף/בוטל/נמחק) | **הודעת שינויים** `course_sessions_changed` עם לפני←אחרי | ✅ **רק מה שנוסף** |
 | שמירה בלי שינוי אמיתי | כלום (idempotent דרך `last_hash`) | — |
 
-**נוסח ההזמנה** כולל **בלוק "📍 מקום הלימוד"** — כל הכיתות שהמרצה מלמד בהן בקורס (dedup, מוטה יחיד/רבים), הכתובת, והוראות הכניסה לקומה מינוס 2. שורת מפגש מציגה **תאריך · שעה · כיתה** (הכתובת נאמרת פעם אחת בבלוק ולא חוזרת בכל שורה). `rooms` על ה-entry הוא **תצוגה בלבד ואינו נכנס ל-hash** — הכיתה כבר בתוך `description` שכן נכנס, אז אין מיילי-שינוי שקריים.
+**העדכון ידני במכוון**: Gmail לא מעדכן אירוע שנוסף דרך "Add to Calendar", ולכן מפגש
+שהוזז או בוטל **מתואר במילים** והמרצה מתקן בעצמו. מפגש **חדש** כן מקבל קובץ — הוא
+עוד לא ביומן, אז אין סיכון כפילות. החלטת בעל המוצר (2026-07-20) אחרי שכל מסלול
+ה-iMIP נכשל.
 
-**העדכון ידני במכוון.** Gmail לא מעדכן אירוע שנוסף דרך "Add to Calendar", ולכן מפגש שהוזז/בוטל **מתואר במילים** והמרצה מתקן בעצמו. מפגש **חדש** כן מקבל קובץ — הוא לא קיים ביומן, אז אין סיכון כפילות. החלטת בעל המוצר (2026-07-20) אחרי שכל מסלול ה-iMIP נכשל.
+נוסח ההזמנה כולל בלוק **"📍 מקום הלימוד"** — הכיתות שהמרצה מלמד בהן, הכתובת והוראות
+הכניסה, פעם אחת ולא בכל שורה. `rooms` על ה-entry הוא **תצוגה בלבד ואינו נכנס
+ל-hash** (הכיתה כבר בתוך `description` שכן נכנס) — אחרת נשלחים מיילי-שינוי שקריים.
 
 ### מודל הדלתא
 
-`lesson_calendar_events` שומרת פר `(lesson_id, session_key, lecturer_id)` **סנאפ-שוט של מה שנמסר למרצה** — `event_date`/`start_time`/`end_time`/`summary`/`location` + `last_hash` + `status`. `reconcileLesson` ב-[api/calendar-sync.js](api/calendar-sync.js) גוזר את הרצוי מה-`lessons` החי ומחשב מולו:
+`lesson_calendar_events` שומרת פר `(lesson_id, session_key, lecturer_id)` **סנאפ-שוט
+של מה שנמסר למרצה בפועל**. `reconcileLesson` ב-[api/calendar-sync.js](api/calendar-sync.js)
+גוזר את הרצוי מה-`lessons` החי ומשווה:
 
 - מפתח ברצוי בלי שורה → **added**
-- שורה קיימת עם `last_hash` שונה → **changed** (ה-"לפני" מגיע מהסנאפ-שוט — זו כל הסיבה שהוא נשמר)
-- שורה `active` שהמפתח שלה נעלם → **removed** (`status='cancelled'`, השורה נשמרת כדי לא לדווח שוב)
-- מפגש **עבר** שעדיין קיים → לא נגעים בו לעולם
+- שורה עם `last_hash` שונה → **changed** (ה"לפני" מגיע מהסנאפ-שוט — זו כל סיבת קיומו)
+- שורה `active` שמפתחה נעלם → **removed** (`status='cancelled'`; השורה נשמרת כדי לא לדווח שוב)
+- מפגש **עבר** — לא נוגעים בו לעולם
 
-**קורס שנמחק מטופל "בחינם"** — אין שורה ב-`lessons` → אין רצוי → כל השורות הפעילות מדווחות כמבוטלות.
-
-### חוזה ה-ICS — נקבע אמפירית מול Gmail
-
-[api/_ics.js](api/_ics.js) `buildIcs(events, {method})`:
-- **`METHOD:PUBLISH`** (ברירת מחדל). **לא `REQUEST`** — REQUEST עם כמה UID שונים אינו iTIP תקין (RFC 5546), ו-Gmail סירב לזהות אותו כהזמנה ונפל לזיהוי-חכם ("Add to Calendar" + "Based on this email", בלי RSVP).
-- ב-PUBLISH **אין** `ORGANIZER`/`ATTENDEE`/`SEQUENCE` — הם שייכים ל-REQUEST ומוסיפים רק משטח-פרסור.
-- **אסור `encoding:"base64"`** על חלק היומן. ברירת המחדל של nodemailer (quoted-printable לעברית) היא מה ש-Gmail מקבל; base64 גרם ל-**"Unable to load event"**.
-- `LOCATION` = **כתובת המכללה בלבד**, בגרשיים **עבריים** `״` (U+05F4). שם החדר והערת הקומה חיים ב-`DESCRIPTION`.
-- `escParam` לערכי פרמטר (DQUOTE + הסרת `" ; : , \`) — `esc()` של TEXT אינו חוקי שם, ומרצה בשם `כהן, דני` היה שובר את הקובץ.
-- **מפגשים חוזרים מתאחדים ל-VEVENT אחד עם `RDATE`** (PR #83). הצ'יפ של Gmail מפסיק לרנדר מעל **~7 VEVENTs** בקובץ — 6 עובד, 8 מחזיר `Unable to load event` (נמדד ב-A/B מול Gmail, 2026-07-20). קורס שבועי הוא 13+ מפגשים, כלומר **כמעט כל קורס אמיתי** חצה את הסף ואיבד את "Add to Calendar". `groupOccurrences` מאחד מפגשים **זהים לחלוטין** (שעה, כותרת, תיאור, מיקום) לסדרה אחת: קורס שבועי = **VEVENT אחד** (13 מפגשים: 5,919B→815B). מפתח האיחוד הוא כל התוכן הנראה ולא רק השעה — occurrence של `RDATE` יורש summary/description/location וגוזר את משכו מ-`DTSTART`/`DTEND` של הראשי, ולכן מפגש בשעה/משך שונה **חייב** VEVENT נפרד. **`RDATE` ולא `RRULE`** — חותמת UTC מפורשת לכל מפגש שומרת על שעון-הקיר במעבר שעון קיץ/חורף (12:30 = `09:30Z` עד 19/10/26 ו-`10:30Z` מ-26/10/26) ומייתרת `EXDATE` לדילוגי חגים. **האיחוד חל על `PUBLISH` בלבד** — `REQUEST`/`CANCEL` נושאים סמנטיקת iTIP פר-אירוע.
+**קורס שנמחק מטופל בחינם**: אין שורה ב-`lessons` → אין רצוי → הכל מדווח כמבוטל.
 
 ### נקודות הפעלה
 
-`POST {lessonId}` (קליינט, אחרי שמירה/מחיקה) · `GET ?force_test=<lessonId>` · `GET ?reconcile=all` · `GET ?reconcile=all&dryrun=1`.
-אימות: `requireStaff` **או** `X-Cron-Secret`. **env: אפס חדשים.**
-בקליינט מחווט מ-[LessonsPage.jsx](src/components/LessonsPage.jsx): `doSaveLesson`, מחיקת קורס, **ייבוא XL**, ו**פאנל ההתנגשויות** (שני האחרונים מעולם לא סנכרנו לפני PR #81).
-מיילים נשלחים דרך **`/api/send-email`** (chrome ממותג משותף) — אין transporter שני.
+`POST {lessonId}` (קליינט, אחרי שמירה/מחיקה) · `GET ?force_test=<lessonId>` ·
+`GET ?reconcile=all[&dryrun=1]`. אימות `requireStaff` **או** `X-Cron-Secret`;
+**`reconcile=all` חי דורש את ה-cron secret** ולא רק JWT של צוות (לקח #37+#41).
+אפס env חדשים. בקליינט מחווט מ-`doSaveLesson`, מחיקת קורס, **ייבוא XL** ו**פאנל
+ההתנגשויות**. מיילים דרך `/api/send-email` בלבד — אין transporter שני.
 
-**cron יומי ב-[vercel.json](vercel.json) הוא `dryrun=1` בלבד** (04:00). `reconcile=all` ללא dryrun ישלח הזמנה לכל מרצה במכללה — **לא לרשום אותו כ-cron**.
-
-### קצב ועמידות (נמדד, לא הוערך)
-
-**~2.3 שניות למייל.** בקשה אחת מטפלת בקורס אחד ושולחת למרציו **אחד-אחד עם `SEND_GAP_MS = 1000` ביניהם** — לא במקביל. קורס עם **4 מרצים** (תרחיש אמיתי במכללה: מרצים שונים למפגשים שונים) נמדד ב-**10.4 שניות**, כלומר **מעל ברירת המחדל של Vercel** — לכן [vercel.json](vercel.json) מגדיר `functions["api/calendar-sync.js"].maxDuration = 60`. בלי זה הריצה נקטעת באמצע וחלק מהמרצים לא מקבלים דבר, בשקט. 60 שניות מכסות ~20 מרצים על קורס אחד.
-
-**ייבוא XL שולח קורס-אחר-קורס** (לא במקביל) — הצוואר הוא סובלנות Gmail ל-burst, לא ה-throughput שלנו. גיליון של 20 קורסים ≈ דקה של עבודת רקע אחרי שדוח הייבוא כבר על המסך.
-
-**ניסיון חוזר לכשלים חולפים**: `sendCourseEmail` מנסה שוב פעמיים (1s, 4s) על שגיאת רשת או 5xx. **4xx לעולם לא נענה שוב** (דחייה אמיתית). זה נוסף אחרי ש-Gmail התחיל להחזיר `ETIMEDOUT` באמצע פיתוח והתאושש מעצמו — בלי הניסיון החוזר, ייבוא המוני היה משאיר מרצים בלי יומן **ושום דבר לא היה מתקן את זה** (הקרון רק **מדווח** דריפט).
-
-**`reconcile=all` שולף מרוכז** (PR #82): שתי קריאות (`prefetchAll`) במקום 2 לכל קורס. עם 166 קורסים בפרוד הגרסה הטורית לקחה 60s+ ונפלה על `FUNCTION_INVOCATION_TIMEOUT`; עכשיו **3.06s**. נתיבי הקורס-הבודד (POST אחרי שמירה / `force_test`) ממשיכים בקריאות ממוקדות. כשל באחת השליפות מפיל את הבקשה ב-500 — **אסור להמשיך עם מפות ריקות**, זה היה מציג את כל הקורסים כמחוקים.
+> ⚠️ **ה-cron היומי הוא `dryrun=1` בלבד.** `reconcile=all` ללא dryrun ישלח הזמנה
+> לכל מרצה במכללה — **אסור לרשום אותו כ-cron**.
 
 ---
 
@@ -565,73 +557,55 @@ admin/staff מתנתק אוטומטית אחרי **60 דקות** של חוסר �
 
 ## 🎓 לקחים נלמדו (anti-regressions)
 
-1. **Email-first dedup ב-`lecturers`** — bootstrap ב-App.jsx מחלץ מרצים אוטומטית משיעורים. dedup חייב לבדוק `lower(email)` **לפני** `lower(name)`. UNIQUE על email — dedup לפי שם יוצר 23505.
-2. **navigator.locks deadlock** — אסור להחזיר את `lock` ל-default ב-`supabaseClient.js`.
-3. **Listener fire-and-forget** — אסור `await routeByRoles` ב-onAuthStateChange.
-4. **Identity-confirmation modal** — אסור להחזיר.
-5. **`FAR_FUTURE` block ל-`באיחור`** — היה bug שחסם כל השאלה עתידית. עכשיו 48h בלבד.
-6. **`toDateTime()` מחזיר number, לא Date** — אל תקרא `.getTime()` על התוצאה.
-7. **Auto-coupling MAIN CONTROL → סטודיו הקלטות בשיעורים** — הוסר לחלוטין בקומיט `6c89345`. שיעור ב-MAIN CONTROL לא משריין אוטומטית את סטודיו הקלטות. אם צריך גם הקלטות — לבחור כיתה משנית במפורש. ה-toggle הידני "צרף סטודיו הקלטות" ב-team/student booking נשמר כ-opt-in.
-8. **`production_delete_v1` atomic hard-delete** — קוראים ישירות מ-React (`supabase.rpc`), לא דרך API endpoint נפרד. כל הפעולה ב-transaction יחיד של Postgres. ראה מיגרציה `20260525120000`.
-9. **`session.studioIds[]` array — לא `studioId`+`secondaryStudioId`** (PR #20). הזוג הישן הוסר. דפים שעוד מסתמכים על `getEffectiveLessonStudioIds`/`getLessonSessionStudioIds` (חוזרים array). שמירת position מותרת — empty string ב-index `i` שומר את העמודה במקומה.
-10. **`course_studios` jsonb explicit column** (PR #21). אסור לחזור לגזירת union מ-`schedule[]` ברמת הקורס — זה גרם ל-phantom columns אחרי reload. chips של הקורס נשמרים ישירות, overrides של מפגש נשארים inline.
-11. **Toast aggregation — סינכרוני בלבד** (PR #22). אסור להוסיף async/await/network בנתיב `aggregateKey`. כל הלוגיקה רצה בתוך `setToasts(prev => ...)` + `useRef`. אם מוסיפים latency — `aggregateKey` מפסיק להיות "קוסמטי בלבד" כפי שתוכנן.
-12. **Custom message in `studio_lesson_conflict` email** (PR #20). `custom_message` מוצג ב-block "💬 הודעה מהמכללה" בלבד. אסור להחזיר אותו ל-`studentMessageSection` הישן — בעבר זה גרם ל-2 תיבות זהות במייל.
-13. **`session.lecturerIds[]` array — לא scalar `lecturerId`** (PR #24). הוספת `session.lecturerIds[]` במקביל ל-`session.lecturerId`. **`lecturerId` חייב להיות נגזר מ-`lecturerIds[0]`** בכל code path (`updateSessionLecturerSlot`, `addLecturerColumn`, `removeLecturerColumn`, XL import builder). שבירת הקשר הזה תפצל את ה-UI מה-state ומה-display surfaces (LecturerPortal/PublicDisplay/buildLessonStudioBookings) שעדיין קוראים את הסקלר.
-14. **`course_lecturers` jsonb explicit column** (PR #24). אסור לחזור לגזירת union מ-`schedule[]` ברמת הקורס. דפוס מקביל ל-`course_studios` של PR #21. ה-fallback ל-derivation קיים רק לrows שנכתבו **לפני** המיגרציה — אחרי כתיבה אחת השורה מקבלת `course_lecturers: [...]`.
-15. **כפתור "הוסף עמודת מרצה" ≠ chip ב-"מרצי הקורס"** (PR #24). הוספת chip ב-"מרצי הקורס" **לא** מוסיפה עמודה ל-grid (בניגוד ל-`addCourseStudio` של PR #20 שכן מוסיף). העמודות נוספות **אך ורק** דרך לחיצה מפורשת על "👤 הוסף עמודת מרצה". זה דפוס מודע, לא באג — היפוך מהאינטואיציה ב-PR #20.
-16. **Lecturer multi-column XL import — column-based, לא row-based** (PR #24). שורת XL עם 3 עמודות "מרצה 1/2/3" מייצרת מפגש עם `lecturerIds = [3 ids]`. שורות עם אותו `(date, time, topic)` אבל מרצים שונים בעמודה היחידה מתמזגות (`importSessionMergeKey` בלי lecturer). אסור להחזיר את ה-lecturer ל-merge key.
-17. **כל `usage` חייב `import` — `no-undef` עכשיו ERROR** (PR #40–#42). PR #39 הוסיף שימושים ב-`formatTime` ל-5 קבצים אבל עריכות ה-`import` **נכשלו בשקט** (parallel edits) → `formatTime is not defined` בזמן ריצה → **קריסת דפים** (טופס השאלת ציוד, `/daily`, `/daily-table`, ארכיון, הזמנת אולפן). lint+build עברו כי `no-undef` היה `warn`. תיקון: ייבוא ב-5 קבצים (#40) + 2 missing-imports נוספים שנמצאו בסריקת `no-undef` כוללת — `updateReservationStatus` ב-[CalendarViews.jsx](src/components/CalendarViews.jsx) ו-`deleteReservation` ב-[App.jsx](src/App.jsx) (#41) + העלאת `no-undef` ל-`error` (#42). **לקח: כשמוסיפים usage של helper — לוודא import באותו commit; ה-build חוסם עכשיו. כשעורכים imports במקביל בכמה קבצים — לאמת שכל אחת הצליחה.**
-18. **`formatTime(t)` ב-[src/utils.js](src/utils.js)** (PR #39) — helper מרכזי לתצוגת שעת-יום: `String(t).slice(0,5)` → `HH:MM`. חותך שניות גולמיות מה-DB (`09:30:00`→`09:30`) ומאחד מול ערכים שכבר `HH:MM`. **כל תצוגת שעה משתמשת בו** — אסור להציג `borrow_time`/`return_time`/`startTime`/`endTime` גולמי. (במייל הקרון משתמשים ב-slice מקומי כי זה Node, לא ה-bundle.)
-19. **`getEffectiveStatus` הוא מקור-האמת היחיד לסטטוס מוצג** (PR #47, [src/utils.js](src/utils.js)). גוזר `מאושר`→`באיחור` כשעבר זמן ההחזרה (mirror של `normalizeReservationsForArchive`), ו-`מאושר`→`פעילה` כשהחל זמן ההוצאה. שיעורים (`שיעור`) מוחרגים מ-`באיחור` (להם נתיב `הוחזר`). **אסור לחזור לגרסה שמחזירה רק `פעילה`** — זה גרם לקפיצה פעילה↔באיחור בתצוגות (PublicForm "ההזמנות שלי" טוען rows גולמיים ל-state המשותף ש-App מנרמל; שני המקורות חייבים להסכים). תופס overdue **מיד** בלי תלות בקרון `check-overdue.js`. הערה: `getAvailable` משתמש בו ולכן מחיל את חלון ה-48h של `באיחור` מיד (מכוון, עקבי עם מצב שאחרי הקרון).
-20. **double-booking של אולפן נחסם ברמת ה-DB** (PR #48). ה-`EXCLUDE constraint` `studio_bookings_no_overlap` עמיד-race לקביעות persisted (student/team). **כל בדיקת חפיפה בקליינט עוברת דרך `rangesOverlap` ב-[studioOverlap.js](src/utils/studioOverlap.js)** — אסור להחזיר gate של `!isNight` (גרם לקביעות לילה לדלג על הבדיקה) ואסור השוואות מחרוזות גולמיות במקום ה-helper. **שיעור↔קביעה נשאר client-only** (שיעורים לא persisted). כל `CREATE OR REPLACE` של ה-constraint/`studio_booking_tsrange` — לשמר wrap-around לילה + ה-`WHERE`, ולעשות דה-דופ לפני re-add.
-21. **הגבלת השאלת-חוץ — flag ברמת `equipment`, אכיפה דו-שכבתית** (PR #51). העמודות `external_loan_restricted`/`external_loan_hold_count` יושבות על `equipment` (לא `equipment_units` — הטופס לא מושך unit rows). **`normalizeEquipmentTagFlags` חייב לשטח אותן ל-camelCase בשני העותקים** (App.jsx + utils.js) — אחרת `sync_equipment_from_json` (delete+reinsert + COALESCE→false/0) **מאפס בשקט** את הערכים בכתיבת-מערך-מלא הבאה. רשימת הסוגים המושפעים `פרטית`/`הפקה` חייבת להישאר מסונכרנת בין `EXTERNAL_LOAN_TYPES` (קליינט) ל-`v_loan_type IN (...)` (RPC). כל `CREATE OR REPLACE` של `create_reservation_v2` חייב לשמר את **כל 4 ה-guards** (per-student, per-equipment, crew-derive, external-loan). ראה סעיף "🚫 הגבלת השאלת-חוץ".
-22. **אישור בקשה = נקודת אכיפה שנייה לזמינות (race-proof), והאישור מ-modal העריכה חייב לשמור קודם** (PR #55). היסטורית, בדיקת הזמינות רצה **רק** ב-`create_reservation_v2` (הגשה); האישור (`update_reservation_status_v1`) לא בדק כלום וההגנה היחידה הייתה `getReservationApprovalConflicts` **בקליינט** מול state בזיכרון — שתי בקשות `ממתין` (לא חוסמות) שאושרו על snapshot מיושן יצרו הקצאת-יתר. עכשיו ה-RPC נועל `FOR UPDATE` ובודק `healthy − overlapping_blocking_demand (ללא self) ≥ qty` במעבר לתוך `מאושר`, וזורק `approve_overbook` (→409, מיפוי ב-[api/update-reservation-status.js](api/update-reservation-status.js), הודעת עברית + רענון ב-`doApprove`). **אסור להחיל את ה-guard על אישור-חוזר או על `באיחור`/`פעילה`→`מאושר`** (הם כבר מחזיקים מלאי) — רק על מעבר מסטטוס לא-חוסם. בנפרד: ב-[EditReservationModal](src/components/EditReservationModal.jsx) כפתורי האישור קוראים `onApprove({...form, items})`, אבל ההורה ב-[ReservationsPage.jsx](src/components/ReservationsPage.jsx) **חייב להריץ `saveEditedReservation(updated,{silent:true})` לפני `approveReservation`** — אחרת עריכת פריטים/שעות לפני אישור נמחקת בשקט (האישור הוא status-only). `saveEditedReservation` מחזיר boolean ו-`{silent}` מדלג על toast+סגירה כשמשרשרים אליו אישור.
-23. **שיוך איש צוות לבקשת השאלה — טבלת-צד מנותקת, אפס השפעה על לוגיקת ההשאלות** (PR #58). הפיצ'ר **אסתטי/ניהולי בלבד**. `reservation_staff_assignments` (FK חד-כיווני `ON DELETE CASCADE`→`reservations_new`, `kind` out/return, `UNIQUE(reservation_id,kind)`, RLS read-all + service-write, realtime). **אסור** להוסיף שום שדה/לוגיקה ל-`create_reservation_v2`/`update_reservation_status_v1`/נתיב כתיבת ההשאלה (`saveEditedReservation`) — האחראי חי **בטבלת-הצד בלבד**. **אין שיוך → אין תצוגה, אין חסימה, הסטטוסים זורמים כרגיל.** כתיבה רק דרך 2 actions אדיטיביים ב-[api/staff-schedule.js](api/staff-schedule.js) (`assign/unassign-loan-handler`; אדמין משייך כל אחד, צוות רק את עצמו); קריאה ב-[App.jsx](src/App.jsx) (`loanHandlers` state + realtime channel "loan-handlers-live", מועבר לדפים). UI: helpers ברמת-מודול ב-[StaffSchedulePage.jsx](src/components/StaffSchedulePage.jsx) (`getDayStudentLoans`/`shiftCoversTime`/`loanHandlerFor`) — פאנל מנהל/העדפה + צ'יפ לוח + 🔧; תצוגת מחסן read-only (ReservationsPage כרטיס/מודאל/עריכה + DashboardPage). **כל `CREATE OR REPLACE` או edit עתידי של RPC הזמנות — לא לגעת בטבלה הזו, ולא להוסיף לה אכיפה.**
-24. **Service Worker — ניווט network-first, אסור לחזור ל-cache-first** (PR #61, [src/sw.js](src/sw.js)). ה-`NavigationRoute` חייב להישאר `NetworkFirst` (+`PrecacheFallbackPlugin`→`index.html`), **לא** `createHandlerBoundToURL('index.html')` (cache-first). המעבר נעשה כי cache-first על תצוגת קיוסק (`/daily-table` ב-Fully Kiosk) יצר **death-spiral** אחרי דפלוי: `index.html` ישן בה-precache→`assets/index-<hash-ישן>.js` שנמחק→**404**→מודול הכניסה נכשל→`registerSW` ב-[main.jsx](src/main.jsx) לא רץ→ה-SW לא מתעדכן לבד→מסך לבן קבוע עד ניקוי ידני. עם network-first, מכשיר מחובר תמיד מביא index טרי. **שחזור מתקיעה קיימת = ניקוי cache ידני במכשיר פעם אחת** (Fully Kiosk: Clear Cache + Clear Web Storage + Restart, או Android Settings→Apps→Clear Data) — התיקון מונע **הישנות** אך לא משחרר מכשיר שכבר תקוע על ה-SW הישן. תמיכת offline נשמרת (fallback ל-precache). **המשך (hotfix `57b657b`, ישיר ל-main): `/daily-table` לעולם לא רושם SW** — `isKioskPage = pathname.startsWith('/daily-table')` ב-[main.jsx](src/main.jsx) → תמיד מסלול desktop (unregister SW + purge caches + reload-once), בלי קשר ל-User-Agent; `sw.js` מוסיף `NetworkOnly` ל-`/daily-table` כ-defense-in-depth. network-first לבדו לא שחרר קיוסק שכבר היה תקוע, אז בדף הזה פשוט לא רושמים SW בכלל. מובייל בדפים אחרים ממשיך לקבל PWA רגיל.
-25. **חישוב זמינות ציוד = שיא-מקבילי (peak-concurrent), אסור לחזור ל-SUM** (PR #63). זמינות פריט מחושבת `workingUnits − MAX_concurrent_demand(בחלון הבקשה)`, **לא** `workingUnits − SUM(כל הביקוש החופף)`. שתי בקשות חוסמות בחלונות **זרים** (שלא חופפים זה-לזה) תופסות יחידה פיזית אחת בכל רגע (fungible) — סכימה מנפחה כשחלון הבקשה משתרע על כמה בקשות זרות (פריט 2-יח' עם 2 השאלות-יחידה זרות דּוּוח 0 זמין וחסם/דחה אישור). **הסימטריה מכוונת**: שתי בקשות ש**כן חופפות** בזמן על פריט 2-יח' → שיא=2 → `זמין: 0` = חוסר במלאי (בקשה שלישית חופפת נחסמת) — peak-concurrent **מקטין** רק את הניפוח של חלונות זרים, לא מרפה חסימה אמיתית (מוודא ב-smoke P3). התיקון בכל המשטחים: **קליינט** — helper יחיד `computeEquipmentAvailability` ב-[src/utils.js](src/utils.js) (סריקת peak על נק' ההתחלה); `getAvailable`/`getReservationApprovalConflicts`/`getEquipmentBlockingDetails` ([EditReservationModal.jsx](src/components/EditReservationModal.jsx)) הם wrappers דקים סביבו. **שרת** — `create_reservation_v2` (מיגרציה `20260701120000`) + `update_reservation_status_v1` (`20260701120100`) מחשבים `MAX(c)` על CTE `blk` במקום `SUM` (byte-for-byte, שומרים את **כל** ה-guards). **שתיהן הוחלו ב-dev וב-prod.** אגב התיקון: המודאל עבר מ-`total_quantity`→`workingUnits` ומ-`FAR_FUTURE`→חלון 48h ל-`באיחור` (עקבי עם `getAvailable`+לקח #5). Anti-regression: כל `CREATE OR REPLACE` של שתי ה-RPC חייב לשמר `MAX(c)` (לא `SUM`), סמנטיקת `tstzrange '[)'`, וכל ה-guards. טסט CI `run_availability_peak_tests` (3 תרחישים, מיגרציה `20260701120200`, **קורא ל-create_reservation_v2 האמיתי**) ב-`npm run test:db` → smoke **33/33**.
+> כל שורה כאן נכתבה **אחרי** שמשהו נשבר בפועל. הפורמט הוא **הכלל** ואז *למה* —
+> הנימוק קיים כדי שאיש לא "יתקן" את הכלל בחזרה. הסיפור המלא של כל באג חי ב-PR שלו.
+> המספור **קבוע לנצח**: הפניות "ראה לקח #N" פזורות בקוד ובקומיטים. לקחים שמוזגו
+> נושאים מספר כפול, והמספר המשוחרר נשאר ריק.
 
-26. **ארכיון הפקות = `archived_at` מגובה-DB, אסור לחשב "הסתיימה" בקליינט** (PR #67). מצב הארכיון של הפקה נשמר ב-`productions.archived_at` (מקור אמת: `NULL`=פעילה / timestamp=מתי הסתיימה לראשונה), נגזר מ-`max(production_dates.end_date) < היום(Asia/Jerusalem)`, ומתוחזק **אך ורק** ע"י `productions_refresh_archive_v1(p_production_id?)` — שנקרא (א) post-save מהקליינט להפקה בודדת (ארכוב/שחזור מיידי, ב-[productionsApi.js](src/utils/productionsApi.js) `upsertProduction`), ו-(ב) cron יומי ([api/productions-archive.js](api/productions-archive.js)) לכל ה-`published`. הקליינט **קורא** `archivedAt` ולא מחשב "הסתיימה" בעצמו. `belongsToTab` ב-[ProductionsPage.jsx](src/components/ProductionsPage.jsx) מפצל לוח (`!archivedAt`) מול ארכיון (`archivedAt`); `archiveVisibleTo` מגביל את **הסטודנט** לחלון חודש (`ARCHIVE_STUDENT_WINDOW_MS`) בעוד צוות/ראש-מחלקה (`currentStudent=null`) רואים הכל. **הרשומה לעולם לא נמחקת** — "מחיקה מהארכיון של הסטודנט אחרי חודש" היא **view-filter** בלבד (הצוות שומר לתיעוד לתמיד). Anti-regression: (a) ה-RPC חייב לשמר `Asia/Jerusalem` (לא `current_date`), gate ל-`status='published'` (טיוטות לא מתארכבות), `COALESCE(old_at, now())` (re-save לא מאפס חלון-חודש), ו-`IS DISTINCT FROM` (דילוג no-op → אפס realtime churn); (b) ארכוב **לא משנה `status`** → RLS (`public_read_published`/`director_read_own`) ותצוגות אחרות עובדות, וה-`productions_director_overlap_trg` לא נורה (`AFTER UPDATE OF status, director_student_id` — `archived_at` לא ברשימה); (c) `production_delete_v1` (HARD delete) **לא נגעו בו**. **שחזור**: `ProductionEditor.validate()` עושה grandfather לתאריכי-עבר שלא-שונו (השוואה מול `initial.dates` לפי `id`+שדות) — בלעדיו כלל 8-הימים חוסם הוספת טווח עתידי להפקה שהסתיימה. **סינון חודשי** (`productionInMonth` + `scopeAll`): הלוח הפעיל מציג כברירת מחדל רק הפקות שטווחן חופף לחודש שבלוח-שנה; "ההפקות שלי" (הבמאי) **תמיד** גלוי ללא סינון; הארכיון לא מושפע מהסינון החודשי.
+1. **dedup של `lecturers` לפי `lower(email)` לפני `lower(name)`** — יש UNIQUE על email, ו-dedup לפי שם מייצר 23505. ה-bootstrap ב-App.jsx מחלץ מרצים משיעורים אוטומטית.
+2. **אסור להחזיר את `lock` ל-default ב-`supabaseClient.js`** — `navigator.locks` יוצר deadlock תחת Edge tracking-prevention ו-PWA standalone.
+3. **אסור `await routeByRoles` ב-onAuthStateChange** — ה-listener חייב להישאר fire-and-forget; await חוסם את `signInWithPassword` ועובר את ה-safety timer של 10 שניות.
+4. **אסור להחזיר את ה-Identity-confirmation modal** — RLS + FK על `public.users.email` כבר מספקים את ההגנה.
+5. **`באיחור` חוסם רק בחלון 48h, אסור `FAR_FUTURE`** — חסימת-לנצח חסמה כל השאלה עתידית. `OVERDUE_BLOCK_BUFFER_MS` ב-utils.js + App.jsx.
+6. **`toDateTime()` מחזיר number ולא Date** — אל תקרא `.getTime()` על התוצאה.
+7. **אסור auto-coupling של MAIN CONTROL → סטודיו הקלטות בשיעורים** (הוסר ב-`6c89345`) — שיעור לא משריין אולפן שני מעצמו; צריך לבחור כיתה משנית במפורש. ה-toggle הידני ב-team/student booking נשאר opt-in.
+8. **`production_delete_v1` נקרא ישירות מ-React** (`supabase.rpc`) — hard-delete אטומי בטרנזקציה אחת. אסור להחזיר endpoint עוקף.
+9. **`session.studioIds[]` מערך, לא `studioId`+`secondaryStudioId`** — הזוג הישן הוסר. מחרוזת ריקה ב-index `i` שומרת את העמודה במקומה (position-preserving).
+10. **`course_studios` jsonb מפורש — אסור לחזור לגזירת union מ-`schedule[]`** — הגזירה גרמה ל-phantom columns אחרי reload; overrides של מפגש נשארים inline.
+11. **Toast aggregation סינכרוני בלבד — אסור async/await/network בנתיב `aggregateKey`** — כל הלוגיקה בתוך `setToasts(prev=>...)` + `useRef`; latency הופך אותו ממנגנון קוסמטי לעיכוב בלחיצה.
+12. **`custom_message` מוצג רק בבלוק "💬 הודעה מהמכללה"** — החזרתו ל-`studentMessageSection` הישן יצרה 2 תיבות זהות במייל `studio_lesson_conflict`.
+13. **`session.lecturerIds[]` מערך, ו-`lecturerId` הסקלרי חייב להיגזר מ-`lecturerIds[0]`** בכל code path — שבירת הקשר מפצלת את ה-UI מ-display surfaces שעדיין קוראים את הסקלר (LecturerPortal/PublicDisplay/buildLessonStudioBookings).
+14. **`course_lecturers` jsonb מפורש — אסור לחזור לגזירת union** — מקביל ל-#10. ה-fallback קיים רק לשורות שנכתבו לפני המיגרציה.
+15. **chip ב"מרצי הקורס" ≠ עמודה ב-grid** — עמודה נוספת **רק** בלחיצה על "הוסף עמודת מרצה". מכוון, והיפוך מהתנהגות הכיתות ב-#9 — אל ת"תקן".
+16. **ייבוא XL של מרצים הוא column-based — אסור להחזיר lecturer ל-`importSessionMergeKey`** — שורות עם אותו `(date,start,end,topic)` חייבות להתמזג למפגש אחד עם `lecturerIds[]` מאוחד.
+17. **כל `usage` חדש חייב `import` תואם באותו commit — `no-undef` הוא ERROR** — ייבוא חסר של `formatTime` הפיל 5 דפים בפרוד בזמן ריצה כש-lint עבר. כשעורכים imports במקביל בכמה קבצים — לאמת שכל עריכה הצליחה.
+18. **אסור להציג `borrow_time`/`return_time`/`startTime`/`endTime` גולמי — הכל דרך `formatTime`** — הוא חותך שניות מה-DB (`09:30:00`→`09:30`). (בקרונים יש slice מקומי כי זה Node ולא ה-bundle.)
+19. **`getEffectiveStatus` הוא מקור-האמת היחיד לסטטוס מוצג** — גוזר `מאושר`→`באיחור`/`פעילה`, מחריג שיעורים מ-`באיחור`. **אסור לחזור לגרסה שמחזירה רק `פעילה`**: PublicForm טוען שורות גולמיות ל-state המשותף ש-App מנרמל, ואי-הסכמה בין השניים גרמה לקפיצה פעילה↔באיחור.
+20. **חפיפת אולפנים נחסמת ב-DB (`studio_bookings_no_overlap`), וכל בדיקת קליינט עוברת דרך `rangesOverlap`** — אסור gate של `!isNight` (גרם לקביעות לילה לדלג על הבדיקה) ואסור השוואת מחרוזות גולמית. **שיעור↔קביעה נשאר client-only** (שיעורים לא persisted). כל `CREATE OR REPLACE` של ה-constraint/`studio_booking_tsrange` — לשמר wrap-around לילה + ה-`WHERE`, ולדה-דפ לפני re-add.
+21. **`normalizeEquipmentTagFlags` חייב לשטח את דגלי השאלת-החוץ ל-camelCase בשני העותקים** (App.jsx + utils.js) — אחרת `sync_equipment_from_json` (delete+reinsert + COALESCE) **מאפס אותם בשקט** בכתיבת-מערך-מלא הבאה. `EXTERNAL_LOAN_TYPES` בקליינט חייב להישאר מסונכרן עם `v_loan_type IN ('פרטית','הפקה')` ב-RPC.
+22. **אישור בקשה הוא נקודת אכיפה שנייה לזמינות** — `update_reservation_status_v1` נועל `FOR UPDATE` ובודק מלאי במעבר לתוך `מאושר`, אחרת `approve_overbook`→409. **אסור להחיל את ה-guard על אישור-חוזר או על `באיחור`/`פעילה`→`מאושר`** (הם כבר מחזיקים מלאי). בנוסף: ReservationsPage **חייב** להריץ `saveEditedReservation(updated,{silent:true})` לפני `approveReservation` — האישור הוא status-only ובלעדיו עריכת פריטים נמחקת בשקט.
+23. **`reservation_staff_assignments` היא טבלת-צד מנותקת — אסור להוסיף לה אכיפה או לגעת בה מ-RPC של הזמנות** — הפיצ'ר ניהולי בלבד. אין שיוך → אין תצוגה, אין חסימה, הסטטוסים זורמים כרגיל. כתיבה רק דרך 2 ה-actions ב-api/staff-schedule.js.
+24. **`NavigationRoute` ב-sw.js חייב להישאר `NetworkFirst` — אסור cache-first** — cache-first על הקיוסק יצר death-spiral: index ישן→chunk 404→`registerSW` לא רץ→SW לא מתעדכן→מסך לבן קבוע. **`/daily-table` לא רושם SW בכלל** (unregister+purge, `NetworkOnly`). התיקון מונע הישנות אך לא משחרר מכשיר שכבר תקוע — שם צריך ניקוי cache ידני פעם אחת.
+25. **זמינות ציוד = `workingUnits − MAX_concurrent`, אסור `SUM`** — שתי בקשות בחלונות **זרים** תופסות יחידה פיזית אחת, וסכימה ניפחה אותן ל-`זמין: 0` שגוי. בקשות ש**כן** חופפות עדיין חוסמות — הסימטריה מכוונת. helper יחיד `computeEquipmentAvailability`; כל `CREATE OR REPLACE` של שתי ה-RPC חייב לשמר `MAX(c)` ואת סמנטיקת `tstzrange '[)'`.
+26. **ארכיון הפקות נגזר מ-`productions.archived_at` — אסור לחשב "הסתיימה" בקליינט** — מתוחזק אך ורק ע"י `productions_refresh_archive_v1`. ה-RPC חייב לשמר `Asia/Jerusalem` (לא `current_date`), gate ל-`status='published'`, `COALESCE(old_at,now())` (re-save לא מאפס חלון-חודש) ו-`IS DISTINCT FROM`. **ארכוב לא משנה `status`** — אחרת RLS ותצוגות נשברות והטריגר נורה. הרשומה לעולם לא נמחקת; חלון החודש של הסטודנט הוא view-filter בלבד.
+27. **כל שאילתת `equipment` שמזינה state חייבת `select("*, units:equipment_units(*)")`** — בלי ה-join `eq.units=undefined`, ו-`ensureUnits` ממציא יחידות `תקין` ומוחק סטטוס אמיתי (פגום/בתיקון/נעלם "חזרו לתקין"). בנוסף: פאנל "משימות להיום" נטען app-level — **אסור fetch פר-mount** (הבהוב בכל ניווט), והצ'קבוקסים אופטימיים בלבד.
+28. **ייצוא PDF = browser-print בלבד, אסור להכניס ספריית PDF** — jsPDF/pdfmake/html2canvas שוברות עברית בלי font-embedding+bidi שלא קיימים בריפו. המקור לרשימה חייב להיות אותו נגזר שהמסך מרנדר (`filtered`+`groupedCategories`), אחרת ה-PDF לא תואם לסינון. כל קלט-משתמש עובר `esc` לפני שרבוב ל-HTML.
+29. **שיוך חדר בשיעור הוא פר-מפגש — אסור fallback לרמת-קורס כשלמפגש יש מערך `studioIds`** (גם ריק = "אין חדר"); fallback רק ל-legacy בלי מערך כלל. **אסור לארוז (drop-empties) את המערך ב-`getLessonScheduleEntries`** — האריזה מוחקת את האות "מערך מפורש" ומחזירה את ה-fallback, מה שייצר קביעות-רפאים. כל 7 בודקי החפיפה מדלגים על מפגשי עבר.
+30+32. **מלכודת CSS: `overflow-x:auto` לבדו מקדם את `overflow-y` ל-`auto`** (המפרט לא מאפשר ציר אחד `visible` והשני `auto`) ומחזיר סרגל אנכי. גוף טבלת לוח השיעורים חייב `display:flex;flexDirection:column` **בלי שום `overflow`**; עטיפת טבלת הדסקטופ חייבת `overflowX:"auto",overflowY:"hidden"` מפורש, **בלי `maxHeight`**. בעורך הקורס: **`minWidth:0` על שני טורי ה-grid** (בלעדיו `min-width:auto` של grid item גורם לטבלה הרחבה לדחוף את הכרטיס לרוחב-יתר), ומודאל "רשימת תלמידים" (`position:fixed`) **חייב להישאר מחוץ ל-grid**, ה-`useEffect` שגוזר תעודה ממסלול חייב `if (!initial) return` (קורס חדש נשאר "ללא תעודה"), ומייל סיום-קורס מדולג לקורס בלי `certificateTemplateType`.
+31. **`is_student`/`is_lecturer` הם דגלים נגזרים מהטבלאות החיות — אסור first-match** (זה השאיר מרצה+סטודנט עם דגל אחד). `is_admin`/`is_warehouse` אוטוריטטיביים ולא מנוקים אוטומטית. **מחיקת איש צוות = הסרת-תפקיד; אסור למחוק auth user של מייל שעדיין רשום כסטודנט/מרצה** (הבאג המקורי מחק סיסמה של סטודנט). **אסור להחזיר שדה `password` ל-create/invite** — הוא דרס סיסמה קיימת; onboarding אחיד דרך "שכחת סיסמה?".
+33. **`submittedDateIds` ב-productionVisibility.js הוא מקור-האמת היחיד ל"טווח עם רשימה" — אסור לשכפל inline** (החליף 3 עותקים). **אסור להוריד את `LEGACY_PRODUCTION_CUTOFF_ISO`** — זה יגייס הפקות ישנות רטרואקטיבית ויעלים אותן מהלוח. **אסור לכתוב `status:'approved'` ישירות ב-INSERT של crew** — הטריגר לא יורה על INSERT וה-recheck הוא service_role-only, אז snapshot/cert-gate יישארו מיושנים; חייב לעבור דרך `production_approve_crew_v1`. הגשר לטופס נוחת `setStep(3)` וחייב לזרוע `borrow_date`/`return_date`, אחרת `availEq` ריק.
+34. **צ'יפי קטגוריה נגזרים מאותו מאגר שהרשימה מרנדרת** — צ'יפ גלוי שמחזיר רשימה ריקה הוא באג. **סמנטיקת "כללי" קדושה**: פריט בלי תיוג (או עם `soundOnly` **וגם** `photoOnly`) מופיע בכל פילטר — **אסור בדיקת-דגל קשיחה**, היא הפכה 19 פריטים בפרוד לבלתי-נגישים. מאגר הצ'יפים = מאגר הסקשנים **פחות פילטר-הקטגוריה עצמו**, ובהחלפת סוג מאפסים את הבחירה. `EquipmentPage` מסנן ברמת-קטגוריה — **סמנטיקה שונה במכוון, לא לאחד**.
+35+44. **הארכיון קורא ציוד דרך `archiveItems(r)` = `original_items ?? items`** — בהחזרה חלקית `reservation_items` מתרוקן, ולכן **גם סינון הארכיון חייב לרוץ נגד `archiveItems`** ולא נגד השורות החיות (אחרת חיפוש פורנזי מפספס בדיוק את מה שמחפשים). `original_items` נחתם **פעם אחת** ולעולם לא נדרס, ו-`saveEditedReservation` **חייב לשאת אותו ב-UPDATE** אחרת החותמת נמחקת בכל עריכה. **אסור שורות `reservation_items` עם כמות 0** — ה-`CHECK` נשאר ו-~25 מסכי רינדור היו נשברים. סמנטיקת הזמן בארכיון היא **חפיפת חלון-ההשאלה**, לא נקודת-זמן. פער ידוע: `restore_reservation_v1` לא משחזר את העמודה.
+36. **מתיחת "באיחור" בלוחות היא גאומטריה בלבד, דרך `stretchOverdueForCalendar` בלבד** — מבוסס `getEffectiveStatus` ולא `r.status` הגולמי (פורטל מרצה דוחף שורות גולמיות ל-state). **המתיחה לא מגיעה לשום טקסט** — `overdue_since` נושא את התאריך האמיתי. שורה מתוחה היא אובייקט חדש בכל רינדור → **השוואות בחירה חייבות id**, לא זהות-אובייקט. **אסור להעביר רשימה מתוחה ל-`computeEquipmentAvailability`**.
+37+41. **`activity_logs` אינו מקור זהות קביל** — `user_id`/`user_name` מגיעים מגוף הבקשה ולא מה-JWT (החלטה מודעת: גזירה מהטוקן תשנה שמות שכבר מוצגים). לכן `returned_by_*`/`approved_by_*` נגזרים **בשרת מה-JWT** ב-PATCH נפרד אחרי ה-RPC — **בלי לגעת ב-`update_reservation_status_v1`**. ה-PATCH מסונן `status=eq.הוחזר` ו**לא** מגויט על `changed`; כישלון = log + 200, לא שגיאה למשתמש; המיזוג האופטימי חייב `|| null` ולא `?? r.returned_by_name` (שימור ערך ישן מציג שקר); ה-whitelist ב-`updateReservationStatus` בולע כל שדה שלא נרשם בו. **השער האמיתי הוא ה-endpoint, לא סינון ב-UI**: `activity-log` דורש `requireStaff` על `write`/`delete`; ראש מחלקה נבדק גם על **סטטוס המקור** (אחרת יכול למשוך `מאושר` ל-`ממתין` ולשחרר מלאי חי) וגם על היקף `loan_types`; `reconcile=all` חי דורש cron secret ולא רק JWT.
+38. **חוזה ה-ICS נקבע אמפירית מול Gmail — אל תשנה בלי בדיקה מקצה-לקצה מול תיבה אמיתית**: `METHOD:PUBLISH` ולא `REQUEST` (ריבוי UID אינו iTIP תקין), בלי `ORGANIZER`/`ATTENDEE`/`SEQUENCE`, **אסור `encoding:"base64"`** על חלק היומן (הוא מה שהפיל את הפרסור), ו-`LOCATION` = כתובת המכללה בלבד בגרשיים **עבריים** (שם חדר בקידומת הזיז את הפין; ASCII `"` עובר HTML-escape בצד גוגל). **שורות המצב נשמרות רק אחרי שליחה מוצלחת** (`if (ok)`) — אחרת מרצה נשאר מסונכרן-לכאורה ולנצח בלי מייל. מפגשים חוזרים מתאחדים ל-VEVENT אחד עם `RDATE` (מעל ~7 VEVENTs Gmail מפסיק לרנדר את הצ'יפ) — `RDATE` ולא `RRULE`, כדי לשמור שעון-קיר במעבר שעון. **`maxDuration=60` ב-vercel.json חובה** ושליחה **טורית** עם `SEND_GAP_MS` — לא `Promise.all` (Gmail חונק bursts); retry רק על רשת/5xx, **לעולם לא על 4xx**. `_key` מתחדש רק בהתנגשות אמיתית, אחרת נשלח מייל-שינויים שקרי.
+39. **פיצ'ר שעובר על אוסף — לבדוק על גודל-פרוד, לא על גודל-dev** — ספירת השורות בשתי הסביבות היא חלק מהבדיקה. שני כשלים נפרדים באותו יום נבעו מזה: קרון טורי שנפל על timeout ב-166 קורסים (עבד על 52 ב-dev), וקובץ ICS שחצה את סף ה-VEVENTs של Gmail בקורס אמיתי בן 13 מפגשים.
+40. **עדכון פריטים בבקשה קיימת: `add`/`increase` בלבד — `replace` הוסר במכוון** מכל השכבות. **`בדיקת עדכון` הוא display-state בלבד** (נגזר מ-`pending_update_id`) — **אסור להוסיפו למערך חוסמי-המלאי**. **אסור להזרים `reservation_pending_items` ל-`reservation_items` לפני אישור** — הישיבה בטבלה נפרדת היא כל ההגנה על המלאי (הם בלתי-נראים ל-CTEs). חלונות ההתראה חייבים להישאר מסונכרנים בין `loanPolicy.js` ל-`student_submit_reservation_update_v3`; ה-`_v1` מוענקות ל-`service_role` בלבד כדי שלא יעקפו את שער ה-lead-time. **`loanPolicy.js`, `reservationUpdateReview.js` ו-`announcementPolicy.js` חייבים להישאר חסרי-תלויות** — ה-API ב-Node מייבא אותם, וייבוא `src/utils.js` יגרור את קליינט Supabase ויפיל את ה-bundle.
+42. **`useState` שנזרע מ-prop אסינכרוני + כפתור שמירה גלובלי = אובדן נתונים** — ה-initializer רץ פעם אחת, וקפא על placeholder ריק; "שמור הגדרות" כתב אותו על רשימות שלמות ב-DB. **אסור להחזיר `syncAllSiteSettings` לדף ההגדרות** (כל פאנל כותב רק את המפתחות שלו דרך `setSetting`), **ואסור להסיר את ה-`DATA-LOSS GUARD`** שממלא רק חוסרים ב-draft. שדות מספריים ב-`onBlur` ולא debounce (הקלדת "20" כתבה 2 ואז 20).
+43. **קהל ההודעה נקבע בשרת מדגלי `public.users`, לא מ-`active_role`** שהקליינט שולט בו; שתי הטבלאות RLS-on בלי policy — `/api/announcement` הוא הדרך היחידה פנימה (ב-`site_settings` הודעה לצוות הייתה נוחתת בדפדפן של כל סטודנט). ה-PK `(announcement_id,user_id,seen_on)` עושה את כל עבודת ה"כמה פעמים", ו-`ON CONFLICT DO NOTHING` מונע מרענון לשרוף את המכסה. **הצפייה נרשמת ברגע ההצגה ולא בסגירה** — אחרת רענון מחזיר את ההודעה בלי סוף. גוף ההודעה מרונדר ב**רכיבי React ולא `dangerouslySetInnerHTML`** (טקסט אדמין, אבל מוצג לכל המכללה).
+45. **נגן וידאו: פוסטר בדף, נגן במסך מלא — אסור לכפות `aspectRatio` סביב נגן שיש לו chrome משלו** — `iframe` חוצה-מקור אי אפשר למדוד ואי אפשר לעצב מבפנים, ולכן כל קבוע-ריפוד הוא ניחוש שנשבר ברוחב אחר (שניים נוסו ונכשלו). סרגל Drive הוא גובה **קבוע**, אז בתיבה נמוכה הוא בולע שליש והסרטון נחתך; **הרוחב קובע גם את גודל הפקדים**, אז תיבה רחבה פורסת אותם על כל המסך. במסך מלא ה-iframe מקבל את כל החלון בלי כפיית יחס והנגן מרפד בעצמו. תמונת פוסטר ב-**`contain` ולא `cover`** (cover חותך) + `onError`. **מעדיפים YouTube "לא רשום" על Drive לסרטוני הדרכה** — נגן `/preview` של Drive לא מיישם auto-hide ואין דרך נתמכת להסתיר את פקדיו; המעבר הוא הדבקת קישור אחר בלבד.
 
-27. **פאנל "משימות להיום" ב-Staff Hub + תיקון קריאת סטטוס יחידות** (PR #68). **(א) הפאנל**: נטען **app-level** — `myToday`+`loadMyToday` ב-[App.jsx](src/App.jsx) (מתרענן כשמגיעים ל-hub, נשמר ב-state), מועבר כ-prop ל-[StaffHub.jsx](src/components/StaffHub.jsx) `TodayTasksPanel`; **אסור** לחזור ל-fetch פר-mount (גרם להבהוב טעינה בכל ניווט). כל הנתונים/כתיבות דרך `/api/staff-schedule` (`requireStaff`, staff_id מה-JWT, service-role) — 3 הטבלאות (`staff_personal_tasks`, `staff_hub_checkoffs`, ועמודת `reservation_staff_assignments.done`) הן **RLS-on ללא policies** (אין גישת-קליינט ישירה, כמו `staff_schedule_*`). מעקב-ביצוע: משימות אישיות + בקשות-השאלה עם עמודת `done` משלהן; משמרת-יום + הערות (מ-3 טבלאות ללא done) דרך טבלת check-off **מאוחדת** `staff_hub_checkoffs` (presence=בוצע, action `set-checkoff` upsert/delete). צ'קבוקסים **אופטימיים-בלבד** (setState מיידי, `refreshMyToday` רק על כישלון) — refetch פר-קליק גרם ל-lag. "היום" מחושב בשרת ב-`Asia/Jerusalem`. `reservation_staff_assignments.done` הוא **display-only** — לא נוגע בלוגיקת ההשאלות (כיבוד לקח #23). **(ב) תיקון קריאת סטטוס יחידות**: היחידות יושבות בטבלת בת `equipment_units`; קריאת `equipment` עם `select("*")` **לא** מושכת אותן → `eq.units=undefined` → `ensureUnits` ([App.jsx](src/App.jsx)) ממציא יחידות בברירת מחדל `status:"תקין"` ומוחק את הסטטוס האמיתי (הכתיבה תמיד עבדה — ה-RPC כותב `unit->>'status'`; רק הקריאה נשברה, לכן פגום/בתיקון/נעלם "חזרו לתקין" ולא הופיעו ב"ציוד בדיקה"). **Anti-regression: כל שאילתת `equipment` שמזינה state חייבת `select("*, units:equipment_units(*)")`** — תוקן ב-4 אתרים (load ראשוני, realtime refetch, סנכרון מלאי ציבורי, רענון מרצה). `ensureUnits` ממיין יחידות לפי הסיפרה שב-`id`.
-
-28. **ייצוא PDF = דפוס browser-print, אסור להכניס ספריית PDF** (PR #69). כפתור "🖨️ ייצוא PDF" ב-`EquipmentPage` ([App.jsx](src/App.jsx) `exportEquipmentPdf`) מפיק רשימת ציוד אדפטיבית-לסינון. **המקור לרשימה חייב להיות הנגזר `filtered` בקיבוץ `groupedCategories`** (שניהם ב-`EquipmentPage`) — אותו נגזר שהרשת במסך מרנדרת, כך שה-PDF תמיד תואם למה שרואים (אסור לייצא את `equipment` הגולמי או להעתיק לוגיקת סינון). **הטכניקה = browser-print בלבד**: מחרוזת `<html dir="rtl">` → `window.open` → `document.write` → `window.print()`, זהה ל-`exportPDF` ב-[ReservationsPage.jsx](src/components/ReservationsPage.jsx). זו **הדרך היחידה שעברית/RTL עובדות** בקוד הזה — הדפדפן מרנדר טקסט HTML רגיל, אין רסטריזציה/פונט מוטמע. **אסור להוסיף jsPDF/pdfmake/html2canvas** — הן שוברות עברית בלי font-embedding + bidi שלא קיימים בריפו. כל ערך מקלט-משתמש (שם ציוד/קטגוריה) חייב לעבור escaping (`esc`) לפני שרבוב ל-HTML (ל-`exportPDF` בהזמנות אין escape — לא להעתיק את החוסר הזה). guard ל-`window.open` שנחסם (popup blocker) → toast, לא קריסה שקטה. **code-only, אפס DB.**
-
-29. **התנגשות חדרים בשיעורים = שיוך פר-מפגש, אסור fallback לרמת-קורס, ורק עתידי** (PR #71). פאנל "התנגשות עם קביעות חדרים" בעורך הקורס נגזר משיוך הכיתה של **כל מפגש בנפרד** (`session.studioIds[]` בטבלת לוח השיעורים) — **לא** משדות הכיתה הגלובליים של הקורס. השורש: `getEffectiveLessonStudioIds` ב-[lessonBookings.js](src/utils/lessonBookings.js) נפל ל-`getLessonCourseStudioIds(lesson)` כשמערך המפגש היה ריק, כך שמפגש שסומן "ללא שיוך" הצליב מול חדר ברירת-המחדל של הקורס וחסם שמירה. **התיקון**: מערך `studioIds` **מפורש** (גם ריק לגמרי) הוא מקור-האמת = "אין חדר", ו-fallback לרמת-הקורס חל **רק על מפגשי legacy בלי מערך כלל** (סקלר `studioId`/`secondaryStudioId` קודם, אז קורס). כדי שהתיקון יעבור גם ל-`buildLessonStudioBookings` (התצוגה הנגזרת שמאכלסת לוח ציבורי/`daily-table`/זמינות הזמנת אולפן), **`getLessonScheduleEntries` חייב לשמר את המערך הגולמי (עם הריקים) + השדות הסקלריים** — אחרת האריזה שמוחקת ריקים מוחקת את האות "מערך מפורש" ומחזירה את ה-fallback. תוצאה: מפגש "ללא שיוך" לא יוצר עוד **קביעת-רפאים** בחדר הקורס. **סינון עתידי בלבד**: כל 7 בודקי החפיפה (`findBookingConflicts`/`findLessonConflict`/`findAllLessonRoomConflicts`/`findRoomConflictInList` + `findLecturerConflict`/`findAllLessonLecturerConflicts`/`findLecturerConflictsAcross`) מדלגים על `session.date < today()`. **צוות+סטודנט**: ה-dedup ב-`findBookingConflicts` הוא לפי `booking.id` בלבד (לא חדר/סלוט) → קביעת-צוות וקביעת-סטודנט חופפות על אותו חדר מוצגות **שתיהן**. **Anti-regression**: אסור להחזיר fallback לרמת-קורס כשלמפגש יש מערך `studioIds`; אסור לארוז (drop-empties) את המערך ב-`getLessonScheduleEntries` לפני שהוא מגיע ל-getter; שיעורים לא persisted → אין אכיפת-DB, הכול בשכבת ה-JS המשותפת [lessonBookings.js](src/utils/lessonBookings.js).
-
-30. **טבלת לוח השיעורים = גובה אדפטיבי, אסור `overflow` על מכולת הגוף** (PR #72). טבלת "לוח שיעורים" בעורך הקורס ([LessonsPage.jsx](src/components/LessonsPage.jsx)) מציגה את **כל** המפגשים בגובה מלא — **בלי `maxHeight`/scroll פנימי** (הדף עצמו גולל; הטופס יושב ב-`<div className="card">` בזרימת הדף, לא במודאל בגובה קבוע). ⚠️ **מלכודת CSS**: הגדרת `overflow-x:auto` בלבד על מכולת הגוף **מקדמת אוטומטית** את `overflow-y` ל-`auto` (מפרט CSS — `visible` מול `auto/scroll` אינו אפשרי) ומחזירה סרגל גלילה אנכי (בצד שמאל ב-RTL). לכן מכולת גוף הטבלה חייבת `display:flex;flexDirection:column` **בלי שום `overflow`**. מפגש שחלף (`session.date < today()`) מוצג אפור+`opacity:0.6`+tooltip; לחצן "💾 עדכן קורס" משוכפל לכותרת הטופס ליד "ביטול" (אותו `handleSave`) לשמירה בלי גלילה לתחתית. code-only, אפס DB.
-
-31. **מולטי-תפקיד: דגלים נגזרים, מחיקת-צוות ≠ השמדת-משתמש, אין שדה סיסמה** (PR #73). ארבעה עקרונות: **(א) `is_student`/`is_lecturer` ב-`public.users` הם דגלים נגזרים** — מקור האמת הוא הטבלאות החיות (`students` לפי `email=eq.`, `lecturers` פעילים לפי `email=ilike.`). מסונכרנים ע"י `computeLiveRoleFlags`+`upsertPublicUserWithLiveFlags` ([api/auth.js](api/auth.js) — משותף ל-`ensure-user`+reset-email, בודק **כל** המקורות במקביל ועושה set+clear) + זיהוי drift בלוגין ב-`routeByRolesCore` ([PublicForm.jsx](src/components/PublicForm.jsx), קריאת שרת רק על אי-התאמה; מדולג בזמן role-switch — ביצועים). **אסור לחזור ל-first-match** (זה מה שהשאיר מרצה+סטודנט עם דגל אחד). `is_admin`/`is_warehouse` **אוטוריטטיביים** ב-users — לעולם לא מנוקים אוטומטית ע"י הסנכרון. **(ב) מחיקת איש צוות = הסרת-תפקיד, לא השמדה**: `handleDelete` ב-[api/staff.js](api/staff.js) בודק אם המייל עדיין סטודנט/מרצה-פעיל → אם כן, PATCH `is_admin/is_warehouse=false` בלבד (`downgraded:true`) — שורת users, ה-auth user והסיסמה **נשמרים**; מחיקה מלאה רק ליתום. **אסור למחוק auth user של מייל שרשום במקום כלשהו** — הבאג המקורי מחק את הסיסמה של סטודנט ששודרג-והוסר (מראה של אותו guard שכבר היה ב-`delete-student-auth` ב-api/auth.js). **(ג) אין שדה סיסמה בטפסי יצירה**: onboarding אחיד לכולם דרך "שכחת סיסמה?" — **אסור להחזיר `password` ל-create/invite ב-api/staff.js** (הוא דרס סיסמה קיימת של סטודנט ששודרג); יצירת auth היא `email_confirm:true` בלי password. מייל קיים ב-create → שדרוג-מיזוג (דגלי צוות OR, שאר הדגלים לא נגעים) במקום 409. **(ד) מעבר-תפקיד**: מנגנון `active_role` ב-sessionStorage + reload; `switching` state מציג "מעביר…" במקום הבהוב login; hint כושל → מנקים `active_role` ונופלים לעדיפות ברירת-מחדל (בלי dead-end). כרטיסי המעבר ב-StudentHub מותנים ב-`public_student_roles` (נכתב ב-`routeToStudent` מהשורה המסונכרנת).
-
-32. **עורך הקורס דו-טורי + ברירת-מחדל תעודה + horizontal-only scroll** (PR #74, code-only). ארבעה חלקים ב-`LessonForm` ([LessonsPage.jsx](src/components/LessonsPage.jsx)) + guard במייל: **(א) פריסה דו-טורית** — הפאנלים עטופים ב-`display:grid` מותנה `isMobile` (`minmax(0,0.9fr) minmax(0,1.5fr)` בדסקטופ / `1fr` במובייל). **טור שמאל = לוח שיעורים בלבד** (רחב); **טור ימין = פרטי הקורס · שיוך כיתות · שליחת מייל · תעודת גמר**. **`minWidth:0` על שני הטורים קריטי** — בלעדיו `min-width:auto` של grid item גורם לטבלה הרחבה לדחוף את ה-card לרוחב-יתר. ה-modal "רשימת תלמידים" (`position:fixed`) חייב להישאר **מחוץ** ל-grid (רק 2 טורים). **(ב) ברירת-מחדל "ללא תעודה" ביצירת קורס** — ה-`useEffect` שגוזר `certificateTemplateType` מהמסלול חייב `if (!initial) return` בראשו: קורס **חדש** נשאר "ללא תעודה" עד בחירה ידנית; **edit mode ללא שינוי** (עדיין עוקב אחרי המסלול). **אסור להסיר את ה-gate** — בלעדיו בחירת מסלול דורסת מיד את "ללא תעודה". **(ג) מייל סיום-קורס מדולג לקורס ללא תעודה** — [api/notify-course-end-7days.js](api/notify-course-end-7days.js): `if (!String(lesson.certificateTemplateType||"").trim()) continue;` (קורס ללא תעודה לא מייצר תעודות → אין למרצה מה לסמן → לא נשלח מייל). **(ד) horizontal-only scroll — מלכודת CSS** (הרחבת לקח #30): עטיפת טבלת הדסקטופ **חייבת** `overflowX:"auto",overflowY:"hidden"` — `overflowX:"auto"` **לבדו** מקדם את `overflow-y` מ-`visible` ל-`auto` (כלל CSS: אי-אפשר ציר אחד `visible` והשני `auto`) ומחזיר סרגל אנכי דק. `overflowY:"hidden"` מפורש שובר את הקידום → אופקי בלבד כשהעמודות רחבות מהטור, אנכי לעולם לא. **אין `maxHeight`** (אחרת `hidden` יחתוך) — הדף עצמו גולל אנכית. מובייל (כרטיסים) לא מושפע.
-
-33. **לוח הפקות v2: חובת רשימת ציוד פר-טווח + auto-approve צוות** (PR #75, code-only, אפס DB). שישה עקרונות: **(א) שער הלוח הוא client-only ב-[productionVisibility.js](src/utils/productionVisibility.js)** — `submittedDateIds(p, reservations)` (מדלג `status='בוטל'`, דורש `production_date_id`) הוא **מקור האמת היחיד** ל"טווח עם רשימה" (החליף 3 עותקים inline — אסור לשכפל שוב); `boardVisibleDates`/`pendingDates` נגזרים ממנו. טווח מופיע בלוח-שנה ובכרטיסים **רק אם מוגש — לכולם, כולל הבמאי** (הבמאי רואה טיוטות רק בעורך/detail). **(ב) Grandfathering**: `isLegacyProduction` (`createdAt < LEGACY_PRODUCTION_CUTOFF_ISO="2026-07-14"`; חסר createdAt=legacy) — הפקת legacy עוקפת את **כל** המנגנון (שער/מודאל/מחיקה/תנאי-ברזל). כל 23 הפקות הפרוד הקיימות legacy. **אסור להוריד את ה-cutoff** — זה יגיית הפקות ישנות רטרואקטיבית ויעלים אותן מהלוח. **(ג) crew auto-approve דרך RPC בלבד**: שורות צוות **נולדות `invited`** (בעורך) ומאושרות אחרי `upsertProduction` ע"י `autoApproveDirectorCrew`→`production_approve_crew_v1` (הבמאי מורשה; ה-RPC מריץ `production_crew_change_recheck_v1` לצלם/סאונד). **אסור לכתוב `status:'approved'` ישירות ב-INSERT** — טריגר ה-recheck יורה רק על DELETE/UPDATE של שורות approved (לא INSERT), וה-recheck RPC הוא `service_role`-only — עקיפה תשאיר snapshot/cert-gate מיושנים. flip ידני ב-SQL חייב `SELECT production_crew_change_recheck_v1(id)` אחריו. **(ד) תנאי-ברזל** `canAddDate = isLegacy || dates.length===0 || allDatesLocked` — מקסימום טווח-תלוי (ללא רשימה) אחד בכל רגע. **(ה) שתי סמנטיקות סגירה בעורך**: `handleEditorClose` (X/"סגירה" — מוחק טווחים ללא רשימה מה-DB דרך diff של `upsertProduction`; gate על `persistedRef && !isLegacy`) מול `onClose` גולמי (מעבר לטופס ההשאלה/מודאל/מחיקה — **לא** מוחק). אסור לחווט את נתיב-הטופס ל-handleEditorClose. **(ו) הגשר** `onOpenLoanForm(p, dateId?)` ב-[PublicForm.jsx](src/components/PublicForm.jsx) נוחת `setStep(3)` (ה-setter הגולמי עוקף את שערי הניווט בכוונה) — חובה לזרוע `borrow_date`/`return_date` (אחרת `availEq` ריק); chip הטווח `isActive` לפי `production_date_id` (השוואת date/time נשברת על פורמט שניות DB מול blob). מה שנמחק מהקליינט ונשאר inert ב-DB: `production_check_crew_conflict_v1`, RLS self_enroll policies — לא להחזיר UI שמשתמש בהם.
-
-34. **צ'יפי קטגוריה נגזרים מאותו מאגר שהרשימה מרנדרת — אסור מ-`equipment` הגולמי** (PR #77, code-only, אפס DB). שורת הצ'יפים ורשימת הפריטים **חייבות להסכים**: צ'יפ גלוי שמחזיר רשימה ריקה = באג. היסטורית, 3 מסכים גזרו את הצ'יפים מ-`[...new Set(equipment.map(e=>e.category))]` (או מ-`categories` המלא) בלי שום אזכור לפילטר, בעוד שרשימת הפריטים כן סוננה → "ציוד סאונד" הציג את כל 22 הקטגוריות, כולל צילום טהור, ולחיצה עליהן החזירה כלום (`if(!catEq.length) return null`). המקור היחיד עכשיו ב-[src/utils.js](src/utils.js): `matchesEquipmentTypeFilter(eq, filter)` + `deriveVisibleCategories(categories, pool)` — החליפו 5 מימושים מקומיים מתפצלים. **(א) סמנטיקת "כללי" קדושה**: פריט ללא תיוג — או עם `soundOnly` **וגם** `photoOnly` — הוא "כללי" (כבלים/זכרונות) ו**מופיע בכל פילטר**. **אסור להחזיר בדיקת-דגל קשיחה** (כפי שהיה ב-`KitForm` ב-[App.jsx](src/App.jsx) וב-[CertificationsPage.jsx](src/components/CertificationsPage.jsx)): בפרוד יש **6 קטגוריות / 19 פריטים** לא-מתויגים (כבלי סאונד, מקליטי אודיו, מקל בום, מיקרופונים להפקות וידאו, זכרונות, כבלי וידאו) שהופכים בלתי-נגישים תחת כל פילטר פרט ל"הכל". טופס ההשאלה ([PublicForm.jsx](src/components/PublicForm.jsx) `Step3Equipment`) והשאלת איש צוות ([ReservationsPage.jsx](src/components/ReservationsPage.jsx) `meqMatch`) הם **מקור האמת** (החלטת בעל המוצר, 2026-07-15). **(ב) מאגר הצ'יפים = מאגר הסקשנים פחות פילטר-הקטגוריה עצמו** — לכלול אותו יסתיר את כל שאר הצ'יפים ויחסום בחירה שנייה. **(ג) איפוס בהחלפת סוג** (`setEditCategoryFilters([])`/`setEqCatF([])`) — אחרת קטגוריה נעוצה מייצרת רשימה ריקה בלי הסבר. **(ד)** ב-[EditReservationModal.jsx](src/components/EditReservationModal.jsx) ההעשרה `overdueEqAll` מופרדת מהסינון **בכוונה** — הרשימה המסוננת כוללת פילטר-קטגוריה ולכן אינה כשירה לגזירת צ'יפים; בלי ההפרדה מצב "באיחור" מציג את כל המחסן בצ'יפים מול 2-3 קטגוריות בסקשנים. **(ה)** `EquipmentPage` ([App.jsx](src/App.jsx) `filteredCategoryOptions`) מסנן לפי `categoryTypes` ברמת-**קטגוריה**, לא לפי דגלי-פריט — **סמנטיקה שונה במכוון, לא לאחד אותו**. ⚠️ `no-unused-vars` **לא** יתפוס רכיב מת (`varsIgnorePattern: '^[A-Z_]'` מתעלם משם באות גדולה) — כך שרד `Step3Equipment` כפול ב-App.jsx (נמחק ב-PR #77; `Step4Confirm`+`InfoPanel` עדיין מתים שם).
-
-35. **החזרה חלקית בבקשה "באיחור": `original_items` = תיעוד, `reservation_items` = זמינות** (PR #78, מיגרציה `20260719120000`). עריכת בקשה `באיחור` מאפשרת **הפחתת כמויות בלבד** (תקרה = הכמות שיצאה בפועל; `+` הוא undo, לא הוספת ציוד) — הפחתה משחררת מלאי מיד כי הזמינות נגזרת מ-`reservation_items.quantity` החי, וכיוון שהכמות לא עולה על מה שכבר בחוץ **אין תרחיש הקצאת-יתר** (אפס נגיעה בבדיקות הזמינות). התיעוד לארכיון חי ב-`reservations_new.original_items` — jsonb **מוקפא** שנחתם **פעם אחת** בהחזרה החלקית הראשונה ולעולם לא נדרס; עריכה שנייה ע"י עובד אחר נזרעת ממנו (`originalItems` ב-[EditReservationModal.jsx](src/components/EditReservationModal.jsx) מעדיף `original_items` על `items` — בלי זה התיעוד מתכווץ בהדרגה). **חריגה מודעת מכלל "אסור jsonb למערכי domain"**: זה סנאפ-שוט תיעודי write-once כמו `crew_photographer_name`, לא מערך חי. Anti-regression: (א) `saveEditedReservation` ([ReservationsPage.jsx](src/components/ReservationsPage.jsx)) חייב לשאת `original_items` ב-UPDATE (רשימת שדות מפורשת — השמטה מוחקת את החותמת בכל עריכה); (ב) שורת `reservation_items` **עדיין נמחקת ב-0** ו-`CHECK (quantity > 0)` נשאר — אסור להכניס שורות-אפס (סריקה מצאה ~25 מסכי רינדור ו-2 באגי-לוגיקה שהיו נשברים מהן); (ג) הארכיון קורא דרך `archiveItems(r)` = `original_items ?? items` ([ArchivePage.jsx](src/components/ArchivePage.jsx) — **הקובץ החי**; `ArchivePage` ה-inline ב-App.jsx מת); (ד) אף guard/RPC לא קורא את העמודה; (ה) פער ידוע: `restore_reservation_v1` (רשימת עמודות קשיחה) לא משחזר אותה — undo של מחיקה מהארכיון מאבד את הסנאפ-שוט והתצוגה נופלת ל-items.
-
-36. **מתיחת "באיחור" בלוחות = גאומטריה בלבד, דרך `stretchOverdueForCalendar` בלבד** (PR #79, code-only). השאלה שלא הוחזרה ממשיכה לתפוס את הלוח עד היום — helper יחיד ב-[src/utils.js](src/utils.js) (החליף עותק inline ב-PublicForm; דפוס לקח #34), מבוסס **`getEffectiveStatus` ולא `r.status` הגולמי**: [LecturerPortal.jsx](src/components/LecturerPortal.jsx) דוחף שורות גולמיות ל-state אחרי כל אישור/דחייה ולוח מנהל המכללה עובד על סנאפ-שוט mount — בדיקת status גולמי מתה שם אחרי הקליק הראשון. רק `שיעור` מוחרג; `צוות` נמתח כהשאלה רגילה (אושר מחדש 2026-07-19). ארבעה כללים: **(א) המתיחה לא מגיעה לשום טקסט** — `overdue_since` נושא את תאריך ההחזרה האמיתי; כל תצוגת תאריך משתמשת בו (מודאל הדשבורד עובר דרך `unstretch` שמאתר את השורה המקורית לפי id). **(ב) שורה מתוחה = אובייקט חדש בכל רינדור** → השוואות בחירה חייבות id (`String(selected?.id)===String(r.id)`), לא זהות-אובייקט — זהות שברה את פתיחת פאנל הציוד לבקשות באיחור בלבד. **(ג)** [CalendarGrid.jsx](src/components/CalendarGrid.jsx) מסמן חריגה בקו אדום 2px (רקע שכבתי, בלי DOM נוסף) ומדכא קצה מעוגל + תווית "↩ הוחזר" על בר מתוח (`overdue_since` הוא הסיגנל). **(ד) הזמינות לא רואה מתיחה** — `computeEquipmentAvailability` קורא את השורות הגולמיות עם חלון 48h (לקח #5); אסור להעביר לו רשימה מתוחה.
-
-37. **"איש צוות מטפל" בארכיון = המבצע בפועל, נגזר-JWT — לא השיבוץ המתוכנן** (PR #80, מיגרציה `20260719130000`). `reservations_new.returned_by_staff_id`+`returned_by_name` רושמות **מי באמת לחץ "הוחזר"**, ונכתבות ב-**PATCH נפרד** ב-[api/update-reservation-status.js](api/update-reservation-status.js) אחרי ה-RPC. **המיקום הוא ההחלטה**: (א) `update_reservation_status_v1` לא נגוע (לקחים #22/#25/#23) — הוספת פרמטר הייתה מחייבת `DROP FUNCTION` + הצהרה מחדש, המנגנון שהפיל את הפרוד ב-PR #45; (ב) הזהות מגיעה מה-JWT דרך `resolveUserRole` ([api/_auth-helper.js](api/_auth-helper.js) — הורחב להחזיר `full_name`), ולכן **בלתי-ניתנת לזיוף**; (ג) ה-endpoint הוא הצוואר של **כל** נתיבי ההחזרה, כולל [DashboardPage.jsx](src/components/DashboardPage.jsx) שאין לו זהות צוות בצד הלקוח בכלל. **שלוש הבחנות שאסור לטשטש**: (1) `reservation_staff_assignments(kind='return')` הוא **אחראי מתוכנן** מלוז העובדים — מוצג רק כנפילה, **בנוסח נבדל** ("אחראי החזרה (מתוכנן)"), כדי ששם תחת "איש צוות מטפל" תמיד יהיה עובדה מאומתת; (2) `activity_logs` (`action='reservation_return'`) **אינו** מקור לגיטימי — ה-identity ב-`api/activity-log.js` action `write` הוא **client-supplied** (השדות `user_id`/`user_name` מגיעים מה-body; מ-PR #89 ה-endpoint לפחות דורש JWT של צוות, אבל **הזהות עצמה עדיין לא נגזרת מהטוקן**); **נדחה backfill ממנו במפורש** (2026-07-19) כי היה מזריק שמות לא-מאומתים שנראים זהים בממשק; (3) שיעורים לא מציגים כלום — הם מתארכבים לפי שעון בלי אדם. Anti-regression: (א) ה-PATCH מסונן ב-`status=eq.הוחזר` (guard מפני היפוך מקבילי) ו**לא** מגויט על `changed` — כישלון היה נשאר בלתי-ניתן-לתיקון כי כפתור ההחזרה נעלם; (ב) דריסה בלתי-מותנית — החזרה חוזרת ע"י אדם אחר חייבת לעדכן; (ג) כישלון PATCH = `console.error` + 200, לא שגיאה למשתמש (הסטטוס כבר נשמר); (ד) המיזוג האופטימי בקליינט חייב `|| null` ולא `?? r.returned_by_name` — שימור ערך ישן כשה-DB null מציג שקר; (ה) ה-whitelist ב-`updateReservationStatus` ([src/utils.js](src/utils.js)) בולע כל שדה שלא נרשם בו במפורש; (ו) פער ידוע: `restore_reservation_v1` לא משחזר את העמודות.
-
-38. **סנכרון יומן = `PUBLISH` + קידוד ברירת-מחדל + `LOCATION` נקי; והמצב נשמר רק אחרי שליחה מוצלחת** (PR #81, מיגרציות `20260720120000`+`20260720140000`). ארבעה כללים שנקבעו **אמפירית מול Gmail** ב-2026-07-20, כל אחד אחרי כשל אמיתי — **אל תשנה אף אחד מהם בלי לבדוק מקצה לקצה מול תיבה אמיתית**: **(א) `METHOD:PUBLISH`, לא `REQUEST`.** REQUEST עם כמה UID שונים אינו iTIP תקין (RFC 5546); Gmail סירב לזהות הזמנה, נפל לזיהוי-חכם, והמשתמש קיבל "Add to Calendar" בלי RSVP — ואז האירועים שנוצרו היו **עותקים מנותקים** ששום `SEQUENCE` לא יכול לעדכן. ב-PUBLISH גם **אין** `ORGANIZER`/`ATTENDEE`/`SEQUENCE`. **(ב) אסור `encoding:"base64"`** על חלק ה-`text/calendar`. הוא נוסה כ"תיקון" לעברית והוא **מה שהפיל** את הפרסור ל-`Unable to load event`; ברירת המחדל של nodemailer (quoted-printable) עובדת. **(ג) `LOCATION` = כתובת המכללה בלבד, בגרשיים עבריים `״` (U+05F4).** גוגל מגאוקדת את השדה מילה-במילה — קידומת של שם חדר (`"DIGITAL MIX ROOM · …"`) מזיזה את הפין; ו-ASCII `"` עובר HTML-escape בצד גוגל ל-`ריב&quot;ל` שלא נמצא במפות (השרשרת שלנו נבדקה בייט-בייט והייתה נקייה). שם החדר + הערת הקומה ב-`DESCRIPTION`. **(ד) `if (ok)` לפני כתיבת המצב** — שורות המיפוי נשמרות **רק** אחרי שליחה מוצלחת, אחרת כשל SMTP היה משאיר את המרצה מסונכרן-לכאורה ולנצח בלי מייל. זה מה שהחזיק כשה-App Password פג. **+ שני שערים שהיו פתוחים**: ייבוא XL ופאנל ההתנגשויות עורכים מפגשים ולא סנכרנו כלל — נסגרו. **+ `_key` לא מתחלף על תבנית**: `normalizeScheduleEntry` חידש מפתח שנראה legacy (`/^sk-\d+$/`), ותחת מודל הדלתא זה נקרא "מפגש בוטל + מפגש נוסף" ושולח **מייל שינויים שקרי**; החידוש עבר ל-`normalizeSchedule` ומתרחש **רק בהתנגשות אמיתית**. **+ קצב, שנמדד ולא הוערך**: ~2.3s למייל, שליחה **טורית עם `SEND_GAP_MS=1000`** ולא במקביל (Gmail חונק bursts — קיבלנו `ETIMEDOUT` אמיתי בפיתוח). קורס עם **4 מרצים נמדד ב-10.4s**, מעל ברירת המחדל של Vercel → `maxDuration=60` ב-[vercel.json](vercel.json) הוא **חובה**, אחרת הריצה נקטעת וחלק מהמרצים לא מקבלים דבר בשקט. ייבוא XL רץ **קורס-אחר-קורס**. `sendCourseEmail` מנסה שוב פעמיים (1s/4s) על רשת/5xx ו**לעולם לא על 4xx**. טסט הגנה: `npm run test:ics` (מכסה `maxDuration`, איסור מקביליות, קרון dry-run, איחוד חזרות ונכונות DST; המספר העדכני ב-**🛡️ Guardrails חיים**). ראה סעיף "📅 מפגשי קורס ליומן המרצה".
-
-39. **קנה-מידה: מה שעבד ב-dev נשבר בפרוד — בשני מקומות, באותו יום** (PR #82, #83). שני הכשלים התגלו **אחרי** מיזוג PR #81 שעבר את כל הבדיקות, ושניהם מאותו שורש: **dev קטן מפרוד**. (א) **הקרון הלילי** — `reconcile=all` ביצע 2 קריאות REST טוריות לכל קורס; 52 קורסים ב-dev = מהיר, **166 בפרוד = ~330 round-trips ≈ 60s+** ונפילה על `FUNCTION_INVOCATION_TIMEOUT` (504 אחרי 60.3s, נמדד). התיקון: `prefetchAll()` — שתי קריאות מרוכזות; כשל שליפה מפיל את הבקשה ב-500 ולא ממשיך עם מפה ריקה, שהייתה גורמת לכל הקורסים להיראות מחוקים. ירד ל-**3.06s על 166 קורסים**. (ב) **הצ'יפ של Gmail** — קורסי הבדיקה ב-dev היו 3–5 מפגשים; קורס אמיתי הוא **13**, וזה חצה את סף ה-~7 VEVENTs. ראה לקח #38. **המסקנה: כשבודקים פיצ'ר שעובר על אוסף, לבדוק על גודל-פרוד ולא על גודל-dev — ספירת השורות בשתי הסביבות היא חלק מהבדיקה.** בנוסף, **הבדיקה שסגרה את (ב) שינתה משתנה אחד** (10 מפגשים מול 3, אותו מייל בדיוק) — אותה מתודה שסגרה את באגי ה-iMIP המקוריים.
-
-40. **עדכון פריטי ציוד בבקשה קיימת — פריטים ממתינים חיים בטבלה נפרדת, וזה מה שמגן על המלאי** (PR #85, 10 מיגרציות `20260722120000`→`20260722160000`). סטודנט יכול **להוסיף פריט** או **להגדיל כמות** בבקשה קיימת מ-"ההזמנות שלי". שבעה כללים שאסור לשבור: **(א) `add` / `increase` בלבד — `replace` הוסר במכוון** מכל השכבות (UI/API/DB + `CHECK (action IN ('add','increase'))`); אין להחזירו בלי החלטת מוצר ומיגרציה. סטודנט שרוצה ציוד אחר מחסיר ומוסיף. **(ב) שני מסלולים לפי סטטוס**: `ממתין`/`אישור ראש מחלקה` (לא-חוסמים) → הפריטים מוחלים **מיד** על `reservation_items` ונרשמים `auto_applied`; `מאושר` (חוסם) → הפריטים נשמרים ב-`reservation_pending_items` ו-`reservations_new.pending_update_id` נדלק. **(ג) `בדיקת עדכון` הוא display-state בלבד** — נגזר מ-`pending_update_id`, **לא** סטטוס DB, ו**אסור** להוסיפו למערך חוסמי-המלאי ב-[utils.js](src/utils.js). הסטטוס הבסיסי נשאר `מאושר` לכל אורך הבדיקה. **(ד) פריטים בבדיקה אינם תופסים מלאי — וזה עובד "בחינם"**: הם חיים בטבלה נפרדת ולכן **בלתי-נראים** ל-`blk` CTEs של `create_reservation_v2`/`update_reservation_status_v1`. **אסור להזרים אותם ל-`reservation_items` לפני אישור** — זו כל ההגנה. ציוד שכבר אושר ממשיך להחזיק מלאי ואינו נבדק מחדש. **(ה) מגבלת 2 עדכונים מגובת-DB** = `COUNT(*)` ב-`reservation_item_updates` (השורה נשמרת גם אחרי דחייה). כל עדכון נספר **בכל סטטוס**; **החסרה אינה נספרת** (עוברת ב-`student_modify_reservation_item_v1` שלא נגעו בו); אין משיכה אחרי שליחה — מצב הטיוטה ב-`localStorage` הוא נקודת הבטיחות היחידה. **(ו) חלונות התראה — שני מקורות שחייבים להישאר מסונכרנים**: [loanPolicy.js](src/utils/loanPolicy.js) (קליינט + API) ומראה אטומית ב-`student_submit_reservation_update_v3` (תחת נעילת שורה). **פרטית + קולנוע יומית = 24 שעות מדויקות** מרגע האיסוף (איסוף ב-14:30 → חלון נסגר ב-14:30 יום קודם, **לא** ב-23:59 — החלטת מוצר 2026-07-22 שהפכה את הכלל היומי הקודם) · **סאונד = 3 שעות** · **הפקה = 7 ימים** עם דילוג שישי/שבת. אחרי הדדליין: **הוספה חסומה, החסרה נשארת זמינה.** `_v1` מוענק **רק ל-`service_role`** כדי שלא ניתן יהיה לעקוף את שער ה-lead-time של `_v3`. **(ז) בדיקת הסמכות נאכפת גם בשרת** ב-[api/staff-review-reservation-update.js](api/staff-review-reservation-update.js) דרך `getProductionCertBlockers` — אותה פונקציה שהקליינט מריץ (ה-RPC בודק זמינות/השאלת-חוץ/מגבלת-4 אך **לא** הסמכות). לכן **[reservationUpdateReview.js](src/utils/reservationUpdateReview.js) חייב להישאר חסר-תלויות** — ייבוא של `src/utils.js` יגרור את קליינט Supabase ו-`import.meta` ויפיל את bundle ה-Node. אותו שיקול חל על `loanPolicy.js`. RLS: צוות רואה הכל, סטודנט רק את שלו (`20260722150000`) — **אין policy של קריאה-לכולם** על שתי הטבלאות.
-
-41. **שער ה-endpoint הוא השער האמיתי — סינון ב-UI אינו אכיפה** (PR #89, code-only, אפס DB). שלושה endpoints סמכו על משהו חלש מדי, וכל אחד מהם הוקשה בלי לגעת בזרימה הרגילה, בסטטוסים או ב-RPC. **(א) `/api/activity-log` — `write` ו-`delete` היו ללא שום אימות** ורצו ישר עם `service_role`, כלומר כל אחד באינטרנט יכול היה להזריק שורות יומן או למחוק שורה שהמזהה שלה ידוע. שניהם עברו ל-`requireStaff` (אותה תבנית של `list`), והטוקן נוסף לשתי קריאות הקליינט — `logActivity` ב-[src/utils.js](src/utils.js) ו-`deleteActivityLog` ב-[App.jsx](src/App.jsx). **התיקון בטוח כי כל ~25 קוראי `logActivity` הם צד-צוות ו-`PublicForm.jsx` לא מתעד פעילות כלל** — אין קורא אנונימי לגיטימי; כשל כתיבה כבר תמיד היה שקט (מחזיר `null`, הפעולה עצמה לא מושפעת). **`user_id`/`user_name` עדיין מגיעים מה-body ולא מה-JWT** — גזירה מהטוקן הייתה משנה שמות שכבר מוצגים ביומן, ולכן `activity_logs` **נשאר לא-קביל** כמקור זהות (לקח #37 עומד בעינו). **(ב) ראש מחלקה אכף רק את היעד, לא את המקור.** `DEPT_HEAD_ALLOWED_STATUSES` הגביל ל-`ממתין`/`נדחה` אבל שום דבר לא בדק מאיפה — כך שראש מחלקה שידע מזהה של בקשה יכול היה למשוך בקשה `מאושר` או `פעילה` בחזרה ל-`ממתין` ו**לשחרר מלאי של השאלה חיה**. (היקף `loan_types` היה פרוץ גם הוא, אבל בפרוד שלושת ראשי המחלקה מוגדרים `["הפקה"]` ולכן לפער הזה אין ביטוי מעשי היום.) שתי הבדיקות שנוספו הן **מראה מדויקת של `pendingDhRequests`** ב-[LecturerPortal.jsx](src/components/LecturerPortal.jsx) (`status === "אישור ראש מחלקה"` **וגם** `loanTypes.includes(loan_type)`) — ראש מחלקה לגיטימי לא רואה שום הבדל. `getDeptHeadScope` מאחד `loan_types` מכל שורות המייל (union ולא first-match: שורה נוספת יכולה רק להרחיב, לעולם לא לחסום בטעות). מסלול ה-`staff` ו-`update_reservation_status_v1` **לא נגועים** (לקחים #22/#25/#55). **(ג) `calendar-sync`** — ערך ההחזרה של `sbUpsert` נזרק, כך שכשל שמירה **אחרי** שליחה מוצלחת השאיר סנאפ-שוט ישן והריצה הבאה שלחה למרצה **בדיוק את אותו מייל שינויים שוב**; זה החצי שלקח #38(ד) לא סגר — הוא סגר את השליחה, לא את השמירה. עכשיו נתפס, נרשם ל-log ומדווח כ-`persisted` בתוצאה (בלי retry, בלי שינוי סדר). ובנוסף: `reconcile=all` **חי** דורש עכשיו את ה-cron secret במפורש ולא רק `requireStaff` — הוא מדוור לכל מרצה במכללה, וזה footgun שאיש מחסן יכול היה להפעיל מהדפדפן. `dryrun=1` (הקרון) ו-`POST {lessonId}` (הקליינט) נשארו פתוחים לצוות בדיוק כמו קודם.
-
-42. **`useState` שנזרע מ-prop אסינכרוני + כפתור שמירה גלובלי = אובדן נתונים** (PR #91 + #93). ב-[SystemSettingsPage.jsx](src/components/SystemSettingsPage.jsx) ה-`draft` נזרע ב-`useState({...siteSettings})` — **initializer שרץ בדיוק פעם אחת**. `staff_view` שמור ב-`sessionStorage`, ולכן **רענון בזמן שהאדמין על הדף** מרכיב אותו לפני ש-App סיים לטעון, וה-`draft` קופא על ה-placeholder של App שמכיל `userGuideVideos: []`. פאנלי הסרטונים הציגו "אין סרטונים" בזמן שהרשימות שלמות ב-DB, ולחיצה על "שמור הגדרות" כתבה את המערך הריק עליהן — `syncAllSiteSettings` דוחף **כל מפתח שקיים ב-blob**. (מה שחשף את זה: ה-PDF-ים כן הופיעו, כי הם נטענים בנפרד דרך `loadUserGuideAsset` ולא דרך `draft`.) **התיקון בשלוש שכבות, וכולן נחוצות:** (א) [App.jsx](src/App.jsx) לא מרכיב את הדף עד ש-`loading` נגמר — חוסם את המרוץ בשורש; (ב) effect שמזהה `siteSettings` חדש ו**ממלא רק חוסרים** ב-`draft` (מפתח שכבר מחזיק ערך לא נדרס, כך שעריכה באמצע שורדת ורשימה שנתקעה ריקה מתוקנת) — מסומן `DATA-LOSS GUARD`, **אסור להסיר**; (ג) **הכפתור הגלובלי פורק לשמירה פר-פאנל** דרך `setSetting(key, value)`, כך שפעולה **לא יכולה** לגעת במפתח שהיא מעולם לא טענה. (ג) היא התיקון המבני — (א) ו-(ב) סוגרות את המסלול הידוע, אבל כל עוד קיים כפתור אחד שכותב את כל ה-blob, כל באג טעינה עתידי הוא שוב סיכון לכל ההגדרות. **Anti-regression: אסור להחזיר `syncAllSiteSettings` לדף הזה**, ואסור להסיר את שכבות (א)/(ב) גם אחרי (ג). קבצים נשמרים מיידית בהעלאה/הסרה (`persistAsset`), שדות מספריים ב-`onBlur` (לא debounce — הקלדת "20" הייתה כותבת 2 ואז 20), ורק בורר הצבע נשאר עם לחצן כי `input[type=color]` יורה על כל תזוזת עכבר.
-
-43. **הודעה יומית: הקהל נקבע בשרת, וה-PK הוא כל מנגנון "כמה פעמים"** (PR #93, מיגרציה `20260723120000`). `announcements` + `announcement_views`, שתיהן **RLS-on ללא policy ל-anon/authenticated** — `/api/announcement` הוא הדרך היחידה פנימה. **טבלה ולא `site_settings`**: כל קליינט טוען את `site_settings` בעלייה, והודעה שמכוונת לצוות הייתה נוחתת בדפדפן של כל סטודנט וניתנת לקריאה שם. **ה-PK `(announcement_id, user_id, seen_on)` עושה את כל העבודה** — `COUNT` = בכמה ימים **שונים** המשתמש ראה, שורה של היום = "כבר הוצגה היום", ו-`ON CONFLICT DO NOTHING` הופך את הרישום לאידמפוטנטי כך שרענון דף לא שורף את המכסה. "פעמיים" = **בשני ימים שונים**; פעם ביום לכל היותר תמיד. הכללים בפונקציות טהורות ב-[announcementPolicy.js](src/utils/announcementPolicy.js) — **חייב להישאר חסר-תלויות**, כי ה-API ב-Node מייבא אותו וייבוא `src/utils.js` יגרור את קליינט Supabase ויפיל את ה-bundle (אותה מגבלה של `loanPolicy.js`, לקח #40ז). התאמת קהל ב-**OR על דגלי `public.users`** ולא על `active_role` (שהקליינט שולט בו). **הצפייה נרשמת ברגע ההצגה ולא בסגירה** — אחרת רענון היה מחזיר את אותה הודעה בלי סוף. **"שמור שינויים" עורך במקום (`id` נשמר ⇒ הצפיות שורדות) מול "פרסם כהודעה חדשה" (שורה חדשה ⇒ כולם רואים שוב)** — הפרדה מכוונת, ותיקון פסיק לא צריך להציק שוב למי שכבר קרא. הסרטון נשמר כ**סנאפ-שוט** בתוך ההודעה ולא כהפניה. גוף ההודעה מרונדר ב**רכיבי React ולא `dangerouslySetInnerHTML`** — הטקסט נכתב ע"י אדמין אך מוצג לכל המכללה. הקיוסק (`/daily-table`) והלוחות הציבוריים **מוחרגים מפורשות** מעיגון החלון (לקח #24).
-
-44. **סינון הארכיון הוא פורנזי — נגד `archiveItems`, לא נגד `reservation_items` החי** (PR #95, code-only, אפס DB). דף הארכיון ([ArchivePage.jsx](src/components/ArchivePage.jsx)) קיבל סינון זמן (הכל / דפדוף חודשי / טווח מותאם) וסינון multi-select לפי פריטי ציוד (OR) עם מונה שימוש פר-פריט. **התרחיש המרכזי פורנזי** ("כל ההשאלות שהשתמשו בפריט הפגום הזה"), ולכן שני דברים קריטיים: **(א) ההתאמה לפי ציוד היא מול `archiveItems(r)` = `original_items ?? items`** (לקח #35) — בהחזרה חלקית `reservation_items` מתרוקן, וסינון נגד השורות החיות היה **מפספס** בדיוק את הבקשות שבהן פריט הוחזר חלקית; מונה `eqUsage` נגזר מאותו סנאפ-שוט. **(ב) סמנטיקת הזמן היא חפיפת חלון-ההשאלה** `[borrow_date, return_date]` עם הטווח (helper `loanOverlapsRange` על מחרוזות ISO), **לא נקודת-זמן** — כמו `productionInMonth`, כך שהשאלה חוצת-חודשים מופיעה בשני החודשים ("מי החזיק את הפריט בתקופה"). **הדפדוף החודשי מיושם כרשימה, לא כ-CalendarGrid** — נמנע מגע ברכיב הלוח הגלובלי (לקח #36). פאנל הציוד מציג **רק ציוד שקיים בפועל בארכיון** (לקח #34). **היקף: UI של דף הארכיון בלבד** — `ArchivePage.jsx` + שורה אחת ב-[ReservationsPage.jsx](src/components/ReservationsPage.jsx) (`categories` prop, בתוך `subView==="archive"` בלבד); אפס RPC/סטטוסים/מיגרציה.
-
-45. **נגן וידאו משובץ = פוסטר בדף, נגן במסך מלא; ולעולם לא תיבת-יחס סביב נגן** (PR #97, code-only). זה עלה שישה סבבי תיקון מול המשתמש, וכל ניסיון ביניים נכשל מאותו שורש — **`iframe` חוצה-מקור אי אפשר למדוד ואי אפשר לעצב מבפנים.** הדפדפן חוסם גישה ל-DOM שלו, ול-`/preview` של Google Drive אין פרמטרים ואין player API. **(א) אסור לכפות `aspectRatio` סביב נגן שיש לו chrome משלו.** הסרגל של Drive הוא בגובה **קבוע** (~55px), ולכן מה שקובע הוא איזה **אחוז** מהתיבה הוא תופס: תיבת 16:9 בטור של מודאל היא ~160px בטלפון, הסרגל לוקח שליש ממנה, והסרטון יוצא **חתוך**. שני קבועי-ריפוד נוסו (46px, ואז 68px) ו**אף אחד לא החזיק** — כל קבוע הוא ניחוש על פריסה פנימית של גוגל, ונשבר ברוחב אחר או ב-DPR אחר. **(ב) הרוחב קובע גם את גודל הפקדים, לא רק את התמונה.** תיבה ברוחב מלא לסרטון אנכי גרמה ל-Drive לפרוס הפעלה/דילוג/ווליום/כתוביות/מהירות/הגדרות על פני כל המסך ולדחוס את הווידאו לאמצע. **הפריים חייב להיות בצורת הסרטון** (9:16 צר וממורכז מול 16:9 מלא). **(ג) המסקנה שהחזיקה**: ההודעה מציגה **פוסטר בלבד** (תמונה + ▶ + תווית "נפתח במסך מלא"), ולחיצה פותחת overlay של **מסך מלא** שבו ה-iframe מקבל את כל החלון **בלי שום כפיית יחס** — שם הנגן מרפד וממרכז בעצמו, וזה מה שהם בנויים לעשות. זו גם הצורה ש-`UserGuideVideosModal`/`UserGuideVideosPage`/פאנל המדריך ב-`PublicForm` כבר השתמשו בה; **כל ארבעת המשטחים** תוקנו יחד, כי הערת השוליים של ההודעה מפנה למדריך במפורש ותיקון של אחד היה שולח את המשתמש אל אותו נגן שבור. **(ד) `videoThumbnailSrc`** ב-[src/utils.js](src/utils.js), ליד `videoEmbedSrc` ובאותו חוזה (אותו קלט, `null` כשאין) — יוטיוב `img.youtube.com/vi/<id>/hqdefault.jpg` (**לא** `maxresdefault`, שנותן 404 בהעלאות ישנות), Drive `drive.google.com/thumbnail?id=<id>`. שניהם ציבוריים ובלי מפתח. התמונה ב-**`object-fit: contain`** ולא `cover` — cover חותך, וזו התלונה המקורית. חובה `onError` → נפילה לרקע מדורג, כי שיתוף של קובץ Drive יכול להצטמצם בדיעבד ואייקון שבור בתוך הודעה נראה כמו תקלה. **(ה) העדפת מקור: YouTube "לא רשום" על פני Drive לסרטוני הדרכה.** נגן `/preview` של Drive הוא נגן מסמכים — הוא **לא** מיישם auto-hide, והפקדים שלו נשארים על המסך לאורך כל הנגינה; ליוטיוב יש auto-hide מובנה. אומת ע"י בעל המוצר בשני מסכים שונים (2026-07-25). **אין דרך נתמכת להסתיר את הפקדים של Drive** — לא CSS (חוצה-מקור) ולא פרמטר (לא קיים). הקוד תומך בשני הספקים במלואם דרך `videoEmbedSrc`/`videoThumbnailSrc`, כך שהמעבר הוא **הדבקת קישור אחר בלבד, אפס שינוי קוד**.
-
-> ⚠️ **השאלות-שיעור (`loan_type='שיעור'`) לעולם לא נסגרות אוטומטית**: `check-overdue.js` שורה ~115 מדלג עליהן (`return false`), אז הן נשארות `מאושר` לתמיד — **בתכנון**. הן צוברות כשורות `מאושר` בעבר אך **לא חוסמות בקשות עתידיות** (תאריכי עבר לא חופפים לעתיד). סריקת הקצאת-יתר "כל-הזמנים" עלולה להציג אותן כ-over-allocation היסטורי שאינו בעיה תפעולית.
+> ⚠️ **השאלות-שיעור (`loan_type='שיעור'`) לעולם לא נסגרות אוטומטית** — `check-overdue.js` מדלג עליהן בתכנון, אז הן נשארות `מאושר` לתמיד. הן **לא חוסמות בקשות עתידיות** (תאריכי עבר לא חופפים לעתיד), אבל סריקת הקצאת-יתר "כל-הזמנים" עלולה להציג אותן כבעיה שאינה קיימת.
 
 ---
 
@@ -690,12 +664,12 @@ admin/staff מתנתק אוטומטית אחרי **60 דקות** של חוסר �
 
 ## 🔥 נקודות חולשה / סיכון
 
-1. **dev לא מיושר ל-prod** — RLS כבוי על `users`/`equipment`/`equipment_units`/`reservations_new`/`reservation_items`/`staff_daily_tasks`, ויש FK constraints ל-`staff_members`. לא קריטי כי dev = sandbox.
-1א. **10 מיגרציות PR #85 הוחלו על prod דרך ה-SQL Editor ולא דרך MCP/CLI** — ולכן **אינן רשומות בהיסטוריית המיגרציות של Supabase**. הסכימה מוחלת במלואה (אומת בקריאה אחרי כל מיגרציה + 19/19 טסטים על prod), אך מי שינסה להריץ אותן שוב או להקים סביבה חדשה מהקבצים צריך לדעת: רובן idempotent (`IF NOT EXISTS`/`CREATE OR REPLACE`) אבל **`CREATE POLICY` ייכשל** על טבלה שכבר יש לה את ה-policy. **מקור האמת נשאר קבצי המיגרציה ב-repo.**
-1ב. **כל 6 פונקציות ה-`run_*_tests` ניתנות להרצה ע"י `anon`/`authenticated` בפרוד** — הן `SECURITY DEFINER` ומקבלות EXECUTE מברירת המחדל של Supabase, כי המיגרציות עושות `REVOKE ... FROM PUBLIC` בלבד ולא `FROM anon, authenticated`. **דפוס קיים מזה זמן ולא רגרסיה** (הפונקציות נוגעות רק בשורות עם קידומת `test-`), אך הזדמנות הקשחה: להוסיף `REVOKE ... FROM anon, authenticated` לכל השש. ה-RPCים האמיתיים של הפיצ'ר **כן** נעולים ל-`service_role` בלבד.
-2. **`staff_members` legacy** — הקוד הפעיל לא משתמש כ-fallback. ב-prod: 9 rows, אין FK. ב-dev: row אחד + יש FKs. למחוק אחרי וידוא שאין תלות היסטורית.
-3. **App.jsx הוא הקובץ הגדול בריפו** — 8 דפים inline שעוד לא חולצו (רשימה למעלה).
-4. **`policy_assets` שומר PDF + XL templates כ-Base64 ב-TEXT** — קריאת מדיניות / טמפלט מושכת blob שלם. tech debt.
+1. **dev לא מיושר ל-prod** — RLS כבוי על `users`/`equipment`/`equipment_units`/`reservations_new`/`reservation_items`/`staff_daily_tasks`, ויש FK ל-`staff_members`. לא קריטי: dev הוא sandbox.
+2. **10 המיגרציות של PR #85 הוחלו על prod דרך ה-SQL Editor** ולכן **אינן רשומות בהיסטוריית המיגרציות של Supabase**. הסכימה מוחלת במלואה (אומתה + 19/19 טסטים על prod), אבל מי שמריץ אותן שוב או מקים סביבה חדשה מהקבצים צריך לדעת: רובן idempotent, אבל **`CREATE POLICY` ייכשל** על טבלה שכבר יש לה אותו. **מקור האמת נשאר קבצי המיגרציה ב-repo.**
+3. **`run_*_tests` ניתנות להרצה ע"י `anon` בפרוד** — ראה הערה ב-🗄️ מבנה DB.
+4. **`staff_members` legacy** — הקוד הפעיל לא משתמש בו כ-fallback. בפרוד 9 שורות בלי FK; ב-dev שורה אחת **עם** FK. למחוק אחרי וידוא שאין תלות היסטורית.
+5. **App.jsx הוא הקובץ הגדול בריפו** — 8 דפים inline שטרם חולצו.
+6. **`policy_assets` שומר PDF וטמפלטי XL כ-Base64 ב-TEXT** — כל קריאה מושכת blob שלם. tech debt.
 
 ---
 
@@ -708,80 +682,51 @@ admin/staff מתנתק אוטומטית אחרי **60 דקות** של חוסר �
 
 ---
 
-## 📜 היסטוריית PRs אחרונים שעלו לפרוד
+## 📜 היסטוריית PRs
 
-- **2026-07-25** — **PR #97** — **תחזוקה + נגן הווידאו + ניקוי CLAUDE.md** (code-only, אפס DB): (1) **`calendarSyncApi.js` — גלאי כשל השליחה היה מת**: הקליינט בדק `r.requests`/`r.cancels` שהשרת מעולם לא החזיר, ולכן כשל SMTP הציג toast ירוק בזמן שהמרצה לא קיבל יומן; נוסף גם דיווח `persisted:false` (מדווח מ-PR #89 ואיש לא קרא), עם הודעה **נבדלת** כי שם המייל כן נשלח. (2) **`/api/announcement` action `seen`** רשם צפייה לכל `id` בגוף בלי לוודא שההודעה פעילה ושהקורא בקהל שלה — הכנסה-עצמית בלבד (`user_id` מה-JWT), אבל זיהמה את "מי צפה"; הסירוב מחזיר `200 ok:true` כמו קודם. (3) **נגן הווידאו** — פוסטר בהודעה, נגן במסך מלא, ב-4 המשטחים; `videoThumbnailSrc` חדש; ראה לקח #45. (4) **לחצן ההתנתקות ב-Staff Hub** היה קבור תחת פאנל "משימות להיום" ה-`fixed` בלי דרך לגלול אליו. (5) **ניקוי CLAUDE.md**: פסקת-ענק של 34KB בשורה אחת (PR #50–#95, מידע שכבר היה קיים פעמיים) פורקה לטובת טבלת בעלות; שאלת נייד/מחשב הורמה ל"שלב 0"; מספרי שורה רקובים הוחלפו בשמות סימבולים (שלושה שנבדקו הצביעו על קוד לא-קשור). **נדחו במכוון**: `publish` לא-אטומי, וגזירת זהות מה-JWT ב-`activity-log` (החלטה מתועדת — לקחים #37/#41).
-- **2026-07-23** — **PR #95** — **סינון זמן + פריטי ציוד בארכיון הבקשות** (code-only, אפס DB): דף הארכיון (תפעול מחסן → בקשות → ארכיון) קיבל **סינון זמן** בשלושה מצבים (הכל / דפדוף חודשי ◀▶ עם מונה חודשי / טווח מותאם מ-עד) בסמנטיקת **חפיפת חלון-ההשאלה** (helper `loanOverlapsRange`, כמו `productionInMonth`, בלי לגעת ב-CalendarGrid), ו**סינון multi-select לפי פריטי ציוד** (OR) עם פאנל צר + חיפוש + מונה שימוש פר-פריט (`eqUsage`). **ההתאמה נגד `archiveItems` = `original_items ?? items`** (לקח #35) — חיפוש פורנזי חייב לתפוס את מה שיצא בפועל, גם בהחזרה חלקית. **היקף UI בלבד**: [ArchivePage.jsx](src/components/ArchivePage.jsx) + שורה אחת ב-[ReservationsPage.jsx](src/components/ReservationsPage.jsx) (העברת `categories`, בתוך `subView==="archive"`). מותאם מובייל/PWA. ראה לקח #44.
+**שורה אחת ל-PR.** מה שהשתנה, ולאן ללכת לפרטים. הפירוט המלא של כל שינוי חי ב-PR
+עצמו בגיטהאב, והכללים שנגזרו ממנו חיים ב-🎓 לקחים — כאן זה אינדקס בלבד.
 
-- **2026-07-23** — **PR #93** — **הודעה יומית חד-פעמית למשתמשים + פירוק כפתור השמירה הגלובלי** (מיגרציה `20260723120000` — `announcements` + `announcement_views`, **הוחלה ב-dev וב-prod**). האדמין כותב הודעה ב"הגדרות מערכת" והיא קופצת בחלון צף **בכניסה הראשונה של המשתמש באותו יום**, ואז נעלמת. קהל (כולם/סטודנטים/מרצים/צוות) נקבע **בשרת** מדגלי `public.users` לפי ה-JWT; הצגה ליום אחד או **לשני ימים שונים**; סרטון אופציונלי מהמאגר הקיים, נשמר כסנאפ-שוט. עיצוב בגוף ההודעה (`**מודגש**`, נקודות, מספור) עם שורת כלים, מרונדר ב**רכיבי React ולא `dangerouslySetInnerHTML`**. פאנל **"👥 מי צפה"** עם ייצוא Excel/PDF (שורה לכל אדם, לא לכל צפייה). **+ פירוק "שמור הגדרות" הגלובלי**: כל פאנל כותב רק את המפתחות שלו דרך `setSetting`; קבצים נשמרים מיידית, שדות מספריים ב-`onBlur`, ורק בורר הצבע נשאר עם לחצן. נמחקו `save()`/`saving`/`pdfInitial`/`xlInitial`. + `videoEmbedSrc` אוחד ל-[src/utils.js](src/utils.js) (3 עותקים → 1), SKILL חדש `auto-grow-textarea`, וחוק מרכוז ה-localhost ב-CLAUDE.md. `npm run test:announce` (**32**) + E2E מול dev (23/23). ראה לקחים #42–#43.
+| תאריך | PR | מה |
+|---|---|---|
+| 2026-07-25 | **#97** | גלאי כשל שליחת היומן היה מת; `seen` בהודעה ללא בדיקת קהל; נגן וידאו → פוסטר+מסך-מלא ב-4 משטחים (לקח #45); לחצן התנתקות קבור ב-Staff Hub; ניקוי CLAUDE.md |
+| 2026-07-23 | **#95** | סינון זמן + פריטי ציוד בארכיון הבקשות (לקח #35+#44) |
+| 2026-07-23 | **#93** | הודעה יומית חד-פעמית (`announcements`, מיגרציה `20260723120000`) + פירוק כפתור השמירה הגלובלי בהגדרות (לקחים #42, #43) |
+| 2026-07-23 | **#92** | מצב עריכה כ-toggle בכרטיס הבקשה; הוסרו לחצני `+` והבורר נשאר מסלול ההוספה היחיד |
+| 2026-07-23 | **#91** | 🚨 "הגדרות מערכת" יכול היה למחוק את סרטוני ההדרכה בשמירה (לקח #42) |
+| 2026-07-23 | **#90** | לחצני כרטיס ההזמנה נחתכו בקצה המסך במובייל |
+| 2026-07-23 | **#89** | הקשחת 3 endpoints: `activity-log` ללא אימות, ראש מחלקה ללא בדיקת סטטוס-מקור, כשל שמירת סנאפ-שוט ביומן (לקח #37+#41) |
+| 2026-07-22 | **#88** | חותמת "מי אישר" (`approved_by_*`, מיגרציה `20260722170000`) + תיקון פילטר "סוג פעולה" ביומן הפעילות |
+| 2026-07-22 | **#87** | הקשחת נתיב "הוחזר": timeout, retry עם `refreshSession` על 401/403, והודעות שגיאה ספציפיות |
+| 2026-07-22 | **#85** | עדכון פריטי ציוד בבקשה קיימת (10 מיגרציות `20260722120000`→`20260722160000`, לקח #40) |
+| 2026-07-20 | **#81** | מפגשי קורס ליומן המרצה דרך ICS במייל (`lesson_calendar_events`, לקח #38) |
+| 2026-07-19 | **#80** | "איש צוות מטפל" בארכיון — `returned_by_*` נגזר-JWT (מיגרציה `20260719130000`, לקח #37) |
+| 2026-07-19 | **#79** | מתיחת בר "באיחור" בכל לוחות השנה (לקח #36) |
+| 2026-07-19 | **#78** | עריכת כמויות בבקשה "באיחור" + `original_items` (מיגרציה `20260719120000`, לקח #35) |
+| 2026-07-15 | **#77** | סינון סוג ציוד מסנן גם את צ'יפי הקטגוריות (לקח #34) |
+| 2026-07-14 | **#75** | לוח הפקות v2: חובת רשימת ציוד פר-טווח + הסרת מערכת אישור הצוות (לקח #33) |
+| 2026-07-12 | **#74** | עורך קורס דו-טורי, ברירת-מחדל "ללא תעודה", horizontal-only scroll (לקח #30+#32) |
+| 2026-07-12 | **#73** | ממשק מולטי-תפקיד + הוספת/הסרת איש צוות בטוחה (לקח #31) |
+| 2026-07-07 | **#72** | לוח שיעורים בגובה אדפטיבי + הפרדת עבר/עתיד (לקח #30+#32) |
+| 2026-07-07 | **#71** | התנגשות חדרים נגזרת פר-מפגש ולא מרמת-הקורס (לקח #29) |
+| 2026-07-07 | **#69** | ייצוא PDF לרשימת הציוד המסוננת (לקח #28) |
+| 2026-07-06 | **#68** | פאנל "משימות להיום" ב-Staff Hub + תיקון קריאת סטטוס יחידות ציוד (לקח #27) |
+| 2026-07-05 | **#67** | ארכיון להפקות שהסתיימו (`archived_at` + cron יומי, לקח #26) |
+| 2026-07-05 | **#66** | לחצני תפעול בראש מודאל הבקשה; קטגוריות ותמונות בערכה |
+| 2026-07-05 | **#64–#65** | קביעות צוות ברובריקת "קביעות"; קישור דו-כיווני בדשבורד; תיקון `TIME_SLOTS` שנעצר ב-19:30 |
+| 2026-07-01 | **#63** | זמינות ציוד לפי שיא-מקבילי במקום סכימה (לקח #25) + hotfix `/daily-table` בלי SW (לקח #24) |
+| 2026-06-29 | **#61** | Service Worker network-first — מניעת מסך לבן בקיוסק (לקח #24) |
+| 2026-06-29 | **#60** | "לא משויך" באדום בלוז העובדים; סידור פאנלים בעורך הקורס |
+| 2026-06-28 | **#58** | שיוך איש צוות מטפל לבקשת השאלה — טבלת-צד מנותקת (לקח #23) |
+| 2026-06-28 | **#57** | שיפורי פאנל ולוח שיבוץ עובדים: draft-buffer, נעילה, העדפות |
+| 2026-06-25 | **#55** | guard אטומי נגד הקצאת-יתר באישור + שמירת עריכות לפני אישור (לקח #22) |
+| 2026-06-23 | **#51–#54** | הגבלת השאלת-חוץ של ציוד: 2 עמודות על `equipment` + guard רביעי ב-RPC (לקח #21) |
+| 2026-06-21 | **#48–#50** | guard אטומי נגד double-booking של אולפנים (`EXCLUDE constraint`, לקח #20) + עיצוב עורך הקורס |
+| 2026-06-13 | **#47** | חסימת בקשות חופפות לאותו סטודנט + `getEffectiveStatus` גוזר "באיחור" (לקח #19) |
+| 2026-06-13 | **#46** | crew snapshot מתיישן — רענון ב-`production_crew_change_recheck_v1` |
+| 2026-06-04 | **#45** | crew snapshot נגזר ב-`create_reservation_v2` לכל הזמנת הפקה |
+| 2026-05-31 | **#39–#44** | `formatTime` אחיד + 🚨 hotfix ייבוא חסר שהשבית את הפרוד + `no-undef`→ERROR (לקח #17, #18); מייל דדליין הפקה; deep-link ללוח הפקות |
+| 2026-05-29 | **#26–#30** | הקמת רוטינת הסריקה היומית (`.claude/audit-routine.md` + `audit-log.md`) והסבב הראשון שלה |
+| 2026-05-25 | **#20–#25** | N כיתות ו-N מרצים למפגש (`studioIds[]`/`lecturerIds[]` + עמודות jsonb ייעודיות), conflict resolver, ייבוא XL, toast aggregation, undo stack (לקחים #9–#16) |
 
-- **2026-07-23** — **PR #92** — **מצב עריכה כ-toggle ברור + מסלול הוספה יחיד** (code-only): שני לחצני הכותרת בכרטיס הבקשה הם toggle (לחיצה נכנסת, לחיצה נוספת יוצאת) עם מצב "לחוץ" ש**משנה צבעים בלבד** — אף תכונה שמשפיעה על פריסה לא זזה, כי טקסט/אייקון/`font-weight`/עובי-מסגרת משנים את הרוחב הנמדד וגורמים ללחצן לקפוץ. "בטל טיוטה" עבר לפינה השמאלית-העליונה של פאנל הטיוטה, רחוק מ"עדכן בקשה". **הוסרו לחצני ה-`+` ליד הפריטים הקיימים** — היו שני מסלולי הוספה (`increase` מהלחצן ו-`add` מהבורר) ושימוש בשניהם על אותו ציוד הציג אותו פעמיים בטיוטה. הבורר הוא הדרך היחידה, ואין אובדן יכולת: `student_submit_reservation_update_v1` מבצע על `add` מיזוג לשורה הקיימת (`UPDATE ... WHERE equipment_id`, `INSERT` רק `IF NOT FOUND`). `increase` **נשארת נתמכת בכל השכבות** — טיוטות ב-`localStorage` ועדכונים שממתינים לבדיקה עשויים להכיל אותה.
-
-- **2026-07-23** — **PR #91** — 🚨 **"הגדרות מערכת" יכול היה למחוק את סרטוני ההדרכה בלחיצה על שמור** (code-only): `draft` נזרע ב-`useState` initializer שרץ פעם אחת; רענון בזמן שהאדמין על הדף (`staff_view` ב-`sessionStorage`) מרכיב את הרכיב לפני שההגדרות נטענו, ו-`draft` קופא על ה-placeholder שמכיל `userGuideVideos: []` — ואז "שמור הגדרות" כותב את המערך הריק על רשימות שלמות ב-DB. תוקן בשתי שכבות: הדף לא מורכב עד ש-`loading` נגמר, ו-effect שממלא **רק חוסרים** ב-`draft` כשההגדרות מגיעות מאוחר (מסומן `DATA-LOSS GUARD`). ראה לקח #42.
-
-- **2026-07-23** — **PR #90** — **לחצני כרטיס ההזמנה ב"ההזמנות שלי" נחתכו בקצה המסך במובייל** (code-only): כותרת הכרטיס פרשה את לחצני הפעולה בשורה אופקית `flexShrink: 0` לצד בלוק תאריכים ללא `minWidth: 0`; בטלפון השורה גלשה והכרטיס (`overflow: hidden`) חתך את "− החסר פריטים". הלחצן השני שפיצ'ר עדכון הפריטים (PR #85) הוסיף הוא מה שדחף אותה מעבר לגבול. מתחת ל-600px הלחצנים נערמים בטור אנכי עם יעדי מגע של טלפון; דסקטופ ללא שינוי.
-
-- **2026-07-23** — **PR #89** — **הקשחת שלושה endpoints** (code-only, **אפס DB**): (1) **`/api/activity-log`** — `write` ו-`delete` רצו ללא שום אימות דרך `service_role` (הזרקת שורות יומן / מחיקה לפי id, מכל מקום באינטרנט); שניהם עברו ל-`requireStaff` + טוקן בשתי קריאות הקליינט. כל 25 הקוראים צד-צוות, `PublicForm` לא מתעד כלל. **ה-identity עדיין client-supplied** — `activity_logs` נשאר לא-קביל כמקור זהות. (2) **[api/update-reservation-status.js](api/update-reservation-status.js)** — ראש מחלקה אכף רק את היעד ולא את **המקור**, ולכן יכול היה למשוך בקשה `מאושר`/`פעילה` ל-`ממתין` ו**לשחרר מלאי חי**; נוספו בדיקת סטטוס-מקור (`אישור ראש מחלקה`) והיקף `loan_types` — מראה מדויקת של מה שהפורטל כבר מסנן. ה-RPC לא נגוע. (3) **[api/calendar-sync.js](api/calendar-sync.js)** — ערך ההחזרה של `sbUpsert` נתפס ומדווח כ-`persisted` (כשל שמירה אחרי שליחה גרם ל**מייל שינויים כפול** בריצה הבאה), ו-`reconcile=all` חי דורש cron secret ולא רק JWT של צוות. lint 0 · build ✓ · `test:db` 52/52 · `test:policy` 23/23 · `test:ics` 18→**20/20** (שתי בדיקות סטטיות חדשות מקבעות את שער ה-cron ואת דיווח `persisted`). ראה לקח #41.
-
-- **2026-07-22** — **PR #88** — **מעקב "מאשר הבקשה" + מבצע עדכון + שיפור יומן הפעילות** (מיגרציה `20260722170000` — `reservations_new.approved_by_staff_id`+`approved_by_name`; בפרוד רשומה כ-`20260722214226`): כל מעבר ל-`מאושר` רושם את המאשר **נגזר-JWT בשרת**, ב-PATCH נפרד אחרי ה-RPC דרך helper משותף `stampActor` (מראה של PR #80; ה-RPC לא נגוע — לקחים #22/#25/#37). רכיב תצוגה משותף [reservationActors.jsx](src/components/reservationActors.jsx) — `ApprovedByLabel` + `UpdateHistoryList` ("🔄 עדכון #N — אושר/נדחה ע״י", מ-`reservation_item_updates.reviewed_by_name` שכבר נשמר ב-PR #85) ב-ReservationsPage / DashboardPage / ArchivePage. + **תיקון פילטר "סוג פעולה" ביומן הפעילות**: תקרת 1000 השורות של PostgREST יחד עם מיון אלפביתי הותירו את המכסה מלאה בשורות `login` וחתכו כל פעולה שאחריה (`reservation_*`, `staff_*`, `student_*`); הרשימה נבנית עכשיו מרשימה מסודרת ומתורגמת + כל פעולה מהנתונים, וה-API ממוין `created_at.desc`.
-
-- **2026-07-22** — **PR #87** — **הקשחת נתיב "הוחזר"** (code-only): אנשי צוות דיווחו שלחיצה על "הוחזר" משאירה את הבקשה "באיחור" בעוד שלאדמין זה עובד. החקירה שללה רגרסיית קוד (איש צוות לא-אדמין נוסף החזיר בהצלחה באותה תקופה) — השורש הוא **JWT מיושן → 403 שקט** שהוסתר מאחורי הודעה גנרית. `updateReservationStatus` ב-[src/utils.js](src/utils.js): timeout 8s→15s (מאז PR #80 יש שני סבבי-שרת ברצף), **retry יחיד עם `refreshSession()` על 401/403**, והפרדת timeout מ-network. `reservationStatusErrorMessage` משותף מחזיר הודעה ספציפית (הרשאה/רשת/timeout) בשני נתיבי ההחזרה. + לוג אבחון על כל 403 ב-endpoint (`anon` מול not-staff) + `reason` בתגובה, `AbortController` 2.5s על חותמת `returned_by`, והסרת ה-no-op השקט ב-ReservationsPage כשהשורה לא נמצאה.
-
-- **2026-07-22** — **PR #85** — **עדכון פריטי ציוד בבקשת השאלה קיימת** (10 מיגרציות `20260722120000`→`20260722160000`): סטודנט מוסיף פריט או מגדיל כמות מ-"ההזמנות שלי", בכפוף לחלון ההתראה של סוג ההשאלה ולמגבלת **2 עדכונים** מגובת-DB. **`replace` לא קיים במכוון.** בסטטוס `ממתין`/`אישור ראש מחלקה` העדכון מוחל מיד; בסטטוס `מאושר` הוא נכנס ל-**`בדיקת עדכון`** — הפריטים יושבים ב-`reservation_pending_items` (**טבלה נפרדת ⇒ אינם תופסים מלאי ואינם נראים ל-peak CTEs**) עד שאיש מחסן מאשר/מקטין/דוחה בפאנל [UpdateReviewModal.jsx](src/components/UpdateReviewModal.jsx), עם מייל לסטודנט על דחייה/אישור-חלקי. הציוד המאושר **לא נבדק מחדש ולא מאבד מלאי**. **חלונות התראה: פרטית + קולנוע יומית = 24 שעות מדויקות · סאונד = 3 שעות · הפקה = 7 ימים** — מקור אחד ([loanPolicy.js](src/utils/loanPolicy.js)) + מראה אטומית ב-`student_submit_reservation_update_v3`; אחרי הדדליין **הוספה חסומה, החסרה נשארת**. בדיקת הסמכות נאכפת **גם בשרת**; RLS ממוקד (צוות/סטודנט-שלו). `test:db` 33→**52**, סקריפט חדש `npm run test:policy` (**23**). מובייל/PWA: לחצני פוטר נערמים לרוחב מלא, יעדי מגע 38px ל-`−`/`+`, ו-16px בתיבת ההודעה (מונע זום iOS). ראה לקח #40.
-
-- **2026-07-20** — **PR #81** — **מפגשי קורס ליומן המרצה (ICS במייל)**: מיגרציות `20260720120000` (טבלת `lesson_calendar_events`) + `20260720140000` (עמודת `location`). פתיחת קורס → **מייל אחד** למרצה עם קובץ יומן → **"Add to Calendar"** בלחיצה אחת פורס את כל מפגשיו. כל שינוי אחר כך → **מייל הודעה** עם לפני←אחרי (הוזז / נוסף / בוטל / הקורס נמחק), והמרצה מעדכן ידנית; **רק מפגש שנוסף** מקבל קובץ יומן. מודל **דלתא** מול סנאפ-שוט בטבלה; שמירה רק אחרי שליחה מוצלחת; idempotent דרך `last_hash`. **הפורמט נקבע אמפירית מול Gmail אחרי שלוש שכבות כשל**: `METHOD:PUBLISH` (ולא `REQUEST` — ריבוי UID אינו iTIP תקין), **בלי** `encoding:"base64"` (הוא מה שהפיל את הפרסור), ו-`LOCATION` = כתובת המכללה בלבד בגרשיים **עבריים** `״` (שם חדר בקידומת הזיז את הפין; ASCII `"` עובר HTML-escape בצד גוגל). נסגרו שני שערים שמעולם לא סנכרנו — **ייבוא XL** ו**פאנל ההתנגשויות**; `_key` כבר לא מתחלף על תבנית (מנע מייל-שינויים שקרי); `syncLessonCalendar` מדווח כשל במקום לבלוע אותו; המיילים עברו ל-`/api/send-email` המשותף (אין transporter שני); cron יומי **dry-run בלבד**. טסט `npm run test:ics` (9/9). ראה לקח #38 + סעיף "📅 מפגשי קורס ליומן המרצה".
-- **2026-07-19** — **PR #80** — **"איש צוות מטפל" בארכיון + קיבוץ הציוד לפי קטגוריה**: מיגרציה `20260719130000` (`returned_by_staff_id`+`returned_by_name` על `reservations_new`) — כל לחיצה על "הוחזר" רושמת את המבצע, **נגזר בשרת מה-JWT** ב-PATCH נפרד אחרי ה-RPC (אפס נגיעה ב-`update_reservation_status_v1`), ולכן מכסה גם את נתיב הדשבורד שאין לו זהות צוות בקליינט. הארכיון מציג מבצע-אמיתי / אחראי-מתוכנן (נוסח נבדל) / "לא נרשם"; שיעורים לא מציגים כלום. **ללא backfill** — `activity_logs` לא-מאומת ולכן נדחה כמקור. בנוסף: רשימת הציוד במודאל הארכיון מקובצת לפי קטגוריה דרך `groupReservationItemsByCategory`, מוזנת מ-`archiveItems` כדי לשמר את נאמנות PR #78. ראה לקח #37.
-- **2026-07-19** — **PR #79** — **מתיחת בר "באיחור" בכל לוחות השנה + סימון עדין של החריגה** (code-only, אפס DB): helper יחיד `stretchOverdueForCalendar` ב-[src/utils.js](src/utils.js) מבוסס `getEffectiveStatus` (שורות גולמיות בפורטל מרצה/לוח מנהל), מוחל על 7 משטחים; קו אדום 2px על החריגה; המתיחה גאומטריה בלבד — `overdue_since` + `unstretch` שומרים תאריך אמיתי בכל טקסט; בחירת כרטיסים לפי id. ראה לקח #36.
-- **2026-07-19** — **PR #78** — **עריכת כמויות בבקשה "באיחור" + נאמנות רשימת הציוד בארכיון**: מיגרציה `20260719120000` (`reservations_new.original_items` jsonb, dev+prod) — סנאפ-שוט מוקפא שנחתם בהחזרה החלקית הראשונה; הפחתת כמויות משחררת מלאי מיד (תקרה = מה שיצא); הארכיון מציג את הרשימה כפי שיצאה (`archiveItems` ב-[ArchivePage.jsx](src/components/ArchivePage.jsx)); אפס נגיעה ב-RPC/זמינות/`CHECK`. ראה לקח #35.
-- **2026-07-15** — **PR #77** — **סינון סוג ציוד מסנן גם את צ'יפי הקטגוריות** (code-only, אפס DB): צ'יפי הקטגוריות נגזרו מהציוד הגולמי בלי להתייחס לפילטר, בעוד שרשימת הפריטים כן סוננה → "ציוד סאונד" הציג את כל 22 הקטגוריות, כולל צילום טהור שלחיצה עליו החזירה רשימה ריקה. שני helpers משותפים ב-[src/utils.js](src/utils.js) (`matchesEquipmentTypeFilter` + `deriveVisibleCategories`) החליפו 5 מימושים מקומיים מתפצלים ותוקנו **3 מסכים**: עריכת בקשה ([EditReservationModal.jsx](src/components/EditReservationModal.jsx)), עורך הערכה (`KitForm` ב-[App.jsx](src/App.jsx)), ומודאל הסמכת ציוד ([CertificationsPage.jsx](src/components/CertificationsPage.jsx)). בנוסף: **סמנטיקת "כללי" יושרה** לזו של טופס ההשאלה (ב-KitForm/CertificationsPage הסינון היה קשיח ו-19 פריטים לא-מתויגים נעלמו מכל פילטר פרט ל"הכל"); **איפוס בחירת קטגוריה** בהחלפת סוג בכל 3 המסכים; **מצב "באיחור"** בעריכת בקשה הציג את כל המחסן בצ'יפים מול הפריטים שיצאו בפועל בסקשנים; **סדר הצ'יפים** לפי האדמין (הועבר prop `categories`). נמחק `Step3Equipment` **מת** ב-App.jsx (189 שורות, אף פעם לא רונדר). +78/−241. lint 0 · build נקי · 11/11 בדיקות יחידה על ה-helpers. ראה לקח #34.
-- **2026-07-14** — **PR #75** — **לוח הפקות v2: חובת רשימת ציוד פר-טווח + הסרת מערכת אישור הצוות** (code-only, אפס DB): (1) טווח תאריכים מופיע בלוח הכללי **רק אחרי הגשת רשימת ציוד** (לכולם, כולל הבמאי) — שער client-only ב-[productionVisibility.js](src/utils/productionVisibility.js) + grandfathering מלא ל-23 הפקות הפרוד הקיימות (cutoff `2026-07-14`); (2) אכיפה בעורך: תנאי-ברזל `canAddDate`, מחיקה אוטומטית של טווח-ללא-רשימה בסגירת העורך (`handleEditorClose`), מודאל חובה ללא "אחר כך", כפתור פר-טווח "🎬 הגש רשימת ציוד" (פרסום אוטומטי + נחיתה ישירה בשלב הציוד `setStep(3)` ממולא-מראש), הוסר "שמור טיוטה"; (3) הסרת מערכת אישור הצוות: auto-approve בשמירה דרך `production_approve_crew_v1` (`autoApproveDirectorCrew`), נמחקו "בקש להצטרף"/inbox/badges/5 פונקציות API, מייל צוות בנוסח יידוע, צלם/סאונד עדיין סטודנטים רשומים; (4) לוח-שנה: "במאי · הפקה", יישור RTL ([CalendarGrid.jsx](src/components/CalendarGrid.jsx) גלובלי), לוח מעל הכרטיסים; תיקון chip `production_date_id`; הוסר "ניהול מערכת" מתחתית הטפסים. אחרי merge: ניקוי חד-פעמי של שורות crew `invited` בפרוד (flip+recheck). ראה לקח #33.
-- **2026-07-12** — **PR #74** — **פריסה דו-טורית בעורך הקורס + ברירת מחדל תעודה + guard מייל סיום קורס** (code-only, אפס DB): (1) **פריסה דו-טורית** ב-`LessonForm` ([LessonsPage.jsx](src/components/LessonsPage.jsx)) לצמצום גלילה — `display:grid` מותנה `isMobile`, `minWidth:0` על הטורים; **טור שמאל = לוח שיעורים** (רחב), **טור ימין = פרטי הקורס · שיוך כיתות · שליחת מייל · תעודת גמר**; מובייל = טור יחיד. (2) **ברירת מחדל "ללא תעודה" ביצירת קורס** — ה-`useEffect` שגוזר תעודה מהמסלול מדולג ב-create mode (`if (!initial) return`); edit ללא שינוי. (3) **חסימת מייל סיום-קורס לקורס ללא תעודה** — [api/notify-course-end-7days.js](api/notify-course-end-7days.js) מדלג על `certificateTemplateType` ריק. (4) **גלילה אנכית בטבלת לוח השיעורים בוטלה** — עטיפה `overflowX:"auto",overflowY:"hidden"` (מונע קידום CSS של הציר האנכי ל-auto; אופקי בלבד כשהעמודות רחבות). ראה לקח #32.
-- **2026-07-12** — **PR #73** — **ממשק מולטי-תפקיד ב-HUB + הוספת/הסרת איש צוות בטוחה** (code-only, אפס DB): (1) דגלי `is_student`/`is_lecturer` נגזרים מהטבלאות החיות — `computeLiveRoleFlags`+`upsertPublicUserWithLiveFlags` ([api/auth.js](api/auth.js), כל המקורות לא first-match, ensure-user+reset) + drift-detection בלוגין ([PublicForm.jsx](src/components/PublicForm.jsx)); (2) כרטיסי/לחצני מעבר-תפקיד בכל שלושת ה-HUB (צהוב `#f5a623`), מסך "מעביר…", hint-fallthrough; (3) הוספת איש צוות **ללא סיסמה** + שדרוג-מיזוג למייל קיים (במקום 409) + autocomplete מסטודנטים/מרצים + שם פרטי/משפחה ([StaffManagementPage.jsx](src/components/StaffManagementPage.jsx), [api/staff.js](api/staff.js)); (4) **תיקון קריטי**: מחיקת איש צוות = הסרת-תפקיד כשהמייל עדיין סטודנט/מרצה (auth+סיסמה נשמרים), מחיקה מלאה רק ליתום. ראה לקח #31.
-
-- **2026-07-07** — **PR #72** — **שיפורי UI בעורך הקורס** (code-only): (1) **לוח שיעורים בגובה אדפטיבי** — הוסר ה-scroll הפנימי מטבלת המפגשים ([LessonsPage.jsx](src/components/LessonsPage.jsx), דסקטופ+מובייל); הטבלה גדלה עם מספר המפגשים והדף גולל. ⚠️ הסרת ה-overflow חייבת להיות מלאה — `overflow-x:auto` לבדו מקדם `overflow-y` ל-`auto` ומחזיר סרגל אנכי. (2) **הפרדת עבר/עתיד** — מפגש `date < today()` אפור+מעומעם+tooltip; עתידי סגול/בהיר. (3) **לחצן "💾 עדכן קורס" עליון** ליד "ביטול" (אותו `handleSave`) — שמירה בלי גלילה לתחתית. אפס DB · lint 0 · build נקי. ראה לקח #30.
-- **2026-07-07** — **PR #71** — **תיקון פאנל התנגשות קביעות חדרים בעורך הקורס** (code-only): הפאנל "התנגשות עם קביעות חדרים" ([LessonsPage.jsx](src/components/LessonsPage.jsx)) הצליב מול כיתות הקורס הגלובליות במקום מול השיוך הפר-מפגש בטבלת לוח השיעורים → מפגש "ללא שיוך"/חדר-אחר חסם שמירה שגויה. תוקן בשכבת-הנתונים ([lessonBookings.js](src/utils/lessonBookings.js)): `getEffectiveLessonStudioIds` מכבד מערך `studioIds` מפורש (ריק=אין חדר, בלי fallback לקורס; legacy בלבד נופל לסקלר→קורס) + `getLessonScheduleEntries` משמר את המערך הגולמי/סקלרים כך ש-`buildLessonStudioBookings` מפסיק לייצר קביעת-רפאים. **+ סינון עתידי** ב-7 בודקי החפיפה (4 חדרים + 3 מרצים, `session.date < today()`). צוות+סטודנט חופפים על אותו חדר → שתי הקביעות מוצגות. אפס DB · lint 0 · build נקי. ראה לקח #29.
-- **2026-07-07** — **PR #69** — **כפתור ייצוא PDF לרשימת הציוד המסוננת (תפעול מחסן)** (code-only): כפתור "🖨️ ייצוא PDF" בטולבר של תפעול מחסן → ציוד (סאב-תצוגה "active") שמפיק PDF של רשימת הציוד המוצגת — משקף בדיוק את הסינון הפעיל (קטגוריה/חיפוש/סוג), מקובץ לפי קטגוריה. `exportEquipmentPdf` ב-[App.jsx](src/App.jsx) `EquipmentPage` מרנדר את `filtered` בקיבוץ `groupedCategories` (אותו מקור שהמסך מציג). דפוס browser-print (HTML `dir=rtl` → `window.open` → `window.print()`), Hebrew/RTL-safe, זהה ל-`exportPDF` ב-[ReservationsPage.jsx](src/components/ReservationsPage.jsx) — **אין ספריית PDF**. תוכן מינימלי (שם+כמות), escaping מפני הזרקה, toast כשריק/חלון חסום. אפס DB · lint 0 · build נקי. ראה לקח #28.
-- **2026-07-06** — **PR #68** — **פאנל "משימות להיום" ב-Staff Hub (מגובה-DB) + תיקון קריאת סטטוס יחידות ציוד**: פאנל מתקפל לכל עובד ב-Staff Hub — משמרת היום, בקשות השאלה שהוא מטפל בהן (out/return+שעות), הערת מנהל, ההערה שלו, משימות ידניות (≤150). צ'קבוקס ביצוע לכל פריט (משימות/בקשות עם `done` משלהן; משמרת+הערות דרך `staff_hub_checkoffs`). 3 מיגרציות (staff_personal_tasks, rsa.done, staff_hub_checkoffs — RLS-on ללא policies, **הוחלו ב-dev וב-prod**), 6 actions ב-[api/staff-schedule.js](api/staff-schedule.js), טעינה app-level ([App.jsx](src/App.jsx) `myToday`), מובייל/PWA. **+ תיקון באג**: סטטוס יחידות (פגום/בתיקון/נעלם) חזר ל"תקין" — הקריאה שלפה `equipment` בלי `equipment_units`; תוקן ע"י join `units:equipment_units(*)` ב-4 אתרים (code-only). smoke 33/33. ראה לקח #27.
-- **2026-07-05** — **PR #67** — **ארכיון להפקות שהסתיימו (מגובה-DB) + עיצוב אפור + סינון חודשי**: הפקה "מסתיימת" כשהתאריך האחרון (`max(end_date)`) עובר → עוברת לתצוגת **"ארכיון"** (מתג בלוח ההפקות, ב-3 המסכים). עמודת `productions.archived_at` (מיגרציה `20260705120000`, הוחלה ב-dev וב-prod) + RPC `productions_refresh_archive_v1` (Asia/Jerusalem, gate ל-`published`, `COALESCE` שומר זמן-ארכוב, no-op skip) + backfill + **cron יומי** [api/productions-archive.js](api/productions-archive.js). קליינט: `archivedAt` ל-blob + refresh post-save (ארכוב/שחזור מיידי); `belongsToTab` על כרטיסים+לוח-שנה; **סטודנט=ארכיון חודש, צוות/ראש-מחלקה=לתמיד — הרשומה לעולם לא נמחקת**; הפקה שהסתיימה באפור (`ARCHIVED_COLOR`) + badge "ההפקה הסתיימה"; **סינון חודשי** (`productionInMonth`+`scopeAll`) עם "ההפקות שלי" תמיד גלוי; `ProductionEditor.validate()` grandfather לתאריכי-עבר → שחזור ע"י תאריך עתידי. DB: backfill/idempotent/round-trip-שחזור אומתו, smoke **33/33**. ראה לקח #26.
-- **2026-07-05** — **PR #66** — **לחצני תפעול בראש מודאל הבקשה + קטגוריות/תמונות בערכה** (code-only): לחצני אשר/דחה/עריכה/PDF/מחק/סגור הועברו ל**ראש** מודאל התצוגה ([ReservationsPage.jsx](src/components/ReservationsPage.jsx)) — נגישים בלי גלילה; רשימת הציוד בערכה ([App.jsx](src/App.jsx) `KitsPage`) מקובצת לפי קטגוריה + תמונות 32px.
-- **2026-07-05** — **PR #64–#65** — קביעות צוות מוצגות ברובריקת "קביעות" בלוז העובדים (קודם `student` בלבד); קישור דו-כיווני "בקשות אחרונות"⇄"לוח השאלות ציוד" בדשבורד (הלוח SLAVE לפילטרים, לחיצה על בר פותחת מודאל); קטגוריות ברשימת הציוד בתצוגת בקשה; ותיקון `TIME_SLOTS` שנעצר ב-19:30 במודאל העריכה.
-
-- **2026-07-01** — **PR #63** — **חישוב זמינות ציוד לפי שיא-מקבילי במקום סכימה**: הזמינות חושבה `workingUnits − SUM(כל הביקוש החופף)` במקום `workingUnits − MAX_concurrent(בחלון)`. שתי בקשות חוסמות בחלונות זרים (לא חופפות זו-לזו) שנפלו בתוך חלון בקשה אחד נספרו פעמיים → פריט 2-יח' הוצג `זמין: 0` וחסם/דחה אישור (`approve_overbook`). תוקן בכל המשטחים: **קליינט** — helper `computeEquipmentAvailability` ([src/utils.js](src/utils.js)) + wrappers (`getAvailable`/`getReservationApprovalConflicts`/`getEquipmentBlockingDetails`); **שרת** — `create_reservation_v2` (`20260701120000`) + `update_reservation_status_v1` (`20260701120100`) → `MAX(c)` במקום `SUM`, byte-for-byte עם כל ה-guards. **שתי המיגרציות + טסט `run_availability_peak_tests` (`20260701120200`, 3 תרחישים) הוחלו ב-dev וב-prod; smoke 30→33.** אגב: המודאל עבר ל-`workingUnits`+חלון 48h. ראה לקח #25. **בנוסף — hotfix `57b657b` (ישיר ל-main, 29/06): `/daily-table` לעולם לא רושם SW** (unregister+purge בכל טעינה, `NetworkOnly` ל-`sw.js`) — ריפוי-עצמי לקיוסק תקוע; ראה לקח #24.
-- **2026-06-29** — **PR #61** — **ניווט network-first ב-Service Worker — מניעת מסך לבן בקיוסק** (code-only): `NavigationRoute` ב-[src/sw.js](src/sw.js) עבר מ-cache-first (`createHandlerBoundToURL`) ל-**`NetworkFirst`** (`networkTimeoutSeconds: 5`) + `PrecacheFallbackPlugin`→`index.html`. סוגר death-spiral של `/daily-table` ב-Fully Kiosk (index ישן בה-precache→chunk 404→`registerSW` לא רץ→SW לא מתעדכן→מסך לבן). מכשיר מחובר תמיד מביא index טרי; offline נופל ל-precache. אבחנה: הפרוד היה תקין לחלוטין (HTML/JS 200, deploy READY) — התקלה לוקלית בקיוסק. ראה לקח #24.
-- **2026-06-29** — **PR #60** — **תיקונים אסתטיים נקודתיים** (code-only): (1) "לא משויך"/"לא שויך" באדום מודגש (`#ef4444`) בלוז העובדים — שיוך כיתה ([StaffSchedulePage.jsx](src/components/StaffSchedulePage.jsx) כרטיס+טבלה) ואיש-צוות-מטפל בבקשות ההשאלה (`LoanChip`+מודאל פרטים); (2) סידור פאנלים בטופס יצירת/עריכת קורס ([LessonsPage.jsx](src/components/LessonsPage.jsx)) — "לוח שיעורים" הועבר אל מתחת ל"שיוך כיתות לימוד" (פרטי הקורס→שיוך כיתות→לוח שיעורים). שינוי סדר/צבע בלבד, אפס שינוי לוגי.
-- **2026-06-28** — **PR #58** — **שיוך איש צוות מטפל לבקשת השאלה (תיאום פנימי, מנותק לחלוטין)**: טבלת-צד `reservation_staff_assignments` (מיגרציה `20260628120000`, **הוחלה ב-dev וב-prod**) — FK חד-כיווני `ON DELETE CASCADE`, `kind` out/return, `UNIQUE(reservation_id,kind)`, RLS read-all/service-write, realtime. 2 actions ב-`api/staff-schedule.js` (`assign/unassign-loan-handler`) + `loanHandlers` ב-App.jsx + UI בלוז עובדים (תת-רובריקות "תפעול כללי"/"בקשות השאלה", 🔧) ותצוגת מחסן read-only (ReservationsPage + DashboardPage). **אפס שינוי ב-RPC/סטטוסים/נתיב כתיבת ההשאלה — בקשה זורמת בכל הסטטוסים גם בלי אף אחראי.** ראה לקח #23.
-- **2026-06-28** — **PR #57** — **שיפורי פאנל ולוח שיבוץ עובדים** (`StaffSchedulePage.jsx`, code-only): מולטי-עובד draft-buffer + Save יחיד, פאנל מנהל גלובלי, ברירת מחדל ללא משמרת, DESELECT, נעילה צבעונית (Lock), טעינת העדפת עובד + צ'יפ כחול+עיגול, "עריכה אחרונה מנצחת אלא אם נעול", סינון משימות לפי תאימות משמרת. + **docs(claude)**: ברירת מחדל לזרימת מחשב (localhost-first) + חובת שאלת "נייד/מחשב" בתחילת שיחה.
-- **2026-06-25** — **PR #55** — **guard אטומי נגד הקצאת-יתר באישור + שמירת עריכות בעת אישור**: `update_reservation_status_v1` קיבל בדיקת זמינות בצד-שרת (מיגרציה `20260625120000`, הוחלה ב-dev וב-prod) — `FOR UPDATE` + `healthy − overlapping_blocking_demand (ללא self) ≥ qty` במעבר לתוך `מאושר`, אחרת `approve_overbook`→409. סוגר את ה-TOCTOU race של אישור כפול על state מיושן (קודם client-only). + כפתור "אשר והעבר למאושר" שומר קודם את עריכות הפריטים/שעות ([ReservationsPage.jsx](src/components/ReservationsPage.jsx) `saveEditedReservation` עם `{silent}`+boolean) ורק אז מאשר — תיקון לבאג trim-ואז-אישור שמחק עריכות. ראה לקח #22.
-- **2026-06-25** — **PR #54** — docs: רענון CLAUDE.md ל-PR #50–#53 (הגבלת השאלת-חוץ).
-- **2026-06-25** — **PR #53** — דיוק טקסט בהסבר הגבלת השאלת-חוץ ב-`UnitsModal`: "קולנוע" → "קולנוע יומית" ([App.jsx](src/App.jsx), שורה אחת).
-- **2026-06-25** — **PR #52** — ליטוש UX להגבלת השאלת-חוץ ([App.jsx](src/App.jsx) `UnitsModal`): **auto-sync דו-כיווני** בין "הגבל את כל היחידות" לשדה ה-N (N≥units→restrictAll; ביטול restrictAll→N=0; restrictAll מציג units.length בשדה) + הבהרת טקסט ההסבר.
-- **2026-06-23** — **PR #51** — **הגבלת השאלת-חוץ של ציוד**: 2 עמודות על `equipment` (`external_loan_restricted` + `external_loan_hold_count`, מיגרציה `20260623120000`) + guard רביעי ב-`create_reservation_v2` (`20260623120200`, byte-for-byte על `20260613153000`) + `sync_equipment_from_json` ממראה את העמודות (`20260623120100`) + UI בפאנל היחידות + הסתרה ב-PublicForm step 3 + chips בכרטיס + מיפוי שגיאה `external_restricted`→409. בנוסף: `privateLoanUnlimited` הועבר מרמת-קטגוריה לרמת-פריט (toggle ב-`EqForm`). **כל 3 המיגרציות הוחלו ב-dev וב-prod.** ראה סעיף "🚫 הגבלת השאלת-חוץ" + לקח #21.
-- **2026-06-21** — **PR #50** — docs: רענון CLAUDE.md ל-PR #48–#49 (studio overlap guard + lessons editor UI).
-- **2026-06-21** — **PR #48** — **guard אטומי נגד double-booking של אולפנים**: `EXCLUDE constraint` `studio_bookings_no_overlap` + `btree_gist` + פונקציית `studio_booking_tsrange` IMMUTABLE (מיגרציה `20260621120000`, הוחלה ב-dev וב-prod; נוקתה כפילות קיימת אחת בפרוד) → race-proof ל-`student↔student/team↔team` וכל שילובי יום/לילה. + סגירת פערי בדיקת-חפיפה בקביעות לילה (סטודנט+צוות) ע"י helper משותף [studioOverlap.js](src/utils/studioOverlap.js) (`rangesOverlap`), מיפוי `23P01`→`studio_overlap`, וטסט CI `run_studio_overlap_tests` (6) → smoke **30/30**. שיעור↔קביעה נשאר client-only (לא persisted). ראה סעיף "🛡️ Guard נגד double-booking" + לקח #20.
-- **2026-06-21** — **PR #49** — עיצוב עורך הקורס ([LessonsPage.jsx](src/components/LessonsPage.jsx)): לחצני ההוספה (שיעור נוסף / הוסף עמודת מרצה / הוסף מרצה / הוסף כיתה) עברו לסגול אחיד `#9b59b6` התואם ללחצן "➕ הוסף" הראשי, ושם הקורס הנערך מוצג **דינמית** בכותרת העורך (מתעדכן תוך כדי הקלדה).
-- **2026-06-13** — **PR #47** — **חסימת בקשות השאלה חופפות לאותו סטודנט (כל הסוגים)**: שחזור ה-per-student overlap guard ב-`create_reservation_v2` (מיגרציה `20260613153000`) שהופל בשוגג ב-PR #45 + חידוד (התעלמות משיעורים, self-exclude) + **פאנל צף חוסם בשלב האישור ב-[PublicForm.jsx](src/components/PublicForm.jsx)** (עם הנחיה לבטל ב"ההזמנות שלי") + מיפוי שגיאה `student_overlap` ב-[api/create-reservation.js](api/create-reservation.js) + טסט CI `run_student_overlap_tests` (5). **בנוסף**: `getEffectiveStatus` גוזר "באיחור" (לקח #19 — סוף הקפיצה פעילה↔באיחור). ראה הסעיף "🧍 Per-student overlap guard".
-- **2026-06-13** — **PR #46** — תיקון **crew snapshot מתיישן**: `production_crew_change_recheck_v1` עכשיו **מרענן** את `crew_*_name/phone` על ההזמנות המקושרות כשצוות מאושר/משתנה אחרי הגשת רשימת הציוד (מיגרציה `20260613150000`) + **backfill חד-פעמי** לשורות קיימות. תוקן באג בו איש סאונד שאושר אחרי ההגשה לא הופיע בלוח הבקרה והסמכותיו נחסמו שלא לצורך. ראה anti-regression #6 בקטע ההפקות.
-- **2026-06-04** — **PR #45** — **crew snapshot מועבר לכל הזמנת date-range של הפקה**: `create_reservation_v2` גוזר crew מ-`production_crew` המאושר כש-`production_id` קיים והשם ריק (מיגרציה `20260604120000`, safety net — overlap זהה ל-`20260516160000`), + הקליינט ([PublicForm.jsx](src/components/PublicForm.jsx)) re-derive בזמן submit + re-seed זהות סטודנט ב-"שלח בקשה נוספת" reset. תוקן race שבו snapshot ריק תקע הזמנות ב-"דרושה הסמכה".
-- **2026-05-31** — **PR #44** — רענון CLAUDE.md ל-PR #39–#43 + הדגשת זרימת המובייל (Stage 1 localhost מוחלף ב-Stage 2 Vercel Preview עד שתחזור גישת ה-localhost).
-- **2026-05-31** — **PR #43** — תצוגת הפקה (לוח הפקות → מצב תצוגה): תוויות **"יציאה:" / "חזרה:"** בטווחי תאריכי הצילום ([ProductionsPage.jsx](src/components/ProductionsPage.jsx)) — ברור מתי הציוד יוצא ומתי חוזר. שורה אחת.
-- **2026-05-31** — **PR #42** — הקשחת CI: **`no-undef` → `error`** ([eslint.config.js](eslint.config.js)) + מחיקת 2 בלוקי **קוד-מת** (סינון `{false && …}` ב-PublicForm; טופס login ישן לא-נגיש ב-LecturerPortal). ראה לקח 17.
-- **2026-05-31** — **PR #41** — hotfix: ייבוא חסר `updateReservationStatus` ([CalendarViews.jsx](src/components/CalendarViews.jsx)) + `deleteReservation` ([App.jsx](src/App.jsx)) — קריסות סמויות (שינוי סטטוס בלוח מנהל; מחיקה מארכיון) שנמצאו בסריקת `no-undef`. ראה לקח 17.
-- **2026-05-31** — **PR #40** — 🚨 **hotfix השבתת פרוד**: ייבוא חסר של `formatTime` ב-5 קבצים (PublicForm/PublicDailyTable/Archive/PublicDisplay/StudioBooking). טופס השאלת הציוד קרס בשלב התאריכים/אישור. ראה לקח 17.
-- **2026-05-31** — **PR #39** — תיקוני מובייל: (1) helper `formatTime` + **תצוגת זמן אחידה `HH:MM`** בכל האפליקציה; (2) תוויות "הוצאה/החזרה" בפאנל "בקשות אחרונות" בדשבורד; (3) **מייל תזכורת דדליין הפקה** (cron [api/production-deadline-reminder.js](api/production-deadline-reminder.js) + סוג `production_deadline` ב-send-email + רישום ב-[vercel.json](vercel.json)); (4) **deep-link** `?app=productions`; (5) הערת workflow מובייל ב-CLAUDE.md.
-- **2026-05-29** — **PR #30** — חוזה הרוטינה: חובת מקטע **"🧪 מדריך בדיקה ידנית"** בשפת משתמש בכל PR יומי (איפה במסך / מה לבדוק / מה לא לשבור). עדכון [.claude/audit-routine.md](.claude/audit-routine.md).
-- **2026-05-29** — **PR #29** — חוזה הרוטינה: **מקסימום push אחד ביום** ל-Vercel + **אפס push בסריקה ריקה** (דילוג שקט). עדכון [.claude/audit-routine.md](.claude/audit-routine.md).
-- **2026-05-29** — **PR #28** — הסבב הראשון של הרוטינה (dry-run ידני): **4 תיקוני safe + 7 דווחו**. תיקונים: [src/utils.js](src/utils.js) (`ensureUnits` השוואה מספרית; `groupReservationItemsByCategory` עם `Map` במקום `find` בלולאה), [src/components/LessonsPage.jsx](src/components/LessonsPage.jsx) (`isArchived` מוגן מ-null deref; `normalizeLessonLecturerList` מחושב פעם אחת לכרטיס).
-- **2026-05-29** — **PR #27** — הקמת תשתית הרוטינה: [.claude/audit-routine.md](.claude/audit-routine.md) (החוזה) + [.claude/audit-log.md](.claude/audit-log.md) (לוג state). ראו סעיף "🤖 רוטינת סריקה יומית אוטומטית".
-- **2026-05-29** — **PR #26** — CLAUDE.md: הבהרה ששני ה-DB נגישים דרך Supabase MCP אך רק prod מופיע ב-`list_projects`; חיזוק חוק dev-first; חובת `project_id` מפורש בכל קריאת MCP.
-- **2026-05-28** — **PR #25** — קיבוץ פריטי ציוד בהשאלה לפי קטגוריה + תיקוני מובייל (כולל גלישת שמות ציוד ארוכים ב-modal "צפייה מהירה" של דשבורד צוות).
-- **2026-05-26** — **PR #24** (**ממוזג**) — N עמודות מרצה למפגש (`session.lecturerIds[]`) + כפתורי "+ / − הוסף/הסר עמודת מרצה". XL import: `findAllH("מרצה",...)` תופס "מרצה 1/2/3" כעמודות נפרדות, merge key ללא lecturer. עמודה חדשה `lessons.course_lecturers jsonb` (מיגרציה `20260526200000` — **הוחלה ב-prod, אומת 2026-05-29**). תיקון multi-classroom import bundled. LecturerPortal filter מתקן מרצים משניים.
-- **2026-05-25** — **PR #23** — Admin מעלה טמפלטים ל-XL import מתוך "הגדרות מערכת". מיחזור `policy_assets` עם slots `xl_template_courses` + `xl_template_students`. אין מיגרציה. fallback ל-base64 המובנה אם אין upload.
-- **2026-05-25** — **PR #22** — UX: aggregate delete toasts (single counter toast במחיקות עוקבות), undo stack 10→15 + optimistic state + parallel network, admin/staff idle timeout 20m→60m.
-- **2026-05-25** — **PR #21** — Lessons UX overhaul: conflict resolver modal עם textarea + WhatsApp + edit-other-session, lecturer chips עם click-to-promote, view-mode toggle (grouped/flat), creation timestamp, resizable classroom columns, persistence ל-`course_studios jsonb` (מיגרציה `20260525150000`).
-- **2026-05-25** — **PR #20** — N כיתות לקורס/מפגש (`studios[]` / `studioIds[]` במקום הזוג הישן), conflict resolver V1, fix team-booking email lookup.
-
-> פיצ'רים מוקדמים יותר (PR #11–#19, לוח הפקות #15, CI+ErrorBoundary #16, ייבוא XL #19, atomic production delete) — מתועדים בסעיפים הייעודיים שלהם למעלה; שורות ההיסטוריה הגרנולריות הוסרו לקיצור.
-
----
-
-*ההקשר המלא של הקוד נמצא ב-repo, מצב חי ב-DB. כל העבודה committed + pushed.*
+> PRs מוקדמים מ-#20 מתועדים בסעיפים הנושאיים שלהם. הריפו הוא הארכיון.
