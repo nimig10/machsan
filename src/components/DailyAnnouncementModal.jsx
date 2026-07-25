@@ -12,9 +12,9 @@
 // Every decision about WHO sees WHAT is made server-side in /api/announcement
 // from the caller's JWT. This component only renders what it is handed.
 import { useEffect, useRef, useState } from "react";
-import { X, Megaphone } from "lucide-react";
+import { X, Megaphone, Play } from "lucide-react";
 import { supabase } from "../supabaseClient.js";
-import { videoEmbedSrc } from "../utils.js";
+import { videoEmbedSrc, videoThumbnailSrc } from "../utils.js";
 import { fetchMyAnnouncement, markAnnouncementSeen } from "../utils/announcementsApi.js";
 
 // Long enough for the loading screen and the post-login routing to settle, so
@@ -102,6 +102,10 @@ function AnnouncementBody({ body }) {
 
 export function DailyAnnouncementModal({ preview = null, onClosePreview = null }) {
   const [item, setItem] = useState(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  // No iframe is ever mounted inside the notice (see the video panel), so the
+  // only state the poster needs is whether its thumbnail actually loaded.
+  const [thumbFailed, setThumbFailed] = useState(false);
   // Guards against a double fetch when getSession and onAuthStateChange both
   // fire for the same login.
   const loadedForRef = useRef(null);
@@ -142,15 +146,24 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
 
   useEffect(() => {
     if (!shown) return undefined;
-    const onKey = (e) => { if (e.key === "Escape") close(); };
+    // Escape closes the video overlay first, the notice only once no video is
+    // open — otherwise one press would dismiss a notice the user is watching.
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      if (fullscreen) setFullscreen(false);
+      else close();
+    };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shown]);
+  }, [shown, fullscreen]);
 
   if (!shown) return null;
 
   const src = videoEmbedSrc(shown.videoUrl);
+  const thumb = videoThumbnailSrc(shown.videoUrl);
+  // Shapes the poster and the nothing-else: no clip plays inside the notice in
+  // either orientation, so this only decides how the still frame is framed.
   const isVertical = shown.videoOrientation === "vertical";
 
   // Where this viewer can find the guide videos again after closing the notice.
@@ -204,28 +217,75 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
                   ▶ {shown.videoTitle}
                 </div>
               )}
-              {/* Vertical clips are capped by height so a 9:16 video cannot
-                  push the buttons off a phone screen; landscape fills the width. */}
-              <div
+              {/* NO INLINE PLAYER, either orientation. Google Drive's toolbar
+                  is a FIXED height inside its own cross-origin frame, so in the
+                  narrow column of a notice it takes a share of the box that the
+                  clip needed, and the video came out cut. Several attempts to
+                  pad around it failed, and a full-width box made it worse — Drive
+                  also sizes its CONTROLS to the frame width, so play/skip/volume/
+                  CC/settings sprawled across the screen.
+
+                  So the notice only ever shows a poster, and the player gets the
+                  whole screen where none of that applies. Same shape as
+                  UserGuideVideosModal and PublicForm's guide panel, which never
+                  render an iframe inline either. Nothing here can be cropped,
+                  because nothing here is a player.
+
+                  The box keeps the video's own shape so the poster reads right;
+                  the image is `contain`, so even a mismatch cannot crop it. */}
+              <button
+                type="button"
+                onClick={() => setFullscreen(true)}
+                aria-label={`נגן את הסרטון${shown.videoTitle ? `: ${shown.videoTitle}` : ""}`}
                 style={{
                   position: "relative",
-                  background: "#000",
+                  background: thumb && !thumbFailed ? "#000" : "linear-gradient(160deg, #141922, #05070a)",
+                  border: "1px solid var(--border)",
                   borderRadius: 10,
                   overflow: "hidden",
-                  alignSelf: isVertical ? "center" : "stretch",
-                  width: isVertical ? "min(100%, 46vh)" : "100%",
-                  aspectRatio: isVertical ? "9 / 16" : "16 / 9",
-                  maxHeight: isVertical ? "58vh" : undefined,
+                  padding: 0,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  ...(isVertical
+                    ? { alignSelf: "center", width: "min(100%, 46vh)", aspectRatio: "9 / 16", maxHeight: "58vh" }
+                    : { width: "100%", aspectRatio: "16 / 9" }),
                 }}
               >
-                <iframe
-                  src={src}
-                  title={shown.videoTitle || shown.title || "announcement video"}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }}
-                />
-              </div>
+                {thumb && !thumbFailed && (
+                  <img
+                    src={thumb}
+                    alt=""
+                    onError={() => setThumbFailed(true)}
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }}
+                  />
+                )}
+                <span
+                  style={{
+                    position: "relative",
+                    width: 64, height: 64, borderRadius: "50%", background: "var(--accent)",
+                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    boxShadow: "0 6px 20px rgba(0,0,0,0.55)",
+                  }}
+                >
+                  {/* Nudged off-centre because a triangle's optical centre sits
+                      left of its bounding box. */}
+                  <Play size={27} strokeWidth={2} color="#0a0c10" fill="#0a0c10" style={{ marginInlineStart: 4 }} />
+                </span>
+                {/* Says what the tap will do, so opening fullscreen never feels
+                    like the notice was closed by accident. */}
+                <span
+                  style={{
+                    position: "absolute", insetInline: 0, bottom: 10,
+                    fontSize: 12.5, fontWeight: 700, color: "#fff",
+                    textShadow: "0 1px 6px rgba(0,0,0,0.9)",
+                  }}
+                >
+                  נפתח במסך מלא
+                </span>
+              </button>
               {/* Standing footnote on every announcement that carries a video —
                   not something the admin writes. The notice is shown once and
                   then gone, so without this the video looks like a one-time
@@ -256,6 +316,65 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
           </button>
         </div>
       </div>
+
+      {/* Fullscreen video overlay — same pattern as UserGuideVideosModal and
+          PublicForm's guide panel. zIndex 6000 was already reserved for it by
+          this modal's own 5400 (see the overlay comment above), so a playing
+          video is never buried by the notice it came from. Closing it returns
+          to the notice rather than dismissing it: the view is already recorded
+          on show, but the user still has a body to finish reading. */}
+      {fullscreen && src && (
+        <div
+          onClick={(e) => e.target === e.currentTarget && setFullscreen(false)}
+          style={{ position: "fixed", inset: 0, background: "#000", zIndex: 6000, display: "flex", alignItems: "center", justifyContent: "center" }}
+        >
+          <button
+            type="button"
+            onClick={() => setFullscreen(false)}
+            aria-label="סגור"
+            style={{
+              position: "fixed",
+              top: "max(16px, env(safe-area-inset-top))",
+              left: "max(16px, env(safe-area-inset-left))",
+              zIndex: 6010,
+              background: "var(--accent)",
+              color: "#0a0c10",
+              border: "2px solid #fff",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.6)",
+              borderRadius: 999,
+              padding: "10px 18px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              cursor: "pointer",
+              fontSize: 15,
+              fontWeight: 900,
+              lineHeight: 1,
+              fontFamily: "inherit",
+            }}
+          >
+            <X size={20} strokeWidth={2.5} color="#0a0c10" />
+            <span>סגור</span>
+          </button>
+          {/* The frame takes the WHOLE viewport — no aspect-ratio box.
+              Forcing one is what cropped the video: a 16:9 box on a portrait
+              phone is only about a fifth of the screen tall, and Drive's fixed
+              toolbar then eats a quarter of THAT, so the clip lost its bottom.
+              Given the full screen, both players letterbox the video themselves
+              and centre it — which is what they are built to do and what a
+              fullscreen viewer should look like. Nothing is constrained, so
+              nothing can be cut, in either orientation. */}
+          <div style={{ position: "absolute", inset: 0, background: "#000" }}>
+            <iframe
+              src={src}
+              title={shown.videoTitle || shown.title || "announcement video"}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              style={{ width: "100%", height: "100%", border: 0, display: "block" }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

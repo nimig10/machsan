@@ -800,9 +800,12 @@ export function LessonsPage({ lessons=[], setLessons, studios=[], kits=[], showT
       // Calendars (create/update ICS invites). Never blocks the save — but a
       // failure must not stay invisible, or a lecturer silently gets no calendar.
       syncLessonCalendar(lesson.id).then((r) => {
-        if (r && r.ok === false && r.reason !== "no-session") {
-          showToast("error", "הקורס נשמר, אך אירועי היומן לא נשלחו למרצים.");
-        }
+        if (!r || r.ok !== false || r.reason === "no-session") return;
+        // "not-persisted" is a different failure: the mail DID go out, only the
+        // snapshot save failed, so saying "לא נשלחו" would be plainly wrong.
+        showToast("error", r.reason === "not-persisted"
+          ? "הקורס נשמר ואירועי היומן נשלחו, אך ייתכן שהמרצים יקבלו את אותה הודעה שוב בשמירה הבאה."
+          : "הקורס נשמר, אך אירועי היומן לא נשלחו למרצים.");
       });
     }
     setMode(null);

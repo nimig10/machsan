@@ -159,6 +159,17 @@ export default async function handler(req, res) {
     const id = body.id;
     if (!id) return res.status(400).json({ ok: false, error: "missing id" });
     try {
+      // The id is caller-supplied and the ids are sequential, so verify it is
+      // the LIVE announcement and that this caller is actually in its audience
+      // before recording anything. Without it a logged-in user could hand-craft
+      // a request and appear in the admin's "מי צפה" list for a notice that was
+      // never aimed at them. (user_id comes from the JWT, so this was only ever
+      // self-insertion — nobody could forge a view for someone else.)
+      const { row } = await loadActiveAnnouncement();
+      if (!row || String(row.id) !== String(id)) return res.status(200).json({ ok: true });
+      const flags = await loadRoleFlags(user.id);
+      if (!matchesAudience(row.audience, flags)) return res.status(200).json({ ok: true });
+
       // The PK (announcement_id, user_id, seen_on) makes this idempotent, so a
       // double render cannot inflate the day counter.
       const r = await sb("announcement_views?on_conflict=announcement_id,user_id,seen_on", {

@@ -222,7 +222,18 @@ export function StaffHub({ user, logo, myToday, refreshMyToday, onNavigate, onLo
   };
 
   return (
-    <div style={{ minHeight: "100dvh", padding: 24, background: "var(--bg)", position: "relative" }}>
+    <div style={{
+      minHeight: "100dvh",
+      padding: 24,
+      // "משימות להיום" is position:fixed over the bottom of the viewport and is
+      // rendered even when it has nothing in it, so the last element in the flow
+      // — the logout button — sat underneath it with no way to scroll clear.
+      // Clears the collapsed panel (~44px), its own 16px offset, and the PWA
+      // home indicator. Harmless on desktop: it is just scroll room.
+      paddingBottom: "calc(92px + env(safe-area-inset-bottom))",
+      background: "var(--bg)",
+      position: "relative",
+    }}>
       {canInstall && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && (
         <button
           type="button"
