@@ -12,7 +12,7 @@
 // Every decision about WHO sees WHAT is made server-side in /api/announcement
 // from the caller's JWT. This component only renders what it is handed.
 import { useEffect, useRef, useState } from "react";
-import { X, Megaphone } from "lucide-react";
+import { X, Megaphone, Maximize2 } from "lucide-react";
 import { supabase } from "../supabaseClient.js";
 import { videoEmbedSrc } from "../utils.js";
 import { fetchMyAnnouncement, markAnnouncementSeen } from "../utils/announcementsApi.js";
@@ -102,6 +102,7 @@ function AnnouncementBody({ body }) {
 
 export function DailyAnnouncementModal({ preview = null, onClosePreview = null }) {
   const [item, setItem] = useState(null);
+  const [fullscreen, setFullscreen] = useState(false);
   // Guards against a double fetch when getSession and onAuthStateChange both
   // fire for the same login.
   const loadedForRef = useRef(null);
@@ -142,16 +143,30 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
 
   useEffect(() => {
     if (!shown) return undefined;
-    const onKey = (e) => { if (e.key === "Escape") close(); };
+    // Escape closes the video overlay first, the notice only once no video is
+    // open — otherwise one press would dismiss a notice the user is watching.
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      if (fullscreen) setFullscreen(false);
+      else close();
+    };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shown]);
+  }, [shown, fullscreen]);
 
   if (!shown) return null;
 
   const src = videoEmbedSrc(shown.videoUrl);
   const isVertical = shown.videoOrientation === "vertical";
+  // Google Drive's /preview player draws its own toolbar INSIDE the iframe.
+  // A plain 16:9 box therefore leaves the clip less than 16:9 to live in, and
+  // Drive fits it into what is left — which is why a landscape video came out
+  // clipped on a phone with its play/pause control pushed out of reach. The box
+  // is given that chrome back on top of the ratio so the video itself still
+  // gets a full 16:9. YouTube overlays its controls and needs no allowance.
+  const isDrive = !!src && src.includes("drive.google.com");
+  const chromePx = isDrive ? 46 : 0;
 
   // Where this viewer can find the guide videos again after closing the notice.
   // The three audiences keep their libraries in three different places, so the
@@ -205,7 +220,10 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
                 </div>
               )}
               {/* Vertical clips are capped by height so a 9:16 video cannot
-                  push the buttons off a phone screen; landscape fills the width. */}
+                  push the buttons off a phone screen; landscape fills the width.
+                  Landscape uses padding-bottom rather than aspect-ratio because
+                  only padding can express "the ratio PLUS the player's chrome" —
+                  aspect-ratio takes no offset. */}
               <div
                 style={{
                   position: "relative",
@@ -214,8 +232,9 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
                   overflow: "hidden",
                   alignSelf: isVertical ? "center" : "stretch",
                   width: isVertical ? "min(100%, 46vh)" : "100%",
-                  aspectRatio: isVertical ? "9 / 16" : "16 / 9",
-                  maxHeight: isVertical ? "58vh" : undefined,
+                  ...(isVertical
+                    ? { aspectRatio: "9 / 16", maxHeight: "58vh" }
+                    : { height: 0, paddingBottom: `calc(56.25% + ${chromePx}px)` }),
                 }}
               >
                 <iframe
@@ -226,6 +245,18 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
                   style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }}
                 />
               </div>
+              {/* An inline player inside a notice that also has to fit a title,
+                  body, footnote and a button is always going to be small on a
+                  phone. This is the escape hatch to the same fullscreen overlay
+                  the user guide uses — one tap, real estate for the controls. */}
+              <button
+                type="button"
+                onClick={() => setFullscreen(true)}
+                className="btn btn-secondary btn-sm"
+                style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 7, minHeight: 38, fontSize: 13.5 }}
+              >
+                <Maximize2 size={15} strokeWidth={2} /> צפייה במסך מלא
+              </button>
               {/* Standing footnote on every announcement that carries a video —
                   not something the admin writes. The notice is shown once and
                   then gone, so without this the video looks like a one-time
@@ -256,6 +287,65 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
           </button>
         </div>
       </div>
+
+      {/* Fullscreen video overlay — same pattern as UserGuideVideosModal and
+          PublicForm's guide panel. zIndex 6000 was already reserved for it by
+          this modal's own 5400 (see the overlay comment above), so a playing
+          video is never buried by the notice it came from. Closing it returns
+          to the notice rather than dismissing it: the view is already recorded
+          on show, but the user still has a body to finish reading. */}
+      {fullscreen && src && (
+        <div
+          onClick={(e) => e.target === e.currentTarget && setFullscreen(false)}
+          style={{ position: "fixed", inset: 0, background: "#000", zIndex: 6000, display: "flex", alignItems: "center", justifyContent: "center" }}
+        >
+          <button
+            type="button"
+            onClick={() => setFullscreen(false)}
+            aria-label="סגור"
+            style={{
+              position: "fixed",
+              top: "max(16px, env(safe-area-inset-top))",
+              left: "max(16px, env(safe-area-inset-left))",
+              zIndex: 6010,
+              background: "var(--accent)",
+              color: "#0a0c10",
+              border: "2px solid #fff",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.6)",
+              borderRadius: 999,
+              padding: "10px 18px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              cursor: "pointer",
+              fontSize: 15,
+              fontWeight: 900,
+              lineHeight: 1,
+              fontFamily: "inherit",
+            }}
+          >
+            <X size={20} strokeWidth={2.5} color="#0a0c10" />
+            <span>סגור</span>
+          </button>
+          <div
+            style={{
+              background: "#000",
+              position: "relative",
+              ...(isVertical
+                ? { height: "100vh", aspectRatio: "9 / 16", maxWidth: "100vw" }
+                : { width: "100vw", aspectRatio: "16 / 9", maxHeight: "100vh" }),
+            }}
+          >
+            <iframe
+              src={src}
+              title={shown.videoTitle || shown.title || "announcement video"}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
