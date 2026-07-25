@@ -165,22 +165,10 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
 
   const src = videoEmbedSrc(shown.videoUrl);
   const thumb = videoThumbnailSrc(shown.videoUrl);
-  // Google Drive's /preview draws a fixed-height toolbar INSIDE its own
-  // cross-origin frame, so the clip never gets the full box. A plain 16:9 box
-  // therefore CROPS it, and the frame cannot be measured from here to correct
-  // for that exactly.
-  //
-  // So the box is deliberately over-allocated rather than fitted: the error is
-  // asymmetric. Too much height costs a thin black band; too little cuts the
-  // bottom off the video, which is the bug being fixed. 68px comfortably clears
-  // the ~55px toolbar, and Drive letterboxes into whatever is left over instead
-  // of cropping — the same reason the fullscreen player simply fills the screen.
-  // YouTube overlays its controls and needs no allowance.
-  const isDrive = !!src && src.includes("drive.google.com");
-  // videoOrientation is deliberately NOT read. It used to pick an aspect-ratio
-  // box, and every such box turned out to be a way to crop the clip; a portrait
-  // video letterboxes inside this one with no special case. The field is still
-  // stored and still drives the admin preview.
+  // Decides where the clip is allowed to play — see the panel comment below.
+  // A landscape box in this column is too short to host Drive's fixed-height
+  // toolbar and the video; a vertical one has height to spare.
+  const isVertical = shown.videoOrientation === "vertical";
 
   // Where this viewer can find the guide videos again after closing the notice.
   // The three audiences keep their libraries in three different places, so the
@@ -233,23 +221,36 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
                   ▶ {shown.videoTitle}
                 </div>
               )}
-              {/* One box, two states: poster until the viewer taps, then the
-                  live player IN PLACE. Height is over-allocated (see isDrive
-                  above) rather than fitted to a ratio, so the player letterboxes
-                  inside it and the clip is never cut. */}
+              {/* WHERE A CLIP PLAYS DEPENDS ON ITS SHAPE, and that is not a
+                  preference — it is the geometry that broke this panel.
+                  Google Drive's toolbar has a FIXED height (~55px) inside its
+                  own cross-origin frame, so what matters is the fraction of the
+                  box it eats:
+                    • Landscape in this column is a short box (~160px tall on a
+                      phone). The toolbar takes a third of it, the clip gets the
+                      rest, and it comes out cut. Repeated attempts to pad around
+                      it did not hold. So landscape does not play here at all —
+                      the poster opens the fullscreen player, where the frame has
+                      the whole screen and the toolbar is a rounding error.
+                    • Vertical is a TALL box (~450px). The same 55px is now an
+                      eighth of it, there is room to spare, and it plays inline
+                      with no trouble.
+                  The box is sized by height with no forced ratio, so whatever
+                  goes in letterboxes itself rather than being cropped. */}
               <div
                 style={{
                   position: "relative",
                   width: "100%",
-                  height: 0,
-                  paddingBottom: `calc(56.25% + ${isDrive ? 68 : 0}px)`,
                   background: "#05070a",
                   border: "1px solid var(--border)",
                   borderRadius: 10,
                   overflow: "hidden",
+                  ...(isVertical
+                    ? { height: "min(58vh, 460px)" }
+                    : { height: 0, paddingBottom: "56.25%" }),
                 }}
               >
-                {playing ? (
+                {playing && isVertical ? (
                   <iframe
                     src={src}
                     title={shown.videoTitle || shown.title || "announcement video"}
@@ -260,7 +261,9 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setPlaying(true)}
+                    // Vertical plays in place; landscape jumps straight to the
+                    // fullscreen player — one tap either way, no dead end.
+                    onClick={() => (isVertical ? setPlaying(true) : setFullscreen(true))}
                     aria-label={`נגן את הסרטון${shown.videoTitle ? `: ${shown.videoTitle}` : ""}`}
                     style={{
                       position: "absolute", inset: 0, width: "100%", height: "100%",
@@ -291,20 +294,35 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
                           sits left of its bounding box. */}
                       <Play size={27} strokeWidth={2} color="#0a0c10" fill="#0a0c10" style={{ marginInlineStart: 4 }} />
                     </span>
+                    {/* Says what the tap will do, so opening fullscreen never
+                        feels like the notice was closed by accident. */}
+                    {!isVertical && (
+                      <span
+                        style={{
+                          position: "absolute", insetInline: 0, bottom: 10,
+                          fontSize: 12.5, fontWeight: 700, color: "#fff",
+                          textShadow: "0 1px 6px rgba(0,0,0,0.9)",
+                        }}
+                      >
+                        נפתח במסך מלא
+                      </span>
+                    )}
                   </button>
                 )}
               </div>
-              {/* Kept even now that the video plays in place: the inline box
-                  shares a phone screen with a title, body, footnote and button,
-                  so it can only ever be small. */}
-              <button
-                type="button"
-                onClick={() => setFullscreen(true)}
-                className="btn btn-secondary btn-sm"
-                style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 7, minHeight: 38, fontSize: 13.5 }}
-              >
-                <Maximize2 size={15} strokeWidth={2} /> צפייה במסך מלא
-              </button>
+              {/* Only for the vertical clip, which plays in this small column:
+                  landscape has no second control because its poster IS the
+                  fullscreen trigger, and two identical buttons read as a bug. */}
+              {isVertical && (
+                <button
+                  type="button"
+                  onClick={() => setFullscreen(true)}
+                  className="btn btn-secondary btn-sm"
+                  style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 7, minHeight: 38, fontSize: 13.5 }}
+                >
+                  <Maximize2 size={15} strokeWidth={2} /> צפייה במסך מלא
+                </button>
+              )}
               {/* Standing footnote on every announcement that carries a video —
                   not something the admin writes. The notice is shown once and
                   then gone, so without this the video looks like a one-time
