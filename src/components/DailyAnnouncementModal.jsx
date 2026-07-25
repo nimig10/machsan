@@ -12,7 +12,7 @@
 // Every decision about WHO sees WHAT is made server-side in /api/announcement
 // from the caller's JWT. This component only renders what it is handed.
 import { useEffect, useRef, useState } from "react";
-import { X, Megaphone, Play, Maximize2 } from "lucide-react";
+import { X, Megaphone, Play } from "lucide-react";
 import { supabase } from "../supabaseClient.js";
 import { videoEmbedSrc, videoThumbnailSrc } from "../utils.js";
 import { fetchMyAnnouncement, markAnnouncementSeen } from "../utils/announcementsApi.js";
@@ -103,11 +103,8 @@ function AnnouncementBody({ body }) {
 export function DailyAnnouncementModal({ preview = null, onClosePreview = null }) {
   const [item, setItem] = useState(null);
   const [fullscreen, setFullscreen] = useState(false);
-  // The inline frame is mounted only once the viewer asks for it: until then the
-  // notice shows a poster. That keeps a third-party player off the screen of
-  // everyone who just wants to read the text, and it is what makes a real
-  // preview image possible at all.
-  const [playing, setPlaying] = useState(false);
+  // No iframe is ever mounted inside the notice (see the video panel), so the
+  // only state the poster needs is whether its thumbnail actually loaded.
   const [thumbFailed, setThumbFailed] = useState(false);
   // Guards against a double fetch when getSession and onAuthStateChange both
   // fire for the same login.
@@ -165,9 +162,8 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
 
   const src = videoEmbedSrc(shown.videoUrl);
   const thumb = videoThumbnailSrc(shown.videoUrl);
-  // Decides where the clip is allowed to play — see the panel comment below.
-  // A landscape box in this column is too short to host Drive's fixed-height
-  // toolbar and the video; a vertical one has height to spare.
+  // Shapes the poster and the nothing-else: no clip plays inside the notice in
+  // either orientation, so this only decides how the still frame is framed.
   const isVertical = shown.videoOrientation === "vertical";
 
   // Where this viewer can find the guide videos again after closing the notice.
@@ -221,113 +217,75 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
                   ▶ {shown.videoTitle}
                 </div>
               )}
-              {/* WHERE A CLIP PLAYS DEPENDS ON ITS SHAPE, and that is not a
-                  preference — it is the geometry that broke this panel.
-                  Google Drive's toolbar has a FIXED height (~55px) inside its
-                  own cross-origin frame, so what matters is the fraction of the
-                  box it eats:
-                    • Landscape in this column is a short box (~160px tall on a
-                      phone). The toolbar takes a third of it, the clip gets the
-                      rest, and it comes out cut. Repeated attempts to pad around
-                      it did not hold. So landscape does not play here at all —
-                      the poster opens the fullscreen player, where the frame has
-                      the whole screen and the toolbar is a rounding error.
-                    • Vertical is a TALL box (~450px). The same 55px is now an
-                      eighth of it, there is room to spare, and it plays inline
-                      with no trouble.
-                  The box is sized by height with no forced ratio, so whatever
-                  goes in letterboxes itself rather than being cropped. */}
-              <div
+              {/* NO INLINE PLAYER, either orientation. Google Drive's toolbar
+                  is a FIXED height inside its own cross-origin frame, so in the
+                  narrow column of a notice it takes a share of the box that the
+                  clip needed, and the video came out cut. Several attempts to
+                  pad around it failed, and a full-width box made it worse — Drive
+                  also sizes its CONTROLS to the frame width, so play/skip/volume/
+                  CC/settings sprawled across the screen.
+
+                  So the notice only ever shows a poster, and the player gets the
+                  whole screen where none of that applies. Same shape as
+                  UserGuideVideosModal and PublicForm's guide panel, which never
+                  render an iframe inline either. Nothing here can be cropped,
+                  because nothing here is a player.
+
+                  The box keeps the video's own shape so the poster reads right;
+                  the image is `contain`, so even a mismatch cannot crop it. */}
+              <button
+                type="button"
+                onClick={() => setFullscreen(true)}
+                aria-label={`נגן את הסרטון${shown.videoTitle ? `: ${shown.videoTitle}` : ""}`}
                 style={{
                   position: "relative",
-                  background: "#05070a",
+                  background: thumb && !thumbFailed ? "#000" : "linear-gradient(160deg, #141922, #05070a)",
                   border: "1px solid var(--border)",
                   borderRadius: 10,
                   overflow: "hidden",
-                  // Vertical keeps the 9:16 geometry it always had: a narrow,
-                  // centred, height-capped column. A full-width box was tried
-                  // and was wrong — Drive lays its controls out to the frame's
-                  // width, so a wide box spread play/skip/volume/CC/settings
-                  // across the whole screen and squeezed the clip into the
-                  // middle. The frame must be the SHAPE of the video.
+                  padding: 0,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                   ...(isVertical
                     ? { alignSelf: "center", width: "min(100%, 46vh)", aspectRatio: "9 / 16", maxHeight: "58vh" }
-                    : { width: "100%", height: 0, paddingBottom: "56.25%" }),
+                    : { width: "100%", aspectRatio: "16 / 9" }),
                 }}
               >
-                {playing && isVertical ? (
-                  <iframe
-                    src={src}
-                    title={shown.videoTitle || shown.title || "announcement video"}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0, display: "block" }}
+                {thumb && !thumbFailed && (
+                  <img
+                    src={thumb}
+                    alt=""
+                    onError={() => setThumbFailed(true)}
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }}
                   />
-                ) : (
-                  <button
-                    type="button"
-                    // Vertical plays in place; landscape jumps straight to the
-                    // fullscreen player — one tap either way, no dead end.
-                    onClick={() => (isVertical ? setPlaying(true) : setFullscreen(true))}
-                    aria-label={`נגן את הסרטון${shown.videoTitle ? `: ${shown.videoTitle}` : ""}`}
-                    style={{
-                      position: "absolute", inset: 0, width: "100%", height: "100%",
-                      border: 0, padding: 0, cursor: "pointer", fontFamily: "inherit",
-                      background: thumb && !thumbFailed ? "#000" : "linear-gradient(160deg, #141922, #05070a)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                    }}
-                  >
-                    {thumb && !thumbFailed && (
-                      // contain, not cover: cover would crop the poster and that
-                      // is the whole complaint this panel exists to answer.
-                      <img
-                        src={thumb}
-                        alt=""
-                        onError={() => setThumbFailed(true)}
-                        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }}
-                      />
-                    )}
-                    <span
-                      style={{
-                        position: "relative",
-                        width: 64, height: 64, borderRadius: "50%", background: "var(--accent)",
-                        display: "inline-flex", alignItems: "center", justifyContent: "center",
-                        boxShadow: "0 6px 20px rgba(0,0,0,0.55)",
-                      }}
-                    >
-                      {/* Nudged off-centre because a triangle's optical centre
-                          sits left of its bounding box. */}
-                      <Play size={27} strokeWidth={2} color="#0a0c10" fill="#0a0c10" style={{ marginInlineStart: 4 }} />
-                    </span>
-                    {/* Says what the tap will do, so opening fullscreen never
-                        feels like the notice was closed by accident. */}
-                    {!isVertical && (
-                      <span
-                        style={{
-                          position: "absolute", insetInline: 0, bottom: 10,
-                          fontSize: 12.5, fontWeight: 700, color: "#fff",
-                          textShadow: "0 1px 6px rgba(0,0,0,0.9)",
-                        }}
-                      >
-                        נפתח במסך מלא
-                      </span>
-                    )}
-                  </button>
                 )}
-              </div>
-              {/* Only for the vertical clip, which plays in this small column:
-                  landscape has no second control because its poster IS the
-                  fullscreen trigger, and two identical buttons read as a bug. */}
-              {isVertical && (
-                <button
-                  type="button"
-                  onClick={() => setFullscreen(true)}
-                  className="btn btn-secondary btn-sm"
-                  style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 7, minHeight: 38, fontSize: 13.5 }}
+                <span
+                  style={{
+                    position: "relative",
+                    width: 64, height: 64, borderRadius: "50%", background: "var(--accent)",
+                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    boxShadow: "0 6px 20px rgba(0,0,0,0.55)",
+                  }}
                 >
-                  <Maximize2 size={15} strokeWidth={2} /> צפייה במסך מלא
-                </button>
-              )}
+                  {/* Nudged off-centre because a triangle's optical centre sits
+                      left of its bounding box. */}
+                  <Play size={27} strokeWidth={2} color="#0a0c10" fill="#0a0c10" style={{ marginInlineStart: 4 }} />
+                </span>
+                {/* Says what the tap will do, so opening fullscreen never feels
+                    like the notice was closed by accident. */}
+                <span
+                  style={{
+                    position: "absolute", insetInline: 0, bottom: 10,
+                    fontSize: 12.5, fontWeight: 700, color: "#fff",
+                    textShadow: "0 1px 6px rgba(0,0,0,0.9)",
+                  }}
+                >
+                  נפתח במסך מלא
+                </span>
+              </button>
               {/* Standing footnote on every announcement that carries a video —
                   not something the admin writes. The notice is shown once and
                   then gone, so without this the video looks like a one-time
