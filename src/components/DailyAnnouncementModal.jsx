@@ -12,7 +12,7 @@
 // Every decision about WHO sees WHAT is made server-side in /api/announcement
 // from the caller's JWT. This component only renders what it is handed.
 import { useEffect, useRef, useState } from "react";
-import { X, Megaphone, Maximize2 } from "lucide-react";
+import { X, Megaphone, Play } from "lucide-react";
 import { supabase } from "../supabaseClient.js";
 import { videoEmbedSrc } from "../utils.js";
 import { fetchMyAnnouncement, markAnnouncementSeen } from "../utils/announcementsApi.js";
@@ -159,14 +159,8 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
 
   const src = videoEmbedSrc(shown.videoUrl);
   const isVertical = shown.videoOrientation === "vertical";
-  // Google Drive's /preview player draws its own toolbar INSIDE the iframe.
-  // A plain 16:9 box therefore leaves the clip less than 16:9 to live in, and
-  // Drive fits it into what is left — which is why a landscape video came out
-  // clipped on a phone with its play/pause control pushed out of reach. The box
-  // is given that chrome back on top of the ratio so the video itself still
-  // gets a full 16:9. YouTube overlays its controls and needs no allowance.
-  const isDrive = !!src && src.includes("drive.google.com");
-  const chromePx = isDrive ? 46 : 0;
+  // Orientation only decides the shape of the FULLSCREEN player now — the
+  // notice itself renders a poster, never a frame (see the comment on it).
 
   // Where this viewer can find the guide videos again after closing the notice.
   // The three audiences keep their libraries in three different places, so the
@@ -219,43 +213,51 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
                   ▶ {shown.videoTitle}
                 </div>
               )}
-              {/* Vertical clips are capped by height so a 9:16 video cannot
-                  push the buttons off a phone screen; landscape fills the width.
-                  Landscape uses padding-bottom rather than aspect-ratio because
-                  only padding can express "the ratio PLUS the player's chrome" —
-                  aspect-ratio takes no offset. */}
-              <div
-                style={{
-                  position: "relative",
-                  background: "#000",
-                  borderRadius: 10,
-                  overflow: "hidden",
-                  alignSelf: isVertical ? "center" : "stretch",
-                  width: isVertical ? "min(100%, 46vh)" : "100%",
-                  ...(isVertical
-                    ? { aspectRatio: "9 / 16", maxHeight: "58vh" }
-                    : { height: 0, paddingBottom: `calc(56.25% + ${chromePx}px)` }),
-                }}
-              >
-                <iframe
-                  src={src}
-                  title={shown.videoTitle || shown.title || "announcement video"}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }}
-                />
-              </div>
-              {/* An inline player inside a notice that also has to fit a title,
-                  body, footnote and a button is always going to be small on a
-                  phone. This is the escape hatch to the same fullscreen overlay
-                  the user guide uses — one tap, real estate for the controls. */}
+              {/* NO INLINE IFRAME — deliberately. Google Drive's /preview player
+                  draws a fixed-height toolbar inside its own frame and fits the
+                  clip into whatever is left, so in a box this small it scaled to
+                  width and cropped: a landscape video came out clipped with its
+                  play/pause control out of reach on a phone. The frame is
+                  cross-origin, so its internals cannot be measured — every
+                  "add N px for the chrome" constant is a guess that re-breaks on
+                  a different width, DPR, or Drive UI change (one was tried and
+                  did not hold).
+
+                  So the notice shows a poster and the player gets the whole
+                  screen — the same shape UserGuideVideosModal and PublicForm's
+                  guide panel already use, where no iframe is ever rendered
+                  inline. Nothing here can crop, at any size. */}
               <button
                 type="button"
                 onClick={() => setFullscreen(true)}
-                className="btn btn-secondary btn-sm"
-                style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 7, minHeight: 38, fontSize: 13.5 }}
+                aria-label={`נגן את הסרטון${shown.videoTitle ? `: ${shown.videoTitle}` : ""}`}
+                style={{
+                  width: "100%",
+                  border: "1px solid var(--border)",
+                  borderRadius: 10,
+                  background: "linear-gradient(160deg, #141922, #05070a)",
+                  cursor: "pointer",
+                  padding: "26px 16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 10,
+                  fontFamily: "inherit",
+                }}
               >
-                <Maximize2 size={15} strokeWidth={2} /> צפייה במסך מלא
+                <span
+                  style={{
+                    width: 64, height: 64, borderRadius: "50%", background: "var(--accent)",
+                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    boxShadow: "0 6px 20px rgba(0,0,0,0.45)",
+                  }}
+                >
+                  {/* Nudged off-centre because a triangle's optical centre sits
+                      left of its bounding box. */}
+                  <Play size={27} strokeWidth={2} color="#0a0c10" fill="#0a0c10" style={{ marginInlineStart: 4 }} />
+                </span>
+                <span style={{ fontSize: 15, fontWeight: 800, color: "var(--text)" }}>צפייה בסרטון</span>
+                <span style={{ fontSize: 12.5, color: "var(--text3)" }}>נפתח במסך מלא</span>
               </button>
               {/* Standing footnote on every announcement that carries a video —
                   not something the admin writes. The notice is shown once and
