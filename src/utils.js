@@ -131,24 +131,37 @@ export function videoEmbedSrc(rawUrl) {
   return null;
 }
 
-// Poster frame for a video, so a player that has not been started yet can show
-// the clip instead of a blank box. Same input as videoEmbedSrc; null when the
-// host has no public thumbnail endpoint.
+// Poster frames for a video, so a player that has not been started yet can show
+// the clip instead of a blank box. Same input as videoEmbedSrc.
 //
-// Both URLs are public and need no key. Drive's only answers for files shared
-// as "anyone with the link" — which is already required for /preview to embed
-// at all, so a video that plays here has a thumbnail here. Callers must still
-// handle onError: sharing can be tightened after the fact, and a broken image
-// icon inside an announcement looks like a bug.
-export function videoThumbnailSrc(rawUrl) {
+// Returns an ORDERED list of candidates, best first — because which YouTube
+// variants exist for a given video cannot be known up front. The caller walks
+// the list on error rather than betting on one URL.
+//
+// Both hosts are public and need no key. Drive's endpoint only answers for
+// files shared as "anyone with the link", which /preview already requires to
+// embed at all. Callers must still handle the list running out: sharing can be
+// tightened after the fact, and a broken image inside a notice reads as a bug.
+//
+// YOUTUBE VARIANTS ARE NOT INTERCHANGEABLE — the ratio differs, not just the
+// size. `hqdefault` (480x360) and `sddefault` (640x480) are **4:3 and carry
+// black bars baked into the file** for a 16:9 clip, so they leave dead space no
+// layout can remove. Only these two are 16:9:
+//   maxresdefault 1280x720 — best, but absent on many uploads
+//   mqdefault      320x180 — small, but exists for every video
+export function videoThumbnailSrcs(rawUrl) {
   const url = String(rawUrl || "").trim();
-  if (!url) return null;
+  if (!url) return [];
   let m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
-  // hqdefault exists for every video; maxresdefault 404s on older uploads.
-  if (m) return `https://img.youtube.com/vi/${m[1]}/hqdefault.jpg`;
+  if (m) return [
+    `https://img.youtube.com/vi/${m[1]}/maxresdefault.jpg`,
+    `https://img.youtube.com/vi/${m[1]}/mqdefault.jpg`,
+  ];
+  // Drive renders the thumbnail at the clip's own aspect ratio, so there is
+  // nothing to choose between.
   m = url.match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)/);
-  if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w640`;
-  return null;
+  if (m) return [`https://drive.google.com/thumbnail?id=${m[1]}&sz=w640`];
+  return [];
 }
 
 export function cloudinaryThumb(url, width = 400) {

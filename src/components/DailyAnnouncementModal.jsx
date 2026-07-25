@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Megaphone, Play } from "lucide-react";
 import { supabase } from "../supabaseClient.js";
-import { videoEmbedSrc, videoThumbnailSrc } from "../utils.js";
+import { videoEmbedSrc, videoThumbnailSrcs } from "../utils.js";
 import { fetchMyAnnouncement, markAnnouncementSeen } from "../utils/announcementsApi.js";
 
 // Long enough for the loading screen and the post-login routing to settle, so
@@ -104,8 +104,10 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
   const [item, setItem] = useState(null);
   const [fullscreen, setFullscreen] = useState(false);
   // No iframe is ever mounted inside the notice (see the video panel), so the
-  // only state the poster needs is whether its thumbnail actually loaded.
-  const [thumbFailed, setThumbFailed] = useState(false);
+  // only state the poster needs is how far down the thumbnail candidate list it
+  // has had to walk. Past the end there is no usable still and it falls back to
+  // a plain panel.
+  const [thumbIdx, setThumbIdx] = useState(0);
   // Guards against a double fetch when getSession and onAuthStateChange both
   // fire for the same login.
   const loadedForRef = useRef(null);
@@ -161,10 +163,12 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
   if (!shown) return null;
 
   const src = videoEmbedSrc(shown.videoUrl);
-  const thumb = videoThumbnailSrc(shown.videoUrl);
-  // Shapes the poster and the nothing-else: no clip plays inside the notice in
-  // either orientation, so this only decides how the still frame is framed.
-  const isVertical = shown.videoOrientation === "vertical";
+  // Ordered best-first; onError walks it. undefined past the end = no still.
+  const thumb = videoThumbnailSrcs(shown.videoUrl)[thumbIdx];
+  // `videoOrientation` is deliberately not read here. It describes the clip, and
+  // nothing in this notice is shaped by the clip any more: the poster takes the
+  // thumbnail's shape and the fullscreen player fills the window. The field is
+  // still stored and still drives the admin preview.
 
   // Where this viewer can find the guide videos again after closing the notice.
   // The three audiences keep their libraries in three different places, so the
@@ -231,15 +235,25 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
                   render an iframe inline either. Nothing here can be cropped,
                   because nothing here is a player.
 
-                  The box keeps the video's own shape so the poster reads right;
-                  the image is `contain`, so even a mismatch cannot crop it. */}
+                  THE BOX TAKES THE IMAGE'S SHAPE, it does not impose one. An
+                  earlier version sized it from the admin-declared
+                  `videoOrientation`, which describes the CLIP — but what renders
+                  here is a THUMBNAIL, and the two disagree: YouTube serves a
+                  landscape still even for a portrait video. A clip flagged
+                  vertical therefore got a 9:16 frame around a wide image and
+                  `contain` filled the rest with dead black. Same mistake as
+                  lesson #45, one layer up: do not force a ratio onto something
+                  whose real shape you do not control. With no ratio to satisfy
+                  the frame shrink-wraps the poster, so no padding can exist. */}
               <button
                 type="button"
                 onClick={() => setFullscreen(true)}
                 aria-label={`נגן את הסרטון${shown.videoTitle ? `: ${shown.videoTitle}` : ""}`}
                 style={{
                   position: "relative",
-                  background: thumb && !thumbFailed ? "#000" : "linear-gradient(160deg, #141922, #05070a)",
+                  alignSelf: "center",
+                  maxWidth: "100%",
+                  background: thumb ? "#000" : "linear-gradient(160deg, #141922, #05070a)",
                   border: "1px solid var(--border)",
                   borderRadius: 10,
                   overflow: "hidden",
@@ -249,17 +263,19 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  ...(isVertical
-                    ? { alignSelf: "center", width: "min(100%, 46vh)", aspectRatio: "9 / 16", maxHeight: "58vh" }
-                    : { width: "100%", aspectRatio: "16 / 9" }),
+                  // Only the no-image fallback needs a size of its own.
+                  ...(thumb ? {} : { width: "100%", aspectRatio: "16 / 9" }),
                 }}
               >
-                {thumb && !thumbFailed && (
+                {thumb && (
+                  // Free-standing, not absolutely positioned: the image is what
+                  // gives the button its height. `auto` on both axes keeps the
+                  // ratio while the two caps bound it.
                   <img
                     src={thumb}
                     alt=""
-                    onError={() => setThumbFailed(true)}
-                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }}
+                    onError={() => setThumbIdx(i => i + 1)}
+                    style={{ display: "block", width: "auto", height: "auto", maxWidth: "100%", maxHeight: "58vh" }}
                   />
                 )}
                 <span
