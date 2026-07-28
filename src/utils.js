@@ -151,6 +151,99 @@ export function videoThumbnailSrc(rawUrl) {
   return null;
 }
 
+// Poster candidates in preference order, for a caller that wants to SIZE a box
+// from the picture rather than just show it. `videoThumbnailSrc` stays the
+// one-shot answer for callers that only need something to display.
+//
+// The distinction exists because YouTube's default poster lies about shape:
+// hqdefault is ALWAYS 480×360, so a vertical clip arrives as a narrow strip
+// with black pillars baked into the pixels — dead space no box shape can crop
+// away. `oardefault` ("original aspect ratio") is the honest one: measured
+// 1080×1920 for a vertical upload. It only exists for clips that actually have
+// a non-default shape, so a 404 is itself the signal to fall back.
+//
+// Each entry carries `trueAspect`: whether the image's own dimensions may be
+// used to shape a box. Drive's thumbnail is generated from the source frame and
+// measured true in both orientations (640×1387 portrait, 1920×1080 landscape).
+export function videoThumbnailCandidates(rawUrl) {
+  const url = String(rawUrl || "").trim();
+  if (!url) return [];
+  let m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+  if (m) {
+    return [
+      // Present only for clips whose shape is not the default, and then it is
+      // the honest one (measured 1080×1920 for a vertical upload). Absent for
+      // an ordinary upload — which is not a failure, just the next candidate.
+      { src: `https://i.ytimg.com/vi/${m[1]}/oardefault.jpg`, trueAspect: true },
+      // Padded, but real and always present: verified 480×360 carrying actual
+      // frame content even for a clip with no oardefault. This is the poster
+      // that must never be skipped, or the notice shows no picture at all.
+      { src: `https://img.youtube.com/vi/${m[1]}/hqdefault.jpg`, trueAspect: false },
+    ];
+  }
+  m = url.match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)/);
+  if (m) return [{ src: `https://drive.google.com/thumbnail?id=${m[1]}&sz=w640`, trueAspect: true }];
+  return [];
+}
+
+// Normalize Israeli phone numbers to international format for wa.me deep links.
+// Accepts inputs like "054-123-4567", "054 123 4567", "+972541234567",
+// "972541234567" and returns "972541234567". Returns "" if no usable digits.
+//
+// Shared rather than per-screen: the lesson-conflict resolver and the loan
+// rejection dialog both build WhatsApp links, and two copies of a normalizer
+// drift (lesson #21).
+export function normalizeIsraeliPhone(raw = "") {
+  const digits = String(raw || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("972")) return digits;
+  if (digits.startsWith("0")) return `972${digits.slice(1)}`;
+  return digits;
+}
+
+// A wa.me deep link about one reservation, prefilled with the request's own
+// details plus whatever the staff member typed. Returns "" when the student has
+// no phone, so callers can show the "אין טלפון" fallback instead of a dead link.
+//
+// `headline` is the reason for writing (rejected / still out), `note` the free
+// text. Callers rebuild this on every render so the link tracks what is being
+// typed — that is the whole point of pairing it with a textarea.
+export function buildReservationWhatsAppLink(reservation, { headline = "", note = "", includeItems = true } = {}) {
+  const phone = normalizeIsraeliPhone(reservation?.phone);
+  if (!phone) return "";
+
+  const lines = [];
+  const name = String(reservation?.student_name || "").trim();
+  lines.push(name ? `שלום ${name},` : "שלום,");
+  if (headline) { lines.push(""); lines.push(headline); }
+
+  // Dates and times only ever through the shared formatters — they trim the
+  // seconds the DB returns (lesson #18).
+  const borrow = [formatDate(reservation?.borrow_date), formatTime(reservation?.borrow_time)].filter(Boolean).join(" ");
+  const ret = [formatDate(reservation?.return_date), formatTime(reservation?.return_time)].filter(Boolean).join(" ");
+  if (borrow || ret) {
+    lines.push("");
+    if (borrow) lines.push(`📅 השאלה: ${borrow}`);
+    if (ret) lines.push(`↩ החזרה: ${ret}`);
+  }
+
+  if (includeItems) {
+    const items = (reservation?.items || [])
+      .map(i => `• ${String(i?.name || "").trim()} ×${i?.quantity}`)
+      .filter(l => !l.startsWith("•  ×") && l.trim() !== "•");
+    if (items.length) {
+      lines.push("");
+      lines.push("🎒 הציוד בבקשה:");
+      lines.push(...items);
+    }
+  }
+
+  const trimmed = String(note || "").trim();
+  if (trimmed) { lines.push(""); lines.push(trimmed); }
+
+  return `https://wa.me/${phone}?text=${encodeURIComponent(lines.join("\n"))}`;
+}
+
 export function cloudinaryThumb(url, width = 400) {
   if (!url || !url.includes("res.cloudinary.com")) return url;
   return url.replace("/upload/", `/upload/w_${width},q_auto,f_auto/`);

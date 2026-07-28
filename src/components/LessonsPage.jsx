@@ -2,7 +2,7 @@
 import { Fragment, useRef, useState, useEffect, useLayoutEffect } from "react";
 import * as XLSX from "xlsx";
 import { Award, BookOpen, Calendar, Camera, Check, CheckCircle, Clock, Download, FileText, Film, GraduationCap, Lightbulb, Link, Mail, Mic, Package, Pencil, Phone, Plus, Search, Trash2, Upload, User, Video, X, XCircle } from "lucide-react";
-import { formatDate, formatLocalDateInput, parseLocalDate, today, getAuthToken } from "../utils.js";
+import { formatDate, formatLocalDateInput, parseLocalDate, today, getAuthToken, normalizeIsraeliPhone } from "../utils.js";
 import { listStudents } from "../utils/studentsApi.js";
 import { syncAllStudioBookings } from "../utils/studioBookingsApi.js";
 import { syncAllLessons } from "../utils/lessonsApi.js";
@@ -455,17 +455,6 @@ function getLessonDisplaySchedule(lesson = {}) {
 
 function getLessonSessionStudioIds(session = {}, lesson = {}) {
   return getEffectiveLessonStudioIds(session, lesson).map(String);
-}
-
-// Normalize Israeli phone numbers to international format for wa.me deep links.
-// Accepts inputs like "054-123-4567", "054 123 4567", "+972541234567", "972541234567"
-// and returns "972541234567". Returns "" if no usable digits found.
-function normalizeIsraeliPhone(raw = "") {
-  const digits = String(raw || "").replace(/\D/g, "");
-  if (!digits) return "";
-  if (digits.startsWith("972")) return digits;
-  if (digits.startsWith("0")) return `972${digits.slice(1)}`;
-  return digits;
 }
 
 function formatLessonDateDdMmYy(iso = "") {
