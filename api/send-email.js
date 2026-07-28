@@ -292,7 +292,7 @@ function buildEmail({
   const studentMessageSection = custom_message && !isLessonConflict && !isUpdateReview && (isApproved || isOverdue || (!isNew && !isTeamNotify && !isDeptHead && !isManagerReport && !isLessonKitReady && !isOverdueTeam)) ? `
     <div style="background:#1a1d26;border:1px solid #2d3244;border-radius:8px;padding:16px;margin:16px 0;direction:rtl">
       <div style="font-size:13px;color:${isApproved ? "#2ecc71" : isOverdue ? "#f5a623" : "#e74c3c"};font-weight:700;margin-bottom:10px">${isApproved ? "דיווח מצוות המחסן על אישור הבקשה" : isOverdue ? "הודעה נוספת מצוות המחסן על האיחור" : "הסבר מצוות המחסן על סיבת הדחייה"}</div>
-      <div style="font-size:13px;color:#e8eaf0;white-space:pre-wrap;line-height:1.7">${custom_message}</div>
+      <div style="font-size:13px;color:#e8eaf0;white-space:pre-wrap;line-height:1.7">${escapeHtml(custom_message)}</div>
     </div>` : "";
 
   const crewSection = isDeptHead ? `

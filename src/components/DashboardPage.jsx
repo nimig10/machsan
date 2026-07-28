@@ -4,8 +4,10 @@ import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, toda
 import { Modal, statusBadge } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import { UpdateReviewModal } from "./UpdateReviewModal.jsx";
+import { EditReservationModal } from "./EditReservationModal.jsx";
+import { makeSaveEditedReservation } from "../utils/reservationEdit.js";
 import { ApprovedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
-import { Activity, AlertTriangle, ArrowUpFromLine, Briefcase, Calendar, Camera, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Layers, MessageSquare, Mic, Package, RefreshCw, Shield, User, Wrench, X, XCircle } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUpFromLine, Briefcase, Calendar, Camera, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Layers, MessageSquare, Mic, Package, Pencil, RefreshCw, Shield, User, Wrench, X, XCircle } from "lucide-react";
 
 const HE_DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 function getDayName(dateStr) {
@@ -14,7 +16,7 @@ function getDayName(dateStr) {
   return HE_DAYS[d.getDay()] || "";
 }
 
-export function DashboardPage({ equipment, reservations, setReservations, showToast, siteSettings = {}, equipmentReports = [], certifications = { types: [], students: [] }, loanHandlers = [], reservationUpdates = [], refreshReservationUpdates = async () => {}, refreshReservations = async () => {} }) {
+export function DashboardPage({ equipment, reservations, setReservations, showToast, siteSettings = {}, equipmentReports = [], certifications = { types: [], students: [] }, loanHandlers = [], reservationUpdates = [], refreshReservationUpdates = async () => {}, refreshReservations = async () => {}, categories = [], collegeManager = {}, managerToken = "" }) {
   const todayStr = today();
   const nowMs = Date.now();
 
@@ -86,6 +88,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
   const unstretch = (r) =>
     reservations.find(x => String(x.id) === String(r?.id)) ||
     (r?.overdue_since ? { ...r, return_date: r.overdue_since } : r);
+  const [dashEditing, setDashEditing] = useState(null); // reservation open in the editor
   const [dashApprovalConflict, setDashApprovalConflict] = useState(null);
   const [dashConsecutiveWarning, setDashConsecutiveWarning] = useState(null);
   const [approvingId, setApprovingId] = useState(null);
@@ -517,7 +520,18 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                   )}
                 </div>
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={()=>setDashViewRes(null)}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>
+              {/* Gated on the RAW status, matching the requests page exactly.
+                  getEffectiveStatus would read an open-window "מאושר" loan as
+                  "פעילה" (lesson #19) and drop the button off editable rows. */}
+              <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}}>
+                {["ממתין","מאושר","נדחה","באיחור"].includes(dashViewRes.status)&&(
+                  <button className="btn btn-secondary btn-sm" title="עריכת הבקשה"
+                    onClick={()=>{setDashEditing(unstretch(dashViewRes));setDashViewRes(null);}}>
+                    <Pencil size={14} strokeWidth={1.75} /> עריכת בקשה
+                  </button>
+                )}
+                <button className="btn btn-secondary btn-sm" onClick={()=>setDashViewRes(null)}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>
+              </div>
             </div>
             <div style={{padding:"20px 22px",display:"flex",flexDirection:"column",gap:16}}>
               {/* Dates & info */}
@@ -800,6 +814,21 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
           />
         );
       })()}
+
+      {/* Edit a request without leaving the dashboard. The quick-view is closed
+          on open (same as the requests page), which also means there is no stale
+          snapshot of it left behind to refresh.
+          onApprove is null on purpose: approving runs through a cert-gate,
+          conflict and consecutive-booking pipeline that lives on the requests
+          page, and duplicating it here is the drift lesson #21 warns about. The
+          quick-view's own "אשר בקשה" button still covers approval, and since an
+          edit is persisted immediately there is no unsaved work for it to drop. */}
+      {dashEditing && <EditReservationModal reservation={dashEditing} equipment={equipment}
+        reservations={reservations} categories={categories} collegeManager={collegeManager}
+        managerToken={managerToken} siteSettings={siteSettings} loanHandlers={loanHandlers}
+        onApprove={null}
+        onSave={makeSaveEditedReservation({ reservations, setReservations, showToast, onSaved: () => setDashEditing(null) })}
+        onClose={() => setDashEditing(null)} />}
 
       {/* Dashboard — Hard block conflict dialog */}
       {dashApprovalConflict && (()=>{

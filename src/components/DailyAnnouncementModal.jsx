@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Megaphone, Play } from "lucide-react";
 import { supabase } from "../supabaseClient.js";
-import { videoEmbedSrc, videoThumbnailSrc } from "../utils.js";
+import { videoEmbedSrc, videoThumbnailCandidates } from "../utils.js";
 import { fetchMyAnnouncement, markAnnouncementSeen } from "../utils/announcementsApi.js";
 
 // Long enough for the loading screen and the post-login routing to settle, so
@@ -104,8 +104,15 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
   const [item, setItem] = useState(null);
   const [fullscreen, setFullscreen] = useState(false);
   // No iframe is ever mounted inside the notice (see the video panel), so the
-  // only state the poster needs is whether its thumbnail actually loaded.
-  const [thumbFailed, setThumbFailed] = useState(false);
+  // only state the poster needs is which candidate poster it is currently
+  // trying (see videoThumbnailCandidates — the first choice 404s for clips that
+  // have no special shape, which is exactly how we learn they have none)…
+  const [thumbIdx, setThumbIdx] = useState(0);
+  // …and the aspect ratio that poster turned out to have. Measured from the
+  // loaded image so the box matches the real clip rather than trusting the
+  // admin's orientation flag, which is easy to leave on its landscape default.
+  // null until measured.
+  const [thumbAspect, setThumbAspect] = useState(null);
   // Guards against a double fetch when getSession and onAuthStateChange both
   // fire for the same login.
   const loadedForRef = useRef(null);
@@ -158,13 +165,28 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shown, fullscreen]);
 
+  // A different video (a re-opened preview, a fresh notice) must re-measure from
+  // scratch rather than keeping the previous clip's shape or candidate.
+  useEffect(() => {
+    setThumbIdx(0);
+    setThumbAspect(null);
+  }, [shown?.videoUrl]);
+
   if (!shown) return null;
 
   const src = videoEmbedSrc(shown.videoUrl);
-  const thumb = videoThumbnailSrc(shown.videoUrl);
-  // Shapes the poster and the nothing-else: no clip plays inside the notice in
+  // Walked in order: a candidate that 404s advances the index, so the poster
+  // ends up on the best image the host actually has.
+  const thumbCandidates = videoThumbnailCandidates(shown.videoUrl);
+  const candidate = thumbCandidates[thumbIdx] || null;
+  // Shapes the poster and nothing else: no clip plays inside the notice in
   // either orientation, so this only decides how the still frame is framed.
   const isVertical = shown.videoOrientation === "vertical";
+  // The box takes the clip's own shape — measured from the poster when the
+  // poster is honest about it, the admin's orientation flag otherwise. So a
+  // vertical clip gets a vertical box on its own, which is the fix: the box no
+  // longer has to be told, and a mis-set flag no longer leaves dead space.
+  const boxAspect = thumbAspect || (isVertical ? 9 / 16 : 16 / 9);
 
   // Where this viewer can find the guide videos again after closing the notice.
   // The three audiences keep their libraries in three different places, so the
@@ -239,7 +261,7 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
                 aria-label={`נגן את הסרטון${shown.videoTitle ? `: ${shown.videoTitle}` : ""}`}
                 style={{
                   position: "relative",
-                  background: thumb && !thumbFailed ? "#000" : "linear-gradient(160deg, #141922, #05070a)",
+                  background: candidate ? "#000" : "linear-gradient(160deg, #141922, #05070a)",
                   border: "1px solid var(--border)",
                   borderRadius: 10,
                   overflow: "hidden",
@@ -249,17 +271,52 @@ export function DailyAnnouncementModal({ preview = null, onClosePreview = null }
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  ...(isVertical
-                    ? { alignSelf: "center", width: "min(100%, 46vh)", aspectRatio: "9 / 16", maxHeight: "58vh" }
-                    : { width: "100%", aspectRatio: "16 / 9" }),
+                  // One rule for every shape instead of a portrait branch and a
+                  // landscape branch: the box is as wide as the column allows,
+                  // capped so a tall clip cannot outgrow the notice. Anything
+                  // taller than square gets the height cap, which the width
+                  // clamp then converts back into a narrower, centred box —
+                  // so a 9:16 clip is centred, and a 16:9 one still spans the
+                  // column exactly as before.
+                  alignSelf: "center",
+                  width: `min(100%, ${(58 * boxAspect).toFixed(2)}vh)`,
+                  aspectRatio: String(boxAspect),
+                  maxHeight: "58vh",
                 }}
               >
-                {thumb && !thumbFailed && (
+                {candidate && (
                   <img
-                    src={thumb}
+                    key={candidate.src}
+                    src={candidate.src}
                     alt=""
-                    onError={() => setThumbFailed(true)}
-                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }}
+                    // A missing candidate is expected, not an error: it is how a
+                    // clip without a special shape identifies itself. Step to
+                    // the next one; running out just leaves the play button on
+                    // its gradient, exactly as a failed poster always did.
+                    onError={() => setThumbIdx((i) => i + 1)}
+                    onLoad={(e) => {
+                      const { naturalWidth: w, naturalHeight: h } = e.currentTarget;
+                      // A missing poster does not always 404: YouTube answers a
+                      // flat grey 120×90 stand-in with a normal 200, and Drive a
+                      // tiny placeholder while a file is still processing. Both
+                      // load "successfully" and would otherwise be shown as the
+                      // picture AND measured for the box — which is exactly the
+                      // grey, wrongly-shaped panel this guard exists to stop.
+                      // Anything this small is a stand-in, never a real frame.
+                      if (w <= 160 || h <= 120) { setThumbIdx((i) => i + 1); return; }
+                      if (candidate.trueAspect) setThumbAspect(w / h);
+                    }}
+                    style={{
+                      position: "absolute", inset: 0, width: "100%", height: "100%",
+                      // `contain` for an honest poster — it already matches the
+                      // box, so nothing is cropped (lesson #45). A padded poster
+                      // is the one case where `cover` is right: what it crops is
+                      // the host's own black bars, not frame content. For a 9:16
+                      // clip inside YouTube's 4:3 pad the two work out to the
+                      // same strip, so the picture fills the box instead of
+                      // sitting in the dead space this fix is about.
+                      objectFit: candidate.trueAspect ? "contain" : "cover",
+                    }}
                   />
                 )}
                 <span

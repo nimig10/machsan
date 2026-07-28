@@ -17,13 +17,15 @@ Never hand-roll the measurement. Use the shared hook:
 ```jsx
 import { useAutoGrowTextarea, AUTO_GROW_TEXTAREA_STYLE } from "../hooks/useAutoGrowTextarea.js";
 
-const body = useAutoGrowTextarea(form.body);
+// Destructure — passing `body.ref` straight to a ref prop trips
+// react-hooks/refs, which reads the property access as a ref read in render.
+const { ref: bodyRef, fit: fitBody } = useAutoGrowTextarea(form.body);
 
 <textarea
-  ref={body.ref}
+  ref={bodyRef}
   rows={1}
   value={form.body}
-  onChange={e => { const v = e.target.value; setForm(f => ({ ...f, body: v })); body.fit(e.target); }}
+  onChange={e => { const v = e.target.value; setForm(f => ({ ...f, body: v })); fitBody(e.target); }}
   style={{
     ...AUTO_GROW_TEXTAREA_STYLE,
     width: "100%", padding: "10px 12px", borderRadius: 8,

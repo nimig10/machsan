@@ -1,17 +1,18 @@
 import { supabase } from '../supabaseClient.js';
 // ReservationsPage.jsx — admin reservations management page (includes rejected + archive tabs)
 import { useEffect, useState, useMemo } from "react";
-import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, reservationStatusErrorMessage, createReservation, deleteReservation as deleteReservationRpc, getAuthToken, syncReservationStatusToBlob, groupReservationItemsByCategory } from "../utils.js";
+import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, reservationStatusErrorMessage, createReservation, deleteReservation as deleteReservationRpc, getAuthToken, syncReservationStatusToBlob, groupReservationItemsByCategory, buildReservationWhatsAppLink } from "../utils.js";
 import { Modal, statusBadge } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
 import { syncAllLessons } from "../utils/lessonsApi.js";
-import { listKits, syncAllKits } from "../utils/kitsApi.js";
+import { makeSaveEditedReservation } from "../utils/reservationEdit.js";
+import { RejectReservationModal } from "./RejectReservationModal.jsx";
 import { markReservationDeleting, unmarkReservationDeleting } from "../pendingDeletes.js";
 import { UpdateReviewModal } from "./UpdateReviewModal.jsx";
 import { ApprovedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
 import { getProductionCertBlockers } from "../utils/reservationUpdateReview.js";
-import { AlertTriangle, BookOpen, Briefcase, Camera, Calendar, CheckCircle, ClipboardList, Clock, FileText, Film, MessageSquare, Mic, Package, Pencil, RotateCcw, Save, Shield, Trash2, User, X, XCircle } from "lucide-react";
+import { AlertTriangle, BookOpen, Briefcase, Camera, Calendar, CheckCircle, ClipboardList, Clock, FileText, Film, MessageSquare, Mic, Package, Pencil, Phone, RotateCcw, Save, Shield, Trash2, User, X, XCircle } from "lucide-react";
 
 // Match production crew members to certification records for existing
 // reservation approval surfaces. The update-review modal uses the shared
@@ -297,6 +298,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
   const [approvalConflict, setApprovalConflict] = useState(null);
   const [consecutiveWarning, setConsecutiveWarning] = useState(null); // {reservation, warnings}
   const [certBlockerModal, setCertBlockerModal] = useState(null); // {reservation, blockers}
+  const [rejecting, setRejecting] = useState(null); // the reservation awaiting a rejection reason
   const [busyIds, setBusyIds] = useState(() => new Set());
   const [showManualForm, setShowManualForm] = useState(false);
   const [overdueEmailText, setOverdueEmailText] = useState("");
@@ -553,7 +555,11 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       .catch(err => console.error("delete reservation log failed:", err));
   };
 
-  const sendStatusEmail = async (reservation, status) => {
+  // `reason` is the warehouse's explanation on a rejection. It rides in as
+  // custom_message, which send-email already renders for type:"rejected" under
+  // the heading "הסבר מצוות המחסן על סיבת הדחייה". Empty is fine — the block is
+  // simply omitted.
+  const sendStatusEmail = async (reservation, status, reason = "") => {
     if (!reservation?.email || (status !== "מאושר" && status !== "נדחה")) return;
     const itemsList = reservation.items?.map(i => `<tr><td style="padding:7px 12px;color:#e8eaf0;border-bottom:1px solid #1e2130">${i.name || eqName(i.equipment_id)}</td><td style="padding:7px 12px;text-align:center;color:#f5a623;font-weight:700;border-bottom:1px solid #1e2130">${i.quantity}</td></tr>`).join("") || "";
     try {
@@ -570,6 +576,8 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
           borrow_time:  reservation.borrow_time || "",
           return_date:  formatDate(reservation.return_date),
           return_time:  reservation.return_time || "",
+          // Conditional so the approval payload stays byte-identical to before.
+          ...(String(reason || "").trim() ? { custom_message: String(reason).trim() } : {}),
           logo_url: siteSettings.logo || "",
           sound_logo_url: siteSettings.soundLogo || "",
         }),
@@ -667,7 +675,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
     return doApprove(reservationToApprove);
   };
 
-  const updateStatus = async (id, status) => {
+  const updateStatus = async (id, status, { rejectionReason = "" } = {}) => {
     const res = reservations.find(r=>r.id===id);
     if (!res) {
       // Never fail silently — a missing row (stale client state) used to make
@@ -710,11 +718,15 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
       // blob sync removed (Stage 5) — RPC already updated DB, local state is set above
       // Only email / log when this click was the one that actually flipped the status.
       if (rpcResult.changed) {
-        if (status === "נדחה") await sendStatusEmail({ ...res, status: "נדחה" }, "נדחה");
+        const trimmedReason = String(rejectionReason || "").trim();
+        if (status === "נדחה") await sendStatusEmail({ ...res, status: "נדחה" }, "נדחה", trimmedReason);
         const caller = JSON.parse(sessionStorage.getItem("staff_user")||"{}");
         const actionMap = { "נדחה": "reservation_reject", "הוחזר": "reservation_return" };
         if (actionMap[status]) {
-          logActivity({ user_id: caller.id, user_name: caller.full_name, action: actionMap[status], entity: "reservation", entity_id: String(id), details: { student: res.student_name, loan_type: res.loan_type } });
+          // details is jsonb, so the rejection reason gets an audit trail without
+          // a column or a migration. Identity still comes from the body, not the
+          // JWT — lesson #37+#41.
+          logActivity({ user_id: caller.id, user_name: caller.full_name, action: actionMap[status], entity: "reservation", entity_id: String(id), details: { student: res.student_name, loan_type: res.loan_type, ...(status === "נדחה" && trimmedReason ? { reject_reason: trimmedReason } : {}) } });
         }
       }
       setSelected(null);
@@ -724,7 +736,11 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
     }
   };
 
-  const sendOverdueManualEmail = async (reservation, text) => {
+  // One sender for both follow-up panels in the detail modal. `type` picks the
+  // template: "overdue" chases gear that is still out, "rejected" explains a
+  // rejection after the fact. Either way the typed text lands in the same
+  // custom_message block send-email already renders per type.
+  const sendOverdueManualEmail = async (reservation, text, type = "overdue") => {
     if (!reservation?.email || !text.trim()) return;
     setOverdueEmailSending(true);
     try {
@@ -734,7 +750,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
         headers: { "Content-Type": "application/json", ...(tokOdm ? { Authorization: `Bearer ${tokOdm}` } : {}) },
         body: JSON.stringify({
           to: reservation.email,
-          type: "overdue",
+          type,
           student_name: reservation.student_name,
           borrow_date: formatDate(reservation.borrow_date),
           return_date: formatDate(reservation.return_date),
@@ -744,7 +760,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
           sound_logo_url: siteSettings.soundLogo || "",
         }),
       });
-      showToast("success", `📧 מייל תזכורת נשלח ל-${reservation.email}`);
+      showToast("success", `📧 מייל נשלח ל-${reservation.email}`);
       setOverdueEmailText("");
     } catch {
       showToast("error", "שגיאה בשליחת המייל");
@@ -758,84 +774,11 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
   // action (e.g. approve) chains off this save — it skips the toast + modal close
   // so the caller controls the final UX. Returning a boolean lets the approve
   // path abort if the persist failed (so item/time edits are never silently lost).
-  const saveEditedReservation = async (updated, { silent = false } = {}) => {
-    const { items: updatedItems, reservation_items: _ri, ...rowFields } = updated;
-
-    // Virtual lesson reservations (lesson_auto: true) have no row in reservations_new.
-    // Their source of truth is store.kits — sync items there instead.
-    const isVirtual = updated.lesson_auto === true || String(updated.id || "").startsWith("lesson_res_");
-    const linkedKitId = updated.lesson_kit_id ? String(updated.lesson_kit_id) : null;
-
-    if (isVirtual) {
-      // Update kit items in store.kits so the LecturerPortal sees the change
-      if (linkedKitId && updatedItems) {
-        const freshKits = await listKits(); // Stage 11 Session B: read from public.kits
-        if (Array.isArray(freshKits)) {
-          const normalized = updatedItems.map(i => ({ equipment_id: i.equipment_id, quantity: Number(i.quantity) || 1, name: i.name || "" }));
-          const newKits = freshKits.map(k => String(k.id) === linkedKitId ? { ...k, items: normalized } : k);
-          const r = await syncAllKits(newKits);
-          if (!r.ok) { showToast("error", "שגיאה בעדכון ערכת השיעור"); return false; }
-        }
-      }
-      const all = normalizeReservationsForArchive(reservations.map(r => r.id === updated.id ? updated : r));
-      setReservations(all);
-      if (!silent) { showToast("success", "הבקשה עודכנה"); setEditing(null); }
-      return true;
-    }
-
-    // Real reservation — update reservations_new + reservation_items
-    const { error: updErr } = await supabase.from("reservations_new").update({
-      student_name:  rowFields.student_name,
-      email:         rowFields.email,
-      phone:         rowFields.phone,
-      course:        rowFields.course,
-      project_name:  rowFields.project_name || null,
-      loan_type:     rowFields.loan_type,
-      borrow_date:   rowFields.borrow_date,
-      return_date:   rowFields.return_date,
-      borrow_time:   rowFields.borrow_time,
-      return_time:   rowFields.return_time,
-      overdue_student_note: rowFields.overdue_student_note || null,
-      // Frozen snapshot of the gear as it went out, stamped by the overdue
-      // partial-return flow. `form` spreads the reservation, so an already-
-      // stamped value flows straight back through — every other edit is a
-      // no-op preserve. Never derived here; see migration 20260719120000.
-      original_items: rowFields.original_items ?? null,
-    }).eq("id", updated.id);
-    if (updErr) {
-      console.error("saveEditedReservation update error:", updErr);
-      showToast("error", "שגיאה בעדכון הבקשה: " + (updErr.message || "לא ידוע"));
-      return false;
-    }
-    if (updatedItems) {
-      const { error: delErr } = await supabase.from("reservation_items").delete().eq("reservation_id", updated.id);
-      if (delErr) {
-        console.error("saveEditedReservation delete items error:", delErr);
-        showToast("error", "שגיאה במחיקת הפריטים הישנים: " + (delErr.message || "לא ידוע"));
-        return false;
-      }
-      if (updatedItems.length) {
-        const { error: insErr } = await supabase.from("reservation_items").insert(
-          updatedItems.map(i => ({
-            reservation_id: updated.id,
-            equipment_id:   i.equipment_id,
-            name:           i.name || "",
-            quantity:       Number(i.quantity) || 1,
-            unit_id:        i.unit_id || null,
-          }))
-        );
-        if (insErr) {
-          console.error("saveEditedReservation insert items error:", insErr);
-          showToast("error", "שגיאה בהוספת הפריטים החדשים: " + (insErr.message || "לא ידוע"));
-          return false;
-        }
-      }
-    }
-    const all = normalizeReservationsForArchive(reservations.map(r => r.id === updated.id ? updated : r));
-    setReservations(all);
-    if (!silent) { showToast("success", "הבקשה עודכנה"); setEditing(null); }
-    return true;
-  };
+  // Shared with the dashboard's editor — see src/utils/reservationEdit.js.
+  const saveEditedReservation = makeSaveEditedReservation({
+    reservations, setReservations, showToast,
+    onSaved: () => setEditing(null),
+  });
 
   const studentReqs = filtered.filter(r => r.loan_type !== "שיעור" && r.loan_type !== "צוות");
   const lessonReqs  = filtered.filter(r => r.loan_type === "שיעור");
@@ -904,7 +847,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                     {certBlocked
                       ? <span title="לא ניתן לאשר — הצלם/איש סאונד טרם הוסמכו על הציוד המבוקש" style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:700,color:"#f59e0b",background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.4)",borderRadius:6,padding:"4px 10px"}}><Shield size={12} strokeWidth={2}/> דרושה הסמכה לפני אישור</span>
                       : <button className="btn btn-success btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"מאושר")}>{busyIds.has(r.id)?<Clock size={14} strokeWidth={1.75} />:<><CheckCircle size={14} strokeWidth={1.75} /> אשר</>}</button>}
-                    <button className="btn btn-danger btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"נדחה")}><XCircle size={14} strokeWidth={1.75} /> דחה</button>
+                    <button className="btn btn-danger btn-sm" disabled={busyIds.has(r.id)} onClick={()=>setRejecting(r)}><XCircle size={14} strokeWidth={1.75} /> דחה</button>
                   </>);
                 })()}
                 {(getEffectiveStatus(r)==="פעילה"||getEffectiveStatus(r)==="באיחור")&&<button className="btn btn-secondary btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"הוחזר")}><><RotateCcw size={14} strokeWidth={1.75} /> הוחזר</></button>}
@@ -1148,7 +1091,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                 {certBlocked
                   ? <span title="לא ניתן לאשר — הצלם/איש סאונד טרם הוסמכו על הציוד המבוקש" style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:13,fontWeight:700,color:"#f59e0b",background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.4)",borderRadius:8,padding:"8px 14px"}}><Shield size={14} strokeWidth={2}/> דרושה הסמכה לפני אישור</span>
                   : <button className="btn btn-success" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"מאושר")}>{busyIds.has(selected.id)?<><Clock size={14} strokeWidth={1.75} /> מאשר...</>:<><CheckCircle size={14} strokeWidth={1.75} /> אשר</>}</button>}
-                <button className="btn btn-danger" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"נדחה")}><XCircle size={14} strokeWidth={1.75} /> דחה</button>
+                <button className="btn btn-danger" disabled={busyIds.has(selected.id)} onClick={()=>setRejecting(selected)}><XCircle size={14} strokeWidth={1.75} /> דחה</button>
               </>);
             })()}
             {selected.status==="נדחה"&&(() => {
@@ -1279,32 +1222,80 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
               </div>
             </div>
           </div>
-          {/* Overdue manual email area */}
-          {selected.status==="באיחור" && (
-            <div style={{marginTop:20,background:"rgba(230,126,34,0.08)",border:"1px solid rgba(230,126,34,0.3)",borderRadius:"var(--r)",padding:16}}>
-              <div style={{fontWeight:800,fontSize:13,color:"#e67e22",marginBottom:10}}>📧 שליחת מייל ידני לסטודנט המאחר</div>
+          {/* Follow-up message panel. Same shape for the two statuses where the
+              warehouse still needs to reach the student after the decision: a
+              loan that is still out, and a request that was turned down. The
+              email type differs, the panel does not. */}
+          {(selected.status==="באיחור" || selected.status==="נדחה") && (()=>{
+            const isOverduePanel = selected.status==="באיחור";
+            const tone = isOverduePanel ? "#e67e22" : "#e74c3c";
+            const waLink = buildReservationWhatsAppLink(selected, {
+              headline: isOverduePanel
+                ? "זמן ההשאלה שלך במכללה תם, ויש להחזיר את הציוד."
+                : "בקשת השאלת הציוד שלך במכללה נדחתה.",
+              note: overdueEmailText,
+            });
+            return (
+            <div style={{marginTop:20,background:isOverduePanel?"rgba(230,126,34,0.08)":"rgba(231,76,60,0.08)",border:`1px solid ${isOverduePanel?"rgba(230,126,34,0.3)":"rgba(231,76,60,0.3)"}`,borderRadius:"var(--r)",padding:16}}>
+              <div style={{fontWeight:800,fontSize:13,color:tone,marginBottom:10}}>
+                {isOverduePanel ? "📧 שליחת מייל ידני לסטודנט המאחר" : "📧 שליחת מייל נוסף לסטודנט שבקשתו נדחתה"}
+              </div>
               <textarea
                 className="form-textarea"
                 rows={4}
-                placeholder={`${selected.student_name} שים/י לב, זמן ההשאלה שלך תם ועליך להשיב את הציוד בהקדם למכללה...`}
+                placeholder={isOverduePanel
+                  ? `${selected.student_name} שים/י לב, זמן ההשאלה שלך תם ועליך להשיב את הציוד בהקדם למכללה...`
+                  : `${selected.student_name}, הבקשה נדחתה מכיוון ש... אפשר להגיש בקשה חדשה לתאריך אחר.`}
                 value={overdueEmailText}
                 onChange={e=>setOverdueEmailText(e.target.value)}
                 style={{marginBottom:10}}
               />
-              <button
-                className="btn btn-primary"
-                style={{background:"#e67e22",borderColor:"#e67e22"}}
-                disabled={overdueEmailSending || !overdueEmailText.trim() || !selected.email}
-                onClick={()=>sendOverdueManualEmail(selected, overdueEmailText)}
-              >
-                {overdueEmailSending ? <><Clock size={16} strokeWidth={1.75} /> שולח...</> : "📤 שלח מייל לסטודנט"}
-              </button>
-              <span style={{fontSize:12,color:"var(--text3)",marginRight:10}}>
-                {selected.email ? `יישלח אל ${selected.email}` : "אין כתובת מייל"}
-              </span>
+              <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                <button
+                  className="btn btn-primary"
+                  style={{background:tone,borderColor:tone}}
+                  disabled={overdueEmailSending || !overdueEmailText.trim() || !selected.email}
+                  onClick={()=>sendOverdueManualEmail(selected, overdueEmailText, isOverduePanel?"overdue":"rejected")}
+                >
+                  {overdueEmailSending ? <><Clock size={16} strokeWidth={1.75} /> שולח...</> : "📤 שלח מייל לסטודנט"}
+                </button>
+                {/* Plain anchor, not window.open — WhatsApp routes itself to
+                    web/desktop/mobile. Link is rebuilt each render, so it always
+                    carries whatever is currently in the box. */}
+                {waLink ? (
+                  <a href={waLink} target="_blank" rel="noopener noreferrer"
+                    title="פתח שיחת WhatsApp עם הסטודנט — הטקסט מתעדכן לפי מה שנכתב למעלה"
+                    style={{display:"inline-flex",alignItems:"center",gap:6,background:"#25D366",color:"#0a3d20",fontWeight:800,fontSize:13,padding:"9px 14px",borderRadius:8,textDecoration:"none",whiteSpace:"nowrap",boxShadow:"0 1px 4px rgba(37,211,102,0.35)"}}>
+                    <Phone size={15} strokeWidth={2} /> שלח בוואטסאפ
+                  </a>
+                ) : (
+                  <span style={{fontSize:12,color:"var(--text3)",fontStyle:"italic"}}>אין טלפון — לא ניתן לשלוח וואטסאפ</span>
+                )}
+                <span style={{fontSize:12,color:"var(--text3)"}}>
+                  {selected.email ? `יישלח אל ${selected.email}` : "אין כתובת מייל"}
+                </span>
+              </div>
             </div>
-          )}
+            );
+          })()}
         </Modal>
+      )}
+      {/* Rendered AFTER the detail modal on purpose: both use .modal-overlay at
+          the same z-index, so DOM order is what decides which one paints on top.
+          Reject can be opened from inside the detail modal, and must land above
+          it. */}
+      {rejecting && (
+        <RejectReservationModal
+          reservation={rejecting}
+          busy={busyIds.has(rejecting.id)}
+          onCancel={()=>setRejecting(null)}
+          onConfirm={async (reason) => {
+            const ok = await updateStatus(rejecting.id, "נדחה", { rejectionReason: reason });
+            // Stay open only on a real RPC failure so staff can retry after
+            // reading the toast; close on success and on the stale-row branch.
+            if (ok !== false) setRejecting(null);
+          }}
+        />
       )}
       {updateReviewReservation && (() => {
         const pendingUpdate = pendingUpdateFor(updateReviewReservation);

@@ -184,7 +184,6 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
     if (!selectedKitId) return null;
     return (kits || []).find(k => String(k.id) === String(selectedKitId)) || null;
   }, [kits, selectedKitId, selectedKit]);
-  const kitFieldLocked = allDatesLocked;
 
   // Director can't be a crew member of their own production.
   const directorEmailLc = String(initial?.directorEmail || currentStudent?.email || "").toLowerCase();
@@ -492,7 +491,27 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
     const pending = (persistedRef.current && !isLegacy)
       ? dates.filter(d => !lockedDateIds.has(String(d.id)))
       : [];
-    if (pending.length === 0) { onClose(); return; }
+    if (pending.length === 0) {
+      // The production type stays editable even once every range is locked, but
+      // this branch is the one close path that otherwise saves nothing — so a
+      // type change made here would be discarded without a word, and the loan
+      // form would go on offering the old kit's gear. Persist it before leaving.
+      // (When `pending` is non-empty the write below already carries kitId.)
+      if (persistedRef.current && String(selectedKitId || "") !== String(initial?.kitId || "")) {
+        const blob = buildBlob(initial?.status || "published");
+        const res = await upsertProduction(blob);
+        if (res.ok) {
+          // onSaved refreshes the productions list, which is what makes the loan
+          // form and the add-items picker re-derive the gate from the new kit.
+          onSaved?.(blob);
+          showToast?.("סוג ההפקה עודכן", "success");
+        } else {
+          showToast?.(`שגיאה בעדכון סוג ההפקה: ${String(res.error || "").slice(0, 120)}`, "error");
+        }
+      }
+      onClose();
+      return;
+    }
     const dropIds = new Set(pending.map(d => String(d.id)));
     const keptDates = dates.filter(d => !dropIds.has(String(d.id)));
     const blob = { ...buildBlob("published"), dates: keptDates };
@@ -622,13 +641,15 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
       {/* ── סוג ההפקה (kit binding) — sets the equipment scope; sits right above the dates ── */}
       <div style={{marginBottom:18}}>
         <label className="form-label">סוג ההפקה</label>
+        {/* Deliberately NOT locked with the date ranges. The kit only gates the
+            loan form while a list is being filled in, so changing it later
+            affects the next list and never rewrites one already submitted —
+            there is nothing to protect by freezing it. Product decision
+            2026-07-28; the date ranges stay locked as before. */}
         <select
           className="form-input"
           value={selectedKitId}
           onChange={e => setSelectedKitId(e.target.value)}
-          disabled={kitFieldLocked}
-          title={kitFieldLocked ? "לא ניתן לשנות לאחר שהוגשה רשימת ציוד לכל הטווחים" : undefined}
-          style={kitFieldLocked ? {opacity:0.6, cursor:"not-allowed"} : undefined}
         >
           <option value="">כללית — ללא הגבלת ציוד</option>
           {productionKits.map(k => (
@@ -642,7 +663,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
         </select>
         <div style={{fontSize:12,color:"var(--text3)",marginTop:6}}>
           בחירת ערכה מגבילה את הצוות לפריטי ציוד בתוך הערכה בלבד בעת מילוי טופס ההשאלה.
-          {kitFieldLocked && <span style={{color:"#2ecc71",marginInlineStart:6,fontWeight:700}}>🔒 נעול — הוגשה רשימת ציוד לכל הטווחים.</span>}
+          {allDatesLocked && <span style={{color:"var(--text3)",marginInlineStart:6}}>השינוי יחול על רשימות ציוד חדשות בלבד — רשימות שכבר הוגשו נשארות כפי שהן.</span>}
         </div>
       </div>
 

@@ -5769,7 +5769,12 @@ ${inventory}
                               {o.action==="increase"?"הגדלת כמות לפריט קיים":"פריט חדש בבקשה"}
                             </div>
                           </div>
-                          <span style={{fontSize:13,fontWeight:900,color:"var(--accent)",background:"var(--accent-glow)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:8,padding:"3px 10px",flexShrink:0,whiteSpace:"nowrap"}}>כמות: {o.quantity}</span>
+                          {/* "2×" rather than "כמות: 2" — the row already reads
+                              as an item, so the sign carries it in less space.
+                              Same shape the staff reservation cards use. LTR is
+                              pinned so the sign stays to the RIGHT of the number
+                              instead of being reordered by the RTL context. */}
+                          <span style={{fontSize:13,fontWeight:900,color:"var(--accent)",background:"var(--accent-glow)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:8,padding:"3px 10px",flexShrink:0,whiteSpace:"nowrap",direction:"ltr",unicodeBidi:"plaintext"}}>{o.quantity}×</span>
                           <button type="button" onClick={e=>{e.stopPropagation();setUpdDraft(prev=>prev?{...prev,ops:prev.ops.filter((_,i)=>i!==oi)}:prev);}}
                             style={{background:"rgba(231,76,60,0.12)",color:"#e74c3c",border:"1px solid rgba(231,76,60,0.35)",borderRadius:6,width:24,height:24,padding:0,fontSize:12,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
                             title="הסר מהטיוטה"><X size={13} strokeWidth={2}/></button>
