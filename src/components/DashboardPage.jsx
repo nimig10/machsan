@@ -502,59 +502,52 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
               other axis from visible to auto (lesson #30+#32), which turned the
               header's overflow into a horizontal scroll instead of nothing. */}
           <div className="dash-quickview-modal" style={{width:"100%",maxWidth:640,background:"var(--surface)",borderRadius:18,border:"1px solid var(--border)",direction:"rtl",maxHeight:"92vh",overflowY:"auto",overflowX:"hidden"}}>
-            {/* Header — sticky, so whatever lives here stays reachable while the
-                equipment list scrolls. Laid out as rows: title+close on top, the
-                action button on its own full-width row beneath it. The button
-                gets its own row on purpose — sharing a row with the title and the
-                contact chips is what overflowed the header in the first place. */}
-            <div className="dash-quickview-header" style={{display:"flex",flexDirection:"column",gap:8,minWidth:0,padding:"16px 22px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"18px 18px 0 0",position:"sticky",top:0,zIndex:1}}>
-              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,minWidth:0}}>
-                {/* minWidth:0 is load-bearing: a flex item's min-width defaults to
-                    its min-content width, and the non-wrapping LTR email chip below
-                    inflated that to nearly the full modal — which pushed the close
-                    button clean out of the header's painted background. */}
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontWeight:900,fontSize:17,display:"flex",alignItems:"center",flexWrap:"wrap",minWidth:0,gap:8}}>
-                    {dashViewRes.loan_type==="שיעור"?<Film size={16} strokeWidth={1.75} color="var(--accent)" />:<ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" />} {dashViewRes.student_name}
-                    {dashViewRes.pending_update_id&&statusBadge("בדיקת עדכון")}
-                    {statusBadge(getEffectiveStatus(dashViewRes))}
-                  </div>
-                  <div style={{fontSize:12,marginTop:8,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-                    {dashViewRes.email&&(
-                      <span title={dashViewRes.email} style={{display:"inline-flex",alignItems:"center",gap:6,maxWidth:"100%",minWidth:0,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(148,163,184,0.28)",borderRadius:999,padding:"4px 9px",color:"#fff",fontWeight:800,direction:"ltr",unicodeBidi:"plaintext"}}>
-                        <span aria-hidden="true">📧</span>
-                        <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dashViewRes.email}</span>
-                      </span>
-                    )}
-                    {dashViewRes.phone&&(
-                      <span title={dashViewRes.phone} style={{display:"inline-flex",alignItems:"center",gap:6,maxWidth:"100%",minWidth:0,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(148,163,184,0.28)",borderRadius:999,padding:"4px 9px",color:"#fff",fontWeight:800,direction:"ltr",unicodeBidi:"plaintext"}}>
-                        <span aria-hidden="true">📞</span>
-                        <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dashViewRes.phone}</span>
-                      </span>
-                    )}
-                  </div>
+            {/* Header */}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,minWidth:0,padding:"18px 22px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"18px 18px 0 0",position:"sticky",top:0,zIndex:1}}>
+              {/* minWidth:0 is load-bearing: a flex item's min-width defaults to
+                  its min-content width, and the non-wrapping LTR email chip below
+                  inflated that to nearly the full modal — which pushed the close
+                  button clean out of the header's painted background. */}
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:900,fontSize:17,display:"flex",alignItems:"center",flexWrap:"wrap",minWidth:0,gap:8}}>
+                  {dashViewRes.loan_type==="שיעור"?<Film size={16} strokeWidth={1.75} color="var(--accent)" />:<ClipboardList size={16} strokeWidth={1.75} color="var(--accent)" />} {dashViewRes.student_name}
+                  {dashViewRes.pending_update_id&&statusBadge("בדיקת עדכון")}
+                  {statusBadge(getEffectiveStatus(dashViewRes))}
                 </div>
-                {/* Same square icon button the shared Modal uses (ui.jsx).
-                    flex-start, not center, so it lines up with the name rather than
-                    floating mid-way down a two-line block. */}
-                <button className="btn btn-secondary btn-sm btn-icon" style={{flexShrink:0}} title="סגירה" aria-label="סגירה" onClick={()=>setDashViewRes(null)}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>
+                <div style={{fontSize:12,marginTop:8,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                  {dashViewRes.email&&(
+                    <span title={dashViewRes.email} style={{display:"inline-flex",alignItems:"center",gap:6,maxWidth:"100%",minWidth:0,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(148,163,184,0.28)",borderRadius:999,padding:"4px 9px",color:"#fff",fontWeight:800,direction:"ltr",unicodeBidi:"plaintext"}}>
+                      <span aria-hidden="true">📧</span>
+                      <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dashViewRes.email}</span>
+                    </span>
+                  )}
+                  {dashViewRes.phone&&(
+                    <span title={dashViewRes.phone} style={{display:"inline-flex",alignItems:"center",gap:6,maxWidth:"100%",minWidth:0,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(148,163,184,0.28)",borderRadius:999,padding:"4px 9px",color:"#fff",fontWeight:800,direction:"ltr",unicodeBidi:"plaintext"}}>
+                      <span aria-hidden="true">📞</span>
+                      <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dashViewRes.phone}</span>
+                    </span>
+                  )}
+                </div>
               </div>
-              {/* Gated on the RAW status: getEffectiveStatus would read an
+              {/* Close stays alone in the header — same square icon button the
+                  shared Modal uses (ui.jsx). Action buttons live in the body. */}
+              <button className="btn btn-secondary btn-sm btn-icon" style={{flexShrink:0}} title="סגירה" aria-label="סגירה" onClick={()=>setDashViewRes(null)}><X size={16} strokeWidth={1.75} color="var(--text3)" /></button>
+            </div>
+            <div style={{padding:"20px 22px",display:"flex",flexDirection:"column",gap:16}}>
+              {/* Actions at the top of the body, matching the requests-page modal,
+                  so staff reach עריכה without scrolling past a long equipment list.
+                  Gated on the RAW status: getEffectiveStatus would read an
                   open-window "מאושר" loan as "פעילה" (lesson #19) and drop the
                   button off editable rows. unstretch() keeps a calendar-stretched
-                  overdue date out of the editor's date field (lesson #36).
-                  Rendered only when editable, so a returned request keeps the
-                  shorter two-line header instead of an empty row. */}
+                  overdue date out of the editor's date field (lesson #36). */}
               {["ממתין","מאושר","נדחה","באיחור"].includes(dashViewRes.status)&&(
-                <div className="dash-quickview-actions" style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-                  <button className="btn btn-secondary" style={{padding:"9px 22px"}} title="עריכת הבקשה"
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",paddingBottom:14,borderBottom:"1px solid var(--border)"}}>
+                  <button className="btn btn-secondary" title="עריכת הבקשה"
                     onClick={()=>{setDashEditing(unstretch(dashViewRes));setDashViewRes(null);}}>
                     <Pencil size={14} strokeWidth={1.75} /> עריכת בקשה
                   </button>
                 </div>
               )}
-            </div>
-            <div style={{padding:"20px 22px",display:"flex",flexDirection:"column",gap:16}}>
               {/* Dates & info */}
               <div style={{background:"var(--accent-glow)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:12,padding:"14px 16px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 16px"}}>
                 {[
