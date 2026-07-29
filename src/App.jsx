@@ -1040,11 +1040,12 @@ const css = `
        button ("הוחזר"/"אשר בקשה") clears the fixed bottom nav (60px+safe-area). */
     .dash-quickview-overlay { align-items:flex-start !important; }
     .dash-quickview-modal { max-height:calc(100dvh - 60px - env(safe-area-inset-bottom,0px) - 56px) !important; }
-    /* The action row adds a third line to the sticky header — tighten the padding
-       to win part of that height back, and give the button the full width so it's
-       a comfortable tap target (same shape as .upd-review-footer below). */
-    .dash-quickview-header { padding:14px 16px !important; gap:8px !important; }
-    .dash-quickview-actions .btn { width:100%; justify-content:center; padding:11px 14px; font-size:13px; }
+    /* The action row adds a third line to the sticky header, which on a phone comes
+       straight out of the equipment list's visible area — so it is kept deliberately
+       low: full width for the tap target, but the flattest padding the app's own
+       .btn scale allows, and tighter header padding to claw the rest back. */
+    .dash-quickview-header { padding:12px 16px !important; gap:6px !important; }
+    .dash-quickview-actions .btn { width:100%; justify-content:center; padding:8px 14px; font-size:12px; }
     .search-bar { min-width:0; flex:1; }
     .flex-between { flex-wrap:wrap; gap:10px; }
     html, body, #root { min-height:100%; }

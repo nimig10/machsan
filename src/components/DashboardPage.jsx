@@ -507,7 +507,7 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                 action button on its own full-width row beneath it. The button
                 gets its own row on purpose — sharing a row with the title and the
                 contact chips is what overflowed the header in the first place. */}
-            <div className="dash-quickview-header" style={{display:"flex",flexDirection:"column",gap:10,minWidth:0,padding:"18px 22px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"18px 18px 0 0",position:"sticky",top:0,zIndex:1}}>
+            <div className="dash-quickview-header" style={{display:"flex",flexDirection:"column",gap:8,minWidth:0,padding:"16px 22px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"18px 18px 0 0",position:"sticky",top:0,zIndex:1}}>
               <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,minWidth:0}}>
                 {/* minWidth:0 is load-bearing: a flex item's min-width defaults to
                     its min-content width, and the non-wrapping LTR email chip below
