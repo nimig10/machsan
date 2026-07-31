@@ -45,53 +45,61 @@ export function makeSaveEditedReservation({ reservations, setReservations, showT
       return finish();
     }
 
-    // Real reservation — update reservations_new + reservation_items
-    const { error: updErr } = await supabase.from("reservations_new").update({
-      student_name:  rowFields.student_name,
-      email:         rowFields.email,
-      phone:         rowFields.phone,
-      course:        rowFields.course,
-      project_name:  rowFields.project_name || null,
-      loan_type:     rowFields.loan_type,
-      borrow_date:   rowFields.borrow_date,
-      return_date:   rowFields.return_date,
-      borrow_time:   rowFields.borrow_time,
-      return_time:   rowFields.return_time,
-      overdue_student_note: rowFields.overdue_student_note || null,
-      // Frozen snapshot of the gear as it went out, stamped by the overdue
-      // partial-return flow. `form` spreads the reservation, so an already-
-      // stamped value flows straight back through — every other edit is a
-      // no-op preserve. Never derived here; see migration 20260719120000.
-      original_items: rowFields.original_items ?? null,
-    }).eq("id", updated.id);
-    if (updErr) {
-      console.error("saveEditedReservation update error:", updErr);
-      showToast("error", "שגיאה בעדכון הבקשה: " + (updErr.message || "לא ידוע"));
-      return false;
-    }
-    if (updatedItems) {
-      const { error: delErr } = await supabase.from("reservation_items").delete().eq("reservation_id", updated.id);
-      if (delErr) {
-        console.error("saveEditedReservation delete items error:", delErr);
-        showToast("error", "שגיאה במחיקת הפריטים הישנים: " + (delErr.message || "לא ידוע"));
-        return false;
-      }
-      if (updatedItems.length) {
-        const { error: insErr } = await supabase.from("reservation_items").insert(
-          updatedItems.map(i => ({
-            reservation_id: updated.id,
-            equipment_id:   i.equipment_id,
-            name:           i.name || "",
-            quantity:       Number(i.quantity) || 1,
-            unit_id:        i.unit_id || null,
+    // Real reservation — one RPC, one transaction.
+    //
+    // This used to be three round trips: UPDATE the row, DELETE every item,
+    // INSERT the new list. Between the DELETE and the INSERT the request
+    // existed with no gear on it, and a failure there — a dropped connection
+    // is the realistic one — made that state permanent while the two earlier
+    // steps had already been reported as fine. Nothing downstream can tell an
+    // interrupted save apart from a list that was legitimately emptied.
+    //
+    // save_edited_reservation_v1 is SECURITY INVOKER, so the permission surface
+    // is unchanged: the same rows this code could already write, governed by
+    // the same RLS. See migration 20260731120000.
+    const { error: rpcErr } = await supabase.rpc("save_edited_reservation_v1", {
+      p_reservation_id: updated.id,
+      p_fields: {
+        student_name:  rowFields.student_name,
+        email:         rowFields.email,
+        phone:         rowFields.phone,
+        course:        rowFields.course,
+        project_name:  rowFields.project_name || null,
+        loan_type:     rowFields.loan_type,
+        borrow_date:   rowFields.borrow_date,
+        return_date:   rowFields.return_date,
+        borrow_time:   rowFields.borrow_time,
+        return_time:   rowFields.return_time,
+        overdue_student_note: rowFields.overdue_student_note || null,
+        // Frozen snapshot of the gear as it went out, stamped by the overdue
+        // partial-return flow. `form` spreads the reservation, so an already-
+        // stamped value flows straight back through — every other edit is a
+        // no-op preserve. Never derived here; see migration 20260719120000.
+        // A key left out entirely is preserved by the RPC rather than nulled.
+        original_items: rowFields.original_items ?? null,
+      },
+      // null = "items are not part of this edit". An array, empty included,
+      // replaces the list wholesale — the same distinction the old `if
+      // (updatedItems)` guard drew.
+      p_items: updatedItems
+        ? updatedItems.map(i => ({
+            equipment_id: i.equipment_id,
+            name:         i.name || "",
+            quantity:     Number(i.quantity) || 1,
+            unit_id:      i.unit_id || null,
           }))
-        );
-        if (insErr) {
-          console.error("saveEditedReservation insert items error:", insErr);
-          showToast("error", "שגיאה בהוספת הפריטים החדשים: " + (insErr.message || "לא ידוע"));
-          return false;
-        }
-      }
+        : null,
+    });
+    if (rpcErr) {
+      console.error("saveEditedReservation rpc error:", rpcErr);
+      const msg = String(rpcErr.message || "");
+      // The RPC raises this when the UPDATE matched nothing. The old code
+      // could not report it at all: postgrest calls a zero-row UPDATE a
+      // success, so a vanished request still toasted "הבקשה עודכנה".
+      showToast("error", msg.includes("reservation_not_found")
+        ? "הבקשה לא נמצאה — ייתכן שנמחקה בינתיים. רענן את הדף."
+        : "שגיאה בעדכון הבקשה: " + (rpcErr.message || "לא ידוע"));
+      return false;
     }
     return finish();
   };

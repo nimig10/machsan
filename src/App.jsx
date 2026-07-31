@@ -1040,6 +1040,10 @@ const css = `
        button ("הוחזר"/"אשר בקשה") clears the fixed bottom nav (60px+safe-area). */
     .dash-quickview-overlay { align-items:flex-start !important; }
     .dash-quickview-modal { max-height:calc(100dvh - 60px - env(safe-area-inset-bottom,0px) - 56px) !important; }
+    /* Edit-reservation modal rolls its own overlay instead of .modal-overlay, so
+       it needs the bottom-nav allowance spelled out: its save button is the last
+       element in the flow and would otherwise end flush against the nav. */
+    .edit-res-overlay { padding-bottom:calc(60px + env(safe-area-inset-bottom,0px) + 24px) !important; }
     .search-bar { min-width:0; flex:1; }
     .flex-between { flex-wrap:wrap; gap:10px; }
     html, body, #root { min-height:100%; }

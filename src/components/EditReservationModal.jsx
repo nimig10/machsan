@@ -243,7 +243,14 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
   };
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:3000,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"24px 16px",overflowY:"auto"}}>
+    // zIndex matches .modal-overlay (10000). At 3000 it sat BELOW the mobile
+    // bottom nav (.sidebar, z-index 9000, fixed, 60px + safe-area), which meant
+    // the last element in the flow — "שמור שינויים" — was permanently covered
+    // and no amount of scrolling could reach it. The class adds the matching
+    // bottom padding on mobile so the button clears the nav's footprint rather
+    // than ending flush against it. Every other modal in the app already sits
+    // above the nav; this one was the outlier because it rolls its own overlay.
+    <div className="edit-res-overlay" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:10000,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"24px 16px",overflowY:"auto"}}>
       <div style={{width:"100%",maxWidth:760,background:"var(--surface)",borderRadius:16,border:"1px solid var(--border)",direction:"rtl"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"20px 24px",borderBottom:"1px solid var(--border)",background:"var(--surface2)",borderRadius:"16px 16px 0 0"}}>
           <div>

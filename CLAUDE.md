@@ -169,7 +169,11 @@
   זמינות peak-concurrent, crew-derive, השאלת-חוץ) · `update_reservation_status_v1`
   (**guard אטומי נגד הקצאת-יתר באישור**, לקח #22) · `create_lesson_reservations_v1` ·
   `delete_reservation_v1` · `restore_reservation_v1` ·
-  `student_modify_reservation_item_v1` · `mark_overdue_email_sent`.
+  `student_modify_reservation_item_v1` · `mark_overdue_email_sent` ·
+  `save_edited_reservation_v1` (**היחידה שהיא `SECURITY INVOKER`** — היא קיימת
+  לאטומיות ולא לסמכות, ולכן חייבת להישאר כפופה לאותו RLS; **אסור לחזור
+  ל-UPDATE+DELETE+INSERT מהקליינט**, שהשאיר בקשה בלי ציוד כשהרשת נפלה באמצע.
+  מפתח שחסר מ-`p_fields` משמר את העמודה — כך `original_items` לא נמחק, לקח #35+#44).
 - **עדכון פריטים בבקשה** — `student_submit_reservation_update_v3`→`_v1` ו-
   `staff_review_reservation_update_v3`→`_v1`. **כל ארבעתן `service_role` בלבד**;
   ה-`_v1` חסומות ל-`anon/authenticated` כדי שלא יעקפו את שער ה-lead-time (לקח #40).
@@ -692,6 +696,7 @@ admin/staff מתנתק אוטומטית אחרי **60 דקות** של חוסר �
 
 | תאריך | PR | מה |
 |---|---|---|
+| 2026-07-31 | **#102** | שמירת עריכת בקשה הפכה אטומית — `save_edited_reservation_v1` (מיגרציה `20260731120000`) במקום 3 קריאות שהשאירו בקשה בלי ציוד; + לחצן השמירה במודאל העריכה היה מתחת לסרגל הניווט במובייל |
 | 2026-07-29 | **#101** | לחצן היציאה בפאנל הבקשה בלוח הבקרה גלש מחוץ לכותרת — `minWidth:0` על flex item + "עריכת בקשה" לראש הגוף (לקח #30+#32) |
 | 2026-07-28 | **#100** | דחיית בקשה עם נימוק (מייל+וואטסאפ) + escaping ל-`custom_message`; "עריכת בקשה" בלוח הבקרה (`reservationEdit.js` משותף); סוג ההפקה נפתח לעריכה (לקח #46); פאנל מייל-נוסף לבקשה שנדחתה; פוסטר וידאו לפי יחס אמיתי (לקח #45); `useAutoGrowTextarea` |
 | 2026-07-25 | **#97** | גלאי כשל שליחת היומן היה מת; `seen` בהודעה ללא בדיקת קהל; נגן וידאו → פוסטר+מסך-מלא ב-4 משטחים (לקח #45); לחצן התנתקות קבור ב-Staff Hub; ניקוי CLAUDE.md |
