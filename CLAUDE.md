@@ -1,6 +1,6 @@
 # מסמך מעבר חשבון — אפליקציית "מחסן קמרה"
 
-> **מסמך ההקשר היחיד לסשנים חדשים.** עדכני ל-**2026-07-29** (אחרי PR #101).
+> **מסמך ההקשר היחיד לסשנים חדשים.** עדכני ל-**2026-07-31** (אחרי PR #102).
 >
 > **לפני שנוגעים בקוד — שני דברים חובה**: בלוק **זרימת העבודה** מיד למטה (השאלה
 > הראשונה בכל שיחה חדשה היא *נייד או מחשב?*), וסעיף **🎓 לקחים נלמדו** — שם יושבים
@@ -17,13 +17,30 @@
 | מה אסור לשבור, ולמה | **🎓 לקחים נלמדו** (בסוף הקובץ) — הסמכות היחידה |
 | איך תת-מערכת עובדת | הסעיף הנושאי שלה: הפקות · אולפנים · יומן מרצה · auth · ייבוא XL |
 | מה חוסם מלאי | **🚨 כלל ברזל: סטטוסים שחוסמים מלאי** |
-| מה השתנה ומתי | **📜 היסטוריית PRs** — שורה אחת ל-PR |
+| מה השתנה ומתי | **בארכיון החיצוני** (`03-ציר-זמן/`) — לא בקובץ הזה |
 | איך בודקים לפני merge | **זרימת העבודה** למטה + **🛡️ Guardrails חיים** |
 
-> 📏 **תקציב הקובץ: ~65K תווים.** הוא נטען בכל סשן ובא על חשבון המקום לעבוד בקוד.
-> פיצ'ר חדש מוסיף **שורה אחת** ל-📜 היסטוריה. לקח חדש נוסף **רק אם משהו נשבר בפועל**,
-> ובפורמט כלל+נימוק — לא סיפור. חורגים מהתקציב → **מקצצים לפני שמוסיפים**.
-> אל תשכפל: אם זה כבר בלקח, הסעיף הנושאי מפנה אליו ולא חוזר עליו.
+> 🗄️ **ארכיון היסטורי חיצוני** — Obsidian vault מקומי
+> (`C:\Users\NIMROD\Documents\Obsldian\nimis vault`; גיבוי Drive **קפוא**).
+> מכיל: הסיפור המלא של כל 46 הלקחים, אינדקס כל 102 ה-PRs, פוסט-מורטמים
+> לתקריות, ניתוחי-עומק לתת-מערכות, ומדיניות השאלת-הציוד הרשמית.
+>
+> **📖 קריאה — לפי בקשה מפורשת בלבד.** לא אוטומטית, לא כברירת מחדל. אם התשובה
+> כבר בקובץ הזה — אין סיבה לפנות לארכיון.
+> **✍️ כתיבה — חובה שוטפת.** כל PR שמוזג, כל תקלה שמתגלה, כל שינוי ארכיטקטורה
+> נכתבים לשם כחלק מהעבודה (Stage 4 למטה). הארכיון לא נטען אוטומטית — אבל הוא
+> כן חייב להישאר מעודכן.
+
+> 📏 **תקציב הקובץ: אין מספר קסם — צפיפות-מידע, לא גודל.** הקובץ נטען בכל סשן
+> ומתחרה על תשומת-הלב של הסוכן, ולכן **המבחן של כל שורה הוא "האם זה
+> כלל-חובה-לדעת-מראש, או נרטיב שאפשר לשלוף בזמן אמת?"** — לא ספירת-תווים.
+> **מה שייך לכאן**: זרימת עבודה · ארכיטקטורה ולוגיקה עסקית · אנטי-רגרסיות.
+> **מה שייך לארכיון** (🗄️ למעלה): היסטוריה, סיפורי-מקור, changelog, פוסט-מורטמים.
+> פיצ'ר חדש **לא** מוסיף שורה לקובץ הזה. לקח חדש נוסף **רק אם משהו נשבר בפועל**,
+> בפורמט כלל+נימוק בלבד — לא סיפור. **אל תשכפל**: אם זה כבר בלקח, הסעיף הנושאי
+> מפנה אליו ולא חוזר עליו.
+>
+> *זוקק 2026-08-01: 91K → 78K. ההיסטוריה לא נמחקה — היא עברה לארכיון.*
 
 ## 🎯 רעיון האפליקציה
 
@@ -37,8 +54,8 @@
 - React + Vite (עברית, RTL).
 - `src/App.jsx` — shell מרכזי (הקובץ הגדול ביותר בריפו). מכיל orchestration גלובלי (state, routing, realtime, auth bootstrap) + **8 דפים inline** שעוד לא חולצו.
 - `src/components/LessonsPage.jsx` — הרכיב הגדול ביותר (עורך הקורס, לוח השיעורים, ייבוא XL, פאנל התנגשויות).
-- `src/components/` — 32 קבצי JSX.
-- `src/utils/` — 20 קבצי utils (entity APIs + `jewishHolidays.js` + `lessonBookings.js` + `studioOverlap.js` + `productionVisibility.js` + `calendarSyncApi.js`).
+- `src/components/` — רכיבי הדפים.
+- `src/utils/` — entity APIs + helpers (`jewishHolidays.js` · `lessonBookings.js` · `studioOverlap.js` · `productionVisibility.js` · `calendarSyncApi.js` · `loanPolicy.js`).
 - `src/hooks/` — `useNotifications.js` · `useAutoGrowTextarea.js` (המדידה היחידה
   לתיבת טקסט אדפטיבית — ראה `.claude/skills/auto-grow-textarea`).
 
@@ -61,7 +78,7 @@
 | **Production** | `wxkyqgwwraojnbmyyfco` | רק כשהקוד ב-`main` רץ ב-`app.camera.org.il` |
 | **Development** | `mhvujejdlmtowypjdhjd` | localhost (`.env.local`) + Vercel Preview של feature branches |
 
-> ⚠️ **שני ה-DB נגישים דרך Supabase MCP — אבל רק פרוד מופיע ב-`list_projects`.** `list_organizations` מחזיר רק `nimig10's Org` (`cadhrpjnudiawwqlvwun`) שמכיל את פרוד בלבד, ולכן dev **לא** מופיע ברשימה. זה עניין של *רישום* ולא של *גישה*: ל-token יש גישה ברמת הפרויקט גם ל-dev, ו-`execute_sql`/`apply_migration` עם `project_id: "mhvujejdlmtowypjdhjd"` מפורש עובדים מצוין. **אל תסיק מהיעדרו ב-list שאין חיבור ל-dev.** הסיכון: קריאת MCP בלי `project_id` מפורש עלולה ליפול על הפרויקט היחיד שב-list = פרוד. לכן — תמיד לנקוב `project_id` מפורש.
+> ⚠️ **שני ה-DB נגישים דרך Supabase MCP — אבל רק פרוד מופיע ב-`list_projects`/`list_organizations`** (עניין *רישום*, לא *גישה*: `execute_sql`/`apply_migration` עם `project_id: "mhvujejdlmtowypjdhjd"` מפורש עובדים מצוין ל-dev). **אל תסיק מהיעדרו ב-list שאין חיבור.** תמיד לנקוב `project_id` מפורש (ראו גם כללים נוספים למטה).
 
 ### ⚠️ זרימת עבודה — חובה, אסור לדלג
 
@@ -85,13 +102,38 @@
    > ⚠️ **`strictPort: 5174` נופל בשקט** אם תהליך node ישן עוד תפוס על הפורט — `npm run dev` פשוט לא עולה וקל לפספס. אם השרת לא עולה, לוודא שאין תהליך node ישן על הפורט.
 2. **Stage 2 — Vercel Preview על dev DB**: push ל-feature branch → Preview מתחבר ל-dev DB. בזרימת המחשב זה שלב נוסף; **בזרימת הנייד זה השלב המרכזי**.
 3. **Stage 3 — Production**: רק אחרי שהמשתמש אישר את שלב הבדיקה שלו במפורש — מחילים מיגרציה ל-prod דרך `apply_migration` MCP **לפני** ה-merge ל-main.
+4. **Stage 4 — תיעוד בארכיון (חובה, מ-2026-08-01)**: אחרי כל merge — לכתוב ל-**vault המקומי** (ראה 🗄️ בראש הקובץ). ראה "כתיבה לארכיון" למטה.
 
 **אסור לדלג על שלב הבדיקה הידנית.** SQL smoke + `npm run test:db` הם בדיקות עזר — **לא תחליף** לבדיקה של המשתמש בדפדפן.
+
+#### ✍️ כתיבה לארכיון — Stage 4 בפירוט
+
+> **קריאה מהארכיון = לפי בקשה בלבד. כתיבה אליו = תמיד.** האסימטריה מכוונת:
+> הארכיון לא אמור להעמיס על סשן עבודה, אבל הוא כן חייב להישאר מעודכן.
+
+| מתי | לאן | מה |
+|---|---|---|
+| **כל PR שמוזג** | `03-ציר-זמן/<חודש>.md` | שורה: מספר PR · תאריך · כותרת אמיתית · קישור ללקח (אם נגזר) · מזהה מיגרציה (אם יש) |
+| **PR שהוליד anti-regression** | `02-לקחים/` נוט חדש + שורה ב-`CLAUDE.md` | הכלל **המלא** בארכיון; ב-CLAUDE.md רק כלל+נימוק |
+| **תקלת ייצור / באג שהתגלה** | `04-תקריות/` | מה קרה · השפעה · איך התגלה · תיקון. **גם אם עוד לא תוקן** — לתעד כפתוח |
+| **שינוי ארכיטקטורה** (טבלה/RPC/תת-מערכת) | `01-מפת-המערכת/` או `06-מסד-נתונים/` | עדכון הנוט הקיים |
+
+> 🔬 **הכלל שקובע את כל ערך הארכיון: מה שנכתב שם חייב להיות עמוק יותר ממה
+> שכאן — אחרת אין לו סיבה להתקיים.** נוט שהוא תקציר של `CLAUDE.md` הוא נוט
+> מיותר ומזיק (כפילות). מה שחייב להיכנס לנוט ו**אין לו מקום כאן**: הסיפור עם
+> **נתונים אמיתיים** (שמות, תאריכים, מספרי PR/קומיט, מספרים מדודים) · שורש
+> הבעיה · **מה נוסה ולא עבד** (זה מה שמונע מאיתנו לנסות שוב) · הקשר
+> ארכיטקטוני רחב. **סדר גודל: 5–15KB לנוט, לא 500 בתים.**
+
+- **יעד הכתיבה: ה-vault המקומי בלבד.** תיקיית ה-Drive **קפואה** מ-2026-08-01 —
+  לא לדחוף לשם אלא אם המשתמש ביקש במפורש.
+- אין זמן/הקשר לנוט מלא? **שורה ב-`03-ציר-זמן/` היא המינימום** — עדיף מעט מכלום.
+- הנוהל המלא (פורמט frontmatter, תגיות, חוזה הנוט): `05-נהלים/נוהל-עדכון-הארכיון`.
 
 > 💻 **זרימת מחשב — חוק מרכוז ה-localhost** (נקבע 2026-07-23):
 > כשעובדים במקביל על כמה PRs, **הענף שרץ על `localhost:5174` חייב להכיל את כל העבודה שטרם מוזגה** — המשתמש מרכז את כל הבדיקות למקום אחד ובודק הכל יחד לפני מיזוג.
 > - **ענפים נפרדים ל-PR עדיין נכונים** — הפרדה נעשית ב-git, לא בסביבת הבדיקה. לערום את הענפים זה על זה (`git rebase <ענף-קודם>`) כך ש-localhost הוא **האיחוד** של כולם, ולפרק רק כשה-PRs עולים בפועל.
-> - **אסור להחליף ענף באמצע סשן בלי להגיד מה ייעלם מהמסך.** מעבר לענף שיצא מ-main מוציא פיצ'רים שהמשתמש בודק כרגע — זה קרה, והמשתמש שאל "איפה הפיצ'ר הזה???" באמצע בדיקה. היגיינת ענפים לא שווה כלום אם היא עולה למשתמש בסביבת הבדיקה.
+> - **אסור להחליף ענף באמצע סשן בלי להגיד מה ייעלם מהמסך.** מעבר לענף שיצא מ-main מוציא פיצ'רים שהמשתמש בודק כרגע (קרה בפועל, ובלבל את המשתמש). היגיינת ענפים לא שווה כלום אם היא עולה למשתמש בסביבת הבדיקה.
 > - **סדר מיזוג**: למזג לפי סדר הערימה (התחתון ראשון), ואחרי כל מיזוג לרבייס את מה שנשאר מעל main כדי למנוע התנגשויות.
 > - **חריג יחיד**: לפצל כשהערימה באמת מסוכנת — שני ענפים שעורכים את אותן שורות, או מיגרציה שחייבת לנחות לבד.
 
@@ -111,7 +153,7 @@
 
 > 📧 **כתובת מייל לבדיקות:** `nimig10@gmail.com` — כל בדיקת מיילים (תצוגות עיצוב, `force_test` של קרונים וכו') נשלחת לכתובת הזו.
 
-**`CREATE OR REPLACE FUNCTION` הוא שינוי schema** ודורש אישור מפורש של המשתמש לסשן הנוכחי. אישור תוכנית מראש **לא** מהווה אישור לרוץ על prod.
+**`CREATE OR REPLACE FUNCTION` הוא שינוי schema** ודורש אישור מפורש של המשתמש לסשן הנוכחי (ראו גם "כללים נוספים" למטה — אישור תוכנית מראש ≠ אישור לרוץ על prod).
 
 ### כללים נוספים
 - **חוק ברזל**: כל בדיקה/מיגרציה/כתיבה רצה **קודם על dev** (`mhvujejdlmtowypjdhjd`). גישה או עדכון של **prod** (`wxkyqgwwraojnbmyyfco`) מותרים **רק** אחרי שהמשתמש אישר במפורש בסשן הנוכחי ש-dev עובד תקין. אישור תוכנית מראש ≠ אישור לרוץ על prod.
@@ -193,16 +235,11 @@
 `productions_status_director_overlap_trg` ·
 `production_crew_photographer_sound_must_be_student`.
 
-### סדרי גודל בפרוד — סנאפ-שוט, לא מצב חי
+### סדרי גודל בפרוד
 
-⚠️ נמדד **2026-05-25** (השאלות/ציוד אומתו 2026-07-19) ומאז לא רוענן. שימושי כסדר
-גודל — למשל להערכת עומס לפני פיצ'ר שעובר על אוסף (לקח #39) — **אבל לא כמצב נוכחי.**
-לספירה אמיתית: `execute_sql` מול `wxkyqgwwraojnbmyyfco`.
-
-`users`≈107 · `students`≈168 · `lecturers`≈31 · `lessons`≈145 (הקרון מדד 166
-ב-07-20) · `studio_bookings`≈295 · `reservations_new`≈167 (+`reservation_items`≈1,379)
-· `equipment`≈131 (+`equipment_units`≈321) · `productions`≈23 (כולן legacy מול
-ה-cutoff של PR #75) · `staff_members`=9 (legacy).
+⚠️ **אל תסתמך על מספרים כתובים** — הסנאפ-שוט האחרון (05/2026) התיישן. פיצ'ר
+שעובר על אוסף חייב להיבדק על **גודל-פרוד אמיתי** (לקח #39): `execute_sql` מול
+`wxkyqgwwraojnbmyyfco`. סדרי גודל היסטוריים לייחוס — בארכיון.
 
 ---
 
@@ -223,13 +260,12 @@
 ### 🧍 Per-student overlap guard (גלובלי — כל סוגי ההשאלה)
 ב-`create_reservation_v2`: אותו סטודנט (`lower(email)`) **לא יכול להגיש** בקשה חדשה שחופפת בזמן לבקשה קיימת שלו — בכל סוג (פרטית/סאונד/קולנוע יומית/הפקה, כולל חוצה-סוגים. נוסף ב-`20260518120000`, **שוחזר ב-`20260613153000`** אחרי ש-PR #45 הפיל אותו בשוגג). סטטוסים חוסמים = כל מה ש**אינו** `בוטל`/`הוחזר`/`נדחה`; שיעורים (`loan_type='שיעור'`/`lesson_auto`) **לא** נספרים. ה-RPC זורק עם הטוקן `student_overlap` → [api/create-reservation.js](api/create-reservation.js) ממפה ל-`error:"student_overlap"` → [PublicForm.jsx](src/components/PublicForm.jsx) מציג הודעה ברורה. בנוסף יש **pre-check חוסם בקליינט בשלב האישור** (אותה הודעה, feedback מיידי).
 
-> ⚠️ **Anti-regression**: זהו guard **per-student** ונפרד מ-guard ה-**per-equipment** (`status IN ('מאושר','באיחור','פעילה')`). כל `CREATE OR REPLACE` של `create_reservation_v2` חייב לכלול **את שלושתם**: per-student guard, equipment-availability, ו-crew-derive (PR #45). הרגרסיה ב-PR #45 קרתה כי הפונקציה הוצהרה מחדש על בסיס גרסה ישנה. יש עכשיו טסט CI `run_student_overlap_tests` (5 תרחישים) ב-`npm run test:db`.
+> ⚠️ **Anti-regression**: זהו guard **per-student** ונפרד מ-guard ה-**per-equipment** (`status IN ('מאושר','באיחור','פעילה')`). כל `CREATE OR REPLACE` של `create_reservation_v2` חייב לכלול **את שלושתם**: per-student guard, equipment-availability, ו-crew-derive (PR #45). יש עכשיו טסט CI `run_student_overlap_tests` (5 תרחישים) ב-`npm run test:db`.
 
 ### השאלת צוות (`loan_type="צוות"`) ו-`באיחור` — מכוון, לא באג ✅
 השאלת ציוד של איש צוות מתנהגת **כמו כל השאלה רגילה** לעניין איחור: כשעובר ה-`return_date` והסטטוס `מאושר` → עוברת ל-`באיחור` (וחוסמת מלאי בחלון 48h כמו כל באיחור). מי שכותב זאת ל-DB הוא ה-cron `api/check-overdue.js`, שפוטר **רק** `שיעור` — **לא** `צוות`. גם `normalizeReservationsForArchive` ב-`App.jsx` עושה זאת נכון. **אושר ע"י בעל המוצר (2026-05-30).**
 
-- **קוד מת ידוע**: ל-`utils.js` יש עותק מקביל של `normalizeReservationsForArchive` עם guard ישן `if (loan_type==="צוות") return` (משאיר `מאושר`). הוא **inert** — רץ רק על rows שכבר `מאושר`, ב-ReservationsPage/DashboardPage local re-normalize, ולכל היותר גורם להבהוב רגעי שמתקן את עצמו בפול הבא. אינו משנה את ההתנהגות בפועל.
-- **לרוטינת הסריקה היומית**: ההבדל בין `App.jsx` ל-`utils.js` בטיפול ב-`loan_type==="צוות"` ב-overdue הוא **ידוע ומכוון — אל תדווח עליו שוב**.
+- **קוד מת ידוע (רוטינת הסריקה: אל תדווח שוב)**: ל-`utils.js` עותק מקביל של `normalizeReservationsForArchive` עם guard ישן שמשאיר `מאושר` — **inert**, רץ רק על rows שכבר `מאושר`, לכל היותר הבהוב רגעי שמתקן את עצמו בפול הבא.
 
 ### 🚫 הגבלת השאלת-חוץ של ציוד (PR #51–#53)
 איש המחסן יכול לסמן פריט שלא ייצא מהקמפוס בהשאלות שפיזית מוציאות ציוד החוצה — **`פרטית` + `הפקה` בלבד** (קבוע `EXTERNAL_LOAN_TYPES` ב-[src/utils.js](src/utils.js)). שאר הסוגים (`סאונד`/`קולנוע יומית`/`צוות`/`שיעור`) **לא מושפעים**.
@@ -245,20 +281,25 @@
 **UI נוסף**: chips בכרטיס הציוד (🔒 "מוגבל להשאלת חוץ" אדום / 🔒 "מוחזק בקמפוס: N" צהוב), כפתור "יחידות" נוסף בתוך `EqForm` (`onOpenUnits`). הכפתור הישן "לא מוגבל בהשאלה פרטית" ברמת-קטגוריה **הוסר** — `privateLoanUnlimited` עבר לרמת פריט בלבד (toggle ב-`EqForm`).
 
 **Anti-regression**:
-1. **`normalizeEquipmentTagFlags` חייב לשטח את העמודות ל-camelCase** (ב-**שני** העותקים — `App.jsx` ו-`utils.js`). בלי זה, כתיבת-מערך-מלא הבאה (`sync_equipment_from_json`) שולחת keys ריקים, ה-RPC עושה `COALESCE→false/0`, והערכים השמורים **נמחקים בשקט**.
+1. **`normalizeEquipmentTagFlags` ו-`EXTERNAL_LOAN_TYPES`↔RPC מסונכרן** — ראה לקח #21 לרקע המלא.
 2. `UnitsModal.saveAll` clamp: `external_loan_hold_count` ל-`[0, units.length]`, וכש-`restrictAll` → `hold_count=0`. PR #52 הוסיף auto-sync דו-כיווני (N≥units.length→restrictAll; ביטול restrictAll→N=0).
-3. רשימת הסוגים המושפעים = `EXTERNAL_LOAN_TYPES` בקליינט **ו**-`v_loan_type IN ('פרטית','הפקה')` ב-RPC — לשמור מסונכרן.
 
 ---
 
 ## 🎬 לוח הפקות (Productions Board)
 
 ### זרימה
-1. סטודנט → **StudentHub** ([src/components/StudentHub.jsx](src/components/StudentHub.jsx)) — 2 כרטיסים: "מערכת הפניות" / "לוח הפקות".
-2. **ProductionsPage** — board (published), inbox (בקשות נכנסות/יוצאות). חיפוש סטודנטים = טקסט חופשי.
-3. **ProductionEditor** — כותרת, תיאור (800 תווים), Drive URL, צבע, סוג (כללית / kit), עד 7 ימי צילום, צוות. פוטוגרף + סאונד חייבים סטודנט רשום.
-4. **צוות — ללא אישורים (PR #75)**: הבמאי מרכיב את הצוות ישירות בעורך; שורות נכתבות `invited` ומאושרות אוטומטית בשמירה דרך `production_approve_crew_v1` (`autoApproveDirectorCrew`). מנגנון "בקש להצטרף"/inbox הוסר לחלוטין. מייל יידוע נשלח לצוות ("שובצת להפקה").
-5. **השאלת ציוד להפקה** — bridge ל-PublicForm עם `loan_type="הפקה"` + `production_id`. עם `dateId` (כפתור פר-טווח) נוחת **ישר בשלב הציוד** (`setStep(3)`) ממולא-מראש. ב-step 3, אם להפקה `kit_id` — נעול לפריטי הערכה. **חובת רשימה פר-טווח (הפקות חדשות)**: טווח מופיע בלוח רק אחרי הגשת רשימה; ראה לקח #33.
+`StudentHub` → `ProductionsPage` (board=published) → `ProductionEditor` (כותרת,
+תיאור 800 תווים, Drive URL, צבע, סוג כללית/kit, עד 7 ימי צילום, צוות —
+**פוטוגרף+סאונד חייבים סטודנט רשום**).
+
+- **צוות ללא אישורים** (PR #75): הבמאי מרכיב ישירות; שורות נכתבות `invited`
+  ומאושרות אוטומטית בשמירה דרך `production_approve_crew_v1`
+  (`autoApproveDirectorCrew`). מנגנון "בקש להצטרף"/inbox **הוסר לחלוטין**.
+- **השאלת ציוד** — bridge ל-PublicForm עם `loan_type="הפקה"` + `production_id`;
+  עם `dateId` נוחת **ישר בשלב הציוד** (`setStep(3)`) ממולא-מראש, ואם להפקה
+  `kit_id` — נעול לפריטי הערכה. **חובת רשימה פר-טווח**: טווח מופיע בלוח רק
+  אחרי הגשת רשימה (לקח #33).
 
 ### חוקים יחודיים להפקה (לא משפיעים על פרטית/סאונד/קולנוע יומית/שיעור)
 - **8 ימים מראש (inclusive)** להגשת רשימת ציוד.
@@ -275,7 +316,7 @@
 2. **8-day inclusive** — אל תחזיר ל-9 (היה bug). חישוב `minShootISO`/`minDays`/`fmtDeadline`.
 3. **Director overlap trigger דולג כשתאריכים לא משתנים** (מיגרציה `20260518130000`). אם תבדוק ב-UPDATE ללא השוואת OLD vs NEW, כל edit ייכשל.
 4. **Stable productionId** ב-`ProductionEditor.jsx`: `useState(() => initial?.id || genId("prod"))`, לא `const`. אחרת retry של publish שנכשל יוצר draft חדש.
-5. **`production_delete_v1` הוא HARD_DELETE atomic** (2026-05-25). קוראים אליו ישירות מהקליינט דרך `supabase.rpc("production_delete_v1")`. אסור להחזיר API endpoint עוקף.
+5. **`production_delete_v1`** — ראה לקח #8 (hard-delete אטומי, נקרא ישירות מ-React; אסור endpoint עוקף).
 6. **Crew snapshot חייב להישאר טרי** — ההזמנה שומרת snapshot של `crew_photographer_name/phone` + `crew_sound_name/phone` (cert-gate `getProductionCertBlockers` ב-[ReservationsPage.jsx](src/components/ReservationsPage.jsx) קורא מהם). הוא נגזר ב-`create_reservation_v2` **בזמן הגשה** (PR #45, מיגרציה `20260604120000`) **וגם מרוענן ב-`production_crew_change_recheck_v1`** כשצוות מאושר/משתנה אחרי ההגשה (מיגרציה `20260613150000`). **אסור לגעת בלוגיקת ה-overlap/cert-flip בתוך ה-recheck** — רק הוספת רענון ה-snapshot (fill-from-approved, לא מאפס תפקיד ריק). בלי הרענון, צוות שאושר אחרי הגשת רשימת הציוד לא מופיע בלוח הבקרה והסמכותיו לא נספרות.
 
 ---
@@ -293,9 +334,6 @@
 
 ### 🛡️ Guard נגד double-booking (race-proof ב-DB)
 
-היסטורית לא הייתה אכיפת-שרת בכלל: כל הבדיקות היו בקליינט מול מערך בזיכרון, ותחת
-race שני קובעים עברו בדיקה מקומית ושניהם כתבו.
-
 `EXCLUDE constraint` **`studio_bookings_no_overlap`** (btree_gist, מיגרציה
 `20260621120000`) חוסם פיזית ואטומית שתי קביעות **persisted** חופפות על אותו חדר.
 ה-`WHERE` שלו: `lesson_auto=false AND status<>'נדחה' AND start/end NOT NULL`.
@@ -306,12 +344,10 @@ race שני קובעים עברו בדיקה מקומית ושניהם כתבו.
 
 **מכוסה**: כל צירוף של קביעות persisted (student↔student, student↔team, team↔team),
 יום ולילה. **לא מכוסה**: שיעור↔קביעה — שיעורים לא persisted ולכן ה-`EXCLUDE` לא רואה
-אותם; החסימה שם היא בקליינט בלבד. פער מודע ומקובל (שיעורים נוצרים ע"י אדמין,
-concurrency נמוך) — החלטת בעל המוצר 2026-06-21.
+אותם; החסימה שם בקליינט בלבד (פער מודע ומקובל — החלטת בעל המוצר).
 
-> **פער פתוח (Layer B)**: נתיב הכתיבה של הצוות עדיין `syncAllStudioBookings`
-> מערך-מלא עם delete-missing, שיכול לדרוס קביעות מקבילות. ה-constraint מונע כפילות
-> אך לא clobber. follow-up מומלץ: כתיבות שורה-בודדת.
+> **פער פתוח (Layer B)**: נתיב הכתיבה של הצוות הוא עדיין `syncAllStudioBookings`
+> מערך-מלא עם delete-missing — ה-constraint מונע כפילות אך **לא clobber**.
 
 **לפני הוספת/החלפת ה-constraint — חובה דה-דופ** של כפילויות קיימות, אחרת ה-`ALTER`
 נכשל; שאילתת הזיהוי מתועדת כהערה במיגרציה. שאר כללי ה-anti-regression: לקח #20.
@@ -354,15 +390,14 @@ file picker → מודאל מצב → parser → validation עם **שמירה ח
 שאפשר לערוך ולנסות שוב. כל ה-pipeline ב-[LessonsPage.jsx](src/components/LessonsPage.jsx),
 ספריית `xlsx`.
 
-1. **מודאל מצב** — `upsert` (עדכון+יצירה) או `create_only`.
-2. **`readImportRowsFromFile()`** — `XLSX.read` → `sheet_to_json` → התאמת עמודות לפי
-   שמות עבריים ("קורס"/"תאריך"/"התחלה"…).
-3. **`buildImportGroups()`** — ולידציה שורה-שורה: קורס, מסלול, מרצה קיים, תאריך,
-   חלון שעות, חדר. כשלים נאספים ל-`reportErrors`.
-4. **`runLessonImportRows()`** — שורות תקינות נכנסות, נבדקות מול התנגשויות מרצה+חדר,
-   ומצטברות ל-`baseLesson.schedule`. **קורס שכל מפגשיו נפסלו נופל לדוח.**
-5. **retry** — עריכת שורה כושלת בדוח מריצה אותה שוב **באותו pipeline**
-   (`runLessonImportRows([row],{retry:true})`), ואם עברה היא יוצאת מהדוח.
+שרשרת הפונקציות (כולן ב-`LessonsPage.jsx`, `grep` לפי השם): מודאל מצב
+(`upsert` / `create_only`) → `readImportRowsFromFile()` → `buildImportGroups()`
+(ולידציה שורה-שורה; כשלים ל-`reportErrors`) → `runLessonImportRows()` (בדיקת
+התנגשויות מרצה+חדר, צבירה ל-`baseLesson.schedule`).
+
+- **קורס שכל מפגשיו נפסלו נופל לדוח** — לא נכנס חלקית.
+- **retry**: עריכת שורה כושלת בדוח מריצה אותה שוב **באותו pipeline**
+  (`runLessonImportRows([row],{retry:true})`); אם עברה — יוצאת מהדוח.
 
 **`splitImportCellValues` חותך תאים לפי `,;،，` — רק בעמודת הכיתה.** עמודת המרצה
 לא נחתכת; כל מרצה הוא עמודה נפרדת ("מרצה 1/2/3") או שורה נפרדת. ריבוי-מרצים הוא
@@ -413,14 +448,12 @@ OAuth**, דרך קובץ iCalendar במייל. **כל כללי הפורמט וה
 | כל שינוי אחר כך (הוזז/נוסף/בוטל/נמחק) | **הודעת שינויים** `course_sessions_changed` עם לפני←אחרי | ✅ **רק מה שנוסף** |
 | שמירה בלי שינוי אמיתי | כלום (idempotent דרך `last_hash`) | — |
 
-**העדכון ידני במכוון**: Gmail לא מעדכן אירוע שנוסף דרך "Add to Calendar", ולכן מפגש
-שהוזז או בוטל **מתואר במילים** והמרצה מתקן בעצמו. מפגש **חדש** כן מקבל קובץ — הוא
-עוד לא ביומן, אז אין סיכון כפילות. החלטת בעל המוצר (2026-07-20) אחרי שכל מסלול
-ה-iMIP נכשל.
+**העדכון ידני במכוון**: Gmail לא מעדכן אירוע שנוסף דרך "Add to Calendar", ולכן
+מפגש שהוזז/בוטל **מתואר במילים** והמרצה מתקן בעצמו; מפגש **חדש** כן מקבל קובץ
+(עוד לא ביומן → אין סיכון כפילות). כל מסלול ה-iMIP נוסה ונכשל — אל תנסה שוב.
 
-נוסח ההזמנה כולל בלוק **"📍 מקום הלימוד"** — הכיתות שהמרצה מלמד בהן, הכתובת והוראות
-הכניסה, פעם אחת ולא בכל שורה. `rooms` על ה-entry הוא **תצוגה בלבד ואינו נכנס
-ל-hash** (הכיתה כבר בתוך `description` שכן נכנס) — אחרת נשלחים מיילי-שינוי שקריים.
+⚠️ `rooms` על ה-entry הוא **תצוגה בלבד ואינו נכנס ל-hash** (הכיתה כבר בתוך
+`description` שכן נכנס) — אחרת נשלחים מיילי-שינוי שקריים.
 
 ### מודל הדלתא
 
@@ -457,12 +490,10 @@ OAuth**, דרך קובץ iCalendar במייל. **כל כללי הפורמט וה
 **אין יצירת חשבון מפורשת.** משתמש חדש (סטודנט/מרצה/צוות) שעוד אין לו `auth.users` row — לוחץ "שכחת סיסמה?" → `/api/auth` action `send-reset-email` → Gmail SMTP → המשתמש יוצר סיסמה → מתחבר. `auth.users` נוצר רק כשהמשתמש יוצר סיסמה. **גם "הוספת איש צוות" עוברת את אותו תהליך** (PR #73) — הטופס בניהול צוות לא כולל סיסמה; `handleCreate` ב-[api/staff.js](api/staff.js) יוצר auth בלי password (או משדרג-ממזג משתמש קיים בלי לגעת בסיסמתו).
 
 ### מולטי-תפקיד (PR #73)
-משתמש שהמייל שלו רשום בכמה תפקידים רואה בכל HUB את כל הממשקים שלו: דגלי `is_student`/`is_lecturer` **נגזרים** מהטבלאות החיות (סנכרון ב-ensure-user/reset + drift-detection בלוגין), `roleFlags` מועברים לכל שלוש הזהויות (`staff_user`/`lecturer_portal_user`/`public_student_roles`), ומעבר-תפקיד = `sessionStorage.active_role` + reload (מסך "מעביר…"). כרטיסי מעבר: StudentHub ("פורטל מרצה"/"ניהול מערכת"), LecturerPortal ("ניהול מערכת"/"מעבר לתצוגת סטודנט"), StaffHub ("מעבר לתצוגת סטודנט/מרצה") — כולם בצהוב `#f5a623`, מותני-דגלים בלבד. מחיקת איש צוות של מייל שעדיין סטודנט/מרצה = הסרת-תפקיד בלבד. ראה לקח #31.
+משתמש שהמייל שלו רשום בכמה תפקידים רואה בכל HUB את כל הממשקים שלו: `roleFlags` מועברים לכל שלוש הזהויות (`staff_user`/`lecturer_portal_user`/`public_student_roles`), ומעבר-תפקיד = `sessionStorage.active_role` + reload (מסך "מעביר…"). כרטיסי מעבר: StudentHub ("פורטל מרצה"/"ניהול מערכת"), LecturerPortal ("ניהול מערכת"/"מעבר לתצוגת סטודנט"), StaffHub ("מעבר לתצוגת סטודנט/מרצה") — כולם בצהוב `#f5a623`, מותני-דגלים בלבד. פירוט מלא (דגלים נגזרים, מחיקה בטוחה): לקח #31.
 
 ### קליינט auth — נקודות קריטיות שאסור לשבור
-- **`lock: async (_, __, fn) => fn()`** ב-`src/supabaseClient.js` — bypass של navigator.locks (deadlock תחת Edge tracking-prevention / PWA standalone). **אסור להחזיר.**
-- **listener fire-and-forget** — onAuthStateChange קורא ל-`routeByRoles(session)` בלי `await`. עטיפה ב-await חוסמת את `signInWithPassword` ועוברת את ה-10s safety timer.
-- **Identity-confirmation modal — הוסר** ב-`bd3742c`. אסור להחזיר. RLS + FK על `public.users.email` כבר מספקים את ההגנה.
+- **`lock`/listener fire-and-forget/Identity-confirmation modal** (`src/supabaseClient.js`) — anti-regressions מלאים בלקחים #2, #3, #4. אין לשכפל כאן.
 - סיסמה מינ׳ 6 תווים. **Supabase setting חובה: "Prevent use of leaked passwords" = OFF.**
 
 ### API auth helper: `api/_auth-helper.js`
@@ -475,17 +506,12 @@ OAuth**, דרך קובץ iCalendar במייל. **כל כללי הפורמט וה
 - **password-reset**: Gmail SMTP + nodemailer ב-`api/auth.js`. `buildResetEmail`.
 - **כל שאר המיילים** (אישור בקשה `new`, איחור `overdue`, אישור אולפן, התראת ראש מחלקה, סיום קורס, ...) עוברים דרך [api/send-email.js](api/send-email.js) (Gmail SMTP, nodemailer). אנונימי מורשה רק `new`/`team_notify`/`dept_head_notify`; כל השאר דורש JWT או header `X-Cron-Secret`.
 
-### 📧 מייל תזכורת דדליין הפקה (PR #39 — cron יומי חדש)
-- **קובץ**: [api/production-deadline-reminder.js](api/production-deadline-reminder.js) — Vercel cron יומי **09:00 UTC** (רשום ב-[vercel.json](vercel.json) ליד `notify-course-end-7days`).
-- **מתי שולח**: יום אחד לפני המועד האחרון להגשת רשימת ציוד = ה-shoot date הפנוי הקרוב ביותר עם `daysToShoot===8` (= `daysToDeadline===1`, מקביל ל-`equipmentDeadline` ב-[ProductionsPage.jsx](src/components/ProductionsPage.jsx)). **נשלח רק אם טרם הוגשה רשימת ציוד** לאותו תאריך.
-- **למי**: הבמאי בלבד (`productions.director_email`). מייל אחד להפקה — כולל **טווח תאריכי הצילום** (תאריכים בלבד, בלי שעות) וכפתור יחיד "🎬 כניסה ללוח ההפקות".
-- **סוג מייל חדש** `production_deadline` ב-[api/send-email.js](api/send-email.js) (`isProductionDeadline`).
-- **Idempotency בלי DB**: התאמת-יום-מדויקת + cron יומי יחיד (אותה תבנית כמו `notify-course-end-7days`). **אין עמודה חדשה, אין מיגרציה.**
-- מצב בדיקה ידני: `GET /api/production-deadline-reminder?force_test=<email>` (דורש header `Authorization: Bearer <CRON_SECRET>`).
-- **env נדרש**: `CRON_SECRET` (קיים בפרוד — All Environments) + `GMAIL_USER`/`GMAIL_PASS`. אותו `CRON_SECRET` משמש גם את `Authorization` של ה-cron וגם את `X-Cron-Secret` ל-send-email.
-
-### Deep-link ללוח הפקות (PR #39)
-- `https://app.camera.org.il/?app=productions` — [PublicForm.jsx](src/components/PublicForm.jsx) קורא `?app=` ב-init של `studentApp` (ערכים תקפים: `hub`/`forms`/`productions`). אחרי login הסטודנט/במאי נוחת **ישר על לוח ההפקות**. כפתור מייל התזכורת משתמש ב-URL הזה. אין routing אחר ללוח ההפקות (הוא state פנימי, לא pathname).
+### קרונים ו-deep-links (הפירוט המלא בארכיון)
+- **תזכורת דדליין הפקה** — [api/production-deadline-reminder.js](api/production-deadline-reminder.js),
+  cron יומי 09:00 UTC ב-[vercel.json](vercel.json). דורש `CRON_SECRET` + `GMAIL_USER`/`GMAIL_PASS`.
+- **`?app=productions`** — [PublicForm.jsx](src/components/PublicForm.jsx) קורא `?app=`
+  ב-init של `studentApp` (`hub`/`forms`/`productions`). **אין routing אחר ללוח
+  ההפקות** — הוא state פנימי, לא pathname.
 
 ---
 
@@ -522,24 +548,18 @@ showToast("success", "X נמחק", {
   pluralize: n => `${n} X נמחקו`,
 });
 ```
-- ללא `aggregateKey` — התנהגות זהה לחלוטין למה שהיה (backwards-compatible).
-- עם `aggregateKey` — toast יחיד מתעדכן ל-"2 X נמחקו" → "3..." כשהמשתמש מוחק ברצף. ה-timer מתאפס בכל לחיצה ונעלם 3.5s אחרי הפעולה האחרונה.
+- ללא `aggregateKey` — התנהגות זהה למה שהיה (backwards-compatible). עם המפתח —
+  toast יחיד מתעדכן ל-"2 X נמחקו" → "3…"; ה-timer מתאפס בכל לחיצה, נעלם 3.5s
+  אחרי האחרונה. 13 callsites קיימים (רשימה מלאה בארכיון).
 - **קריטי**: סינכרוני לחלוטין בתוך `setToasts(prev => ...)` + `useRef` ל-Map של טיימרים. **אסור** להוסיף async/await בנתיב הזה — `aggregateKey` נוצר בדיוק כדי לא להאט את לחיצת הכפתור.
-- callsites קיימים: `lesson-delete`, `lecturer-delete`, `cert-type-delete`, `archive-delete`, `staff-user-delete`, `staff-pref-delete`, `staff-shift-delete`, `staff-lesson-day-delete`, `studio-delete`, `studio-booking-student-delete`, `studio-booking-team-delete`, `reservation-delete`, `category-delete`.
 
-### Undo stack (PR #22)
-- **גודל**: 15 פעולות (היה 10).
-- **Optimistic**: state setter רץ **לפני** הקריאה לרשת. `setUndoStack(prev => prev.slice(0,-1))` מיידי, אחר כך `Promise.all([...reservationPromises, ...entityPromises])` במקביל. הלחיצה מרגישה מיידית.
-- **Toast מצוין**: `undo-action` אגרגציה — מציג "X פעולות בוטלו" כשמשתמש לוחץ Undo ברצף.
-
-### Inactivity logout (PR #22)
-admin/staff מתנתק אוטומטית אחרי **60 דקות** של חוסר פעילות (היה 20m). מימוש ב-[App.jsx](src/App.jsx).
-
-### XL import templates — admin upload (PR #23)
-- אדמין מעלה טמפלטים ב-**הגדרות מערכת** ("טמפלטים לייבוא Excel (XL)") — 2 slots: `xl_template_courses` + `xl_template_students`.
-- אחסון: **מיחזור `policy_assets`** (אותה טבלה של PDFs) — אין מיגרציה, אין טבלה חדשה. הbase64 נשמר ב-`data_base64` text.
-- הורדה ב-"הגדרות → אדמיניסטרציה" קוראת ל-`loadXlTemplate(slot)` ב-[src/utils/xlTemplatesApi.js](src/utils/xlTemplatesApi.js); אם אין שורה → fallback ל-`COURSES_TEMPLATE_B64`/`STUDENTS_TEMPLATE_B64` (constants ב-App.jsx).
-- 100% backwards-compatible: בלי upload המשתמש מקבל את אותו טמפלט המובנה שהיה תמיד.
+### שאר הדפוסים (מפרט מלא בארכיון)
+- **Undo stack** — 15 פעולות; ה-state setter רץ **לפני** הרשת (אופטימי), ואז
+  `Promise.all` במקביל.
+- **ניתוק אוטומטי** — admin/staff אחרי **60 דקות** חוסר פעילות. מימוש ב-[App.jsx](src/App.jsx).
+- **טמפלטי ייבוא XL** — אדמין מעלה ב"הגדרות מערכת"; אחסון ב-**מיחזור `policy_assets`**
+  (אין טבלה/מיגרציה חדשה), `loadXlTemplate(slot)` ב-[src/utils/xlTemplatesApi.js](src/utils/xlTemplatesApi.js)
+  עם fallback ל-constants `*_TEMPLATE_B64`.
 
 ---
 
@@ -575,7 +595,7 @@ admin/staff מתנתק אוטומטית אחרי **60 דקות** של חוסר �
 6. **`toDateTime()` מחזיר number ולא Date** — אל תקרא `.getTime()` על התוצאה.
 7. **אסור auto-coupling של MAIN CONTROL → סטודיו הקלטות בשיעורים** (הוסר ב-`6c89345`) — שיעור לא משריין אולפן שני מעצמו; צריך לבחור כיתה משנית במפורש. ה-toggle הידני ב-team/student booking נשאר opt-in.
 8. **`production_delete_v1` נקרא ישירות מ-React** (`supabase.rpc`) — hard-delete אטומי בטרנזקציה אחת. אסור להחזיר endpoint עוקף.
-9. **`session.studioIds[]` מערך, לא `studioId`+`secondaryStudioId`** — הזוג הישן הוסר. מחרוזת ריקה ב-index `i` שומרת את העמודה במקומה (position-preserving).
+9. **`session.studioIds[]` מערך — הכתיבה תמיד יוצאת כמערך**, לעולם לא כזוג `studioId`+`secondaryStudioId`. הזוג הישן נשאר **קריאה בלבד** לשורות legacy (עדיין חי ב-~10 קבצי-תצוגה — אל תסיר אותו, רק אל תכתוב אליו). מחרוזת ריקה ב-index `i` שומרת את העמודה במקומה (position-preserving).
 10. **`course_studios` jsonb מפורש — אסור לחזור לגזירת union מ-`schedule[]`** — הגזירה גרמה ל-phantom columns אחרי reload; overrides של מפגש נשארים inline.
 11. **Toast aggregation סינכרוני בלבד — אסור async/await/network בנתיב `aggregateKey`** — כל הלוגיקה בתוך `setToasts(prev=>...)` + `useRef`; latency הופך אותו ממנגנון קוסמטי לעיכוב בלחיצה.
 12. **`custom_message` מוצג רק בבלוק "💬 הודעה מהמכללה"** — החזרתו ל-`studentMessageSection` הישן יצרה 2 תיבות זהות במייל `studio_lesson_conflict`.
@@ -596,19 +616,19 @@ admin/staff מתנתק אוטומטית אחרי **60 דקות** של חוסר �
 27. **כל שאילתת `equipment` שמזינה state חייבת `select("*, units:equipment_units(*)")`** — בלי ה-join `eq.units=undefined`, ו-`ensureUnits` ממציא יחידות `תקין` ומוחק סטטוס אמיתי (פגום/בתיקון/נעלם "חזרו לתקין"). בנוסף: פאנל "משימות להיום" נטען app-level — **אסור fetch פר-mount** (הבהוב בכל ניווט), והצ'קבוקסים אופטימיים בלבד.
 28. **ייצוא PDF = browser-print בלבד, אסור להכניס ספריית PDF** — jsPDF/pdfmake/html2canvas שוברות עברית בלי font-embedding+bidi שלא קיימים בריפו. המקור לרשימה חייב להיות אותו נגזר שהמסך מרנדר (`filtered`+`groupedCategories`), אחרת ה-PDF לא תואם לסינון. כל קלט-משתמש עובר `esc` לפני שרבוב ל-HTML.
 29. **שיוך חדר בשיעור הוא פר-מפגש — אסור fallback לרמת-קורס כשלמפגש יש מערך `studioIds`** (גם ריק = "אין חדר"); fallback רק ל-legacy בלי מערך כלל. **אסור לארוז (drop-empties) את המערך ב-`getLessonScheduleEntries`** — האריזה מוחקת את האות "מערך מפורש" ומחזירה את ה-fallback, מה שייצר קביעות-רפאים. כל 7 בודקי החפיפה מדלגים על מפגשי עבר.
-30+32. **מלכודת CSS: `overflow-x:auto` לבדו מקדם את `overflow-y` ל-`auto`** (המפרט לא מאפשר ציר אחד `visible` והשני `auto`) ומחזיר סרגל אנכי. גוף טבלת לוח השיעורים חייב `display:flex;flexDirection:column` **בלי שום `overflow`**; עטיפת טבלת הדסקטופ חייבת `overflowX:"auto",overflowY:"hidden"` מפורש, **בלי `maxHeight`**. בעורך הקורס: **`minWidth:0` על שני טורי ה-grid** (בלעדיו `min-width:auto` של grid item גורם לטבלה הרחבה לדחוף את הכרטיס לרוחב-יתר), ומודאל "רשימת תלמידים" (`position:fixed`) **חייב להישאר מחוץ ל-grid**, ה-`useEffect` שגוזר תעודה ממסלול חייב `if (!initial) return` (קורס חדש נשאר "ללא תעודה"), ומייל סיום-קורס מדולג לקורס בלי `certificateTemplateType`. **`minWidth:0` נדרש גם על flex item ולא רק על טורי grid** — בפאנל הבקשה של לוח הבקרה עוטף-הכותרת בלעדיו קיבל `min-width:auto` = ה-min-content של צ'יפ המייל (`inline-flex` + `direction:ltr`, לא נשבר פנימית), ומול לחצנים `flexShrink:0` הכותרת גלשה; הרקע נצבע רק על ה-border-box המקורי, ולכן **ה-X נשאר מרחף מחוץ לפאנל**. לכן: תוכן LTR שאינו נשבר בתוך כותרת RTL חייב `maxWidth:"100%"` + ellipsis, ובכותרת יושב **רק** ה-X — לחצני פעולה עולים לראש גוף המודאל (תבנית `ReservationsPage`).
+30+32. **מלכודת CSS: `overflow-x:auto` לבדו מקדם את `overflow-y` ל-`auto`** (המפרט לא מאפשר ציר אחד `visible` והשני `auto`) ומחזיר סרגל אנכי. גוף טבלת לוח השיעורים חייב `display:flex;flexDirection:column` **בלי שום `overflow`**; עטיפת טבלת הדסקטופ חייבת `overflowX:"auto",overflowY:"hidden"` מפורש, **בלי `maxHeight`**. **`minWidth:0` חובה גם על טורי grid וגם על flex item** — בלעדיו `min-width:auto` מייצר גלישה (בעורך הקורס טבלה רחבה דוחפת את הכרטיס לרוחב-יתר; בפאנל הבקשה צ'יפ מייל LTR שאינו נשבר דוחף את **ה-X מחוץ לפאנל**). לכן תוכן LTR בתוך כותרת RTL חייב `maxWidth:"100%"` + ellipsis, ובכותרת יושב **רק** ה-X — לחצני פעולה עולים לראש גוף המודאל (תבנית `ReservationsPage`). בעורך הקורס בנוסף: מודאל "רשימת תלמידים" (`position:fixed`) **חייב להישאר מחוץ ל-grid**, ה-`useEffect` שגוזר תעודה ממסלול חייב `if (!initial) return` (קורס חדש נשאר "ללא תעודה"), ומייל סיום-קורס מדולג לקורס בלי `certificateTemplateType`.
 31. **`is_student`/`is_lecturer` הם דגלים נגזרים מהטבלאות החיות — אסור first-match** (זה השאיר מרצה+סטודנט עם דגל אחד). `is_admin`/`is_warehouse` אוטוריטטיביים ולא מנוקים אוטומטית. **מחיקת איש צוות = הסרת-תפקיד; אסור למחוק auth user של מייל שעדיין רשום כסטודנט/מרצה** (הבאג המקורי מחק סיסמה של סטודנט). **אסור להחזיר שדה `password` ל-create/invite** — הוא דרס סיסמה קיימת; onboarding אחיד דרך "שכחת סיסמה?".
 33. **`submittedDateIds` ב-productionVisibility.js הוא מקור-האמת היחיד ל"טווח עם רשימה" — אסור לשכפל inline** (החליף 3 עותקים). **אסור להוריד את `LEGACY_PRODUCTION_CUTOFF_ISO`** — זה יגייס הפקות ישנות רטרואקטיבית ויעלים אותן מהלוח. **אסור לכתוב `status:'approved'` ישירות ב-INSERT של crew** — הטריגר לא יורה על INSERT וה-recheck הוא service_role-only, אז snapshot/cert-gate יישארו מיושנים; חייב לעבור דרך `production_approve_crew_v1`. הגשר לטופס נוחת `setStep(3)` וחייב לזרוע `borrow_date`/`return_date`, אחרת `availEq` ריק.
 34. **צ'יפי קטגוריה נגזרים מאותו מאגר שהרשימה מרנדרת** — צ'יפ גלוי שמחזיר רשימה ריקה הוא באג. **סמנטיקת "כללי" קדושה**: פריט בלי תיוג (או עם `soundOnly` **וגם** `photoOnly`) מופיע בכל פילטר — **אסור בדיקת-דגל קשיחה**, היא הפכה 19 פריטים בפרוד לבלתי-נגישים. מאגר הצ'יפים = מאגר הסקשנים **פחות פילטר-הקטגוריה עצמו**, ובהחלפת סוג מאפסים את הבחירה. `EquipmentPage` מסנן ברמת-קטגוריה — **סמנטיקה שונה במכוון, לא לאחד**.
-35+44. **הארכיון קורא ציוד דרך `archiveItems(r)` = `original_items ?? items`** — בהחזרה חלקית `reservation_items` מתרוקן, ולכן **גם סינון הארכיון חייב לרוץ נגד `archiveItems`** ולא נגד השורות החיות (אחרת חיפוש פורנזי מפספס בדיוק את מה שמחפשים). `original_items` נחתם **פעם אחת** ולעולם לא נדרס, ו-`saveEditedReservation` **חייב לשאת אותו ב-UPDATE** אחרת החותמת נמחקת בכל עריכה. **אסור שורות `reservation_items` עם כמות 0** — ה-`CHECK` נשאר ו-~25 מסכי רינדור היו נשברים. סמנטיקת הזמן בארכיון היא **חפיפת חלון-ההשאלה**, לא נקודת-זמן. פער ידוע: `restore_reservation_v1` לא משחזר את העמודה.
+35+44. **הארכיון קורא ציוד דרך `archiveItems(r)` = `original_items ?? items`** — בהחזרה חלקית `reservation_items` מתרוקן, ולכן **גם סינון הארכיון חייב לרוץ נגד `archiveItems`** ולא נגד השורות החיות. `original_items` נחתם **פעם אחת** ולעולם לא נדרס, ו-`saveEditedReservation` **חייב לשאת אותו ב-UPDATE** אחרת החותמת נמחקת בכל עריכה. **אסור שורות `reservation_items` עם כמות 0** (ה-`CHECK` נשאר; ~25 מסכי רינדור נשברים). סמנטיקת הזמן בארכיון היא **חפיפת חלון-ההשאלה**, לא נקודת-זמן. פער ידוע: `restore_reservation_v1` לא משחזר את העמודה.
 36. **מתיחת "באיחור" בלוחות היא גאומטריה בלבד, דרך `stretchOverdueForCalendar` בלבד** — מבוסס `getEffectiveStatus` ולא `r.status` הגולמי (פורטל מרצה דוחף שורות גולמיות ל-state). **המתיחה לא מגיעה לשום טקסט** — `overdue_since` נושא את התאריך האמיתי. שורה מתוחה היא אובייקט חדש בכל רינדור → **השוואות בחירה חייבות id**, לא זהות-אובייקט. **אסור להעביר רשימה מתוחה ל-`computeEquipmentAvailability`**.
-37+41. **`activity_logs` אינו מקור זהות קביל** — `user_id`/`user_name` מגיעים מגוף הבקשה ולא מה-JWT (החלטה מודעת: גזירה מהטוקן תשנה שמות שכבר מוצגים). לכן `returned_by_*`/`approved_by_*` נגזרים **בשרת מה-JWT** ב-PATCH נפרד אחרי ה-RPC — **בלי לגעת ב-`update_reservation_status_v1`**. ה-PATCH מסונן `status=eq.הוחזר` ו**לא** מגויט על `changed`; כישלון = log + 200, לא שגיאה למשתמש; המיזוג האופטימי חייב `|| null` ולא `?? r.returned_by_name` (שימור ערך ישן מציג שקר); ה-whitelist ב-`updateReservationStatus` בולע כל שדה שלא נרשם בו. **השער האמיתי הוא ה-endpoint, לא סינון ב-UI**: `activity-log` דורש `requireStaff` על `write`/`delete`; ראש מחלקה נבדק גם על **סטטוס המקור** (אחרת יכול למשוך `מאושר` ל-`ממתין` ולשחרר מלאי חי) וגם על היקף `loan_types`; `reconcile=all` חי דורש cron secret ולא רק JWT.
-38. **חוזה ה-ICS נקבע אמפירית מול Gmail — אל תשנה בלי בדיקה מקצה-לקצה מול תיבה אמיתית**: `METHOD:PUBLISH` ולא `REQUEST` (ריבוי UID אינו iTIP תקין), בלי `ORGANIZER`/`ATTENDEE`/`SEQUENCE`, **אסור `encoding:"base64"`** על חלק היומן (הוא מה שהפיל את הפרסור), ו-`LOCATION` = כתובת המכללה בלבד בגרשיים **עבריים** (שם חדר בקידומת הזיז את הפין; ASCII `"` עובר HTML-escape בצד גוגל). **שורות המצב נשמרות רק אחרי שליחה מוצלחת** (`if (ok)`) — אחרת מרצה נשאר מסונכרן-לכאורה ולנצח בלי מייל. מפגשים חוזרים מתאחדים ל-VEVENT אחד עם `RDATE` (מעל ~7 VEVENTs Gmail מפסיק לרנדר את הצ'יפ) — `RDATE` ולא `RRULE`, כדי לשמור שעון-קיר במעבר שעון. **`maxDuration=60` ב-vercel.json חובה** ושליחה **טורית** עם `SEND_GAP_MS` — לא `Promise.all` (Gmail חונק bursts); retry רק על רשת/5xx, **לעולם לא על 4xx**. `_key` מתחדש רק בהתנגשות אמיתית, אחרת נשלח מייל-שינויים שקרי.
+37+41. **`activity_logs` אינו מקור זהות קביל** — `user_id`/`user_name` מגיעים מגוף הבקשה ולא מה-JWT (החלטה מודעת). לכן `returned_by_*`/`approved_by_*` נגזרים **בשרת מה-JWT** ב-PATCH נפרד אחרי ה-RPC — **בלי לגעת ב-`update_reservation_status_v1`**. ה-PATCH מסונן `status=eq.הוחזר` ו**לא** מגויט על `changed`; כישלון = log + 200, לא שגיאה למשתמש; המיזוג האופטימי חייב `|| null` ולא `?? r.returned_by_name` (שימור ערך ישן מציג שקר); ה-whitelist ב-`updateReservationStatus` בולע כל שדה שלא נרשם בו. **השער האמיתי הוא ה-endpoint, לא סינון ב-UI**: `activity-log` דורש `requireStaff` על `write`/`delete`; ראש מחלקה נבדק גם על **סטטוס המקור** (אחרת מושך `מאושר`→`ממתין` ומשחרר מלאי חי) וגם על היקף `loan_types`; `reconcile=all` חי דורש cron secret ולא רק JWT.
+38. **חוזה ה-ICS נקבע אמפירית מול Gmail — אל תשנה בלי בדיקה מקצה-לקצה מול תיבה אמיתית**: `METHOD:PUBLISH` ולא `REQUEST`, בלי `ORGANIZER`/`ATTENDEE`/`SEQUENCE`, **אסור `encoding:"base64"`** על חלק היומן (הפיל את הפרסור), ו-`LOCATION` = כתובת המכללה בלבד בגרשיים **עבריים** (ASCII `"` עובר HTML-escape בצד גוגל; שם חדר בקידומת מזיז את הפין). **שורות המצב נשמרות רק אחרי שליחה מוצלחת** (`if (ok)`) — אחרת מרצה נשאר מסונכרן-לכאורה לנצח בלי מייל. מפגשים חוזרים מתאחדים ל-VEVENT אחד עם **`RDATE` ולא `RRULE`** (מעל ~7 VEVENTs Gmail מפסיק לרנדר את הצ'יפ; RDATE שומר שעון-קיר במעבר שעון). **`maxDuration=60` ב-vercel.json חובה**, שליחה **טורית** עם `SEND_GAP_MS` ולא `Promise.all` (Gmail חונק bursts), retry רק על רשת/5xx **לעולם לא על 4xx**. `_key` מתחדש רק בהתנגשות אמיתית.
 39. **פיצ'ר שעובר על אוסף — לבדוק על גודל-פרוד, לא על גודל-dev** — ספירת השורות בשתי הסביבות היא חלק מהבדיקה. שני כשלים נפרדים באותו יום נבעו מזה: קרון טורי שנפל על timeout ב-166 קורסים (עבד על 52 ב-dev), וקובץ ICS שחצה את סף ה-VEVENTs של Gmail בקורס אמיתי בן 13 מפגשים.
-40. **עדכון פריטים בבקשה קיימת: `add`/`increase` בלבד — `replace` הוסר במכוון** מכל השכבות. **`בדיקת עדכון` הוא display-state בלבד** (נגזר מ-`pending_update_id`) — **אסור להוסיפו למערך חוסמי-המלאי**. **אסור להזרים `reservation_pending_items` ל-`reservation_items` לפני אישור** — הישיבה בטבלה נפרדת היא כל ההגנה על המלאי (הם בלתי-נראים ל-CTEs). חלונות ההתראה חייבים להישאר מסונכרנים בין `loanPolicy.js` ל-`student_submit_reservation_update_v3`; ה-`_v1` מוענקות ל-`service_role` בלבד כדי שלא יעקפו את שער ה-lead-time. **`loanPolicy.js`, `reservationUpdateReview.js` ו-`announcementPolicy.js` חייבים להישאר חסרי-תלויות** — ה-API ב-Node מייבא אותם, וייבוא `src/utils.js` יגרור את קליינט Supabase ויפיל את ה-bundle.
+40. **עדכון פריטים בבקשה קיימת: `add`/`increase` בלבד — `replace` הוסר במכוון** מכל השכבות. **`בדיקת עדכון` הוא display-state בלבד** (נגזר מ-`pending_update_id`) — **אסור להוסיפו למערך חוסמי-המלאי**. **אסור להזרים `reservation_pending_items` ל-`reservation_items` לפני אישור** — הישיבה בטבלה נפרדת היא כל ההגנה על המלאי (בלתי-נראים ל-CTEs). חלונות ההתראה מסונכרנים בין `loanPolicy.js` ל-`student_submit_reservation_update_v3`; ה-`_v1` ל-`service_role` בלבד כדי שלא יעקפו את שער ה-lead-time. **`loanPolicy.js`, `reservationUpdateReview.js` ו-`announcementPolicy.js` חייבים להישאר חסרי-תלויות** — ה-API ב-Node מייבא אותם, וייבוא `src/utils.js` יגרור את קליינט Supabase ויפיל את ה-bundle.
 42. **`useState` שנזרע מ-prop אסינכרוני + כפתור שמירה גלובלי = אובדן נתונים** — ה-initializer רץ פעם אחת, וקפא על placeholder ריק; "שמור הגדרות" כתב אותו על רשימות שלמות ב-DB. **אסור להחזיר `syncAllSiteSettings` לדף ההגדרות** (כל פאנל כותב רק את המפתחות שלו דרך `setSetting`), **ואסור להסיר את ה-`DATA-LOSS GUARD`** שממלא רק חוסרים ב-draft. שדות מספריים ב-`onBlur` ולא debounce (הקלדת "20" כתבה 2 ואז 20).
 43. **קהל ההודעה נקבע בשרת מדגלי `public.users`, לא מ-`active_role`** שהקליינט שולט בו; שתי הטבלאות RLS-on בלי policy — `/api/announcement` הוא הדרך היחידה פנימה (ב-`site_settings` הודעה לצוות הייתה נוחתת בדפדפן של כל סטודנט). ה-PK `(announcement_id,user_id,seen_on)` עושה את כל עבודת ה"כמה פעמים", ו-`ON CONFLICT DO NOTHING` מונע מרענון לשרוף את המכסה. **הצפייה נרשמת ברגע ההצגה ולא בסגירה** — אחרת רענון מחזיר את ההודעה בלי סוף. גוף ההודעה מרונדר ב**רכיבי React ולא `dangerouslySetInnerHTML`** (טקסט אדמין, אבל מוצג לכל המכללה).
-45. **נגן וידאו: פוסטר בדף, נגן במסך מלא — אסור לכפות `aspectRatio` סביב נגן שיש לו chrome משלו** — `iframe` חוצה-מקור אי אפשר למדוד ואי אפשר לעצב מבפנים, ולכן כל קבוע-ריפוד הוא ניחוש שנשבר ברוחב אחר (שניים נוסו ונכשלו). סרגל Drive הוא גובה **קבוע**, אז בתיבה נמוכה הוא בולע שליש והסרטון נחתך; **הרוחב קובע גם את גודל הפקדים**, אז תיבה רחבה פורסת אותם על כל המסך. במסך מלא ה-iframe מקבל את כל החלון בלי כפיית יחס והנגן מרפד בעצמו. תמונת פוסטר ב-**`contain` ולא `cover`** (cover חותך) + `onError`. **מעדיפים YouTube "לא רשום" על Drive לסרטוני הדרכה** — נגן `/preview` של Drive לא מיישם auto-hide ואין דרך נתמכת להסתיר את פקדיו; המעבר הוא הדבקת קישור אחר בלבד. **הפוסטר של יוטיוב משקר על הצורה**: `hqdefault` הוא **תמיד** 480×360 עם פסים שחורים צרובים בפיקסלים, ולכן אי אפשר לגזור ממנו יחס ואי אפשר לנקות אותו בשום צורת תיבה; `oardefault` נותן את היחס האמיתי אך קיים רק לסרטון שצורתו אינה ברירת-המחדל, ובהיעדרו מוחזר **placeholder אפור 120×90 עם HTTP 200 — לא 404**. לכן שרשרת הפוסטרים חייבת **שומר סף גודל** ולא רק `onError`, אחרת האפור מוצג *וגם* נמדד. תמונות Drive אמינות בשני הכיוונים.
+45. **נגן וידאו: פוסטר בדף, נגן במסך מלא** — **אסור לכפות `aspectRatio`/ריפוד-קבוע סביב `iframe` חוצה-מקור** (לא ניתן למדידה מבחוץ; שני קבועים נוסו ונכשלו). במסך מלא ה-iframe מקבל את כל החלון בלי כפיית יחס והנגן מרפד בעצמו. פוסטר ב-**`contain` ולא `cover`** + `onError`. **מעדיפים YouTube "לא רשום" על Drive** — לנגן `/preview` של Drive אין auto-hide ואין דרך נתמכת להסתיר את פקדיו. **הפוסטר של יוטיוב משקר על הצורה**: `hqdefault` הוא **תמיד** 480×360 עם פסים צרובים בפיקסלים; `oardefault` נותן יחס אמיתי אך קיים רק לצורה לא-סטנדרטית, ובהיעדרו חוזר **placeholder אפור 120×90 עם HTTP 200 — לא 404**. לכן שרשרת הפוסטרים חייבת **שומר סף גודל** ולא רק `onError`.
 
 46. **שדה שנפתח לעריכה ב-`ProductionEditor` חייב להיבדק מול `handleEditorClose`** — המסלול הזה שומר **רק** כשיש טווחי תאריכים לגזום, ואחרת קורא ל-`onClose()` בלי לכתוב כלום. שחרור "סוג ההפקה" מהנעילה בלי לטפל בזה יצר **אובדן נתונים שקט**: הסטודנט שינה ל"כללית", סגר, והשינוי נזרק — בעוד `forcedKit`/`prodKit` ב-PublicForm המשיכו להגביל לערכה הישנה. שתי ההגבלות עצמן תקינות ונגזרות **חיות** מ-`productions[].kitId`, ולכן מספיק לשמור ולרענן; אין להן סנאפ-שוט לתקן.
 
@@ -619,7 +639,8 @@ admin/staff מתנתק אוטומטית אחרי **60 דקות** של חוסר �
 ## 🛡️ Guardrails חיים
 
 - **ESLint** ([eslint.config.js](eslint.config.js)) חוסם: `storageGet`, `storageSet`, `supabase.from('store'...)`, `from('store_snapshots'...)`, `/api/store`. רמה=ERROR.
-- **`no-undef` = ERROR** ([eslint.config.js](eslint.config.js), מ-PR #42) — מזהה בשימוש בלי import/הגדרה = **שגיאת build, ה-CI נכשל**. נוסף אחרי שהשבית את הפרוד import חסר של `formatTime` (PR #40). **חוק: כל `usage` חדש חייב `import` תואם באותו commit — אחרת ה-build ייפול. אל תוסיף `formatTime(...)`/helper בלי לוודא שהוא מיובא בקובץ.**
+- **`no-undef` = ERROR** ([eslint.config.js](eslint.config.js), מ-PR #42) — מזהה בשימוש בלי import/הגדרה = **שגיאת build, ה-CI נכשל**. רקע והכלל המלא: לקח #17.
+- **`react-hooks/rules-of-hooks` = ERROR** (אותו קובץ) — hook בתוך תנאי/לולאה משנה את סדר ה-hooks וגורם לקריסה. גם זה מפיל build.
 - **CI workflow** ([.github/workflows/ci.yml](.github/workflows/ci.yml)) — `Lint & build` רץ על כל PR/push. `DB smoke (dev project)` רץ אם `SUPABASE_DEV_URL`/`SUPABASE_DEV_SERVICE_ROLE_KEY` מוגדרים ב-GitHub secrets (כרגע לא — הוא מדלג נקי).
 - **Global Error Boundary** ([src/components/ErrorBoundary.jsx](src/components/ErrorBoundary.jsx)) — Hebrew/RTL fallback עוטף את `<App/>` ב-StrictMode.
 - **DB smoke** (`npm run test:db`, [scripts/run-db-smoke.mjs](scripts/run-db-smoke.mjs)) — 52 scenarios: `run_reservation_overlap_tests` (13) + `run_productions_regression_tests` (6) + `run_student_overlap_tests` (5) + `run_studio_overlap_tests` (6) + `run_availability_peak_tests` (3 — peak-concurrent, קורא ל-`create_reservation_v2` האמיתי, PR #63) + `run_reservation_update_tests` (16) + `run_reservation_update_v3_tests` (3 — עדכון פריטים, PR #85). מסרב לרוץ אם ה-hostname לא `mhvujejdlmtowypjdhjd`. status נוכחי: **52/52 PASS**.
@@ -631,112 +652,40 @@ admin/staff מתנתק אוטומטית אחרי **60 דקות** של חוסר �
 
 ## 🤖 רוטינת סריקה יומית אוטומטית
 
-מנגנון שהוקם ב-2026-05-29 (PR #27–#30): **סוכן ענן אוטונומי** רץ פעם ביום, סורק את הקבצים החמים, מתקן תיקונים בטוחים בלבד ומדווח על השאר ב-PR מתגלגל יחיד.
+סוכן ענן אוטונומי (הוקם PR #26–#30) רץ יומית ב-09:00 שעון ישראל, סורק **hot files
+בלבד** ([src/App.jsx](src/App.jsx), [src/components/LessonsPage.jsx](src/components/LessonsPage.jsx),
+[src/utils.js](src/utils.js), `supabase/migrations/**`), מתקן אוטומטית **רק** תיקונים
+בטוחים (null-guards, cleanup, dead code) ומצטבר ל-**PR מתגלגל יחיד** על `claude/daily-audit`.
+כל היתר → checklist ב-PR. קוראת את CLAUDE.md בתחילת כל ריצה כדי לכבד את ה-anti-regressions.
 
-### שני חלקים
-
-1. **קבצים בריפו = מקור האמת** (לקרוא במלואם לפני נגיעה ברוטינה):
-   - **[.claude/audit-routine.md](.claude/audit-routine.md)** — החוזה הקבוע: היקף, חוקי ברזל, פרוצדורה צעד-צעד, פורמט PR + פורמט לוג. ה-prompt של הטריגר רק מצביע על הקובץ הזה — כל הלוגיקה בו.
-   - **[.claude/audit-log.md](.claude/audit-log.md)** — לוג state מתמשך; כל ריצה עם ממצאים מוסיפה רשומה. הסוכן של מחר קורא אותו ראשון כדי לא לחזור על עבודה.
-
-2. **הגדרת הטריגר — בענן, לא בריפו** (Claude Code on the web → Routines; לא נראה מתוך הריפו, מתועד כאן):
-   - שם: **"סריקה יומית — machsan"**, סטטוס **Active**, סוג **Remote** (ענן).
-   - תזמון: **כל יום 09:00 שעון ישראל (Asia/Jerusalem)**.
-   - Repository: `nimig10/machsan`. Model: **Opus 4.8**.
-   - Connectors: **Context7 + Vercel בלבד** — ה-Supabase connector **הוסר במכוון** כדי שלרוטינה לא תהיה דרך פיזית לגעת ב-DB (חסם קשיח).
-   - Permissions: **"Allow unrestricted branch pushes" כבוי** → הסוכן מוגבל לדחוף רק לענפי `claude/*` (main מוגן).
-
-### מה הרוטינה עושה
-- סורקת **hot files בלבד**: [src/App.jsx](src/App.jsx), [src/components/LessonsPage.jsx](src/components/LessonsPage.jsx), [src/utils.js](src/utils.js), ו-`supabase/migrations/**` + RPCs (קריאה/דיווח בלבד).
-- מצב **"תקן בטוח + דווח השאר"**: מתקנת אוטומטית רק תיקונים בטוחים (null-guards, cleanup, dead code, אופטימיזציות ללא שינוי התנהגות). כל היתר → checklist ב-PR.
-- קוראת את **CLAUDE.md בתחילת כל ריצה** כדי לכבד את כל ה-anti-regressions.
-- מצטברת ל-**Rolling PR יחיד** על ענף `claude/daily-audit` (לא פותחת PR חדש כל יום — מעדכנת קיים).
-- כל PR כולל מקטע **"🧪 מדריך בדיקה ידנית"** בשפת משתמש (איפה במסך / מה לבדוק / על מה לשמור שלא נשבר) — חובה מ-PR #30.
+**החוזה המלא** (היקף, פרוצדורה, פורמט PR ולוג) — [.claude/audit-routine.md](.claude/audit-routine.md);
+הלוג המתמשך — [.claude/audit-log.md](.claude/audit-log.md). **קונפיגורציית הטריגר בענן**
+(שם, מודל, connectors, איך משהים/עורכים) חיה בארכיון, לא כאן.
 
 ### חוקי ברזל (תקציר — המלא ב-audit-routine.md)
 - ⛔ **code-only**: אסור לגעת ב-DB/schema/RPC/migration (לא dev ולא prod). בעיות DB → checklist בלבד.
 - ⛔ אסור למזג — **המיזוג הוא של המשתמש בלבד**, אחרי בדיקה ידנית ב-Preview.
 - ⛔ אסור לדחוף ל-`main`; רק לענף `claude/daily-audit`.
 - 🔂 **מקסימום push אחד ביום** = build אחד ב-Vercel. אימות (`lint`+`build`) מקומי בלבד; אסור לדחוף "כדי לבדוק".
-- 🤫 **יום ללא ממצאים → אפס push** (דילוג שקט מוחלט — זה התרחיש הנפוץ).
-
-### איך להשהות / לערוך / למחוק
-בדף **Claude Code on the web → Routines**:
-- **השהיה**: כיבוי toggle "Repeats" של הרוטינה.
-- **עריכה** (תזמון/מודל/connectors/הרשאות): אייקון העיפרון.
-- **מחיקה**: אייקון המחיקה.
-שינוי החוזה עצמו (היקף, חוקים, פורמט) נעשה בקוד — עריכת [.claude/audit-routine.md](.claude/audit-routine.md) ב-PR רגיל.
+- 🤫 **יום ללא ממצאים → אפס push** (דילוג שקט — זה התרחיש הנפוץ).
+- 🧪 כל PR חייב לכלול מקטע **"מדריך בדיקה ידנית"** בשפת משתמש (חובה מ-PR #30).
 
 ---
 
 ## 🔥 נקודות חולשה / סיכון
 
 1. **dev לא מיושר ל-prod** — RLS כבוי על `users`/`equipment`/`equipment_units`/`reservations_new`/`reservation_items`/`staff_daily_tasks`, ויש FK ל-`staff_members`. לא קריטי: dev הוא sandbox.
-2. **10 המיגרציות של PR #85 הוחלו על prod דרך ה-SQL Editor** ולכן **אינן רשומות בהיסטוריית המיגרציות של Supabase**. הסכימה מוחלת במלואה (אומתה + 19/19 טסטים על prod), אבל מי שמריץ אותן שוב או מקים סביבה חדשה מהקבצים צריך לדעת: רובן idempotent, אבל **`CREATE POLICY` ייכשל** על טבלה שכבר יש לה אותו. **מקור האמת נשאר קבצי המיגרציה ב-repo.**
-3. **`run_*_tests` ניתנות להרצה ע"י `anon` בפרוד** — ראה הערה ב-🗄️ מבנה DB.
-4. **`staff_members` legacy** — הקוד הפעיל לא משתמש בו כ-fallback. בפרוד 9 שורות בלי FK; ב-dev שורה אחת **עם** FK. למחוק אחרי וידוא שאין תלות היסטורית.
-5. **App.jsx הוא הקובץ הגדול בריפו** — 8 דפים inline שטרם חולצו.
-6. **`policy_assets` שומר PDF וטמפלטי XL כ-Base64 ב-TEXT** — כל קריאה מושכת blob שלם. tech debt.
+2. **10 המיגרציות של PR #85 אינן רשומות בהיסטוריית המיגרציות של Supabase** (הוחלו דרך ה-SQL Editor). הסכימה מוחלת במלואה ואומתה, אבל בהקמת סביבה חדשה מהקבצים: רובן idempotent — **`CREATE POLICY` ייכשל** על טבלה שכבר יש לה אותו. מקור האמת = קבצי המיגרציה בריפו.
+3. **`staff_members` legacy** — הקוד הפעיל לא משתמש בו כ-fallback. בפרוד 9 שורות בלי FK. למחוק אחרי וידוא שאין תלות היסטורית.
+4. **`policy_assets` שומר PDF וטמפלטי XL כ-Base64 ב-TEXT** — כל קריאה מושכת blob שלם. tech debt.
 
 ---
 
-## 🛠️ כלים זמינים
+## 📜 היסטוריית PRs — בארכיון, לא כאן
 
-- **Supabase MCP** — `execute_sql`, `apply_migration`, `list_migrations`, `list_projects`, `get_advisors`.
-- **Vercel MCP** — `list_projects`, `get_project`, `list_deployments`, `deploy_to_vercel`.
-- **Git + GitHub CLI (`gh`)** — גישה מלאה ל-repo.
-- **Context7 MCP** (`ctx7`) — docs של ספריות (דורש restart של Claude Code כשמתקינים).
+**כל 102 ה-PRs** (מ-#1, כולל ~40 שמעולם לא נכנסו לקובץ הזה) מתועדים חודש-חודש
+ב-`03-ציר-זמן/` שבארכיון החיצוני — כותרת אמיתית, תאריך, וקישור ללקח שנגזר.
+כאן **לא** נשמר אינדקס: הכלל שנגזר מכל PR כבר חי ב-🎓 לקחים למעלה, וזה מה שמחייב.
 
----
-
-## 📜 היסטוריית PRs
-
-**שורה אחת ל-PR.** מה שהשתנה, ולאן ללכת לפרטים. הפירוט המלא של כל שינוי חי ב-PR
-עצמו בגיטהאב, והכללים שנגזרו ממנו חיים ב-🎓 לקחים — כאן זה אינדקס בלבד.
-
-| תאריך | PR | מה |
-|---|---|---|
-| 2026-07-31 | **#102** | שמירת עריכת בקשה הפכה אטומית — `save_edited_reservation_v1` (מיגרציה `20260731120000`) במקום 3 קריאות שהשאירו בקשה בלי ציוד; + לחצן השמירה במודאל העריכה היה מתחת לסרגל הניווט במובייל |
-| 2026-07-29 | **#101** | לחצן היציאה בפאנל הבקשה בלוח הבקרה גלש מחוץ לכותרת — `minWidth:0` על flex item + "עריכת בקשה" לראש הגוף (לקח #30+#32) |
-| 2026-07-28 | **#100** | דחיית בקשה עם נימוק (מייל+וואטסאפ) + escaping ל-`custom_message`; "עריכת בקשה" בלוח הבקרה (`reservationEdit.js` משותף); סוג ההפקה נפתח לעריכה (לקח #46); פאנל מייל-נוסף לבקשה שנדחתה; פוסטר וידאו לפי יחס אמיתי (לקח #45); `useAutoGrowTextarea` |
-| 2026-07-25 | **#97** | גלאי כשל שליחת היומן היה מת; `seen` בהודעה ללא בדיקת קהל; נגן וידאו → פוסטר+מסך-מלא ב-4 משטחים (לקח #45); לחצן התנתקות קבור ב-Staff Hub; ניקוי CLAUDE.md |
-| 2026-07-23 | **#95** | סינון זמן + פריטי ציוד בארכיון הבקשות (לקח #35+#44) |
-| 2026-07-23 | **#93** | הודעה יומית חד-פעמית (`announcements`, מיגרציה `20260723120000`) + פירוק כפתור השמירה הגלובלי בהגדרות (לקחים #42, #43) |
-| 2026-07-23 | **#92** | מצב עריכה כ-toggle בכרטיס הבקשה; הוסרו לחצני `+` והבורר נשאר מסלול ההוספה היחיד |
-| 2026-07-23 | **#91** | 🚨 "הגדרות מערכת" יכול היה למחוק את סרטוני ההדרכה בשמירה (לקח #42) |
-| 2026-07-23 | **#90** | לחצני כרטיס ההזמנה נחתכו בקצה המסך במובייל |
-| 2026-07-23 | **#89** | הקשחת 3 endpoints: `activity-log` ללא אימות, ראש מחלקה ללא בדיקת סטטוס-מקור, כשל שמירת סנאפ-שוט ביומן (לקח #37+#41) |
-| 2026-07-22 | **#88** | חותמת "מי אישר" (`approved_by_*`, מיגרציה `20260722170000`) + תיקון פילטר "סוג פעולה" ביומן הפעילות |
-| 2026-07-22 | **#87** | הקשחת נתיב "הוחזר": timeout, retry עם `refreshSession` על 401/403, והודעות שגיאה ספציפיות |
-| 2026-07-22 | **#85** | עדכון פריטי ציוד בבקשה קיימת (10 מיגרציות `20260722120000`→`20260722160000`, לקח #40) |
-| 2026-07-20 | **#81** | מפגשי קורס ליומן המרצה דרך ICS במייל (`lesson_calendar_events`, לקח #38) |
-| 2026-07-19 | **#80** | "איש צוות מטפל" בארכיון — `returned_by_*` נגזר-JWT (מיגרציה `20260719130000`, לקח #37) |
-| 2026-07-19 | **#79** | מתיחת בר "באיחור" בכל לוחות השנה (לקח #36) |
-| 2026-07-19 | **#78** | עריכת כמויות בבקשה "באיחור" + `original_items` (מיגרציה `20260719120000`, לקח #35) |
-| 2026-07-15 | **#77** | סינון סוג ציוד מסנן גם את צ'יפי הקטגוריות (לקח #34) |
-| 2026-07-14 | **#75** | לוח הפקות v2: חובת רשימת ציוד פר-טווח + הסרת מערכת אישור הצוות (לקח #33) |
-| 2026-07-12 | **#74** | עורך קורס דו-טורי, ברירת-מחדל "ללא תעודה", horizontal-only scroll (לקח #30+#32) |
-| 2026-07-12 | **#73** | ממשק מולטי-תפקיד + הוספת/הסרת איש צוות בטוחה (לקח #31) |
-| 2026-07-07 | **#72** | לוח שיעורים בגובה אדפטיבי + הפרדת עבר/עתיד (לקח #30+#32) |
-| 2026-07-07 | **#71** | התנגשות חדרים נגזרת פר-מפגש ולא מרמת-הקורס (לקח #29) |
-| 2026-07-07 | **#69** | ייצוא PDF לרשימת הציוד המסוננת (לקח #28) |
-| 2026-07-06 | **#68** | פאנל "משימות להיום" ב-Staff Hub + תיקון קריאת סטטוס יחידות ציוד (לקח #27) |
-| 2026-07-05 | **#67** | ארכיון להפקות שהסתיימו (`archived_at` + cron יומי, לקח #26) |
-| 2026-07-05 | **#66** | לחצני תפעול בראש מודאל הבקשה; קטגוריות ותמונות בערכה |
-| 2026-07-05 | **#64–#65** | קביעות צוות ברובריקת "קביעות"; קישור דו-כיווני בדשבורד; תיקון `TIME_SLOTS` שנעצר ב-19:30 |
-| 2026-07-01 | **#63** | זמינות ציוד לפי שיא-מקבילי במקום סכימה (לקח #25) + hotfix `/daily-table` בלי SW (לקח #24) |
-| 2026-06-29 | **#61** | Service Worker network-first — מניעת מסך לבן בקיוסק (לקח #24) |
-| 2026-06-29 | **#60** | "לא משויך" באדום בלוז העובדים; סידור פאנלים בעורך הקורס |
-| 2026-06-28 | **#58** | שיוך איש צוות מטפל לבקשת השאלה — טבלת-צד מנותקת (לקח #23) |
-| 2026-06-28 | **#57** | שיפורי פאנל ולוח שיבוץ עובדים: draft-buffer, נעילה, העדפות |
-| 2026-06-25 | **#55** | guard אטומי נגד הקצאת-יתר באישור + שמירת עריכות לפני אישור (לקח #22) |
-| 2026-06-23 | **#51–#54** | הגבלת השאלת-חוץ של ציוד: 2 עמודות על `equipment` + guard רביעי ב-RPC (לקח #21) |
-| 2026-06-21 | **#48–#50** | guard אטומי נגד double-booking של אולפנים (`EXCLUDE constraint`, לקח #20) + עיצוב עורך הקורס |
-| 2026-06-13 | **#47** | חסימת בקשות חופפות לאותו סטודנט + `getEffectiveStatus` גוזר "באיחור" (לקח #19) |
-| 2026-06-13 | **#46** | crew snapshot מתיישן — רענון ב-`production_crew_change_recheck_v1` |
-| 2026-06-04 | **#45** | crew snapshot נגזר ב-`create_reservation_v2` לכל הזמנת הפקה |
-| 2026-05-31 | **#39–#44** | `formatTime` אחיד + 🚨 hotfix ייבוא חסר שהשבית את הפרוד + `no-undef`→ERROR (לקח #17, #18); מייל דדליין הפקה; deep-link ללוח הפקות |
-| 2026-05-29 | **#26–#30** | הקמת רוטינת הסריקה היומית (`.claude/audit-routine.md` + `audit-log.md`) והסבב הראשון שלה |
-| 2026-05-25 | **#20–#25** | N כיתות ו-N מרצים למפגש (`studioIds[]`/`lecturerIds[]` + עמודות jsonb ייעודיות), conflict resolver, ייבוא XL, toast aggregation, undo stack (לקחים #9–#16) |
-
-> PRs מוקדמים מ-#20 מתועדים בסעיפים הנושאיים שלהם. הריפו הוא הארכיון.
+> "מתי נכנס הפיצ'ר הזה ולמה?" → שאלת-ארכיון (🗄️ בראש הקובץ).
+> "מה אסור לשבור?" → כאן, לא שם.
