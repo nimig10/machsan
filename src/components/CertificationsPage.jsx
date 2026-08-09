@@ -1,9 +1,11 @@
 // CertificationsPage.jsx — certifications management with equipment/studio modes
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera, CheckCircle, ClipboardList, GraduationCap, Lightbulb, Mic, Package, Pencil, Search, X } from "lucide-react";
 import { cloudinaryThumb, writeEquipmentToDB, matchesEquipmentTypeFilter, deriveVisibleCategories } from "../utils.js";
 import { dualWriteCertifications, setStudentCertStatus } from "../utils/studentsApi.js";
 import { syncAllStudios } from "../utils/studiosApi.js";
+import { staffListNightTraining } from "../utils/nightTrainingApi.js";
+import { NightTrainingResultsPanel } from "./NightTrainingResultsPanel.jsx";
 import { Modal } from "./ui.jsx";
 
 const NIGHT_CERT_ID = "cert_night_studio";
@@ -46,6 +48,38 @@ export function CertificationsPage({ certifications, setCertifications, showToas
   // Local student state for instant visual updates — avoids App.jsx re-render on every click
   const [studentsLocal, setStudentsLocal] = useState(null);
   const effectiveStudents = studentsLocal ?? students;
+
+  // ── night-training results ────────────────────────────────────────────────
+  // BOTH CertificationsPage instances are mounted at app boot inside
+  // display:none wrappers (App.jsx renders onlyMode="equipment" and
+  // onlyMode="studio" unconditionally). A plain mount effect would therefore
+  // fire this fetch twice for every staff user on every load. Gating on
+  // certMode==="studio" plus a ref makes it exactly one request, and only in the
+  // instance that shows the panel — the same "load once, not per mount" rule
+  // that lesson #27 came out of.
+  const [nightData, setNightData] = useState(null);
+  const [nightLoading, setNightLoading] = useState(false);
+  const nightLoadedRef = useRef(false);
+
+  const loadNightTraining = useCallback(async () => {
+    setNightLoading(true);
+    const r = await staffListNightTraining();
+    setNightLoading(false);
+    if (r.ok) setNightData(r);
+    else showToast?.("error", "לא ניתן לטעון את תוצאות מבחן הלילה.");
+  }, [showToast]);
+
+  useEffect(() => {
+    if (certMode !== "studio" || nightLoadedRef.current) return;
+    nightLoadedRef.current = true;
+    loadNightTraining();
+  }, [certMode, loadNightTraining]);
+
+  // Students who have passed the theory exam at least once. Display-only — it
+  // never writes a certification; a staff member still decides that.
+  const theoryPassedIds = new Set(
+    (nightData?.students || []).filter(s => s.passedTheory).map(s => String(s.studentId))
+  );
 
   const save = async (updatedPatch) => {
     const nextStudents = updatedPatch?.students ?? students;
@@ -452,6 +486,15 @@ export function CertificationsPage({ certifications, setCertifications, showToas
         )}
       </div>
 
+      {certMode==="studio" && (
+        <NightTrainingResultsPanel
+          data={nightData}
+          loading={nightLoading}
+          onRefresh={loadNightTraining}
+          showToast={showToast}
+        />
+      )}
+
       {activeTypes.length===0 ? (
         <div className="info" style={{padding:"12px 16px",background:"rgba(52,152,219,0.08)",border:"1px solid rgba(52,152,219,0.2)",borderRadius:"var(--r-sm)",fontSize:13,color:"var(--text2)"}}>
           <Lightbulb size={16} strokeWidth={1.75} /> {certMode==="equipment"
@@ -565,6 +608,13 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                                   style={{padding:"5px 12px",borderRadius:20,border:`2px solid ${passed?passedColor:"var(--border)"}`,background:passed?passedBg:"transparent",color:passed?passedColor:"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap",minWidth:100}}>
                                   {passed?(isNight?"🌙 עבר/ה":<><CheckCircle size={16} strokeWidth={1.75} /> עבר/ה</>):"⬜ לא עבר/ה"}
                                 </button>
+                                {/* Theory result sits next to the button that grants the
+                                    certification, so the decision needs one screen, not two. */}
+                                {isNight && theoryPassedIds.has(String(s.id)) && (
+                                  <div style={{marginTop:4,fontSize:10,fontWeight:800,color:"var(--green)",display:"inline-flex",alignItems:"center",gap:3}}>
+                                    <CheckCircle size={10} strokeWidth={2} /> עבר עיוני
+                                  </div>
+                                )}
                               </td>
                             );
                           })}
@@ -594,10 +644,17 @@ export function CertificationsPage({ certifications, setCertifications, showToas
                           return (
                             <div key={t.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:isNight?NIGHT_COLOR+"08":undefined,borderRadius:8,padding:isNight?"6px 8px":undefined}}>
                               <span style={{fontSize:13,fontWeight:600,color:isNight?NIGHT_COLOR:undefined}}>{isNight?"🌙":certMode==="studio"?<Mic size={16} strokeWidth={1.75} />:<GraduationCap size={16} strokeWidth={1.75} />} {t.name}</span>
-                              <button onClick={()=>toggleCert(s.id,t.id)}
-                                style={{padding:"5px 14px",borderRadius:20,border:`2px solid ${passed?passedColor:"var(--border)"}`,background:passed?passedBg:"transparent",color:passed?passedColor:"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",minWidth:110,textAlign:"center"}}>
-                                {passed?(isNight?"🌙 עבר/ה":<><CheckCircle size={16} strokeWidth={1.75} /> עבר/ה</>):"⬜ לא עבר/ה"}
-                              </button>
+                              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2}}>
+                                <button onClick={()=>toggleCert(s.id,t.id)}
+                                  style={{padding:"5px 14px",borderRadius:20,border:`2px solid ${passed?passedColor:"var(--border)"}`,background:passed?passedBg:"transparent",color:passed?passedColor:"var(--text3)",fontWeight:700,fontSize:12,cursor:"pointer",minWidth:110,textAlign:"center"}}>
+                                  {passed?(isNight?"🌙 עבר/ה":<><CheckCircle size={16} strokeWidth={1.75} /> עבר/ה</>):"⬜ לא עבר/ה"}
+                                </button>
+                                {isNight && theoryPassedIds.has(String(s.id)) && (
+                                  <span style={{fontSize:10,fontWeight:800,color:"var(--green)",display:"inline-flex",alignItems:"center",gap:3}}>
+                                    <CheckCircle size={10} strokeWidth={2} /> עבר עיוני
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           );
                         })}

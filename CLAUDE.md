@@ -198,6 +198,7 @@
 | יומן המרצה | `lesson_calendar_events` | `api/calendar-sync.js` + `calendarSyncApi.js` |
 | הודעה יומית | `announcements` + `announcement_views` | `api/announcement.js` + `announcementPolicy.js` |
 | עדכון פריטים בבקשה | `reservation_item_updates` + `reservation_pending_items` | `reservationUpdatesApi.js` + 2 endpoints |
+| תרגול לילה (מבחן + נעילה) | `night_quiz_attempts` + `night_quiz_answers` + `night_closing_checklists` | `api/night-training.js` + `nightTrainingApi.js` |
 
 **טבלאות תומכות**: `users` (מראת auth — **המקור הפעיל להרשאות**), `activity_logs`,
 `equipment_reports`, `auth_entity_map`, `auth_rate_limits`, `staff_members` (legacy,
@@ -205,8 +206,14 @@
 `staff_personal_tasks`, `staff_hub_checkoffs`, `reservation_staff_assignments`.
 
 > **RLS-on ללא policies, API-only**: `staff_schedule_*`, `staff_personal_tasks`,
-> `staff_hub_checkoffs`, `lesson_calendar_events`, `announcements`(+`_views`).
+> `staff_hub_checkoffs`, `lesson_calendar_events`, `announcements`(+`_views`),
+> `night_quiz_attempts`/`night_quiz_answers`/`night_closing_checklists`.
 > אין להם גישת-קליינט ישירה — רק דרך ה-endpoint שלהם.
+>
+> ⚠️ **לשלושת ה-`night_*` אסור לתת policy ל-`anon`/`authenticated` — לעולם.**
+> `night_quiz_answers.correct_text` הוא **מפתח התשובות** של מבחן הלילה, ו-
+> `night_quiz_attempts.seed`+`question_ids` מאפשרים לשחזר מבחן (ותשובותיו) לבד.
+> policy "לנוחות" מבטלת בשקט את כל הסיבה שהניקוד עבר לשרת.
 
 **עמודות שנוספו ל-`reservations_new`** — כולן **display-only**; אף guard/RPC/חישוב
 זמינות לא קורא אותן, וכולן **בלי FK** במכוון כדי לשרוד מחיקת משתמש:
@@ -662,6 +669,7 @@ showToast("success", "X נמחק", {
 - **DB smoke** (`npm run test:db`, [scripts/run-db-smoke.mjs](scripts/run-db-smoke.mjs)) — 52 scenarios: `run_reservation_overlap_tests` (13) + `run_productions_regression_tests` (6) + `run_student_overlap_tests` (5) + `run_studio_overlap_tests` (6) + `run_availability_peak_tests` (3 — peak-concurrent, קורא ל-`create_reservation_v2` האמיתי, PR #63) + `run_reservation_update_tests` (16) + `run_reservation_update_v3_tests` (3 — עדכון פריטים, PR #85). מסרב לרוץ אם ה-hostname לא `mhvujejdlmtowypjdhjd`. status נוכחי: **52/52 PASS**.
 - **Announcement-policy tests** (`npm run test:announce`, [scripts/run-announcement-tests.mjs](scripts/run-announcement-tests.mjs)) — 32 בדיקות על [src/utils/announcementPolicy.js](src/utils/announcementPolicy.js): 4 סוגי קהל × דגלי תפקיד (כולל מרובה-תפקידים ומשתמש חסר-דגלים), `display_days` 1 מול 2, "כבר נראתה היום", ומיצוי אחרי היום השני. **בלי רשת ובלי DB.** status נוכחי: **32/32 PASS**.
 - **Loan-policy tests** (`npm run test:policy`, [scripts/run-loan-policy-tests.mjs](scripts/run-loan-policy-tests.mjs)) — 23 בדיקות על [src/utils/loanPolicy.js](src/utils/loanPolicy.js): חלונות ההתראה פר-סוג, גבולות מדויקים (24h/3h), גלגול שישי/שבת, ו-`computeUpdateDeadline`. **בלי רשת ובלי DB.** status נוכחי: **23/23 PASS**.
+- **Night-training tests** (`npm run test:night`, [scripts/run-night-quiz-tests.mjs](scripts/run-night-quiz-tests.mjs)) — 67 בדיקות על [api/_night-quiz.js](api/_night-quiz.js) ו-[src/utils/nightChecklist.js](src/utils/nightChecklist.js). מקבעות שלושה דברים שקל לשבור בשקט: (1) **מפתח התשובות לא עוזב את השרת** — סריקה עמוקה של `buildAttemptView().public` ושל `toStudentResult()` לכל שדה תשובה, ובדיקה **סטטית** שאף קובץ תחת `src/` לא מייבא את הבנק (זו ההוכחה שהתשובות לא נכנסות ל-bundle); (2) **מעבר = 100% בלבד** — 14/15 נכשל; (3) **אותו seed מייצר את אותו מבחן** — השרת שומר רק `(seed, question_ids)` ומשחזר את המבחן כדי לנקד, אז הגרלה לא-דטרמיניסטית הייתה מנקדת סטודנטים לא נכון. בנוסף: תקינות הבנק (32 שאלות, 17 mc + 15 tf), פיזור אחיד של התשובה הנכונה בין 4 המיקומים (תופס באג Fisher-Yates קלאסי), עמידות ניקוד לקלט זבל, ו-26 פריטי הצ'ק ליסט ללא HTML גולמי. **בלי רשת ובלי DB.** status נוכחי: **67/67 PASS**.
 - **ICS smoke** (`npm run test:ics`, [scripts/run-ics-smoke.mjs](scripts/run-ics-smoke.mjs)) — 20 בדיקות על חוזה קובץ היומן, הקצב ושערי ה-endpoint (PR #81, הורחב ב-#89): `METHOD:PUBLISH` בלי `ORGANIZER`/`ATTENDEE`/`SEQUENCE`, UID לכל VEVENT, קיפול ≤75 אוקטטים, round-trip base64, `escParam`, `COLLEGE_ADDRESS` בגרשיים עבריים בלי ASCII `"`, `LOCATION` בלי שם חדר, איסור `encoding` מפורש על חלק היומן, `maxDuration ≥ 60`, שליחה מרווחת (לא `Promise.all` על מרצים), איחוד חזרות ל-`RDATE` ונכונות DST, הקרון dry-run בלבד, **שער ה-cron-secret על `reconcile=all` חי**, ו**דיווח כשל שמירת הסנאפ-שוט** (שתי האחרונות מ-PR #89). **בלי רשת ובלי DB.** status נוכחי: **20/20 PASS**. כל בדיקה כאן מקבעת כשל אמיתי שקרה — ראה לקח #38.
 
 ---

@@ -16,6 +16,7 @@ import { CalendarGrid } from "./CalendarGrid.jsx";
 import AIChatBot from "./AIChatBot.jsx";
 import { ProductionsPage } from "./ProductionsPage.jsx";
 import { StudentHub } from "./StudentHub.jsx";
+import { NightTrainingModal } from "./NightTrainingModal.jsx";
 
 const SMART_LOAN_TYPES = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
 
@@ -5164,6 +5165,7 @@ ${inventory}
             certifications={certifications}
             siteSettings={siteSettings}
             policies={policies}
+            studentTrackType={studentTrackType}
           />
         </div>}
         {publicView==="daily" && <div className="form-card-body">
@@ -6334,7 +6336,7 @@ ${inventory}
 }
 
 // ─── PUBLIC STUDIO BOOKING (student side) ────────────────────────────────────
-function PublicStudioBooking({ studios, bookings, setBookings, student, showToast, weekOffset, setWeekOffset, modal, setModal, certifications, siteSettings = {}, policies = {} }) {
+function PublicStudioBooking({ studios, bookings, setBookings, student, showToast, weekOffset, setWeekOffset, modal, setModal, certifications, siteSettings = {}, policies = {}, studentTrackType = "" }) {
   const [saving, setSaving] = useState(false);
   const [studioInfoPanel, setStudioInfoPanel] = useState(null); // studio object for info modal
   const [dayView, setDayView] = useState(null); // { studioId, date, dayName }
@@ -6346,6 +6348,7 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
   const [smartBookingPrompt, setSmartBookingPrompt] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [studioCertsOpen, setStudioCertsOpen] = useState(false);
+  const [nightTrainingOpen, setNightTrainingOpen] = useState(false);
 
   const DAY_HOURS = (() => { const h = []; for (let hr = 9; hr <= 21; hr++) for (let m = 0; m < 60; m += 15) { if (hr === 21 && m > 30) break; h.push(`${String(hr).padStart(2,"0")}:${String(m).padStart(2,"0")}`); } return h; })();
   const DAY_BOOKING_HOURS = DAY_HOURS.filter(t => t < "21:30");
@@ -6395,6 +6398,12 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
   })();
   const nightCertType = (certifications?.types||[]).find(t => t.id === "cert_night_studio");
   const hasNightCert = studentRecord && nightCertType && (studentRecord.certs||{})[nightCertType.id] === "עבר";
+
+  // The night-training exam + closing checklist are for the two engineering
+  // classifications ("סיווג מסלול" in StudentsPage: הנדסאי סאונד / הנדסאי קולנוע).
+  // This only hides the button — /api/night-training re-checks eligibility from
+  // the caller's JWT, because the UI is never the gate (lesson #37+#41).
+  const canSeeNightTraining = studentTrackType === "sound" || studentTrackType === "cinema";
 
   // Studio certification check
   const studioCertTypes = (certifications?.types || []).filter(t => t.category === "studio" && t.id !== "cert_night_studio");
@@ -7379,6 +7388,15 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
             >
               <Shield size={14} strokeWidth={1.75} color="var(--accent)"/> סטטוס הסמכות החדרים שלי
             </button>
+            {canSeeNightTraining && (
+              <button
+                type="button"
+                onClick={()=>setNightTrainingOpen(true)}
+                style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:"var(--r-sm)",border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",fontWeight:700,fontSize:13,cursor:"pointer"}}
+              >
+                <Moon size={14} strokeWidth={1.75} color={NIGHT_COLOR}/> מבחן לילה וצ'ק ליסט נעילה
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -7617,6 +7635,17 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
         title="סטטוס הסמכות החדרים שלי"
         certs={studioCertsList}
       />
+
+      {/* Conditionally MOUNTED, not open-prop gated: the component has hooks, so
+          an early return above them would break rules-of-hooks (ERROR here).
+          Unmounting also resets the quiz and checklist, matching the original. */}
+      {nightTrainingOpen && (
+        <NightTrainingModal
+          onClose={()=>setNightTrainingOpen(false)}
+          showToast={showToast}
+          studentName={studentRecord?.name || student?.name || ""}
+        />
+      )}
     </div>
   );
 }
