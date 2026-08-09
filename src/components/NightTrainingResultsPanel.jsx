@@ -273,8 +273,10 @@ export function NightTrainingResultsPanel({ data, loading, onRefresh, showToast 
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {filteredStudents.map((s) => (
+              // Green border for a pass, red for a fail — a neutral border read
+              // as "no result yet" rather than "did not pass".
               <div key={s.studentId} style={{
-                border: `1px solid ${s.passedTheory ? "rgba(46,204,113,0.35)" : "var(--border)"}`,
+                border: `1px solid ${s.passedTheory ? "rgba(46,204,113,0.35)" : "rgba(231,76,60,0.35)"}`,
                 borderRadius: 10, padding: "10px 12px", background: "var(--surface)",
               }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -293,7 +295,7 @@ export function NightTrainingResultsPanel({ data, loading, onRefresh, showToast 
                         <CheckCircle size={12} strokeWidth={2} /> עבר עיוני
                       </span>
                     ) : (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "var(--surface2)", border: "1px solid var(--border)", color: "var(--text3)", borderRadius: 20, padding: "3px 12px", fontSize: 11, fontWeight: 800 }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(231,76,60,0.15)", border: "1px solid var(--red)", color: "var(--red)", borderRadius: 20, padding: "3px 12px", fontSize: 11, fontWeight: 800 }}>
                         <XCircle size={12} strokeWidth={2} /> טרם עבר
                       </span>
                     )}
