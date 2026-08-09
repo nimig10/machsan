@@ -13,7 +13,7 @@
 // the tables are service-role-only so the browser cannot reach them directly.
 
 import { useCallback, useMemo, useState } from "react";
-import { CheckCircle, ClipboardList, Moon, Search, XCircle } from "lucide-react";
+import { CheckCircle, ChevronDown, ChevronUp, ClipboardList, Moon, Search, XCircle } from "lucide-react";
 import { staffGetNightAttempt } from "../utils/nightTrainingApi.js";
 
 const NIGHT_COLOR = "#2196f3";
@@ -30,15 +30,18 @@ function fmtDateTime(iso) {
   } catch { return "—"; }
 }
 
-function StatCard({ value, label, color }) {
+// Compact counter for the collapsed header row, so shutting the panel does not
+// hide the one number staff actually scan for.
+function SummaryChip({ value, label, color }) {
   return (
-    <div style={{
-      background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10,
-      padding: "10px 16px", textAlign: "center", minWidth: 110,
+    <span style={{
+      display: "inline-flex", alignItems: "baseline", gap: 4,
+      background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 20,
+      padding: "2px 10px", whiteSpace: "nowrap",
     }}>
-      <div style={{ fontSize: 22, fontWeight: 900, color: color || "var(--text)" }}>{value}</div>
-      <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 700 }}>{label}</div>
-    </div>
+      <strong style={{ fontSize: 13, fontWeight: 900, color: color || "var(--text)" }}>{value}</strong>
+      <span style={{ fontSize: 11, color: "var(--text3)", fontWeight: 700 }}>{label}</span>
+    </span>
   );
 }
 
@@ -72,6 +75,7 @@ function AttemptBreakdown({ answers }) {
 }
 
 export function NightTrainingResultsPanel({ data, loading, onRefresh, showToast }) {
+  const [open, setOpen] = useState(false);  // reference panel — shut by default
   const [view, setView] = useState("quiz"); // quiz | checklist
   const [search, setSearch] = useState("");
   const [openAttemptId, setOpenAttemptId] = useState(null);
@@ -110,14 +114,45 @@ export function NightTrainingResultsPanel({ data, loading, onRefresh, showToast 
 
   return (
     <div className="card" style={{ marginBottom: 20 }}>
-      <div className="card-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-        <div className="card-title" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      {/* Collapsed by default: this is a reference panel, and the page's real
+          work is the certifications table below it. The counters stay on the
+          collapsed row so it is still informative shut.
+          NOTE: collapsing hides the body only — the fetch lives in
+          CertificationsPage and runs either way, because the "עבר עיוני" badge
+          in the table below is derived from the same data. */}
+      <div
+        onClick={() => setOpen((v) => !v)}
+        style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", flexWrap: "wrap" }}
+      >
+        <div className="card-title" style={{ display: "inline-flex", alignItems: "center", gap: 6, margin: 0 }}>
           <Moon size={16} strokeWidth={1.75} color={NIGHT_COLOR} /> מבחן לילה עיוני וצ'ק ליסט נעילה
         </div>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={onRefresh} disabled={loading}>
-          {loading ? "טוען…" : "🔄 רענן"}
-        </button>
+
+        <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <SummaryChip value={passedCount} label="עברו עיוני" color="var(--green)" />
+          <SummaryChip value={students.length} label="נבחנו" color={NIGHT_COLOR} />
+          <SummaryChip value={checklists.length} label="דיווחי נעילה" color="var(--text3)" />
+          {loading && <span style={{ fontSize: 11, color: "var(--text3)" }}>טוען…</span>}
+        </div>
+
+        {open && (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={(e) => { e.stopPropagation(); onRefresh(); }}
+            disabled={loading}
+          >
+            {loading ? "טוען…" : "🔄 רענן"}
+          </button>
+        )}
+        {open
+          ? <ChevronUp size={18} strokeWidth={1.75} color="var(--accent)" />
+          : <ChevronDown size={18} strokeWidth={1.75} color="var(--text3)" />}
       </div>
+
+      {open && (<>
+
+      <div style={{ height: 12 }} />
 
       {/* The decision this panel informs is NOT automatic — say so where staff act. */}
       <div style={{
@@ -128,11 +163,8 @@ export function NightTrainingResultsPanel({ data, loading, onRefresh, showToast 
         הסמכת הלילה ניתנת ידנית בטבלה שלמטה.
       </div>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-        <StatCard value={passedCount} label="עברו עיוני" color="var(--green)" />
-        <StatCard value={students.length} label="נבחנו" color={NIGHT_COLOR} />
-        <StatCard value={checklists.length} label="נעילות דווחו" />
-      </div>
+      {/* No stat cards here — the same three counters already sit in the header
+          row, which stays visible whether the panel is open or shut. */}
 
       <div style={{ display: "flex", gap: 0, marginBottom: 12, borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", width: "fit-content" }}>
         <button type="button" onClick={() => setView("quiz")}
@@ -143,9 +175,16 @@ export function NightTrainingResultsPanel({ data, loading, onRefresh, showToast 
         <button type="button" onClick={() => setView("checklist")}
           style={{ padding: "8px 18px", border: "none", borderRight: "1px solid var(--border)", cursor: "pointer", fontWeight: 800, fontSize: 13,
             background: view === "checklist" ? NIGHT_COLOR : "var(--surface2)", color: view === "checklist" ? "#fff" : "var(--text3)" }}>
-          נעילות שדווחו
+          דיווחי סיום נעילה
         </button>
       </div>
+
+      {view === "checklist" && (
+        <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 10, lineHeight: 1.6 }}>
+          מי סיים את צ'ק ליסט הנעילה (26 השלבים) ודיווח על כך בסוף הלילה.
+          «ליל» הוא הלילה שאליו הדיווח שייך — דיווח אחרי חצות נרשם על הלילה שהתחיל בערב הקודם.
+        </div>
+      )}
 
       <div className="search-bar" style={{ marginBottom: 12, maxWidth: 320 }}>
         <span><Search size={16} strokeWidth={1.75} color="var(--text3)" /></span>
@@ -243,6 +282,8 @@ export function NightTrainingResultsPanel({ data, loading, onRefresh, showToast 
           </div>
         )
       )}
+
+      </>)}
     </div>
   );
 }
