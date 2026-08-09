@@ -249,7 +249,6 @@ export function NightTrainingModal({ onClose, showToast, studentName = "" }) {
   const [checked, setChecked] = useState(() => CHECKLIST_ITEMS.map(() => false));
   const [checklistSaving, setChecklistSaving] = useState(false);
   const [checklistDone, setChecklistDone] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -307,15 +306,9 @@ export function NightTrainingModal({ onClose, showToast, studentName = "" }) {
     if (r.passed) setStatus((s) => ({ ...(s || {}), passedTheory: true }));
   }, [attemptId, answers, questions, showToast]);
 
-  // Ticking the last box opens the confirmation, as in the original. Done here
-  // rather than in an effect watching `allChecked`: this is a reaction to a
-  // click, not to a render, and an effect would be a cascading setState.
   const toggleChecklistItem = useCallback((i) => {
-    const next = [...checked];
-    next[i] = !next[i];
-    setChecked(next);
-    if (!checklistDone && next.every(Boolean)) setConfirmOpen(true);
-  }, [checked, checklistDone]);
+    setChecked((prev) => prev.map((v, idx) => (idx === i ? !v : v)));
+  }, []);
 
   const doneCount = useMemo(() => checked.filter(Boolean).length, [checked]);
   const allChecked = doneCount === CHECKLIST_ITEMS.length;
@@ -326,7 +319,6 @@ export function NightTrainingModal({ onClose, showToast, studentName = "" }) {
     setChecklistSaving(false);
     if (!r.ok) { showToast("error", nightErrorMessage(r.error)); return; }
     setChecklistDone(true);
-    setConfirmOpen(false);
     showToast("success", "הנעילה דווחה. תודה!");
   }, [showToast]);
 
@@ -487,15 +479,13 @@ export function NightTrainingModal({ onClose, showToast, studentName = "" }) {
                 >
                   איפוס הסימונים ↺
                 </button>
-                {allChecked && !checklistDone && (
-                  <button type="button" className="btn btn-primary" onClick={() => setConfirmOpen(true)}
-                    style={{ flex: 1, justifyContent: "center" }}>
-                    דיווח סיום נעילה
-                  </button>
-                )}
               </div>
 
-              {confirmOpen && !checklistDone && (
+              {/* One report button, and it exists only while all 26 boxes are
+                  ticked — unticking any step takes it away again. A second
+                  "report" button that merely revealed this card said nothing
+                  new and read as two different actions. */}
+              {allChecked && !checklistDone && (
                 <div style={{
                   marginTop: 14, padding: 16, borderRadius: 12, textAlign: "center",
                   background: "var(--surface2)", border: `1px solid ${NIGHT_COLOR}`,
@@ -505,16 +495,10 @@ export function NightTrainingModal({ onClose, showToast, studentName = "" }) {
                   <p style={{ fontSize: 13, color: "var(--text2)", margin: "0 0 12px", lineHeight: 1.6 }}>
                     הדיווח יירשם על שם <strong style={{ color: "var(--text)" }}>{studentName || "המשתמש המחובר"}</strong>.
                   </p>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button type="button" className="btn btn-primary" onClick={submitChecklist} disabled={checklistSaving}
-                      style={{ flex: 1, justifyContent: "center" }}>
-                      {checklistSaving ? "שולח…" : "אני מאשר/ת שביצעתי את כל שלבי הנעילה"}
-                    </button>
-                    <button type="button" className="btn btn-secondary" onClick={() => setConfirmOpen(false)}
-                      style={{ justifyContent: "center" }}>
-                      עוד לא
-                    </button>
-                  </div>
+                  <button type="button" className="btn btn-primary" onClick={submitChecklist} disabled={checklistSaving}
+                    style={{ width: "100%", justifyContent: "center" }}>
+                    {checklistSaving ? "שולח…" : "אני מאשר/ת שביצעתי את כל שלבי הנעילה"}
+                  </button>
                 </div>
               )}
 
