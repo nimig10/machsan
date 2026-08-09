@@ -7,7 +7,8 @@ import { Modal } from "./ui.jsx";
 import { ProductionEditor } from "./ProductionEditor.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import { today, formatTime } from "../utils.js";
-import { isLegacyProduction, submittedDateIds, boardVisibleDates, pendingDates } from "../utils/productionVisibility.js";
+import { isLegacyProduction, submittedDateIds, boardVisibleDates, pendingDates, getAssignedPhotographer } from "../utils/productionVisibility.js";
+import { ensurePhotographerApproved } from "../utils/productionsApi.js";
 
 const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 const HE_WEEKDAYS = ["א'","ב'","ג'","ד'","ה'","ו'","ש'"];
@@ -250,7 +251,7 @@ function ProductionCard({ p, reservations, onClick, showPending = false }) {
   );
 }
 
-function ProductionDetail({ p, currentStudent, students, kits = [], reservations = [], showPending = false, onClose, onEdit, onOpenLoanForm, onOpenMyReservations }) {
+function ProductionDetail({ p, currentStudent, students, kits = [], reservations = [], showPending = false, onClose, onEdit, onOpenLoanForm, onOpenMyReservations, showToast, refresh }) {
   // Date ranges that already have an active (non-cancelled) equipment reservation
   // attached. The director must remove the reservation via "ההזמנות שלי" before
   // submitting a new list for the same range.
@@ -258,11 +259,33 @@ function ProductionDetail({ p, currentStudent, students, kits = [], reservations
   // order between renders and throws "Rendered more hooks than during the
   // previous render". Hence the null-guard lives inside the memo, not above it.
   const lockedDateIds = useMemo(() => (p ? submittedDateIds(p, reservations) : new Set()), [p, reservations]);
+  // Same rule as the memo above: the hook must run before the null-guard.
+  const [openingLoanForm, setOpeningLoanForm] = useState(false);
   if (!p) return null;
   const isDirector = currentStudent && p.directorEmail &&
     String(currentStudent.email || "").toLowerCase() === String(p.directorEmail).toLowerCase();
-  const hasApprovedPhotographer = (p.crew || []).some(c => c.role === "photographer" && c.status === "approved" && c.studentId);
+  // Picking a registered photographer IS the whole casting step — the flip to
+  // 'approved' is automatic and belongs to the app, not to the photographer.
+  // Gate on the assignment, then heal a failed flip on the way to the form.
+  const photographer = getAssignedPhotographer(p);
+  const hasPhotographer = !!photographer;
   const isLegacy = isLegacyProduction(p);
+
+  async function openLoanForm(dateId) {
+    if (openingLoanForm) return;
+    setOpeningLoanForm(true);
+    const healed = await ensurePhotographerApproved(p.crew);
+    setOpeningLoanForm(false);
+    if (!healed.ok) {
+      showToast?.(
+        `שיבוץ הצלם לא הושלם${healed.error ? `: ${String(healed.error).slice(0, 120)}` : ""} — נסו שוב בעוד רגע, ואם זה חוזר פנו למחסן`,
+        "error",
+      );
+      return;
+    }
+    if (healed.healed.length > 0) refresh?.();
+    onOpenLoanForm(p, dateId);
+  }
 
   const totalDates = (p.dates || []).length;
   const allDatesLocked = totalDates > 0 && (p.dates || []).every(d => lockedDateIds.has(String(d.id)));
@@ -276,14 +299,14 @@ function ProductionDetail({ p, currentStudent, students, kits = [], reservations
           )}
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          {isDirector && p.status === "published" && !hasApprovedPhotographer && (
+          {isDirector && p.status === "published" && !hasPhotographer && (
             <span style={{fontSize:12,color:"#e74c3c"}} title="חובה לרשום צלם לפני שאפשר להתקדם להשאלת ציוד">
               ⚠ חסר צלם
             </span>
           )}
-          {isDirector && p.status === "published" && hasApprovedPhotographer && !allDatesLocked && (
-            <button className="btn btn-primary btn-sm" onClick={() => onOpenLoanForm(p)}>
-              <ExternalLink size={14}/> השאלת ציוד להפקה
+          {isDirector && p.status === "published" && hasPhotographer && !allDatesLocked && (
+            <button className="btn btn-primary btn-sm" disabled={openingLoanForm} onClick={() => openLoanForm()}>
+              <ExternalLink size={14}/> {openingLoanForm ? "פותח…" : "השאלת ציוד להפקה"}
             </button>
           )}
           {isDirector && allDatesLocked && (
@@ -397,13 +420,13 @@ function ProductionDetail({ p, currentStudent, students, kits = [], reservations
                       display:"flex", alignItems:"center", gap:8, flexWrap:"wrap",
                     }}>
                       <span>⚠ הטווח לא יופיע בלוח עד להגשת רשימת ציוד</span>
-                      {p.status === "published" && hasApprovedPhotographer && onOpenLoanForm && (
+                      {p.status === "published" && hasPhotographer && onOpenLoanForm && (
                         <button className="btn btn-primary btn-sm" style={{padding:"2px 10px",fontSize:12}}
-                          onClick={() => onOpenLoanForm(p, d.id)}>
-                          <ExternalLink size={12}/> הגש רשימת ציוד
+                          disabled={openingLoanForm} onClick={() => openLoanForm(d.id)}>
+                          <ExternalLink size={12}/> {openingLoanForm ? "פותח…" : "הגש רשימת ציוד"}
                         </button>
                       )}
-                      {p.status === "published" && !hasApprovedPhotographer && (
+                      {p.status === "published" && !hasPhotographer && (
                         <span style={{fontWeight:400}}>— יש לשבץ צלם ראשי תחילה</span>
                       )}
                     </div>
@@ -785,6 +808,8 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
           kits={kits}
           reservations={reservations}
           showPending={showPendingFor(detail)}
+          showToast={showToast}
+          refresh={refresh}
           onClose={() => setDetail(null)}
           onEdit={(p) => { setDetail(null); openEditor(p); }}
           onOpenLoanForm={(p, dateId) => { setDetail(null); onOpenLoanForm?.(p, dateId); }}
