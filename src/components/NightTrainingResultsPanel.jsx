@@ -30,6 +30,35 @@ function fmtDateTime(iso) {
   } catch { return "—"; }
 }
 
+// A closing report carries TWO dates that are trivially confused: `completed_at`
+// is the moment the student pressed the button, `completed_on` is the night the
+// report belongs to (01:30 belongs to the previous evening). Squeezed onto one
+// line they read as a contradiction, so each gets its own labelled line.
+function fmtReportMoment(iso) {
+  if (!iso) return null;
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    const tz = { timeZone: "Asia/Jerusalem" };
+    return {
+      day: d.toLocaleDateString("he-IL", { ...tz, weekday: "long" }),
+      date: d.toLocaleDateString("he-IL", { ...tz, day: "2-digit", month: "2-digit", year: "numeric" }),
+      time: d.toLocaleTimeString("he-IL", { ...tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
+    };
+  } catch { return null; }
+}
+
+// completed_on is a plain YYYY-MM-DD date column — parsed by hand so no timezone
+// ever shifts it a day, which is the whole point of storing it as a date.
+function fmtNightDate(dateStr) {
+  const [y, m, d] = String(dateStr || "").split("-");
+  return y && m && d ? `${d}.${m}.${y}` : (dateStr || "—");
+}
+
+const ALL_TRACKS = "";      // the default filter value
+const NO_TRACK = "__none__"; // rows whose track is empty
+const trackKey = (t) => (String(t || "").trim() || NO_TRACK);
+
 // Compact counter for the collapsed header row, so shutting the panel does not
 // hide the one number staff actually scan for.
 function SummaryChip({ value, label, color }) {
@@ -78,6 +107,7 @@ export function NightTrainingResultsPanel({ data, loading, onRefresh, showToast 
   const [open, setOpen] = useState(false);  // reference panel — shut by default
   const [view, setView] = useState("quiz"); // quiz | checklist
   const [search, setSearch] = useState("");
+  const [track, setTrack] = useState(ALL_TRACKS);
   const [openAttemptId, setOpenAttemptId] = useState(null);
   const [attemptDetail, setAttemptDetail] = useState({}); // attemptId -> answers[]
   const [loadingAttempt, setLoadingAttempt] = useState(null);
@@ -85,21 +115,46 @@ export function NightTrainingResultsPanel({ data, loading, onRefresh, showToast 
   const students = useMemo(() => data?.students || [], [data]);
   const checklists = useMemo(() => data?.checklists || [], [data]);
 
+  // The search box is name-only now that tracks have their own dropdown —
+  // typing a track name and getting name matches too was the ambiguity.
   const q = search.trim().toLowerCase();
-  const filteredStudents = useMemo(() => (
-    !q ? students : students.filter((s) =>
-      String(s.name || "").toLowerCase().includes(q) ||
-      String(s.email || "").toLowerCase().includes(q) ||
-      String(s.track || "").toLowerCase().includes(q))
-  ), [students, q]);
+  const matchesName = useCallback((name) => !q || String(name || "").toLowerCase().includes(q), [q]);
+  const matchesTrack = useCallback((t) => track === ALL_TRACKS || trackKey(t) === track, [track]);
 
-  const filteredChecklists = useMemo(() => (
-    !q ? checklists : checklists.filter((c) =>
-      String(c.student_name || "").toLowerCase().includes(q) ||
-      String(c.track_name || "").toLowerCase().includes(q))
-  ), [checklists, q]);
+  // Options come from the rows the current tab actually renders, so the menu can
+  // never offer a track that yields an empty list (lesson #34).
+  const trackOptions = useMemo(() => {
+    const raw = view === "quiz" ? students.map((s) => s.track) : checklists.map((c) => c.track_name);
+    const named = [...new Set(raw.map((t) => String(t || "").trim()).filter(Boolean))];
+    named.sort((a, b) => a.localeCompare(b, "he"));
+    return { named, hasNone: raw.some((t) => !String(t || "").trim()) };
+  }, [view, students, checklists]);
+
+  // Switching tabs can drop the selected track out of the option list; falling
+  // back to "all" here (a reaction to the click) keeps the select from showing
+  // a blank value, and avoids a setState-in-effect cascade.
+  const switchView = useCallback((next) => {
+    setView(next);
+    if (track === ALL_TRACKS) return;
+    const raw = next === "quiz" ? students.map((s) => s.track) : checklists.map((c) => c.track_name);
+    if (!raw.some((t) => trackKey(t) === track)) setTrack(ALL_TRACKS);
+  }, [track, students, checklists]);
+
+  const filteredStudents = useMemo(
+    () => students.filter((s) => matchesName(s.name) && matchesTrack(s.track)),
+    [students, matchesName, matchesTrack],
+  );
+
+  const filteredChecklists = useMemo(
+    () => checklists.filter((c) => matchesName(c.student_name) && matchesTrack(c.track_name)),
+    [checklists, matchesName, matchesTrack],
+  );
 
   const passedCount = useMemo(() => students.filter((s) => s.passedTheory).length, [students]);
+
+  const filtering = q !== "" || track !== ALL_TRACKS;
+  const shown = view === "quiz" ? filteredStudents.length : filteredChecklists.length;
+  const totalRows = view === "quiz" ? students.length : checklists.length;
 
   const toggleAttempt = useCallback(async (attemptId) => {
     if (openAttemptId === attemptId) { setOpenAttemptId(null); return; }
@@ -167,12 +222,12 @@ export function NightTrainingResultsPanel({ data, loading, onRefresh, showToast 
           row, which stays visible whether the panel is open or shut. */}
 
       <div style={{ display: "flex", gap: 0, marginBottom: 12, borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", width: "fit-content" }}>
-        <button type="button" onClick={() => setView("quiz")}
+        <button type="button" onClick={() => switchView("quiz")}
           style={{ padding: "8px 18px", border: "none", cursor: "pointer", fontWeight: 800, fontSize: 13,
             background: view === "quiz" ? NIGHT_COLOR : "var(--surface2)", color: view === "quiz" ? "#fff" : "var(--text3)" }}>
           תוצאות מבחן
         </button>
-        <button type="button" onClick={() => setView("checklist")}
+        <button type="button" onClick={() => switchView("checklist")}
           style={{ padding: "8px 18px", border: "none", borderRight: "1px solid var(--border)", cursor: "pointer", fontWeight: 800, fontSize: 13,
             background: view === "checklist" ? NIGHT_COLOR : "var(--surface2)", color: view === "checklist" ? "#fff" : "var(--text3)" }}>
           דיווחי סיום נעילה
@@ -186,9 +241,28 @@ export function NightTrainingResultsPanel({ data, loading, onRefresh, showToast 
         </div>
       )}
 
-      <div className="search-bar" style={{ marginBottom: 12, maxWidth: 320 }}>
-        <span><Search size={16} strokeWidth={1.75} color="var(--text3)" /></span>
-        <input placeholder="חיפוש לפי שם או מסלול..." value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="search-bar" style={{ flex: "1 1 220px", minWidth: 0, maxWidth: 320, marginBottom: 0 }}>
+          <span><Search size={16} strokeWidth={1.75} color="var(--text3)" /></span>
+          <input placeholder="חיפוש לפי שם הסטודנט..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+
+        <select
+          className="form-select"
+          value={track}
+          onChange={(e) => setTrack(e.target.value)}
+          style={{ flex: "0 1 220px", minWidth: 0, borderColor: track !== ALL_TRACKS ? NIGHT_COLOR : undefined }}
+        >
+          <option value={ALL_TRACKS}>כל המסלולים</option>
+          {trackOptions.named.map((t) => <option key={t} value={t}>{t}</option>)}
+          {trackOptions.hasNone && <option value={NO_TRACK}>ללא מסלול</option>}
+        </select>
+
+        {filtering && (
+          <span style={{ fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap" }}>
+            מציג {shown} מתוך {totalRows}
+          </span>
+        )}
       </div>
 
       {view === "quiz" && (
@@ -262,23 +336,36 @@ export function NightTrainingResultsPanel({ data, loading, onRefresh, showToast 
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {filteredChecklists.map((c) => (
-              <div key={c.id} style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap",
-                border: "1px solid var(--border)", borderRadius: 8, padding: "8px 12px", background: "var(--surface)",
-              }}>
-                <div style={{ minWidth: 0 }}>
-                  <span style={{ fontWeight: 700, fontSize: 13 }}>
-                    <ClipboardList size={13} strokeWidth={1.75} /> {c.student_name}
-                  </span>
-                  <span style={{ fontSize: 11, color: "var(--text3)", marginRight: 8 }}>{c.track_name || "ללא מסלול"}</span>
+            {filteredChecklists.map((c) => {
+              const at = fmtReportMoment(c.completed_at);
+              return (
+                <div key={c.id} style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap",
+                  border: "1px solid var(--border)", borderRadius: 8, padding: "10px 12px", background: "var(--surface)",
+                }}>
+                  <div style={{ minWidth: 0 }}>
+                    <span style={{ fontWeight: 700, fontSize: 13 }}>
+                      <ClipboardList size={13} strokeWidth={1.75} /> {c.student_name}
+                    </span>
+                    <span style={{ fontSize: 11, color: "var(--text3)", marginRight: 8 }}>{c.track_name || "ללא מסלול"}</span>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: "var(--text2)", minWidth: 0 }}>
+                    <div>
+                      <span style={{ color: "var(--text3)" }}>הדיווח התקבל ב־</span>
+                      <strong style={{ color: "var(--text)" }}>{at ? `${at.day}, ${at.date}` : "—"}</strong>
+                      {at && <>
+                        <span style={{ color: "var(--text3)" }}> בשעה </span>
+                        <strong style={{ color: "var(--text)" }}>{at.time}</strong>
+                      </>}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "var(--text3)", marginTop: 2 }}>
+                      <Moon size={11} strokeWidth={1.75} color={NIGHT_COLOR} />{" "}
+                      שייך ללילה שהתחיל ב־{fmtNightDate(c.completed_on)}
+                    </div>
+                  </div>
                 </div>
-                <div style={{ fontSize: 12, color: "var(--text2)", whiteSpace: "nowrap" }}>
-                  {fmtDateTime(c.completed_at)}
-                  <span style={{ color: "var(--text3)", marginRight: 6 }}>(ליל {c.completed_on})</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )
       )}
