@@ -4,7 +4,7 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import { Plus, Trash2, Send, AlertTriangle, ExternalLink } from "lucide-react";
 import { Modal } from "./ui.jsx";
-import { upsertProduction, notifyProductionCrewInvites, publishProduction, deleteProduction, autoApproveDirectorCrew } from "../utils/productionsApi.js";
+import { upsertProduction, notifyProductionCrewInvites, publishProduction, deleteProduction, autoApproveDirectorCrew, ensurePhotographerApproved } from "../utils/productionsApi.js";
 import { isLegacyProduction, submittedDateIds } from "../utils/productionVisibility.js";
 
 // Only photographer + sound are predefined: the equipment-loan certification
@@ -137,12 +137,11 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
   // a brand-new production that was never published has nothing to clean up.
   const persistedRef = useRef(!!initial?.id);
   const isPublished = initial?.status === "published";
-  // Live (not persisted) check — uses local crew state so the button reflects
-  // edits made in this session even before save.
-  const hasApprovedPhotographer = crew.some(c => c.role === "photographer" && c.status === "approved" && c.studentId);
   // A photographer is ASSIGNED as soon as a student is picked — even before the
-  // save auto-approves the row (status is still 'invited' pre-save). Gates the
-  // per-range "הגש רשימת ציוד" shortcut in create mode.
+  // save auto-approves the row (status is still 'invited' pre-save). This is the
+  // ONLY photographer gate in the editor: an 'approved'-only check made a row
+  // whose automatic flip failed look like no casting at all (see
+  // getAssignedPhotographer). Every path to the loan form heals first.
   const hasPhotographerAssigned = crew.some(c => c.role === "photographer" && c.studentId);
 
   const linkedReservations = useMemo(() =>
@@ -374,6 +373,37 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
     };
   }
 
+  // The single write path: save, then run the automatic crew flip. Every caller
+  // must go through it — a write that skips the flip leaves the photographer
+  // stuck at 'invited' with no way back (the on-close writes below used to do
+  // exactly that). Mutates blob.crew + local state so the caller sees the flip.
+  async function upsertAndApprove(blob) {
+    const res = await upsertProduction(blob);
+    if (!res.ok) return { ...res, auto: null };
+    const auto = await autoApproveDirectorCrew(blob.crew);
+    if (auto.approvedIds.length > 0) {
+      const flip = c => auto.approvedIds.includes(c.id) ? { ...c, status: "approved" } : c;
+      blob.crew = blob.crew.map(flip);
+      setCrew(prev => prev.map(flip));
+    }
+    return { ...res, auto };
+  }
+
+  // Heal-then-open: the loan form must never open on an unapproved photographer
+  // (create_reservation_v2 derives the crew snapshot from approved rows only).
+  async function openLoanFormFor(blob, dateId) {
+    const healed = await ensurePhotographerApproved(blob?.crew);
+    if (!healed.ok) {
+      showToast?.(
+        `שיבוץ הצלם לא הושלם${healed.error ? `: ${String(healed.error).slice(0, 120)}` : ""} — נסו שוב בעוד רגע`,
+        "error",
+      );
+      return false;
+    }
+    onOpenLoanForm?.(blob, dateId);
+    return true;
+  }
+
   async function persist(targetStatus) {
     const err = validate();
     if (err) {
@@ -384,9 +414,14 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
     setErrorField(null);
     setSaving(true);
     const blob = buildBlob(targetStatus);
-    const res = await upsertProduction(blob);
+    // No approval flow: director-composed crew rows are auto-approved right
+    // after the save. Rows are still WRITTEN as 'invited' (do not change that —
+    // the approved→invited UPDATE is what fires the DB recheck trigger), and
+    // production_approve_crew_v1 flips them + runs the cert-recheck/snapshot
+    // refresh for photographer/sound.
+    const res = await upsertAndApprove(blob);
+    setSaving(false);
     if (!res.ok) {
-      setSaving(false);
       console.error("[ProductionEditor.persist]", { blob, error: res.error, raw: res });
       const detail = String(res.error || "").slice(0, 200);
       showToast?.(`שגיאה בשמירה: ${detail || "ראה Console"}`, "error");
@@ -395,22 +430,11 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
     // The production (and its date rows) now exist in the DB — the on-close
     // cleanup may need to prune list-less ranges.
     persistedRef.current = true;
-    // No approval flow: director-composed crew rows are auto-approved right
-    // after the save. Rows are still WRITTEN as 'invited' (do not change that —
-    // the approved→invited UPDATE is what fires the DB recheck trigger), and
-    // production_approve_crew_v1 flips them + runs the cert-recheck/snapshot
-    // refresh for photographer/sound. Best-effort: a failed row stays
-    // 'invited' and converges on the next save.
-    const auto = await autoApproveDirectorCrew(blob.crew);
-    setSaving(false);
-    if (auto.approvedIds.length > 0) {
-      const flip = c => auto.approvedIds.includes(c.id) ? { ...c, status: "approved" } : c;
-      blob.crew = blob.crew.map(flip);
-      setCrew(prev => prev.map(flip));
-    }
-    if (auto.failures.length > 0) {
-      const detail = String(auto.failures[0].error || "").slice(0, 120);
-      showToast?.(`ההפקה נשמרה, אך שיבוץ איש צוות נכשל${detail ? `: ${detail}` : ""} — שמרו שוב כדי לנסות שוב`, "error");
+    // A failed flip is no longer terminal (the loan-form paths retry it), but it
+    // still deserves a word — the photographer's row is not live yet.
+    if (res.auto?.failures.length > 0) {
+      const detail = String(res.auto.failures[0].error || "").slice(0, 120);
+      showToast?.(`ההפקה נשמרה, אך שיבוץ איש צוות טרם הושלם${detail ? `: ${detail}` : ""} — יושלם אוטומטית בהגשת רשימת הציוד`, "error");
     }
     return blob;
   }
@@ -476,8 +500,10 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
     }
     const blob = await persistAndPublish();
     if (!blob) return;
-    onOpenLoanForm?.(blob, dateId);
-    onClose();
+    // Keep the editor open when the flip could not be healed — the toast
+    // explains why, and closing would drop the director on the board with no
+    // form and no context.
+    if (await openLoanFormFor(blob, dateId)) onClose();
   }
 
   // Close the editor. A date range the director entered but never submitted an
@@ -499,7 +525,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
       // (When `pending` is non-empty the write below already carries kitId.)
       if (persistedRef.current && String(selectedKitId || "") !== String(initial?.kitId || "")) {
         const blob = buildBlob(initial?.status || "published");
-        const res = await upsertProduction(blob);
+        const res = await upsertAndApprove(blob);
         if (res.ok) {
           // onSaved refreshes the productions list, which is what makes the loan
           // form and the add-items picker re-derive the gate from the new kit.
@@ -515,7 +541,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
     const dropIds = new Set(pending.map(d => String(d.id)));
     const keptDates = dates.filter(d => !dropIds.has(String(d.id)));
     const blob = { ...buildBlob("published"), dates: keptDates };
-    const res = await upsertProduction(blob);
+    const res = await upsertAndApprove(blob);
     if (res.ok) {
       onSaved?.(blob);
       showToast?.(
@@ -957,7 +983,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
                 טווח תאריכים יופיע בלוח ההפקות <strong>רק</strong> אחרי שתוגש לו רשימת ציוד.
                 טווח תאריכים שתשאיר ללא רשימה <strong style={{color:"#e74c3c"}}>יוסר</strong> מההפקה בעת סגירת החלון.
               </p>
-              {!hasApprovedPhotographer && (
+              {!hasPhotographerAssigned && (
                 <p style={{margin:"0 0 10px",fontSize:12,color:"#e74c3c",fontWeight:700}}>
                   ⚠ יש לשבץ צלם ראשי לפני הגשת רשימת ציוד
                 </p>
@@ -966,9 +992,9 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
                 {postSavePrompt.pending.map(d => (
                   <div key={d.id} style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"space-between",border:"1px solid var(--border)",borderRadius:6,padding:"8px 10px",background:"var(--surface2)"}}>
                     <span style={{fontSize:13,fontWeight:700}}>{fmtRangeHe(d)}</span>
-                    {hasApprovedPhotographer && (
+                    {hasPhotographerAssigned && (
                       <button className="btn btn-primary btn-sm"
-                        onClick={() => onOpenLoanForm?.(postSavePrompt.blob, d.id)}>
+                        onClick={() => openLoanFormFor(postSavePrompt.blob, d.id)}>
                         <ExternalLink size={14}/> הגש רשימת ציוד
                       </button>
                     )}

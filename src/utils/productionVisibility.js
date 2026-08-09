@@ -34,6 +34,20 @@ export function submittedDateIds(p, reservations) {
   return ids;
 }
 
+// The photographer row that gates equipment loans — the minimum crew required
+// to take gear out. A row counts as soon as a registered STUDENT is picked:
+// since PR #75 there is no human approval step, and 'approved' is only the
+// automatic post-save flip (production_approve_crew_v1). A row still sitting at
+// 'invited' means that flip failed, NOT that the director skipped the casting —
+// gating on 'approved' turned such a row into a permanent "⚠ חסר צלם" the
+// director had no way to clear (prod: "נגמרה הסוללה", 2026-08). Callers that
+// open the loan form must first heal the row via ensurePhotographerApproved:
+// create_reservation_v2 derives the crew snapshot from approved rows only.
+export function getAssignedPhotographer(p) {
+  const crew = Array.isArray(p?.crew) ? p.crew : [];
+  return crew.find(c => c.role === "photographer" && c.studentId && c.status !== "rejected") || null;
+}
+
 // Date ranges that appear on the public board: legacy productions show all;
 // new productions show only ranges with a submitted equipment list.
 export function boardVisibleDates(p, reservations) {

@@ -450,3 +450,20 @@ export async function autoApproveDirectorCrew(crew) {
   }
   return { ok: failures.length === 0, approvedIds, failures };
 }
+
+// Last-chance retry of the automatic flip, run right before the loan form
+// opens. autoApproveDirectorCrew above is best-effort and fires exactly once
+// per save: a network blip in the second between the save and the flip left the
+// photographer at 'invited' FOREVER, with no UI anywhere to retry it — the
+// board just said "⚠ חסר צלם" while the editor showed the same row as
+// "משובץ" (prod incident, 2026-08). Healing here (rather than only relaxing the
+// board gate) is mandatory: create_reservation_v2 derives the reservation's
+// crew snapshot from approved rows only, so opening the form with an
+// unapproved photographer would file a request with an empty cert snapshot.
+export async function ensurePhotographerApproved(crew) {
+  const stuck = (crew || []).filter(c =>
+    c.role === "photographer" && c.status === "invited" && c.studentId);
+  if (stuck.length === 0) return { ok: true, healed: [], error: null };
+  const res = await autoApproveDirectorCrew(stuck);
+  return { ok: res.ok, healed: res.approvedIds, error: res.failures[0]?.error || null };
+}
