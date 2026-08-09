@@ -312,6 +312,7 @@ export function NightTrainingModal({ onClose, showToast, studentName = "" }) {
 
   const doneCount = useMemo(() => checked.filter(Boolean).length, [checked]);
   const allChecked = doneCount === CHECKLIST_ITEMS.length;
+  const remaining = CHECKLIST_ITEMS.length - doneCount;
 
   const submitChecklist = useCallback(async () => {
     setChecklistSaving(true);
@@ -469,6 +470,43 @@ export function NightTrainingModal({ onClose, showToast, studentName = "" }) {
                   />
                 ))}
               </ul>
+
+              {/* The list runs 26 rows deep, so the header counter is long gone
+                  by the time the student reaches the end. Repeat it where the
+                  action is, and state the all-or-nothing rule outright — the
+                  report button's absence is otherwise unexplained. */}
+              {!checklistDone && (
+                <div style={{
+                  marginTop: 14, padding: "12px 14px", borderRadius: 10, background: "var(--surface2)",
+                  border: `1px solid ${allChecked ? "rgba(46,204,113,0.35)" : "var(--border)"}`,
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, minWidth: 0 }}>
+                      {allChecked
+                        ? "כל השלבים סומנו ✓"
+                        : remaining === 1 ? "נותר שלב אחד לסימון" : `נותרו ${remaining} שלבים לסימון`}
+                    </span>
+                    <span style={{
+                      fontWeight: 800, fontSize: 13, whiteSpace: "nowrap",
+                      color: allChecked ? "var(--green)" : NIGHT_COLOR,
+                    }}>
+                      {doneCount}/{CHECKLIST_ITEMS.length}
+                    </span>
+                  </div>
+                  <div style={{ height: 7, background: "var(--surface3)", borderRadius: 99, overflow: "hidden", marginTop: 10 }}>
+                    <div style={{
+                      height: "100%", width: `${(doneCount / CHECKLIST_ITEMS.length) * 100}%`,
+                      background: "var(--green)", borderRadius: 99, transition: "width 0.25s ease",
+                    }} />
+                  </div>
+                  {!allChecked && (
+                    <p style={{ fontSize: 12.5, color: "var(--text2)", margin: "10px 0 0", lineHeight: 1.6 }}>
+                      יש להשלים את <strong style={{ color: "var(--text)" }}>כל {CHECKLIST_ITEMS.length} השלבים</strong> כדי
+                      לדווח על הנעילה — כפתור האישור הסופי יופיע כאן רק כשכולם מסומנים.
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
                 <button
