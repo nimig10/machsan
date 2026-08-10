@@ -5839,30 +5839,55 @@ export default function App() {
 
 
 
-  const queueUndoSnapshot = () => {
+  // `resIds` = the reservation ids THIS action changed, captured at snapshot
+  // time. Undo may write back only these. Without the scope, an undo would
+  // also push back rows that drifted underneath the snapshot — realtime uses
+  // the RAW _setReservations (see the reservations_new channel) and therefore
+  // records no snapshot, so another warehouse user's return can land in local
+  // state silently and would otherwise be "undone" by a click that had nothing
+  // to do with it.
+  const queueUndoSnapshot = (resIds = null) => {
     if (historySuspendedRef.current || undoInFlightRef.current || historyQueuedRef.current) return;
     historyQueuedRef.current = true;
     const snapshot = getUndoSnapshot();
     setUndoStack((prev) => {
       const last = prev[prev.length - 1];
       if (last && dataEquals(last.snapshot, snapshot)) return prev;
-      return [...prev, { id: Date.now(), snapshot }].slice(-15);
+      return [...prev, { id: Date.now(), snapshot, resIds }].slice(-15);
     });
     window.setTimeout(() => {
       historyQueuedRef.current = false;
     }, 0);
   };
 
-  const createTrackedSetter = (rawSetter) => (nextValue) => {
+  // `diffIds` is optional and only the reservations setter supplies one — it is
+  // the sole entity whose undo issues per-row status writes.
+  const createTrackedSetter = (rawSetter, diffIds = null) => (nextValue) => {
     rawSetter((prev) => {
       const resolved = typeof nextValue === "function" ? nextValue(prev) : nextValue;
-      if (!dataEquals(prev, resolved)) queueUndoSnapshot();
+      if (!dataEquals(prev, resolved)) queueUndoSnapshot(diffIds ? diffIds(prev, resolved) : null);
       return resolved;
     });
   };
 
+  // Ids added, removed, or modified in any way. Deliberately wider than "status
+  // changed": the snapshot is a whole-app rollback, so the scope must cover
+  // every row the action touched, and handleUndo narrows to status from there.
+  const changedReservationIds = (prev, next) => {
+    const before = new Map((prev || []).map(r => [String(r.id), r]));
+    const ids = new Set();
+    for (const r of next || []) {
+      const id = String(r.id);
+      const was = before.get(id);
+      if (!was || !dataEquals(was, r)) ids.add(id);
+      before.delete(id);
+    }
+    for (const id of before.keys()) ids.add(id);
+    return ids;
+  };
+
   const setEquipment = createTrackedSetter(_setEquipment);
-  const setReservations = createTrackedSetter(_setReservations);
+  const setReservations = createTrackedSetter(_setReservations, changedReservationIds);
   const setCategories = createTrackedSetter(_setCategories);
   const setCategoryTypes = createTrackedSetter(_setCategoryTypes);
   const setCategoryLoanTypes = createTrackedSetter(_setCategoryLoanTypes);
@@ -6012,9 +6037,15 @@ export default function App() {
         const currentRes  = Array.isArray(currentState.reservations) ? currentState.reservations : [];
         const snapshotById = new Map(snapshotRes.filter(r => !r.lesson_auto).map(r => [String(r.id), r]));
         const currentById  = new Map(currentRes.filter(r => !r.lesson_auto).map(r => [String(r.id), r]));
+        // Only rows this action itself touched (see queueUndoSnapshot). A
+        // snapshot pushed by some other entity's setter carries no scope, and
+        // then no status is written at all — a partial undo is recoverable,
+        // overwriting a colleague's live change is not.
+        const scope = lastEntry.resIds instanceof Set ? lastEntry.resIds : null;
         for (const [id, r] of snapshotById) {
           const cur = currentById.get(id);
           if (!cur) { toRestore.push(r); continue; }
+          if (!scope || !scope.has(id)) continue;
           // Compared through getEffectiveStatus (lesson #19), not raw status:
           // local rows carry a normalised "באיחור" where the DB still says
           // "מאושר", and a raw comparison would fire a pointless write on every
