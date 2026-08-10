@@ -5994,17 +5994,35 @@ export default function App() {
       const currentState = getUndoSnapshot();
 
       // Reservations live in reservations_new + reservation_items (relational).
-      // Diff snapshot vs current to produce restore/delete lists.
+      // Diff snapshot vs current to produce restore/delete/status lists.
       // lesson_auto rows are virtual — never written to DB, skipped here.
+      //
+      // toRevert exists because presence-only diffing silently dropped the most
+      // common undo of all. A row that was MODIFIED — "הוחזר", approved,
+      // rejected — is in both maps, so it landed in neither list and no write
+      // was ever issued: local state flipped back, the DB kept the new status,
+      // and the next realtime tick overwrote the revert. Worse, an empty
+      // promise list makes `.every()` true, so the toast reported success.
       let toRestore = [];
       let toDelete = [];
+      let toRevert = [];
       let authHeaders = { "Content-Type": "application/json" };
       try {
         const snapshotRes = Array.isArray(snapshot.reservations) ? snapshot.reservations : [];
         const currentRes  = Array.isArray(currentState.reservations) ? currentState.reservations : [];
         const snapshotById = new Map(snapshotRes.filter(r => !r.lesson_auto).map(r => [String(r.id), r]));
         const currentById  = new Map(currentRes.filter(r => !r.lesson_auto).map(r => [String(r.id), r]));
-        for (const [id, r] of snapshotById) if (!currentById.has(id)) toRestore.push(r);
+        for (const [id, r] of snapshotById) {
+          const cur = currentById.get(id);
+          if (!cur) { toRestore.push(r); continue; }
+          // Compared through getEffectiveStatus (lesson #19), not raw status:
+          // local rows carry a normalised "באיחור" where the DB still says
+          // "מאושר", and a raw comparison would fire a pointless write on every
+          // overdue loan in the snapshot.
+          if (getEffectiveStatus(r) !== getEffectiveStatus(cur)) {
+            toRevert.push({ id, status: r.status });
+          }
+        }
         for (const [id] of currentById)     if (!snapshotById.has(id)) toDelete.push(id);
         const token = await getAuthToken().catch(() => null);
         if (token) authHeaders["Authorization"] = `Bearer ${token}`;
@@ -6099,6 +6117,19 @@ export default function App() {
           headers: authHeaders,
           body: JSON.stringify({ id: String(id) }),
         }).catch((err) => { console.error("undo delete-reservation failed", id, err); return null; })),
+        // Undoing a return re-takes inventory, so the RPC's approve-overbook
+        // guard (lesson #22) applies and a 409 here is a real answer, not a
+        // glitch: the units went out to somebody else in the meantime. It
+        // arrives as res.ok === false and is counted as a failed write below,
+        // which is what turns the toast into "חלק מהשמירות נכשלו".
+        ...toRevert.map(({ id, status }) => fetch("/api/update-reservation-status", {
+          method: "POST",
+          headers: authHeaders,
+          body: JSON.stringify({ id: String(id), status }),
+        }).then((res) => {
+          if (!res.ok) console.error("undo status-revert rejected", id, status, res.status);
+          return res;
+        }).catch((err) => { console.error("undo status-revert failed", id, err); return null; })),
       ];
 
       let ok = true;
