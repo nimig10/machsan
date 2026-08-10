@@ -2,7 +2,7 @@
 // Director-only. Sections: title + description, dates, crew, status CTA + delete.
 
 import { useMemo, useState, useRef, useEffect } from "react";
-import { Plus, Trash2, Send, AlertTriangle, ExternalLink, CalendarDays } from "lucide-react";
+import { Plus, Trash2, Send, AlertTriangle, ExternalLink, CalendarDays, ChevronDown, ChevronUp } from "lucide-react";
 import { Modal } from "./ui.jsx";
 import { upsertProduction, notifyProductionCrewInvites, publishProduction, deleteProduction, autoApproveDirectorCrew, ensurePhotographerApproved } from "../utils/productionsApi.js";
 import { isLegacyProduction, submittedDateIds } from "../utils/productionVisibility.js";
@@ -147,6 +147,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [postSavePrompt, setPostSavePrompt] = useState(null); // { blob, pending: [dateRange] } | null
   const [errorField, setErrorField]   = useState(null);
+  const [rulesOpen, setRulesOpen]     = useState(false); // date-rules hint, shut by default
   const [customRolePrompt, setCustomRolePrompt] = useState({ open: false, value: "" });
   const descriptionRef = useRef(null);
   useEffect(() => {
@@ -752,32 +753,42 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
             min={minShoot}, so the browser simply greys out every earlier day —
             no message, nothing happens on tap. Without this line the field reads
             as broken rather than as restricted (prod report, 2026-08-09). */}
+        {/* One line by default — the earliest legal date is the only thing most
+            directors need, and this hint sits above the form itself. The rest of
+            the rules open on demand. */}
         <div style={{
           marginBottom:10, background:"var(--surface2)", border:"1px solid var(--border)",
-          borderRadius:8, padding:"10px 12px",
+          borderRadius:8, padding:"7px 10px",
         }}>
-          {/* The date leads — it is the one thing the director needs. The rule
-              behind it is the explanation, not the headline. */}
-          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,fontWeight:800,flexWrap:"wrap"}}>
+          <div
+            onClick={() => setRulesOpen(v => !v)}
+            style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",fontSize:12.5,cursor:"pointer"}}
+          >
             <CalendarDays size={14} strokeWidth={1.75} color="var(--accent)" style={{flex:"none"}} />
-            <span>התאריך המוקדם ביותר שאפשר לצלם בו:</span>
-            <span style={{color:"var(--accent)"}}>{fmtDateHe(minShoot)}</span>
+            <span style={{fontWeight:800}}>מוקדם ביותר לצילום:</span>
+            <span style={{fontWeight:800,color:"var(--accent)"}}>{fmtDateHe(minShoot)}</span>
+            <span style={{marginInlineStart:"auto",color:"var(--text3)",display:"inline-flex",alignItems:"center",gap:3,whiteSpace:"nowrap"}}>
+              כללי התאריכים
+              {rulesOpen ? <ChevronUp size={13} strokeWidth={1.75}/> : <ChevronDown size={13} strokeWidth={1.75}/>}
+            </span>
           </div>
-          {/* One fact per line, each led by the part the director acts on.
-              The first bullet exists to say the greyed-out calendar is a RULE
-              and not a broken field — that confusion is what generated the
-              support call in the first place. */}
-          <ul style={{margin:"8px 0 0",paddingInlineStart:18,fontSize:12.5,color:"var(--text2)",lineHeight:1.9}}>
-            <li>
-              <strong style={{color:"var(--text)"}}>תאריכים מוקדמים יותר חסומים בלוח השנה</strong>
-              {" "}— זו לא תקלה. נדרשת {LEAD_TIME_RULE_HE}.
-            </li>
-            <li><strong style={{color:"var(--text)"}}>אורך מקסימלי לטווח: 7 ימים.</strong></li>
-            <li>
-              <strong style={{color:"var(--text)"}}>טווח לא מתחיל ולא מסתיים בשישי/שבת</strong>
-              {" "}— המחסן סגור. (הצילום עצמו יכול לכלול סוף שבוע באמצע הטווח.)
-            </li>
-          </ul>
+
+          {/* One fact per line. The first exists to say the greyed-out calendar
+              is a RULE and not a broken field — that confusion is what generated
+              the support call in the first place. */}
+          {rulesOpen && (
+            <ul style={{margin:"8px 0 2px",paddingInlineStart:18,fontSize:12.5,color:"var(--text2)",lineHeight:1.9}}>
+              <li>
+                <strong style={{color:"var(--text)"}}>תאריכים מוקדמים יותר חסומים בלוח השנה</strong>
+                {" "}— זו לא תקלה. נדרשת {LEAD_TIME_RULE_HE}.
+              </li>
+              <li><strong style={{color:"var(--text)"}}>אורך מקסימלי לטווח: 7 ימים.</strong></li>
+              <li>
+                <strong style={{color:"var(--text)"}}>טווח לא מתחיל ולא מסתיים בשישי/שבת</strong>
+                {" "}— המחסן סגור. (הצילום עצמו יכול לכלול סוף שבוע באמצע הטווח.)
+              </li>
+            </ul>
+          )}
         </div>
 
         {!canAddDate && dates.length > 0 && !isLegacy && (
