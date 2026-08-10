@@ -763,9 +763,20 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
             <span>התאריך המוקדם ביותר שאפשר לצלם בו:</span>
             <span style={{color:"var(--accent)"}}>{fmtDateHe(minShoot)}</span>
           </div>
-          <ul style={{margin:"6px 0 0",paddingInlineStart:18,fontSize:12,color:"var(--text3)",lineHeight:1.8}}>
-            <li>תאריכים מוקדמים יותר חסומים בלוח השנה — נדרשת {LEAD_TIME_RULE_HE}.</li>
-            <li>כל טווח עד 7 ימים, ואינו מתחיל או מסתיים בשישי/שבת (המחסן סגור).</li>
+          {/* One fact per line, each led by the part the director acts on.
+              The first bullet exists to say the greyed-out calendar is a RULE
+              and not a broken field — that confusion is what generated the
+              support call in the first place. */}
+          <ul style={{margin:"8px 0 0",paddingInlineStart:18,fontSize:12.5,color:"var(--text2)",lineHeight:1.9}}>
+            <li>
+              <strong style={{color:"var(--text)"}}>תאריכים מוקדמים יותר חסומים בלוח השנה</strong>
+              {" "}— זו לא תקלה. נדרשת {LEAD_TIME_RULE_HE}.
+            </li>
+            <li><strong style={{color:"var(--text)"}}>אורך מקסימלי לטווח: 7 ימים.</strong></li>
+            <li>
+              <strong style={{color:"var(--text)"}}>טווח לא מתחיל ולא מסתיים בשישי/שבת</strong>
+              {" "}— המחסן סגור. (הצילום עצמו יכול לכלול סוף שבוע באמצע הטווח.)
+            </li>
           </ul>
         </div>
 
