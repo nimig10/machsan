@@ -72,6 +72,7 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
         console.error("[completeDashReturn]", result);
         if (showToast) {
           if (result.stage === "equipment") showToast("error", "שגיאה בעדכון סטטוס היחידות — ההחזרה לא הושלמה ולא בוצע שינוי.");
+          else if (result.stage === "outcomes") showToast("error", "רישום החריגים נכשל — ההשאלה נשארה פתוחה בכוונה. מצב היחידות כבר נשמר; נסו שוב.");
           else showToast("error", result.inventoryWritten
             ? "מצב היחידות נשמר, אך סגירת ההשאלה נכשלה — הבקשה עדיין פתוחה. נסו שוב."
             : reservationStatusErrorMessage(result.error));
@@ -85,6 +86,7 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
         ...markReservationReturned(r),
         returned_by_staff_id: rpcResult.returned_by_staff_id || null,
         returned_by_name:     rpcResult.returned_by_name || null,
+        return_outcomes:      result.returnOutcomes || null,
       })));
       if (showToast) showToast("success", result.note
         ? `הציוד של ${res.student_name} הוחזר — ${result.note}`

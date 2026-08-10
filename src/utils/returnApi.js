@@ -6,7 +6,9 @@
 // exactly how one of them ends up with the steps reversed.
 
 import { writeEquipmentToDB, updateReservationStatus } from "../utils.js";
-import { applyUnitOutcomes, summarizeOutcomes, describeExceptions } from "./returnFlow.js";
+import {
+  applyUnitOutcomes, summarizeOutcomes, describeExceptions, buildReturnOutcomesSnapshot,
+} from "./returnFlow.js";
 
 // Record what came back, then close the loan.
 //
@@ -21,9 +23,14 @@ import { applyUnitOutcomes, summarizeOutcomes, describeExceptions } from "./retu
 // and no trace of what happened to it. That failure is unrecoverable without
 // someone remembering, which is the whole problem this screen was built to fix.
 //
+// The damage SNAPSHOT for the archive travels with the status change, and the
+// endpoint writes it before invoking the RPC — so the same ordering rule holds
+// on the server: the record of what came back is durable before the loan is
+// allowed to close. A failure there surfaces as stage "outcomes".
+//
 // Returns:
-//   { ok: true,  summary, note }
-//   { ok: false, stage: "equipment" | "reservation", error, inventoryWritten }
+//   { ok: true,  summary, note, returnOutcomes }
+//   { ok: false, stage: "equipment" | "outcomes" | "reservation", error, inventoryWritten }
 export async function completeEquipmentReturn({ reservation, equipment, setEquipment, outcomes }) {
   const list = Array.isArray(equipment) ? equipment : [];
   const summary = summarizeOutcomes(outcomes);
@@ -43,10 +50,19 @@ export async function completeEquipmentReturn({ reservation, equipment, setEquip
   }
 
   const returnedAt = new Date().toISOString();
-  const rpc = await updateReservationStatus(reservation.id, "הוחזר", { returned_at: returnedAt });
+  // Built from `outcomes`, never from the equipment array: unit statuses drift
+  // legitimately afterwards (פגום → בתיקון → תקין on "ציוד בדיקה") and the
+  // archive must keep showing what was recorded at handover. null when nothing
+  // was wrong, and then the column stays NULL — see returnFlow.js.
+  const returnOutcomes = buildReturnOutcomesSnapshot({ outcomes, equipment: list, at: returnedAt });
+
+  const rpc = await updateReservationStatus(reservation.id, "הוחזר", { returned_at: returnedAt, returnOutcomes });
   if (!rpc.ok) {
-    return { ok: false, stage: "reservation", error: rpc, inventoryWritten: inventoryChanged };
+    // The snapshot write is the one failure that leaves the loan open on
+    // purpose, so it gets its own stage and its own message.
+    const stage = rpc.error === "return_outcomes_write_failed" ? "outcomes" : "reservation";
+    return { ok: false, stage, error: rpc, inventoryWritten: inventoryChanged };
   }
 
-  return { ok: true, returnedAt, rpc, summary, note: describeExceptions(summary), inventoryChanged };
+  return { ok: true, returnedAt, rpc, summary, note: describeExceptions(summary), inventoryChanged, returnOutcomes };
 }

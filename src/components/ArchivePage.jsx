@@ -1,8 +1,12 @@
 // ArchivePage.jsx — archive of returned reservations
 import { useMemo, useState } from "react";
 import { formatDate, formatTime, deleteReservation as deleteReservationRpc, groupReservationItemsByCategory } from "../utils.js";
-import { Calendar, ChevronLeft, ChevronRight, Film, Mic, Package, X } from "lucide-react";
+import { AlertTriangle, Calendar, ChevronLeft, ChevronRight, Film, HelpCircle, Mic, Package, X } from "lucide-react";
 import { ApprovedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
+import {
+  readReturnOutcomes, returnExceptionSummary, describeExceptions, unitLabel,
+  UNIT_DAMAGED, UNIT_MISSING, OUTCOME_COLOR, OUTCOME_BG,
+} from "../utils/returnFlow.js";
 
 const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 
@@ -184,8 +188,25 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
     setCalYr(d.getFullYear()); setCalMo(d.getMonth());
   };
 
+  // One chip per outcome, used by both the modal list and the collapsed card.
+  const OutcomeChip = ({status, unitId, fault}) => (
+    <span
+      title={status===UNIT_DAMAGED ? (fault || "לא נרשם פירוט") : "לא חזר"}
+      style={{display:"inline-flex",alignItems:"center",gap:3,whiteSpace:"nowrap",
+        background:OUTCOME_BG[status],color:OUTCOME_COLOR[status],
+        border:`1px solid ${OUTCOME_COLOR[status]}`,borderRadius:6,padding:"2px 8px",fontSize:10,fontWeight:800}}>
+      {status===UNIT_DAMAGED
+        ? <><AlertTriangle size={10} strokeWidth={2.4}/> פגום {unitLabel(unitId)}</>
+        : <><HelpCircle size={10} strokeWidth={2.4}/> נעלם {unitLabel(unitId)}</>}
+    </span>
+  );
+
   const ResCard = ({r}) => {
     const isLesson = r.loan_type==="שיעור";
+    // null for every clean return and every row written before the feature —
+    // everything below is gated on it, so those render exactly as before.
+    const outc = readReturnOutcomes(r);
+    const ex = returnExceptionSummary(r);
     return (
       <div key={r.id}
         onClick={()=>setViewRes(r)}
@@ -205,6 +226,10 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
               ? <span style={{background:"rgba(155,89,182,0.12)",color:"#9b59b6",border:"1px solid rgba(155,89,182,0.4)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>📽️ שיעור הסתיים</span>
               : <span style={{background:"rgba(52,152,219,0.12)",color:"var(--blue)",border:"1px solid rgba(52,152,219,0.4)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>🔵 הוחזר</span>}
             {r.loan_type&&!isLesson&&<span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:20,padding:"2px 8px",fontSize:11,color:"var(--accent)",fontWeight:700,display:"inline-flex",alignItems:"center",gap:4}}>{LOAN_ICONS[r.loan_type]||<Package size={11} strokeWidth={1.75} color="var(--accent)" />} {r.loan_type}</span>}
+            {/* Count on the collapsed card, so "how bad" is answerable without
+                opening. Wording comes from describeExceptions — the same string
+                the closing toast uses, so the two can never drift. */}
+            {ex&&<span title="נרשמו חריגים בהחזרה" style={{background:"rgba(231,76,60,0.12)",color:"var(--red)",border:"1px solid rgba(231,76,60,0.45)",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:800,display:"inline-flex",alignItems:"center",gap:4}}><AlertTriangle size={11} strokeWidth={2.2}/> {describeExceptions(ex)}</span>}
             <button className="btn btn-danger btn-sm" onClick={e=>{e.stopPropagation();deleteRes(r.id);}}>🗑️</button>
           </div>
         </div>
@@ -217,7 +242,11 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
           <ApprovedByLabel reservation={r}/>
         </div>
         <div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:4}}>
-          {archiveItems(r).map((i,j)=><span key={j} className="chip"><EqImg id={i.equipment_id}/> {eqName(i.equipment_id)} ×{i.quantity}</span>)}
+          {/* Only the affected chips are tinted, so the eye lands on the item. */}
+          {archiveItems(r).map((i,j)=>{
+            const hit = outc?.byEquipment?.[String(i.equipment_id)];
+            return <span key={j} className="chip" style={hit?{borderColor:"rgba(231,76,60,0.5)",color:"var(--red)"}:undefined}><EqImg id={i.equipment_id}/> {eqName(i.equipment_id)} ×{i.quantity}</span>;
+          })}
         </div>
       </div>
     );
@@ -472,21 +501,55 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
                 {/* Grouped by category — long archived loans are hard to scan flat.
                     Source is archiveItems (not viewRes.items) so the original-loan
                     snapshot from a partial return keeps being what is documented. */}
+                {(()=>{ const outc = readReturnOutcomes(viewRes); return outc && (
+                  <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:10,background:"rgba(231,76,60,0.08)",border:"1px solid rgba(231,76,60,0.35)",borderRadius:8,padding:"7px 11px",fontSize:12,fontWeight:700,color:"var(--red)"}}>
+                    <AlertTriangle size={14} strokeWidth={2.2}/> בהחזרה נרשמו חריגים: {describeExceptions(outc.totals)}
+                  </div>
+                ); })()}
                 {groupReservationItemsByCategory(archiveItems(viewRes), equipment).map(group=>(
                   <div key={group.category}>
                     <div style={{fontSize:11,fontWeight:800,color:"var(--accent)",marginTop:8,marginBottom:2}}>{group.category}</div>
-                    {group.entries.map(({item,index})=>(
-                      <div key={index} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
+                    {group.entries.map(({item,index})=>{
+                      const outc = readReturnOutcomes(viewRes);
+                      const hit = outc?.byEquipment?.[String(item.equipment_id)] || null;
+                      const faults = hit ? hit.damaged.filter(u=>u.fault) : [];
+                      return (
+                      <div key={index} style={{display:"flex",alignItems:hit?"flex-start":"center",gap:10,padding:"6px 0",borderBottom:"1px solid var(--border)",...(hit?{background:"rgba(231,76,60,0.06)"}:null)}}>
                         <EqImg id={item.equipment_id} size={28}/>
-                        <span style={{flex:1,fontSize:13,fontWeight:600}}>{eqName(item.equipment_id)}</span>
-                        <span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:6,padding:"2px 10px",fontWeight:700,fontSize:13,color:"var(--accent)"}}>×{item.quantity}</span>
-                      </div>
-                    ))}
+                        {/* minWidth:0 — lesson #30+#32: a long staff-typed fault
+                            must wrap, not push the ×N chip out of the panel. */}
+                        <div style={{flex:1,minWidth:0}}>
+                          <span style={{fontSize:13,fontWeight:600}}>{eqName(item.equipment_id)}</span>
+                          {hit&&(
+                            <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
+                              {hit.damaged.map(u=><OutcomeChip key={u.unitId} status={UNIT_DAMAGED} unitId={u.unitId} fault={u.fault}/>)}
+                              {hit.missing.map(u=><OutcomeChip key={u.unitId} status={UNIT_MISSING} unitId={u.unitId}/>)}
+                            </div>
+                          )}
+                          {/* Spelled out rather than left in title= — a tooltip is
+                              unreachable on touch and the warehouse runs on phones. */}
+                          {faults.length>0&&(
+                            <div style={{fontSize:11,color:"var(--text2)",marginTop:3,lineHeight:1.6,overflowWrap:"anywhere"}}>
+                              {faults.map(u=>`${unitLabel(u.unitId)} — ${u.fault}`).join(" · ")}
+                            </div>
+                          )}
+                        </div>
+                        <span style={{background:"var(--surface3)",border:"1px solid var(--border)",borderRadius:6,padding:"2px 10px",fontWeight:700,fontSize:13,color:"var(--accent)",flexShrink:0}}>×{item.quantity}</span>
+                      </div>);
+                    })}
                   </div>
                 ))}
                 <div style={{marginTop:8,fontSize:12,color:"var(--text3)"}}>
                   סה״כ: <strong style={{color:"var(--text)"}}>{archiveItems(viewRes).reduce((s,i)=>s+(Number(i.quantity)||0),0)}</strong> יחידות
                 </div>
+                {/* Not optional. Without it "#3" reads as proof of which physical
+                    cable broke — and reservation_items.unit_id is never recorded,
+                    so the panel offers lowest-numbered healthy units instead. */}
+                {readReturnOutcomes(viewRes)&&(
+                  <div style={{marginTop:8,fontSize:10.5,color:"var(--text3)",lineHeight:1.6}}>
+                    מספרי היחידות מציינים את מה שסומן במחסן בעת ההחזרה. הם אינם קושרים יחידה פיזית מסוימת לבקשה הזו.
+                  </div>
+                )}
                 {viewRes.returned_at&&(
                   <div style={{marginTop:8,fontSize:12,color:"var(--text3)"}}>
                     הועבר לארכיון: <strong style={{color:"var(--text)"}}>{new Date(viewRes.returned_at).toLocaleString("he-IL")}</strong>

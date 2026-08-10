@@ -23,7 +23,7 @@ import { useMemo, useState } from "react";
 import { Package, CheckCircle, RotateCcw, AlertTriangle, HelpCircle, X } from "lucide-react";
 import { groupReservationItemsByCategory } from "../utils.js";
 import {
-  UNIT_OK, UNIT_DAMAGED, UNIT_MISSING,
+  UNIT_OK, UNIT_DAMAGED, UNIT_MISSING, OUTCOME_COLOR, OUTCOME_BG,
   pickUnitsForReturn, summarizeOutcomes, unitLabel,
 } from "../utils/returnFlow.js";
 
@@ -32,10 +32,13 @@ import {
 // the accent colour and belongs to אשר/שמור — not to closing a loan.
 const BLUE_BTN = { background: "var(--blue)", borderColor: "var(--blue)", color: "#fff", fontWeight: 800 };
 
+// Colours come from returnFlow.js so the archive renders a "פגום" chip in
+// exactly the same red — one palette, two screens. The icons stay here: they
+// are React components and that module must run under plain Node.
 const OUTCOME_STYLE = {
-  [UNIT_OK]:      { color: "var(--green)",  bg: "rgba(46,204,113,0.15)", icon: CheckCircle },
-  [UNIT_DAMAGED]: { color: "var(--red)",    bg: "rgba(231,76,60,0.15)",  icon: AlertTriangle },
-  [UNIT_MISSING]: { color: "#9b59b6",       bg: "rgba(155,89,182,0.18)", icon: HelpCircle },
+  [UNIT_OK]:      { color: OUTCOME_COLOR[UNIT_OK],      bg: OUTCOME_BG[UNIT_OK],      icon: CheckCircle },
+  [UNIT_DAMAGED]: { color: OUTCOME_COLOR[UNIT_DAMAGED], bg: OUTCOME_BG[UNIT_DAMAGED], icon: AlertTriangle },
+  [UNIT_MISSING]: { color: OUTCOME_COLOR[UNIT_MISSING], bg: OUTCOME_BG[UNIT_MISSING], icon: HelpCircle },
 };
 
 function EqImg({ eq, size = 32 }) {

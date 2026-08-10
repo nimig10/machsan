@@ -13,12 +13,18 @@
 //      never more than the borrowed quantity.
 //   4. fault text survives on פגום and is cleared everywhere else.
 //
+//   5. The archive snapshot (return_outcomes) degrades to null for every row
+//      written before the feature existed — that branch is the one the whole
+//      display design rests on, so it is pinned harder than the happy path.
+//
 // No network, no DB. Exit 0 = all passed.
 
 import {
-  UNIT_OK, UNIT_DAMAGED, UNIT_MISSING, RETURN_OUTCOMES,
+  UNIT_OK, UNIT_DAMAGED, UNIT_MISSING, RETURN_OUTCOMES, RETURN_EXCEPTIONS,
   unitNumber, unitLabel,
   pickUnitsForReturn, applyUnitOutcomes, summarizeOutcomes, describeExceptions,
+  buildReturnOutcomesSnapshot, readReturnOutcomes, returnExceptionSummary,
+  validateReturnOutcomes, findUnitReturnRecord,
 } from "../src/utils/returnFlow.js";
 
 let passed = 0;
@@ -172,7 +178,208 @@ console.log("\n\x1b[1m> summaries\x1b[0m");
 check("RETURN_OUTCOMES is exactly the three panel states, without בתיקון",
   JSON.stringify(RETURN_OUTCOMES) === JSON.stringify([UNIT_OK, UNIT_DAMAGED, UNIT_MISSING]));
 
-// ── 5. the module stays dependency-free ────────────────────────────────────
+// ── 5. building the frozen archive snapshot ────────────────────────────────
+const AT = "2026-08-10T09:41:22.113Z";
+const outcome = (eqId, n, status, fault = "") => ({ equipmentId: eqId, unitId: `${eqId}_${n}`, status, fault });
+const XLR_ID = "1776079954421";
+
+console.log("\n\x1b[1m> buildReturnOutcomesSnapshot\x1b[0m");
+{
+  // The all-green path: ReturnEquipmentPanel calls onComplete([]) when every
+  // card is marked, so this is the SHAPE OF THE COMMON CASE. It must produce
+  // null and not an empty envelope — the archive treats null as "nothing to
+  // show", and {items:[]} would light up every banner with zero content.
+  check("no outcomes at all → null",
+    buildReturnOutcomesSnapshot({ outcomes: [], equipment: fleet(), at: AT }) === null);
+  check("every unit תקין → null (nothing was actually wrong)",
+    buildReturnOutcomesSnapshot({
+      outcomes: [outcome(XLR_ID, 1, UNIT_OK), outcome(XLR_ID, 2, UNIT_OK)],
+      equipment: fleet(), at: AT,
+    }) === null);
+
+  const snap = buildReturnOutcomesSnapshot({
+    outcomes: [
+      outcome(XLR_ID, 1, UNIT_OK),
+      outcome(XLR_ID, 3, UNIT_DAMAGED, "  מחבר שבור  "),
+      outcome(XLR_ID, 5, UNIT_MISSING),
+      outcome(XLR_ID, 6, UNIT_OK),
+    ],
+    equipment: fleet(), at: AT,
+  });
+  check("one item entry for the equipment that had exceptions", snap?.items?.length === 1);
+  check("two unit entries — the תקין ones are dropped", snap?.items?.[0]?.units?.length === 2);
+  // Deep scan rather than a count: a stray תקין nested anywhere would make the
+  // "NULL means clean" contract a lie.
+  check("תקין never appears anywhere in the snapshot",
+    !JSON.stringify(snap).includes(UNIT_OK), JSON.stringify(snap));
+  check("fault is trimmed", snap?.items?.[0]?.units?.[0]?.fault === "מחבר שבור");
+  check("name is snapshotted from the equipment row", snap?.items?.[0]?.name === "כבל XLR");
+  check("v is 1", snap?.v === 1);
+  check("at is the injected timestamp, not a fresh Date()", snap?.at === AT);
+
+  const missingUnit = snap.items[0].units.find(u => u.status === UNIT_MISSING);
+  check("fault key is absent on נעלם, not empty-string",
+    missingUnit && !("fault" in missingUnit), JSON.stringify(missingUnit));
+
+  const blank = buildReturnOutcomesSnapshot({
+    outcomes: [outcome(XLR_ID, 2, UNIT_DAMAGED, "   ")], equipment: fleet(), at: AT,
+  });
+  check("whitespace-only fault omits the key entirely",
+    blank?.items?.[0]?.units?.[0] && !("fault" in blank.items[0].units[0]));
+
+  const twoItems = buildReturnOutcomesSnapshot({
+    outcomes: [outcome(XLR_ID, 3, UNIT_DAMAGED), outcome(XLR_ID, 9, UNIT_MISSING), outcome("1773430190996", 1, UNIT_DAMAGED)],
+    equipment: fleet(), at: AT,
+  });
+  check("two units of one equipment collapse into a single items[] entry",
+    twoItems.items.find(i => String(i.equipment_id) === XLR_ID)?.units?.length === 2);
+  check("a second equipment gets its own entry", twoItems.items.length === 2);
+
+  check("unknown equipmentId still records, with an empty name",
+    buildReturnOutcomesSnapshot({ outcomes: [outcome("nope", 1, UNIT_DAMAGED)], equipment: fleet(), at: AT })
+      ?.items?.[0]?.name === "");
+  check("an unrecognised status is ignored, like summarizeOutcomes",
+    buildReturnOutcomesSnapshot({
+      outcomes: [{ equipmentId: XLR_ID, unitId: `${XLR_ID}_4`, status: "בתיקון" }],
+      equipment: fleet(), at: AT,
+    }) === null);
+  check("RETURN_EXCEPTIONS is פגום+נעלם only — תקין must never be storable",
+    JSON.stringify(RETURN_EXCEPTIONS) === JSON.stringify([UNIT_DAMAGED, UNIT_MISSING]));
+}
+
+// ── 6. reading it back — the degrade path ──────────────────────────────────
+console.log("\n\x1b[1m> readReturnOutcomes\x1b[0m");
+{
+  // THE most important test in this file. Every reservation archived before
+  // this feature shipped takes this branch, in prod, on every archive render.
+  const empties = [undefined, null, {}, { return_outcomes: null }, { return_outcomes: {} },
+    { return_outcomes: { items: [] } }, { return_outcomes: "…" }, { return_outcomes: [] },
+    { return_outcomes: { items: "x" } }];
+  check("every empty/legacy/garbage shape reads as null",
+    empties.every(r => readReturnOutcomes(r) === null),
+    empties.map(r => JSON.stringify(r)).find(r => readReturnOutcomes(JSON.parse(r || "null")) !== null) || "");
+
+  const snap = buildReturnOutcomesSnapshot({
+    outcomes: [outcome(XLR_ID, 3, UNIT_DAMAGED, "מחבר שבור"), outcome(XLR_ID, 5, UNIT_MISSING)],
+    equipment: fleet(), at: AT,
+  });
+  const read = readReturnOutcomes({ return_outcomes: snap });
+  check("round-trip: build → read reproduces the damaged set",
+    read?.byEquipment?.[XLR_ID]?.damaged?.length === 1);
+  check("round-trip: and the missing set", read?.byEquipment?.[XLR_ID]?.missing?.length === 1);
+  check("round-trip: the fault text survives",
+    read.byEquipment[XLR_ID].damaged[0].fault === "מחבר שבור");
+  check("totals are exposed for the banner", read?.totals?.damaged === 1 && read?.totals?.missing === 1);
+  check("at is carried through", read?.at === AT);
+
+  // ArchivePage looks up by item.equipment_id, which arrives as a number on
+  // some rows and a string on others.
+  check("lookup key is string-normalised", !!readReturnOutcomes({
+    return_outcomes: { v: 1, at: AT, items: [{ equipment_id: 123, units: [{ unit_id: "123_1", status: UNIT_DAMAGED }] }] },
+  })?.byEquipment?.["123"]);
+
+  check("a unit entry with no unit_id is dropped rather than rendered as #—",
+    readReturnOutcomes({
+      return_outcomes: { v: 1, at: AT, items: [{ equipment_id: XLR_ID, units: [{ status: UNIT_DAMAGED }] }] },
+    }) === null);
+
+  // Additive future changes must not blank out the archive.
+  check("a future v still reads (forward compatible)", !!readReturnOutcomes({
+    return_outcomes: { v: 2, at: AT, items: [{ equipment_id: XLR_ID, units: [{ unit_id: `${XLR_ID}_1`, status: UNIT_MISSING }] }] },
+  }));
+}
+
+// ── 7. the collapsed archive card ──────────────────────────────────────────
+console.log("\n\x1b[1m> returnExceptionSummary\x1b[0m");
+{
+  const snap = buildReturnOutcomesSnapshot({
+    outcomes: [outcome(XLR_ID, 3, UNIT_DAMAGED), outcome(XLR_ID, 4, UNIT_DAMAGED), outcome(XLR_ID, 5, UNIT_MISSING)],
+    equipment: fleet(), at: AT,
+  });
+  const ex = returnExceptionSummary({ return_outcomes: snap });
+  check("counts damaged and missing", ex?.damaged === 2 && ex?.missing === 1);
+  // Reuse, don't re-word: this string is already pinned by section 4 and shown
+  // in the closing toast, so card and toast can never drift apart.
+  check("feeds describeExceptions verbatim",
+    describeExceptions(ex) === "2 יחידות פגומות · יחידה אחת נעלמה", describeExceptions(ex));
+  check("a clean reservation yields null, so the card renders nothing new",
+    returnExceptionSummary({ id: "1", status: "הוחזר" }) === null);
+}
+
+// ── 8. the reverse view — which loan was this unit marked in ───────────────
+console.log("\n\x1b[1m> findUnitReturnRecord\x1b[0m");
+{
+  const mk = (id, student, at, unitN, status, fault = "") => ({
+    id, student_name: student,
+    return_outcomes: buildReturnOutcomesSnapshot({
+      outcomes: [outcome(XLR_ID, unitN, status, fault)], equipment: fleet(), at,
+    }),
+  });
+  const older  = mk("R1", "דנה", "2026-08-01T10:00:00.000Z", 3, UNIT_DAMAGED, "רעש");
+  const newer  = mk("R2", "יוסי", "2026-08-09T10:00:00.000Z", 3, UNIT_DAMAGED, "מחבר שבור");
+  const other  = mk("R3", "מיכל", "2026-08-10T10:00:00.000Z", 7, UNIT_MISSING);
+  const clean  = { id: "R4", student_name: "אבי", return_outcomes: null };
+  const all = [older, newer, other, clean];
+
+  const hit = findUnitReturnRecord(`${XLR_ID}_3`, all);
+  check("finds the reservation the unit was marked in", hit?.reservationId === "R2");
+  check("picks the LATEST record when a unit was marked more than once",
+    hit?.at === "2026-08-09T10:00:00.000Z", hit?.at);
+  check("carries the student name for the card", hit?.studentName === "יוסי");
+  check("carries status and fault", hit?.status === UNIT_DAMAGED && hit?.fault === "מחבר שבור");
+  check("a נעלם unit is found too", findUnitReturnRecord(`${XLR_ID}_7`, all)?.reservationId === "R3");
+  // Units damaged by hand on the units screen, and every unit in prod today,
+  // have no record — the card must simply show nothing.
+  check("a unit with no record → null", findUnitReturnRecord(`${XLR_ID}_2`, all) === null);
+  check("empty/garbage inputs → null",
+    findUnitReturnRecord("", all) === null && findUnitReturnRecord(`${XLR_ID}_3`, null) === null);
+}
+
+// ── 9. the server-side gate ────────────────────────────────────────────────
+console.log("\n\x1b[1m> validateReturnOutcomes\x1b[0m");
+{
+  const good = buildReturnOutcomesSnapshot({
+    outcomes: [outcome(XLR_ID, 3, UNIT_DAMAGED, "מחבר שבור")], equipment: fleet(), at: AT,
+  });
+  check("a well-formed snapshot passes", !!validateReturnOutcomes(good));
+  check("non-objects are rejected",
+    [null, undefined, "x", 5, []].every(v => validateReturnOutcomes(v) === null));
+  check("missing items is rejected", validateReturnOutcomes({ v: 1, at: AT }) === null);
+
+  // The injection guard. Anything the client bolts on must not reach the row.
+  const dirty = validateReturnOutcomes({
+    v: 1, at: AT, evil: true,
+    items: [{ equipment_id: XLR_ID, name: "כבל XLR", extra: "no",
+      units: [{ unit_id: `${XLR_ID}_3`, status: UNIT_DAMAGED, fault: "x", isAdmin: true }] }],
+  });
+  check("envelope keys are whitelisted",
+    JSON.stringify(Object.keys(dirty).sort()) === JSON.stringify(["at", "items", "v"]));
+  check("item keys are whitelisted",
+    JSON.stringify(Object.keys(dirty.items[0]).sort()) === JSON.stringify(["equipment_id", "name", "units"]));
+  check("unit keys are whitelisted",
+    JSON.stringify(Object.keys(dirty.items[0].units[0]).sort()) === JSON.stringify(["fault", "status", "unit_id"]));
+
+  check("תקין is dropped even if a client sends it", validateReturnOutcomes({
+    v: 1, at: AT, items: [{ equipment_id: XLR_ID, units: [{ unit_id: `${XLR_ID}_1`, status: UNIT_OK }] }],
+  }) === null, "a snapshot that reduces to zero units must become null");
+
+  // A return must never fail because somebody typed an essay into the fault box.
+  const essay = validateReturnOutcomes({
+    v: 1, at: AT, items: [{ equipment_id: XLR_ID, units: [{ unit_id: `${XLR_ID}_1`, status: UNIT_DAMAGED, fault: "א".repeat(900) }] }],
+  });
+  check("an over-long fault is truncated, not rejected", essay?.items?.[0]?.units?.[0]?.fault?.length === 400,
+    String(essay?.items?.[0]?.units?.[0]?.fault?.length));
+
+  const flood = validateReturnOutcomes({
+    v: 1, at: AT,
+    items: Array.from({ length: 400 }, (_, i) => ({
+      equipment_id: `eq${i}`, units: [{ unit_id: `eq${i}_1`, status: UNIT_MISSING }],
+    })),
+  });
+  check("an absurd number of items is rejected outright", flood === null);
+}
+
+// ── 10. the module stays dependency-free ───────────────────────────────────
 console.log("\n\x1b[1m> module hygiene\x1b[0m");
 {
   const { readFileSync } = await import("node:fs");
