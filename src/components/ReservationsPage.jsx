@@ -8,6 +8,8 @@ import { ArchivePage } from "./ArchivePage.jsx";
 import { syncAllLessons } from "../utils/lessonsApi.js";
 import { makeSaveEditedReservation } from "../utils/reservationEdit.js";
 import { RejectReservationModal } from "./RejectReservationModal.jsx";
+import { ReturnEquipmentPanel } from "./ReturnEquipmentPanel.jsx";
+import { completeEquipmentReturn } from "../utils/returnApi.js";
 import { markReservationDeleting, unmarkReservationDeleting } from "../pendingDeletes.js";
 import { UpdateReviewModal } from "./UpdateReviewModal.jsx";
 import { ApprovedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
@@ -265,7 +267,7 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
   );
 }
 
-export function ReservationsPage({ reservations, setReservations, equipment, showToast,
+export function ReservationsPage({ reservations, setReservations, equipment, setEquipment = () => {}, showToast,
     search, setSearch, statusF, setStatusF, loanTypeF, setLoanTypeF, sortBy, setSortBy, mode="active", initialSubView="active", collegeManager={}, managerToken="",
     categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], siteSettings={}, onLogCreated = () => {}, equipmentReports=[], lessons=[], setLessons=null, loanHandlers=[], reservationUpdates=[], refreshReservationUpdates=()=>{}, refreshReservations=async()=>{} }) {
   const [subView, setSubView] = useState("active"); // "active" | "rejected" | "archive"
@@ -736,6 +738,54 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
     }
   };
 
+  // The return flow's completion, fired by ReturnEquipmentPanel. Deliberately
+  // NOT routed through updateStatus: the unit outcomes have to be written before
+  // the loan closes (see completeEquipmentReturn), and a partial failure needs
+  // its own message. Everything after the RPC — actor stamp, archive
+  // normalisation, activity log — mirrors updateStatus exactly.
+  const completeReturn = async (res, outcomes) => {
+    if (!res || busyIds.has(res.id)) return;
+    setBusyIds(prev => { const n = new Set(prev); n.add(res.id); return n; });
+    try {
+      const result = await completeEquipmentReturn({ reservation: res, equipment, setEquipment, outcomes });
+      if (!result.ok) {
+        console.error("[completeReturn]", result);
+        if (result.stage === "equipment") {
+          showToast("error", "שגיאה בעדכון סטטוס היחידות — ההחזרה לא הושלמה ולא בוצע שינוי.");
+        } else {
+          showToast("error", result.inventoryWritten
+            ? "מצב היחידות נשמר, אך סגירת ההשאלה נכשלה — הבקשה עדיין פתוחה. נסו שוב."
+            : reservationStatusErrorMessage(result.error));
+        }
+        return;
+      }
+      const rpcResult = result.rpc;
+      setReservations(normalizeReservationsForArchive(reservations.map(r => r.id !== res.id ? r : {
+        ...markReservationReturned(r),
+        returned_by_staff_id: rpcResult.returned_by_staff_id || null,
+        returned_by_name:     rpcResult.returned_by_name || null,
+      })));
+      showToast("success", result.note
+        ? `הציוד של ${res.student_name} הוחזר — ${result.note}`
+        : `הציוד של ${res.student_name} הוחזר תקין`);
+      if (rpcResult.changed) {
+        const caller = JSON.parse(sessionStorage.getItem("staff_user") || "{}");
+        logActivity({
+          user_id: caller.id, user_name: caller.full_name, action: "reservation_return",
+          entity: "reservation", entity_id: String(res.id),
+          details: {
+            student: res.student_name, loan_type: res.loan_type,
+            ...(result.summary.damaged ? { damaged_units: result.summary.damaged } : {}),
+            ...(result.summary.missing ? { missing_units: result.summary.missing } : {}),
+          },
+        });
+      }
+      setSelected(null);
+    } finally {
+      setBusyIds(prev => { const n = new Set(prev); n.delete(res.id); return n; });
+    }
+  };
+
   // One sender for both follow-up panels in the detail modal. `type` picks the
   // template: "overdue" chases gear that is still out, "rejected" explains a
   // rejection after the fact. Either way the typed text lands in the same
@@ -1100,7 +1150,9 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                 ? <span title="לא ניתן לאשר — הצלם/איש סאונד טרם הוסמכו על הציוד המבוקש" style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:13,fontWeight:700,color:"#f59e0b",background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.4)",borderRadius:8,padding:"8px 14px"}}><Shield size={14} strokeWidth={2}/> דרושה הסמכה לפני אישור</span>
                 : <button className="btn btn-success" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"מאושר")}>{busyIds.has(selected.id)?<><Clock size={14} strokeWidth={1.75} /> מאשר...</>:<><CheckCircle size={14} strokeWidth={1.75} /> אשר בקשה</>}</button>;
             })()}
-            {(getEffectiveStatus(selected)==="פעילה"||getEffectiveStatus(selected)==="באיחור")&&<button className="btn btn-secondary" disabled={busyIds.has(selected.id)} onClick={()=>updateStatus(selected.id,"הוחזר")}>🔄 סמן כהוחזר</button>}
+            {/* No "סמן כהוחזר" here any more — returning is now a screen, not a
+                button, and its trigger lives at the foot of the return panel
+                below, after the items have actually been looked at. */}
             <button className="btn btn-secondary" onClick={()=>exportPDF(selected)}>📄 ייצא PDF</button>
             <button className="btn btn-danger" onClick={()=>deleteReservation(selected.id)}>🗑️ מחק</button>
             <button className="btn btn-secondary" onClick={()=>{setSelected(null);setOverdueEmailText("");}}>סגור</button>
@@ -1179,6 +1231,18 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
               </div>
             </div>
             <div>
+              {/* A loan that is out becomes a RETURN screen: the only thing staff
+                  do with it now is take the gear back in. The read-only list
+                  below stays for every other status. */}
+              {(getEffectiveStatus(selected)==="פעילה"||getEffectiveStatus(selected)==="באיחור") ? (<>
+                <div className="form-section-title">🔄 החזרת ציוד ({selected.items?.length||0} פריטים)</div>
+                <ReturnEquipmentPanel
+                  reservation={selected}
+                  equipment={equipment}
+                  busy={busyIds.has(selected.id)}
+                  onComplete={(outcomes) => completeReturn(selected, outcomes)}
+                />
+              </>) : (<>
               <div className="form-section-title">{selected.pending_update_id?"✅ ציוד מאושר":"ציוד מבוקש"} ({selected.items?.length||0} פריטים)</div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {(() => {
@@ -1220,6 +1284,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, sho
                   ));
                 })()}
               </div>
+              </>)}
             </div>
           </div>
           {/* Follow-up message panel. Same shape for the two statuses where the
