@@ -74,12 +74,9 @@ function ItemCard({ eq, item, green, onToggle }) {
         ? <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "var(--green)", fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" }}>
             <CheckCircle size={16} strokeWidth={2} /> חזר תקין
           </span>
-        /* Dashed pill so it reads as an invitation to tap. It was the smallest,
-           dimmest text on the card while being the only instruction on it. */
-        : <span style={{
-            fontSize: 12.5, color: "var(--text2)", fontWeight: 700, whiteSpace: "nowrap",
-            border: "1px dashed var(--text3)", borderRadius: 999, padding: "3px 10px",
-          }}>לחצו לסימון</span>}
+        /* Plain text, no frame — it was the dimmest thing on the card while
+           being the only instruction on it, so it only needed the contrast. */
+        : <span style={{ fontSize: 12.5, color: "var(--text2)", fontWeight: 700, whiteSpace: "nowrap" }}>לחצו לסימון</span>}
     </div>
   );
 }
