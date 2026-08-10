@@ -12,6 +12,7 @@
 //
 // No network, no DB. Exit 0 = all passed.
 
+import { readFileSync } from "node:fs";
 import {
   formatLocalDateInput,
   parseLocalDate,
@@ -138,6 +139,40 @@ console.log("\n> computeUpdateDeadline (the last day/instant the window is open)
     !!prodDl && prodDl.time === "23:59" && prodDl.date < "2026-08-10", JSON.stringify(prodDl));
 
   check("no borrow date → null deadline", computeUpdateDeadline({ loan_type: "פרטית" }, nowMs) === null);
+}
+
+// ── 4. the production editor's WORDING matches the rule it enforces ────────
+// A static scan, not a behaviour test — because the thing that broke in prod
+// was never the arithmetic. ProductionEditor carried three separate sentences
+// for one rule ("8 ימי עבודה", "9 ימי עבודה", "9 ימי עבודה") while the code
+// computed today + 7 CALENDAR days. CLAUDE.md already records the fix as
+// "8-day inclusive — אל תחזיר ל-9 (היה bug)": the arithmetic was corrected then,
+// the strings were not, and a director (דניאל גיימן, 2026-08-09) could not tell
+// why his save kept failing. These four checks make the copy fail the build
+// rather than drift silently again.
+{
+  console.log("\n\x1b[1m> production-editor lead-time copy\x1b[0m");
+  const src = readFileSync(new URL("../src/components/ProductionEditor.jsx", import.meta.url), "utf8");
+  // Comments legitimately quote the old wrong strings — strip them first.
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const prodLead = loanMinDays("הפקה"); // 7 calendar days
+
+  const body = code.match(/function minShootISO\(\)\s*\{([\s\S]*?)\n\}/)?.[1] || "";
+  const advance = body.match(/setDate\(d\.getDate\(\)\s*\+\s*(\d+)\)/);
+  check("minShootISO advances exactly loanMinDays('הפקה') days",
+    !!advance && Number(advance[1]) === prodLead, `code=${advance?.[1]} policy=${prodLead}`);
+
+  // The sentence counts INCLUSIVELY (submission day + shoot day), so it must
+  // read one more than the calendar gap the code applies.
+  const notice = code.match(/התראה של (\d+) ימים מראש \(כולל היום\)/);
+  check("the notice states loanMinDays+1 (inclusive counting)",
+    !!notice && Number(notice[1]) === prodLead + 1, `copy=${notice?.[1]} expected=${prodLead + 1}`);
+
+  check("no 'ימי עבודה' left in code — the rule counts CALENDAR days, not working days",
+    !code.includes("ימי עבודה"));
+
+  const spellings = (code.match(/ימים מראש/g) || []).length;
+  check("the lead time is spelled out in exactly ONE place", spellings === 1, `found ${spellings}`);
 }
 
 console.log("");

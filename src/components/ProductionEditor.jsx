@@ -2,7 +2,7 @@
 // Director-only. Sections: title + description, dates, crew, status CTA + delete.
 
 import { useMemo, useState, useRef, useEffect } from "react";
-import { Plus, Trash2, Send, AlertTriangle, ExternalLink } from "lucide-react";
+import { Plus, Trash2, Send, AlertTriangle, ExternalLink, CalendarDays } from "lucide-react";
 import { Modal } from "./ui.jsx";
 import { upsertProduction, notifyProductionCrewInvites, publishProduction, deleteProduction, autoApproveDirectorCrew, ensurePhotographerApproved } from "../utils/productionsApi.js";
 import { isLegacyProduction, submittedDateIds } from "../utils/productionVisibility.js";
@@ -83,6 +83,35 @@ function minShootISO() {
 function fmtRangeHe(d) {
   const f = (iso) => String(iso || "").split("-").reverse().join("/");
   return d.startDate === d.endDate ? f(d.startDate) : `${f(d.startDate)} – ${f(d.endDate)}`;
+}
+function fmtDateHe(iso) {
+  return String(iso || "").split("-").reverse().join("/");
+}
+// Local components, not toISOString() — same reason as minShootISO().
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// THE single wording for the lead-time rule. There used to be three separate
+// strings for it — the date picker said "8 ימי עבודה", the end-date picker said
+// "9 ימי עבודה", and validate() said "9 ימי עבודה" — while minShootISO() has
+// always computed today + 7 CALENDAR days (then skipping Fri/Sat). None of the
+// three matched the code, and two contradicted each other.
+//
+// That is the string half of the anti-regression CLAUDE.md records as
+// "8-day inclusive — אל תחזיר ל-9 (היה bug)": the arithmetic was fixed back then,
+// the copy was not. A director reading "9 ימי עבודה" derives a later date than
+// the system wants, is refused anyway, and has no way to tell why (prod:
+// דניאל גיימן, 2026-08-09 — could neither edit his ranges nor open a new
+// production, because the SAME validate() gate blocks both).
+//
+// Keep this the only place the number and the unit are written.
+// The rule in words, written ONCE. Both the one-line toast/validate sentence and
+// the panel above the date fields compose from it.
+const LEAD_TIME_RULE_HE = "התראה של 8 ימים מראש (כולל היום)";
+function leadTimeNoticeHe(minShoot) {
+  return `נדרשת ${LEAD_TIME_RULE_HE} — תאריך הצילום המוקדם ביותר האפשרי הוא ${fmtDateHe(minShoot)}`;
 }
 
 export function ProductionEditor({ initial, currentStudent, students = [], kits = [], showToast, onClose, onSaved, onDeleted, onOpenLoanForm, onOpenMyReservations, reservations = [] }) {
@@ -193,6 +222,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
     [students, directorEmailLc]);
 
   const minShoot = minShootISO();
+  const today = todayISO();
   function addDate() {
     if (!canAddDate) {
       showToast?.("יש להגיש רשימת ציוד לטווח הקיים לפני הוספת טווח תאריכים נוסף", "error");
@@ -313,7 +343,17 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
       }
       if (!isGrandfathered(d)) {
         if (d.startDate < minShoot) {
-          return { field: "dates", message: `תאריך צילום חייב להיות לפחות 9 ימי עבודה מהיום (החל מ-${minShoot})` };
+          // A range whose ORIGINAL dates are already past, now edited: the
+          // director is re-dating a finished shoot to reuse the production. The
+          // generic lead-time message never says WHICH row is at fault, so the
+          // save just keeps failing with no way forward — name the row and give
+          // the way out. (prod: דניאל גיימן, 2026-08-09.)
+          const prev = initialById.get(String(d.id));
+          if (prev && String(prev.startDate) < today) {
+            return { field: "dates", message:
+              `טווח הצילום ${fmtRangeHe(prev)} כבר עבר ולא ניתן לשנות את תאריכיו. השאירו אותו כפי שהוא והוסיפו טווח חדש — ${leadTimeNoticeHe(minShoot)}` };
+          }
+          return { field: "dates", message: leadTimeNoticeHe(minShoot) };
         }
         if (isWeekendISO(d.startDate) || isWeekendISO(d.endDate)) {
           return { field: "dates", message: "שישי/שבת אינם זמינים — המחסן סגור בסופי שבוע" };
@@ -707,6 +747,32 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
             <Plus size={14}/> תאריך
           </button>
         </div>
+
+        {/* State the rules BEFORE the director hits them. The date inputs carry
+            min={minShoot}, so the browser simply greys out every earlier day —
+            no message, nothing happens on tap. Without this line the field reads
+            as broken rather than as restricted (prod report, 2026-08-09). */}
+        {/* Two lines, always visible. The date and the reason for it are the
+            whole point — a director who does not know the rule exists reads the
+            greyed-out calendar as a broken field, which is exactly the support
+            call this replaced. Everything else fits on the second line. */}
+        <div style={{
+          marginBottom:10, background:"var(--surface2)", border:"1px solid var(--border)",
+          borderRadius:8, padding:"8px 10px", fontSize:12.5, lineHeight:1.8,
+        }}>
+          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+            <CalendarDays size={14} strokeWidth={1.75} color="var(--accent)" style={{flex:"none"}} />
+            <strong>מוקדם ביותר לצילום:</strong>
+            <strong style={{color:"var(--accent)"}}>{fmtDateHe(minShoot)}</strong>
+            <span style={{color:"var(--text)",minWidth:0}}>— נדרשת {LEAD_TIME_RULE_HE}.</span>
+          </div>
+          {/* --text2, not --text3: the second line is secondary but still has to
+              be read. At --text3 (#555f72 on #181c24) it was near-invisible. */}
+          <div style={{color:"var(--text2)",minWidth:0}}>
+            תאריכים מוקדמים יותר חסומים בלוח השנה · טווח עד 7 ימים · לא מתחיל או מסתיים בשישי/שבת.
+          </div>
+        </div>
+
         {!canAddDate && dates.length > 0 && !isLegacy && (
           <div style={{fontSize:12,color:"var(--text2)",background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:6,padding:"8px 10px",marginBottom:10}}>
             💡 יש להגיש רשימת ציוד לטווח הקיים לפני הוספת טווח תאריכים נוסף.
@@ -735,7 +801,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
                 <input type="date" className="form-input" min={minShoot} value={d.startDate} disabled={dateLocked} onChange={e => {
                   const v = e.target.value;
                   if (!v) return;
-                  if (v < minShoot) { showToast?.(`לא ניתן לבחור תאריך לפני ${minShoot} (מינימום 8 ימי עבודה מהיום)`, "error"); return; }
+                  if (v < minShoot) { showToast?.(leadTimeNoticeHe(minShoot), "error"); return; }
                   if (isWeekendISO(v)) { showToast?.("שישי/שבת אינם זמינים — המחסן סגור בסופי שבוע", "error"); return; }
                   const newMaxEnd = addDaysLocalISO(v, 6);
                   let nextEnd = d.endDate || v;
@@ -755,7 +821,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
                 <input type="date" className="form-input" min={d.startDate || minShoot} max={maxEndDate} value={d.endDate} disabled={dateLocked} onChange={e => {
                   const v = e.target.value;
                   if (!v) return;
-                  if (v < minShoot) { showToast?.(`לא ניתן לבחור תאריך לפני ${minShoot} (מינימום 9 ימי עבודה מהיום)`, "error"); return; }
+                  if (v < minShoot) { showToast?.(leadTimeNoticeHe(minShoot), "error"); return; }
                   if (d.startDate && v < d.startDate) { showToast?.("תאריך סיום לא יכול להיות לפני תאריך התחלה", "error"); return; }
                   if (isWeekendISO(v)) { showToast?.("שישי/שבת אינם זמינים — המחסן סגור בסופי שבוע", "error"); return; }
                   if (maxEndDate && v > maxEndDate) {
