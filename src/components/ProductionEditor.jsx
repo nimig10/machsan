@@ -2,7 +2,7 @@
 // Director-only. Sections: title + description, dates, crew, status CTA + delete.
 
 import { useMemo, useState, useRef, useEffect } from "react";
-import { Plus, Trash2, Send, AlertTriangle, ExternalLink } from "lucide-react";
+import { Plus, Trash2, Send, AlertTriangle, ExternalLink, CalendarDays } from "lucide-react";
 import { Modal } from "./ui.jsx";
 import { upsertProduction, notifyProductionCrewInvites, publishProduction, deleteProduction, autoApproveDirectorCrew, ensurePhotographerApproved } from "../utils/productionsApi.js";
 import { isLegacyProduction, submittedDateIds } from "../utils/productionVisibility.js";
@@ -107,8 +107,11 @@ function todayISO() {
 // production, because the SAME validate() gate blocks both).
 //
 // Keep this the only place the number and the unit are written.
+// The rule in words, written ONCE. Both the one-line toast/validate sentence and
+// the panel above the date fields compose from it.
+const LEAD_TIME_RULE_HE = "התראה של 8 ימים מראש (כולל היום)";
 function leadTimeNoticeHe(minShoot) {
-  return `נדרשת התראה של 8 ימים מראש (כולל היום) — תאריך הצילום המוקדם ביותר האפשרי הוא ${fmtDateHe(minShoot)}`;
+  return `נדרשת ${LEAD_TIME_RULE_HE} — תאריך הצילום המוקדם ביותר האפשרי הוא ${fmtDateHe(minShoot)}`;
 }
 
 export function ProductionEditor({ initial, currentStudent, students = [], kits = [], showToast, onClose, onSaved, onDeleted, onOpenLoanForm, onOpenMyReservations, reservations = [] }) {
@@ -750,12 +753,20 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
             no message, nothing happens on tap. Without this line the field reads
             as broken rather than as restricted (prod report, 2026-08-09). */}
         <div style={{
-          fontSize:12, color:"var(--text2)", lineHeight:1.7, marginBottom:10,
-          background:"var(--surface2)", border:"1px solid var(--border)",
-          borderRadius:8, padding:"8px 12px",
+          marginBottom:10, background:"var(--surface2)", border:"1px solid var(--border)",
+          borderRadius:8, padding:"10px 12px",
         }}>
-          📅 {leadTimeNoticeHe(minShoot)}.
-          <span style={{color:"var(--text3)"}}> טווח צילום עד 7 ימים, ולא מתחיל או מסתיים בשישי/שבת (המחסן סגור).</span>
+          {/* The date leads — it is the one thing the director needs. The rule
+              behind it is the explanation, not the headline. */}
+          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,fontWeight:800,flexWrap:"wrap"}}>
+            <CalendarDays size={14} strokeWidth={1.75} color="var(--accent)" style={{flex:"none"}} />
+            <span>התאריך המוקדם ביותר שאפשר לצלם בו:</span>
+            <span style={{color:"var(--accent)"}}>{fmtDateHe(minShoot)}</span>
+          </div>
+          <ul style={{margin:"6px 0 0",paddingInlineStart:18,fontSize:12,color:"var(--text3)",lineHeight:1.8}}>
+            <li>תאריכים מוקדמים יותר חסומים בלוח השנה — נדרשת {LEAD_TIME_RULE_HE}.</li>
+            <li>כל טווח עד 7 ימים, ואינו מתחיל או מסתיים בשישי/שבת (המחסן סגור).</li>
+          </ul>
         </div>
 
         {!canAddDate && dates.length > 0 && !isLegacy && (
