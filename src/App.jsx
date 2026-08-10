@@ -904,6 +904,10 @@ const css = `
   .modal-title { font-size:18px; font-weight:800; }
   .modal-body { padding:24px; }
   .modal-footer { padding:16px 24px; border-top:1px solid var(--border); display:flex; gap:8px; background:var(--surface); flex-wrap:wrap; }
+  /* Return flow: the action that actually closes the loan must never require
+     scrolling to find. .modal is the scroll container, so bottom-sticky pins the
+     footer the same way .modal-header is pinned to the top. */
+  .return-exceptions-footer { position:sticky; bottom:0; z-index:2; box-shadow:0 -6px 16px rgba(0,0,0,0.35); }
   @keyframes fadeIn { from{opacity:0} to{opacity:1} }
   @keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
   @keyframes spin { to{transform:rotate(360deg)} }
@@ -1044,6 +1048,18 @@ const css = `
        it needs the bottom-nav allowance spelled out: its save button is the last
        element in the flow and would otherwise end flush against the nav. */
     .edit-res-overlay { padding-bottom:calc(60px + env(safe-area-inset-bottom,0px) + 24px) !important; }
+    /* Return flow's exceptions step is a modal INSIDE a modal. .modal-overlay
+       anchors to the viewport bottom on mobile — exactly where the fixed nav
+       sits — so "השלם החזרה" landed underneath the bar. Same trap, same fix as
+       .edit-res-overlay above: reserve the nav's strip, and shrink the modal by
+       the same amount so it doesn't overflow past the 60px top padding. */
+    .return-exceptions-overlay { padding-bottom:calc(60px + env(safe-area-inset-bottom,0px)) !important; }
+    .return-exceptions-overlay .modal { max-height:calc(100dvh - 120px - env(safe-area-inset-bottom,0px)) !important; }
+    /* Three footer actions side by side are unreadable on a phone — stack them,
+       primary last so it sits closest to the thumb. */
+    .return-exceptions-footer { flex-direction:column !important; align-items:stretch !important; }
+    .return-exceptions-footer .btn { width:100%; justify-content:center; padding:11px 14px; font-size:13px; }
+    .return-panel-footer .btn { width:100%; justify-content:center; }
     .search-bar { min-width:0; flex:1; }
     .flex-between { flex-wrap:wrap; gap:10px; }
     html, body, #root { min-height:100%; }
@@ -5823,30 +5839,55 @@ export default function App() {
 
 
 
-  const queueUndoSnapshot = () => {
+  // `resIds` = the reservation ids THIS action changed, captured at snapshot
+  // time. Undo may write back only these. Without the scope, an undo would
+  // also push back rows that drifted underneath the snapshot — realtime uses
+  // the RAW _setReservations (see the reservations_new channel) and therefore
+  // records no snapshot, so another warehouse user's return can land in local
+  // state silently and would otherwise be "undone" by a click that had nothing
+  // to do with it.
+  const queueUndoSnapshot = (resIds = null) => {
     if (historySuspendedRef.current || undoInFlightRef.current || historyQueuedRef.current) return;
     historyQueuedRef.current = true;
     const snapshot = getUndoSnapshot();
     setUndoStack((prev) => {
       const last = prev[prev.length - 1];
       if (last && dataEquals(last.snapshot, snapshot)) return prev;
-      return [...prev, { id: Date.now(), snapshot }].slice(-15);
+      return [...prev, { id: Date.now(), snapshot, resIds }].slice(-15);
     });
     window.setTimeout(() => {
       historyQueuedRef.current = false;
     }, 0);
   };
 
-  const createTrackedSetter = (rawSetter) => (nextValue) => {
+  // `diffIds` is optional and only the reservations setter supplies one — it is
+  // the sole entity whose undo issues per-row status writes.
+  const createTrackedSetter = (rawSetter, diffIds = null) => (nextValue) => {
     rawSetter((prev) => {
       const resolved = typeof nextValue === "function" ? nextValue(prev) : nextValue;
-      if (!dataEquals(prev, resolved)) queueUndoSnapshot();
+      if (!dataEquals(prev, resolved)) queueUndoSnapshot(diffIds ? diffIds(prev, resolved) : null);
       return resolved;
     });
   };
 
+  // Ids added, removed, or modified in any way. Deliberately wider than "status
+  // changed": the snapshot is a whole-app rollback, so the scope must cover
+  // every row the action touched, and handleUndo narrows to status from there.
+  const changedReservationIds = (prev, next) => {
+    const before = new Map((prev || []).map(r => [String(r.id), r]));
+    const ids = new Set();
+    for (const r of next || []) {
+      const id = String(r.id);
+      const was = before.get(id);
+      if (!was || !dataEquals(was, r)) ids.add(id);
+      before.delete(id);
+    }
+    for (const id of before.keys()) ids.add(id);
+    return ids;
+  };
+
   const setEquipment = createTrackedSetter(_setEquipment);
-  const setReservations = createTrackedSetter(_setReservations);
+  const setReservations = createTrackedSetter(_setReservations, changedReservationIds);
   const setCategories = createTrackedSetter(_setCategories);
   const setCategoryTypes = createTrackedSetter(_setCategoryTypes);
   const setCategoryLoanTypes = createTrackedSetter(_setCategoryLoanTypes);
@@ -5978,17 +6019,41 @@ export default function App() {
       const currentState = getUndoSnapshot();
 
       // Reservations live in reservations_new + reservation_items (relational).
-      // Diff snapshot vs current to produce restore/delete lists.
+      // Diff snapshot vs current to produce restore/delete/status lists.
       // lesson_auto rows are virtual — never written to DB, skipped here.
+      //
+      // toRevert exists because presence-only diffing silently dropped the most
+      // common undo of all. A row that was MODIFIED — "הוחזר", approved,
+      // rejected — is in both maps, so it landed in neither list and no write
+      // was ever issued: local state flipped back, the DB kept the new status,
+      // and the next realtime tick overwrote the revert. Worse, an empty
+      // promise list makes `.every()` true, so the toast reported success.
       let toRestore = [];
       let toDelete = [];
+      let toRevert = [];
       let authHeaders = { "Content-Type": "application/json" };
       try {
         const snapshotRes = Array.isArray(snapshot.reservations) ? snapshot.reservations : [];
         const currentRes  = Array.isArray(currentState.reservations) ? currentState.reservations : [];
         const snapshotById = new Map(snapshotRes.filter(r => !r.lesson_auto).map(r => [String(r.id), r]));
         const currentById  = new Map(currentRes.filter(r => !r.lesson_auto).map(r => [String(r.id), r]));
-        for (const [id, r] of snapshotById) if (!currentById.has(id)) toRestore.push(r);
+        // Only rows this action itself touched (see queueUndoSnapshot). A
+        // snapshot pushed by some other entity's setter carries no scope, and
+        // then no status is written at all — a partial undo is recoverable,
+        // overwriting a colleague's live change is not.
+        const scope = lastEntry.resIds instanceof Set ? lastEntry.resIds : null;
+        for (const [id, r] of snapshotById) {
+          const cur = currentById.get(id);
+          if (!cur) { toRestore.push(r); continue; }
+          if (!scope || !scope.has(id)) continue;
+          // Compared through getEffectiveStatus (lesson #19), not raw status:
+          // local rows carry a normalised "באיחור" where the DB still says
+          // "מאושר", and a raw comparison would fire a pointless write on every
+          // overdue loan in the snapshot.
+          if (getEffectiveStatus(r) !== getEffectiveStatus(cur)) {
+            toRevert.push({ id, status: r.status });
+          }
+        }
         for (const [id] of currentById)     if (!snapshotById.has(id)) toDelete.push(id);
         const token = await getAuthToken().catch(() => null);
         if (token) authHeaders["Authorization"] = `Bearer ${token}`;
@@ -6083,6 +6148,19 @@ export default function App() {
           headers: authHeaders,
           body: JSON.stringify({ id: String(id) }),
         }).catch((err) => { console.error("undo delete-reservation failed", id, err); return null; })),
+        // Undoing a return re-takes inventory, so the RPC's approve-overbook
+        // guard (lesson #22) applies and a 409 here is a real answer, not a
+        // glitch: the units went out to somebody else in the meantime. It
+        // arrives as res.ok === false and is counted as a failed write below,
+        // which is what turns the toast into "חלק מהשמירות נכשלו".
+        ...toRevert.map(({ id, status }) => fetch("/api/update-reservation-status", {
+          method: "POST",
+          headers: authHeaders,
+          body: JSON.stringify({ id: String(id), status }),
+        }).then((res) => {
+          if (!res.ok) console.error("undo status-revert rejected", id, status, res.status);
+          return res;
+        }).catch((err) => { console.error("undo status-revert failed", id, err); return null; })),
       ];
 
       let ok = true;
@@ -7430,9 +7508,9 @@ export default function App() {
               )}
             </div>
             {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <>
-              <div style={{display:page==="dashboard"?"block":"none"}}><DashboardPage equipment={equipment} reservations={reservations} setReservations={setReservations} showToast={showToast} siteSettings={siteSettings} equipmentReports={equipmentReports} certifications={certifications} loanHandlers={loanHandlers} reservationUpdates={reservationUpdates} refreshReservationUpdates={loadReservationUpdates} refreshReservations={refreshPublicInventory} categories={categories} collegeManager={collegeManager} managerToken={managerToken}/></div>
+              <div style={{display:page==="dashboard"?"block":"none"}}><DashboardPage equipment={equipment} setEquipment={setEquipment} reservations={reservations} setReservations={setReservations} showToast={showToast} siteSettings={siteSettings} equipmentReports={equipmentReports} certifications={certifications} loanHandlers={loanHandlers} reservationUpdates={reservationUpdates} refreshReservationUpdates={loadReservationUpdates} refreshReservations={refreshPublicInventory} categories={categories} collegeManager={collegeManager} managerToken={managerToken}/></div>
               <div style={{display:page==="equipment"?"block":"none"}}><EquipmentPage equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} categoryLoanTypes={categoryLoanTypes} setCategoryLoanTypes={setCategoryLoanTypes} certifications={certifications} studios={studios} collegeManager={collegeManager} managerToken={managerToken} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports} fetchEquipmentReports={fetchEquipmentReports}/></div>
-              <div style={{display:page==="reservations"?"block":"none"}}><ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} showToast={showToast}
+              <div style={{display:page==="reservations"?"block":"none"}}><ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} setEquipment={setEquipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}
                 loanTypeF={resLoanTypeF} setLoanTypeF={setResLoanTypeF} sortBy={resSortBy} setSortBy={setResSortBy} collegeManager={collegeManager} managerToken={managerToken}
                 initialSubView={reservationsInitialSubView} categories={categories} certifications={certifications} kits={kits} teamMembers={teamMembers} deptHeads={deptHeads} siteSettings={siteSettings} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports} lessons={lessons} setLessons={setLessons} loanHandlers={loanHandlers} reservationUpdates={reservationUpdates} refreshReservationUpdates={loadReservationUpdates} refreshReservations={refreshPublicInventory}/></div>

@@ -7,6 +7,8 @@ import { UpdateReviewModal } from "./UpdateReviewModal.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { makeSaveEditedReservation } from "../utils/reservationEdit.js";
 import { ApprovedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
+import { ReturnEquipmentPanel } from "./ReturnEquipmentPanel.jsx";
+import { completeEquipmentReturn } from "../utils/returnApi.js";
 import { Activity, AlertTriangle, ArrowUpFromLine, Briefcase, Calendar, Camera, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Layers, MessageSquare, Mic, Package, Pencil, RefreshCw, Shield, User, Wrench, X, XCircle } from "lucide-react";
 
 const HE_DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
@@ -16,7 +18,7 @@ function getDayName(dateStr) {
   return HE_DAYS[d.getDay()] || "";
 }
 
-export function DashboardPage({ equipment, reservations, setReservations, showToast, siteSettings = {}, equipmentReports = [], certifications = { types: [], students: [] }, loanHandlers = [], reservationUpdates = [], refreshReservationUpdates = async () => {}, refreshReservations = async () => {}, categories = [], collegeManager = {}, managerToken = "" }) {
+export function DashboardPage({ equipment, setEquipment = () => {}, reservations, setReservations, showToast, siteSettings = {}, equipmentReports = [], certifications = { types: [], students: [] }, loanHandlers = [], reservationUpdates = [], refreshReservationUpdates = async () => {}, refreshReservations = async () => {}, categories = [], collegeManager = {}, managerToken = "" }) {
   const todayStr = today();
   const nowMs = Date.now();
 
@@ -56,6 +58,42 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
   const [calFS, setCalFS]           = useState(false);
   const [dashViewRes, setDashViewRes] = useState(null);
   const [dashUpdateReview, setDashUpdateReview] = useState(null);
+  const [returnBusy, setReturnBusy] = useState(false);
+
+  // Completion of the return flow. Mirrors ReservationsPage.completeReturn —
+  // both go through completeEquipmentReturn, which owns the ordering rule
+  // (units first, loan second) so a failure can never lose the damage report.
+  const completeDashReturn = async (res, outcomes) => {
+    if (!res || returnBusy) return;
+    setReturnBusy(true);
+    try {
+      const result = await completeEquipmentReturn({ reservation: res, equipment, setEquipment, outcomes });
+      if (!result.ok) {
+        console.error("[completeDashReturn]", result);
+        if (showToast) {
+          if (result.stage === "equipment") showToast("error", "שגיאה בעדכון סטטוס היחידות — ההחזרה לא הושלמה ולא בוצע שינוי.");
+          else showToast("error", result.inventoryWritten
+            ? "מצב היחידות נשמר, אך סגירת ההשאלה נכשלה — הבקשה עדיין פתוחה. נסו שוב."
+            : reservationStatusErrorMessage(result.error));
+        }
+        return;
+      }
+      const rpcResult = result.rpc;
+      // Same actor-stamp carry-over as ReservationsPage — see the note there on
+      // why this uses `|| null` rather than `??`.
+      setReservations(normalizeReservationsForArchive(reservations.map(r => r.id !== res.id ? r : {
+        ...markReservationReturned(r),
+        returned_by_staff_id: rpcResult.returned_by_staff_id || null,
+        returned_by_name:     rpcResult.returned_by_name || null,
+      })));
+      if (showToast) showToast("success", result.note
+        ? `הציוד של ${res.student_name} הוחזר — ${result.note}`
+        : `הציוד של ${res.student_name} הוחזר תקין`);
+      setDashViewRes(null);
+    } finally {
+      setReturnBusy(false);
+    }
+  };
   const pendingUpdateFor = reservation => (reservationUpdates || []).find(update =>
     String(update.id) === String(reservation?.pending_update_id) && update.review_status === "pending");
   const pendingItemCountFor = reservation => (pendingUpdateFor(reservation)?.items || [])
@@ -495,9 +533,14 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
         </div>
       )}
 
-      {/* Dashboard quick-view modal */}
+      {/* Dashboard quick-view modal.
+          zIndex 10000, not 3000: the mobile nav (.sidebar) is fixed at z-index
+          9000, so at 3000 this overlay — and everything nested inside it, which
+          now includes the return flow's exceptions modal — was painted UNDER the
+          bar and its action button became unreachable. Same fix as PR #102 made
+          for .edit-res-overlay; aligns with .modal-overlay. */}
       {dashViewRes&&(
-        <div className="dash-quickview-overlay" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}} onClick={e=>e.target===e.currentTarget&&setDashViewRes(null)}>
+        <div className="dash-quickview-overlay" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}} onClick={e=>e.target===e.currentTarget&&setDashViewRes(null)}>
           {/* overflow-x declared explicitly: a lone overflow-y:auto promotes the
               other axis from visible to auto (lesson #30+#32), which turned the
               header's overflow into a horizontal scroll instead of nothing. */}
@@ -606,8 +649,19 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                   <div style={{fontSize:13,color:"var(--text)",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{dashViewRes.lecturer_notes}</div>
                 </div>
               )}
-              {/* Items with images */}
+              {/* Items with images — or, for a loan that is still out, the
+                  return screen. Same component as ReservationsPage so the two
+                  entry points cannot drift. */}
               <div>
+              {(getEffectiveStatus(dashViewRes)==="פעילה"||getEffectiveStatus(dashViewRes)==="באיחור") && setReservations ? (<>
+                <div style={{fontWeight:800,fontSize:14,marginBottom:10}}>🔄 החזרת ציוד ({dashViewRes.items?.length||0} פריטים)</div>
+                <ReturnEquipmentPanel
+                  reservation={dashViewRes}
+                  equipment={equipment}
+                  busy={returnBusy}
+                  onComplete={(outcomes) => completeDashReturn(dashViewRes, outcomes)}
+                />
+              </>) : (<>
                 <div style={{fontWeight:800,fontSize:14,marginBottom:10}}>ציוד ({dashViewRes.items?.length||0} פריטים)</div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {(() => {
@@ -662,42 +716,11 @@ export function DashboardPage({ equipment, reservations, setReservations, showTo
                   ));
                   })()}
                 </div>
+              </>)}
               </div>
-              {/* Return button for approved/overdue requests */}
-              {(getEffectiveStatus(dashViewRes)==="פעילה"||getEffectiveStatus(dashViewRes)==="באיחור") && setReservations && (
-                <div style={{borderTop:"1px solid var(--border)",paddingTop:14,display:"flex",justifyContent:"center"}}>
-                  <button className="btn btn-secondary" style={{fontSize:14,padding:"10px 32px",background:"var(--blue)",borderColor:"var(--blue)",color:"#fff"}}
-                    onClick={async()=>{
-                      const res = dashViewRes;
-                      // Route through the atomic RPC (migration 009) so
-                      // available_units recomputes and concurrent admins
-                      // can't double-process the return.
-                      const returnedAt = new Date().toISOString();
-                      const rpcResult = await updateReservationStatus(res.id, "הוחזר", { returned_at: returnedAt });
-                      if (!rpcResult.ok) {
-                        console.error("return RPC failed:", rpcResult);
-                        if(showToast) showToast("error", reservationStatusErrorMessage(rpcResult));
-                        return;
-                      }
-                      // Same actor-stamp carry-over as ReservationsPage — see the
-                      // note there on why this uses `|| null` rather than `??`.
-                      const updated = normalizeReservationsForArchive(reservations.map(r =>
-                        r.id === res.id
-                          ? {
-                              ...markReservationReturned(r),
-                              returned_by_staff_id: rpcResult.returned_by_staff_id || null,
-                              returned_by_name:     rpcResult.returned_by_name || null,
-                            }
-                          : r
-                      ));
-                      setReservations(updated);
-                      if(showToast) showToast("success", `הציוד של ${res.student_name} הוחזר`);
-                      setDashViewRes(null);
-                    }}>
-                    🔄 הוחזר
-                  </button>
-                </div>
-              )}
+              {/* The return button used to live here. It moved into
+                  ReturnEquipmentPanel above, so it can only be pressed after the
+                  items have been marked — and so both entry points share it. */}
               {/* Approve button for pending requests — with conflict checking */}
               {dashViewRes.status==="ממתין" && setReservations && (() => {
                 // Production cert gate — neither photographer nor sound is certified

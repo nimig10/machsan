@@ -13,7 +13,8 @@
     "test:ics": "node scripts/run-ics-smoke.mjs",
     "test:policy": "node scripts/run-loan-policy-tests.mjs",
     "test:announce": "node scripts/run-announcement-tests.mjs",
-    "test:night": "node scripts/run-night-quiz-tests.mjs"
+    "test:night": "node scripts/run-night-quiz-tests.mjs",
+    "test:return": "node scripts/run-return-flow-tests.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.102.1",
