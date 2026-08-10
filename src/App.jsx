@@ -904,6 +904,10 @@ const css = `
   .modal-title { font-size:18px; font-weight:800; }
   .modal-body { padding:24px; }
   .modal-footer { padding:16px 24px; border-top:1px solid var(--border); display:flex; gap:8px; background:var(--surface); flex-wrap:wrap; }
+  /* Return flow: the action that actually closes the loan must never require
+     scrolling to find. .modal is the scroll container, so bottom-sticky pins the
+     footer the same way .modal-header is pinned to the top. */
+  .return-exceptions-footer { position:sticky; bottom:0; z-index:2; box-shadow:0 -6px 16px rgba(0,0,0,0.35); }
   @keyframes fadeIn { from{opacity:0} to{opacity:1} }
   @keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
   @keyframes spin { to{transform:rotate(360deg)} }
@@ -1044,6 +1048,18 @@ const css = `
        it needs the bottom-nav allowance spelled out: its save button is the last
        element in the flow and would otherwise end flush against the nav. */
     .edit-res-overlay { padding-bottom:calc(60px + env(safe-area-inset-bottom,0px) + 24px) !important; }
+    /* Return flow's exceptions step is a modal INSIDE a modal. .modal-overlay
+       anchors to the viewport bottom on mobile — exactly where the fixed nav
+       sits — so "השלם החזרה" landed underneath the bar. Same trap, same fix as
+       .edit-res-overlay above: reserve the nav's strip, and shrink the modal by
+       the same amount so it doesn't overflow past the 60px top padding. */
+    .return-exceptions-overlay { padding-bottom:calc(60px + env(safe-area-inset-bottom,0px)) !important; }
+    .return-exceptions-overlay .modal { max-height:calc(100dvh - 120px - env(safe-area-inset-bottom,0px)) !important; }
+    /* Three footer actions side by side are unreadable on a phone — stack them,
+       primary last so it sits closest to the thumb. */
+    .return-exceptions-footer { flex-direction:column !important; align-items:stretch !important; }
+    .return-exceptions-footer .btn { width:100%; justify-content:center; padding:11px 14px; font-size:13px; }
+    .return-panel-footer .btn { width:100%; justify-content:center; }
     .search-bar { min-width:0; flex:1; }
     .flex-between { flex-wrap:wrap; gap:10px; }
     html, body, #root { min-height:100%; }

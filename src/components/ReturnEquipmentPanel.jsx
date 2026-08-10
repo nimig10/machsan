@@ -20,12 +20,17 @@
 // the rest of the inventory — are in src/utils/returnFlow.js, under test.
 
 import { useMemo, useState } from "react";
-import { Package, CheckCircle, RotateCcw, AlertTriangle, HelpCircle } from "lucide-react";
+import { Package, CheckCircle, RotateCcw, AlertTriangle, HelpCircle, X } from "lucide-react";
 import { groupReservationItemsByCategory } from "../utils.js";
 import {
   UNIT_OK, UNIT_DAMAGED, UNIT_MISSING,
   pickUnitsForReturn, summarizeOutcomes, unitLabel,
 } from "../utils/returnFlow.js";
+
+// The return action stayed blue when it moved off the old "🔄 הוחזר" button, so
+// it still reads as the same act the archive labels "🔵 הוחזר". btn-primary is
+// the accent colour and belongs to אשר/שמור — not to closing a loan.
+const BLUE_BTN = { background: "var(--blue)", borderColor: "var(--blue)", color: "#fff", fontWeight: 800 };
 
 const OUTCOME_STYLE = {
   [UNIT_OK]:      { color: "var(--green)",  bg: "rgba(46,204,113,0.15)", icon: CheckCircle },
@@ -59,15 +64,22 @@ function ItemCard({ eq, item, green, onToggle }) {
       <EqImg eq={eq} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: 14, minWidth: 0 }}>{eq?.name || item.name || "?"}</div>
-        <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 2 }}>
-          כמות: <strong style={{ color: green ? "var(--green)" : "var(--accent)" }}>{item.quantity}</strong>
+        {/* --text2 / 13px, not --text3 / 12px: this is the number the staff
+            member counts against the pile in front of them, not a caption. */}
+        <div style={{ fontSize: 13, color: "var(--text2)", fontWeight: 600, marginTop: 3 }}>
+          כמות: <strong style={{ color: green ? "var(--green)" : "var(--accent)", fontSize: 14 }}>{item.quantity}</strong>
         </div>
       </div>
       {green
         ? <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "var(--green)", fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" }}>
             <CheckCircle size={16} strokeWidth={2} /> חזר תקין
           </span>
-        : <span style={{ fontSize: 11, color: "var(--text3)", whiteSpace: "nowrap" }}>לחצו לסימון</span>}
+        /* Dashed pill so it reads as an invitation to tap. It was the smallest,
+           dimmest text on the card while being the only instruction on it. */
+        : <span style={{
+            fontSize: 12.5, color: "var(--text2)", fontWeight: 700, whiteSpace: "nowrap",
+            border: "1px dashed var(--text3)", borderRadius: 999, padding: "3px 10px",
+          }}>לחצו לסימון</span>}
     </div>
   );
 }
@@ -128,6 +140,7 @@ export function ReturnEquipmentPanel({ reservation, equipment = [], onComplete, 
   const allEntries = useMemo(() => groups.flatMap(g => g.entries), [groups]);
   const total = allEntries.length;
   const greenCount = allEntries.filter(e => greenKeys.has(String(e.index))).length;
+  const allGreen = greenCount === total;
 
   const toggle = (key) => setGreenKeys((prev) => {
     const next = new Set(prev);
@@ -188,32 +201,50 @@ export function ReturnEquipmentPanel({ reservation, equipment = [], onComplete, 
         ))}
       </div>
 
-      <div style={{
-        display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 14,
+      {/* The button's label says which of the two things pressing it does, so
+          nobody presses "הוחזר" expecting to close the loan and lands in the
+          per-unit step instead. */}
+      <div className="return-panel-footer" style={{
+        display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 14,
         paddingTop: 14, borderTop: "1px solid var(--border)",
       }}>
-        <span style={{ fontSize: 12.5, color: "var(--text2)", minWidth: 0 }}>
-          סומנו <strong style={{ color: greenCount === total ? "var(--green)" : "var(--text)" }}>{greenCount}</strong> מתוך {total} פריטים
-          {greenCount < total && <span style={{ color: "var(--text3)" }}> — השאר יפורטו בשלב הבא</span>}
+        <span style={{ fontSize: 12.5, color: "var(--text2)", minWidth: 0, flex: "1 1 180px" }}>
+          סומנו <strong style={{ color: allGreen ? "var(--green)" : "var(--text)" }}>{greenCount}</strong> מתוך {total} פריטים
+          {!allGreen && <span style={{ color: "var(--text3)" }}> — השאר יפורטו בשלב הבא</span>}
         </span>
         <button
-          className="btn btn-primary"
-          style={{ marginInlineStart: "auto" }}
+          className="btn"
+          style={{ ...BLUE_BTN, fontSize: 14, padding: "10px 28px" }}
           disabled={busy}
           onClick={startReturn}
         >
-          {busy ? "שומר…" : <><RotateCcw size={14} strokeWidth={1.75} /> הוחזר</>}
+          {busy ? "שומר…" : <><RotateCcw size={15} strokeWidth={2} /> {allGreen ? "הוחזר" : "המשך לפירוט"}</>}
         </button>
       </div>
 
       {exceptions && (
-        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setExceptions(null)}>
+        <div className="modal-overlay return-exceptions-overlay" onClick={(e) => { if (!busy && e.target === e.currentTarget) setExceptions(null); }}>
           <div className="modal modal-lg">
             <div className="modal-header">
               <span className="modal-title">
                 <AlertTriangle size={16} strokeWidth={1.75} color="var(--accent)" /> טיפול בפריטים חריגים
               </span>
-              <button className="btn btn-secondary btn-sm" onClick={() => setExceptions(null)}>סגור</button>
+              {/* The only way out without saving. There is deliberately no
+                  second "חזור" in the footer — one escape, in the place every
+                  other modal in the app puts it. Disabled mid-write so the
+                  panel can't be dismissed while the units are being saved. */}
+              <button
+                className="btn"
+                onClick={() => setExceptions(null)}
+                disabled={busy}
+                style={{
+                  background: "var(--surface2)", color: "var(--text)",
+                  border: "1px solid var(--text3)", fontWeight: 800,
+                  padding: "8px 18px", gap: 5,
+                }}
+              >
+                <X size={15} strokeWidth={2.25} /> סגור
+              </button>
             </div>
             <div className="modal-body">
               <div style={{ fontSize: 12.5, color: "var(--text2)", lineHeight: 1.8, marginBottom: 12 }}>
@@ -251,15 +282,17 @@ export function ReturnEquipmentPanel({ reservation, equipment = [], onComplete, 
                 ))}
               </div>
             </div>
-            <div className="modal-footer" style={{ gap: 8, flexWrap: "wrap" }}>
+            {/* Sticky (see .return-exceptions-footer): the tally and the button
+                that commits it stay on screen while the unit list scrolls, so a
+                long list can never hide the only way to finish. */}
+            <div className="modal-footer return-exceptions-footer" style={{ gap: 8, flexWrap: "wrap" }}>
               <span style={{ fontSize: 12.5, color: "var(--text2)", marginInlineEnd: "auto", minWidth: 0 }}>
                 <strong style={{ color: "var(--green)" }}>{summary.ok}</strong> תקינות ·{" "}
                 <strong style={{ color: "var(--red)" }}>{summary.damaged}</strong> פגומות ·{" "}
                 <strong style={{ color: "#9b59b6" }}>{summary.missing}</strong> נעלמו
               </span>
-              <button className="btn btn-secondary" onClick={() => setExceptions(null)} disabled={busy}>חזור</button>
-              <button className="btn btn-primary" disabled={busy} onClick={() => onComplete(outcomes)}>
-                {busy ? "שומר…" : <><CheckCircle size={14} strokeWidth={1.75} /> השלם החזרה</>}
+              <button className="btn" style={{ ...BLUE_BTN, fontSize: 14, padding: "10px 28px" }} disabled={busy} onClick={() => onComplete(outcomes)}>
+                {busy ? "שומר…" : <><CheckCircle size={15} strokeWidth={2} /> השלם החזרה</>}
               </button>
             </div>
           </div>

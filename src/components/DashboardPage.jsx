@@ -533,9 +533,14 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
         </div>
       )}
 
-      {/* Dashboard quick-view modal */}
+      {/* Dashboard quick-view modal.
+          zIndex 10000, not 3000: the mobile nav (.sidebar) is fixed at z-index
+          9000, so at 3000 this overlay — and everything nested inside it, which
+          now includes the return flow's exceptions modal — was painted UNDER the
+          bar and its action button became unreachable. Same fix as PR #102 made
+          for .edit-res-overlay; aligns with .modal-overlay. */}
       {dashViewRes&&(
-        <div className="dash-quickview-overlay" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}} onClick={e=>e.target===e.currentTarget&&setDashViewRes(null)}>
+        <div className="dash-quickview-overlay" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 16px"}} onClick={e=>e.target===e.currentTarget&&setDashViewRes(null)}>
           {/* overflow-x declared explicitly: a lone overflow-y:auto promotes the
               other axis from visible to auto (lesson #30+#32), which turned the
               header's overflow into a horizontal scroll instead of nothing. */}
