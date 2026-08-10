@@ -764,9 +764,11 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
             <CalendarDays size={14} strokeWidth={1.75} color="var(--accent)" style={{flex:"none"}} />
             <strong>מוקדם ביותר לצילום:</strong>
             <strong style={{color:"var(--accent)"}}>{fmtDateHe(minShoot)}</strong>
-            <span style={{color:"var(--text2)",minWidth:0}}>— נדרשת {LEAD_TIME_RULE_HE}.</span>
+            <span style={{color:"var(--text)",minWidth:0}}>— נדרשת {LEAD_TIME_RULE_HE}.</span>
           </div>
-          <div style={{color:"var(--text3)",minWidth:0}}>
+          {/* --text2, not --text3: the second line is secondary but still has to
+              be read. At --text3 (#555f72 on #181c24) it was near-invisible. */}
+          <div style={{color:"var(--text2)",minWidth:0}}>
             תאריכים מוקדמים יותר חסומים בלוח השנה · טווח עד 7 ימים · לא מתחיל או מסתיים בשישי/שבת.
           </div>
         </div>
