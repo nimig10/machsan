@@ -29,6 +29,8 @@
 //     source of truth; the JSON blob is a cache.
 
 import { resolveUserRole } from "./_auth-helper.js";
+// Dependency-free by contract — same import pattern as api/announcement.js.
+import { validateReturnOutcomes } from "../src/utils/returnFlow.js";
 
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -110,7 +112,7 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: "Forbidden", reason: role.role === "anon" ? "no_valid_session" : "not_staff" });
   }
 
-  const { id, status, returned_at } = req.body || {};
+  const { id, status, returned_at, return_outcomes } = req.body || {};
 
   if (!id || typeof id !== "string") {
     return res.status(400).json({ ok: false, error: "Missing or invalid id" });
@@ -123,6 +125,20 @@ export default async function handler(req, res) {
   }
   if (returned_at != null && typeof returned_at !== "string") {
     return res.status(400).json({ ok: false, error: "returned_at must be an ISO string" });
+  }
+
+  // The damage snapshot rides along on exactly one transition, from exactly one
+  // kind of caller. A dept_head can never set "הוחזר" anyway, but say so here
+  // rather than depend on that holding forever.
+  let outcomes = null;
+  if (return_outcomes != null) {
+    if (caller.kind !== "staff" || status !== "הוחזר") {
+      return res.status(400).json({ ok: false, error: "return_outcomes_not_allowed" });
+    }
+    outcomes = validateReturnOutcomes(return_outcomes);
+    if (!outcomes) {
+      return res.status(400).json({ ok: false, error: "invalid_return_outcomes" });
+    }
   }
 
   // Dept-head only: the row must actually be sitting on their step of the chain
@@ -162,6 +178,51 @@ export default async function handler(req, res) {
         ok: false, error: "Forbidden",
         detail: "dept_head is not responsible for this loan type",
       });
+    }
+  }
+
+  // ── Freeze what came back, BEFORE the loan closes ─────────────────────────
+  // The reverse order would archive the request and drop the damage on the
+  // floor — the failure mode src/utils/returnApi.js exists to prevent. Unlike
+  // the returned_by_* stamp further down, a failure here ABORTS: the RPC never
+  // runs, the loan stays open, and the unit statuses already written are
+  // visible in "ציוד בדיקה" so the return can simply be retried.
+  //
+  // `return_outcomes=is.null` in the filter makes the write once-only in the
+  // URL itself, so a retry after a partial success cannot overwrite a real
+  // stamp with a second one.
+  let outcomesWritten = null;
+  if (outcomes) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 5000);
+    try {
+      const w = await fetch(
+        `${SB_URL}/rest/v1/reservations_new?id=eq.${encodeURIComponent(String(id))}&return_outcomes=is.null`,
+        {
+          method: "PATCH",
+          headers: {
+            apikey: SB_KEY,
+            Authorization: `Bearer ${SB_KEY}`,
+            "Content-Type": "application/json",
+            Prefer: "return=headers-only,count=exact",
+          },
+          body: JSON.stringify({ return_outcomes: outcomes }),
+          signal: ctl.signal,
+        },
+      );
+      if (!w.ok) {
+        const text = await w.text();
+        console.error("update-reservation-status: return_outcomes write failed:", w.status, text);
+        return res.status(502).json({ ok: false, error: "return_outcomes_write_failed", detail: text });
+      }
+      // 0 rows matched = already stamped by an earlier attempt. Not an error —
+      // fall through and close the loan.
+      outcomesWritten = /\/0$/.test(w.headers.get("content-range") || "") ? "already" : "written";
+    } catch (e) {
+      console.error("update-reservation-status: return_outcomes write error:", e.message);
+      return res.status(502).json({ ok: false, error: "return_outcomes_write_failed", detail: e.message });
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -274,6 +335,8 @@ export default async function handler(req, res) {
       returned_by_name: returnedByName,
       approved_by_staff_id: approvedById,
       approved_by_name: approvedByName,
+      // "written" | "already" | null — null means no snapshot was sent.
+      return_outcomes_written: outcomesWritten,
     });
   } catch (e) {
     console.error("update-reservation-status network error:", e);

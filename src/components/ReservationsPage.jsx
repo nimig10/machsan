@@ -752,6 +752,8 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
         console.error("[completeReturn]", result);
         if (result.stage === "equipment") {
           showToast("error", "שגיאה בעדכון סטטוס היחידות — ההחזרה לא הושלמה ולא בוצע שינוי.");
+        } else if (result.stage === "outcomes") {
+          showToast("error", "רישום החריגים נכשל — ההשאלה נשארה פתוחה בכוונה. מצב היחידות כבר נשמר; נסו שוב.");
         } else {
           showToast("error", result.inventoryWritten
             ? "מצב היחידות נשמר, אך סגירת ההשאלה נכשלה — הבקשה עדיין פתוחה. נסו שוב."
@@ -764,6 +766,9 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
         ...markReservationReturned(r),
         returned_by_staff_id: rpcResult.returned_by_staff_id || null,
         returned_by_name:     rpcResult.returned_by_name || null,
+        // Without this the archive shows no marks until the next full refetch.
+        // `|| null`, never `??` — lesson #37+#41.
+        return_outcomes:      result.returnOutcomes || null,
       })));
       showToast("success", result.note
         ? `הציוד של ${res.student_name} הוחזר — ${result.note}`

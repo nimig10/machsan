@@ -32,6 +32,7 @@ import { syncAllLecturers, loadLecturersFromTable } from "./utils/lecturersApi.j
 import { syncAllLessons, loadLessonsFromTable } from "./utils/lessonsApi.js";
 import { loadStudiosFromTable } from "./utils/studiosApi.js";
 import { loadStudioBookingsFromTable } from "./utils/studioBookingsApi.js";
+import { findUnitReturnRecord } from "./utils/returnFlow.js";
 import { buildLessonStudioBookings } from "./utils/lessonBookings.js";
 import { syncAllKits, loadKitsFromTable } from "./utils/kitsApi.js";
 import { listProductions } from "./utils/productionsApi.js";
@@ -1903,7 +1904,7 @@ function EquipmentPage({ equipment, reservations, setEquipment, showToast, categ
       </div>
 
       {/* Damaged sub-view */}
-      {eqSubView==="damaged" && <DamagedEquipmentPage equipment={equipment} setEquipment={setEquipment} showToast={showToast} categories={categories} collegeManager={collegeManager} managerToken={managerToken}/>}
+      {eqSubView==="damaged" && <DamagedEquipmentPage equipment={equipment} setEquipment={setEquipment} showToast={showToast} categories={categories} collegeManager={collegeManager} managerToken={managerToken} reservations={reservations}/>}
 
       {/* Reports sub-view */}
       {eqSubView==="reports" && <div>
@@ -5173,7 +5174,7 @@ function downloadLessonsTemplate() { downloadXlTemplateFromSlot(XL_TEMPLATE_SLOT
 function downloadStudentsTemplate() { downloadXlTemplateFromSlot(XL_TEMPLATE_SLOTS.students, STUDENTS_TEMPLATE_B64, 'טמפלט_ייבוא_סטודנטים.xlsx'); }
 
 // ─── DAMAGED EQUIPMENT PAGE ──────────────────────────────────────────────────
-function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[], collegeManager={}, managerToken="" }) {
+function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[], collegeManager={}, managerToken="", reservations=[] }) {
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("הכל");
   const [editUnit, setEditUnit] = useState(null); // {eq, unit}
@@ -5286,6 +5287,17 @@ function DamagedEquipmentPage({ equipment, setEquipment, showToast, categories=[
                   </div>
                   {unit.fault&&<div style={{fontSize:12,color:"var(--text2)",marginBottom:2,display:"flex",alignItems:"center",gap:4}}><AlertTriangle size={12} strokeWidth={1.75} /> <strong>תקלה:</strong> {unit.fault}</div>}
                   {unit.repair&&<div style={{fontSize:12,color:"var(--green)",display:"flex",alignItems:"center",gap:4}}><Wrench size={12} strokeWidth={1.75} /> <strong>תיקון:</strong> {unit.repair}</div>}
+                  {/* The reverse view: which loan was this unit marked in.
+                      Absent for units damaged by hand on the units screen, and
+                      for everything that predates return_outcomes — then it
+                      simply renders nothing. */}
+                  {(()=>{ const rec = findUnitReturnRecord(unit.id, reservations); return rec && (
+                    <div style={{marginTop:4,fontSize:11.5,color:"var(--text3)",lineHeight:1.6}}>
+                      🔄 נרשם בהחזרה של <strong style={{color:"var(--text2)"}}>{rec.studentName||"—"}</strong>
+                      {rec.at&&<> · {new Date(rec.at).toLocaleDateString("he-IL")}</>}
+                      {rec.fault&&<> · <span style={{color:"var(--text2)"}}>{rec.fault}</span></>}
+                    </div>
+                  ); })()}
                 </div>
                 <button className="btn btn-secondary btn-sm" onClick={()=>{setEditUnit({eq,unit});setEditForm({status:unit.status,fault:unit.fault||"",repair:unit.repair||""}); }} style={{display:"inline-flex",alignItems:"center",gap:4}}><Pencil size={12} strokeWidth={1.75} color="var(--text3)"/> עריכה</button>
               </div>

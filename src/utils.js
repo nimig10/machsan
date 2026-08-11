@@ -459,10 +459,12 @@ export async function createLessonReservations(kitId, reservations, items, optio
 //
 // Callers should check `ok` before updating local state / sending emails.
 export async function updateReservationStatus(id, status, options = {}) {
-  // 15s (was 8s): since PR #80 this endpoint makes TWO sequential Supabase
-  // round-trips for a return (status RPC + returned_by stamp), so the old 8s
-  // ceiling could abort a genuinely-successful return on a slow mobile link.
-  const { returned_at = null, timeoutMs = 15000 } = options;
+  // 20s (was 15s, was 8s): a return now makes up to THREE sequential Supabase
+  // round-trips (return_outcomes PATCH → status RPC → returned_by stamp). Same
+  // reasoning as PR #80 — too low a ceiling aborts a genuinely-successful
+  // return on a slow mobile link and reports failure for work that happened.
+  // The new PATCH is capped at 5s server-side, so the worst case stays bounded.
+  const { returned_at = null, returnOutcomes = null, timeoutMs = 20000 } = options;
   if (!id || !status) {
     return { ok: false, error: "missing_arg", detail: "id and status are required" };
   }
@@ -476,7 +478,12 @@ export async function updateReservationStatus(id, status, options = {}) {
       const res = await fetch("/api/update-reservation-status", {
         method:  "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ id: String(id), status, returned_at }),
+        body:    JSON.stringify({
+          id: String(id), status, returned_at,
+          // Omitted entirely when absent — the endpoint rejects the key on any
+          // transition other than a staff "הוחזר".
+          ...(returnOutcomes ? { return_outcomes: returnOutcomes } : {}),
+        }),
         signal:  ctrl.signal,
       });
       const data = await res.json().catch(() => ({}));
@@ -519,6 +526,9 @@ export async function updateReservationStatus(id, status, options = {}) {
       returned_by_name:     data.returned_by_name ?? null,
       approved_by_staff_id: data.approved_by_staff_id ?? null,
       approved_by_name:     data.approved_by_name ?? null,
+      // "written" | "already" | null. Listed because the whitelist above would
+      // otherwise swallow it (lesson #37+#41).
+      return_outcomes_written: data.return_outcomes_written ?? null,
     };
   } catch (e) {
     // Distinguish a client-side abort (timeout) from a real network failure so

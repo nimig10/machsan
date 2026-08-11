@@ -1,0 +1,81 @@
+-- 20260810193806_reservations_return_outcomes.sql
+--
+-- WHY THIS COLUMN EXISTS
+--
+-- PR #107 gave the warehouse a return screen: every physical unit coming back
+-- is marked תקין / פגום / נעלם, with an optional fault note. Those verdicts are
+-- written to equipment_units.status/.fault — which is the CURRENT STATE OF THE
+-- UNIT, not a record of an event. Two consequences, both bad for the archive:
+--
+--   1. Nothing ties "unit #3 came back broken" to the loan it came back from.
+--      reservation_items.unit_id exists but is NULL in every row and no code
+--      path anywhere writes to it (verified across src/, api/, migrations/).
+--   2. Unit status legitimately moves on: פגום → בתיקון → תקין on the
+--      "ציוד בדיקה" screen. Reading live unit rows to render history would make
+--      yesterday's damaged return silently re-render as clean the moment the
+--      cable is repaired.
+--
+-- So the archive has nothing truthful to show unless the verdicts are frozen at
+-- handover. That is this column.
+--
+--
+-- WHY jsonb AND NOT A TABLE
+--
+-- CLAUDE.md forbids new JSONB for domain arrays and mandates a table for every
+-- new entity. This is not an entity: written once at handover, never mutated,
+-- never queried relationally, never joined, read only by ArchivePage and the
+-- "ציוד בדיקה" screen for display. That is verbatim the profile for which
+-- 20260719120000_reservations_original_items.sql already granted an explicit
+-- waiver — this is that waiver's second use, not a new precedent.
+--
+-- The decisive argument is about honesty, not convenience: because unit_id is
+-- never recorded at handover, pickUnitsForReturn offers the lowest-numbered
+-- HEALTHY units — not the hardware that physically went out. A normalized
+-- reservation_return_outcomes(reservation_id, equipment_id, unit_id) table
+-- LOOKS like it can answer "which unit breaks most often" and would answer it
+-- WRONGLY. A display snapshot cannot be mistaken for a forensic index.
+--
+--
+-- SHAPE  (exceptions only — תקין is never stored)
+--
+--   { "v": 1,
+--     "at": "2026-08-10T09:41:22.113Z",
+--     "items": [ { "equipment_id": "1776079954421",
+--                  "name": "כבל XLR",
+--                  "units": [ { "unit_id": "1776079954421_3",
+--                               "status": "פגום",
+--                               "fault": "מחבר שבור" },
+--                             { "unit_id": "1776079954421_5",
+--                               "status": "נעלם" } ] } ] }
+--
+-- A clean return leaves the column NULL — identical to every pre-feature row.
+-- The whole display design rests on that: NULL ⇒ render exactly as before.
+--
+--
+-- ANTI-REGRESSION — four clauses, all load bearing
+--
+--   1. No guard, RPC, trigger or availability computation may ever read this
+--      column. equipment_units.status remains the sole source of truth for
+--      stock and availability.
+--
+--   2. NEVER add return_outcomes to save_edited_reservation_v1's SET list.
+--      That RPC names eleven columns explicitly, so this one survives edits by
+--      virtue of its ABSENCE. This is the mirror image of original_items, which
+--      needed a jsonb_exists guard precisely because the client does send it.
+--
+--   3. The unit_id values here are INDICATIVE, not forensic — see above. Never
+--      aggregate this column to answer "which unit fails most". Use
+--      equipment_units / equipment_reports for that, or first start recording
+--      unit_id at handover.
+--
+--   4. restore_reservation_v1 does not carry this column, the same known gap it
+--      already has for original_items / returned_by_* / approved_by_*. Deleting
+--      an archived loan and restoring it drops the snapshot.
+--
+-- No index: nothing filters, sorts or joins on it.
+
+ALTER TABLE public.reservations_new
+  ADD COLUMN IF NOT EXISTS return_outcomes jsonb;
+
+COMMENT ON COLUMN public.reservations_new.return_outcomes IS
+  'Frozen documentation snapshot of the EXCEPTIONS recorded at handover: {v,at,items:[{equipment_id,name,units:[{unit_id,status,fault?}]}]}. status is limited to (פגום, נעלם) — תקין is never stored. Written once by /api/update-reservation-status on the transition to הוחזר, before the status RPC runs. Display-only: never read by any guard, RPC, trigger or availability computation. unit_id values are INDICATIVE (reservation_items.unit_id is never populated, so the return screen offers lowest-numbered healthy units) — never aggregate them. NULL => no exception recorded, or the row predates the feature.';
