@@ -8,6 +8,7 @@ import { syncAllStudioBookings } from "../utils/studioBookingsApi.js";
 import { syncAllSiteSettings } from "../utils/siteSettingsApi.js";
 import { rangesOverlap } from "../utils/studioOverlap.js";
 import { Modal } from "./ui.jsx";
+import { DateField } from "./DateField.jsx";
 
 const DAY_HOURS = (() => { const h = []; for (let hr = 9; hr <= 21; hr++) for (let m = 0; m < 60; m += 15) { if (hr === 21 && m > 30) break; h.push(`${String(hr).padStart(2,"0")}:${String(m).padStart(2,"0")}`); } return h; })();
 const DAY_BOOKING_HOURS = DAY_HOURS.filter(t => t < "21:30");
@@ -1443,7 +1444,7 @@ export default function StudioBookingPage(props) {
                     <div style={{ display:"flex", gap:8 }}>
                       <label style={{ ...labelStyle, flex:1 }}>
                         תאריך
-                        <input type="date" className="form-input" value={modal.teamDate || ""} onChange={e => setModal(prev => ({ ...prev, teamDate: e.target.value }))} />
+                        <DateField value={modal.teamDate || ""} onChange={v => setModal(prev => ({ ...prev, teamDate: v }))} />
                       </label>
                       <label style={{ ...labelStyle, flex:1 }}>
                         חדר

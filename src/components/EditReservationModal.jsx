@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Modal } from "./ui.jsx";
 import { Calendar, CheckCircle, Mic, Minus, Package, X } from "lucide-react";
+import { DateField } from "./DateField.jsx";
 import {
   formatDate,
   formatTime,
@@ -294,7 +295,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                 <div className="form-group">
                   <label className="form-label">תאריך השאלה</label>
-                  <input type="date" className="form-input" value={form.borrow_date} onChange={e=>set("borrow_date",e.target.value)}/>
+                  <DateField value={form.borrow_date} onChange={v=>set("borrow_date",v)}/>
                 </div>
                 <div className="form-group">
                   <label className="form-label">שעת איסוף</label>
@@ -306,7 +307,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                 </div>
                 <div className="form-group">
                   <label className="form-label">תאריך החזרה</label>
-                  <input type="date" className="form-input" value={form.return_date} min={form.borrow_date} onChange={e=>set("return_date",e.target.value)}/>
+                  <DateField value={form.return_date} min={form.borrow_date} onChange={v=>set("return_date",v)}/>
                 </div>
                 <div className="form-group">
                   <label className="form-label">שעת החזרה</label>

@@ -6,6 +6,7 @@ import { Plus, Trash2, Send, AlertTriangle, ExternalLink, CalendarDays } from "l
 import { Modal } from "./ui.jsx";
 import { upsertProduction, notifyProductionCrewInvites, publishProduction, deleteProduction, autoApproveDirectorCrew, ensurePhotographerApproved } from "../utils/productionsApi.js";
 import { isRangeAutoPrunable, submittedDateIds } from "../utils/productionVisibility.js";
+import { DateField } from "./DateField.jsx";
 
 // Only photographer + sound are predefined: the equipment-loan certification
 // check (crewIsCertifiedForEq) validates exactly these two roles, so they
@@ -800,8 +801,13 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
             <div key={d.id} style={{display:"flex",flexWrap:"wrap",alignItems:"end",gap:8,marginBottom:8,padding:8,border:"1px solid var(--border)",borderRadius:6,background:"var(--surface2)"}}>
               <div style={{flex:"1 1 130px",minWidth:0}}>
                 <label className="form-label" style={{fontSize:11}}>התחלה (תאריך)</label>
-                <input type="date" className="form-input" min={minShoot} value={d.startDate} disabled={dateLocked} onChange={e => {
-                  const v = e.target.value;
+                {/* Domain rules run on COMMIT, not per keystroke — DateField
+                    already withheld everything until the value was whole.
+                    Rejecting mid-typing is what made the old native field
+                    impossible to type into (lesson #42). */}
+                <DateField min={minShoot} value={d.startDate} disabled={dateLocked}
+                  onReject={m => showToast?.(m, "error")}
+                  onChange={v => {
                   if (!v) return;
                   if (v < minShoot) { showToast?.(leadTimeNoticeHe(minShoot), "error"); return; }
                   if (isWeekendISO(v)) { showToast?.("שישי/שבת אינם זמינים — המחסן סגור בסופי שבוע", "error"); return; }
@@ -820,8 +826,9 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
               </div>
               <div style={{flex:"1 1 130px",minWidth:0}}>
                 <label className="form-label" style={{fontSize:11}}>סיום (תאריך)</label>
-                <input type="date" className="form-input" min={d.startDate || minShoot} max={maxEndDate} value={d.endDate} disabled={dateLocked} onChange={e => {
-                  const v = e.target.value;
+                <DateField min={d.startDate || minShoot} max={maxEndDate} value={d.endDate} disabled={dateLocked}
+                  onReject={m => showToast?.(m, "error")}
+                  onChange={v => {
                   if (!v) return;
                   if (v < minShoot) { showToast?.(leadTimeNoticeHe(minShoot), "error"); return; }
                   if (d.startDate && v < d.startDate) { showToast?.("תאריך סיום לא יכול להיות לפני תאריך התחלה", "error"); return; }
