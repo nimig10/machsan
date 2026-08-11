@@ -59,10 +59,19 @@ export function DateField({
   }
 
   // Commit = the only place a value travels upward.
+  //
+  // ⚠️ Both exits set the draft back to the CURRENT `value`, never to what was
+  // just typed — the parent is allowed to refuse. ProductionEditor rejects
+  // weekends and ranges over 7 days, and several call sites early-return on an
+  // empty value. Optimistically showing the typed text would leave the field
+  // displaying a date the form does not hold, which is precisely how a booking
+  // lands on the wrong day. When the parent DOES accept, its state update lands
+  // in the same batch and the resync above rewrites the draft — one render,
+  // no flash.
   function commit(text) {
     const trimmed = String(text ?? "").trim();
     if (!trimmed) {
-      setDraft("");
+      setDraft(isoToHe(value));
       if (value) onChange?.("");
       return;
     }
@@ -70,7 +79,7 @@ export function DateField({
     if (!iso) return reject("תאריך לא תקין — הזינו בפורמט DD/MM/YYYY");
     if (min && isValidIso(min) && iso < min) return reject(`התאריך המוקדם ביותר האפשרי הוא ${isoToHe(min)}`);
     if (max && isValidIso(max) && iso > max) return reject(`התאריך המאוחר ביותר האפשרי הוא ${isoToHe(max)}`);
-    setDraft(isoToHe(iso));
+    setDraft(isoToHe(value));
     if (iso !== value) onChange?.(iso);
   }
 
