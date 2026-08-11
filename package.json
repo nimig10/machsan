@@ -15,7 +15,8 @@
     "test:announce": "node scripts/run-announcement-tests.mjs",
     "test:night": "node scripts/run-night-quiz-tests.mjs",
     "test:return": "node scripts/run-return-flow-tests.mjs",
-    "test:auth": "node scripts/run-auth-guard-tests.mjs"
+    "test:auth": "node scripts/run-auth-guard-tests.mjs",
+    "test:prodvis": "node scripts/run-production-visibility-tests.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.102.1",

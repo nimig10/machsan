@@ -5,7 +5,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { Plus, Trash2, Send, AlertTriangle, ExternalLink, CalendarDays } from "lucide-react";
 import { Modal } from "./ui.jsx";
 import { upsertProduction, notifyProductionCrewInvites, publishProduction, deleteProduction, autoApproveDirectorCrew, ensurePhotographerApproved } from "../utils/productionsApi.js";
-import { isLegacyProduction, submittedDateIds } from "../utils/productionVisibility.js";
+import { isRangeAutoPrunable, submittedDateIds } from "../utils/productionVisibility.js";
 
 // Only photographer + sound are predefined: the equipment-loan certification
 // check (crewIsCertifiedForEq) validates exactly these two roles, so they
@@ -183,17 +183,12 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
   const lockedDateIds = useMemo(() =>
     submittedDateIds({ id: productionId }, reservations),
     [reservations, productionId]);
-  // Board-gate exemption: productions created before the cutoff keep the old
-  // behavior (no pending warnings / post-save prompt). A brand-new production
-  // (no `initial`) is always gated.
-  const isLegacy = initial ? isLegacyProduction(initial) : false;
   const allDatesLocked = dates.length > 0 && dates.every(d => lockedDateIds.has(String(d.id)));
   // Iron rule: you may add a new date range only once every existing range has a
   // submitted equipment list. This guarantees at most ONE list-less range at any
   // time (the last one added), so submitting a list for one range can never leave
-  // a sibling range dangling on the board. Legacy productions are exempt, and the
-  // very first range (none yet) is always allowed.
-  const canAddDate = isLegacy || dates.length === 0 || allDatesLocked;
+  // a sibling range dangling on the board. The very first range is always allowed.
+  const canAddDate = dates.length === 0 || allDatesLocked;
 
   // Kits filtered to those usable for production loans.
   const productionKits = useMemo(
@@ -479,12 +474,12 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
     return blob;
   }
 
-  // After a successful publish/update: a gated (non-legacy) published production
-  // that still has ranges without a submitted equipment list gets a BLOCKING
-  // prompt. The director must either submit a list for each range or discard
-  // them — there is no "later". Legacy productions close silently, as before.
+  // After a successful publish/update: a published production that still has
+  // ranges without a submitted equipment list gets a BLOCKING prompt. The
+  // director must either submit a list for each range or discard them — there
+  // is no "later".
   function closeOrPromptPending(blob) {
-    const pending = isLegacy ? [] : (blob.dates || []).filter(d => !lockedDateIds.has(String(d.id)));
+    const pending = (blob.dates || []).filter(d => !lockedDateIds.has(String(d.id)));
     if (blob.status === "published" && pending.length > 0) {
       setPostSavePrompt({ blob, pending });
     } else {
@@ -550,12 +545,19 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
   // equipment list for is pruned automatically — a range only stays on the board
   // once its list is in. upsertProduction diffs the dates array and DELETEs the
   // production_dates rows no longer present (a DELETE does not fire the
-  // director-overlap trigger). Only runs for a persisted non-legacy production;
-  // navigating to the loan form (submitListForRange) uses raw onClose() and does
-  // NOT prune, so other pending ranges survive until the next real close.
+  // director-overlap trigger). Only runs for a persisted production; navigating
+  // to the loan form (submitListForRange) uses raw onClose() and does NOT prune,
+  // so other pending ranges survive until the next real close.
+  //
+  // ⛔ isRangeAutoPrunable is the one guard that must never be dropped from this
+  // line. Everything else about the board gate is now uniform, but DELETION is
+  // not retroactive: a range that predates the gate is hidden until a list is
+  // submitted, never destroyed. Without the filter, merely opening and closing
+  // the editor would silently delete a real future shoot (there is no
+  // confirmation dialog here — only the toast below, after the fact).
   async function handleEditorClose() {
-    const pending = (persistedRef.current && !isLegacy)
-      ? dates.filter(d => !lockedDateIds.has(String(d.id)))
+    const pending = persistedRef.current
+      ? dates.filter(d => !lockedDateIds.has(String(d.id))).filter(isRangeAutoPrunable)
       : [];
     if (pending.length === 0) {
       // The production type stays editable even once every range is locked, but
@@ -773,7 +775,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
           </div>
         </div>
 
-        {!canAddDate && dates.length > 0 && !isLegacy && (
+        {!canAddDate && dates.length > 0 && (
           <div style={{fontSize:12,color:"var(--text2)",background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:6,padding:"8px 10px",marginBottom:10}}>
             💡 יש להגיש רשימת ציוד לטווח הקיים לפני הוספת טווח תאריכים נוסף.
           </div>
@@ -860,7 +862,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
                   A range without a list won't appear on the board (and is
                   removed on close) — so this is the primary path, not optional.
                   Button on the right (RTL start); explanation flows to its left. */}
-              {!dateLocked && !isLegacy && (
+              {!dateLocked && (
                 <div style={{flex:"1 1 100%",marginTop:4,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                   {hasPhotographerAssigned ? (
                     <button className="btn btn-primary btn-sm" onClick={() => submitListForRange(d.id)} disabled={saving || publishing}
@@ -870,8 +872,13 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
                   ) : (
                     <span style={{fontSize:12,color:"#e74c3c",fontWeight:700}}>⚠ יש לשבץ צלם ראשי לפני הגשת רשימת ציוד</span>
                   )}
+                  {/* The "or it will be deleted" half is only true for ranges
+                      auto-pruning actually applies to. A pre-cutoff range is
+                      hidden until a list is in, but never destroyed — promising
+                      otherwise would scare a director into a deletion that
+                      cannot happen. */}
                   <span style={{fontSize:12.5,color:"#f5a623",fontWeight:800}}>
-                    ⚠ טווח התאריכים יופיע בלוח רק לאחר הגשת רשימת ציוד — אחרת יימחק
+                    ⚠ טווח התאריכים יופיע בלוח רק לאחר הגשת רשימת ציוד{isRangeAutoPrunable(d) ? " — אחרת יימחק" : ""}
                   </span>
                 </div>
               )}
@@ -1045,9 +1052,14 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
                   ? "טווח תאריכים אחד עדיין ללא רשימת ציוד."
                   : `${postSavePrompt.pending.length} טווחי תאריכים עדיין ללא רשימת ציוד.`}
               </p>
+              {/* The removal half is only true for ranges auto-pruning applies
+                  to (isRangeAutoPrunable). Claiming it for a pre-cutoff range
+                  would threaten a deletion that cannot happen. */}
               <p style={{margin:"0 0 12px",fontSize:13,color:"var(--text2)",lineHeight:1.6}}>
                 טווח תאריכים יופיע בלוח ההפקות <strong>רק</strong> אחרי שתוגש לו רשימת ציוד.
-                טווח תאריכים שתשאיר ללא רשימה <strong style={{color:"#e74c3c"}}>יוסר</strong> מההפקה בעת סגירת החלון.
+                {postSavePrompt.pending.some(isRangeAutoPrunable) && <>
+                  {" "}טווח שתשאיר ללא רשימה <strong style={{color:"#e74c3c"}}>יוסר</strong> מההפקה בעת סגירת החלון.
+                </>}
               </p>
               {!hasPhotographerAssigned && (
                 <p style={{margin:"0 0 10px",fontSize:12,color:"#e74c3c",fontWeight:700}}>
@@ -1057,7 +1069,14 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {postSavePrompt.pending.map(d => (
                   <div key={d.id} style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"space-between",border:"1px solid var(--border)",borderRadius:6,padding:"8px 10px",background:"var(--surface2)"}}>
-                    <span style={{fontSize:13,fontWeight:700}}>{fmtRangeHe(d)}</span>
+                    <span style={{fontSize:13,fontWeight:700,minWidth:0}}>
+                      {fmtRangeHe(d)}
+                      {!isRangeAutoPrunable(d) && (
+                        <span style={{fontSize:11,fontWeight:600,color:"var(--text3)",marginInlineStart:6}}>
+                          (נשמר — לא יוסר)
+                        </span>
+                      )}
+                    </span>
                     {hasPhotographerAssigned && (
                       <button className="btn btn-primary btn-sm"
                         onClick={() => openLoanFormFor(postSavePrompt.blob, d.id)}>
