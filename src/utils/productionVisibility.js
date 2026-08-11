@@ -6,19 +6,31 @@
 // mounts) with warnings + submit prompts, but are hidden from other students'
 // board — cards, calendar bars and the monthly filter.
 //
-// Grandfathering: productions created BEFORE the cutoff keep the old behavior
-// end-to-end (all ranges visible to everyone, no warnings, no prompts). Only
-// productions created after the feature ships run the new gate. A missing
-// createdAt is treated as legacy — the safe default.
+// The gate is UNIFORM — every production runs it, regardless of when it was
+// created. It used to be exempted per-production for anything predating the
+// cutoff below, but that exemption also covered ranges ADDED LATER to such a
+// production: a range created in August on a May production rendered neither
+// the submit button nor the warning, because the editor gates both on
+// `!dateLocked && !isLegacy` and such a range is neither. A student hit exactly
+// that and had no way to submit an equipment list at all.
 
-// Merge/deploy date of PR #75 — every production created before this day keeps
-// the old behavior forever; verified against prod: newest production predates
-// this by 9 days (2026-07-05), so ALL pre-existing productions are legacy.
+// Merge/deploy date of PR #75. Its ONLY remaining job is to scope AUTO-DELETION
+// (see isRangeAutoPrunable) — it no longer affects what anyone can see or do.
 export const LEGACY_PRODUCTION_CUTOFF_ISO = "2026-07-14";
 
-export function isLegacyProduction(p) {
-  const created = String(p?.createdAt || "");
-  return !created || created < LEGACY_PRODUCTION_CUTOFF_ISO;
+// May this range be deleted automatically when the editor closes without an
+// equipment list? Only if it was created under the rule in the first place.
+//
+// The asymmetry is deliberate: HIDING IS REVERSIBLE, DELETING IS NOT. A range
+// hidden from the board returns the moment a list is submitted; a pruned range
+// is gone. handleEditorClose prunes through upsertProduction's delete-missing
+// diff with no confirmation dialog, so applying it retroactively would have
+// destroyed a real future shoot on a pre-cutoff production just by opening and
+// closing the editor. A missing timestamp means "don't delete" — the safe
+// default, and the same direction the old legacy check erred in.
+export function isRangeAutoPrunable(d) {
+  const created = String(d?.createdAt || "");
+  return !!created && created >= LEGACY_PRODUCTION_CUTOFF_ISO;
 }
 
 // Set of production_date ids that already have an active (non-cancelled)
@@ -48,21 +60,18 @@ export function getAssignedPhotographer(p) {
   return crew.find(c => c.role === "photographer" && c.studentId && c.status !== "rejected") || null;
 }
 
-// Date ranges that appear on the public board: legacy productions show all;
-// new productions show only ranges with a submitted equipment list.
+// Date ranges that appear on the public board: only those with a submitted
+// equipment list. Applies to every production — see the header note.
 export function boardVisibleDates(p, reservations) {
   const dates = Array.isArray(p?.dates) ? p.dates : [];
-  if (isLegacyProduction(p)) return dates;
   const ids = submittedDateIds(p, reservations);
   return dates.filter(d => ids.has(String(d.id)));
 }
 
 // Complement of boardVisibleDates: ranges still waiting for an equipment list.
 // Drives the director-facing warnings, card badge and post-save prompt.
-// Always [] for legacy productions — they never warn.
 export function pendingDates(p, reservations) {
   const dates = Array.isArray(p?.dates) ? p.dates : [];
-  if (isLegacyProduction(p)) return [];
   const ids = submittedDateIds(p, reservations);
   return dates.filter(d => !ids.has(String(d.id)));
 }

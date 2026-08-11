@@ -7,7 +7,7 @@ import { Modal } from "./ui.jsx";
 import { ProductionEditor } from "./ProductionEditor.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import { today, formatTime } from "../utils.js";
-import { isLegacyProduction, submittedDateIds, boardVisibleDates, pendingDates, getAssignedPhotographer } from "../utils/productionVisibility.js";
+import { submittedDateIds, boardVisibleDates, pendingDates, getAssignedPhotographer } from "../utils/productionVisibility.js";
 import { ensurePhotographerApproved } from "../utils/productionsApi.js";
 
 const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
@@ -221,9 +221,8 @@ function ProductionCard({ p, reservations, onClick, showPending = false }) {
       </div>
       <div style={{fontSize:13,color:"var(--text2)",marginBottom:4}}>במאי: {p.directorName}</div>
       {next && <div style={{fontSize:13,color:"var(--text2)",marginBottom:8}}>תאריך קרוב: {fmtDate(next.slice(0,10))}</div>}
-      {/* Deadline chip is a submission nudge — director/staff only on gated
-          productions; legacy productions keep today's show-to-everyone behavior. */}
-      {!isArchived && (showPending || isLegacyProduction(p)) && (
+      {/* Deadline chip is a submission nudge — director/staff only. */}
+      {!isArchived && showPending && (
         <div style={{marginBottom:6}}><DeadlineChip p={p} reservations={reservations}/></div>
       )}
       {!isArchived && p.status === "published" && pendingList.length > 0 && (
@@ -269,7 +268,6 @@ function ProductionDetail({ p, currentStudent, students, kits = [], reservations
   // Gate on the assignment, then heal a failed flip on the way to the form.
   const photographer = getAssignedPhotographer(p);
   const hasPhotographer = !!photographer;
-  const isLegacy = isLegacyProduction(p);
 
   async function openLoanForm(dateId) {
     if (openingLoanForm) return;
@@ -349,8 +347,8 @@ function ProductionDetail({ p, currentStudent, students, kits = [], reservations
       <h5 style={{margin:"12px 0 6px",color:"var(--accent)"}}><CalendarIcon size={14} style={{verticalAlign:"middle"}}/> תאריכי צילום</h5>
       {(() => {
         // Board gate: viewers without pending-visibility only see ranges that
-        // already have a submitted equipment list (legacy productions: all).
-        const visibleList = (showPending || isLegacy)
+        // already have a submitted equipment list.
+        const visibleList = showPending
           ? [...(p.dates || [])]
           : (p.dates || []).filter(d => lockedDateIds.has(String(d.id)));
         if ((p.dates || []).length === 0) return <p style={{color:"var(--text3)",fontSize:13}}>אין תאריכים</p>;
@@ -411,7 +409,7 @@ function ProductionDetail({ p, currentStudent, students, kits = [], reservations
                   {deadlineChip}
                   {/* Board gate — director-facing warning: this range is not on
                       the public board until an equipment list is submitted. */}
-                  {isDirector && !isLegacy && !locked && (
+                  {isDirector && !locked && (
                     <div style={{
                       marginTop:4, fontSize:12, fontWeight:700,
                       padding:"6px 10px", borderRadius:6,
@@ -728,11 +726,10 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
               // A date range shows on the board ONLY once an equipment list has
               // been submitted for it — for EVERYONE, the director included. A
               // list-less range never renders here (the director still sees it as
-              // a draft in the editor + the production-detail view). Legacy
-              // productions: subIds=null → everything renders as before.
-              const subIds = isLegacyProduction(prod) ? null : submittedDateIds(prod, reservations);
+              // a draft in the editor + the production-detail view).
+              const subIds = submittedDateIds(prod, reservations);
               return (prod.dates || [])
-                .filter(d => !subIds || subIds.has(String(d.id)))
+                .filter(d => subIds.has(String(d.id)))
                 .map(d => ({
                   id: `${prod.id}__${d.id}`,
                   student_name: prod.directorName ? `${prod.directorName} · ${prod.title}` : prod.title,

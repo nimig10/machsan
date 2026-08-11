@@ -16,6 +16,11 @@ function dateRowToBlob(r) {
     endTime:    r.end_time,
     note:       r.note ?? "",
     sortOrder:  r.sort_order ?? 0,
+    // Read-only. Scopes auto-deletion (isRangeAutoPrunable) so a range that
+    // predates the board gate is never pruned. dateBlobToRow is an explicit
+    // column whitelist, so this never travels back to the DB — the column
+    // keeps its own DEFAULT now().
+    createdAt:  r.created_at ?? null,
   };
 }
 
