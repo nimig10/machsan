@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { formatDate, formatTime, deleteReservation as deleteReservationRpc, groupReservationItemsByCategory } from "../utils.js";
 import { AlertTriangle, Calendar, ChevronLeft, ChevronRight, Film, HelpCircle, Mic, Package, X } from "lucide-react";
 import { ApprovedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
+import { DateField } from "./DateField.jsx";
 import {
   readReturnOutcomes, returnExceptionSummary, describeExceptions, unitLabel,
   UNIT_DAMAGED, UNIT_MISSING, OUTCOME_COLOR, OUTCOME_BG,
@@ -312,11 +313,11 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
         {timeMode==="range"&&(
           <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
             <label style={{fontSize:12,color:"var(--text3)"}}>מ-</label>
-            <input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)}
-              style={{padding:"7px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",fontSize:16}}/>
+            <DateField value={fromDate} onChange={setFromDate} className=""
+              inputStyle={{padding:"7px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",fontSize:16}}/>
             <label style={{fontSize:12,color:"var(--text3)"}}>עד</label>
-            <input type="date" value={toDate} onChange={e=>setToDate(e.target.value)}
-              style={{padding:"7px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",fontSize:16}}/>
+            <DateField value={toDate} onChange={setToDate} className="" min={fromDate || undefined}
+              inputStyle={{padding:"7px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--surface2)",color:"var(--text)",fontSize:16}}/>
           </div>
         )}
       </div>

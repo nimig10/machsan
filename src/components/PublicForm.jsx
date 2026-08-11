@@ -17,6 +17,7 @@ import AIChatBot from "./AIChatBot.jsx";
 import { ProductionsPage } from "./ProductionsPage.jsx";
 import { StudentHub } from "./StudentHub.jsx";
 import { NightTrainingModal } from "./NightTrainingModal.jsx";
+import { DateField } from "./DateField.jsx";
 
 const SMART_LOAN_TYPES = ["פרטית", "הפקה", "סאונד", "קולנוע יומית"];
 
@@ -4947,8 +4948,8 @@ ${inventory}
               <>
                 <div className="grid-2">
                   <div className="form-group"><label className="form-label" style={{display:"flex",alignItems:"center",gap:4}}><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> תאריך *</label>
-                    <input type="date" className="form-input" min={minDate} value={form.borrow_date} onChange={e=>{
-                      setForm(prev=>({...prev, borrow_date:e.target.value, return_date:e.target.value, borrow_time:"", return_time:""}));
+                    <DateField min={minDate} value={form.borrow_date} onChange={v=>{
+                      setForm(prev=>({...prev, borrow_date:v, return_date:v, borrow_time:"", return_time:""}));
                     }}/>
                   </div>
                   <div className="form-group"><label className="form-label">שעת התחלה *</label>
@@ -5079,7 +5080,7 @@ ${inventory}
             ) : (
               <>
                 <div className="grid-2">
-                  <div className="form-group"><label className="form-label" style={{display:"flex",alignItems:"center",gap:4}}><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> תאריך השאלה *</label><input type="date" className="form-input" min={minDate} value={form.borrow_date} onChange={e=>set("borrow_date",e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label" style={{display:"flex",alignItems:"center",gap:4}}><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> תאריך השאלה *</label><DateField min={minDate} value={form.borrow_date} onChange={v=>set("borrow_date",v)}/></div>
                   <div className="form-group"><label className="form-label">שעת איסוף *</label>
                     <select className="form-select" value={form.borrow_time} onChange={e=>setForm(prev=>({...prev,borrow_time:e.target.value}))}>
                       <option value="">-- בחר שעה --</option>
@@ -5088,7 +5089,7 @@ ${inventory}
                   </div>
                 </div>
                 <div className="grid-2">
-                  <div className="form-group"><label className="form-label" style={{display:"flex",alignItems:"center",gap:4}}><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> תאריך החזרה *</label><input type="date" className="form-input" min={form.borrow_date||today()} value={form.return_date} onChange={e=>set("return_date",e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label" style={{display:"flex",alignItems:"center",gap:4}}><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> תאריך החזרה *</label><DateField min={form.borrow_date||today()} value={form.return_date} onChange={v=>set("return_date",v)}/></div>
                   <div className="form-group"><label className="form-label">שעת החזרה *</label>
                     <select className="form-select" value={form.return_time} onChange={e=>set("return_time",e.target.value)}>
                       <option value="">-- בחר שעה --</option>
@@ -6819,13 +6820,10 @@ function PublicStudioBooking({ studios, bookings, setBookings, student, showToas
                 </select>
               </label>
               <label style={{flex:1,fontSize:13,fontWeight:600}}>תאריך
-                <input
-                  type="date"
-                  name="date"
-                  className="form-input"
+                <DateField
                   min={todayStr}
                   value={modal.selectedDate || modal.date || ""}
-                  onChange={(e) => updateAddBookingModal({ selectedDate: e.target.value, date: e.target.value })}
+                  onChange={(v) => updateAddBookingModal({ selectedDate: v, date: v })}
                 />
               </label>
             </div>

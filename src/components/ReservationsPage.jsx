@@ -15,6 +15,7 @@ import { UpdateReviewModal } from "./UpdateReviewModal.jsx";
 import { ApprovedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
 import { getProductionCertBlockers } from "../utils/reservationUpdateReview.js";
 import { AlertTriangle, BookOpen, Briefcase, Camera, Calendar, CheckCircle, ClipboardList, Clock, FileText, Film, MessageSquare, Mic, Package, Pencil, Phone, RotateCcw, Save, Shield, Trash2, User, X, XCircle } from "lucide-react";
+import { DateField } from "./DateField.jsx";
 
 // Match production crew members to certification records for existing
 // reservation approval surfaces. The update-review modal uses the shared
@@ -191,11 +192,11 @@ function StaffLoanForm({ onClose, showToast, reservations, setReservations, team
       {mStep===1&&<>
         <div className="form-section-title">תאריכים ושעות <span style={{fontSize:11,color:"var(--text3)",fontWeight:400}}>· ללא מגבלות</span></div>
         <div className="grid-2">
-          <div className="form-group"><label className="form-label"><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> תאריך השאלה *</label><input type="date" className="form-input" min={todayStr} value={mf.borrow_date} onChange={e=>mSet("borrow_date",e.target.value)}/></div>
+          <div className="form-group"><label className="form-label"><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> תאריך השאלה *</label><DateField min={todayStr} value={mf.borrow_date} onChange={v=>mSet("borrow_date",v)}/></div>
           <div className="form-group"><label className="form-label">שעת איסוף *</label><select className="form-select" value={mf.borrow_time} onChange={e=>mSet("borrow_time",e.target.value)}><option value="">-- בחר --</option>{borrowTimeOptions.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
         </div>
         <div className="grid-2">
-          <div className="form-group"><label className="form-label"><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> תאריך החזרה *</label><input type="date" className="form-input" min={mf.borrow_date || todayStr} value={mf.return_date} onChange={e=>mSet("return_date",e.target.value)}/></div>
+          <div className="form-group"><label className="form-label"><Calendar size={14} strokeWidth={1.75} color="var(--accent)" /> תאריך החזרה *</label><DateField min={mf.borrow_date || todayStr} value={mf.return_date} onChange={v=>mSet("return_date",v)}/></div>
           <div className="form-group"><label className="form-label">שעת החזרה *</label><select className="form-select" value={mf.return_time} onChange={e=>mSet("return_time",e.target.value)}><option value="">-- בחר --</option>{returnTimeOptions.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
         </div>
         {mTimeOrderError&&<div style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:"var(--r-sm)",padding:"10px 14px",marginBottom:12,fontSize:12}}><XCircle size={14} strokeWidth={1.75} color="var(--red)" /> שעת החזרה חייבת להיות אחרי שעת האיסוף.</div>}
