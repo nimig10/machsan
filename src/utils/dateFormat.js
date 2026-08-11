@@ -91,9 +91,38 @@ export function heToIso(text) {
 // Deliberately does NOT append a trailing slash after the 2nd or 4th digit —
 // that fights backspace, because deleting the slash immediately re-adds it and
 // the caret never gets past it.
+//
+// ⚠️ Safe ONLY for text appended at the very end. See maskWhileTyping.
 export function maskDateInput(raw) {
   const digits = String(raw ?? "").replace(/\D/g, "").slice(0, 8);
   if (digits.length <= 2) return digits;
   if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+// What the field should show after a keystroke — the ONLY thing onChange calls.
+//
+// Masking mid-string is destructive, and this shipped broken: with
+// "18/08/2026" on screen, selecting the day and typing "1" leaves
+// "1/08/2026", whose digits are 1082026 — and maskDateInput reassembles that
+// into "10/82/026". The date scrambles under the user's hands.
+//
+// It also moves the caret. Any rewrite makes React's rendered value differ
+// from what the DOM holds, so the browser drops the caret at the END of the
+// field — one keystroke and you are no longer where you were editing. Fixing
+// a single digit becomes impossible.
+//
+// So: format only while APPENDING at the very end, which is the one case
+// where "rebuild from digits" cannot lose information and the caret belongs at
+// the end anyway. Everything else — editing in the middle, deleting, pasting
+// over a selection — passes through byte-for-byte. React then renders exactly
+// what the DOM already has, touches nothing, and the caret stays put.
+//
+// Nothing is lost by not formatting: heToIso accepts "18/09/2026",
+// "18.09.2026" and bare "18092026" alike, and commit reformats on blur.
+export function maskWhileTyping(prev, next, caret) {
+  const prevText = String(prev ?? "");
+  const nextText = String(next ?? "");
+  const appendingAtEnd = caret === nextText.length && nextText.length > prevText.length;
+  return appendingAtEnd ? maskDateInput(nextText) : nextText;
 }

@@ -21,7 +21,7 @@
 //
 // No network, no DB. Exit 0 = all passed.
 
-import { isoToHe, heToIso, maskDateInput, isValidIso } from "../src/utils/dateFormat.js";
+import { isoToHe, heToIso, maskDateInput, maskWhileTyping, isValidIso } from "../src/utils/dateFormat.js";
 import { readFileSync } from "node:fs";
 
 let passed = 0;
@@ -103,6 +103,57 @@ console.log("\n\x1b[1m> maskDateInput — slashes appear as you type\x1b[0m");
   check("non-digits are stripped", maskDateInput("18a/1b0/20c26") === "18/10/2026");
   check("overflow beyond 8 digits is dropped", maskDateInput("1810202699") === "18/10/2026");
   check("empty stays empty", maskDateInput("") === "" && maskDateInput(null) === "");
+}
+
+// ── 5b. editing in the MIDDLE — the bug that shipped ───────────────────────
+// Reported from production: "אני רוצה רק לשנות את היום או החודש ואז הוא
+// מתבלגן". maskDateInput rebuilds from digits, which is lossless only when
+// appending at the end. Anywhere else it destroys the value AND (because the
+// rendered string then differs from the DOM) drops the caret at the end, so a
+// single digit cannot be corrected.
+console.log("\n\x1b[1m> maskWhileTyping — mid-string edits survive\x1b[0m");
+{
+  const at = (s, i) => i; // readability: caret index
+
+  // THE reported failure. Day selected, "1" typed → "1/08/2026", caret at 1.
+  // The old code produced "10/82/026".
+  check("replacing the day does not scramble the date",
+    maskWhileTyping("18/08/2026", "1/08/2026", at("1/08/2026", 1)) === "1/08/2026",
+    maskWhileTyping("18/08/2026", "1/08/2026", 1));
+
+  // …and finishing the edit still parses.
+  check("the finished mid-edit is a valid date", heToIso("19/08/2026") === "2026-08-19");
+
+  check("editing the month mid-string is left alone",
+    maskWhileTyping("18/08/2026", "18/0/2026", at("18/0/2026", 4)) === "18/0/2026");
+
+  check("deleting from the middle is left alone",
+    maskWhileTyping("18/08/2026", "1808/2026", at("1808/2026", 2)) === "1808/2026");
+
+  // Appending at the end is the one safe case — that is where slashes appear.
+  check("appending at the end still auto-formats",
+    maskWhileTyping("1810", "18102", 5) === "18/10/2");
+  check("typing the first digits auto-formats",
+    maskWhileTyping("18", "181", 3) === "18/1");
+
+  // Backspace at the end must not re-add what was just deleted.
+  check("backspace at the end is not re-formatted",
+    maskWhileTyping("18/10", "18/1", 4) === "18/1");
+  check("deleting the slash at the end stays deleted",
+    maskWhileTyping("18/", "18", 2) === "18");
+
+  // Select-all then retype.
+  check("select-all + one digit is left alone",
+    maskWhileTyping("18/08/2026", "1", 1) === "1");
+
+  // Paste over a selection in the middle.
+  check("pasting into the middle is left alone",
+    maskWhileTyping("18/08/2026", "18/12/2026", at("18/12/2026", 5)) === "18/12/2026");
+
+  // A caret anywhere but the end must never trigger a rewrite, even when the
+  // text grew — that combination is exactly the reported bug.
+  check("growth with the caret NOT at the end never reformats",
+    maskWhileTyping("18/2026", "18/0/2026", 4) === "18/0/2026");
 }
 
 // ── 6. isValidIso — the min/max comparisons rely on it ─────────────────────

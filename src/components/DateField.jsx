@@ -23,7 +23,7 @@
 
 import { useRef, useState } from "react";
 import { Calendar } from "lucide-react";
-import { isoToHe, heToIso, maskDateInput, isValidIso } from "../utils/dateFormat.js";
+import { isoToHe, heToIso, maskWhileTyping, isValidIso } from "../utils/dateFormat.js";
 
 export function DateField({
   value,
@@ -95,7 +95,13 @@ export function DateField({
     <div style={{ display: "flex", alignItems: "stretch", gap: 4, minWidth: 0, position: "relative", ...style }}>
       {/* dir="ltr" so the digits and slashes are not reordered inside the RTL
           page, and minWidth:0 so a flex/grid parent can shrink it instead of
-          being pushed wide (lesson #30+#32). */}
+          being pushed wide (lesson #30+#32).
+
+          onChange passes the caret to maskWhileTyping so that edits in the
+          MIDDLE of the text are left byte-for-byte alone. Reformatting there
+          scrambled the date ("18/08/2026" → change the day → "10/82/026") and
+          threw the caret to the end of the field, which made fixing a single
+          digit impossible. */}
       <input
         type="text"
         inputMode="numeric"
@@ -106,7 +112,7 @@ export function DateField({
         disabled={disabled}
         placeholder={placeholder}
         onFocus={() => setFocused(true)}
-        onChange={(e) => setDraft(maskDateInput(e.target.value))}
+        onChange={(e) => setDraft(maskWhileTyping(draft, e.target.value, e.target.selectionStart))}
         onBlur={(e) => { setFocused(false); commit(e.target.value); }}
         onKeyDown={(e) => {
           if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); }
