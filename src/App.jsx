@@ -5500,11 +5500,25 @@ export default function App() {
       invalidateAuthTokenCache();
       validate(session);
     });
-    // Refresh the session every 4 minutes to prevent JWT expiry from kicking staff out.
-    const refreshInterval = setInterval(async () => {
-      try { await supabase.auth.refreshSession(); } catch { /* silent */ }
-    }, 4 * 60 * 1000);
-    return () => { cancelled = true; subscription?.unsubscribe?.(); clearInterval(refreshInterval); };
+    // ⛔ DO NOT reinstate a manual refresh interval here.
+    //
+    // There used to be a setInterval calling refreshSession() every 4 minutes,
+    // commented "to prevent JWT expiry from kicking staff out". It did the
+    // opposite: autoRefreshToken (supabaseClient.js) already ticks every 30s and
+    // refreshes at 90s-to-expiry — verified in @supabase/auth-js 2.102.1,
+    // AUTO_REFRESH_TICK_DURATION_MS=30 × AUTO_REFRESH_TICK_THRESHOLD=3 — so the
+    // interval added nothing except a SECOND, unsynchronised refresher.
+    //
+    // Supabase rotates refresh tokens on every use, with a 10-second reuse
+    // window; past it, reuse-detection revokes the token and its descendants.
+    // Two refreshers with no lock between them (the lock is a deliberate no-op,
+    // lesson #2) collide, and the loser gets "Invalid Refresh Token: Refresh
+    // Token Not Found" — the session is dropped and every API call 403s as anon.
+    //
+    // Mobile made it routine: background timers freeze, so both refreshers fire
+    // together on resume, on a token that already expired. One refresher can
+    // never race itself. See the incident note of 2026-08-10.
+    return () => { cancelled = true; subscription?.unsubscribe?.(); };
   }, [isAdmin]);
   const [staffView, setStaffView] = useState(() => sessionStorage.getItem("staff_view") || "hub"); // hub | warehouse | administration | staff-management
   const authed = !!staffUser;
