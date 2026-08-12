@@ -186,20 +186,16 @@ export function videoThumbnailCandidates(rawUrl) {
   return [];
 }
 
-// Normalize Israeli phone numbers to international format for wa.me deep links.
-// Accepts inputs like "054-123-4567", "054 123 4567", "+972541234567",
-// "972541234567" and returns "972541234567". Returns "" if no usable digits.
+// Phone helpers live in src/utils/studentPhone.js — dependency-free so they can
+// be unit-tested under plain Node, which this file cannot (it imports the
+// Supabase client). Re-exported here so the existing call sites keep working;
+// two copies of a phone normalizer drift (lesson #21).
 //
-// Shared rather than per-screen: the lesson-conflict resolver and the loan
-// rejection dialog both build WhatsApp links, and two copies of a normalizer
-// drift (lesson #21).
-export function normalizeIsraeliPhone(raw = "") {
-  const digits = String(raw || "").replace(/\D/g, "");
-  if (!digits) return "";
-  if (digits.startsWith("972")) return digits;
-  if (digits.startsWith("0")) return `972${digits.slice(1)}`;
-  return digits;
-}
+// Imported AND re-exported on purpose: `export ... from` creates no local
+// binding, and the WhatsApp link builders below call normalizeIsraeliPhone
+// directly (lesson #17 — no-undef is an error, and it caught exactly this).
+import { normalizeIsraeliPhone } from "./utils/studentPhone.js";
+export { normalizeIsraeliPhone, resolveStudentPhone, pickSubmissionPhone, mayOverwriteRosterPhone, isValidPhone } from "./utils/studentPhone.js";
 
 // A wa.me deep link about one reservation, prefilled with the request's own
 // details plus whatever the staff member typed. Returns "" when the student has
@@ -242,6 +238,36 @@ export function buildReservationWhatsAppLink(reservation, { headline = "", note 
   if (trimmed) { lines.push(""); lines.push(trimmed); }
 
   return `https://wa.me/${phone}?text=${encodeURIComponent(lines.join("\n"))}`;
+}
+
+// A wa.me deep link for simply REACHING the student about their loan.
+//
+// Distinct from buildReservationWhatsAppLink above, which announces a decision
+// (rejected / still out) and lists the gear. This one only opens the
+// conversation and hands the keyboard back to the staff member, who writes the
+// actual question — so it is one line with no item list. Anything more is text
+// they would have to delete before typing.
+//
+// `phoneOverride` takes the result of resolveStudentPhone, since the number is
+// missing from the reservation row itself on most production loans. Returns ""
+// with no usable phone, so callers render the "אין טלפון" fallback rather than
+// a dead link.
+export function buildReservationContactWhatsAppLink(reservation, phoneOverride = "") {
+  const phone = normalizeIsraeliPhone(phoneOverride || reservation?.phone);
+  if (!phone) return "";
+
+  const name = String(reservation?.student_name || "").trim();
+  // Dates and times only ever through the shared formatters — formatTime trims
+  // the seconds the DB returns, "15:30:00" → "15:30" (lesson #18).
+  const borrow = [formatDate(reservation?.borrow_date), formatTime(reservation?.borrow_time)].filter(Boolean).join(" ");
+  const ret = [formatDate(reservation?.return_date), formatTime(reservation?.return_time)].filter(Boolean).join(" ");
+  const span = borrow && ret ? ` מ-${borrow} ועד ${ret}`
+             : borrow       ? ` מ-${borrow}`
+             : ret          ? ` עד ${ret}`
+             : "";
+
+  const text = `${name ? `מה המצב ${name}.` : "מה המצב."} לגבי השאלת הציוד שלך${span}`;
+  return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
 }
 
 export function cloudinaryThumb(url, width = 400) {
@@ -363,6 +389,34 @@ export async function createReservation(reservation, items, options = {}) {
   } catch (e) {
     console.error("createReservation network error:", e);
     return { ok: false, error: "network_error", detail: e.message };
+  }
+}
+
+// Push a phone the student TYPED to their roster row, right now.
+//
+// For fields like טלפון הבמאי, which the student fills in a screen that has
+// nothing to do with borrowing: without this the number would only reach
+// Administration → Students if and when they later submit an equipment list.
+//
+// Server-side the caller is identified from the token, so this can only ever
+// touch the calling student's own row. Never throws — callers treat a failure
+// as "the roster is stale", not as a failure of whatever they were saving.
+export async function saveStudentPhone(phone) {
+  const clean = String(phone || "").trim();
+  if (!clean) return { ok: false, error: "missing_phone" };
+  try {
+    const accessToken = await getAuthToken();
+    if (!accessToken) return { ok: false, error: "no_session" };
+    const res = await fetch("/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "record-student-phone", accessToken, phone: clean }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `http_${res.status}` };
+    return { ok: true, changed: !!data.changed };
+  } catch (e) {
+    return { ok: false, error: e?.message || "network_error" };
   }
 }
 

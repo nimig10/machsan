@@ -28,6 +28,56 @@
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+// Record the request's phone onto the student's roster row.
+//
+// Why this exists: the phone was kept as a per-request snapshot and never
+// written back, so the roster in Administration → Students sat almost entirely
+// empty while the numbers themselves existed, scattered across individual
+// requests. The warehouse had no single place to look.
+//
+// FILL-ONLY, ALWAYS. This endpoint takes NO authentication — there is no
+// requireUser, no token check, only body validation — because a reservation may
+// legitimately be submitted without a session. That is tolerable while it
+// writes to reservations_new, but it means nothing in the request body can be
+// trusted to authorise a write to somebody's student record.
+//
+// An earlier revision of this function let the client send `phoneTyped: true`
+// to opt into overwriting. That handed every anonymous caller the ability to
+// change any student's roster phone by posting their email. Permission is not
+// the client's to assert.
+//
+// So overwriting lives elsewhere: the "record-student-phone" action in
+// api/auth.js verifies a JWT and takes the identity from the TOKEN, never from
+// the body. This path only ever fills a cell that is empty — capturing a number
+// the college does not have yet, which is the whole reason it exists.
+//
+// The `or=(phone.is.null,phone.eq.)` condition lives in the URL rather than in
+// a read-then-write here, so test and write stay one statement that two
+// concurrent submits cannot interleave (lesson #48).
+async function recordStudentPhone(reservation) {
+  const email = String(reservation?.email || "").trim().toLowerCase();
+  const phone = String(reservation?.phone || "").trim();
+  if (!email || !phone) return;
+  // Same shape the self-service endpoint enforces (api/auth.js): strip
+  // separators, then 7–15 digits with an optional leading +.
+  if (!/^\+?\d{7,15}$/.test(phone.replace(/[^\d+]/g, ""))) return;
+
+  const url = `${SB_URL}/rest/v1/students`
+    + `?email=eq.${encodeURIComponent(email)}`
+    + `&or=(phone.is.null,phone.eq.)`;
+  const r = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      apikey: SB_KEY,
+      Authorization: `Bearer ${SB_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({ phone }),
+  });
+  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ ok: false, error: "Method not allowed" });
@@ -98,6 +148,16 @@ export default async function handler(req, res) {
     // retired. Reservations live exclusively in reservations_new /
     // reservation_items. The legacy append_to_store_reservations mirror call
     // was removed on 2026-04-24 together with migration 024.
+
+    // Bookkeeping, not part of the booking: the reservation is already committed
+    // and the student is owed their confirmation. A failure here is logged and
+    // swallowed rather than turned into an error they cannot act on — the same
+    // stance the actor-stamping PATCH takes (lesson #37+#41).
+    try {
+      await recordStudentPhone(reservation);
+    } catch (phoneErr) {
+      console.warn("create-reservation: student phone backfill failed:", phoneErr?.message || phoneErr);
+    }
 
     return res.status(200).json({ ok: true, id });
   } catch (e) {

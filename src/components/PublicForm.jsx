@@ -1,7 +1,8 @@
 // PublicForm.jsx — public loan request form
 import { AlertTriangle, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mail, Mic, Minus, Moon, Package, Pencil, Phone, Save, School, Search, Settings, Shield, ShieldCheck, Trash2, User, X, XCircle } from "lucide-react";
 import { useEffect, useState, useRef, useMemo } from "react";
-import { formatDate, formatTime, formatLocalDateInput, parseLocalDate, today, getAvailable, computeEquipmentAvailability, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, EXTERNAL_LOAN_TYPES, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR, groupReservationItemsByCategory, deriveVisibleCategories, stretchOverdueForCalendar, videoEmbedSrc } from "../utils.js";
+import { formatDate, formatTime, formatLocalDateInput, parseLocalDate, today, getAvailable, computeEquipmentAvailability, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, EXTERNAL_LOAN_TYPES, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR, groupReservationItemsByCategory, deriveVisibleCategories, stretchOverdueForCalendar, videoEmbedSrc, saveStudentPhone } from "../utils.js";
+import { pickSubmissionPhone, mayOverwriteRosterPhone } from "../utils/studentPhone.js";
 import { supabase } from "../supabaseClient.js";
 import { listStudents } from "../utils/studentsApi.js";
 import { listLessons } from "../utils/lessonsApi.js";
@@ -1757,6 +1758,26 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
   const [error,    setError]    = useState("");
   const notifications = useNotifications();
 
+  // Did the user actually edit the phone box in this sitting?
+  //
+  // Both halves of this matter, because together they were deleting people's
+  // numbers. `phone` is seeded ONCE from a prop that can arrive late or come
+  // from the cached session, so the box could sit there empty while the roster
+  // held a real number (lesson #42). The save then sent that empty string, and
+  // the server writes `phone = null` whenever the field is present at all. Net
+  // effect: opening this panel to change only your NAME wiped your phone.
+  //
+  // With the flag, an untouched box is simply not sent — the server already has
+  // a path for an absent field and leaves the column alone. Clearing it on
+  // purpose still works, because that requires touching it.
+  const [phoneTouched, setPhoneTouched] = useState(false);
+
+  // Re-seed while untouched, so a prop that resolves after mount still lands in
+  // the box. Once the user types, their edit owns the field and this stops.
+  useEffect(() => {
+    if (!phoneTouched) setPhone(String(student?.phone || ""));
+  }, [student?.phone, phoneTouched]);
+
   const handleToggleNotifications = async (nextEnabled) => {
     const result = nextEnabled ? await notifications.enable() : await notifications.disable();
     if (result?.ok && showToast) {
@@ -1810,7 +1831,9 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
           accessToken,
           name:  nName,
           email: nEmail,
-          phone: nPhone,
+          // Omitted entirely when untouched — the server reads a MISSING key as
+          // "leave the column alone", but an empty string as "clear it".
+          ...(phoneTouched ? { phone: nPhone } : {}),
         }),
         signal: abort.signal,
       });
@@ -1836,13 +1859,17 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
         return;
       }
 
+      // An untouched phone was never sent, so the local mirror must keep the
+      // old value too — otherwise the UI would show it cleared while the DB
+      // still holds it.
+      const savedPhone = phoneTouched ? nPhone : String(student?.phone || "");
       const nextStudent =
         data.student ||
-        { ...student, name: nName, email: nEmail, phone: nPhone };
+        { ...student, name: nName, email: nEmail, phone: savedPhone };
       const flags = {
         emailChanged:    false,
         passwordChanged: false,
-        phoneChanged:    (student?.phone || "") !== nPhone,
+        phoneChanged:    phoneTouched && (student?.phone || "") !== nPhone,
       };
       unfreeze();
       onClose?.();
@@ -1901,7 +1928,7 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
               className="form-input"
               type="tel"
               value={phone}
-              onChange={(e)=>setPhone(e.target.value)}
+              onChange={(e)=>{setPhoneTouched(true);setPhone(e.target.value);}}
               disabled={busy}
               placeholder="050-1234567"
               autoComplete="tel"
@@ -2178,6 +2205,28 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     {val:"סאונד",icon:<Mic size={30} strokeWidth={1.75} color="var(--accent)" />,desc:"לתרגול הקלטות באולפני המכללה (עבור הנדסאי סאונד בלבד)"},
     {val:"קולנוע יומית",icon:<Camera size={30} strokeWidth={1.75} color="var(--accent)" />,desc:"תרגול חופשי עם ציוד קולנוע למספר שעות — יש להזמין 24 שעות מראש"},
   ].filter((option) => allowedLoanTypes.includes(option.val));
+
+  // Keep every in-memory copy of a student in step with the row we just wrote.
+  //
+  // `students.phone` is the source of truth, but the client holds two
+  // photographs of it: `tableStudents`, fetched once on mount, and
+  // `loggedInStudent`, snapshotted at login and mirrored into sessionStorage.
+  // Neither was refreshed after a write — so a number saved on one screen was
+  // still the OLD one the next time any screen seeded a field from it, and the
+  // student watched a number they had already replaced come back.
+  //
+  // That is what the "duplicate phone numbers" really were: not two sources
+  // disagreeing, but one source and two stale photographs of it. Every write
+  // path must land here.
+  const syncStudentLocally = (email, patch) => {
+    const em = String(email || "").toLowerCase().trim();
+    if (!em) return;
+    const matches = (row) => String(row?.email || "").toLowerCase().trim() === em;
+    setLoggedInStudent(prev => (prev && matches(prev) ? { ...prev, ...patch } : prev));
+    setTableStudents(prev => (Array.isArray(prev)
+      ? prev.map(s => (matches(s) ? { ...s, ...patch } : s))
+      : prev));
+  };
 
   const syncInventory = async () => {
     try {
@@ -3150,6 +3199,19 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   }, [certifications, loggedInStudent]);
 
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  // Did the student TYPE this phone, or did we fill it in for them?
+  //
+  // Only a typed number is allowed to overwrite what the roster already holds.
+  // Everything else in this form is auto-filled from the student record, the
+  // cached session, or the sessionStorage draft — and an auto-filled value is
+  // not an answer, it is an echo. Letting an echo write to the roster is how a
+  // number the office had just corrected came back from the dead.
+  //
+  // Deliberately NOT part of `form`: `form` is what gets persisted to the draft,
+  // and a flag that survives in sessionStorage would claim "typed" on a later
+  // visit where nobody typed anything. Reset wherever the draft is cleared.
+  const [phoneTouched, setPhoneTouched] = useState(false);
 
   // ── Name split helpers ──────────────────────────────────────────────────
   // The public form keeps three fields in lockstep: student_first_name,
@@ -4125,7 +4187,16 @@ ${inventory}
       showToast("error", "לא נמצא צלם ראשי מאושר להפקה — יש לאשר צלם ראשי בלוח ההפקות לפני הגשת רשימת ציוד.");
       return;
     }
-    const newRes = { ...form, ...crewSnapshot, id: reservationId, status: initStatus, created_at: today(), submitted_at: submittedAtHebrew, items };
+    // Which phone this request carries. The order flips for production loans,
+    // and that flip is exactly what broke once — so it lives in a tested,
+    // dependency-free module rather than inline here (src/utils/studentPhone.js).
+    const resolvedPhone = pickSubmissionPhone({
+      isProduction:    isProductionLoan,
+      formPhone:       form.phone,
+      productionPhone: selectedProduction?.directorPhone,
+      sessionPhone:    loggedInStudent?.phone,
+    });
+    const newRes = { ...form, ...crewSnapshot, phone: resolvedPhone, id: reservationId, status: initStatus, created_at: today(), submitted_at: submittedAtHebrew, items };
 
     // ── ATOMIC SERVER-SIDE CREATE ─────────────────────────────────────────
     // create_reservation_v2 (migration 008) takes FOR UPDATE locks on each
@@ -4186,11 +4257,35 @@ ${inventory}
     setSub(false);
     setDone(true);
     clearFormDraft();
+    // Push the number to the roster when the student actually typed it — through
+    // the JWT-verified endpoint, which takes the identity from the token. The
+    // create-reservation call above is anonymous and therefore only ever FILLS
+    // an empty cell; replacing an existing one has to prove who is asking.
+    //
+    // Fire-and-forget, exactly like the confirmation mail: the reservation is
+    // already committed, and bookkeeping must not fail a submit in front of the
+    // student. No session ⇒ resolves to no_session and the fill-only write on
+    // the server has already covered the number-we-did-not-have case.
+    if (mayOverwriteRosterPhone({
+      isProduction: isProductionLoan,
+      phoneTouched,
+      productionPhone: selectedProduction?.directorPhone,
+    }) && resolvedPhone) {
+      saveStudentPhone(resolvedPhone)
+        .then(r => { if (!r.ok && r.error !== "no_session" && r.error !== "student_not_found") {
+          console.warn("roster phone update failed:", r.error);
+        } })
+        .catch(() => {});
+    }
+    // Mirror locally either way, so the next screen to seed a phone field reads
+    // this value instead of the copy this session loaded at login.
+    if (resolvedPhone) syncStudentLocally(newRes.email, { phone: resolvedPhone });
+    setPhoneTouched(false);
     showToast("success","הבקשה נשלחה בהצלחה!");
   };
 
   const reset = () => {
-    clearFormDraft(); setDone(false); setEmailError(false); setStep(1);
+    clearFormDraft(); setPhoneTouched(false); setDone(false); setEmailError(false); setStep(1);
     const blank = {student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_first_name:"",crew_photographer_last_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_first_name:"",crew_sound_last_name:"",crew_sound_phone:"",production_reason:""};
     // Re-seed the logged-in student's identity (name/email/phone/course) — the
     // same person is still logged in, so a fresh "שלח בקשה נוספת" should keep
@@ -4526,6 +4621,9 @@ ${inventory}
             onClose={() => setShowAccountSettings(false)}
             onSaved={(updatedStudent) => {
               setLoggedInStudent(prev => prev ? { ...prev, ...updatedStudent } : prev);
+              // Also into the roster list, or the production editor would keep
+              // seeding new productions from the pre-edit number.
+              syncStudentLocally(loggedInStudent?.email, { phone: updatedStudent?.phone ?? "" });
               setShowAccountSettings(false);
               showToast("success","הפרופיל עודכן");
             }}
@@ -4575,6 +4673,7 @@ ${inventory}
               reservations={reservations}
               showToast={(msg, type="info") => showToast(type, msg)}
               refresh={refreshProductions}
+              onStudentPhoneSaved={(phone) => syncStudentLocally(loggedInStudent?.email, { phone })}
               onOpenLoanForm={(p, dateId) => {
                 // dateId (optional) — a specific shoot range to pre-select
                 // (comes from the per-range "הגש רשימת ציוד" buttons). Seeds the
@@ -4764,7 +4863,7 @@ ${inventory}
                   <div className="form-group"><label className="form-label">שם משפחה *</label><input className="form-input" name="student_last_name" autoComplete="family-name" value={form.student_last_name} onChange={e=>setStudentLastName(e.target.value)}/></div>
                 </div>
                 <div className="grid-2">
-                  <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" name="phone" autoComplete="tel" value={form.phone} onChange={e=>set("phone",e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" name="phone" autoComplete="tel" value={form.phone} onChange={e=>{setPhoneTouched(true);set("phone",e.target.value);}}/></div>
                   <div className="form-group"><label className="form-label">אימייל *{loggedInStudent?.email&&<span style={{fontSize:11,fontWeight:600,color:"var(--text3)",marginRight:6}}>(מהחשבון שלך)</span>}</label><input type="email" className="form-input" name="email" autoComplete="email" value={form.email} onChange={e=>set("email",e.target.value)} readOnly={!!loggedInStudent?.email} style={loggedInStudent?.email?{opacity:0.7,cursor:"not-allowed"}:undefined}/></div>
                 </div>
                 <div className="grid-2">

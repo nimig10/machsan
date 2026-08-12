@@ -1,7 +1,7 @@
 // DashboardPage.jsx — admin dashboard page
 import { useState } from "react";
-import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, reservationStatusErrorMessage, getAuthToken, syncReservationStatusToBlob, getLoanTypeColor, normalizeName, groupReservationItemsByCategory, stretchOverdueForCalendar } from "../utils.js";
-import { Modal, statusBadge } from "./ui.jsx";
+import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, reservationStatusErrorMessage, getAuthToken, syncReservationStatusToBlob, getLoanTypeColor, normalizeName, groupReservationItemsByCategory, stretchOverdueForCalendar, buildReservationContactWhatsAppLink, resolveStudentPhone } from "../utils.js";
+import { Modal, statusBadge, WhatsAppLinkButton } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import { UpdateReviewModal } from "./UpdateReviewModal.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
@@ -585,14 +585,25 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
                   open-window "מאושר" loan as "פעילה" (lesson #19) and drop the
                   button off editable rows. unstretch() keeps a calendar-stretched
                   overdue date out of the editor's date field (lesson #36). */}
-              {["ממתין","מאושר","נדחה","באיחור"].includes(dashViewRes.status)&&(
-                <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",paddingBottom:14,borderBottom:"1px solid var(--border)"}}>
+              {/* The row itself is NOT gated any more — only עריכה is. Reaching
+                  the student stays useful after the loan closes (damage or a
+                  missing item surfaces once the gear is back on the shelf), and
+                  the old gate took the whole row away on הוחזר/בוטל. */}
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",paddingBottom:14,borderBottom:"1px solid var(--border)"}}>
+                {["ממתין","מאושר","נדחה","באיחור"].includes(dashViewRes.status)&&(
                   <button className="btn btn-secondary" title="עריכת הבקשה"
                     onClick={()=>{setDashEditing(unstretch(dashViewRes));setDashViewRes(null);}}>
                     <Pencil size={14} strokeWidth={1.75} /> עריכת בקשה
                   </button>
-                </div>
-              )}
+                )}
+                {/* Second child in an RTL flex row paints to the LEFT of the
+                    first, which is where this belongs relative to עריכת בקשה. */}
+                <WhatsAppLinkButton
+                  href={buildReservationContactWhatsAppLink(dashViewRes, resolveStudentPhone(dashViewRes, { students: certifications.students, reservations }))}
+                  label="וואטסאפ לסטודנט"
+                  title="פתח שיחת WhatsApp עם הסטודנט — ההודעה נפתחת עם פרטי ההשאלה"
+                />
+              </div>
               {/* Dates & info */}
               <div style={{background:"var(--accent-glow)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:12,padding:"14px 16px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 16px"}}>
                 {[
