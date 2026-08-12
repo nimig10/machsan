@@ -35,37 +35,36 @@ const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 // empty while the numbers themselves existed, scattered across individual
 // requests. The warehouse had no single place to look.
 //
-// `typed` decides how far this is allowed to go, and it is the whole safety
-// story:
+// FILL-ONLY, ALWAYS. This endpoint takes NO authentication — there is no
+// requireUser, no token check, only body validation — because a reservation may
+// legitimately be submitted without a session. That is tolerable while it
+// writes to reservations_new, but it means nothing in the request body can be
+// trusted to authorise a write to somebody's student record.
 //
-//   typed === true   the student entered this number by hand on this submit
-//                    (the visible phone field, or טלפון הבמאי on a production).
-//                    It is their current answer, so it REPLACES whatever the
-//                    roster holds — that is the point: a student who changes
-//                    their number must not have to phone the office.
+// An earlier revision of this function let the client send `phoneTyped: true`
+// to opt into overwriting. That handed every anonymous caller the ability to
+// change any student's roster phone by posting their email. Permission is not
+// the client's to assert.
 //
-//   typed === false  the number was auto-filled from their record, the cached
-//                    session, or the sessionStorage form draft. An echo, not an
-//                    answer. FILL-ONLY: the `or=(phone.is.null,phone.eq.)`
-//                    filter restricts the write to rows that have nothing, so a
-//                    stale draft can never resurrect a number the office just
-//                    corrected. That exact regression shipped once already.
+// So overwriting lives elsewhere: the "record-student-phone" action in
+// api/auth.js verifies a JWT and takes the identity from the TOKEN, never from
+// the body. This path only ever fills a cell that is empty — capturing a number
+// the college does not have yet, which is the whole reason it exists.
 //
-// Either way the condition lives in the URL rather than in a read-then-write
-// here, so test and write stay one statement that two concurrent submits cannot
-// interleave — the same trick the return-outcomes PATCH uses (lesson #48).
-//
-// Same normalisation the self-service endpoint enforces (api/auth.js): strip
-// separators, then 7–15 digits with an optional leading +.
-async function recordStudentPhone(reservation, typed = false) {
+// The `or=(phone.is.null,phone.eq.)` condition lives in the URL rather than in
+// a read-then-write here, so test and write stay one statement that two
+// concurrent submits cannot interleave (lesson #48).
+async function recordStudentPhone(reservation) {
   const email = String(reservation?.email || "").trim().toLowerCase();
   const phone = String(reservation?.phone || "").trim();
   if (!email || !phone) return;
+  // Same shape the self-service endpoint enforces (api/auth.js): strip
+  // separators, then 7–15 digits with an optional leading +.
   if (!/^\+?\d{7,15}$/.test(phone.replace(/[^\d+]/g, ""))) return;
 
   const url = `${SB_URL}/rest/v1/students`
     + `?email=eq.${encodeURIComponent(email)}`
-    + (typed ? "" : `&or=(phone.is.null,phone.eq.)`);
+    + `&or=(phone.is.null,phone.eq.)`;
   const r = await fetch(url, {
     method: "PATCH",
     headers: {
@@ -84,7 +83,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, error: "Method not allowed" });
   }
 
-  const { reservation, items, phoneTyped } = req.body || {};
+  const { reservation, items } = req.body || {};
 
   if (!reservation || typeof reservation !== "object") {
     return res.status(400).json({ ok: false, error: "Missing reservation object" });
@@ -155,7 +154,7 @@ export default async function handler(req, res) {
     // swallowed rather than turned into an error they cannot act on — the same
     // stance the actor-stamping PATCH takes (lesson #37+#41).
     try {
-      await recordStudentPhone(reservation, phoneTyped === true);
+      await recordStudentPhone(reservation);
     } catch (phoneErr) {
       console.warn("create-reservation: student phone backfill failed:", phoneErr?.message || phoneErr);
     }

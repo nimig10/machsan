@@ -186,20 +186,16 @@ export function videoThumbnailCandidates(rawUrl) {
   return [];
 }
 
-// Normalize Israeli phone numbers to international format for wa.me deep links.
-// Accepts inputs like "054-123-4567", "054 123 4567", "+972541234567",
-// "972541234567" and returns "972541234567". Returns "" if no usable digits.
+// Phone helpers live in src/utils/studentPhone.js — dependency-free so they can
+// be unit-tested under plain Node, which this file cannot (it imports the
+// Supabase client). Re-exported here so the existing call sites keep working;
+// two copies of a phone normalizer drift (lesson #21).
 //
-// Shared rather than per-screen: the lesson-conflict resolver and the loan
-// rejection dialog both build WhatsApp links, and two copies of a normalizer
-// drift (lesson #21).
-export function normalizeIsraeliPhone(raw = "") {
-  const digits = String(raw || "").replace(/\D/g, "");
-  if (!digits) return "";
-  if (digits.startsWith("972")) return digits;
-  if (digits.startsWith("0")) return `972${digits.slice(1)}`;
-  return digits;
-}
+// Imported AND re-exported on purpose: `export ... from` creates no local
+// binding, and the WhatsApp link builders below call normalizeIsraeliPhone
+// directly (lesson #17 — no-undef is an error, and it caught exactly this).
+import { normalizeIsraeliPhone } from "./utils/studentPhone.js";
+export { normalizeIsraeliPhone, resolveStudentPhone, pickSubmissionPhone, mayOverwriteRosterPhone, isValidPhone } from "./utils/studentPhone.js";
 
 // A wa.me deep link about one reservation, prefilled with the request's own
 // details plus whatever the staff member typed. Returns "" when the student has
@@ -242,37 +238,6 @@ export function buildReservationWhatsAppLink(reservation, { headline = "", note 
   if (trimmed) { lines.push(""); lines.push(trimmed); }
 
   return `https://wa.me/${phone}?text=${encodeURIComponent(lines.join("\n"))}`;
-}
-
-// Where a student's phone actually lives, in order of trust.
-//
-// The reservation carries its own snapshot, and that is the right answer
-// whenever it is filled. On production loans it usually is NOT: PublicForm
-// deliberately drops phone from the step-1 gate there and falls back to the
-// student record — which is empty for the large majority of students, so the
-// request is born without a number at all.
-//
-// Both lists are already in memory at every call site (they are props), so the
-// lookup costs no query. Returns "" when the number exists nowhere, which is a
-// real outcome for a student whose only request is a production one.
-export function resolveStudentPhone(reservation, { students = [], reservations = [] } = {}) {
-  const own = String(reservation?.phone || "").trim();
-  if (own) return own;
-
-  const email = String(reservation?.email || "").trim().toLowerCase();
-  if (!email) return "";
-  const sameEmail = (row) => String(row?.email || "").trim().toLowerCase() === email;
-  const phoneOf = (row) => String(row?.phone || "").trim();
-
-  const fromRecord = (students || []).find(s => sameEmail(s) && phoneOf(s));
-  if (fromRecord) return phoneOf(fromRecord);
-
-  // Last resort: the student typed it into some OTHER request of theirs. Newest
-  // first — a number entered recently beats one from a year ago.
-  const fromOtherRequest = (reservations || [])
-    .filter(r => sameEmail(r) && phoneOf(r))
-    .sort((a, b) => String(b?.borrow_date || "").localeCompare(String(a?.borrow_date || "")))[0];
-  return fromOtherRequest ? phoneOf(fromOtherRequest) : "";
 }
 
 // A wa.me deep link for simply REACHING the student about their loan.
@@ -392,12 +357,8 @@ export async function syncReservationStatusToBlob(reservationId, newStatus, opti
 // course, loan_type, borrow_date, return_date, borrow_time, return_time.
 // The `items` array must be non-empty; each item needs equipment_id + quantity.
 // Optional: `id` on the reservation (server will generate one if missing).
-// `options.phoneTyped` says the student typed the phone by hand on this submit,
-// rather than it having been auto-filled from their record / the cached session
-// / the sessionStorage draft. The server needs the distinction to decide whether
-// this number may overwrite the roster — see recordStudentPhone.
 export async function createReservation(reservation, items, options = {}) {
-  const { timeoutMs = 12000, phoneTyped = false } = options;
+  const { timeoutMs = 12000 } = options;
   if (!reservation || typeof reservation !== "object") {
     return { ok: false, error: "missing_arg", detail: "reservation object required" };
   }
@@ -410,7 +371,7 @@ export async function createReservation(reservation, items, options = {}) {
     const res = await fetch("/api/create-reservation", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ reservation, items, phoneTyped }),
+      body:    JSON.stringify({ reservation, items }),
       signal:  ctrl.signal,
     });
     clearTimeout(t);
