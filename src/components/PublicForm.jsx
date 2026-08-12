@@ -1,7 +1,8 @@
 // PublicForm.jsx — public loan request form
 import { AlertTriangle, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mail, Mic, Minus, Moon, Package, Pencil, Phone, Save, School, Search, Settings, Shield, ShieldCheck, Trash2, User, X, XCircle } from "lucide-react";
 import { useEffect, useState, useRef, useMemo } from "react";
-import { formatDate, formatTime, formatLocalDateInput, parseLocalDate, today, getAvailable, computeEquipmentAvailability, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, EXTERNAL_LOAN_TYPES, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR, groupReservationItemsByCategory, deriveVisibleCategories, stretchOverdueForCalendar, videoEmbedSrc } from "../utils.js";
+import { formatDate, formatTime, formatLocalDateInput, parseLocalDate, today, getAvailable, computeEquipmentAvailability, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, EXTERNAL_LOAN_TYPES, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR, groupReservationItemsByCategory, deriveVisibleCategories, stretchOverdueForCalendar, videoEmbedSrc, saveStudentPhone } from "../utils.js";
+import { pickSubmissionPhone, mayOverwriteRosterPhone } from "../utils/studentPhone.js";
 import { supabase } from "../supabaseClient.js";
 import { listStudents } from "../utils/studentsApi.js";
 import { listLessons } from "../utils/lessonsApi.js";
@@ -4186,24 +4187,15 @@ ${inventory}
       showToast("error", "לא נמצא צלם ראשי מאושר להפקה — יש לאשר צלם ראשי בלוח ההפקות לפני הגשת רשימת ציוד.");
       return;
     }
-    // Which phone this request carries — and the ORDER here is load-bearing.
-    //
-    // On a production loan step 1 renders an identity card with NO phone input
-    // at all (see the isProductionLoan branch further down), so `form.phone`
-    // there is never something the student typed — it is whatever was
-    // auto-filled, and the form draft in sessionStorage keeps that value alive
-    // across the session. Putting it first meant a stale number beat the one
-    // the director had just typed into טלפון הבמאי, and then got written back
-    // over the roster. The production's own field is the explicit entry here,
-    // so it goes first.
-    //
-    // On every other loan type `form.phone` IS the visible required field, so
-    // it stays first there.
-    const resolvedPhone = (isProductionLoan
-      ? (selectedProduction?.directorPhone || form.phone)
-      : form.phone)
-      || loggedInStudent?.phone
-      || "";
+    // Which phone this request carries. The order flips for production loans,
+    // and that flip is exactly what broke once — so it lives in a tested,
+    // dependency-free module rather than inline here (src/utils/studentPhone.js).
+    const resolvedPhone = pickSubmissionPhone({
+      isProduction:    isProductionLoan,
+      formPhone:       form.phone,
+      productionPhone: selectedProduction?.directorPhone,
+      sessionPhone:    loggedInStudent?.phone,
+    });
     const newRes = { ...form, ...crewSnapshot, phone: resolvedPhone, id: reservationId, status: initStatus, created_at: today(), submitted_at: submittedAtHebrew, items };
 
     // ── ATOMIC SERVER-SIDE CREATE ─────────────────────────────────────────
@@ -4227,11 +4219,7 @@ ${inventory}
         name:         it.name,
         quantity:     Number(it.quantity) || 1,
         unit_id:      it.unit_id || null,
-      })),
-      // A production loan's number comes from טלפון הבמאי, which the director
-      // typed into the editor — explicit, even though it was not typed on this
-      // screen. Everywhere else, only the visible field being edited counts.
-      { phoneTyped: isProductionLoan ? !!selectedProduction?.directorPhone : phoneTouched }
+      }))
     );
     if (!rpcResult.ok) {
       setSub(false);
@@ -4269,9 +4257,28 @@ ${inventory}
     setSub(false);
     setDone(true);
     clearFormDraft();
-    // The server may have just written this number onto the roster row. Mirror
-    // it locally so the next screen to seed a phone field reads the new value
-    // instead of the copy this session loaded at login.
+    // Push the number to the roster when the student actually typed it — through
+    // the JWT-verified endpoint, which takes the identity from the token. The
+    // create-reservation call above is anonymous and therefore only ever FILLS
+    // an empty cell; replacing an existing one has to prove who is asking.
+    //
+    // Fire-and-forget, exactly like the confirmation mail: the reservation is
+    // already committed, and bookkeeping must not fail a submit in front of the
+    // student. No session ⇒ resolves to no_session and the fill-only write on
+    // the server has already covered the number-we-did-not-have case.
+    if (mayOverwriteRosterPhone({
+      isProduction: isProductionLoan,
+      phoneTouched,
+      productionPhone: selectedProduction?.directorPhone,
+    }) && resolvedPhone) {
+      saveStudentPhone(resolvedPhone)
+        .then(r => { if (!r.ok && r.error !== "no_session" && r.error !== "student_not_found") {
+          console.warn("roster phone update failed:", r.error);
+        } })
+        .catch(() => {});
+    }
+    // Mirror locally either way, so the next screen to seed a phone field reads
+    // this value instead of the copy this session loaded at login.
     if (resolvedPhone) syncStudentLocally(newRes.email, { phone: resolvedPhone });
     setPhoneTouched(false);
     showToast("success","הבקשה נשלחה בהצלחה!");
