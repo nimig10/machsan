@@ -3,6 +3,7 @@
 // Dispatches based on `action` in request body:
 //   action: "ensure-user"            → eligibility check for lecturers/students/staff
 //   action: "update-student-credentials" → student self-service: update own name/email/password
+//   action: "record-student-phone"   → student self-service: set own phone only
 //   action: "sync-student-auth"      → admin-triggered: sync auth.users with certifications.students
 //   action: "delete-student-auth"    → admin-triggered: remove auth.users row after student deletion
 
@@ -534,6 +535,47 @@ async function handleUpdateStudentCredentials(req, res) {
   });
 }
 
+// ── record-student-phone ──────────────────────────────────────────────────────
+// Narrow self-service endpoint: set MY phone on MY students row, nothing else.
+//
+// Exists because the phone a director types into טלפון הבמאי in the production
+// editor has to reach Administration → Students the moment they save, not
+// whenever they next submit an equipment list. The editor is a client and
+// cannot write to `students` directly, and update-student-credentials is the
+// wrong tool — it also rewrites the auth user, demands name + email, and would
+// let an unrelated screen change either by accident.
+//
+// Security: identity comes from the verified token, never from the body — the
+// same rule handleUpdateStudentCredentials follows, so a hostile client cannot
+// aim this at another student's row. The body carries only the number.
+//
+// This one DOES overwrite: it is only ever called with a value a student typed
+// into a field, which is exactly the case that is allowed to replace what the
+// roster holds. Auto-filled values go through create-reservation's fill-only
+// path instead.
+async function handleRecordStudentPhone(req, res) {
+  const { accessToken, phone } = req.body || {};
+  if (!accessToken) return res.status(401).json({ error: "missing_access_token" });
+
+  const authUser = await verifyAccessToken(accessToken);
+  if (!authUser?.email) return res.status(401).json({ error: "invalid_session" });
+
+  const nextPhone = String(phone || "").trim().replace(/[^\d+]/g, "");
+  if (!nextPhone) return res.status(400).json({ error: "missing_phone" });
+  if (!/^\+?\d{7,15}$/.test(nextPhone)) return res.status(400).json({ error: "invalid_phone" });
+
+  const me = await fetchStudentByEmail(normalizeEmail(authUser.email));
+  if (!me) return res.status(403).json({ error: "student_not_found" });
+
+  // Already correct — skip the write so updated_at does not churn on every save.
+  if (String(me.phone || "").trim() === nextPhone) {
+    return res.status(200).json({ ok: true, changed: false });
+  }
+  const ok = await updateStudentRow(me.id, { phone: nextPhone });
+  if (!ok) return res.status(500).json({ error: "store_update_failed" });
+  return res.status(200).json({ ok: true, changed: true });
+}
+
 // ── sync-student-auth ─────────────────────────────────────────────────────────
 // Admin-triggered endpoint called from StudentsPage after an inline edit
 // successfully saves to the store. Updates the auth.users row to match the
@@ -968,6 +1010,7 @@ export default async function handler(req, res) {
     if (resolvedAction === "ensure-user")            return await handleEnsureUser(req, res);
     if (resolvedAction === "send-reset-email")       return await handleSendResetEmail(req, res);
     if (resolvedAction === "update-student-credentials") return await handleUpdateStudentCredentials(req, res);
+    if (resolvedAction === "record-student-phone")   return await handleRecordStudentPhone(req, res);
     if (resolvedAction === "sync-student-auth")      return await handleSyncStudentAuth(req, res);
     if (resolvedAction === "sync-lecturer-auth")     return await handleSyncLecturerAuth(req, res);
     if (resolvedAction === "delete-student-auth")    return await handleDeleteStudentAuth(req, res);

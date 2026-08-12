@@ -6,6 +6,7 @@ import { Plus, Trash2, Send, AlertTriangle, ExternalLink, CalendarDays } from "l
 import { Modal } from "./ui.jsx";
 import { upsertProduction, notifyProductionCrewInvites, publishProduction, deleteProduction, autoApproveDirectorCrew, ensurePhotographerApproved } from "../utils/productionsApi.js";
 import { isRangeAutoPrunable, submittedDateIds } from "../utils/productionVisibility.js";
+import { saveStudentPhone } from "../utils.js";
 import { DateField } from "./DateField.jsx";
 
 // Only photographer + sound are predefined: the equipment-loan certification
@@ -437,6 +438,18 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
   async function upsertAndApprove(blob) {
     const res = await upsertProduction(blob);
     if (!res.ok) return { ...res, auto: null };
+    // Mirror the typed phone onto the student's roster row. Deliberately here,
+    // in the one write path every save funnels through, so no future caller can
+    // forget it. Bookkeeping only: the production is already saved, so a failure
+    // is logged and never surfaced — it must not read as "the production did not
+    // save". Worst case the roster stays stale until the next equipment list.
+    const typedPhone = directorPhone.trim();
+    if (typedPhone) {
+      const phoneRes = await saveStudentPhone(typedPhone);
+      if (!phoneRes.ok && phoneRes.error !== "student_not_found") {
+        console.warn("[ProductionEditor] roster phone update failed:", phoneRes.error);
+      }
+    }
     const auto = await autoApproveDirectorCrew(blob.crew);
     if (auto.approvedIds.length > 0) {
       const flip = c => auto.approvedIds.includes(c.id) ? { ...c, status: "approved" } : c;
