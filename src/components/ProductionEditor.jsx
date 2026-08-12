@@ -121,6 +121,15 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
   const [driveUrl, setDriveUrl]       = useState(initial?.driveUrl || "");
   const [color, setColor]             = useState(initial?.color || DEFAULT_COLOR);
   const [selectedKitId, setSelectedKitId] = useState(initial?.kitId || "");
+  // The director's phone used to be derived silently from the student record —
+  // which is empty for the large majority of students, so productions and the
+  // loan requests bridged off them were born with no number and the warehouse
+  // had no way to reach anyone. It is a real field now, seeded from whatever we
+  // already know. Required only on a NEW production (see validate): existing
+  // ones must keep saving exactly as they do today.
+  const [directorPhone, setDirectorPhone] = useState(
+    initial?.directorPhone || currentStudent?.phone || ""
+  );
   const [dates, setDates]             = useState(() => Array.isArray(initial?.dates) ? initial.dates : []);
   const [crew, setCrew]               = useState(() => {
     // Legacy zombie guard: self-join requests (invited_by='self') that were
@@ -310,6 +319,18 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
 
   function validate() {
     if (!title.trim()) return { field: "title", message: "חסר כותרת" };
+    // Gated on isNew and NOT on "the field is empty": the 25 productions already
+    // in production have no phone, and blocking their next save would strand
+    // every one of them. New productions carry the requirement forward instead.
+    const phone = directorPhone.trim();
+    if (isNew && !phone) {
+      return { field: "director_phone", message: "חסר טלפון — נדרש כדי שהמחסן יוכל ליצור קשר" };
+    }
+    // Same shape the self-service account endpoint enforces (api/auth.js):
+    // strip separators, then 7–15 digits with an optional leading +.
+    if (phone && !/^\+?\d{7,15}$/.test(phone.replace(/[^\d+]/g, ""))) {
+      return { field: "director_phone", message: "מספר טלפון לא תקין" };
+    }
     if (description.length > 800) return { field: "description", message: "תיאור ארוך מ-800 תווים" };
     const url = driveUrl.trim();
     if (url && !/^https?:\/\//i.test(url)) {
@@ -401,7 +422,7 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
       directorStudentId:  currentStudent?.id,
       directorEmail:      currentStudent?.email,
       directorName:       currentStudent?.name,
-      directorPhone:      currentStudent?.phone,
+      directorPhone:      directorPhone.trim() || currentStudent?.phone || null,
       status:             targetStatus,
       publishedAt:        targetStatus === "published" ? (initial?.publishedAt || new Date().toISOString()) : initial?.publishedAt,
       dates,
@@ -565,17 +586,25 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
       // this branch is the one close path that otherwise saves nothing — so a
       // type change made here would be discarded without a word, and the loan
       // form would go on offering the old kit's gear. Persist it before leaving.
-      // (When `pending` is non-empty the write below already carries kitId.)
-      if (persistedRef.current && String(selectedKitId || "") !== String(initial?.kitId || "")) {
+      // (When `pending` is non-empty the write below already carries both.)
+      //
+      // The director's phone rides the SAME check for the same reason: it is
+      // editable on a production whose ranges are all locked, and this branch is
+      // the one close path that otherwise writes nothing. Leaving it out would
+      // discard a number the director just typed, without a word — exactly the
+      // silent data loss lesson #46 was written about.
+      const kitChanged   = String(selectedKitId || "") !== String(initial?.kitId || "");
+      const phoneChanged = directorPhone.trim() !== String(initial?.directorPhone || "").trim();
+      if (persistedRef.current && (kitChanged || phoneChanged)) {
         const blob = buildBlob(initial?.status || "published");
         const res = await upsertAndApprove(blob);
         if (res.ok) {
           // onSaved refreshes the productions list, which is what makes the loan
           // form and the add-items picker re-derive the gate from the new kit.
           onSaved?.(blob);
-          showToast?.("סוג ההפקה עודכן", "success");
+          showToast?.(kitChanged ? "סוג ההפקה עודכן" : "טלפון הבמאי עודכן", "success");
         } else {
-          showToast?.(`שגיאה בעדכון סוג ההפקה: ${String(res.error || "").slice(0, 120)}`, "error");
+          showToast?.(`שגיאה בעדכון ההפקה: ${String(res.error || "").slice(0, 120)}`, "error");
         }
       }
       onClose();
@@ -733,6 +762,29 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
         <div style={{fontSize:12,color:"var(--text3)",marginTop:6}}>
           בחירת ערכה מגבילה את הצוות לפריטי ציוד בתוך הערכה בלבד בעת מילוי טופס ההשאלה.
           {allDatesLocked && <span style={{color:"var(--text3)",marginInlineStart:6}}>השינוי יחול על רשימות ציוד חדשות בלבד — רשימות שכבר הוגשו נשארות כפי שהן.</span>}
+        </div>
+      </div>
+
+      {/* ── טלפון הבמאי — the warehouse's only way to reach whoever took the gear ── */}
+      <div style={{marginBottom:18}}>
+        <label className="form-label">טלפון הבמאי{isNew && " *"}</label>
+        {/* type="tel" for the numeric keypad on mobile; dir="ltr" so a number
+            does not render right-to-left inside an RTL form. */}
+        <input
+          className="form-input"
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          dir="ltr"
+          placeholder="050-1234567"
+          value={directorPhone}
+          onChange={e => { setDirectorPhone(e.target.value); if (errorField === "director_phone") setErrorField(null); }}
+          style={errorField === "director_phone" ? { outline: "2px solid #e74c3c", outlineOffset: 2 } : undefined}
+        />
+        <div style={{fontSize:12,color:"var(--text3)",marginTop:6}}>
+          {isNew
+            ? "המחסן משתמש במספר הזה כדי ליצור קשר לגבי הציוד של ההפקה."
+            : "הפקה קיימת — אפשר להשלים את המספר, ואפשר להשאיר ריק."}
         </div>
       </div>
 

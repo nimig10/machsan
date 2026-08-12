@@ -4125,7 +4125,17 @@ ${inventory}
       showToast("error", "לא נמצא צלם ראשי מאושר להפקה — יש לאשר צלם ראשי בלוח ההפקות לפני הגשת רשימת ציוד.");
       return;
     }
-    const newRes = { ...form, ...crewSnapshot, id: reservationId, status: initStatus, created_at: today(), submitted_at: submittedAtHebrew, items };
+    // Production loans never ask for a phone in step 1 (ok1 below drops it), and
+    // the student record it was meant to fall back on is empty for most
+    // students — so these requests were reaching the warehouse with no way to
+    // contact anyone. The production itself now carries the director's number,
+    // which is the same person submitting here. Still last in the chain:
+    // anything the student actually typed wins.
+    const resolvedPhone = form.phone
+      || (isProductionLoan ? (selectedProduction?.directorPhone || "") : "")
+      || loggedInStudent?.phone
+      || "";
+    const newRes = { ...form, ...crewSnapshot, phone: resolvedPhone, id: reservationId, status: initStatus, created_at: today(), submitted_at: submittedAtHebrew, items };
 
     // ── ATOMIC SERVER-SIDE CREATE ─────────────────────────────────────────
     // create_reservation_v2 (migration 008) takes FOR UPDATE locks on each

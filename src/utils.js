@@ -244,6 +244,67 @@ export function buildReservationWhatsAppLink(reservation, { headline = "", note 
   return `https://wa.me/${phone}?text=${encodeURIComponent(lines.join("\n"))}`;
 }
 
+// Where a student's phone actually lives, in order of trust.
+//
+// The reservation carries its own snapshot, and that is the right answer
+// whenever it is filled. On production loans it usually is NOT: PublicForm
+// deliberately drops phone from the step-1 gate there and falls back to the
+// student record — which is empty for the large majority of students, so the
+// request is born without a number at all.
+//
+// Both lists are already in memory at every call site (they are props), so the
+// lookup costs no query. Returns "" when the number exists nowhere, which is a
+// real outcome for a student whose only request is a production one.
+export function resolveStudentPhone(reservation, { students = [], reservations = [] } = {}) {
+  const own = String(reservation?.phone || "").trim();
+  if (own) return own;
+
+  const email = String(reservation?.email || "").trim().toLowerCase();
+  if (!email) return "";
+  const sameEmail = (row) => String(row?.email || "").trim().toLowerCase() === email;
+  const phoneOf = (row) => String(row?.phone || "").trim();
+
+  const fromRecord = (students || []).find(s => sameEmail(s) && phoneOf(s));
+  if (fromRecord) return phoneOf(fromRecord);
+
+  // Last resort: the student typed it into some OTHER request of theirs. Newest
+  // first — a number entered recently beats one from a year ago.
+  const fromOtherRequest = (reservations || [])
+    .filter(r => sameEmail(r) && phoneOf(r))
+    .sort((a, b) => String(b?.borrow_date || "").localeCompare(String(a?.borrow_date || "")))[0];
+  return fromOtherRequest ? phoneOf(fromOtherRequest) : "";
+}
+
+// A wa.me deep link for simply REACHING the student about their loan.
+//
+// Distinct from buildReservationWhatsAppLink above, which announces a decision
+// (rejected / still out) and lists the gear. This one only opens the
+// conversation and hands the keyboard back to the staff member, who writes the
+// actual question — so it is one line with no item list. Anything more is text
+// they would have to delete before typing.
+//
+// `phoneOverride` takes the result of resolveStudentPhone, since the number is
+// missing from the reservation row itself on most production loans. Returns ""
+// with no usable phone, so callers render the "אין טלפון" fallback rather than
+// a dead link.
+export function buildReservationContactWhatsAppLink(reservation, phoneOverride = "") {
+  const phone = normalizeIsraeliPhone(phoneOverride || reservation?.phone);
+  if (!phone) return "";
+
+  const name = String(reservation?.student_name || "").trim();
+  // Dates and times only ever through the shared formatters — formatTime trims
+  // the seconds the DB returns, "15:30:00" → "15:30" (lesson #18).
+  const borrow = [formatDate(reservation?.borrow_date), formatTime(reservation?.borrow_time)].filter(Boolean).join(" ");
+  const ret = [formatDate(reservation?.return_date), formatTime(reservation?.return_time)].filter(Boolean).join(" ");
+  const span = borrow && ret ? ` מ-${borrow} ועד ${ret}`
+             : borrow       ? ` מ-${borrow}`
+             : ret          ? ` עד ${ret}`
+             : "";
+
+  const text = `${name ? `מה המצב ${name}.` : "מה המצב."} לגבי השאלת הציוד שלך${span}`;
+  return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+}
+
 export function cloudinaryThumb(url, width = 400) {
   if (!url || !url.includes("res.cloudinary.com")) return url;
   return url.replace("/upload/", `/upload/w_${width},q_auto,f_auto/`);

@@ -1,9 +1,31 @@
-// ui.jsx — shared UI primitives: Toast, Modal, Loading, statusBadge
+// ui.jsx — shared UI primitives: Toast, Modal, Loading, statusBadge,
+// WhatsAppLinkButton
 import { useState, useRef, useEffect } from "react";
-import { CheckCircle, Info, X, XCircle } from "lucide-react";
+import { CheckCircle, Info, Phone, X, XCircle } from "lucide-react";
 import lottie from "lottie-web";
 import loadingData from "../assets/loading-logo2.json";
 import { normalizeReservationStatus } from "../utils.js";
+
+// The green "open WhatsApp" affordance, in one place.
+//
+// A plain anchor and NOT window.open: WhatsApp routes itself to web / desktop /
+// mobile depending on the platform, and opening it programmatically breaks that
+// hand-off (and trips popup blockers on iOS).
+//
+// `href` comes from one of the buildReservation*WhatsAppLink helpers, which
+// return "" when the student has no usable phone. That is a normal outcome —
+// most production loans never collected one — so an empty href renders the
+// explanatory grey text instead of a link that goes nowhere.
+export function WhatsAppLinkButton({ href, label = "שלח בוואטסאפ", title, emptyText = "אין טלפון — לא ניתן לשלוח וואטסאפ" }) {
+  if (!href) return <span style={{fontSize:12,color:"var(--text3)",fontStyle:"italic"}}>{emptyText}</span>;
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" title={title}
+      style={{display:"inline-flex",alignItems:"center",gap:6,background:"#25D366",color:"#0a3d20",fontWeight:800,fontSize:13,padding:"9px 14px",borderRadius:8,textDecoration:"none",whiteSpace:"nowrap",boxShadow:"0 1px 4px rgba(37,211,102,0.35)"}}>
+      <Phone size={15} strokeWidth={2} /> {label}
+    </a>
+  );
+}
+
 export function statusBadge(s) {
   const normalizedStatus = normalizeReservationStatus(s);
   // "בדיקת עדכון" is a DISPLAY state (a pending student equipment-update on an
