@@ -28,24 +28,36 @@
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// Record the phone the student just typed onto their students row — but ONLY
-// when that row has none.
+// Record the request's phone onto the student's roster row.
 //
-// Why this exists: the phone was being kept as a per-request snapshot and never
+// Why this exists: the phone was kept as a per-request snapshot and never
 // written back, so the roster in Administration → Students sat almost entirely
 // empty while the numbers themselves existed, scattered across individual
 // requests. The warehouse had no single place to look.
 //
-// FILL-ONLY, NEVER OVERWRITE. The `or=(phone.is.null,phone.eq.)` filter lives in
-// the URL rather than in a read-then-write here, so the "only if empty" test and
-// the write are one statement that two concurrent submits cannot interleave —
-// the same trick the return-outcomes PATCH uses to stay one-shot (lesson #48).
-// A student fat-fingering a digit can therefore never clobber a good number the
-// office already has; correcting one stays a deliberate admin action.
+// `typed` decides how far this is allowed to go, and it is the whole safety
+// story:
+//
+//   typed === true   the student entered this number by hand on this submit
+//                    (the visible phone field, or טלפון הבמאי on a production).
+//                    It is their current answer, so it REPLACES whatever the
+//                    roster holds — that is the point: a student who changes
+//                    their number must not have to phone the office.
+//
+//   typed === false  the number was auto-filled from their record, the cached
+//                    session, or the sessionStorage form draft. An echo, not an
+//                    answer. FILL-ONLY: the `or=(phone.is.null,phone.eq.)`
+//                    filter restricts the write to rows that have nothing, so a
+//                    stale draft can never resurrect a number the office just
+//                    corrected. That exact regression shipped once already.
+//
+// Either way the condition lives in the URL rather than in a read-then-write
+// here, so test and write stay one statement that two concurrent submits cannot
+// interleave — the same trick the return-outcomes PATCH uses (lesson #48).
 //
 // Same normalisation the self-service endpoint enforces (api/auth.js): strip
 // separators, then 7–15 digits with an optional leading +.
-async function recordStudentPhone(reservation) {
+async function recordStudentPhone(reservation, typed = false) {
   const email = String(reservation?.email || "").trim().toLowerCase();
   const phone = String(reservation?.phone || "").trim();
   if (!email || !phone) return;
@@ -53,7 +65,7 @@ async function recordStudentPhone(reservation) {
 
   const url = `${SB_URL}/rest/v1/students`
     + `?email=eq.${encodeURIComponent(email)}`
-    + `&or=(phone.is.null,phone.eq.)`;
+    + (typed ? "" : `&or=(phone.is.null,phone.eq.)`);
   const r = await fetch(url, {
     method: "PATCH",
     headers: {
@@ -72,7 +84,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, error: "Method not allowed" });
   }
 
-  const { reservation, items } = req.body || {};
+  const { reservation, items, phoneTyped } = req.body || {};
 
   if (!reservation || typeof reservation !== "object") {
     return res.status(400).json({ ok: false, error: "Missing reservation object" });
@@ -143,7 +155,7 @@ export default async function handler(req, res) {
     // swallowed rather than turned into an error they cannot act on — the same
     // stance the actor-stamping PATCH takes (lesson #37+#41).
     try {
-      await recordStudentPhone(reservation);
+      await recordStudentPhone(reservation, phoneTyped === true);
     } catch (phoneErr) {
       console.warn("create-reservation: student phone backfill failed:", phoneErr?.message || phoneErr);
     }

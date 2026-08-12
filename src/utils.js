@@ -392,8 +392,12 @@ export async function syncReservationStatusToBlob(reservationId, newStatus, opti
 // course, loan_type, borrow_date, return_date, borrow_time, return_time.
 // The `items` array must be non-empty; each item needs equipment_id + quantity.
 // Optional: `id` on the reservation (server will generate one if missing).
+// `options.phoneTyped` says the student typed the phone by hand on this submit,
+// rather than it having been auto-filled from their record / the cached session
+// / the sessionStorage draft. The server needs the distinction to decide whether
+// this number may overwrite the roster — see recordStudentPhone.
 export async function createReservation(reservation, items, options = {}) {
-  const { timeoutMs = 12000 } = options;
+  const { timeoutMs = 12000, phoneTyped = false } = options;
   if (!reservation || typeof reservation !== "object") {
     return { ok: false, error: "missing_arg", detail: "reservation object required" };
   }
@@ -406,7 +410,7 @@ export async function createReservation(reservation, items, options = {}) {
     const res = await fetch("/api/create-reservation", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ reservation, items }),
+      body:    JSON.stringify({ reservation, items, phoneTyped }),
       signal:  ctrl.signal,
     });
     clearTimeout(t);
@@ -424,6 +428,34 @@ export async function createReservation(reservation, items, options = {}) {
   } catch (e) {
     console.error("createReservation network error:", e);
     return { ok: false, error: "network_error", detail: e.message };
+  }
+}
+
+// Push a phone the student TYPED to their roster row, right now.
+//
+// For fields like טלפון הבמאי, which the student fills in a screen that has
+// nothing to do with borrowing: without this the number would only reach
+// Administration → Students if and when they later submit an equipment list.
+//
+// Server-side the caller is identified from the token, so this can only ever
+// touch the calling student's own row. Never throws — callers treat a failure
+// as "the roster is stale", not as a failure of whatever they were saving.
+export async function saveStudentPhone(phone) {
+  const clean = String(phone || "").trim();
+  if (!clean) return { ok: false, error: "missing_phone" };
+  try {
+    const accessToken = await getAuthToken();
+    if (!accessToken) return { ok: false, error: "no_session" };
+    const res = await fetch("/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "record-student-phone", accessToken, phone: clean }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `http_${res.status}` };
+    return { ok: true, changed: !!data.changed };
+  } catch (e) {
+    return { ok: false, error: e?.message || "network_error" };
   }
 }
 

@@ -1757,6 +1757,26 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
   const [error,    setError]    = useState("");
   const notifications = useNotifications();
 
+  // Did the user actually edit the phone box in this sitting?
+  //
+  // Both halves of this matter, because together they were deleting people's
+  // numbers. `phone` is seeded ONCE from a prop that can arrive late or come
+  // from the cached session, so the box could sit there empty while the roster
+  // held a real number (lesson #42). The save then sent that empty string, and
+  // the server writes `phone = null` whenever the field is present at all. Net
+  // effect: opening this panel to change only your NAME wiped your phone.
+  //
+  // With the flag, an untouched box is simply not sent — the server already has
+  // a path for an absent field and leaves the column alone. Clearing it on
+  // purpose still works, because that requires touching it.
+  const [phoneTouched, setPhoneTouched] = useState(false);
+
+  // Re-seed while untouched, so a prop that resolves after mount still lands in
+  // the box. Once the user types, their edit owns the field and this stops.
+  useEffect(() => {
+    if (!phoneTouched) setPhone(String(student?.phone || ""));
+  }, [student?.phone, phoneTouched]);
+
   const handleToggleNotifications = async (nextEnabled) => {
     const result = nextEnabled ? await notifications.enable() : await notifications.disable();
     if (result?.ok && showToast) {
@@ -1810,7 +1830,9 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
           accessToken,
           name:  nName,
           email: nEmail,
-          phone: nPhone,
+          // Omitted entirely when untouched — the server reads a MISSING key as
+          // "leave the column alone", but an empty string as "clear it".
+          ...(phoneTouched ? { phone: nPhone } : {}),
         }),
         signal: abort.signal,
       });
@@ -1836,13 +1858,17 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
         return;
       }
 
+      // An untouched phone was never sent, so the local mirror must keep the
+      // old value too — otherwise the UI would show it cleared while the DB
+      // still holds it.
+      const savedPhone = phoneTouched ? nPhone : String(student?.phone || "");
       const nextStudent =
         data.student ||
-        { ...student, name: nName, email: nEmail, phone: nPhone };
+        { ...student, name: nName, email: nEmail, phone: savedPhone };
       const flags = {
         emailChanged:    false,
         passwordChanged: false,
-        phoneChanged:    (student?.phone || "") !== nPhone,
+        phoneChanged:    phoneTouched && (student?.phone || "") !== nPhone,
       };
       unfreeze();
       onClose?.();
@@ -1901,7 +1927,7 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
               className="form-input"
               type="tel"
               value={phone}
-              onChange={(e)=>setPhone(e.target.value)}
+              onChange={(e)=>{setPhoneTouched(true);setPhone(e.target.value);}}
               disabled={busy}
               placeholder="050-1234567"
               autoComplete="tel"
@@ -3151,6 +3177,19 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
 
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
 
+  // Did the student TYPE this phone, or did we fill it in for them?
+  //
+  // Only a typed number is allowed to overwrite what the roster already holds.
+  // Everything else in this form is auto-filled from the student record, the
+  // cached session, or the sessionStorage draft — and an auto-filled value is
+  // not an answer, it is an echo. Letting an echo write to the roster is how a
+  // number the office had just corrected came back from the dead.
+  //
+  // Deliberately NOT part of `form`: `form` is what gets persisted to the draft,
+  // and a flag that survives in sessionStorage would claim "typed" on a later
+  // visit where nobody typed anything. Reset wherever the draft is cleared.
+  const [phoneTouched, setPhoneTouched] = useState(false);
+
   // ── Name split helpers ──────────────────────────────────────────────────
   // The public form keeps three fields in lockstep: student_first_name,
   // student_last_name, and the combined student_name used by every payload,
@@ -4125,14 +4164,22 @@ ${inventory}
       showToast("error", "לא נמצא צלם ראשי מאושר להפקה — יש לאשר צלם ראשי בלוח ההפקות לפני הגשת רשימת ציוד.");
       return;
     }
-    // Production loans never ask for a phone in step 1 (ok1 below drops it), and
-    // the student record it was meant to fall back on is empty for most
-    // students — so these requests were reaching the warehouse with no way to
-    // contact anyone. The production itself now carries the director's number,
-    // which is the same person submitting here. Still last in the chain:
-    // anything the student actually typed wins.
-    const resolvedPhone = form.phone
-      || (isProductionLoan ? (selectedProduction?.directorPhone || "") : "")
+    // Which phone this request carries — and the ORDER here is load-bearing.
+    //
+    // On a production loan step 1 renders an identity card with NO phone input
+    // at all (see the isProductionLoan branch further down), so `form.phone`
+    // there is never something the student typed — it is whatever was
+    // auto-filled, and the form draft in sessionStorage keeps that value alive
+    // across the session. Putting it first meant a stale number beat the one
+    // the director had just typed into טלפון הבמאי, and then got written back
+    // over the roster. The production's own field is the explicit entry here,
+    // so it goes first.
+    //
+    // On every other loan type `form.phone` IS the visible required field, so
+    // it stays first there.
+    const resolvedPhone = (isProductionLoan
+      ? (selectedProduction?.directorPhone || form.phone)
+      : form.phone)
       || loggedInStudent?.phone
       || "";
     const newRes = { ...form, ...crewSnapshot, phone: resolvedPhone, id: reservationId, status: initStatus, created_at: today(), submitted_at: submittedAtHebrew, items };
@@ -4158,7 +4205,11 @@ ${inventory}
         name:         it.name,
         quantity:     Number(it.quantity) || 1,
         unit_id:      it.unit_id || null,
-      }))
+      })),
+      // A production loan's number comes from טלפון הבמאי, which the director
+      // typed into the editor — explicit, even though it was not typed on this
+      // screen. Everywhere else, only the visible field being edited counts.
+      { phoneTyped: isProductionLoan ? !!selectedProduction?.directorPhone : phoneTouched }
     );
     if (!rpcResult.ok) {
       setSub(false);
@@ -4196,11 +4247,12 @@ ${inventory}
     setSub(false);
     setDone(true);
     clearFormDraft();
+    setPhoneTouched(false);
     showToast("success","הבקשה נשלחה בהצלחה!");
   };
 
   const reset = () => {
-    clearFormDraft(); setDone(false); setEmailError(false); setStep(1);
+    clearFormDraft(); setPhoneTouched(false); setDone(false); setEmailError(false); setStep(1);
     const blank = {student_name:"",student_first_name:"",student_last_name:"",email:"",phone:"",course:"",project_name:"",borrow_date:"",borrow_time:"",return_date:"",return_time:"",loan_type:"",sound_day_loan:false,sound_night_loan:false,studio_booking_id:"",crew_photographer_name:"",crew_photographer_first_name:"",crew_photographer_last_name:"",crew_photographer_phone:"",crew_sound_name:"",crew_sound_first_name:"",crew_sound_last_name:"",crew_sound_phone:"",production_reason:""};
     // Re-seed the logged-in student's identity (name/email/phone/course) — the
     // same person is still logged in, so a fresh "שלח בקשה נוספת" should keep
@@ -4774,7 +4826,7 @@ ${inventory}
                   <div className="form-group"><label className="form-label">שם משפחה *</label><input className="form-input" name="student_last_name" autoComplete="family-name" value={form.student_last_name} onChange={e=>setStudentLastName(e.target.value)}/></div>
                 </div>
                 <div className="grid-2">
-                  <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" name="phone" autoComplete="tel" value={form.phone} onChange={e=>set("phone",e.target.value)}/></div>
+                  <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" name="phone" autoComplete="tel" value={form.phone} onChange={e=>{setPhoneTouched(true);set("phone",e.target.value);}}/></div>
                   <div className="form-group"><label className="form-label">אימייל *{loggedInStudent?.email&&<span style={{fontSize:11,fontWeight:600,color:"var(--text3)",marginRight:6}}>(מהחשבון שלך)</span>}</label><input type="email" className="form-input" name="email" autoComplete="email" value={form.email} onChange={e=>set("email",e.target.value)} readOnly={!!loggedInStudent?.email} style={loggedInStudent?.email?{opacity:0.7,cursor:"not-allowed"}:undefined}/></div>
                 </div>
                 <div className="grid-2">
