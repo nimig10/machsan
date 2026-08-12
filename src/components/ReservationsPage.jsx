@@ -1,8 +1,8 @@
 import { supabase } from '../supabaseClient.js';
 // ReservationsPage.jsx — admin reservations management page (includes rejected + archive tabs)
 import { useEffect, useState, useMemo } from "react";
-import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, reservationStatusErrorMessage, createReservation, deleteReservation as deleteReservationRpc, getAuthToken, syncReservationStatusToBlob, groupReservationItemsByCategory, buildReservationWhatsAppLink } from "../utils.js";
-import { Modal, statusBadge } from "./ui.jsx";
+import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, reservationStatusErrorMessage, createReservation, deleteReservation as deleteReservationRpc, getAuthToken, syncReservationStatusToBlob, groupReservationItemsByCategory, buildReservationWhatsAppLink, buildReservationContactWhatsAppLink, resolveStudentPhone } from "../utils.js";
+import { Modal, statusBadge, WhatsAppLinkButton } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
 import { syncAllLessons } from "../utils/lessonsApi.js";
@@ -1162,6 +1162,16 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
             <button className="btn btn-secondary" onClick={()=>exportPDF(selected)}>📄 ייצא PDF</button>
             <button className="btn btn-danger" onClick={()=>deleteReservation(selected.id)}>🗑️ מחק</button>
             <button className="btn btn-secondary" onClick={()=>{setSelected(null);setOverdueEmailText("");}}>סגור</button>
+            {/* Ungated, unlike everything else in this row: reaching the student
+                is still useful once the loan is closed. Placed at the END rather
+                than beside עריכת בקשה (where the dashboard puts it) because this
+                row also carries the green "אשר" — two adjacent green controls,
+                one of which approves a loan, is a misclick waiting to happen. */}
+            <WhatsAppLinkButton
+              href={buildReservationContactWhatsAppLink(selected, resolveStudentPhone(selected, { students: certifications.students, reservations }))}
+              label="וואטסאפ לסטודנט"
+              title="פתח שיחת WhatsApp עם הסטודנט — ההודעה נפתחת עם פרטי ההשאלה"
+            />
           </div>
           {/* Lecturer note (lesson loans only — set by the lecturer in the portal).
               Hoisted to the top of the modal so warehouse staff see it before

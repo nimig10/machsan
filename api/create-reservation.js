@@ -28,6 +28,45 @@
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+// Record the phone the student just typed onto their students row — but ONLY
+// when that row has none.
+//
+// Why this exists: the phone was being kept as a per-request snapshot and never
+// written back, so the roster in Administration → Students sat almost entirely
+// empty while the numbers themselves existed, scattered across individual
+// requests. The warehouse had no single place to look.
+//
+// FILL-ONLY, NEVER OVERWRITE. The `or=(phone.is.null,phone.eq.)` filter lives in
+// the URL rather than in a read-then-write here, so the "only if empty" test and
+// the write are one statement that two concurrent submits cannot interleave —
+// the same trick the return-outcomes PATCH uses to stay one-shot (lesson #48).
+// A student fat-fingering a digit can therefore never clobber a good number the
+// office already has; correcting one stays a deliberate admin action.
+//
+// Same normalisation the self-service endpoint enforces (api/auth.js): strip
+// separators, then 7–15 digits with an optional leading +.
+async function recordStudentPhone(reservation) {
+  const email = String(reservation?.email || "").trim().toLowerCase();
+  const phone = String(reservation?.phone || "").trim();
+  if (!email || !phone) return;
+  if (!/^\+?\d{7,15}$/.test(phone.replace(/[^\d+]/g, ""))) return;
+
+  const url = `${SB_URL}/rest/v1/students`
+    + `?email=eq.${encodeURIComponent(email)}`
+    + `&or=(phone.is.null,phone.eq.)`;
+  const r = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      apikey: SB_KEY,
+      Authorization: `Bearer ${SB_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({ phone }),
+  });
+  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ ok: false, error: "Method not allowed" });
@@ -98,6 +137,16 @@ export default async function handler(req, res) {
     // retired. Reservations live exclusively in reservations_new /
     // reservation_items. The legacy append_to_store_reservations mirror call
     // was removed on 2026-04-24 together with migration 024.
+
+    // Bookkeeping, not part of the booking: the reservation is already committed
+    // and the student is owed their confirmation. A failure here is logged and
+    // swallowed rather than turned into an error they cannot act on — the same
+    // stance the actor-stamping PATCH takes (lesson #37+#41).
+    try {
+      await recordStudentPhone(reservation);
+    } catch (phoneErr) {
+      console.warn("create-reservation: student phone backfill failed:", phoneErr?.message || phoneErr);
+    }
 
     return res.status(200).json({ ok: true, id });
   } catch (e) {
