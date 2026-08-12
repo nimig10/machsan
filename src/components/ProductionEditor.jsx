@@ -116,7 +116,7 @@ function leadTimeNoticeHe(minShoot) {
   return `נדרשת ${LEAD_TIME_RULE_HE} — תאריך הצילום המוקדם ביותר האפשרי הוא ${fmtDateHe(minShoot)}`;
 }
 
-export function ProductionEditor({ initial, currentStudent, students = [], kits = [], showToast, onClose, onSaved, onDeleted, onOpenLoanForm, onOpenMyReservations, reservations = [] }) {
+export function ProductionEditor({ initial, currentStudent, students = [], kits = [], showToast, onClose, onSaved, onDeleted, onStudentPhoneSaved, onOpenLoanForm, onOpenMyReservations, reservations = [] }) {
   const [title, setTitle]             = useState(initial?.title || "");
   const [description, setDescription] = useState(initial?.description || "");
   const [driveUrl, setDriveUrl]       = useState(initial?.driveUrl || "");
@@ -125,12 +125,28 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
   // The director's phone used to be derived silently from the student record —
   // which is empty for the large majority of students, so productions and the
   // loan requests bridged off them were born with no number and the warehouse
-  // had no way to reach anyone. It is a real field now, seeded from whatever we
-  // already know. Required only on a NEW production (see validate): existing
-  // ones must keep saving exactly as they do today.
-  const [directorPhone, setDirectorPhone] = useState(
-    initial?.directorPhone || currentStudent?.phone || ""
-  );
+  // had no way to reach anyone. It is a real field now. Required only on a NEW
+  // production (see validate): existing ones must keep saving as they do today.
+  //
+  // Seeded from the ROSTER row, never from `currentStudent`. That object is the
+  // login-time snapshot kept in sessionStorage, and it does not move when the
+  // number changes — so a new production kept offering a number the student had
+  // already replaced twice over. `students` is the live roster list, which is
+  // the one place allowed to answer "what is this student's number".
+  const rosterPhone = useMemo(() => {
+    const em = String(currentStudent?.email || "").toLowerCase().trim();
+    if (!em) return "";
+    const row = (students || []).find(s =>
+      String(s?.email || "").toLowerCase().trim() === em && String(s?.phone || "").trim());
+    return row ? String(row.phone).trim() : "";
+  }, [students, currentStudent?.email]);
+
+  // Seeding once is enough here, and does NOT repeat the lesson-#42 trap: this
+  // modal is unmounted whenever it is closed (ProductionsPage renders it behind
+  // `editorOpen &&`), so every open re-reads the roster as it stands right then.
+  // A save updates the roster list before the next open, which is what makes
+  // the next production show the new number instead of the replaced one.
+  const [directorPhone, setDirectorPhone] = useState(initial?.directorPhone || rosterPhone || "");
   const [dates, setDates]             = useState(() => Array.isArray(initial?.dates) ? initial.dates : []);
   const [crew, setCrew]               = useState(() => {
     // Legacy zombie guard: self-join requests (invited_by='self') that were
@@ -444,9 +460,15 @@ export function ProductionEditor({ initial, currentStudent, students = [], kits 
     // is logged and never surfaced — it must not read as "the production did not
     // save". Worst case the roster stays stale until the next equipment list.
     const typedPhone = directorPhone.trim();
-    if (typedPhone) {
+    if (typedPhone && typedPhone !== rosterPhone) {
       const phoneRes = await saveStudentPhone(typedPhone);
-      if (!phoneRes.ok && phoneRes.error !== "student_not_found") {
+      if (phoneRes.ok) {
+        // Tell the app the roster moved. Without this the caches it was seeded
+        // from still hold the previous number, and the NEXT production opens
+        // pre-filled with the value this save just replaced — the exact loop
+        // that made one student's number look like it had three versions.
+        onStudentPhoneSaved?.(typedPhone);
+      } else if (phoneRes.error !== "student_not_found") {
         console.warn("[ProductionEditor] roster phone update failed:", phoneRes.error);
       }
     }

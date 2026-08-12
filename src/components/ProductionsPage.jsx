@@ -483,7 +483,7 @@ function ProductionDetail({ p, currentStudent, students, kits = [], reservations
   );
 }
 
-export function ProductionsPage({ productions = [], currentStudent, students = [], kits = [], reservations = [], showToast, onOpenLoanForm, onOpenMyReservations, refresh }) {
+export function ProductionsPage({ productions = [], currentStudent, students = [], kits = [], reservations = [], showToast, onOpenLoanForm, onOpenMyReservations, refresh, onStudentPhoneSaved }) {
   const [tab, setTab]                     = useState("board"); // board | archive
   const [calDate, setCalDate]             = useState(() => new Date());
   const [editorOpen, setEditorOpen]       = useState(null);    // { initial: ... } | null
@@ -792,6 +792,7 @@ export function ProductionsPage({ productions = [], currentStudent, students = [
           onClose={closeEditor}
           onSaved={() => refresh?.()}
           onDeleted={() => refresh?.()}
+          onStudentPhoneSaved={onStudentPhoneSaved}
           onOpenLoanForm={(blob, dateId) => { setEditorOpen(null); onOpenLoanForm?.(blob, dateId); }}
           onOpenMyReservations={() => { setEditorOpen(null); onOpenMyReservations?.(); }}
         />
