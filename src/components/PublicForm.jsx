@@ -2205,6 +2205,28 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
     {val:"קולנוע יומית",icon:<Camera size={30} strokeWidth={1.75} color="var(--accent)" />,desc:"תרגול חופשי עם ציוד קולנוע למספר שעות — יש להזמין 24 שעות מראש"},
   ].filter((option) => allowedLoanTypes.includes(option.val));
 
+  // Keep every in-memory copy of a student in step with the row we just wrote.
+  //
+  // `students.phone` is the source of truth, but the client holds two
+  // photographs of it: `tableStudents`, fetched once on mount, and
+  // `loggedInStudent`, snapshotted at login and mirrored into sessionStorage.
+  // Neither was refreshed after a write — so a number saved on one screen was
+  // still the OLD one the next time any screen seeded a field from it, and the
+  // student watched a number they had already replaced come back.
+  //
+  // That is what the "duplicate phone numbers" really were: not two sources
+  // disagreeing, but one source and two stale photographs of it. Every write
+  // path must land here.
+  const syncStudentLocally = (email, patch) => {
+    const em = String(email || "").toLowerCase().trim();
+    if (!em) return;
+    const matches = (row) => String(row?.email || "").toLowerCase().trim() === em;
+    setLoggedInStudent(prev => (prev && matches(prev) ? { ...prev, ...patch } : prev));
+    setTableStudents(prev => (Array.isArray(prev)
+      ? prev.map(s => (matches(s) ? { ...s, ...patch } : s))
+      : prev));
+  };
+
   const syncInventory = async () => {
     try {
       const refreshed = await refreshInventory();
@@ -4247,6 +4269,10 @@ ${inventory}
     setSub(false);
     setDone(true);
     clearFormDraft();
+    // The server may have just written this number onto the roster row. Mirror
+    // it locally so the next screen to seed a phone field reads the new value
+    // instead of the copy this session loaded at login.
+    if (resolvedPhone) syncStudentLocally(newRes.email, { phone: resolvedPhone });
     setPhoneTouched(false);
     showToast("success","הבקשה נשלחה בהצלחה!");
   };
@@ -4588,6 +4614,9 @@ ${inventory}
             onClose={() => setShowAccountSettings(false)}
             onSaved={(updatedStudent) => {
               setLoggedInStudent(prev => prev ? { ...prev, ...updatedStudent } : prev);
+              // Also into the roster list, or the production editor would keep
+              // seeding new productions from the pre-edit number.
+              syncStudentLocally(loggedInStudent?.email, { phone: updatedStudent?.phone ?? "" });
               setShowAccountSettings(false);
               showToast("success","הפרופיל עודכן");
             }}
@@ -4637,6 +4666,7 @@ ${inventory}
               reservations={reservations}
               showToast={(msg, type="info") => showToast(type, msg)}
               refresh={refreshProductions}
+              onStudentPhoneSaved={(phone) => syncStudentLocally(loggedInStudent?.email, { phone })}
               onOpenLoanForm={(p, dateId) => {
                 // dateId (optional) — a specific shoot range to pre-select
                 // (comes from the per-range "הגש רשימת ציוד" buttons). Seeds the
