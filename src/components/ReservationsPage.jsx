@@ -10,9 +10,12 @@ import { makeSaveEditedReservation } from "../utils/reservationEdit.js";
 import { RejectReservationModal } from "./RejectReservationModal.jsx";
 import { ReturnEquipmentPanel } from "./ReturnEquipmentPanel.jsx";
 import { completeEquipmentReturn } from "../utils/returnApi.js";
+import { CheckoutEquipmentPanel } from "./CheckoutEquipmentPanel.jsx";
+import { completeEquipmentCheckout } from "../utils/checkoutApi.js";
+import { checkoutState, checkoutWindowOpen } from "../utils/checkoutFlow.js";
 import { markReservationDeleting, unmarkReservationDeleting } from "../pendingDeletes.js";
 import { UpdateReviewModal } from "./UpdateReviewModal.jsx";
-import { ApprovedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
+import { ApprovedByLabel, IssuedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
 import { getProductionCertBlockers } from "../utils/reservationUpdateReview.js";
 import { AlertTriangle, BookOpen, Briefcase, Camera, Calendar, CheckCircle, ClipboardList, Clock, FileText, Film, MessageSquare, Mic, Package, Pencil, Phone, RotateCcw, Save, Shield, Trash2, User, X, XCircle } from "lucide-react";
 import { DateField } from "./DateField.jsx";
@@ -273,6 +276,14 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
     categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], siteSettings={}, onLogCreated = () => {}, equipmentReports=[], lessons=[], setLessons=null, loanHandlers=[], reservationUpdates=[], refreshReservationUpdates=()=>{}, refreshReservations=async()=>{} }) {
   const [subView, setSubView] = useState("active"); // "active" | "rejected" | "archive"
   const [selected, setSelected] = useState(null);
+  // "הוצא עכשיו" — a student who turns up early. The automatic window still
+  // governs the normal case; this is the manual override for the one at the
+  // counter, and it is per-reservation so opening one does not arm the rest.
+  const [forceCheckoutId, setForceCheckoutId] = useState(null);
+  // How long before pickup the checkout screen appears on its own. Admin-set;
+  // 3h is the default the feature shipped with. Clamped here as well as in the
+  // settings field, because siteSettings arrives from the DB.
+  const checkoutLeadMs = Math.max(0, Number(siteSettings?.checkoutLeadHours ?? 3) || 0) * 3600000;
   const [updateReviewReservation, setUpdateReviewReservation] = useState(null);
   // Loan-request staff coordination (decoupled side-table) — display-only here.
   // Map reservation_id → { out, return } handler rows for quick lookup.
@@ -792,6 +803,65 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
     }
   };
 
+  // The checkout flow's completion, fired by CheckoutEquipmentPanel. Mirrors
+  // completeReturn, with one extra failure stage: this flow also edits the
+  // request (a "החזר" unit drops off it), so "the units saved but the item list
+  // did not" is a distinct, recoverable state that needs its own message.
+  const completeCheckout = async (res, outcomes) => {
+    if (!res || busyIds.has(res.id)) return;
+    setBusyIds(prev => { const n = new Set(prev); n.add(res.id); return n; });
+    try {
+      const result = await completeEquipmentCheckout({ reservation: res, equipment, setEquipment, outcomes });
+      if (!result.ok) {
+        console.error("[completeCheckout]", result);
+        if (result.stage === "equipment") {
+          showToast("error", "שגיאה בעדכון סטטוס היחידות — ההוצאה לא הושלמה ולא בוצע שינוי.");
+        } else if (result.stage === "items") {
+          showToast("error", "מצב היחידות נשמר, אך עדכון רשימת הפריטים נכשל — ההוצאה לא הושלמה. נסו שוב.");
+        } else if (result.stage === "stamp") {
+          showToast("error", "רישום ההוצאה נכשל — הבקשה נשארה פתוחה בכוונה. מה שנשמר עד כה לא ילך לאיבוד; נסו שוב.");
+        } else {
+          showToast("error", result.itemsWritten || result.inventoryWritten
+            ? "השינויים נשמרו, אך סימון ההוצאה נכשל — הבקשה עדיין פתוחה. נסו שוב."
+            : reservationStatusErrorMessage(result.error));
+        }
+        return;
+      }
+      const rpcResult = result.rpc;
+      setReservations(normalizeReservationsForArchive(reservations.map(r => r.id !== res.id ? r : {
+        ...r,
+        status: "פעילה",
+        // `|| null`, never `??` — a failed stamp leaves NULL in the DB, and
+        // keeping a client-side value would display a lie (lesson #37+#41).
+        issued_at:            rpcResult.issued_at || null,
+        issued_by_staff_id:   rpcResult.issued_by_staff_id || null,
+        issued_by_name:       rpcResult.issued_by_name || null,
+        checkout_outcomes:    result.checkoutOutcomes || null,
+        // Only when the decrement actually ran; otherwise the live rows stand.
+        ...(result.itemsChanged ? { items: result.nextItems } : {}),
+      })));
+      showToast("success", result.note
+        ? `הציוד של ${res.student_name} יצא — ${result.note}`
+        : `הציוד של ${res.student_name} יצא מהמחסן`);
+      if (rpcResult.changed) {
+        const caller = JSON.parse(sessionStorage.getItem("staff_user") || "{}");
+        logActivity({
+          user_id: caller.id, user_name: caller.full_name, action: "reservation_checkout",
+          entity: "reservation", entity_id: String(res.id),
+          details: {
+            student: res.student_name, loan_type: res.loan_type,
+            ...(result.summary.damaged ? { damaged_units: result.summary.damaged } : {}),
+            ...(result.summary.missing ? { missing_units: result.summary.missing } : {}),
+            ...(result.summary.returned ? { returned_units: result.summary.returned } : {}),
+          },
+        });
+      }
+      setSelected(null);
+    } finally {
+      setBusyIds(prev => { const n = new Set(prev); n.delete(res.id); return n; });
+    }
+  };
+
   // One sender for both follow-up panels in the detail modal. `type` picks the
   // template: "overdue" chases gear that is still out, "rejected" explains a
   // rejection after the fact. Either way the typed text lands in the same
@@ -896,7 +966,11 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
               <div className="res-card-actions" onClick={e=>e.stopPropagation()}>
                 {r.pending_update_id&&<button className="btn btn-sm" style={{background:"#e67e22",borderColor:"#e67e22",color:"#fff",fontWeight:900}} onClick={()=>openUpdateReview(r)}><Clock size={14} strokeWidth={2} /> בדיקת עדכון ({pendingItemCountFor(r)||"…"})</button>}
                 <button className="btn btn-secondary btn-sm" onClick={()=>exportPDF(r)}><><FileText size={14} strokeWidth={1.75} /> PDF</></button>
-                {(r.status==="ממתין"||r.status==="מאושר"||r.status==="נדחה"||r.status==="באיחור")&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}><><Pencil size={14} strokeWidth={1.75} /> עריכת בקשה</></button>}
+                {/* "פעילה" is in this list because checkout now writes it. It used
+                    to be unreachable in the DB, so a live loan sat here as "מאושר"
+                    and matched by accident; without it the staff edit button would
+                    vanish from every loan that is actually out. */}
+                {(r.status==="ממתין"||r.status==="מאושר"||r.status==="פעילה"||r.status==="נדחה"||r.status==="באיחור")&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}><><Pencil size={14} strokeWidth={1.75} /> עריכת בקשה</></button>}
                 {r.status==="ממתין"&&(() => {
                   const certBlocked = getProductionCertBlockers(r, equipment, certifications).length > 0;
                   return (<>
@@ -906,7 +980,11 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
                     <button className="btn btn-danger btn-sm" disabled={busyIds.has(r.id)} onClick={()=>setRejecting(r)}><XCircle size={14} strokeWidth={1.75} /> דחה</button>
                   </>);
                 })()}
-                {(getEffectiveStatus(r)==="פעילה"||getEffectiveStatus(r)==="באיחור")&&<button className="btn btn-secondary btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"הוחזר")}><><RotateCcw size={14} strokeWidth={1.75} /> הוחזר</></button>}
+                {/* Only gear that actually left can come back. checkoutState, not
+                    status: a "באיחור" row that was never collected has nothing to
+                    return, and offering the button there closes a loan that never
+                    opened. */}
+                {checkoutState(r)==="issued"&&<button className="btn btn-secondary btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"הוחזר")}><><RotateCcw size={14} strokeWidth={1.75} /> הוחזר</></button>}
                 <button className="btn btn-danger btn-sm" onClick={()=>deleteReservation(r.id)}><Trash2 size={14} strokeWidth={1.75} /></button>
               </div>
             </div>
@@ -1140,7 +1218,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
               reach אשר/דחה/עריכה without scrolling past a long equipment list. */}
           <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:20,paddingBottom:16,borderBottom:"1px solid var(--border)"}}>
             {selected.pending_update_id&&<button className="btn" style={{background:"#e67e22",borderColor:"#e67e22",color:"#fff",fontWeight:900}} onClick={()=>openUpdateReview(selected)}><Clock size={15} strokeWidth={2} /> בדיקת עדכון ({pendingItemCountFor(selected)||"…"})</button>}
-            {(selected.status==="ממתין"||selected.status==="מאושר"||selected.status==="נדחה"||selected.status==="באיחור")&&<button className="btn btn-secondary" onClick={()=>{setEditing(selected);setSelected(null);setOverdueEmailText("");}}>✏️ עריכת בקשה</button>}
+            {(selected.status==="ממתין"||selected.status==="מאושר"||selected.status==="פעילה"||selected.status==="נדחה"||selected.status==="באיחור")&&<button className="btn btn-secondary" onClick={()=>{setEditing(selected);setSelected(null);setOverdueEmailText("");}}>✏️ עריכת בקשה</button>}
             {selected.status==="ממתין"&&(() => {
               const certBlocked = getProductionCertBlockers(selected, equipment, certifications).length > 0;
               return (<>
@@ -1243,14 +1321,35 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
               {/* Who approved + history of who reviewed the student's item-updates */}
               <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:6,alignItems:"center",textAlign:"center"}}>
                 <ApprovedByLabel reservation={selected} style={{fontSize:13}} />
+                <IssuedByLabel reservation={selected} style={{fontSize:13}} />
                 <UpdateHistoryList updates={reservationUpdates} reservationId={selected.id} />
               </div>
             </div>
             <div>
-              {/* A loan that is out becomes a RETURN screen: the only thing staff
-                  do with it now is take the gear back in. The read-only list
-                  below stays for every other status. */}
-              {(getEffectiveStatus(selected)==="פעילה"||getEffectiveStatus(selected)==="באיחור") ? (<>
+              {/* Which of the three faces this request shows. Driven by
+                  checkoutState (i.e. by issued_at), NOT by status: "באיחור" now
+                  means either "out and late" or "nobody ever collected it", and
+                  those two need opposite screens. */}
+              {(() => {
+                const cState = checkoutState(selected);
+                const windowOpen = checkoutWindowOpen(
+                  { status: selected.status, borrowTs: toDateTime(selected.borrow_date, selected.borrow_time || "00:00") },
+                  { nowMs: Date.now(), leadMs: checkoutLeadMs },
+                );
+                return (cState === "pending" || cState === "half_issued")
+                  && (windowOpen || cState === "half_issued" || String(forceCheckoutId) === String(selected.id));
+              })() ? (<>
+                <div className="form-section-title">📦 הוצאת ציוד ({(selected.items?.length)||0} פריטים)</div>
+                <CheckoutEquipmentPanel
+                  reservation={selected}
+                  equipment={equipment}
+                  busy={busyIds.has(selected.id)}
+                  recovering={checkoutState(selected) === "half_issued"}
+                  onComplete={(outcomes) => completeCheckout(selected, outcomes)}
+                />
+              </>) : (checkoutState(selected)==="issued") ? (<>
+                {/* Gear is out: the only thing staff do with it now is take it
+                    back in. The read-only list below stays for every other state. */}
                 <div className="form-section-title">🔄 החזרת ציוד ({selected.items?.length||0} פריטים)</div>
                 <ReturnEquipmentPanel
                   reservation={selected}
@@ -1259,6 +1358,18 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
                   onComplete={(outcomes) => completeReturn(selected, outcomes)}
                 />
               </>) : (<>
+              {/* Approved, but pickup is still far off. The window opens on its
+                  own closer to the time; this is for the student who turns up
+                  early and is standing at the counter now. */}
+              {checkoutState(selected)==="pending" && (
+                <button
+                  className="btn btn-sm"
+                  style={{background:"var(--green)",borderColor:"var(--green)",color:"#fff",fontWeight:800,marginBottom:10}}
+                  onClick={()=>setForceCheckoutId(selected.id)}
+                >
+                  <Package size={14} strokeWidth={1.75} /> הוצא עכשיו
+                </button>
+              )}
               <div className="form-section-title">{selected.pending_update_id?"✅ ציוד מאושר":"ציוד מבוקש"} ({selected.items?.length||0} פריטים)</div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {(() => {

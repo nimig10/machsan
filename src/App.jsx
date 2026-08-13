@@ -515,7 +515,11 @@ function normalizeReservationsForArchive(reservations, now = new Date()) {
       return normalizedReservation.returned_at ? normalizedReservation : markReservationReturned(normalizedReservation, now);
     }
     const returnAt = getReservationReturnTimestamp(normalizedReservation);
-    if (normalizedReservation.status === "מאושר" && returnAt !== null && nowMs >= returnAt) {
+    // "פעילה" is matched alongside "מאושר" because checkout now writes it for
+    // real; a loan whose gear went out and whose return time passed escalates
+    // here exactly as getEffectiveStatus escalates it (lesson #19).
+    if ((normalizedReservation.status === "מאושר" || normalizedReservation.status === "פעילה")
+        && returnAt !== null && nowMs >= returnAt) {
       // Lessons auto-archive; all other types (including staff "צוות") go to "באיחור".
       if (normalizedReservation.loan_type === "שיעור") {
         return markReservationReturned(normalizedReservation, now);
@@ -5417,7 +5421,7 @@ export default function App() {
   const [productions, _setProductions] = useState([]);
   const [policies, _setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"", לילה:"" });
   const [certifications, _setCertifications] = useState({ types:[], students:[] });
-  const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14, aiMaxRequests:5, studioFutureHoursLimit:16, publicDisplayInterval:18, userGuideVideos:[] });
+  const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14, aiMaxRequests:5, studioFutureHoursLimit:16, publicDisplayInterval:18, checkoutLeadHours:3, userGuideVideos:[] });
   // PDF user-guide assets per audience — loaded once + refreshed by realtime
   // when admin uploads/removes from SystemSettingsPage. null = no PDF for that
   // audience → consumer components hide their download button.

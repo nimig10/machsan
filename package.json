@@ -15,6 +15,7 @@
     "test:announce": "node scripts/run-announcement-tests.mjs",
     "test:night": "node scripts/run-night-quiz-tests.mjs",
     "test:return": "node scripts/run-return-flow-tests.mjs",
+    "test:checkout": "node scripts/run-checkout-flow-tests.mjs",
     "test:auth": "node scripts/run-auth-guard-tests.mjs",
     "test:prodvis": "node scripts/run-production-visibility-tests.mjs",
     "test:dates": "node scripts/run-date-format-tests.mjs",

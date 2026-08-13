@@ -518,7 +518,7 @@ export async function updateReservationStatus(id, status, options = {}) {
   // reasoning as PR #80 — too low a ceiling aborts a genuinely-successful
   // return on a slow mobile link and reports failure for work that happened.
   // The new PATCH is capped at 5s server-side, so the worst case stays bounded.
-  const { returned_at = null, returnOutcomes = null, timeoutMs = 20000 } = options;
+  const { returned_at = null, returnOutcomes = null, checkoutOutcomes = null, timeoutMs = 20000 } = options;
   if (!id || !status) {
     return { ok: false, error: "missing_arg", detail: "id and status are required" };
   }
@@ -537,6 +537,9 @@ export async function updateReservationStatus(id, status, options = {}) {
           // Omitted entirely when absent — the endpoint rejects the key on any
           // transition other than a staff "הוחזר".
           ...(returnOutcomes ? { return_outcomes: returnOutcomes } : {}),
+          // Same contract on the checkout side, gated on a staff "פעילה". A
+          // clean checkout sends nothing; the stamp is written regardless.
+          ...(checkoutOutcomes ? { checkout_outcomes: checkoutOutcomes } : {}),
         }),
         signal:  ctrl.signal,
       });
@@ -580,9 +583,13 @@ export async function updateReservationStatus(id, status, options = {}) {
       returned_by_name:     data.returned_by_name ?? null,
       approved_by_staff_id: data.approved_by_staff_id ?? null,
       approved_by_name:     data.approved_by_name ?? null,
+      issued_by_staff_id:   data.issued_by_staff_id ?? null,
+      issued_by_name:       data.issued_by_name ?? null,
+      issued_at:            data.issued_at ?? null,
       // "written" | "already" | null. Listed because the whitelist above would
       // otherwise swallow it (lesson #37+#41).
-      return_outcomes_written: data.return_outcomes_written ?? null,
+      return_outcomes_written:  data.return_outcomes_written ?? null,
+      checkout_stamp_written:   data.checkout_stamp_written ?? null,
     };
   } catch (e) {
     // Distinguish a client-side abort (timeout) from a real network failure so
@@ -898,19 +905,32 @@ export function toDateTime(dateStr, timeStr) {
 }
 
 // Single source of truth for a reservation's DISPLAYED status:
-//   מאושר + return time passed  → "באיחור"  (overdue; lessons excluded — they
-//                                  auto-archive to "הוחזר" via normalize)
-//   מאושר + borrow time started → "פעילה"   (active — gear is out)
-// Mirrors normalizeReservationsForArchive so the student/staff views agree
-// regardless of whether the row was normalized yet (avoids פעילה↔באיחור flicker)
-// and shows overdue immediately without waiting for the daily overdue cron.
+//   מאושר / פעילה + return time passed → "באיחור"  (lessons excluded — they
+//                                        auto-archive to "הוחזר" via normalize)
+//
+// ⚠️ "פעילה" IS NO LONGER DERIVED HERE, and must never be again.
+//
+// It used to be: מאושר + borrow time started ⇒ "פעילה", which meant "the gear
+// is out" was an opinion held by a clock. Nobody had touched the equipment.
+// Checkout is now an explicit act — the warehouse works through
+// CheckoutEquipmentPanel and /api/update-reservation-status writes the status
+// and issued_at for real — so re-deriving it here would resurrect a phantom
+// "פעילה" for every approved request whose pickup hour passed, and the checkout
+// screen would vanish from exactly the requests that still need it.
+//
+// The באיחור branch stays, and now covers "פעילה" too. That is what keeps this
+// function and normalizeReservationsForArchive deriving IDENTICALLY (lesson
+// #19) — without it a genuinely-active loan would keep displaying as "פעילה"
+// until the 5-minute cron got round to it, while the archive normalizer had
+// already moved on, which is precisely the disagreement that produced the
+// original פעילה↔באיחור flicker.
 export function getEffectiveStatus(r) {
-  if (r?.status === "מאושר" && r.borrow_date) {
+  const status = r?.status;
+  if ((status === "מאושר" || status === "פעילה") && r.borrow_date) {
     const returnAt = getReservationReturnTimestamp(r);
     if (returnAt !== null && Date.now() >= returnAt && r.loan_type !== "שיעור") return "באיחור";
-    if (toDateTime(r.borrow_date, r.borrow_time || "00:00") <= Date.now()) return "פעילה";
   }
-  return r?.status || "";
+  return status || "";
 }
 
 export function safeClone(value) {
@@ -968,10 +988,15 @@ export function normalizeReservationsForArchive(reservations, now = new Date()) 
       return normalizedReservation.returned_at ? normalizedReservation : markReservationReturned(normalizedReservation, now);
     }
     const returnAt = getReservationReturnTimestamp(normalizedReservation);
-    if (normalizedReservation.status === "מאושר" && returnAt !== null && nowMs >= returnAt) {
+    // "פעילה" is matched alongside "מאושר" because checkout now writes it for
+    // real. A loan whose gear went out and whose return time passed must
+    // escalate here exactly as getEffectiveStatus escalates it — the two
+    // deriving differently is what caused the original flicker (lesson #19).
+    if ((normalizedReservation.status === "מאושר" || normalizedReservation.status === "פעילה")
+        && returnAt !== null && nowMs >= returnAt) {
       // Lessons auto-archive, regular loans go to "באיחור".
-      // Staff loans (loan_type="צוות") stay "מאושר" (effective "פעילה") until
-      // a staff member manually clicks "הוחזר" — they never auto-escalate.
+      // Staff loans (loan_type="צוות") stay put until a staff member manually
+      // clicks "הוחזר" — they never auto-escalate.
       if (normalizedReservation.loan_type === "שיעור") {
         return markReservationReturned(normalizedReservation, now);
       }

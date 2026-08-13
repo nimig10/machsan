@@ -239,3 +239,32 @@ export function computeUpdateDeadline(reservation, nowMs = Date.now()) {
   }
   return null;
 }
+
+// ── May the STUDENT still touch this request's items? ───────────────────────
+//
+// One predicate for all five surfaces in PublicForm that used to spell it out
+// inline (add items, enter remove-mode, the per-item "−", cancel-the-whole-
+// request, and restoring a saved draft). They were not identical, and the day
+// one of them drifted was the day a student could cancel a live loan.
+//
+// ⚠️ THE issued_at CLAUSE IS LOAD BEARING, AND IT IS NEW.
+//
+// Those surfaces used to gate on getEffectiveStatus(), which flipped a request
+// out of "מאושר" into "פעילה" the moment its pickup hour passed — so the
+// buttons disappeared on a timer, by accident. student_modify_reservation_item_v1
+// never had a time check at all; the clock in the browser was the only thing
+// standing between a student and deleting items from gear already in their bag.
+// Now that "פעילה" is written only at real checkout, the clock is gone and
+// issued_at is what closes the door. The DB enforces the same rule
+// (20260813120100) — this is the UI half, not the guard.
+//
+// Deliberately reads r.status RAW, not the effective status: raw is what the
+// RPC will see, so the button and the server agree.
+export function studentMayModifyItems(reservation) {
+  if (!reservation) return false;
+  if (!["ממתין", "אישור ראש מחלקה", "מאושר"].includes(reservation.status)) return false;
+  if (reservation.issued_at) return false;
+  if (reservation.loan_type === "שיעור") return false;
+  if (reservation.booking_kind === "lesson") return false;
+  return true;
+}

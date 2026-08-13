@@ -6,9 +6,12 @@ import { CalendarGrid } from "./CalendarGrid.jsx";
 import { UpdateReviewModal } from "./UpdateReviewModal.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { makeSaveEditedReservation } from "../utils/reservationEdit.js";
-import { ApprovedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
+import { ApprovedByLabel, IssuedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
 import { ReturnEquipmentPanel } from "./ReturnEquipmentPanel.jsx";
 import { completeEquipmentReturn } from "../utils/returnApi.js";
+import { CheckoutEquipmentPanel } from "./CheckoutEquipmentPanel.jsx";
+import { completeEquipmentCheckout } from "../utils/checkoutApi.js";
+import { checkoutState, checkoutWindowOpen } from "../utils/checkoutFlow.js";
 import { Activity, AlertTriangle, ArrowUpFromLine, Briefcase, Calendar, Camera, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Layers, MessageSquare, Mic, Package, Pencil, RefreshCw, Shield, User, Wrench, X, XCircle } from "lucide-react";
 
 const HE_DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
@@ -28,12 +31,15 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
   const totalDamaged = equipment.reduce((s, e) => s + (Array.isArray(e.units)?e.units.filter(u=>u.status!=="תקין").length:0), 0);
 
   // ── בקשות פעילות עכשיו ──
-  const activeNow = reservations.filter(r => {
-    if (!["מאושר","באיחור"].includes(r.status) || !r.borrow_date || !r.return_date) return false;
-    const borrowAt = toDateTime(r.borrow_date, r.borrow_time || "00:00");
-    const returnAt = toDateTime(r.return_date, r.return_time || "23:59");
-    return r.status === "באיחור" ? borrowAt <= nowMs : (borrowAt <= nowMs && returnAt >= nowMs);
-  });
+  // "Out right now" is a fact recorded at checkout, not a window derived from
+  // the calendar: an approved request whose pickup hour passed but which nobody
+  // collected holds no gear and must not be counted here. That is why "מאושר"
+  // dropped off this list when checkout became explicit.
+  // The date window it used to compute is gone with it: a loan handed over an
+  // hour early is out, and a loan whose window has opened but which is still on
+  // the shelf is not. checkoutState answers exactly that, and answers it the
+  // same way the return panel does.
+  const activeNow = reservations.filter(r => checkoutState(r) === "issued");
   // ── כל בקשות מאושרות (כולל עתידיות) ──
   const allApproved = reservations.filter(r => r.status === "מאושר" || r.status === "באיחור");
 
@@ -59,6 +65,10 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
   const [dashViewRes, setDashViewRes] = useState(null);
   const [dashUpdateReview, setDashUpdateReview] = useState(null);
   const [returnBusy, setReturnBusy] = useState(false);
+  // "הוצא עכשיו" — the manual override for a student who turns up before the
+  // automatic window opens. Per-reservation, so arming one does not arm the rest.
+  const [dashForceCheckoutId, setDashForceCheckoutId] = useState(null);
+  const dashCheckoutLeadMs = Math.max(0, Number(siteSettings?.checkoutLeadHours ?? 3) || 0) * 3600000;
 
   // Completion of the return flow. Mirrors ReservationsPage.completeReturn —
   // both go through completeEquipmentReturn, which owns the ordering rule
@@ -91,6 +101,46 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
       if (showToast) showToast("success", result.note
         ? `הציוד של ${res.student_name} הוחזר — ${result.note}`
         : `הציוד של ${res.student_name} הוחזר תקין`);
+      setDashViewRes(null);
+    } finally {
+      setReturnBusy(false);
+    }
+  };
+
+  // Completion of the checkout flow. Mirrors ReservationsPage.completeCheckout;
+  // both go through completeEquipmentCheckout, which owns the ordering rule
+  // (units → items → status) so no failure can leave stock over-advertised.
+  const completeDashCheckout = async (res, outcomes) => {
+    if (!res || returnBusy) return;
+    setReturnBusy(true);
+    try {
+      const result = await completeEquipmentCheckout({ reservation: res, equipment, setEquipment, outcomes });
+      if (!result.ok) {
+        console.error("[completeDashCheckout]", result);
+        if (showToast) {
+          if (result.stage === "equipment") showToast("error", "שגיאה בעדכון סטטוס היחידות — ההוצאה לא הושלמה ולא בוצע שינוי.");
+          else if (result.stage === "items") showToast("error", "מצב היחידות נשמר, אך עדכון רשימת הפריטים נכשל — ההוצאה לא הושלמה. נסו שוב.");
+          else if (result.stage === "stamp") showToast("error", "רישום ההוצאה נכשל — הבקשה נשארה פתוחה בכוונה. מה שנשמר עד כה לא ילך לאיבוד; נסו שוב.");
+          else showToast("error", result.itemsWritten || result.inventoryWritten
+            ? "השינויים נשמרו, אך סימון ההוצאה נכשל — הבקשה עדיין פתוחה. נסו שוב."
+            : reservationStatusErrorMessage(result.error));
+        }
+        return;
+      }
+      const rpcResult = result.rpc;
+      // Same `|| null` rule as the return path — see the note there.
+      setReservations(normalizeReservationsForArchive(reservations.map(r => r.id !== res.id ? r : {
+        ...r,
+        status: "פעילה",
+        issued_at:          rpcResult.issued_at || null,
+        issued_by_staff_id: rpcResult.issued_by_staff_id || null,
+        issued_by_name:     rpcResult.issued_by_name || null,
+        checkout_outcomes:  result.checkoutOutcomes || null,
+        ...(result.itemsChanged ? { items: result.nextItems } : {}),
+      })));
+      if (showToast) showToast("success", result.note
+        ? `הציוד של ${res.student_name} יצא — ${result.note}`
+        : `הציוד של ${res.student_name} יצא מהמחסן`);
       setDashViewRes(null);
     } finally {
       setReturnBusy(false);
@@ -590,7 +640,9 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
                   missing item surfaces once the gear is back on the shelf), and
                   the old gate took the whole row away on הוחזר/בוטל. */}
               <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",paddingBottom:14,borderBottom:"1px solid var(--border)"}}>
-                {["ממתין","מאושר","נדחה","באיחור"].includes(dashViewRes.status)&&(
+                {/* "פעילה" included: checkout now writes it, and without it the
+                    staff edit button vanishes from every loan that is out. */}
+                {["ממתין","מאושר","פעילה","נדחה","באיחור"].includes(dashViewRes.status)&&(
                   <button className="btn btn-secondary" title="עריכת הבקשה"
                     onClick={()=>{setDashEditing(unstretch(dashViewRes));setDashViewRes(null);}}>
                     <Pencil size={14} strokeWidth={1.75} /> עריכת בקשה
@@ -633,9 +685,10 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
               })()}
               {/* Who approved the request + who reviewed the student's item-updates
                   (display-only, JWT-derived). Guarded so the box never renders empty. */}
-              {(dashViewRes.approved_by_name || (reservationUpdates||[]).some(u=>String(u.reservation_id)===String(dashViewRes.id)&&u.review_status!=="pending")) && (
+              {(dashViewRes.approved_by_name || dashViewRes.issued_at || (reservationUpdates||[]).some(u=>String(u.reservation_id)===String(dashViewRes.id)&&u.review_status!=="pending")) && (
                 <div style={{background:"var(--surface2)",borderRadius:10,padding:"10px 14px",fontSize:12,display:"flex",flexDirection:"column",gap:6}}>
                   <ApprovedByLabel reservation={dashViewRes} style={{fontSize:13}} />
+                  <IssuedByLabel reservation={dashViewRes} style={{fontSize:13}} />
                   <UpdateHistoryList updates={reservationUpdates} reservationId={dashViewRes.id} />
                 </div>
               )}
@@ -666,7 +719,24 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
                   return screen. Same component as ReservationsPage so the two
                   entry points cannot drift. */}
               <div>
-              {(getEffectiveStatus(dashViewRes)==="פעילה"||getEffectiveStatus(dashViewRes)==="באיחור") && setReservations ? (<>
+              {setReservations && (() => {
+                const cState = checkoutState(dashViewRes);
+                if (cState !== "pending" && cState !== "half_issued") return false;
+                if (cState === "half_issued" || String(dashForceCheckoutId) === String(dashViewRes.id)) return true;
+                return checkoutWindowOpen(
+                  { status: dashViewRes.status, borrowTs: toDateTime(dashViewRes.borrow_date, dashViewRes.borrow_time || "00:00") },
+                  { nowMs: Date.now(), leadMs: dashCheckoutLeadMs },
+                );
+              })() ? (<>
+                <div style={{fontWeight:800,fontSize:14,marginBottom:10}}>📦 הוצאת ציוד ({dashViewRes.items?.length||0} פריטים)</div>
+                <CheckoutEquipmentPanel
+                  reservation={dashViewRes}
+                  equipment={equipment}
+                  busy={returnBusy}
+                  recovering={checkoutState(dashViewRes) === "half_issued"}
+                  onComplete={(outcomes) => completeDashCheckout(dashViewRes, outcomes)}
+                />
+              </>) : (checkoutState(dashViewRes)==="issued") && setReservations ? (<>
                 <div style={{fontWeight:800,fontSize:14,marginBottom:10}}>🔄 החזרת ציוד ({dashViewRes.items?.length||0} פריטים)</div>
                 <ReturnEquipmentPanel
                   reservation={dashViewRes}
@@ -675,6 +745,17 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
                   onComplete={(outcomes) => completeDashReturn(dashViewRes, outcomes)}
                 />
               </>) : (<>
+              {/* Approved but pickup is still far off — the manual override for
+                  a student who turns up early. */}
+              {setReservations && checkoutState(dashViewRes)==="pending" && (
+                <button
+                  className="btn btn-sm"
+                  style={{background:"var(--green)",borderColor:"var(--green)",color:"#fff",fontWeight:800,marginBottom:10}}
+                  onClick={()=>setDashForceCheckoutId(dashViewRes.id)}
+                >
+                  <Package size={14} strokeWidth={1.75} /> הוצא עכשיו
+                </button>
+              )}
                 <div style={{fontWeight:800,fontSize:14,marginBottom:10}}>ציוד ({dashViewRes.items?.length||0} פריטים)</div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {(() => {

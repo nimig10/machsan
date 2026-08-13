@@ -10,7 +10,7 @@ import { listStudios } from "../utils/studiosApi.js";
 import { listStudioBookings, upsertStudioBooking, deleteStudioBooking } from "../utils/studioBookingsApi.js";
 import { buildLessonStudioBookings } from "../utils/lessonBookings.js";
 import { rangesOverlap } from "../utils/studioOverlap.js";
-import { loanMaxDays, computeMinBorrowDate, SOUND_MIN_LEAD_TIME_MS, getUpdateLeadTimeState, computeUpdateDeadline } from "../utils/loanPolicy.js";
+import { loanMaxDays, computeMinBorrowDate, SOUND_MIN_LEAD_TIME_MS, getUpdateLeadTimeState, computeUpdateDeadline, studentMayModifyItems } from "../utils/loanPolicy.js";
 import { listReservationUpdates, submitReservationUpdate, MAX_RESERVATION_UPDATES } from "../utils/reservationUpdatesApi.js";
 import { useNotifications } from "../hooks/useNotifications.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
@@ -2630,9 +2630,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       if (!entry || !Array.isArray(entry.ops) || (now - (entry.savedAt || 0)) > UPDATE_DRAFT_TTL_MS) { drop(); continue; }
       const rRow = reservations.find(x => String(x.id) === String(resId));
       if (!rRow) { drop(); continue; }
-      const st = getEffectiveStatus(rRow);
-      const editable = (st === "ממתין" || st === "אישור ראש מחלקה" || st === "מאושר") &&
-        rRow.loan_type !== "שיעור" && rRow.booking_kind !== "lesson";
+      const editable = studentMayModifyItems(rRow);
       const upds = reservationUpdates.filter(u => String(u.reservation_id) === String(resId));
       const hasPending = upds.some(u => u.review_status === "pending");
       const leadOk = getUpdateLeadTimeState(rRow).allowed;
@@ -5526,7 +5524,10 @@ ${inventory}
               const pendingUpd=updsForRes.find(u=>u.review_status==="pending")||null;
               const updLead=getUpdateLeadTimeState(r);
               const updDeadline=computeUpdateDeadline(r);
-              const isEditableStatus=(st==="ממתין"||st==="אישור ראש מחלקה"||st==="מאושר")&&r.loan_type!=="שיעור"&&r.booking_kind!=="lesson";
+              // Shared with the remove-mode button, the per-item "−" and the DB
+              // guard. Includes `!issued_at` — the clock used to close this
+              // window by accident, and now nothing else does. See loanPolicy.
+              const isEditableStatus=studentMayModifyItems(r);
               const canStartUpdate=isEditableStatus&&!pendingUpd&&updatesUsed<MAX_RESERVATION_UPDATES&&updLead.allowed;
               const updateBlockReason=!isEditableStatus?""
                 :pendingUpd?"עדכון קודם ממתין לבדיקת המחסן — לא ניתן לשלוח עדכון נוסף עד לסיום הבדיקה."
@@ -5610,7 +5611,7 @@ ${inventory}
                         }}
                       >➕ הוסף פריטים</button>);
                     })()}
-                    {(st==="ממתין"||st==="אישור ראש מחלקה"||st==="מאושר")&&r.loan_type!=="שיעור"&&r.booking_kind!=="lesson"&&(()=>{
+                    {studentMayModifyItems(r)&&(()=>{
                       const inRemoveMode=removingItemsForResId===r.id;
                       return (<button
                         aria-pressed={inRemoveMode}
@@ -5774,7 +5775,7 @@ ${inventory}
                                 localStorage drafts and updates already awaiting
                                 review can still contain it. We only stopped
                                 producing new ones. */}
-                            {removingItemsForResId===r.id&&(st==="ממתין"||st==="אישור ראש מחלקה"||st==="מאושר")&&r.loan_type!=="שיעור"&&r.booking_kind!=="lesson"&&(()=>{
+                            {removingItemsForResId===r.id&&studentMayModifyItems(r)&&(()=>{
                               const itemBusy=busyItemIds.has(Number(item.id));
                               return (<button
                                 disabled={itemBusy}

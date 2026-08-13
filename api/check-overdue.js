@@ -169,7 +169,10 @@ export default async function handler(req, res) {
 
     const pushCandidates = reservations.filter((r) => {
       if (!r || r.reminder_sent === true) return false;
-      if (r.status !== "מאושר") return false;
+      // "פעילה" as well as "מאושר": checkout writes it for real now, so a loan
+      // the warehouse actually handed over sits at "פעילה" and would otherwise
+      // stop receiving the very reminder it most needs.
+      if (r.status !== "מאושר" && r.status !== "פעילה") return false;
       if (!r.return_date) return false;
       const delta = toDateTime(r.return_date, r.return_time || "23:59") - nowMs;
       return delta >= MIN_MS && delta <= MAX_MS;
