@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient.js';
-import { getAvailable, formatLocalDateInput, getAuthToken } from '../utils.js';
+import { getAvailable, formatLocalDateInput, getAuthToken, INVENTORY_BLOCKING_STATUSES } from '../utils.js';
 
 const fetchWithRetry = async (url, options, maxRetries = 5) => {
   const delays = [1000, 2000, 5000, 10000, 20000];
@@ -31,7 +31,21 @@ const INVENTORY_STOPWORDS = new Set([
 ]);
 
 const BLOCKED_EQUIPMENT_STATUSES = new Set(['פגום', 'בתיקון', 'נעלם', 'damaged', 'inspection', 'repair']);
-const ACTIVE_RESERVATION_STATUSES = new Set(['מאושר', 'באיחור', 'approved', 'out', 'overdue']);
+// ⚠️ DERIVED FROM THE SHARED LIST — DO NOT SPELL THESE OUT AGAIN.
+//
+// This bot answers "כמה X זמין" to students, so it is an inventory-counting
+// surface and must agree with computeEquipmentAvailability exactly. It used to
+// hardcode ['מאושר','באיחור',…] and silently fell behind twice at once when
+// checkout landed: "פעילה" became a real DB status, and the archive normalizer
+// started handing rows over labelled "לא יצא?". Both dropped out of the count,
+// so the bot reported gear as available while it was in a student's bag.
+//
+// The English aliases are kept for defensive parsing of foreign-shaped rows;
+// normalizeStatusValue lowercases, which leaves Hebrew untouched.
+const ACTIVE_RESERVATION_STATUSES = new Set([
+  ...INVENTORY_BLOCKING_STATUSES,
+  'approved', 'out', 'overdue',
+]);
 
 const normalizeStatusValue = (value = '') => String(value || '').trim().toLowerCase();
 const getItemAvailableCount = (item) => Number(item?.available ?? item?.totalAvail ?? 0);

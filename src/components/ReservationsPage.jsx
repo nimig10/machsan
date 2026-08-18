@@ -1,7 +1,7 @@
 import { supabase } from '../supabaseClient.js';
 // ReservationsPage.jsx — admin reservations management page (includes rejected + archive tabs)
 import { useEffect, useState, useMemo } from "react";
-import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, reservationStatusErrorMessage, createReservation, deleteReservation as deleteReservationRpc, getAuthToken, syncReservationStatusToBlob, groupReservationItemsByCategory, buildReservationWhatsAppLink, buildReservationContactWhatsAppLink, resolveStudentPhone } from "../utils.js";
+import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, getReservationApprovalConflicts, getConsecutiveBookingWarnings, RESEND_API_KEY, normalizeReservationsForArchive, markReservationReturned, getAvailable, getPrivateLoanLimitedQty, normalizeName, parseLocalDate, logActivity, getEffectiveStatus, cloudinaryThumb, updateReservationStatus, reservationStatusErrorMessage, createReservation, deleteReservation as deleteReservationRpc, getAuthToken, syncReservationStatusToBlob, groupReservationItemsByCategory, buildReservationWhatsAppLink, buildReservationContactWhatsAppLink, resolveStudentPhone, ACTIVE_RESERVATION_STATUS_FILTERS, STAFF_EDITABLE_STATUSES } from "../utils.js";
 import { Modal, statusBadge, WhatsAppLinkButton } from "./ui.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { ArchivePage } from "./ArchivePage.jsx";
@@ -10,9 +10,14 @@ import { makeSaveEditedReservation } from "../utils/reservationEdit.js";
 import { RejectReservationModal } from "./RejectReservationModal.jsx";
 import { ReturnEquipmentPanel } from "./ReturnEquipmentPanel.jsx";
 import { completeEquipmentReturn } from "../utils/returnApi.js";
+import { CheckoutEquipmentPanel } from "./CheckoutEquipmentPanel.jsx";
+import { completeEquipmentCheckout } from "../utils/checkoutApi.js";
+import { checkoutState, checkoutWindowOpen, STATUS_NOT_PICKED_UP } from "../utils/checkoutFlow.js";
+import { clearWarehouseMarks } from "../hooks/useWarehouseMarks.js";
+import { FLOW_CHECKOUT, FLOW_RETURN } from "../utils/markDraft.js";
 import { markReservationDeleting, unmarkReservationDeleting } from "../pendingDeletes.js";
 import { UpdateReviewModal } from "./UpdateReviewModal.jsx";
-import { ApprovedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
+import { ApprovedByLabel, IssuedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
 import { getProductionCertBlockers } from "../utils/reservationUpdateReview.js";
 import { AlertTriangle, BookOpen, Briefcase, Camera, Calendar, CheckCircle, ClipboardList, Clock, FileText, Film, MessageSquare, Mic, Package, Pencil, Phone, RotateCcw, Save, Shield, Trash2, User, X, XCircle } from "lucide-react";
 import { DateField } from "./DateField.jsx";
@@ -273,6 +278,14 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
     categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], siteSettings={}, onLogCreated = () => {}, equipmentReports=[], lessons=[], setLessons=null, loanHandlers=[], reservationUpdates=[], refreshReservationUpdates=()=>{}, refreshReservations=async()=>{} }) {
   const [subView, setSubView] = useState("active"); // "active" | "rejected" | "archive"
   const [selected, setSelected] = useState(null);
+  // "הוצא עכשיו" — a student who turns up early. The automatic window still
+  // governs the normal case; this is the manual override for the one at the
+  // counter, and it is per-reservation so opening one does not arm the rest.
+  const [forceCheckoutId, setForceCheckoutId] = useState(null);
+  // How long before pickup the checkout screen appears on its own. Admin-set;
+  // 3h is the default the feature shipped with. Clamped here as well as in the
+  // settings field, because siteSettings arrives from the DB.
+  const checkoutLeadMs = Math.max(0, Number(siteSettings?.checkoutLeadHours ?? 3) || 0) * 3600000;
   const [updateReviewReservation, setUpdateReviewReservation] = useState(null);
   // Loan-request staff coordination (decoupled side-table) — display-only here.
   // Map reservation_id → { out, return } handler rows for quick lookup.
@@ -376,20 +389,34 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
     setUpdateReviewReservation(reservation);
   };
   const isRejectedPage = subView === "rejected";
-  const rejectedCount = reservations.filter(r=>r.status==="נדחה"||r.status==="באיחור").length;
+  // ⚠️ WHICH PAGE A REQUEST LANDS ON IS DECIDED ON THE EFFECTIVE STATUS.
+  //
+  // It used to be decided on the raw one, and that was fine only while "באיחור"
+  // had a single meaning. The 5-minute cron stamps באיחור on anything past its
+  // return time without consulting issued_at, so a request nobody ever collected
+  // was swept onto the rejected/overdue page — the one request whose checkout
+  // window is still open, hidden from the list the warehouse actually works from.
+  //
+  // isReallyOverdue is true only for gear that genuinely left the building.
+  // Everything else — including "לא יצא?" — stays in the active list.
+  const isReallyOverdue = r => getEffectiveStatus(r) === "באיחור";
+  const rejectedCount = reservations.filter(r=>r.status==="נדחה"||isReallyOverdue(r)).length;
   const archivedCount = reservations.filter(r=>r.status==="הוחזר").length;
   const effectiveStatusFilter = isRejectedPage
     ? (["הכל","נדחה","באיחור"].includes(statusF) ? statusF : "הכל")
-    : (["הכל","ממתין","אישור ראש מחלקה","מאושר","פעילה"].includes(statusF) ? statusF : "הכל");
+    : (["הכל",...ACTIVE_RESERVATION_STATUS_FILTERS].includes(statusF) ? statusF : "הכל");
 
   const filtered = [...reservations]
     .filter(r => {
       if (["בוטל", "מבוטל"].includes(getEffectiveStatus(r))) return false;
       if (isRejectedPage) {
-        if (r.status !== "נדחה" && r.status !== "באיחור") return false;
-        if (effectiveStatusFilter !== "הכל" && r.status !== effectiveStatusFilter) return false;
+        if (r.status !== "נדחה" && !isReallyOverdue(r)) return false;
+        // Effective status on both sides: a loan that is late but whose row the
+        // cron has not stamped yet is still "באיחור" to the user, and comparing
+        // against the raw value dropped it out of its own filter.
+        if (effectiveStatusFilter !== "הכל" && getEffectiveStatus(r) !== effectiveStatusFilter) return false;
       } else {
-        if (r.status === "הוחזר" || r.status === "נדחה" || r.status === "באיחור") return false;
+        if (r.status === "הוחזר" || r.status === "נדחה" || isReallyOverdue(r)) return false;
         if (effectiveStatusFilter !== "הכל") {
           if (getEffectiveStatus(r) !== effectiveStatusFilter) return false;
         }
@@ -418,6 +445,10 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
   };
 
   const exportPDF = (r) => {
+    // The printed status has to be the one on screen. This read the raw column,
+    // so a request the operator saw as late printed as "מאושר" — and now that the
+    // same raw "באיחור" can mean "never collected", the raw value is wronger still.
+    const st = getEffectiveStatus(r);
     const items = r.items?.map(i => `
       <tr>
         <td style="padding:10px 14px;border-bottom:1px solid #eee;font-size:14px">${eqName(i.equipment_id)}</td>
@@ -434,7 +465,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
       .label{color:#666;min-width:130px}
       table{width:100%;border-collapse:collapse;margin-top:8px}
       th{background:#f5f5f5;padding:10px 14px;text-align:right;font-size:12px;font-weight:700;color:#666}
-      .badge{display:inline-block;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:700;background:${r.status==="מאושר"?"#d4f5e9;color:#1a7a4a":r.status==="ממתין"?"#fff8e1;color:#b8860b":r.status==="נדחה"?"#fde8e8;color:#c0392b":r.status==="באיחור"?"#fef0e1;color:#e67e22":"#e8f4fd;color:#2471a3"}}
+      .badge{display:inline-block;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:700;background:${st==="מאושר"?"#d4f5e9;color:#1a7a4a":st==="ממתין"?"#fff8e1;color:#b8860b":st==="נדחה"?"#fde8e8;color:#c0392b":st==="באיחור"?"#fef0e1;color:#e67e22":st===STATUS_NOT_PICKED_UP?"#eceff1;color:#455a64":"#e8f4fd;color:#2471a3"}}
       .footer{margin-top:40px;padding-top:16px;border-top:1px solid #eee;font-size:11px;color:#999;text-align:center}
       @media print{body{padding:20px}}
     </style></head><body>
@@ -453,7 +484,7 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
       <div class="section-title">תאריכי השאלה</div>
       <div class="row"><span class="label">תאריך השאלה:</span><strong>${formatDate(r.borrow_date)}</strong></div>
       <div class="row"><span class="label">תאריך החזרה:</span><strong>${formatDate(r.return_date)}</strong></div>
-      <div class="row"><span class="label">סטטוס:</span><span class="badge">${r.status}</span></div>
+      <div class="row"><span class="label">סטטוס:</span><span class="badge">${st}</span></div>
     </div>
     <div class="section">
       <div class="section-title">ציוד מבוקש</div>
@@ -787,6 +818,72 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
         });
       }
       setSelected(null);
+      // On success ONLY. A failed return returns early above and keeps its marks,
+      // which is what lets the operator finish the job on the retry.
+      clearWarehouseMarks(FLOW_RETURN, res.id);
+    } finally {
+      setBusyIds(prev => { const n = new Set(prev); n.delete(res.id); return n; });
+    }
+  };
+
+  // The checkout flow's completion, fired by CheckoutEquipmentPanel. Mirrors
+  // completeReturn, with one extra failure stage: this flow also edits the
+  // request (a "החזר" unit drops off it), so "the units saved but the item list
+  // did not" is a distinct, recoverable state that needs its own message.
+  const completeCheckout = async (res, outcomes) => {
+    if (!res || busyIds.has(res.id)) return;
+    setBusyIds(prev => { const n = new Set(prev); n.add(res.id); return n; });
+    try {
+      const result = await completeEquipmentCheckout({ reservation: res, equipment, setEquipment, outcomes });
+      if (!result.ok) {
+        console.error("[completeCheckout]", result);
+        if (result.stage === "equipment") {
+          showToast("error", "שגיאה בעדכון סטטוס היחידות — ההוצאה לא הושלמה ולא בוצע שינוי.");
+        } else if (result.stage === "items") {
+          showToast("error", "מצב היחידות נשמר, אך עדכון רשימת הפריטים נכשל — ההוצאה לא הושלמה. נסו שוב.");
+        } else if (result.stage === "stamp") {
+          showToast("error", "רישום ההוצאה נכשל — הבקשה נשארה פתוחה בכוונה. מה שנשמר עד כה לא ילך לאיבוד; נסו שוב.");
+        } else {
+          showToast("error", result.itemsWritten || result.inventoryWritten
+            ? "השינויים נשמרו, אך סימון ההוצאה נכשל — הבקשה עדיין פתוחה. נסו שוב."
+            : reservationStatusErrorMessage(result.error));
+        }
+        return;
+      }
+      const rpcResult = result.rpc;
+      setReservations(normalizeReservationsForArchive(reservations.map(r => r.id !== res.id ? r : {
+        ...r,
+        status: "פעילה",
+        // `|| null`, never `??` — a failed stamp leaves NULL in the DB, and
+        // keeping a client-side value would display a lie (lesson #37+#41).
+        issued_at:            rpcResult.issued_at || null,
+        issued_by_staff_id:   rpcResult.issued_by_staff_id || null,
+        issued_by_name:       rpcResult.issued_by_name || null,
+        checkout_outcomes:    result.checkoutOutcomes || null,
+        // Only when the decrement actually ran; otherwise the live rows stand.
+        ...(result.itemsChanged ? { items: result.nextItems } : {}),
+      })));
+      showToast("success", result.note
+        ? `הציוד של ${res.student_name} יצא — ${result.note}`
+        : `הציוד של ${res.student_name} יצא מהמחסן`);
+      if (rpcResult.changed) {
+        const caller = JSON.parse(sessionStorage.getItem("staff_user") || "{}");
+        logActivity({
+          user_id: caller.id, user_name: caller.full_name, action: "reservation_checkout",
+          entity: "reservation", entity_id: String(res.id),
+          details: {
+            student: res.student_name, loan_type: res.loan_type,
+            ...(result.summary.damaged ? { damaged_units: result.summary.damaged } : {}),
+            ...(result.summary.missing ? { missing_units: result.summary.missing } : {}),
+            ...(result.summary.returned ? { returned_units: result.summary.returned } : {}),
+          },
+        });
+      }
+      setSelected(null);
+      // On success ONLY — see the note on the return path. The flow namespace is
+      // why this clears `checkout` and not the row's marks wholesale: the same
+      // reservation legitimately reaches the RETURN panel next.
+      clearWarehouseMarks(FLOW_CHECKOUT, res.id);
     } finally {
       setBusyIds(prev => { const n = new Set(prev); n.delete(res.id); return n; });
     }
@@ -843,17 +940,28 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
             const isLesson = r.loan_type==="שיעור";
             const isCinema = r.loan_type==="קולנוע יומית";
             const isStaff  = r.loan_type==="צוות";
-            const isOverdue = r.status==="באיחור";
-            const loanColor = isOverdue?"rgba(230,126,34,0.08)":isStaff?"rgba(100,120,150,0.10)":isLesson?"rgba(155,89,182,0.12)":isCinema?"rgba(52,152,219,0.08)":r.loan_type==="הפקה"?"rgba(52,152,219,0.06)":r.loan_type==="סאונד"?"rgba(245,166,35,0.06)":"var(--surface)";
-            const loanBorder = isOverdue?"1px solid rgba(230,126,34,0.5)":isStaff?"1px solid rgba(100,120,150,0.35)":isLesson?"1px solid rgba(155,89,182,0.35)":isCinema?"1px solid rgba(52,152,219,0.3)":r.loan_type==="הפקה"?"1px solid rgba(52,152,219,0.2)":"1px solid var(--border)";
+            // Effective status, not raw: the cron stamps באיחור on uncollected
+            // requests too, and painting those orange would contradict the
+            // "לא יצא?" badge sitting on the same card. They get their own muted
+            // grey — visible in the list without reading as an emergency.
+            const isOverdue = isReallyOverdue(r);
+            const isNotPickedUp = getEffectiveStatus(r)===STATUS_NOT_PICKED_UP;
+            const loanColor = isOverdue?"rgba(230,126,34,0.08)":isNotPickedUp?"var(--slate-soft)":isStaff?"rgba(100,120,150,0.10)":isLesson?"rgba(155,89,182,0.12)":isCinema?"rgba(52,152,219,0.08)":r.loan_type==="הפקה"?"rgba(52,152,219,0.06)":r.loan_type==="סאונד"?"rgba(245,166,35,0.06)":"var(--surface)";
+            // Dashed, and the only dashed card in the list — the cue for
+            // "booked, but nothing physically left the building".
+            const loanBorder = isOverdue?"1px solid rgba(230,126,34,0.5)":isNotPickedUp?"1px dashed var(--slate-border)":isStaff?"1px solid rgba(100,120,150,0.35)":isLesson?"1px solid rgba(155,89,182,0.35)":isCinema?"1px solid rgba(52,152,219,0.3)":r.loan_type==="הפקה"?"1px solid rgba(52,152,219,0.2)":"1px solid var(--border)";
             const loanIcon = isStaff?<Briefcase size={12} strokeWidth={1.75} color="var(--text3)" />:isLesson?<Film size={12} strokeWidth={1.75} color="var(--accent)" />:isCinema?<Camera size={12} strokeWidth={1.75} color="var(--accent)" />:r.loan_type==="פרטית"?<User size={12} strokeWidth={1.75} color="var(--text2)" />:r.loan_type==="הפקה"?<Film size={12} strokeWidth={1.75} color="var(--accent)" />:<Mic size={12} strokeWidth={1.75} color="var(--accent)" />;
             const loanLabel = isStaff?"השאלת איש צוות":isLesson?"השאלת שיעור":isCinema?"קולנוע יומית":r.loan_type==="סאונד"?"השאלת סאונד":`השאלה ${r.loan_type}`;
+            // Both hover handlers have to know about every tinted variant, or
+            // they repaint the card in a colour it never had. "לא יצא?" was
+            // missing from both, so hovering one replaced its slate border with
+            // the accent and leaving it left --border behind for good.
             return (
             <div key={r.id} className="res-card"
               style={{background:loanColor,border:loanBorder,cursor:"pointer"}}
               onClick={()=>setSelected(selected?.id===r.id?null:r)}
-              onMouseEnter={e=>e.currentTarget.style.borderColor=isOverdue?"#e67e22":isStaff?"rgba(100,120,150,0.7)":isLesson?"rgba(155,89,182,0.7)":"var(--accent)"}
-              onMouseLeave={e=>e.currentTarget.style.borderColor=isOverdue?"rgba(230,126,34,0.5)":isStaff?"rgba(100,120,150,0.35)":isLesson?"rgba(155,89,182,0.35)":"var(--border)"}>
+              onMouseEnter={e=>e.currentTarget.style.borderColor=isOverdue?"#e67e22":isNotPickedUp?"var(--slate)":isStaff?"rgba(100,120,150,0.7)":isLesson?"rgba(155,89,182,0.7)":"var(--accent)"}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=isOverdue?"rgba(230,126,34,0.5)":isNotPickedUp?"var(--slate-border)":isStaff?"rgba(100,120,150,0.35)":isLesson?"rgba(155,89,182,0.35)":"var(--border)"}>
               <div className="res-card-top">
                 <div style={{display:"flex",alignItems:"center",gap:10}}>
                   <div style={{width:38,height:38,borderRadius:"50%",background:isOverdue?"rgba(230,126,34,0.2)":isStaff?"rgba(100,120,150,0.22)":isLesson?"rgba(155,89,182,0.2)":"var(--surface3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:900,flexShrink:0,color:isOverdue?"#e67e22":isStaff?"#6a7d95":isLesson?"#9b59b6":"inherit"}}>
@@ -896,7 +1004,11 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
               <div className="res-card-actions" onClick={e=>e.stopPropagation()}>
                 {r.pending_update_id&&<button className="btn btn-sm" style={{background:"#e67e22",borderColor:"#e67e22",color:"#fff",fontWeight:900}} onClick={()=>openUpdateReview(r)}><Clock size={14} strokeWidth={2} /> בדיקת עדכון ({pendingItemCountFor(r)||"…"})</button>}
                 <button className="btn btn-secondary btn-sm" onClick={()=>exportPDF(r)}><><FileText size={14} strokeWidth={1.75} /> PDF</></button>
-                {(r.status==="ממתין"||r.status==="מאושר"||r.status==="נדחה"||r.status==="באיחור")&&<button className="btn btn-secondary btn-sm" onClick={()=>setEditing(r)}><><Pencil size={14} strokeWidth={1.75} /> עריכת בקשה</></button>}
+                {/* STAFF_EDITABLE_STATUSES, not an inline list: "פעילה" is here
+                    because checkout now writes it for real, and "לא יצא?" because
+                    the normalizer replaces status with the label before the row
+                    ever reaches this component. */}
+                {STAFF_EDITABLE_STATUSES.includes(r.status)&&<button className="btn btn-primary btn-sm" onClick={()=>setEditing(r)}><><Pencil size={14} strokeWidth={1.75} /> עריכת בקשה</></button>}
                 {r.status==="ממתין"&&(() => {
                   const certBlocked = getProductionCertBlockers(r, equipment, certifications).length > 0;
                   return (<>
@@ -906,7 +1018,11 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
                     <button className="btn btn-danger btn-sm" disabled={busyIds.has(r.id)} onClick={()=>setRejecting(r)}><XCircle size={14} strokeWidth={1.75} /> דחה</button>
                   </>);
                 })()}
-                {(getEffectiveStatus(r)==="פעילה"||getEffectiveStatus(r)==="באיחור")&&<button className="btn btn-secondary btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"הוחזר")}><><RotateCcw size={14} strokeWidth={1.75} /> הוחזר</></button>}
+                {/* Only gear that actually left can come back. checkoutState, not
+                    status: a "באיחור" row that was never collected has nothing to
+                    return, and offering the button there closes a loan that never
+                    opened. */}
+                {checkoutState(r)==="issued"&&<button className="btn btn-secondary btn-sm" disabled={busyIds.has(r.id)} onClick={()=>updateStatus(r.id,"הוחזר")}><><RotateCcw size={14} strokeWidth={1.75} /> הוחזר</></button>}
                 <button className="btn btn-danger btn-sm" onClick={()=>deleteReservation(r.id)}><Trash2 size={14} strokeWidth={1.75} /></button>
               </div>
             </div>
@@ -1140,7 +1256,9 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
               reach אשר/דחה/עריכה without scrolling past a long equipment list. */}
           <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:20,paddingBottom:16,borderBottom:"1px solid var(--border)"}}>
             {selected.pending_update_id&&<button className="btn" style={{background:"#e67e22",borderColor:"#e67e22",color:"#fff",fontWeight:900}} onClick={()=>openUpdateReview(selected)}><Clock size={15} strokeWidth={2} /> בדיקת עדכון ({pendingItemCountFor(selected)||"…"})</button>}
-            {(selected.status==="ממתין"||selected.status==="מאושר"||selected.status==="נדחה"||selected.status==="באיחור")&&<button className="btn btn-secondary" onClick={()=>{setEditing(selected);setSelected(null);setOverdueEmailText("");}}>✏️ עריכת בקשה</button>}
+            {/* Same button as the one on the card row, so it wears the same
+                icon — it carried the ✏️ emoji here and the Pencil glyph there. */}
+            {STAFF_EDITABLE_STATUSES.includes(selected.status)&&<button className="btn btn-primary" onClick={()=>{setEditing(selected);setSelected(null);setOverdueEmailText("");}}><Pencil size={14} strokeWidth={1.75} /> עריכת בקשה</button>}
             {selected.status==="ממתין"&&(() => {
               const certBlocked = getProductionCertBlockers(selected, equipment, certifications).length > 0;
               return (<>
@@ -1243,14 +1361,35 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
               {/* Who approved + history of who reviewed the student's item-updates */}
               <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:6,alignItems:"center",textAlign:"center"}}>
                 <ApprovedByLabel reservation={selected} style={{fontSize:13}} />
+                <IssuedByLabel reservation={selected} style={{fontSize:13}} />
                 <UpdateHistoryList updates={reservationUpdates} reservationId={selected.id} />
               </div>
             </div>
             <div>
-              {/* A loan that is out becomes a RETURN screen: the only thing staff
-                  do with it now is take the gear back in. The read-only list
-                  below stays for every other status. */}
-              {(getEffectiveStatus(selected)==="פעילה"||getEffectiveStatus(selected)==="באיחור") ? (<>
+              {/* Which of the three faces this request shows. Driven by
+                  checkoutState (i.e. by issued_at), NOT by status: "באיחור" now
+                  means either "out and late" or "nobody ever collected it", and
+                  those two need opposite screens. */}
+              {(() => {
+                const cState = checkoutState(selected);
+                const windowOpen = checkoutWindowOpen(
+                  { status: selected.status, borrowTs: toDateTime(selected.borrow_date, selected.borrow_time || "00:00") },
+                  { nowMs: Date.now(), leadMs: checkoutLeadMs },
+                );
+                return (cState === "pending" || cState === "half_issued")
+                  && (windowOpen || cState === "half_issued" || String(forceCheckoutId) === String(selected.id));
+              })() ? (<>
+                <div className="form-section-title">📦 הוצאת ציוד ({(selected.items?.length)||0} פריטים)</div>
+                <CheckoutEquipmentPanel
+                  reservation={selected}
+                  equipment={equipment}
+                  busy={busyIds.has(selected.id)}
+                  recovering={checkoutState(selected) === "half_issued"}
+                  onComplete={(outcomes) => completeCheckout(selected, outcomes)}
+                />
+              </>) : (checkoutState(selected)==="issued") ? (<>
+                {/* Gear is out: the only thing staff do with it now is take it
+                    back in. The read-only list below stays for every other state. */}
                 <div className="form-section-title">🔄 החזרת ציוד ({selected.items?.length||0} פריטים)</div>
                 <ReturnEquipmentPanel
                   reservation={selected}
@@ -1259,6 +1398,18 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
                   onComplete={(outcomes) => completeReturn(selected, outcomes)}
                 />
               </>) : (<>
+              {/* Approved, but pickup is still far off. The window opens on its
+                  own closer to the time; this is for the student who turns up
+                  early and is standing at the counter now. */}
+              {checkoutState(selected)==="pending" && (
+                <button
+                  className="btn btn-sm"
+                  style={{background:"var(--green)",borderColor:"var(--green)",color:"#fff",fontWeight:800,marginBottom:10}}
+                  onClick={()=>setForceCheckoutId(selected.id)}
+                >
+                  <Package size={14} strokeWidth={1.75} /> הוצא עכשיו
+                </button>
+              )}
               <div className="form-section-title">{selected.pending_update_id?"✅ ציוד מאושר":"ציוד מבוקש"} ({selected.items?.length||0} פריטים)</div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {(() => {
@@ -1303,43 +1454,73 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
               </>)}
             </div>
           </div>
-          {/* Follow-up message panel. Same shape for the two statuses where the
-              warehouse still needs to reach the student after the decision: a
-              loan that is still out, and a request that was turned down. The
-              email type differs, the panel does not. */}
-          {(selected.status==="באיחור" || selected.status==="נדחה") && (()=>{
-            const isOverduePanel = selected.status==="באיחור";
-            const tone = isOverduePanel ? "#e67e22" : "#e74c3c";
+          {/* Follow-up message panel. Same shape for the three states where the
+              warehouse still needs to reach the student: a loan that is still out,
+              a request that was turned down, and gear nobody came to collect. The
+              wording and the email type differ, the panel does not.
+
+              "לא יצא?" gets NO email button on purpose. The only templates that
+              exist are "אזהרת איחור בהחזרת ציוד — נדרשת פעולה מיידית" and "your
+              request was rejected", and both are false here — the student is not
+              late and was not refused. WhatsApp is free text, so it stays. */}
+          {(()=>{
+            const st = getEffectiveStatus(selected);
+            const mode = selected.status==="נדחה" ? "rejected"
+              : st===STATUS_NOT_PICKED_UP ? "notPickedUp"
+              : st==="באיחור" ? "overdue" : null;
+            if (!mode) return null;
+            const CFG = {
+              overdue: {
+                tone:"#e67e22", bg:"rgba(230,126,34,0.08)", border:"rgba(230,126,34,0.3)",
+                title:"📧 שליחת מייל ידני לסטודנט המאחר",
+                headline:"זמן ההשאלה שלך במכללה תם, ויש להחזיר את הציוד.",
+                placeholder:`${selected.student_name} שים/י לב, זמן ההשאלה שלך תם ועליך להשיב את הציוד בהקדם למכללה...`,
+                emailType:"overdue",
+              },
+              rejected: {
+                tone:"#e74c3c", bg:"rgba(231,76,60,0.08)", border:"rgba(231,76,60,0.3)",
+                title:"📧 שליחת מייל נוסף לסטודנט שבקשתו נדחתה",
+                headline:"בקשת השאלת הציוד שלך במכללה נדחתה.",
+                placeholder:`${selected.student_name}, הבקשה נדחתה מכיוון ש... אפשר להגיש בקשה חדשה לתאריך אחר.`,
+                emailType:"rejected",
+              },
+              notPickedUp: {
+                tone:"var(--slate)", bg:"var(--slate-soft)", border:"var(--slate-border)",
+                title:"💬 יצירת קשר — הציוד לא נאסף",
+                headline:"הציוד שהזמנת במכללה לא נאסף, והבקשה עדיין פתוחה.",
+                placeholder:`${selected.student_name}, הציוד שהזמנת ממתין במחסן ולא נאסף. אפשר להגיע לאסוף, או לעדכן אם ההשאלה מבוטלת.`,
+                emailType:null,
+              },
+            }[mode];
+            const tone = CFG.tone;
             const waLink = buildReservationWhatsAppLink(selected, {
-              headline: isOverduePanel
-                ? "זמן ההשאלה שלך במכללה תם, ויש להחזיר את הציוד."
-                : "בקשת השאלת הציוד שלך במכללה נדחתה.",
+              headline: CFG.headline,
               note: overdueEmailText,
             });
             return (
-            <div style={{marginTop:20,background:isOverduePanel?"rgba(230,126,34,0.08)":"rgba(231,76,60,0.08)",border:`1px solid ${isOverduePanel?"rgba(230,126,34,0.3)":"rgba(231,76,60,0.3)"}`,borderRadius:"var(--r)",padding:16}}>
+            <div style={{marginTop:20,background:CFG.bg,border:`1px solid ${CFG.border}`,borderRadius:"var(--r)",padding:16}}>
               <div style={{fontWeight:800,fontSize:13,color:tone,marginBottom:10}}>
-                {isOverduePanel ? "📧 שליחת מייל ידני לסטודנט המאחר" : "📧 שליחת מייל נוסף לסטודנט שבקשתו נדחתה"}
+                {CFG.title}
               </div>
               <textarea
                 className="form-textarea"
                 rows={4}
-                placeholder={isOverduePanel
-                  ? `${selected.student_name} שים/י לב, זמן ההשאלה שלך תם ועליך להשיב את הציוד בהקדם למכללה...`
-                  : `${selected.student_name}, הבקשה נדחתה מכיוון ש... אפשר להגיש בקשה חדשה לתאריך אחר.`}
+                placeholder={CFG.placeholder}
                 value={overdueEmailText}
                 onChange={e=>setOverdueEmailText(e.target.value)}
                 style={{marginBottom:10}}
               />
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                {CFG.emailType && (
                 <button
                   className="btn btn-primary"
                   style={{background:tone,borderColor:tone}}
                   disabled={overdueEmailSending || !overdueEmailText.trim() || !selected.email}
-                  onClick={()=>sendOverdueManualEmail(selected, overdueEmailText, isOverduePanel?"overdue":"rejected")}
+                  onClick={()=>sendOverdueManualEmail(selected, overdueEmailText, CFG.emailType)}
                 >
                   {overdueEmailSending ? <><Clock size={16} strokeWidth={1.75} /> שולח...</> : "📤 שלח מייל לסטודנט"}
                 </button>
+                )}
                 {/* Plain anchor, not window.open — WhatsApp routes itself to
                     web/desktop/mobile. Link is rebuilt each render, so it always
                     carries whatever is currently in the box. */}
@@ -1353,7 +1534,9 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
                   <span style={{fontSize:12,color:"var(--text3)",fontStyle:"italic"}}>אין טלפון — לא ניתן לשלוח וואטסאפ</span>
                 )}
                 <span style={{fontSize:12,color:"var(--text3)"}}>
-                  {selected.email ? `יישלח אל ${selected.email}` : "אין כתובת מייל"}
+                  {CFG.emailType
+                    ? (selected.email ? `יישלח אל ${selected.email}` : "אין כתובת מייל")
+                    : "אין תבנית מייל למצב הזה — הפנייה בוואטסאפ"}
                 </span>
               </div>
             </div>

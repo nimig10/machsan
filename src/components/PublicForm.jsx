@@ -10,7 +10,7 @@ import { listStudios } from "../utils/studiosApi.js";
 import { listStudioBookings, upsertStudioBooking, deleteStudioBooking } from "../utils/studioBookingsApi.js";
 import { buildLessonStudioBookings } from "../utils/lessonBookings.js";
 import { rangesOverlap } from "../utils/studioOverlap.js";
-import { loanMaxDays, computeMinBorrowDate, SOUND_MIN_LEAD_TIME_MS, getUpdateLeadTimeState, computeUpdateDeadline } from "../utils/loanPolicy.js";
+import { loanMaxDays, computeMinBorrowDate, SOUND_MIN_LEAD_TIME_MS, getUpdateLeadTimeState, computeUpdateDeadline, studentMayModifyItems } from "../utils/loanPolicy.js";
 import { listReservationUpdates, submitReservationUpdate, MAX_RESERVATION_UPDATES } from "../utils/reservationUpdatesApi.js";
 import { useNotifications } from "../hooks/useNotifications.js";
 import { CalendarGrid } from "./CalendarGrid.jsx";
@@ -460,6 +460,11 @@ const STATUS_BADGE_COLORS = {
   "מאושר":            { bg:"rgba(22,163,74,0.16)",  fg:"#16a34a" },
   "פעילה":            { bg:"rgba(37,99,235,0.16)",  fg:"#2563eb" },
   "באיחור":           { bg:"rgba(220,38,38,0.16)",  fg:"#dc2626" },
+  // Neutral on purpose — calm, not dim. It tells the student their gear is still
+  // waiting at the warehouse, not that they did anything wrong. But it is also
+  // the one status here that requires them to act, and the same request must not
+  // read brighter to the warehouse than it does to the person who has to respond.
+  "לא יצא?":          { bg:"var(--slate-bg)",       fg:"var(--slate)" },
   "ממתין":            { bg:"rgba(107,114,128,0.18)",fg:"#6b7280" },
   "אישור ראש מחלקה":  { bg:"rgba(124,58,237,0.18)",fg:"#7c3aed" },
 };
@@ -467,9 +472,10 @@ const STATUS_BADGE_COLORS = {
 function ActiveLoanCard({ reservation, equipById }) {
   const r = reservation;
   const [open, setOpen] = useState(false);
-  // getEffectiveStatus promotes "מאושר" → "פעילה" once the borrow window starts.
-  // Show the effective status on the badge so an active loan reads "פעילה"
-  // even though the row in reservations_new still stores "מאושר".
+  // The badge shows the EFFECTIVE status, not the stored one. "פעילה" is no
+  // longer conjured from a clock — checkout writes it — but the row can still
+  // read "מאושר" while the student is looking at a loan that is already late, or
+  // at one whose gear they never came to collect ("לא יצא?").
   const effectiveStatus = getEffectiveStatus(r);
   const badge = STATUS_BADGE_COLORS[effectiveStatus] || { bg:"var(--surface)", fg:"var(--text3)" };
   const loanTypeColor = r.loan_type ? getLoanTypeColor(r.loan_type) : ["var(--surface2)","var(--text3)"];
@@ -2630,9 +2636,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
       if (!entry || !Array.isArray(entry.ops) || (now - (entry.savedAt || 0)) > UPDATE_DRAFT_TTL_MS) { drop(); continue; }
       const rRow = reservations.find(x => String(x.id) === String(resId));
       if (!rRow) { drop(); continue; }
-      const st = getEffectiveStatus(rRow);
-      const editable = (st === "ממתין" || st === "אישור ראש מחלקה" || st === "מאושר") &&
-        rRow.loan_type !== "שיעור" && rRow.booking_kind !== "lesson";
+      const editable = studentMayModifyItems(rRow);
       const upds = reservationUpdates.filter(u => String(u.reservation_id) === String(resId));
       const hasPending = upds.some(u => u.review_status === "pending");
       const leadOk = getUpdateLeadTimeState(rRow).allowed;
@@ -5526,7 +5530,10 @@ ${inventory}
               const pendingUpd=updsForRes.find(u=>u.review_status==="pending")||null;
               const updLead=getUpdateLeadTimeState(r);
               const updDeadline=computeUpdateDeadline(r);
-              const isEditableStatus=(st==="ממתין"||st==="אישור ראש מחלקה"||st==="מאושר")&&r.loan_type!=="שיעור"&&r.booking_kind!=="lesson";
+              // Shared with the remove-mode button, the per-item "−" and the DB
+              // guard. Includes `!issued_at` — the clock used to close this
+              // window by accident, and now nothing else does. See loanPolicy.
+              const isEditableStatus=studentMayModifyItems(r);
               const canStartUpdate=isEditableStatus&&!pendingUpd&&updatesUsed<MAX_RESERVATION_UPDATES&&updLead.allowed;
               const updateBlockReason=!isEditableStatus?""
                 :pendingUpd?"עדכון קודם ממתין לבדיקת המחסן — לא ניתן לשלוח עדכון נוסף עד לסיום הבדיקה."
@@ -5610,7 +5617,7 @@ ${inventory}
                         }}
                       >➕ הוסף פריטים</button>);
                     })()}
-                    {(st==="ממתין"||st==="אישור ראש מחלקה"||st==="מאושר")&&r.loan_type!=="שיעור"&&r.booking_kind!=="lesson"&&(()=>{
+                    {studentMayModifyItems(r)&&(()=>{
                       const inRemoveMode=removingItemsForResId===r.id;
                       return (<button
                         aria-pressed={inRemoveMode}
@@ -5774,7 +5781,7 @@ ${inventory}
                                 localStorage drafts and updates already awaiting
                                 review can still contain it. We only stopped
                                 producing new ones. */}
-                            {removingItemsForResId===r.id&&(st==="ממתין"||st==="אישור ראש מחלקה"||st==="מאושר")&&r.loan_type!=="שיעור"&&r.booking_kind!=="lesson"&&(()=>{
+                            {removingItemsForResId===r.id&&studentMayModifyItems(r)&&(()=>{
                               const itemBusy=busyItemIds.has(Number(item.id));
                               return (<button
                                 disabled={itemBusy}

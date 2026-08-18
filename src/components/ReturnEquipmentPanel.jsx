@@ -20,12 +20,18 @@
 // the rest of the inventory — are in src/utils/returnFlow.js, under test.
 
 import { useMemo, useState } from "react";
-import { Package, CheckCircle, RotateCcw, AlertTriangle, HelpCircle, X } from "lucide-react";
+import { Package, CheckCircle, RotateCcw, AlertTriangle, Eraser, HelpCircle, X } from "lucide-react";
 import { groupReservationItemsByCategory } from "../utils.js";
 import {
-  UNIT_OK, UNIT_DAMAGED, UNIT_MISSING, OUTCOME_COLOR, OUTCOME_BG,
+  UNIT_OK, UNIT_DAMAGED, UNIT_MISSING, OUTCOME_COLOR, OUTCOME_BG, RETURN_OUTCOMES,
   pickUnitsForReturn, summarizeOutcomes, unitLabel,
 } from "../utils/returnFlow.js";
+import {
+  useWarehouseMarks, toggleWarehouseGreen, setWarehouseVerdict, clearWarehouseMarks,
+} from "../hooks/useWarehouseMarks.js";
+import {
+  FLOW_RETURN, markKeysFor, visibleGreenKeys, countDroppedGreen, mergeUnitVerdicts, hasAnyMarks,
+} from "../utils/markDraft.js";
 
 // The return action stayed blue when it moved off the old "🔄 הוחזר" button, so
 // it still reads as the same act the archive labels "🔵 הוחזר". btn-primary is
@@ -50,7 +56,13 @@ function EqImg({ eq, size = 32 }) {
 }
 
 // One borrowed line. The whole card is the control — no widget on top of it.
-function ItemCard({ eq, item, green, onToggle }) {
+//
+// ⚠️ MARKED IS BLUE HERE AND GREEN IN THE CHECKOUT PANEL — see OUTCOME_COLOR in
+// returnFlow.js for why. The prop is `marked`, not `green`: the store still
+// calls the set greenKeys (that vocabulary is pinned by markDraft.js and its
+// tests) but nothing on this screen is green any more, and a prop that names a
+// colour it does not use is how the two panels drifted into looking identical.
+function ItemCard({ eq, item, marked, onToggle }) {
   return (
     <div
       role="button"
@@ -60,8 +72,8 @@ function ItemCard({ eq, item, green, onToggle }) {
       style={{
         display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", cursor: "pointer",
         borderRadius: "var(--r-sm)", userSelect: "none", transition: "background 0.12s, border-color 0.12s",
-        background: green ? "rgba(46,204,113,0.12)" : "var(--surface2)",
-        border: `1px solid ${green ? "var(--green)" : "var(--border)"}`,
+        background: marked ? "rgba(52,152,219,0.12)" : "var(--surface2)",
+        border: `1px solid ${marked ? "var(--blue)" : "var(--border)"}`,
       }}
     >
       <EqImg eq={eq} />
@@ -70,11 +82,11 @@ function ItemCard({ eq, item, green, onToggle }) {
         {/* --text2 / 13px, not --text3 / 12px: this is the number the staff
             member counts against the pile in front of them, not a caption. */}
         <div style={{ fontSize: 13, color: "var(--text2)", fontWeight: 600, marginTop: 3 }}>
-          כמות: <strong style={{ color: green ? "var(--green)" : "var(--accent)", fontSize: 14 }}>{item.quantity}</strong>
+          כמות: <strong style={{ color: marked ? "var(--blue)" : "var(--accent)", fontSize: 14 }}>{item.quantity}</strong>
         </div>
       </div>
-      {green
-        ? <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "var(--green)", fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" }}>
+      {marked
+        ? <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "var(--blue)", fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" }}>
             <CheckCircle size={16} strokeWidth={2} /> חזר תקין
           </span>
         /* Plain text, no frame — it was the dimmest thing on the card while
@@ -130,8 +142,16 @@ function UnitRow({ unitId, status, fault, onStatus, onFault }) {
 }
 
 export function ReturnEquipmentPanel({ reservation, equipment = [], onComplete, busy = false }) {
-  const [greenKeys, setGreenKeys] = useState(() => new Set());
-  const [exceptions, setExceptions] = useState(null); // null | [{key, eq, item, units:[{id,status,fault}]}]
+  // ⚠️ THE MARKS DO NOT LIVE HERE ANY MORE — see src/hooks/useWarehouseMarks.js,
+  // and the identical note at the top of CheckoutEquipmentPanel. Closing the
+  // request view unmounted this panel and destroyed everything the operator had
+  // marked; the store holds it above the modal instead.
+  //
+  // `detailOpen` replaces the old `exceptions === null`, which meant BOTH "the
+  // overlay is shut" and "there is no per-unit work" — which is why "סגור" threw
+  // the per-unit work away.
+  const draft = useWarehouseMarks(FLOW_RETURN, reservation?.id);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const groups = useMemo(
     () => groupReservationItemsByCategory(reservation?.items || [], equipment),
@@ -139,35 +159,87 @@ export function ReturnEquipmentPanel({ reservation, equipment = [], onComplete, 
   );
   const allEntries = useMemo(() => groups.flatMap(g => g.entries), [groups]);
   const total = allEntries.length;
-  const greenCount = allEntries.filter(e => greenKeys.has(String(e.index))).length;
+
+  // Keyed by equipment id, never by array position — the nested item rows come
+  // back unordered, so a position key would re-attach a mark to different gear.
+  const markKeys = useMemo(() => markKeysFor(reservation?.items || []), [reservation]);
+  const lines = useMemo(
+    () => allEntries.map(e => ({ key: markKeys[e.index], qty: e.item.quantity })),
+    [allEntries, markKeys],
+  );
+  const greenKeys = useMemo(() => visibleGreenKeys(draft, lines), [draft, lines]);
+  const droppedCount = useMemo(() => countDroppedGreen(draft, lines), [draft, lines]);
+  const greenCount = greenKeys.size;
   const allGreen = greenCount === total;
 
-  const toggle = (key) => setGreenKeys((prev) => {
-    const next = new Set(prev);
-    if (next.has(key)) next.delete(key); else next.add(key);
-    return next;
-  });
+  const toggle = (markKey, qty) =>
+    toggleWarehouseGreen(FLOW_RETURN, reservation?.id, markKey, !greenKeys.has(markKey), qty);
 
   // "הוחזר": straight through when every card is green, otherwise open the
   // per-unit step for the cards that are not.
   const startReturn = () => {
-    const pending = allEntries.filter(e => !greenKeys.has(String(e.index)));
-    if (pending.length === 0) { onComplete([]); return; }
-    setExceptions(pending.map(({ item, eq, index }) => ({
-      key: String(index),
-      item,
-      eq,
-      units: pickUnitsForReturn(eq, item.quantity).map(u => ({ id: u.id, status: UNIT_OK, fault: "" })),
-    })));
+    if (allGreen) { onComplete([]); return; }
+    setDetailOpen(true);
   };
 
-  const patchUnit = (rowKey, unitId, patch) => setExceptions(prev => prev.map(row =>
-    row.key !== rowKey ? row : { ...row, units: row.units.map(u => u.id === unitId ? { ...u, ...patch } : u) },
-  ));
+  // Derived, not stored — that is what lets the overlay close and reopen without
+  // losing anything. Mapping over the freshly picked list IS the pruning: a unit
+  // that is no longer תקין drops out of pickUnitsForReturn, so a saved verdict
+  // for it has no row to land on and cannot resurrect it. This is exactly why
+  // pickUnitsForReturn keeps its two-argument signature — a return must never
+  // offer a unit already out of circulation.
+  const liveDetailRows = useMemo(() => {
+    if (!detailOpen) return [];
+    return allEntries
+      .filter(e => !greenKeys.has(markKeys[e.index]))
+      .map(({ item, eq, index }) => {
+        const key = markKeys[index];
+        return {
+          key,
+          item,
+          eq,
+          units: mergeUnitVerdicts(
+            draft,
+            key,
+            pickUnitsForReturn(eq, item.quantity),
+            { defaultStatus: UNIT_OK, damagedStatus: UNIT_DAMAGED, allowed: RETURN_OUTCOMES },
+          ),
+        };
+      });
+  }, [detailOpen, allEntries, markKeys, greenKeys, draft]);
 
-  const outcomes = useMemo(() => (exceptions || []).flatMap(row =>
+  // ⚠️ THE OVERLAY FREEZES THE MOMENT THE OPERATOR COMMITS. Correctness of
+  // display, not polish.
+  //
+  // completeEquipmentReturn calls setEquipment OPTIMISTICALLY, before its network
+  // round trip. So the unit just marked פגום stops being תקין while this overlay
+  // is still on screen — and pickUnitsForReturn offers תקין units only. The row
+  // re-derives onto the next healthy unit, drawn at the default תקין, and the
+  // tally flips back to "1 תקינות · 0 פגומות". For the length of an HTTP request
+  // the operator watches their own mark undo itself.
+  //
+  // Nothing was ever actually lost — onComplete already holds the outcomes array
+  // and the write goes through — but it reads exactly like a failure, at the one
+  // moment there is nothing left to do about it.
+  //
+  // Snapshotted in the CLICK HANDLER, not during render: an event is the honest
+  // place to capture "what was on screen when they pressed it", and it keeps this
+  // component pure (a ref read during render is what the React compiler warns
+  // about, and it would be the wrong shape here anyway).
+  //
+  // Never cleared: it is only ever consulted while busy, so the next submit
+  // simply overwrites it. Releasing it when busy clears is deliberate — on the
+  // failure paths that already wrote inventory, the replaced unit list IS the
+  // truth, and the retry has to be made against it.
+  const [submittedRows, setSubmittedRows] = useState(null);
+  const detailRows = busy && submittedRows ? submittedRows : liveDetailRows;
+
+  const patchUnit = (markKey, unitId, patch) =>
+    setWarehouseVerdict(FLOW_RETURN, reservation?.id, markKey, unitId, patch);
+
+  const outcomes = useMemo(() => detailRows.flatMap(row =>
     row.units.map(u => ({ equipmentId: row.eq?.id, unitId: u.id, status: u.status, fault: u.fault })),
-  ), [exceptions]);
+  ), [detailRows]);
   const summary = summarizeOutcomes(outcomes);
 
   return (
@@ -193,8 +265,8 @@ export function ReturnEquipmentPanel({ reservation, equipment = [], onComplete, 
                 key={index}
                 eq={eq}
                 item={item}
-                green={greenKeys.has(String(index))}
-                onToggle={() => toggle(String(index))}
+                marked={greenKeys.has(markKeys[index])}
+                onToggle={() => toggle(markKeys[index], item.quantity)}
               />
             ))}
           </div>
@@ -208,10 +280,33 @@ export function ReturnEquipmentPanel({ reservation, equipment = [], onComplete, 
         display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 14,
         paddingTop: 14, borderTop: "1px solid var(--border)",
       }}>
-        <span style={{ fontSize: 12.5, color: "var(--text2)", minWidth: 0, flex: "1 1 180px" }}>
-          סומנו <strong style={{ color: allGreen ? "var(--green)" : "var(--text)" }}>{greenCount}</strong> מתוך {total} פריטים
-          {!allGreen && <span style={{ color: "var(--text3)" }}> — השאר יפורטו בשלב הבא</span>}
+        <span style={{ fontSize: 12.5, color: "var(--text2)", minWidth: 0, flex: "1 1 180px", display: "flex", flexDirection: "column", gap: 2 }}>
+          <span>
+            סומנו <strong style={{ color: allGreen ? "var(--blue)" : "var(--text)" }}>{greenCount}</strong> מתוך {total} פריטים
+            {!allGreen && <span style={{ color: "var(--text3)" }}> — השאר יפורטו בשלב הבא</span>}
+          </span>
+          {greenCount > 0 && (
+            <span style={{ fontSize: 11, color: "var(--text3)" }}>
+              הסימונים נשמרים — אפשר לצאת מהבקשה ולחזור אליה
+            </span>
+          )}
+          {droppedCount > 0 && (
+            <span style={{ fontSize: 11, color: "#e67e22", fontWeight: 700 }}>
+              {droppedCount === 1 ? "סימון אחד לא שוחזר" : `${droppedCount} סימונים לא שוחזרו`} — הפריט או הכמות בבקשה השתנו
+            </span>
+          )}
         </span>
+        {/* Replaces the escape hatch that closing the modal used to provide. */}
+        {hasAnyMarks(draft) && (
+          <button
+            className="btn"
+            disabled={busy}
+            onClick={() => clearWarehouseMarks(FLOW_RETURN, reservation?.id)}
+            style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text2)", fontSize: 12.5, fontWeight: 700, padding: "9px 14px" }}
+          >
+            <Eraser size={13} strokeWidth={1.75} /> נקה סימונים
+          </button>
+        )}
         <button
           className="btn"
           style={{ ...BLUE_BTN, fontSize: 14, padding: "10px 28px" }}
@@ -222,20 +317,22 @@ export function ReturnEquipmentPanel({ reservation, equipment = [], onComplete, 
         </button>
       </div>
 
-      {exceptions && (
-        <div className="modal-overlay return-exceptions-overlay" onClick={(e) => { if (!busy && e.target === e.currentTarget) setExceptions(null); }}>
+      {detailOpen && (
+        <div className="modal-overlay return-exceptions-overlay" onClick={(e) => { if (!busy && e.target === e.currentTarget) setDetailOpen(false); }}>
           <div className="modal modal-lg">
             <div className="modal-header">
               <span className="modal-title">
                 <AlertTriangle size={16} strokeWidth={1.75} color="var(--accent)" /> טיפול בפריטים חריגים
               </span>
-              {/* The only way out without saving. There is deliberately no
-                  second "חזור" in the footer — one escape, in the place every
-                  other modal in the app puts it. Disabled mid-write so the
-                  panel can't be dismissed while the units are being saved. */}
+              {/* Backs out to the card list. It no longer discards anything —
+                  the verdicts live in the store and are merged back on the way
+                  in — so this is a close, not a cancel. There is deliberately no
+                  second "חזור" in the footer: one escape, in the place every
+                  other modal in the app puts it. Disabled mid-write so the panel
+                  can't be dismissed while the units are being saved. */}
               <button
                 className="btn"
-                onClick={() => setExceptions(null)}
+                onClick={() => setDetailOpen(false)}
                 disabled={busy}
                 style={{
                   background: "var(--surface2)", color: "var(--text)",
@@ -248,12 +345,12 @@ export function ReturnEquipmentPanel({ reservation, equipment = [], onComplete, 
             </div>
             <div className="modal-body">
               <div style={{ fontSize: 12.5, color: "var(--text2)", lineHeight: 1.8, marginBottom: 12 }}>
-                כל היחידות מסומנות <strong style={{ color: "var(--green)" }}>תקין</strong> כברירת מחדל —
+                כל היחידות מסומנות <strong style={{ color: "var(--blue)" }}>תקין</strong> כברירת מחדל —
                 שנו רק את מה שחזר פגום או לא חזר.
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                {exceptions.map(row => (
+                {detailRows.map(row => (
                   <div key={row.key} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 12 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
                       <EqImg eq={row.eq} size={28} />
@@ -287,11 +384,18 @@ export function ReturnEquipmentPanel({ reservation, equipment = [], onComplete, 
                 long list can never hide the only way to finish. */}
             <div className="modal-footer return-exceptions-footer" style={{ gap: 8, flexWrap: "wrap" }}>
               <span style={{ fontSize: 12.5, color: "var(--text2)", marginInlineEnd: "auto", minWidth: 0 }}>
-                <strong style={{ color: "var(--green)" }}>{summary.ok}</strong> תקינות ·{" "}
+                <strong style={{ color: "var(--blue)" }}>{summary.ok}</strong> תקינות ·{" "}
                 <strong style={{ color: "var(--red)" }}>{summary.damaged}</strong> פגומות ·{" "}
                 <strong style={{ color: "#9b59b6" }}>{summary.missing}</strong> נעלמו
               </span>
-              <button className="btn" style={{ ...BLUE_BTN, fontSize: 14, padding: "10px 28px" }} disabled={busy} onClick={() => onComplete(outcomes)}>
+              {/* Snapshot first, then commit — both read from this render, so
+                  what stays on screen is exactly what was submitted. */}
+              <button
+                className="btn"
+                style={{ ...BLUE_BTN, fontSize: 14, padding: "10px 28px" }}
+                disabled={busy}
+                onClick={() => { setSubmittedRows(detailRows); onComplete(outcomes); }}
+              >
                 {busy ? "שומר…" : <><CheckCircle size={15} strokeWidth={2} /> השלם החזרה</>}
               </button>
             </div>

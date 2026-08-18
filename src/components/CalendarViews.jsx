@@ -226,7 +226,7 @@ export function ManagerCalendarPage({ reservations: initialReservations, setRese
 
   const ALL_STATUSES  = ["ממתין","אישור ראש מחלקה","מאושר","נדחה"];
   const STATUS_COLORS = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","אישור ראש מחלקה":"#9b59b6" };
-  const STATUS_BADGE  = { "מאושר":"green","ממתין":"yellow","נדחה":"red","באיחור":"orange","אישור ראש מחלקה":"purple" };
+  const STATUS_BADGE  = { "מאושר":"green","ממתין":"yellow","נדחה":"red","באיחור":"orange","לא יצא?":"slate","אישור ראש מחלקה":"purple" };
   const LOAN_ICONS    = { "פרטית":<User size={16} strokeWidth={1.75}/>,"הפקה":<Film size={16} strokeWidth={1.75} />,"סאונד":<Mic size={16} strokeWidth={1.75} />,"קולנוע יומית":<Camera size={16} strokeWidth={1.75}/>,"צוות":<Briefcase size={16} strokeWidth={1.75}/>,"הכל":<Package size={16} strokeWidth={1.75} /> };
   const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
   const HE_D = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];

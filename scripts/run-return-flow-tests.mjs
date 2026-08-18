@@ -26,6 +26,7 @@ import {
   buildReturnOutcomesSnapshot, readReturnOutcomes, returnExceptionSummary,
   validateReturnOutcomes, findUnitReturnRecord,
 } from "../src/utils/returnFlow.js";
+import { EMPTY_DRAFT, mergeUnitVerdicts, withVerdict } from "../src/utils/markDraft.js";
 
 let passed = 0;
 let failed = 0;
@@ -387,6 +388,58 @@ console.log("\n\x1b[1m> module hygiene\x1b[0m");
   const imports = [...src.matchAll(/^\s*import\s.*?from\s+["']([^"']+)["']/gm)].map(m => m[1]);
   check("returnFlow.js imports nothing — it must run under plain Node",
     imports.length === 0, imports.join(", "));
+}
+
+// ── markDraft on the return side ────────────────────────────────────────────
+//
+// The return panel lost every mark when the request view closed, exactly as the
+// checkout panel did. Restoring them is safe here only because the unit list is
+// rebuilt first and the saved verdicts are merged ONTO it — a unit that has
+// since stopped being תקין simply has no row to land on.
+console.log("\n\x1b[1m> markDraft (return side)\x1b[0m");
+{
+  const OPTS = { defaultStatus: UNIT_OK, damagedStatus: UNIT_DAMAGED, allowed: RETURN_OUTCOMES };
+  const eq = xlr();
+
+  check("an empty draft seeds every unit תקין with no fault — today's behaviour exactly",
+    mergeUnitVerdicts(EMPTY_DRAFT, "A#0", pickUnitsForReturn(eq, 3), OPTS)
+      .every(u => u.status === UNIT_OK && u.fault === ""));
+
+  let draft = withVerdict(EMPTY_DRAFT, "A#0", "1776079954421_2", { status: UNIT_DAMAGED });
+  draft = withVerdict(draft, "A#0", "1776079954421_2", { fault: "מחבר עקום" });
+  const restored = mergeUnitVerdicts(draft, "A#0", pickUnitsForReturn(eq, 3), OPTS);
+  check("a saved פגום verdict and its fault survive the rebuild",
+    restored[1].status === UNIT_DAMAGED && restored[1].fault === "מחבר עקום");
+
+  // THE load-bearing one. Another screen condemned unit #2 between the operator
+  // marking it and coming back, so the picker now offers 1/3/4. The stale
+  // verdict must not drag #2 back into a return.
+  {
+    const damaged = { ...eq, units: eq.units.map(u => u.id === "1776079954421_2" ? { ...u, status: UNIT_DAMAGED } : u) };
+    const offered = pickUnitsForReturn(damaged, 3);
+    const rows = mergeUnitVerdicts(draft, "A#0", offered, OPTS);
+    check("a unit condemned elsewhere is not offered, and its saved verdict cannot resurrect it",
+      offered.map(u => u.id).join(",") === "1776079954421_1,1776079954421_3,1776079954421_4"
+      && rows.every(u => u.id !== "1776079954421_2"));
+    check("the unit offered in its place is seeded תקין and inherits nothing",
+      rows.every(u => u.status === UNIT_OK && u.fault === ""));
+  }
+
+  check("a נעלם verdict carries no fault even if one was somehow stored",
+    mergeUnitVerdicts(
+      withVerdict(withVerdict(EMPTY_DRAFT, "A#0", "1776079954421_1", { status: UNIT_MISSING }),
+        "A#0", "1776079954421_1", { fault: "לא אמור להישמר" }),
+      "A#0", pickUnitsForReturn(eq, 1), OPTS)[0].fault === "");
+
+  check("a checkout-only verdict is illegal here and falls back to תקין",
+    mergeUnitVerdicts(withVerdict(EMPTY_DRAFT, "A#0", "1776079954421_1", { status: "החזר" }),
+      "A#0", pickUnitsForReturn(eq, 1), OPTS)[0].status === UNIT_OK);
+
+  // Pins that restoring marks did NOT tempt anyone into giving this an
+  // `include` set the way pickUnitsForCheckout has one. A return must never
+  // offer a unit that is already out of circulation.
+  check("pickUnitsForReturn still takes exactly two arguments — no `include` was added",
+    pickUnitsForReturn.length === 2);
 }
 
 console.log("");

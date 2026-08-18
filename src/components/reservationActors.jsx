@@ -4,6 +4,7 @@
 //
 // Both are display-only and read server-derived (JWT) data:
 //   • ApprovedByLabel  ← reservations_new.approved_by_name  (who moved it to מאושר)
+//   • IssuedByLabel    ← reservations_new.issued_by_name    (who handed the gear over)
 //   • UpdateHistoryList ← reservation_item_updates.reviewed_by_name (who reviewed
 //                          each student item-update; PR #85 already stores it)
 import { formatDate } from "../utils.js";
@@ -16,6 +17,40 @@ export function ApprovedByLabel({ reservation, style }) {
   return (
     <span style={{ color: "var(--text2)", ...style }}>
       👤 מאשר הבקשה: <strong style={{ color: "var(--accent)", fontWeight: 800 }}>{name}</strong>
+    </span>
+  );
+}
+
+// "📦 מוציא הבקשה: [שם] · 13/08/2026 14:30".
+//
+// Unlike ApprovedByLabel this renders even with no name, as long as issued_at is
+// set — because "handed over, by nobody we recorded" is a real state, not a
+// missing one. Every loan that was already out when the checkout screen shipped
+// was back-filled with a timestamp and a NULL name (see
+// 20260813120000_reservations_checkout.sql), and silently hiding those would
+// make the whole history look like it never happened.
+export function IssuedByLabel({ reservation, style }) {
+  const name = String(reservation?.issued_by_name || "").trim();
+  const at = reservation?.issued_at;
+  if (!name && !at) return null;
+  // The DB stamps UTC; the warehouse reads Israel time. Same treatment the
+  // announcement viewer list gives its timestamps.
+  let when = "";
+  if (at) {
+    try {
+      const d = new Date(at);
+      when = `${formatDate(d.toISOString().slice(0, 10))} ${d.toLocaleTimeString("he-IL", {
+        hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jerusalem",
+      })}`;
+    } catch { when = ""; }
+  }
+  return (
+    <span style={{ color: "var(--text2)", ...style }}>
+      📦 מוציא הבקשה:{" "}
+      {name
+        ? <strong style={{ color: "var(--accent)", fontWeight: 800 }}>{name}</strong>
+        : <span style={{ fontStyle: "italic" }}>לא נרשם</span>}
+      {when && <span style={{ color: "var(--text3)" }}> · {when}</span>}
     </span>
   );
 }

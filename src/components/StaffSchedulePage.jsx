@@ -13,10 +13,13 @@ const LOAN_STATUS_COLOR = {
   "נדחה": "#e74c3c",           // badge-red
   "הוחזר": "#3498db",          // badge-blue
   "באיחור": "#e67e22",         // badge-orange
+  "לא יצא?": "var(--slate)",   // badge-slate — gear never left the shelf
   "אישור ראש מחלקה": "#9b59b6", // badge-purple
 };
 function loanStatusColor(status) {
-  return LOAN_STATUS_COLOR[normalizeReservationStatus(status)] || "#9aa0a6"; // badge-gray fallback
+  // --text2 is what .badge-gray uses, so the two "unknown status" fallbacks now
+  // agree; this used to be a third, unexplained grey (#9aa0a6).
+  return LOAN_STATUS_COLOR[normalizeReservationStatus(status)] || "var(--text2)";
 }
 import { syncAllLessons } from "../utils/lessonsApi.js";
 import { BookOpen, Calendar, Check, Circle, ClipboardList, Package, Shield, X, User, MapPin, Building2, Pencil, GraduationCap, Lock, Unlock, Star } from "lucide-react";

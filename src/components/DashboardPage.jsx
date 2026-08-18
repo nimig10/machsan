@@ -1,15 +1,22 @@
 // DashboardPage.jsx — admin dashboard page
 import { useState } from "react";
-import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, reservationStatusErrorMessage, getAuthToken, syncReservationStatusToBlob, getLoanTypeColor, normalizeName, groupReservationItemsByCategory, stretchOverdueForCalendar, buildReservationContactWhatsAppLink, resolveStudentPhone } from "../utils.js";
+import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, reservationStatusErrorMessage, getAuthToken, syncReservationStatusToBlob, getLoanTypeColor, normalizeName, groupReservationItemsByCategory, stretchOverdueForCalendar, buildReservationContactWhatsAppLink, resolveStudentPhone, INVENTORY_BLOCKING_STATUSES, STAFF_EDITABLE_STATUSES } from "../utils.js";
 import { Modal, statusBadge, WhatsAppLinkButton } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import { UpdateReviewModal } from "./UpdateReviewModal.jsx";
 import { EditReservationModal } from "./EditReservationModal.jsx";
 import { makeSaveEditedReservation } from "../utils/reservationEdit.js";
-import { ApprovedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
+import { ApprovedByLabel, IssuedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
 import { ReturnEquipmentPanel } from "./ReturnEquipmentPanel.jsx";
 import { completeEquipmentReturn } from "../utils/returnApi.js";
-import { Activity, AlertTriangle, ArrowUpFromLine, Briefcase, Calendar, Camera, CheckCircle, ClipboardList, Clock, Film, GraduationCap, Layers, MessageSquare, Mic, Package, Pencil, RefreshCw, Shield, User, Wrench, X, XCircle } from "lucide-react";
+import { CheckoutEquipmentPanel } from "./CheckoutEquipmentPanel.jsx";
+import { completeEquipmentCheckout } from "../utils/checkoutApi.js";
+import { checkoutState, checkoutWindowOpen, STATUS_NOT_PICKED_UP } from "../utils/checkoutFlow.js";
+import { clearWarehouseMarks } from "../hooks/useWarehouseMarks.js";
+import { FLOW_CHECKOUT, FLOW_RETURN } from "../utils/markDraft.js";
+import { deleteReservation as deleteReservationRpc, logActivity } from "../utils.js";
+import { markReservationDeleting, unmarkReservationDeleting } from "../pendingDeletes.js";
+import { Activity, AlertTriangle, ArrowUpFromLine, Briefcase, Calendar, Camera, CheckCircle, ClipboardList, Clock, Film, GraduationCap, HelpCircle, Layers, MessageSquare, Mic, Package, Pencil, RefreshCw, Shield, Trash2, User, Wrench, X, XCircle } from "lucide-react";
 
 const HE_DAYS = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 function getDayName(dateStr) {
@@ -18,7 +25,7 @@ function getDayName(dateStr) {
   return HE_DAYS[d.getDay()] || "";
 }
 
-export function DashboardPage({ equipment, setEquipment = () => {}, reservations, setReservations, showToast, siteSettings = {}, equipmentReports = [], certifications = { types: [], students: [] }, loanHandlers = [], reservationUpdates = [], refreshReservationUpdates = async () => {}, refreshReservations = async () => {}, categories = [], collegeManager = {}, managerToken = "" }) {
+export function DashboardPage({ equipment, setEquipment = () => {}, reservations, setReservations, showToast, siteSettings = {}, equipmentReports = [], certifications = { types: [], students: [] }, loanHandlers = [], reservationUpdates = [], refreshReservationUpdates = async () => {}, refreshReservations = async () => {}, categories = [], collegeManager = {}, managerToken = "", onLogCreated = () => {} }) {
   const todayStr = today();
   const nowMs = Date.now();
 
@@ -28,14 +35,22 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
   const totalDamaged = equipment.reduce((s, e) => s + (Array.isArray(e.units)?e.units.filter(u=>u.status!=="תקין").length:0), 0);
 
   // ── בקשות פעילות עכשיו ──
-  const activeNow = reservations.filter(r => {
-    if (!["מאושר","באיחור"].includes(r.status) || !r.borrow_date || !r.return_date) return false;
-    const borrowAt = toDateTime(r.borrow_date, r.borrow_time || "00:00");
-    const returnAt = toDateTime(r.return_date, r.return_time || "23:59");
-    return r.status === "באיחור" ? borrowAt <= nowMs : (borrowAt <= nowMs && returnAt >= nowMs);
-  });
+  // "Out right now" is a fact recorded at checkout, not a window derived from
+  // the calendar: an approved request whose pickup hour passed but which nobody
+  // collected holds no gear and must not be counted here. That is why "מאושר"
+  // dropped off this list when checkout became explicit.
+  // The date window it used to compute is gone with it: a loan handed over an
+  // hour early is out, and a loan whose window has opened but which is still on
+  // the shelf is not. checkoutState answers exactly that, and answers it the
+  // same way the return panel does.
+  const activeNow = reservations.filter(r => checkoutState(r) === "issued");
   // ── כל בקשות מאושרות (כולל עתידיות) ──
-  const allApproved = reservations.filter(r => r.status === "מאושר" || r.status === "באיחור");
+  //
+  // The shared list, not an inline pair. This feeds rtToday ("החזרות היום"), and
+  // omitting "פעילה" hid every loan the warehouse had actually checked out and
+  // that was due back today — precisely the rows that tile exists for. The line
+  // above was rewritten for the new status; this one was left behind.
+  const allApproved = reservations.filter(r => INVENTORY_BLOCKING_STATUSES.includes(r.status));
 
   // ── פריטים ויחידות שנמצאים כרגע בהשאלה ──
   const onLoanItems = activeNow.reduce((s,r) => s + (r.items?.length||0), 0);
@@ -59,6 +74,10 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
   const [dashViewRes, setDashViewRes] = useState(null);
   const [dashUpdateReview, setDashUpdateReview] = useState(null);
   const [returnBusy, setReturnBusy] = useState(false);
+  // "הוצא עכשיו" — the manual override for a student who turns up before the
+  // automatic window opens. Per-reservation, so arming one does not arm the rest.
+  const [dashForceCheckoutId, setDashForceCheckoutId] = useState(null);
+  const dashCheckoutLeadMs = Math.max(0, Number(siteSettings?.checkoutLeadHours ?? 3) || 0) * 3600000;
 
   // Completion of the return flow. Mirrors ReservationsPage.completeReturn —
   // both go through completeEquipmentReturn, which owns the ordering rule
@@ -92,10 +111,98 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
         ? `הציוד של ${res.student_name} הוחזר — ${result.note}`
         : `הציוד של ${res.student_name} הוחזר תקין`);
       setDashViewRes(null);
+      // On success ONLY. A failed return returns early above and keeps its marks,
+      // which is what lets the operator finish the job on the retry.
+      clearWarehouseMarks(FLOW_RETURN, res.id);
     } finally {
       setReturnBusy(false);
     }
   };
+
+  // Completion of the checkout flow. Mirrors ReservationsPage.completeCheckout;
+  // both go through completeEquipmentCheckout, which owns the ordering rule
+  // (units → items → status) so no failure can leave stock over-advertised.
+  const completeDashCheckout = async (res, outcomes) => {
+    if (!res || returnBusy) return;
+    setReturnBusy(true);
+    try {
+      const result = await completeEquipmentCheckout({ reservation: res, equipment, setEquipment, outcomes });
+      if (!result.ok) {
+        console.error("[completeDashCheckout]", result);
+        if (showToast) {
+          if (result.stage === "equipment") showToast("error", "שגיאה בעדכון סטטוס היחידות — ההוצאה לא הושלמה ולא בוצע שינוי.");
+          else if (result.stage === "items") showToast("error", "מצב היחידות נשמר, אך עדכון רשימת הפריטים נכשל — ההוצאה לא הושלמה. נסו שוב.");
+          else if (result.stage === "stamp") showToast("error", "רישום ההוצאה נכשל — הבקשה נשארה פתוחה בכוונה. מה שנשמר עד כה לא ילך לאיבוד; נסו שוב.");
+          else showToast("error", result.itemsWritten || result.inventoryWritten
+            ? "השינויים נשמרו, אך סימון ההוצאה נכשל — הבקשה עדיין פתוחה. נסו שוב."
+            : reservationStatusErrorMessage(result.error));
+        }
+        return;
+      }
+      const rpcResult = result.rpc;
+      // Same `|| null` rule as the return path — see the note there.
+      setReservations(normalizeReservationsForArchive(reservations.map(r => r.id !== res.id ? r : {
+        ...r,
+        status: "פעילה",
+        issued_at:          rpcResult.issued_at || null,
+        issued_by_staff_id: rpcResult.issued_by_staff_id || null,
+        issued_by_name:     rpcResult.issued_by_name || null,
+        checkout_outcomes:  result.checkoutOutcomes || null,
+        ...(result.itemsChanged ? { items: result.nextItems } : {}),
+      })));
+      if (showToast) showToast("success", result.note
+        ? `הציוד של ${res.student_name} יצא — ${result.note}`
+        : `הציוד של ${res.student_name} יצא מהמחסן`);
+      setDashViewRes(null);
+      // On success ONLY — see the note on the return path above.
+      clearWarehouseMarks(FLOW_CHECKOUT, res.id);
+    } finally {
+      setReturnBusy(false);
+    }
+  };
+
+  // Delete a request nobody ever collected. Mirrors ReservationsPage's
+  // deleteReservation, minus its lesson_auto branch — that path is unreachable
+  // here because the button is gated on "לא יצא?", and getEffectiveStatus never
+  // produces that label for a lesson.
+  //
+  // Confirmed first, unlike the requests page. delete_reservation_v1 is a HARD
+  // delete and "בטל פעולה" only ever writes statuses (lesson #47), so nothing
+  // brings the row back — ArchivePage already asks before a permanent delete.
+  const deleteNotPickedUp = async (res) => {
+    if (!res) return;
+    if (!window.confirm(`למחוק לצמיתות את הבקשה של ${res.student_name}?\nהציוד לא נאסף, ולא ניתן לשחזר בקשה שנמחקה.`)) return;
+    const id = res.id;
+    // Before the optimistic removal, not after: a poll or realtime tick landing
+    // in the gap would otherwise put the row straight back on screen.
+    markReservationDeleting(id);
+    setReservations(reservations.filter(r => r.id !== id));
+    setDashViewRes(null);
+    // Same aggregateKey as the requests page so deletes from both screens
+    // collapse into one toast instead of stacking.
+    if (showToast) showToast("success", "הבקשה נמחקה", {
+      aggregateKey: "reservation-delete",
+      pluralize: n => `${n} בקשות נמחקו`,
+    });
+    const rpc = await deleteReservationRpc(id);
+    if (!rpc.ok) {
+      console.error("[deleteNotPickedUp] RPC failed:", rpc);
+      if (showToast) showToast("error", "המחיקה נכשלה בשרת — הפריט עלול לחזור לאחר ריענון");
+      unmarkReservationDeleting(id, 0);
+      setReservations(prev => prev.some(r => r.id === id) ? prev : [...prev, res]);
+      return;
+    }
+    // Delayed unmark: the realtime DELETE our own RPC triggers lands shortly
+    // after, and should skip the refetch path too.
+    unmarkReservationDeleting(id);
+    const caller = JSON.parse(sessionStorage.getItem("staff_user") || "{}");
+    logActivity({
+      user_id: caller.id, user_name: caller.full_name, action: "reservation_delete",
+      entity: "reservation", entity_id: String(id),
+      details: { student: res.student_name, loan_type: res.loan_type, reason: "not_picked_up", rpc_source: rpc.source },
+    }).then(logId => onLogCreated?.(logId)).catch(err => console.error("delete reservation log failed:", err));
+  };
+
   const pendingUpdateFor = reservation => (reservationUpdates || []).find(update =>
     String(update.id) === String(reservation?.pending_update_id) && update.review_status === "pending");
   const pendingItemCountFor = reservation => (pendingUpdateFor(reservation)?.items || [])
@@ -162,16 +269,39 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
     outOfMonthDays.push(new Date(yr,mo+1,nextDay++));
   }
 
-  const DASHBOARD_CAL_STATUSES = ["ממתין","מאושר","פעילה","נדחה","באיחור","אישור ראש מחלקה"];
-  const CAL_LOAN_TYPES = [
-    { key:"הכל", label:"הכל", icon:<Package size={16} strokeWidth={1.75} color="var(--accent)" /> },
-    { key:"פרטית", label:"פרטית", icon:<User size={16} strokeWidth={1.75} color="var(--accent)" /> },
-    { key:"הפקה", label:"הפקה", icon:<Film size={16} strokeWidth={1.75} color="var(--accent)" /> },
-    { key:"סאונד", label:"סאונד", icon:<Mic size={16} strokeWidth={1.75} color="var(--accent)" /> },
-    { key:"קולנוע יומית", label:"קולנוע יומית", icon:<Camera size={16} strokeWidth={1.75} color="var(--accent)" /> },
-    { key:"שיעור", label:"שיעור", icon:<GraduationCap size={16} strokeWidth={1.75} color="var(--accent)" /> },
-    { key:"צוות", label:"איש צוות", icon:<Briefcase size={16} strokeWidth={1.75} color="var(--accent)" /> },
+  // Both filter rows are described the same way now. `key` is the STATUS VALUE —
+  // what calStatusF holds and what getEffectiveStatus returns — so the consumers
+  // further down are untouched. Describing them killed two seven-branch ternaries
+  // that made the row impossible to adjust without editing three places.
+  const DASHBOARD_CAL_STATUSES = [
+    { key:"ממתין",  color:"var(--yellow)", icon:<Clock size={13} strokeWidth={1.75} /> },
+    { key:"מאושר",  color:"var(--green)",  icon:<CheckCircle size={13} strokeWidth={1.75} /> },
+    { key:"פעילה",  color:"#64b5f6",       icon:<Activity size={13} strokeWidth={1.75} /> },
+    { key:"נדחה",   color:"var(--red)",    icon:<XCircle size={13} strokeWidth={1.75} /> },
+    { key:"באיחור", color:"#e67e22",       icon:<AlertTriangle size={13} strokeWidth={1.75} /> },
+    { key:STATUS_NOT_PICKED_UP, color:"var(--slate)", icon:<HelpCircle size={13} strokeWidth={1.75} /> },
+    { key:"אישור ראש מחלקה", color:"var(--purple)", icon:<Shield size={13} strokeWidth={1.75} /> },
   ];
+  const CAL_LOAN_TYPES = [
+    { key:"הכל", label:"הכל", icon:<Package size={13} strokeWidth={1.75} color="var(--accent)" /> },
+    { key:"פרטית", label:"פרטית", icon:<User size={13} strokeWidth={1.75} color="var(--accent)" /> },
+    { key:"הפקה", label:"הפקה", icon:<Film size={13} strokeWidth={1.75} color="var(--accent)" /> },
+    { key:"סאונד", label:"סאונד", icon:<Mic size={13} strokeWidth={1.75} color="var(--accent)" /> },
+    { key:"קולנוע יומית", label:"קולנוע יומית", icon:<Camera size={13} strokeWidth={1.75} color="var(--accent)" /> },
+    { key:"שיעור", label:"שיעור", icon:<GraduationCap size={13} strokeWidth={1.75} color="var(--accent)" /> },
+    { key:"צוות", label:"איש צוות", icon:<Briefcase size={13} strokeWidth={1.75} color="var(--accent)" /> },
+  ];
+  // Hoisted so the two rows cannot drift: they sit directly on top of each other
+  // and any divergence reads as a bug.
+  //
+  // ⚠️ whiteSpace:"nowrap" is the actual fix for the wrapping row. Without it a
+  // chip's own label breaks at its internal spaces, which is why "אישור ראש
+  // מחלקה" looked like a stray chip stranded on a second line. The trimmed
+  // padding/border/icon buy the ~70px that keeps all eight on one line.
+  const CAL_CHIP = {
+    padding:"3px 8px", borderRadius:20, fontWeight:700, fontSize:11, cursor:"pointer",
+    whiteSpace:"nowrap", display:"inline-flex", alignItems:"center", gap:4, flex:"none",
+  };
   const LOAN_TYPE_ICON = { "פרטית":<User size={16} strokeWidth={1.75} color="var(--accent)" />,"הפקה":<Film size={16} strokeWidth={1.75} color="var(--accent)" />,"סאונד":<Mic size={16} strokeWidth={1.75} color="var(--accent)" />,"שיעור":<GraduationCap size={16} strokeWidth={1.75} color="var(--accent)" />,"קולנוע יומית":<Camera size={16} strokeWidth={1.75} color="var(--accent)" />,"צוות":<Briefcase size={16} strokeWidth={1.75} color="var(--accent)" /> };
 
   // Overdue loans keep occupying the calendar until the gear is physically back
@@ -253,7 +383,13 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
           { l:"השאלות פעילות", v:allApproved.length,  i:<CheckCircle size={16} strokeWidth={1.75} color="var(--green)" />, c:"var(--green)"  },
           { l:"ממתין לאישור",  v:pending,              i:<Clock size={16} strokeWidth={1.75} color="var(--yellow)" />, c:"var(--yellow)" },
           { l:"אישור ראש מחלקה",v:deptHeadPending,    i:<Shield size={16} strokeWidth={1.75} color="var(--purple)" />, c:"var(--purple)" },
-          { l:"באיחור",        v:reservations.filter(r=>r.status==="באיחור").length, i:<AlertTriangle size={16} strokeWidth={1.75} color="#e67e22" />, c:"#e67e22" },
+          // Two tiles, because the raw "באיחור" column answers neither question on
+          // its own: the 5-minute cron stamps it without looking at issued_at, so
+          // one number was mixing gear that is genuinely missing with gear that
+          // never left the shelf. Counted through getEffectiveStatus, each tile
+          // now means exactly what it says.
+          { l:"באיחור",        v:reservations.filter(r=>getEffectiveStatus(r)==="באיחור").length, i:<AlertTriangle size={16} strokeWidth={1.75} color="#e67e22" />, c:"#e67e22" },
+          { l:"לא יצא?",       v:reservations.filter(r=>getEffectiveStatus(r)===STATUS_NOT_PICKED_UP).length, i:<HelpCircle size={16} strokeWidth={1.75} color="var(--slate)" />, c:"var(--slate)" },
           { l:"בקשות דחויות",  v:rejected,             i:<XCircle size={16} strokeWidth={1.75} color="var(--red)" />, c:"var(--red)"    },
         ].map(s=>(
           <div key={s.l} className="stat-card" style={{"--ac":s.c}}>
@@ -480,21 +616,23 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
               <button className="btn btn-secondary btn-sm" title="מסך מלא" onClick={()=>setCalFS(true)} style={{marginRight:8}}>⛶</button>
             </div>
           </div>
-          {/* Status filter chips */}
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
-              {DASHBOARD_CAL_STATUSES.map(s=>{
-                const active = calStatusF.includes(s);
-                const clr = s==="מאושר" ? "var(--green)" : s==="ממתין" ? "var(--yellow)" : s==="פעילה" ? "#64b5f6" : s==="באיחור" ? "#e67e22" : s==="אישור ראש מחלקה" ? "var(--purple)" : "var(--red)";
+          {/* Status filter chips. columnGap is tighter than rowGap on purpose:
+              horizontal space is what runs out, and on mobile these still wrap. */}
+          <div style={{display:"flex",columnGap:4,rowGap:6,flexWrap:"wrap",marginBottom:8}}>
+              {DASHBOARD_CAL_STATUSES.map(({ key, color, icon })=>{
+                const active = calStatusF.includes(key);
                 return (
-                  <button key={s} type="button" onClick={()=>setCalStatusF(p=>active?p.filter(x=>x!==s):[...p,s])}
-                    style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${active?clr:"var(--border)"}`,background:active?`color-mix(in srgb,${clr} 15%,transparent)`:"transparent",color:active?clr:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}>
-                    {s==="מאושר" ? <CheckCircle size={16} strokeWidth={1.75} /> : s==="ממתין" ? <Clock size={16} strokeWidth={1.75} /> : s==="פעילה" ? <Activity size={16} strokeWidth={1.75} /> : s==="באיחור" ? <AlertTriangle size={16} strokeWidth={1.75} /> : s==="אישור ראש מחלקה" ? <Shield size={16} strokeWidth={1.75} /> : <XCircle size={16} strokeWidth={1.75} />} {s}
+                  <button key={key} type="button" onClick={()=>setCalStatusF(p=>active?p.filter(x=>x!==key):[...p,key])}
+                    style={{...CAL_CHIP,border:`1.5px solid ${active?color:"var(--border)"}`,background:active?`color-mix(in srgb,${color} 15%,transparent)`:"transparent",color:active?color:"var(--text3)"}}>
+                    {icon} {key}
                   </button>
                 );
               })}
-            {calStatusF.length>0&&<button type="button" onClick={()=>setCalStatusF([])} style={{padding:"3px 10px",borderRadius:20,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)",fontSize:11,cursor:"pointer"}}><X size={16} strokeWidth={1.75} color="var(--text3)" /> הכל</button>}
+            {/* Icon only — the word "הכל" cost 24px the row does not have, and an
+                X at the end of a filter row needs no label. */}
+            {calStatusF.length>0&&<button type="button" title="נקה סינון" aria-label="נקה סינון" onClick={()=>setCalStatusF([])} style={{...CAL_CHIP,border:"1px solid var(--border)",background:"transparent",color:"var(--text3)"}}><X size={13} strokeWidth={1.75} color="var(--text3)" /></button>}
           </div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+          <div style={{display:"flex",columnGap:4,rowGap:6,flexWrap:"wrap",marginBottom:12}}>
             {CAL_LOAN_TYPES.map((filterOption) => {
               const active = calLoanTypeF === filterOption.key;
               const [bg, fg] = filterOption.key !== "הכל" ? getLoanTypeColor(filterOption.key) : ["var(--accent-glow)", "var(--accent)"];
@@ -503,7 +641,7 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
                   key={filterOption.key}
                   type="button"
                   onClick={()=>setCalLoanTypeF(active ? "הכל" : filterOption.key)}
-                  style={{padding:"3px 10px",borderRadius:20,border:`2px solid ${active?bg:"var(--border)"}`,background:active?bg:"transparent",color:active?fg:"var(--text3)",fontWeight:700,fontSize:11,cursor:"pointer"}}
+                  style={{...CAL_CHIP,border:`1.5px solid ${active?bg:"var(--border)"}`,background:active?bg:"transparent",color:active?fg:"var(--text3)"}}
                 >
                   {filterOption.icon} {filterOption.label}
                 </button>
@@ -590,8 +728,10 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
                   missing item surfaces once the gear is back on the shelf), and
                   the old gate took the whole row away on הוחזר/בוטל. */}
               <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",paddingBottom:14,borderBottom:"1px solid var(--border)"}}>
-                {["ממתין","מאושר","נדחה","באיחור"].includes(dashViewRes.status)&&(
-                  <button className="btn btn-secondary" title="עריכת הבקשה"
+                {/* "פעילה" included: checkout now writes it, and without it the
+                    staff edit button vanishes from every loan that is out. */}
+                {STAFF_EDITABLE_STATUSES.includes(dashViewRes.status)&&(
+                  <button className="btn btn-primary" title="עריכת הבקשה"
                     onClick={()=>{setDashEditing(unstretch(dashViewRes));setDashViewRes(null);}}>
                     <Pencil size={14} strokeWidth={1.75} /> עריכת בקשה
                   </button>
@@ -603,6 +743,20 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
                   label="וואטסאפ לסטודנט"
                   title="פתח שיחת WhatsApp עם הסטודנט — ההודעה נפתחת עם פרטי ההשאלה"
                 />
+                {/* ⚠️ THIRD child on purpose — RTL paints the row right-to-left,
+                    so DOM order after WhatsApp is what puts this to its LEFT.
+                    Reordering these two silently moves the button to the far side.
+
+                    Gated on the EFFECTIVE status: "לא יצא?" is a display label
+                    and is never stored, so dashViewRes.status would never match.
+                    A request nobody collected is the one case where deleting is
+                    the honest resolution, and this modal had no way to do it. */}
+                {getEffectiveStatus(dashViewRes)===STATUS_NOT_PICKED_UP&&(
+                  <button className="btn btn-danger" title="מחיקת הבקשה — הסטודנט לא אסף את הציוד"
+                    onClick={()=>deleteNotPickedUp(dashViewRes)}>
+                    <Trash2 size={14} strokeWidth={1.75} /> מחק בקשה
+                  </button>
+                )}
               </div>
               {/* Dates & info */}
               <div style={{background:"var(--accent-glow)",border:"1px solid rgba(245,166,35,0.3)",borderRadius:12,padding:"14px 16px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 16px"}}>
@@ -633,9 +787,10 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
               })()}
               {/* Who approved the request + who reviewed the student's item-updates
                   (display-only, JWT-derived). Guarded so the box never renders empty. */}
-              {(dashViewRes.approved_by_name || (reservationUpdates||[]).some(u=>String(u.reservation_id)===String(dashViewRes.id)&&u.review_status!=="pending")) && (
+              {(dashViewRes.approved_by_name || dashViewRes.issued_at || (reservationUpdates||[]).some(u=>String(u.reservation_id)===String(dashViewRes.id)&&u.review_status!=="pending")) && (
                 <div style={{background:"var(--surface2)",borderRadius:10,padding:"10px 14px",fontSize:12,display:"flex",flexDirection:"column",gap:6}}>
                   <ApprovedByLabel reservation={dashViewRes} style={{fontSize:13}} />
+                  <IssuedByLabel reservation={dashViewRes} style={{fontSize:13}} />
                   <UpdateHistoryList updates={reservationUpdates} reservationId={dashViewRes.id} />
                 </div>
               )}
@@ -666,7 +821,24 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
                   return screen. Same component as ReservationsPage so the two
                   entry points cannot drift. */}
               <div>
-              {(getEffectiveStatus(dashViewRes)==="פעילה"||getEffectiveStatus(dashViewRes)==="באיחור") && setReservations ? (<>
+              {setReservations && (() => {
+                const cState = checkoutState(dashViewRes);
+                if (cState !== "pending" && cState !== "half_issued") return false;
+                if (cState === "half_issued" || String(dashForceCheckoutId) === String(dashViewRes.id)) return true;
+                return checkoutWindowOpen(
+                  { status: dashViewRes.status, borrowTs: toDateTime(dashViewRes.borrow_date, dashViewRes.borrow_time || "00:00") },
+                  { nowMs: Date.now(), leadMs: dashCheckoutLeadMs },
+                );
+              })() ? (<>
+                <div style={{fontWeight:800,fontSize:14,marginBottom:10}}>📦 הוצאת ציוד ({dashViewRes.items?.length||0} פריטים)</div>
+                <CheckoutEquipmentPanel
+                  reservation={dashViewRes}
+                  equipment={equipment}
+                  busy={returnBusy}
+                  recovering={checkoutState(dashViewRes) === "half_issued"}
+                  onComplete={(outcomes) => completeDashCheckout(dashViewRes, outcomes)}
+                />
+              </>) : (checkoutState(dashViewRes)==="issued") && setReservations ? (<>
                 <div style={{fontWeight:800,fontSize:14,marginBottom:10}}>🔄 החזרת ציוד ({dashViewRes.items?.length||0} פריטים)</div>
                 <ReturnEquipmentPanel
                   reservation={dashViewRes}
@@ -675,6 +847,17 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
                   onComplete={(outcomes) => completeDashReturn(dashViewRes, outcomes)}
                 />
               </>) : (<>
+              {/* Approved but pickup is still far off — the manual override for
+                  a student who turns up early. */}
+              {setReservations && checkoutState(dashViewRes)==="pending" && (
+                <button
+                  className="btn btn-sm"
+                  style={{background:"var(--green)",borderColor:"var(--green)",color:"#fff",fontWeight:800,marginBottom:10}}
+                  onClick={()=>setDashForceCheckoutId(dashViewRes.id)}
+                >
+                  <Package size={14} strokeWidth={1.75} /> הוצא עכשיו
+                </button>
+              )}
                 <div style={{fontWeight:800,fontSize:14,marginBottom:10}}>ציוד ({dashViewRes.items?.length||0} פריטים)</div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {(() => {

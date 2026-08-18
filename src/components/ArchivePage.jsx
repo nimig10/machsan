@@ -2,12 +2,13 @@
 import { useMemo, useState } from "react";
 import { formatDate, formatTime, deleteReservation as deleteReservationRpc, groupReservationItemsByCategory } from "../utils.js";
 import { AlertTriangle, Calendar, ChevronLeft, ChevronRight, Film, HelpCircle, Mic, Package, X } from "lucide-react";
-import { ApprovedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
+import { ApprovedByLabel, IssuedByLabel, UpdateHistoryList } from "./reservationActors.jsx";
 import { DateField } from "./DateField.jsx";
 import {
   readReturnOutcomes, returnExceptionSummary, describeExceptions, unitLabel,
   UNIT_DAMAGED, UNIT_MISSING, OUTCOME_COLOR, OUTCOME_BG,
 } from "../utils/returnFlow.js";
+import { readCheckoutOutcomes, describeCheckoutExceptions } from "../utils/checkoutFlow.js";
 
 const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 
@@ -240,6 +241,7 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
           <span><Package size={14} strokeWidth={1.75} color="var(--accent)" /> {archiveItems(r).length} פריטים</span>
           {r.returned_at&&<span style={{color:"var(--text3)"}}>🕐 הוחזר: {new Date(r.returned_at).toLocaleDateString("he-IL")}</span>}
           <ReturnActor r={r}/>
+          <IssuedByLabel reservation={r}/>
           <ApprovedByLabel reservation={r}/>
         </div>
         <div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:4}}>
@@ -475,9 +477,10 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
                 ))}
                 {/* Who handled the return — sits with the people facts, not with
                     the equipment list at the bottom of the modal. */}
-                {(returnActorFor(viewRes) || viewRes.approved_by_name || (reservationUpdates||[]).some(u=>String(u.reservation_id)===String(viewRes.id)&&u.review_status!=="pending")) && (
+                {(returnActorFor(viewRes) || viewRes.approved_by_name || viewRes.issued_at || (reservationUpdates||[]).some(u=>String(u.reservation_id)===String(viewRes.id)&&u.review_status!=="pending")) && (
                   <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid var(--border)",fontSize:13,display:"flex",flexDirection:"column",gap:6}}>
                     <ReturnActor r={viewRes}/>
+                    <IssuedByLabel reservation={viewRes}/>
                     <ApprovedByLabel reservation={viewRes}/>
                     <UpdateHistoryList updates={reservationUpdates} reservationId={viewRes.id}/>
                   </div>
@@ -502,6 +505,15 @@ export function ArchivePage({ reservations, setReservations, equipment, showToas
                 {/* Grouped by category — long archived loans are hard to scan flat.
                     Source is archiveItems (not viewRes.items) so the original-loan
                     snapshot from a partial return keeps being what is documented. */}
+                {/* Two independent banners, in the order the events happened.
+                    A loan can carry both: a unit found broken at handover AND a
+                    different one broken on the way back. Merging them would make
+                    it impossible to tell which end of the loan went wrong. */}
+                {(()=>{ const outc = readCheckoutOutcomes(viewRes); return outc && (
+                  <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:10,background:"rgba(52,152,219,0.08)",border:"1px solid rgba(52,152,219,0.35)",borderRadius:8,padding:"7px 11px",fontSize:12,fontWeight:700,color:"var(--blue)"}}>
+                    <AlertTriangle size={14} strokeWidth={2.2}/> בהוצאה נרשמו חריגים: {describeCheckoutExceptions(outc.totals)}
+                  </div>
+                ); })()}
                 {(()=>{ const outc = readReturnOutcomes(viewRes); return outc && (
                   <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:10,background:"rgba(231,76,60,0.08)",border:"1px solid rgba(231,76,60,0.35)",borderRadius:8,padding:"7px 11px",fontSize:12,fontWeight:700,color:"var(--red)"}}>
                     <AlertTriangle size={14} strokeWidth={2.2}/> בהחזרה נרשמו חריגים: {describeExceptions(outc.totals)}

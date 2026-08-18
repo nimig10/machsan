@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { AlertTriangle, AudioLines, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, Clock, ClipboardList, Download, FileText, Film, GraduationCap, HelpCircle, Info, Link, Lightbulb, LogOut, Mail, Mic, Minus, Package, Pencil, Phone, Plus, Save, Search, Settings, Shield, ShoppingCart, SlidersHorizontal, Trash2, Triangle, Upload, User, Video, Wrench, X, XCircle } from "lucide-react";
-import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, deleteReservation, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB, equipmentWriteInFlight, getValidTokenDirect, groupReservationItemsByCategory, matchesEquipmentTypeFilter, deriveVisibleCategories, stretchOverdueForCalendar } from "./utils.js";
+import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, deleteReservation, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB, equipmentWriteInFlight, getValidTokenDirect, groupReservationItemsByCategory, matchesEquipmentTypeFilter, deriveVisibleCategories, stretchOverdueForCalendar, ACTIVE_RESERVATION_STATUS_FILTERS } from "./utils.js";
+import { lateStatusFor, STATUS_NOT_PICKED_UP } from "./utils/checkoutFlow.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
 import { CalendarGrid } from "./components/CalendarGrid.jsx";
@@ -497,6 +498,12 @@ function markReservationReturned(reservation, returnedAt = new Date()) {
   };
 }
 
+// Mirrors LATE_CANDIDATE_STATUSES in utils.js — the raw statuses that can still
+// escalate once their return time passes. "באיחור" is a candidate and not only an
+// output: the 5-minute cron writes it without consulting issued_at, so the value
+// it stored says nothing about whether the gear ever left the building.
+const LATE_CANDIDATE_STATUSES = ["מאושר", "פעילה", "באיחור"];
+
 function normalizeReservationsForArchive(reservations, now = new Date()) {
   const nowMs = now.getTime();
   return (reservations || []).map((reservation) => {
@@ -515,12 +522,19 @@ function normalizeReservationsForArchive(reservations, now = new Date()) {
       return normalizedReservation.returned_at ? normalizedReservation : markReservationReturned(normalizedReservation, now);
     }
     const returnAt = getReservationReturnTimestamp(normalizedReservation);
-    if (normalizedReservation.status === "מאושר" && returnAt !== null && nowMs >= returnAt) {
-      // Lessons auto-archive; all other types (including staff "צוות") go to "באיחור".
+    // "פעילה" is matched alongside "מאושר" because checkout now writes it for
+    // real; a loan whose gear went out and whose return time passed escalates
+    // here exactly as getEffectiveStatus escalates it (lesson #19).
+    if (LATE_CANDIDATE_STATUSES.includes(normalizedReservation.status)
+        && returnAt !== null && nowMs >= returnAt) {
+      // Lessons auto-archive; all other types (including staff "צוות") take the
+      // label lateStatusFor picks — "באיחור" if the gear actually went out,
+      // "לא יצא?" if nobody ever collected it. Same helper as getEffectiveStatus,
+      // which is the whole of lesson #19: these two must never disagree.
       if (normalizedReservation.loan_type === "שיעור") {
         return markReservationReturned(normalizedReservation, now);
       }
-      return { ...normalizedReservation, status: "באיחור" };
+      return { ...normalizedReservation, status: lateStatusFor(normalizedReservation) };
     }
     return normalizedReservation;
   });
@@ -776,6 +790,14 @@ const css = `
     --border:#252b38; --accent:#f5a623; --accent2:#e8863a; --accent-glow:rgba(245,166,35,0.18);
     --text:#e8eaf0; --text2:#8891a8; --text3:#555f72;
     --green:#2ecc71; --red:#e74c3c; --blue:#3498db; --purple:#9b59b6; --yellow:#f1c40f;
+    /* "לא יצא?" — the one status with no hue of its own until now. It used to
+       borrow --surface2/--text2, i.e. the panel background and secondary body
+       text, so it read as "disabled" rather than as a status. Blue-grey keeps it
+       calm (nothing is missing; the gear never left the shelf) while staying far
+       enough from --text2 to be legible, and far enough from the warm grey the
+       "צוות" LOAN TYPE owns to never be confused with it. */
+    --slate:#b0bec5; --slate-bg:rgba(176,190,197,0.16);
+    --slate-soft:rgba(176,190,197,0.09); --slate-border:rgba(176,190,197,0.38);
     --r:12px; --r-sm:8px;
   }
   [data-theme="light"] {
@@ -783,6 +805,11 @@ const css = `
     --border:#d4d8de; --accent:#d48806; --accent2:#c07a05; --accent-glow:rgba(212,136,6,0.12);
     --text:#1a1d23; --text2:#555d6e; --text3:#8891a0;
     --green:#27ae60; --red:#c0392b; --blue:#2980b9; --purple:#8e44ad; --yellow:#d4a017;
+    /* Swapped rather than overridden per-rule: #b0bec5 on white is 1.91:1 and
+       unreadable. Doing it here fixes the badge AND the nine non-badge sites at
+       once, and keeps the "no .badge-* rule has a light override" invariant. */
+    --slate:#455a64; --slate-bg:rgba(69,90,100,0.14);
+    --slate-soft:rgba(69,90,100,0.07); --slate-border:rgba(69,90,100,0.34);
   }
   [data-theme="light"] body { background:#f0f2f5; color:#1a1d23; }
   [data-theme="light"] .sidebar { background:#ffffff; border-left-color:#d4d8de; }
@@ -898,6 +925,9 @@ const css = `
   .badge-orange { background:rgba(230,126,34,0.18); color:#e67e22; border:1px solid rgba(230,126,34,0.4); }
   .badge-teal { background:rgba(100,181,246,0.15); color:#64b5f6; border:1px solid rgba(100,181,246,0.35); }
   .badge-gray { background:var(--surface2); color:var(--text2); border:1px solid var(--border); }
+  /* Separate class, NOT a change to badge-gray — that one is still the fallback
+     for any unmapped status (statusBadge in ui.jsx) and must stay neutral. */
+  .badge-slate { background:var(--slate-bg); color:var(--slate); border:1px solid var(--slate-border); }
   .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.75); display:flex; align-items:center; justify-content:center; z-index:10000; padding:20px; backdrop-filter:blur(4px); animation:fadeIn 0.15s; }
   .modal { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); width:100%; max-width:580px; max-height:90vh; overflow-y:auto; animation:slideUp 0.2s; }
   .modal-lg { max-width:800px; }
@@ -938,7 +968,12 @@ const css = `
   .toast-error   { border-right:3px solid var(--red); }
   .toast-info    { border-right:3px solid var(--blue); }
   .cal-headers { display:grid; grid-template-columns:repeat(7,1fr); gap:1px; margin-bottom:2px; }
-  .dashboard-bottom-grid { display:grid; grid-template-columns:minmax(520px,640px) minmax(320px,1fr); gap:16px; align-items:start; }
+  /* The 700px growth limit is the ONLY upper bound on the loans calendar. It
+     never causes overflow: the sibling track's minmax(320px,1fr) has a flexible
+     max, so it is frozen at its 320px base and column 1 grows only into slack
+     that already exists. At 1280px there is no slack and the calendar sits at
+     648px; from 1366px up it takes the full 700. */
+  .dashboard-bottom-grid { display:grid; grid-template-columns:minmax(520px,700px) minmax(320px,1fr); gap:16px; align-items:start; }
   .dashboard-bottom-grid > .calendar-card { order:-1; }
   /* min-width:520px keeps the calendar grid readable on desktop. On phones
      it would force 145px of horizontal overflow on a 375px screen, so cap
@@ -4424,7 +4459,7 @@ function ManagerCalendarPage({ reservations: initialReservations, setReservation
 
   const ALL_STATUSES  = ["ממתין","אישור ראש מחלקה","מאושר","נדחה"];
   const STATUS_COLORS = { "מאושר":"var(--green)","ממתין":"var(--yellow)","נדחה":"var(--red)","אישור ראש מחלקה":"#9b59b6" };
-  const STATUS_BADGE  = { "מאושר":"green","ממתין":"yellow","נדחה":"red","באיחור":"orange","אישור ראש מחלקה":"purple" };
+  const STATUS_BADGE  = { "מאושר":"green","ממתין":"yellow","נדחה":"red","באיחור":"orange","לא יצא?":"slate","אישור ראש מחלקה":"purple" };
   const LOAN_ICONS    = { "פרטית":<User size={11} strokeWidth={1.75}/>,"הפקה":<Film size={11} strokeWidth={1.75}/>,"סאונד":<Mic size={11} strokeWidth={1.75}/>,"קולנוע יומית":<Camera size={11} strokeWidth={1.75}/> };
   const HE_M = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
   const HE_D = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
@@ -5417,7 +5452,7 @@ export default function App() {
   const [productions, _setProductions] = useState([]);
   const [policies, _setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"", לילה:"" });
   const [certifications, _setCertifications] = useState({ types:[], students:[] });
-  const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14, aiMaxRequests:5, studioFutureHoursLimit:16, publicDisplayInterval:18, userGuideVideos:[] });
+  const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14, aiMaxRequests:5, studioFutureHoursLimit:16, publicDisplayInterval:18, checkoutLeadHours:3, userGuideVideos:[] });
   // PDF user-guide assets per audience — loaded once + refreshed by realtime
   // when admin uploads/removes from SystemSettingsPage. null = no PDF for that
   // audience → consumer components hide their download button.
@@ -7516,11 +7551,11 @@ export default function App() {
                   <select
                     className="form-select"
                     style={{flex:"1 1 100px",minWidth:95,fontSize:12,padding:"6px 8px"}}
-                    value={["הכל","ממתין","אישור ראש מחלקה","מאושר","פעילה"].includes(resStatusF) ? resStatusF : "הכל"}
+                    value={["הכל",...ACTIVE_RESERVATION_STATUS_FILTERS].includes(resStatusF) ? resStatusF : "הכל"}
                     onChange={e=>setResStatusF(e.target.value)}
                   >
                     <option value="הכל">כל הסטטוסים</option>
-                    {["ממתין","אישור ראש מחלקה","מאושר","פעילה"].map(s=><option key={s} value={s}>{s}</option>)}
+                    {ACTIVE_RESERVATION_STATUS_FILTERS.map(s=><option key={s} value={s}>{s}</option>)}
                   </select>
                   <select className="form-select" style={{flex:"1 1 90px",minWidth:85,fontSize:12,padding:"6px 8px"}} value={resLoanTypeF} onChange={e=>setResLoanTypeF(e.target.value)}>
                     <option value="הכל">כל הסוגים</option>
@@ -7534,7 +7569,7 @@ export default function App() {
               )}
             </div>
             {!loadingDone ? <Loading ready={!loading} accentColor={siteSettings.accentColor} onDone={handleLoadingDone}/> : <>
-              <div style={{display:page==="dashboard"?"block":"none"}}><DashboardPage equipment={equipment} setEquipment={setEquipment} reservations={reservations} setReservations={setReservations} showToast={showToast} siteSettings={siteSettings} equipmentReports={equipmentReports} certifications={certifications} loanHandlers={loanHandlers} reservationUpdates={reservationUpdates} refreshReservationUpdates={loadReservationUpdates} refreshReservations={refreshPublicInventory} categories={categories} collegeManager={collegeManager} managerToken={managerToken}/></div>
+              <div style={{display:page==="dashboard"?"block":"none"}}><DashboardPage equipment={equipment} setEquipment={setEquipment} reservations={reservations} setReservations={setReservations} showToast={showToast} siteSettings={siteSettings} equipmentReports={equipmentReports} certifications={certifications} loanHandlers={loanHandlers} reservationUpdates={reservationUpdates} refreshReservationUpdates={loadReservationUpdates} refreshReservations={refreshPublicInventory} categories={categories} collegeManager={collegeManager} managerToken={managerToken} onLogCreated={attachLogIdToUndo}/></div>
               <div style={{display:page==="equipment"?"block":"none"}}><EquipmentPage equipment={equipment} reservations={reservations} setEquipment={setEquipment} showToast={showToast} categories={categories} setCategories={setCategories} categoryTypes={categoryTypes} setCategoryTypes={setCategoryTypes} categoryLoanTypes={categoryLoanTypes} setCategoryLoanTypes={setCategoryLoanTypes} certifications={certifications} studios={studios} collegeManager={collegeManager} managerToken={managerToken} onLogCreated={attachLogIdToUndo} equipmentReports={equipmentReports} fetchEquipmentReports={fetchEquipmentReports}/></div>
               <div style={{display:page==="reservations"?"block":"none"}}><ReservationsPage reservations={reservations} setReservations={setReservations} equipment={equipment} setEquipment={setEquipment} showToast={showToast}
                 search={resSearch} setSearch={setResSearch} statusF={resStatusF} setStatusF={setResStatusF}

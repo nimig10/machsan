@@ -978,6 +978,30 @@ th{background:#eee;font-weight:700}
         </div>
       </div>
 
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-header"><div className="card-title">📦 מסך הוצאת ציוד</div></div>
+        <div style={{ padding: "16px 20px" }}>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14, lineHeight: 1.7 }}>
+            כמה זמן לפני מועד ההשאלה מסך ההוצאה מופיע מעצמו בבקשה מאושרת.
+            מרגע שהופיע הוא <strong>נשאר זמין ללא הגבלת זמן</strong> עד שהציוד יוצא בפועל,
+            גם אם הסטודנט מאחר. לסטודנט שמגיע מוקדם יותר יש כפתור "הוצא עכשיו" בכל בקשה מאושרת.
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>פתיחת מסך ההוצאה (שעות לפני)</label>
+            <input
+              type="number" min={0} max={72}
+              value={draft.checkoutLeadHours ?? 3}
+              onChange={e => setDraft(p => ({ ...p, checkoutLeadHours: e.target.value }))}
+              onBlur={e => commitNumber("checkout", "checkoutLeadHours", e.target.value, { min: 0, max: 72, fallback: 3 })}
+              onKeyDown={commitOnEnter}
+              disabled={busyPanel === "checkout"}
+              style={{ width: 90, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: 16, textAlign: "center" }}
+            />
+            <span style={{ fontSize: 12, color: "var(--text3)" }}>ברירת מחדל: 3 שעות · נשמר אוטומטית</span>
+          </div>
+        </div>
+      </div>
+
       {renderAnnouncementPanel()}
       {/* Viewer list — a floating panel so it can be opened, scanned and closed
           without losing the admin's place in a long settings page. */}

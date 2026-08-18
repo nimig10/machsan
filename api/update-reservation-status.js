@@ -31,6 +31,7 @@
 import { resolveUserRole } from "./_auth-helper.js";
 // Dependency-free by contract — same import pattern as api/announcement.js.
 import { validateReturnOutcomes } from "../src/utils/returnFlow.js";
+import { validateCheckoutOutcomes } from "../src/utils/checkoutFlow.js";
 
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -112,7 +113,7 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: "Forbidden", reason: role.role === "anon" ? "no_valid_session" : "not_staff" });
   }
 
-  const { id, status, returned_at, return_outcomes } = req.body || {};
+  const { id, status, returned_at, return_outcomes, checkout_outcomes } = req.body || {};
 
   if (!id || typeof id !== "string") {
     return res.status(400).json({ ok: false, error: "Missing or invalid id" });
@@ -138,6 +139,20 @@ export default async function handler(req, res) {
     outcomes = validateReturnOutcomes(return_outcomes);
     if (!outcomes) {
       return res.status(400).json({ ok: false, error: "invalid_return_outcomes" });
+    }
+  }
+
+  // Same contract on the checkout side, gated on the one transition that means
+  // "the gear physically left". A clean checkout sends nothing at all; the
+  // issued_* stamp below is written either way.
+  let checkoutOutcomes = null;
+  if (checkout_outcomes != null) {
+    if (caller.kind !== "staff" || status !== "פעילה") {
+      return res.status(400).json({ ok: false, error: "checkout_outcomes_not_allowed" });
+    }
+    checkoutOutcomes = validateCheckoutOutcomes(checkout_outcomes);
+    if (!checkoutOutcomes) {
+      return res.status(400).json({ ok: false, error: "invalid_checkout_outcomes" });
     }
   }
 
@@ -221,6 +236,73 @@ export default async function handler(req, res) {
     } catch (e) {
       console.error("update-reservation-status: return_outcomes write error:", e.message);
       return res.status(502).json({ ok: false, error: "return_outcomes_write_failed", detail: e.message });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // ── Stamp the handover, BEFORE the status flips ───────────────────────────
+  //
+  // ⚠️ This deliberately does NOT go through stampActor further down, and that
+  // difference is the whole reason this block exists up here.
+  //
+  // stampActor is best-effort by design: 2.5s budget, failure logs and still
+  // returns 200. That is right for returned_by_* / approved_by_*, which are
+  // display-only. issued_at is not — it is what decides whether the warehouse
+  // is shown the checkout panel or the return panel, and it is the gate that
+  // stops a student editing a loan whose gear is in their bag. A silent failure
+  // there, followed by the overdue cron moving the row to באיחור, would offer a
+  // SECOND checkout of gear that already left, and that second checkout would
+  // decrement the item list all over again.
+  //
+  // So it aborts like return_outcomes does: on failure the RPC never runs, the
+  // request stays מאושר, and the operator retries. `issued_at=is.null` makes the
+  // write once-only in the URL itself, so the retry cannot re-stamp — and 0 rows
+  // matched is the recovery path, not an error.
+  //
+  // The identity is derived here from the JWT (never from the client), same rule
+  // as lesson #37+#41; only the timing differs.
+  const actorId   = role.id || null;
+  const actorName = String(role.full_name || role.email || "").trim() || null;
+  let issuedAt = null;
+  let checkoutStampWritten = null;
+  if (caller.kind === "staff" && status === "פעילה") {
+    issuedAt = new Date().toISOString();
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 5000);
+    try {
+      const w = await fetch(
+        `${SB_URL}/rest/v1/reservations_new?id=eq.${encodeURIComponent(String(id))}&issued_at=is.null`,
+        {
+          method: "PATCH",
+          headers: {
+            apikey: SB_KEY,
+            Authorization: `Bearer ${SB_KEY}`,
+            "Content-Type": "application/json",
+            Prefer: "return=headers-only,count=exact",
+          },
+          body: JSON.stringify({
+            issued_at: issuedAt,
+            issued_by_staff_id: actorId,
+            issued_by_name: actorName,
+            // Rides along in the same write: the two are meaningless apart, and
+            // one PATCH means one failure mode instead of two.
+            ...(checkoutOutcomes ? { checkout_outcomes: checkoutOutcomes } : {}),
+          }),
+          signal: ctl.signal,
+        },
+      );
+      if (!w.ok) {
+        const text = await w.text();
+        console.error("update-reservation-status: checkout stamp write failed:", w.status, text);
+        return res.status(502).json({ ok: false, error: "checkout_stamp_write_failed", detail: text });
+      }
+      // 0 rows matched = already stamped by an earlier attempt that died before
+      // the RPC. Fall through and finish the job it started.
+      checkoutStampWritten = /\/0$/.test(w.headers.get("content-range") || "") ? "already" : "written";
+    } catch (e) {
+      console.error("update-reservation-status: checkout stamp write error:", e.message);
+      return res.status(502).json({ ok: false, error: "checkout_stamp_write_failed", detail: e.message });
     } finally {
       clearTimeout(timer);
     }
@@ -317,8 +399,6 @@ export default async function handler(req, res) {
     let returnedById = null, returnedByName = null;
     let approvedById = null, approvedByName = null;
     if (caller.kind === "staff") {
-      const actorId   = role.id || null;
-      const actorName = String(role.full_name || role.email || "").trim() || null;
       if (status === "הוחזר") {
         returnedById = actorId; returnedByName = actorName;
         await stampActor("הוחזר", { returned_by_staff_id: actorId, returned_by_name: actorName });
@@ -335,8 +415,16 @@ export default async function handler(req, res) {
       returned_by_name: returnedByName,
       approved_by_staff_id: approvedById,
       approved_by_name: approvedByName,
+      // Reported only when THIS request actually wrote them. On the "already"
+      // recovery path an earlier attempt owns the stamp and we do not know what
+      // it says, so we return null rather than guess — the next poll brings the
+      // real values, and the client merges with `|| null` (lesson #37+#41).
+      issued_at:          checkoutStampWritten === "written" ? issuedAt : null,
+      issued_by_staff_id: checkoutStampWritten === "written" ? actorId : null,
+      issued_by_name:     checkoutStampWritten === "written" ? actorName : null,
       // "written" | "already" | null — null means no snapshot was sent.
       return_outcomes_written: outcomesWritten,
+      checkout_stamp_written:  checkoutStampWritten,
     });
   } catch (e) {
     console.error("update-reservation-status network error:", e);

@@ -20,7 +20,15 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
   const loanOut = (loanHandlers||[]).find(h=>String(h.reservation_id)===String(reservation.id)&&h.kind==="out");
   const loanReturn = (loanHandlers||[]).find(h=>String(h.reservation_id)===String(reservation.id)&&h.kind==="return");
   const TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30"];
-  const isOverdueReservation = reservation.status==="באיחור";
+  // "Gear is already out of the warehouse" mode — the ceiling for a quantity
+  // becomes what physically went out rather than current availability, and
+  // original_items gets stamped on the first partial return.
+  //
+  // "פעילה" belongs here as much as "באיחור" does. It only ever reached this
+  // file as "מאושר" before, because the status was derived in the browser and
+  // never written; now checkout writes it, and without it a live loan would be
+  // edited against availability it does not have.
+  const isOverdueReservation = reservation.status==="באיחור" || reservation.status==="פעילה";
   const [form, setForm]   = useState({...reservation});
   const [items, setItems] = useState(reservation.items ? [...reservation.items] : []);
   // Overdue mode edits quantities of gear that is already out of the warehouse.
