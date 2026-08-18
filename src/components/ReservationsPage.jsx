@@ -278,10 +278,6 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
     categories=[], certifications={types:[],students:[]}, kits=[], teamMembers=[], deptHeads=[], siteSettings={}, onLogCreated = () => {}, equipmentReports=[], lessons=[], setLessons=null, loanHandlers=[], reservationUpdates=[], refreshReservationUpdates=()=>{}, refreshReservations=async()=>{} }) {
   const [subView, setSubView] = useState("active"); // "active" | "rejected" | "archive"
   const [selected, setSelected] = useState(null);
-  // "הוצא עכשיו" — a student who turns up early. The automatic window still
-  // governs the normal case; this is the manual override for the one at the
-  // counter, and it is per-reservation so opening one does not arm the rest.
-  const [forceCheckoutId, setForceCheckoutId] = useState(null);
   // How long before pickup the checkout screen appears on its own. Admin-set;
   // 3h is the default the feature shipped with. Clamped here as well as in the
   // settings field, because siteSettings arrives from the DB.
@@ -1376,8 +1372,18 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
                   { status: selected.status, borrowTs: toDateTime(selected.borrow_date, selected.borrow_time || "00:00") },
                   { nowMs: Date.now(), leadMs: checkoutLeadMs },
                 );
+                // The hours window is the ONLY way in. There used to be a
+                // "הוצא עכשיו" override here that bypassed it entirely, which let
+                // gear leave days before borrow_date — and since both
+                // computeEquipmentAvailability and create_reservation_v2 derive
+                // their blocking window from borrow_date (never issued_at), that
+                // gear read as AVAILABLE the whole time it sat in a student's bag.
+                // A student who turns up early is handled by moving the pickup
+                // time in עריכת בקשה, which fixes the availability window too.
+                // half_issued is NOT part of that override: it is the recovery
+                // state for a checkout that died mid-write and must stay.
                 return (cState === "pending" || cState === "half_issued")
-                  && (windowOpen || cState === "half_issued" || String(forceCheckoutId) === String(selected.id));
+                  && (windowOpen || cState === "half_issued");
               })() ? (<>
                 <div className="form-section-title">📦 הוצאת ציוד ({(selected.items?.length)||0} פריטים)</div>
                 <CheckoutEquipmentPanel
@@ -1398,18 +1404,8 @@ export function ReservationsPage({ reservations, setReservations, equipment, set
                   onComplete={(outcomes) => completeReturn(selected, outcomes)}
                 />
               </>) : (<>
-              {/* Approved, but pickup is still far off. The window opens on its
-                  own closer to the time; this is for the student who turns up
-                  early and is standing at the counter now. */}
-              {checkoutState(selected)==="pending" && (
-                <button
-                  className="btn btn-sm"
-                  style={{background:"var(--green)",borderColor:"var(--green)",color:"#fff",fontWeight:800,marginBottom:10}}
-                  onClick={()=>setForceCheckoutId(selected.id)}
-                >
-                  <Package size={14} strokeWidth={1.75} /> הוצא עכשיו
-                </button>
-              )}
+              {/* Approved, but pickup is still outside the window — read-only
+                  list. The window opens on its own closer to the time. */}
               <div className="form-section-title">{selected.pending_update_id?"✅ ציוד מאושר":"ציוד מבוקש"} ({selected.items?.length||0} פריטים)</div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {(() => {

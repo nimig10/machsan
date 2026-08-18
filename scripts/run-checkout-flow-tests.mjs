@@ -901,6 +901,45 @@ console.log("\n\x1b[1m> in-flight freeze (checkout + return overlays)\x1b[0m");
   }
 }
 
+
+// ── The "הוצא עכשיו" override is gone, and must stay gone ──────────────────
+//
+// It rendered on checkoutState === "pending" with NO time check at all, and set
+// forceCheckoutId, which bypassed checkoutWindowOpen entirely. Gear could leave
+// days before borrow_date — and because computeEquipmentAvailability AND
+// create_reservation_v2 both derive their blocking window from borrow_date and
+// never from issued_at, that gear read as AVAILABLE for the whole time it sat in
+// a student's bag. Neither layer catches it, which is why the button had to go
+// rather than be time-limited. A student who turns up early is served by moving
+// the pickup time in עריכת בקשה — that fixes the availability window too.
+console.log("\n\x1b[1m> checkout override removed (static)\x1b[0m");
+{
+  const { readFileSync } = await import("node:fs");
+  // The comments explaining the removal legitimately name the button. Scanning
+  // raw text would make this guard fail on its own documentation.
+  const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  for (const [label, file] of [
+    ["ReservationsPage", "../src/components/ReservationsPage.jsx"],
+    ["DashboardPage",    "../src/components/DashboardPage.jsx"],
+  ]) {
+    const src = strip(readFileSync(new URL(file, import.meta.url), "utf8"));
+    check(`${label}: no "הוצא עכשיו" button`, !src.includes("הוצא עכשיו"));
+    check(`${label}: no forceCheckoutId state left`, !/[Ff]orceCheckoutId/.test(src));
+    check(`${label}: checkoutWindowOpen is still the gate`, src.includes("checkoutWindowOpen("));
+    // half_issued sat inside the same || as the override — trivially deleted
+    // along with it, and that would strip the mid-write recovery screen.
+    check(`${label}: half_issued still bypasses the window`, src.includes("half_issued"));
+  }
+  const settings = strip(readFileSync(new URL("../src/components/SystemSettingsPage.jsx", import.meta.url), "utf8"));
+  // 72h = 3 days would reopen the same hole through the settings back door, so
+  // the visual cap and the commit clamp must BOTH be 12 — they disagreed once.
+  check("settings: lead-hours input caps at 12", settings.includes("max={12}"));
+  check("settings: commitNumber clamps to 12 as well", /max:\s*12/.test(settings));
+  check("settings: no 72-hour ceiling left", !/max=\{72\}/.test(settings) && !/max:\s*72/.test(settings));
+  check("settings: copy no longer advertises the button", !settings.includes("הוצא עכשיו"));
+}
+
+
 console.log("");
 if (failed === 0) {
   console.log(`\x1b[32m\x1b[1mOK ${passed}/${passed} checkout-flow tests passed\x1b[0m`);
