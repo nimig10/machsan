@@ -74,9 +74,6 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
   const [dashViewRes, setDashViewRes] = useState(null);
   const [dashUpdateReview, setDashUpdateReview] = useState(null);
   const [returnBusy, setReturnBusy] = useState(false);
-  // "הוצא עכשיו" — the manual override for a student who turns up before the
-  // automatic window opens. Per-reservation, so arming one does not arm the rest.
-  const [dashForceCheckoutId, setDashForceCheckoutId] = useState(null);
   const dashCheckoutLeadMs = Math.max(0, Number(siteSettings?.checkoutLeadHours ?? 3) || 0) * 3600000;
 
   // Completion of the return flow. Mirrors ReservationsPage.completeReturn —
@@ -824,7 +821,13 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
               {setReservations && (() => {
                 const cState = checkoutState(dashViewRes);
                 if (cState !== "pending" && cState !== "half_issued") return false;
-                if (cState === "half_issued" || String(dashForceCheckoutId) === String(dashViewRes.id)) return true;
+                // half_issued still short-circuits the window — it is the recovery
+                // state for a checkout that died mid-write, not an override. The
+                // "הוצא עכשיו" override that used to sit on this line is gone: it
+                // bypassed the window completely, and gear released days before
+                // borrow_date reads as AVAILABLE to both computeEquipmentAvailability
+                // and create_reservation_v2, which key off borrow_date, not issued_at.
+                if (cState === "half_issued") return true;
                 return checkoutWindowOpen(
                   { status: dashViewRes.status, borrowTs: toDateTime(dashViewRes.borrow_date, dashViewRes.borrow_time || "00:00") },
                   { nowMs: Date.now(), leadMs: dashCheckoutLeadMs },
@@ -847,17 +850,7 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
                   onComplete={(outcomes) => completeDashReturn(dashViewRes, outcomes)}
                 />
               </>) : (<>
-              {/* Approved but pickup is still far off — the manual override for
-                  a student who turns up early. */}
-              {setReservations && checkoutState(dashViewRes)==="pending" && (
-                <button
-                  className="btn btn-sm"
-                  style={{background:"var(--green)",borderColor:"var(--green)",color:"#fff",fontWeight:800,marginBottom:10}}
-                  onClick={()=>setDashForceCheckoutId(dashViewRes.id)}
-                >
-                  <Package size={14} strokeWidth={1.75} /> הוצא עכשיו
-                </button>
-              )}
+              {/* Approved but pickup is still outside the window — read-only list. */}
                 <div style={{fontWeight:800,fontSize:14,marginBottom:10}}>ציוד ({dashViewRes.items?.length||0} פריטים)</div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {(() => {

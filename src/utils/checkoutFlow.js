@@ -335,9 +335,11 @@ export function checkoutState(reservation) {
   // the row reaches any component (src/utils.js + the copy in App.jsx), so
   // "לא יצא?" is what this function actually sees for a request nobody
   // collected — the ONE request whose checkout window is still open. Reading it
-  // as an unknown status returned "none", which took away the checkout panel,
-  // "הוצא עכשיו" and even "עריכת בקשה", leaving 🗑 as the only action on the row
-  // the whole feature exists to surface.
+  // as an unknown status returned "none", which took away the checkout panel
+  // and even "עריכת בקשה", leaving 🗑 as the only action on the row the whole
+  // feature exists to surface. (It also took away a "הוצא עכשיו" override that
+  // has since been removed outright — it bypassed checkoutWindowOpen, and gear
+  // released before borrow_date reads as available to every stock computation.)
   //
   // Folding the label back onto באיחור is safe by construction rather than by
   // convention: lateStatusFor only ever emits it when issued_at IS NULL, so it

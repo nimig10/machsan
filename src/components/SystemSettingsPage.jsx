@@ -984,20 +984,22 @@ th{background:#eee;font-weight:700}
           <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14, lineHeight: 1.7 }}>
             כמה זמן לפני מועד ההשאלה מסך ההוצאה מופיע מעצמו בבקשה מאושרת.
             מרגע שהופיע הוא <strong>נשאר זמין ללא הגבלת זמן</strong> עד שהציוד יוצא בפועל,
-            גם אם הסטודנט מאחר. לסטודנט שמגיע מוקדם יותר יש כפתור "הוצא עכשיו" בכל בקשה מאושרת.
+            גם אם הסטודנט מאחר. <strong>זו הדרך היחידה לפתוח את המסך.</strong>
+            סטודנט שמגיע מוקדם יותר — מזיזים את מועד האיסוף ב"עריכת בקשה", והמסך נפתח מיד.
+            כך גם חישוב המלאי נשאר נכון: ציוד שיוצא לפני מועד ההשאלה הרשום ממשיך להיספר כזמין.
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
             <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>פתיחת מסך ההוצאה (שעות לפני)</label>
             <input
-              type="number" min={0} max={72}
+              type="number" min={0} max={12}
               value={draft.checkoutLeadHours ?? 3}
               onChange={e => setDraft(p => ({ ...p, checkoutLeadHours: e.target.value }))}
-              onBlur={e => commitNumber("checkout", "checkoutLeadHours", e.target.value, { min: 0, max: 72, fallback: 3 })}
+              onBlur={e => commitNumber("checkout", "checkoutLeadHours", e.target.value, { min: 0, max: 12, fallback: 3 })}
               onKeyDown={commitOnEnter}
               disabled={busyPanel === "checkout"}
               style={{ width: 90, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: 16, textAlign: "center" }}
             />
-            <span style={{ fontSize: 12, color: "var(--text3)" }}>ברירת מחדל: 3 שעות · נשמר אוטומטית</span>
+            <span style={{ fontSize: 12, color: "var(--text3)" }}>ברירת מחדל: 3 שעות · מקסימום: 12 · נשמר אוטומטית</span>
           </div>
         </div>
       </div>
