@@ -319,8 +319,35 @@ export function recordedCheckoutUnitIds(reservation) {
 // handed over and came back late. Showing the return panel is what the operator
 // needs; the rare half-written row still closes correctly through it.
 export function checkoutState(reservation) {
+  // Lessons are generated from the timetable and never handed over at a
+  // counter. The backfill in 20260813120000 excludes them in SQL for exactly
+  // this reason ("stamping one would offer a checkout screen for a loan no
+  // human is ever meant to process"); excluding them here is what stops the UI
+  // contradicting the migration. Nothing is lost — a lesson is never פעילה, so
+  // it never had a return panel either.
+  if (reservation?.loan_type === "שיעור" || reservation?.lesson_auto) return "none";
+
   const issued = !!reservation?.issued_at;
-  const status = reservation?.status;
+
+  // ⚠️ WHAT ARRIVES HERE IS USUALLY THE DISPLAY LABEL, NOT THE RAW COLUMN.
+  //
+  // normalizeReservationsForArchive rewrites status with lateStatusFor() before
+  // the row reaches any component (src/utils.js + the copy in App.jsx), so
+  // "לא יצא?" is what this function actually sees for a request nobody
+  // collected — the ONE request whose checkout window is still open. Reading it
+  // as an unknown status returned "none", which took away the checkout panel,
+  // "הוצא עכשיו" and even "עריכת בקשה", leaving 🗑 as the only action on the row
+  // the whole feature exists to surface.
+  //
+  // Folding the label back onto באיחור is safe by construction rather than by
+  // convention: lateStatusFor only ever emits it when issued_at IS NULL, so it
+  // lands on "pending". Should a stamp somehow exist, it lands on "issued" and
+  // corrects itself. The recursion lateStatusFor → wasCheckedOut → checkoutState
+  // stays stable for the same reason: "לא יצא?" + no stamp ⇒ "pending" ⇒ not
+  // checked out ⇒ "לא יצא?" again.
+  const raw = reservation?.status;
+  const status = raw === STATUS_NOT_PICKED_UP ? STATUS_OVERDUE : raw;
+
   if (status === "פעילה") return "issued";
   if (issued && status === "באיחור") return "issued";
   if (issued && status === "מאושר") return "half_issued";
@@ -331,6 +358,38 @@ export function checkoutState(reservation) {
 export function wasCheckedOut(reservation) {
   const s = checkoutState(reservation);
   return s === "issued" || s === "half_issued";
+}
+
+// ── the two faces of "past its return time" ─────────────────────────────────
+//
+// "באיחור" meant one thing while every approved request was ASSUMED to have been
+// collected. Now that issued_at records the handover, a request whose return time
+// has passed is one of two unrelated problems, and calling both of them "late"
+// sent the warehouse looking for gear that was on the shelf all along:
+//
+//   gear went out and is late   → "באיחור"   — chase the student
+//   nobody ever collected it    → "לא יצא?"  — the gear never left; ask why
+//
+// The discriminator is wasCheckedOut, deliberately the same one checkoutState
+// uses. Forking that judgement would let the badge and the checkout panel
+// disagree about the very same row.
+//
+// ⚠️ DISPLAY ONLY — NEITHER LABEL IS EVER WRITTEN TO reservations_new.
+//
+// The row stays מאושר/באיחור, and that raw value is what create_reservation_v2
+// and update_reservation_status_v1 read. So every inventory calculation must
+// treat "לא יצא?" EXACTLY as it treats "באיחור" (INVENTORY_BLOCKING_STATUSES and
+// isOverdueLikeStatus in src/utils.js). Miss one and the browser offers stock
+// that the DB then refuses with a bare 409 — the student sees "זמין", submits,
+// and gets told there is no inventory.
+export const STATUS_OVERDUE = "באיחור";
+export const STATUS_NOT_PICKED_UP = "לא יצא?";
+
+// Which label a reservation deserves once its return time has passed. The CALLER
+// owns the "has it passed" test — that needs toDateTime from src/utils.js, which
+// would drag the Supabase client in here (lesson #40).
+export function lateStatusFor(reservation) {
+  return wasCheckedOut(reservation) ? STATUS_OVERDUE : STATUS_NOT_PICKED_UP;
 }
 
 // Is the checkout screen due to appear on its own?
@@ -344,7 +403,11 @@ export function wasCheckedOut(reservation) {
 // in src/utils.js, which drags the Supabase client and would break the Node
 // test runner and the server import (lesson #40).
 export function checkoutWindowOpen({ status, borrowTs } = {}, { nowMs, leadMs } = {}) {
-  if (status !== "מאושר" && status !== "באיחור") return false;
+  // STATUS_NOT_PICKED_UP for the same reason checkoutState folds it onto
+  // באיחור: callers pass reservation.status, which the archive normalizer has
+  // already replaced with the display label. Omitting it here kept the window
+  // shut on the exact request that still needs it.
+  if (status !== "מאושר" && status !== "באיחור" && status !== STATUS_NOT_PICKED_UP) return false;
   if (!Number.isFinite(borrowTs) || borrowTs <= 0) return false;
   if (!Number.isFinite(nowMs)) return false;
   const lead = Number.isFinite(leadMs) ? Math.max(0, leadMs) : 0;

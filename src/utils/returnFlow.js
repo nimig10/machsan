@@ -40,11 +40,23 @@ export const RETURN_OUTCOMES_VERSION = 1;
 // Palette shared by the return panel and the archive so a "פגום" chip is the
 // same colour wherever it appears. Values are CSS custom-property NAMES, not a
 // stylesheet import — this module must stay runnable under plain Node.
+//
+// ⚠️ תקין IS BLUE, NOT GREEN, and that is the one rule the two warehouse screens
+// hang on: BLUE MEANS THE GEAR IS AT THE WAREHOUSE, GREEN MEANS IT IS OUT.
+// The checkout panel is green (יוצא) with a blue החזר for the unit that never
+// leaves; the return panel is blue throughout, matching its own button and the
+// archive's "🔵 הוחזר". The two flows are nearly identical in shape — same
+// cards, same tap-to-mark, same per-unit overlay — so colour is the only thing
+// telling an operator at a glance which one they are standing in. It was green
+// on both, and they were mistaken for each other.
+//
+// UNIT_OK never reaches the archive (תקין is never stored — lesson #48), so this
+// entry is read by the panel alone; פגום/נעלם are the shared ones.
 export const OUTCOME_COLOR = {
-  [UNIT_OK]: "var(--green)", [UNIT_DAMAGED]: "var(--red)", [UNIT_MISSING]: "#9b59b6",
+  [UNIT_OK]: "var(--blue)", [UNIT_DAMAGED]: "var(--red)", [UNIT_MISSING]: "#9b59b6",
 };
 export const OUTCOME_BG = {
-  [UNIT_OK]: "rgba(46,204,113,0.15)", [UNIT_DAMAGED]: "rgba(231,76,60,0.15)", [UNIT_MISSING]: "rgba(155,89,182,0.18)",
+  [UNIT_OK]: "rgba(52,152,219,0.15)", [UNIT_DAMAGED]: "rgba(231,76,60,0.15)", [UNIT_MISSING]: "rgba(155,89,182,0.18)",
 };
 
 // Caps for the server-side gate. The column ships to every staff client on

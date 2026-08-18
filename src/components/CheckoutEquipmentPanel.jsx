@@ -26,7 +26,7 @@
 // src/utils/checkoutFlow.js, under test.
 
 import { useMemo, useState } from "react";
-import { Package, CheckCircle, PackageCheck, AlertTriangle, HelpCircle, Undo2, X } from "lucide-react";
+import { Package, CheckCircle, PackageCheck, AlertTriangle, Eraser, HelpCircle, Undo2, X } from "lucide-react";
 import { groupReservationItemsByCategory } from "../utils.js";
 import {
   UNIT_DAMAGED, UNIT_MISSING, UNIT_ISSUED, UNIT_RETURNED,
@@ -34,6 +34,12 @@ import {
   pickUnitsForCheckout, summarizeCheckout, unitLabel,
   checkoutSeedItems, recordedCheckoutUnitIds, computeCheckoutItems,
 } from "../utils/checkoutFlow.js";
+import {
+  useWarehouseMarks, toggleWarehouseGreen, setWarehouseVerdict, clearWarehouseMarks,
+} from "../hooks/useWarehouseMarks.js";
+import {
+  FLOW_CHECKOUT, markKeysFor, visibleGreenKeys, countDroppedGreen, mergeUnitVerdicts, hasAnyMarks,
+} from "../utils/markDraft.js";
 
 // Green, where the return panel is blue. Gear going OUT and gear coming BACK
 // are the two things a warehouse worker must never confuse at a glance, and the
@@ -144,8 +150,19 @@ function UnitRow({ unitId, status, fault, onStatus, onFault }) {
 }
 
 export function CheckoutEquipmentPanel({ reservation, equipment = [], onComplete, busy = false, recovering = false }) {
-  const [greenKeys, setGreenKeys] = useState(() => new Set());
-  const [exceptions, setExceptions] = useState(null); // null | [{key, eq, item, units:[{id,status,fault}]}]
+  // ⚠️ THE MARKS DO NOT LIVE HERE ANY MORE — see src/hooks/useWarehouseMarks.js.
+  //
+  // This panel is rendered conditionally inside its host modal, so closing the
+  // request view (including by clicking the backdrop, which is one stray click)
+  // unmounted it and React destroyed every mark the operator had made. Holding
+  // them above the modal is the fix; reading the store during render, rather
+  // than seeding state from it, is what keeps lesson #42 away.
+  //
+  // `detailOpen` is the only local state left, and it is a pure view flag.
+  // `exceptions` used to be BOTH "is the overlay open" AND "the per-unit work",
+  // which is exactly why pressing "סגור" threw the work away. Two things now.
+  const draft = useWarehouseMarks(FLOW_CHECKOUT, reservation?.id);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   // ⚠️ Seeded from original_items ?? items, NEVER from items alone. If an
   // earlier attempt already decremented the list, seeding from the live rows
@@ -158,7 +175,19 @@ export function CheckoutEquipmentPanel({ reservation, equipment = [], onComplete
   );
   const allEntries = useMemo(() => groups.flatMap(g => g.entries), [groups]);
   const total = allEntries.length;
-  const greenCount = allEntries.filter(e => greenKeys.has(String(e.index))).length;
+
+  // Marks hang on equipment ids, never on array position — the nested item rows
+  // come back from PostgREST unordered, so a position key would re-attach a mark
+  // to a different piece of gear. `lines` carries each quantity so a mark made
+  // against a quantity somebody has since changed is refused, not re-applied.
+  const markKeys = useMemo(() => markKeysFor(seedItems), [seedItems]);
+  const lines = useMemo(
+    () => allEntries.map(e => ({ key: markKeys[e.index], qty: e.item.quantity })),
+    [allEntries, markKeys],
+  );
+  const greenKeys = useMemo(() => visibleGreenKeys(draft, lines), [draft, lines]);
+  const droppedCount = useMemo(() => countDroppedGreen(draft, lines), [draft, lines]);
+  const greenCount = greenKeys.size;
   const allGreen = greenCount === total;
 
   // Units a previous attempt already ruled on. Without this the panel would
@@ -167,33 +196,67 @@ export function CheckoutEquipmentPanel({ reservation, equipment = [], onComplete
   // condemn a second healthy unit.
   const recorded = useMemo(() => recordedCheckoutUnitIds(reservation), [reservation]);
 
-  const toggle = (key) => setGreenKeys((prev) => {
-    const next = new Set(prev);
-    if (next.has(key)) next.delete(key); else next.add(key);
-    return next;
-  });
+  const toggle = (markKey, qty) =>
+    toggleWarehouseGreen(FLOW_CHECKOUT, reservation?.id, markKey, !greenKeys.has(markKey), qty);
 
   // "הוצא": straight through when every card is green, otherwise open the
   // per-unit step for the cards that are not.
   const startCheckout = () => {
-    const pending = allEntries.filter(e => !greenKeys.has(String(e.index)));
-    if (pending.length === 0) { onComplete([]); return; }
-    setExceptions(pending.map(({ item, eq, index }) => ({
-      key: String(index),
-      item,
-      eq,
-      units: pickUnitsForCheckout(eq, item.quantity, { include: recorded })
-        .map(u => ({ id: u.id, status: UNIT_ISSUED, fault: "" })),
-    })));
+    if (allGreen) { onComplete([]); return; }
+    setDetailOpen(true);
   };
 
-  const patchUnit = (rowKey, unitId, patch) => setExceptions(prev => prev.map(row =>
-    row.key !== rowKey ? row : { ...row, units: row.units.map(u => u.id === unitId ? { ...u, ...patch } : u) },
-  ));
+  // The per-unit rows are DERIVED, not stored — which is what lets the overlay
+  // be closed and reopened without losing anything. mergeUnitVerdicts lays the
+  // saved verdicts onto a freshly picked unit list, and mapping over that fresh
+  // list IS the pruning: a unit the picker no longer offers (another screen
+  // marked it פגום) simply has no row, so a stale verdict cannot resurrect it.
+  //
+  // ⚠️ The detailOpen gate is load bearing. `outcomes` below must stay [] while
+  // the overlay is shut, exactly as it was when `exceptions` was null — that is
+  // the contract computeCheckoutItems is read against everywhere else.
+  const liveDetailRows = useMemo(() => {
+    if (!detailOpen) return [];
+    return allEntries
+      .filter(e => !greenKeys.has(markKeys[e.index]))
+      .map(({ item, eq, index }) => {
+        const key = markKeys[index];
+        return {
+          key,
+          item,
+          eq,
+          units: mergeUnitVerdicts(
+            draft,
+            key,
+            pickUnitsForCheckout(eq, item.quantity, { include: recorded }),
+            { defaultStatus: UNIT_ISSUED, damagedStatus: UNIT_DAMAGED, allowed: CHECKOUT_OUTCOMES },
+          ),
+        };
+      });
+  }, [detailOpen, allEntries, markKeys, greenKeys, recorded, draft]);
 
-  const outcomes = useMemo(() => (exceptions || []).flatMap(row =>
+  // ⚠️ THE OVERLAY FREEZES THE MOMENT THE OPERATOR COMMITS — see the long note on
+  // the same lines in ReturnEquipmentPanel. The failure mode is identical because
+  // completeEquipmentCheckout also calls setEquipment optimistically, before its
+  // round trip: a unit marked פגום or נעלם stops being תקין, drops out of
+  // pickUnitsForCheckout, and the row re-derives onto different hardware drawn at
+  // the default יוצא. The operator watches their own mark undo itself while the
+  // button still says "שומר…".
+  //
+  // `recorded` does NOT cover this. It is read off reservation.checkout_outcomes,
+  // which the server has not written yet at this point in the flow — it rescues
+  // the NEXT mount (the recovery banner), not this one.
+  //
+  // Once the operator commits, this overlay is a receipt, not an editor.
+  const [submittedRows, setSubmittedRows] = useState(null);
+  const detailRows = busy && submittedRows ? submittedRows : liveDetailRows;
+
+  const patchUnit = (markKey, unitId, patch) =>
+    setWarehouseVerdict(FLOW_CHECKOUT, reservation?.id, markKey, unitId, patch);
+
+  const outcomes = useMemo(() => detailRows.flatMap(row =>
     row.units.map(u => ({ equipmentId: row.eq?.id, unitId: u.id, status: u.status, fault: u.fault })),
-  ), [exceptions]);
+  ), [detailRows]);
   const summary = summarizeCheckout(outcomes);
 
   // What the request will actually say afterwards — shown per line so nobody
@@ -241,8 +304,8 @@ export function CheckoutEquipmentPanel({ reservation, equipment = [], onComplete
                 key={index}
                 eq={eq}
                 item={item}
-                green={greenKeys.has(String(index))}
-                onToggle={() => toggle(String(index))}
+                green={greenKeys.has(markKeys[index])}
+                onToggle={() => toggle(markKeys[index], item.quantity)}
               />
             ))}
           </div>
@@ -256,10 +319,40 @@ export function CheckoutEquipmentPanel({ reservation, equipment = [], onComplete
         display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 14,
         paddingTop: 14, borderTop: "1px solid var(--border)",
       }}>
-        <span style={{ fontSize: 12.5, color: "var(--text2)", minWidth: 0, flex: "1 1 180px" }}>
-          סומנו <strong style={{ color: allGreen ? "var(--green)" : "var(--text)" }}>{greenCount}</strong> מתוך {total} פריטים
-          {!allGreen && <span style={{ color: "var(--text3)" }}> — השאר יפורטו בשלב הבא</span>}
+        <span style={{ fontSize: 12.5, color: "var(--text2)", minWidth: 0, flex: "1 1 180px", display: "flex", flexDirection: "column", gap: 2 }}>
+          <span>
+            סומנו <strong style={{ color: allGreen ? "var(--green)" : "var(--text)" }}>{greenCount}</strong> מתוך {total} פריטים
+            {!allGreen && <span style={{ color: "var(--text3)" }}> — השאר יפורטו בשלב הבא</span>}
+          </span>
+          {/* Said out loud, because the only other way to discover it is to lose
+              work once and be pleasantly surprised the next time. */}
+          {greenCount > 0 && (
+            <span style={{ fontSize: 11, color: "var(--text3)" }}>
+              הסימונים נשמרים — אפשר לצאת מהבקשה ולחזור אליה
+            </span>
+          )}
+          {/* A mark refused by visibleGreenKeys is otherwise invisible, and looks
+              exactly like the bug this whole change fixes. */}
+          {droppedCount > 0 && (
+            <span style={{ fontSize: 11, color: "#e67e22", fontWeight: 700 }}>
+              {droppedCount === 1 ? "סימון אחד לא שוחזר" : `${droppedCount} סימונים לא שוחזרו`} — הפריט או הכמות בבקשה השתנו
+            </span>
+          )}
         </span>
+        {/* Closing the modal USED to be how an operator abandoned a half-marked
+            request. Keeping the marks takes that away, so this replaces it —
+            deliberately the quietest control in the row, so it can never be
+            mistaken for the green one next to it. */}
+        {hasAnyMarks(draft) && (
+          <button
+            className="btn"
+            disabled={busy}
+            onClick={() => clearWarehouseMarks(FLOW_CHECKOUT, reservation?.id)}
+            style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text2)", fontSize: 12.5, fontWeight: 700, padding: "9px 14px" }}
+          >
+            <Eraser size={13} strokeWidth={1.75} /> נקה סימונים
+          </button>
+        )}
         <button
           className="btn"
           style={{ ...GREEN_BTN, fontSize: 14, padding: "10px 28px" }}
@@ -270,18 +363,19 @@ export function CheckoutEquipmentPanel({ reservation, equipment = [], onComplete
         </button>
       </div>
 
-      {exceptions && (
-        <div className="modal-overlay return-exceptions-overlay" onClick={(e) => { if (!busy && e.target === e.currentTarget) setExceptions(null); }}>
+      {detailOpen && (
+        <div className="modal-overlay return-exceptions-overlay" onClick={(e) => { if (!busy && e.target === e.currentTarget) setDetailOpen(false); }}>
           <div className="modal modal-lg">
             <div className="modal-header">
               <span className="modal-title">
                 <AlertTriangle size={16} strokeWidth={1.75} color="var(--accent)" /> טיפול בפריטים חריגים
               </span>
-              {/* The only way out without saving — one escape, in the place
-                  every other modal in the app puts it. Disabled mid-write. */}
+              {/* Backs out to the card list. It no longer discards anything —
+                  the verdicts live in the store and are merged back on the way
+                  in — so this is a close, not a cancel. Disabled mid-write. */}
               <button
                 className="btn"
-                onClick={() => setExceptions(null)}
+                onClick={() => setDetailOpen(false)}
                 disabled={busy}
                 style={{
                   background: "var(--surface2)", color: "var(--text)",
@@ -300,7 +394,7 @@ export function CheckoutEquipmentPanel({ reservation, equipment = [], onComplete
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                {exceptions.map(row => {
+                {detailRows.map(row => {
                   const before = Number(row.item.quantity) || 0;
                   const after = nextQtyFor(row.eq?.id);
                   return (
@@ -348,7 +442,14 @@ export function CheckoutEquipmentPanel({ reservation, equipment = [], onComplete
                 <strong style={{ color: "#9b59b6" }}>{summary.missing}</strong> נעלמו ·{" "}
                 <strong style={{ color: "var(--blue)" }}>{summary.returned}</strong> חוזרות למלאי
               </span>
-              <button className="btn" style={{ ...GREEN_BTN, fontSize: 14, padding: "10px 28px" }} disabled={busy} onClick={() => onComplete(outcomes)}>
+              {/* Snapshot first, then commit — both read from this render, so
+                  what stays on screen is exactly what was submitted. */}
+              <button
+                className="btn"
+                style={{ ...GREEN_BTN, fontSize: 14, padding: "10px 28px" }}
+                disabled={busy}
+                onClick={() => { setSubmittedRows(detailRows); onComplete(outcomes); }}
+              >
                 {busy ? "שומר…" : <><PackageCheck size={15} strokeWidth={2} /> השלם הוצאה</>}
               </button>
             </div>

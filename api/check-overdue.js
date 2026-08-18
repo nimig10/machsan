@@ -75,7 +75,7 @@ export default async function handler(req, res) {
   try {
     // ── Fetch active reservations from DB (not store blob — that's empty) ──
     const supaRes = await fetch(
-      `${SB_URL}/rest/v1/reservations_new?status=not.in.(הוחזר,נדחה,בוטל,מבוטל)&select=id,email,student_name,loan_type,borrow_date,return_date,return_time,status,overdue_notified,overdue_email_sent,reminder_sent`,
+      `${SB_URL}/rest/v1/reservations_new?status=not.in.(הוחזר,נדחה,בוטל,מבוטל)&select=id,email,student_name,loan_type,borrow_date,return_date,return_time,status,issued_at,overdue_notified,overdue_email_sent,reminder_sent`,
       { headers: SB_HEADERS }
     );
     if (!supaRes.ok) throw new Error(`Supabase fetch failed: ${supaRes.status}`);
@@ -132,8 +132,25 @@ export default async function handler(req, res) {
         continue;
       }
 
-      // Send overdue email (all loan types, including "צוות")
-      if (r.email && !r.overdue_email_sent && !r.overdue_notified) {
+      // ⚠️ NEVER-COLLECTED REQUESTS GET NO OVERDUE EMAIL.
+      //
+      // The status above is still written — the row genuinely is past its return
+      // time, the UI re-labels it to "לא יצא?" from issued_at, and leaving the
+      // email flags unset means the real overdue email still fires later if the
+      // gear does go out and comes back late.
+      //
+      // But the email itself is subject-lined "אזהרת איחור בהחזרת ציוד — נדרשת
+      // פעולה מיידית", and sending that to somebody who never picked anything up
+      // accuses them of losing gear that has been on the shelf the whole time.
+      // The anomaly is surfaced to STAFF instead, as a "לא יצא?" badge on the
+      // request and its own dashboard tile — a human decides what to do.
+      //
+      // Trade-off, stated on purpose: if an operator hands gear over and forgets
+      // to run the checkout screen, that loan looks uncollected and its student
+      // gets no overdue email. The badge is what makes the missed step visible.
+      if (!r.issued_at) {
+        console.log(`  no overdue email: ${r.id} was never checked out (issued_at is null)`);
+      } else if (r.email && !r.overdue_email_sent && !r.overdue_notified) {
         try {
           await fetch(`${baseUrl}/api/send-email`, {
             method: "POST",

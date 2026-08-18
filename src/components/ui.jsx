@@ -31,7 +31,17 @@ export function statusBadge(s) {
   // "בדיקת עדכון" is a DISPLAY state (a pending student equipment-update on an
   // approved reservation, derived from reservations_new.pending_update_id) —
   // never a base status, and deliberately NOT in the inventory-blocking set.
-  const m = { "מאושר":"badge-green","פעילה":"badge-teal","ממתין":"badge-yellow","נדחה":"badge-red","הוחזר":"badge-blue","באיחור":"badge-orange","אישור ראש מחלקה":"badge-purple","בדיקת עדכון":"badge-orange","תקין":"badge-green","פגום":"badge-red","בתיקון":"badge-yellow","נעלם":"badge-red" };
+  //
+  // "לא יצא?" is also display-only, derived from a NULL issued_at (lesson #51).
+  // Slate on purpose: nothing is missing and nobody is in trouble — the gear
+  // never left the shelf. Orange here would put it next to "באיחור", which is
+  // exactly the conflation the label was added to end. It DOES still hold
+  // inventory, though; see INVENTORY_BLOCKING_STATUSES in utils.js.
+  //
+  // badge-slate rather than badge-gray: gray is the fallback below for anything
+  // unmapped, and it borrows --surface2/--text2, which made this status read as
+  // disabled chrome instead of a status.
+  const m = { "מאושר":"badge-green","פעילה":"badge-teal","ממתין":"badge-yellow","נדחה":"badge-red","הוחזר":"badge-blue","באיחור":"badge-orange","לא יצא?":"badge-slate","אישור ראש מחלקה":"badge-purple","בדיקת עדכון":"badge-orange","תקין":"badge-green","פגום":"badge-red","בתיקון":"badge-yellow","נעלם":"badge-red" };
   return <span className={`badge ${m[normalizedStatus]||"badge-gray"}`}>{normalizedStatus}</span>;
 }
 export function Toast({ toasts }) {

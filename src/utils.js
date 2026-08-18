@@ -1,5 +1,10 @@
 // utils.js — shared constants, storage helpers, and utility functions
 import { supabase } from "./supabaseClient.js";
+// checkoutFlow.js is dependency-free (it imports only returnFlow.js), so this
+// direction is safe and there is no cycle: it never imports from here.
+import { lateStatusFor, STATUS_NOT_PICKED_UP } from "./utils/checkoutFlow.js";
+
+export { STATUS_NOT_PICKED_UP };
 
 // ─── AUTH TOKEN ───────────────────────────────────────────────────────────────
 // Coalesce concurrent getSession() calls. Each call to supabase.auth.getSession()
@@ -918,17 +923,28 @@ export function toDateTime(dateStr, timeStr) {
 // "פעילה" for every approved request whose pickup hour passed, and the checkout
 // screen would vanish from exactly the requests that still need it.
 //
-// The באיחור branch stays, and now covers "פעילה" too. That is what keeps this
+// The late branch stays, and now covers "פעילה" too. That is what keeps this
 // function and normalizeReservationsForArchive deriving IDENTICALLY (lesson
 // #19) — without it a genuinely-active loan would keep displaying as "פעילה"
 // until the 5-minute cron got round to it, while the archive normalizer had
 // already moved on, which is precisely the disagreement that produced the
 // original פעילה↔באיחור flicker.
+//
+// That branch now splits in two via lateStatusFor: gear that actually went out
+// reads "באיחור", and a request nobody ever collected reads "לא יצא?". Both are
+// display labels only — see the contract on lateStatusFor.
+//
+// "באיחור" is itself a CANDIDATE for re-labelling, not just an output. The
+// 5-minute cron stamps באיחור on any open row past its return time without
+// looking at issued_at, so the raw value it stored says nothing about whether the
+// gear ever left; issued_at does.
+const LATE_CANDIDATE_STATUSES = ["מאושר", "פעילה", "באיחור"];
+
 export function getEffectiveStatus(r) {
   const status = r?.status;
-  if ((status === "מאושר" || status === "פעילה") && r.borrow_date) {
+  if (LATE_CANDIDATE_STATUSES.includes(status) && r.borrow_date) {
     const returnAt = getReservationReturnTimestamp(r);
-    if (returnAt !== null && Date.now() >= returnAt && r.loan_type !== "שיעור") return "באיחור";
+    if (returnAt !== null && Date.now() >= returnAt && r.loan_type !== "שיעור") return lateStatusFor(r);
   }
   return status || "";
 }
@@ -992,9 +1008,11 @@ export function normalizeReservationsForArchive(reservations, now = new Date()) 
     // real. A loan whose gear went out and whose return time passed must
     // escalate here exactly as getEffectiveStatus escalates it — the two
     // deriving differently is what caused the original flicker (lesson #19).
-    if ((normalizedReservation.status === "מאושר" || normalizedReservation.status === "פעילה")
+    if (LATE_CANDIDATE_STATUSES.includes(normalizedReservation.status)
         && returnAt !== null && nowMs >= returnAt) {
-      // Lessons auto-archive, regular loans go to "באיחור".
+      // Lessons auto-archive; everything else takes the label lateStatusFor
+      // picks — "באיחור" if the gear went out, "לא יצא?" if it never did. Using
+      // the same helper as getEffectiveStatus is the whole of lesson #19.
       // Staff loans (loan_type="צוות") stay put until a staff member manually
       // clicks "הוחזר" — they never auto-escalate.
       if (normalizedReservation.loan_type === "שיעור") {
@@ -1003,7 +1021,7 @@ export function normalizeReservationsForArchive(reservations, now = new Date()) 
       if (normalizedReservation.loan_type === "צוות") {
         return normalizedReservation;
       }
-      return { ...normalizedReservation, status: "באיחור" };
+      return { ...normalizedReservation, status: lateStatusFor(normalizedReservation) };
     }
     return normalizedReservation;
   });
@@ -1028,6 +1046,12 @@ export function normalizeReservationsForArchive(reservations, now = new Date()) 
 // tint the overrun and avoid claiming the loan came back today. Availability is
 // untouched: computeEquipmentAvailability reads the original rows and applies
 // OVERDUE_BLOCK_BUFFER_MS, and never sees a stretched copy.
+//
+// ⚠️ "לא יצא?" is deliberately NOT stretched, and the equality test below is what
+// excludes it. Stretching draws a bar that says "this gear is still out of the
+// warehouse" — a lie for a request nobody ever collected, whose gear has been on
+// the shelf the whole time. Those rows stay visible where they matter, in the
+// requests list with their own badge.
 export function stretchOverdueForCalendar(reservations, todayString = today()) {
   return (reservations || []).map(r => {
     if (!r?.return_date || r.return_date >= todayString) return r;
@@ -1044,6 +1068,48 @@ export const FAR_FUTURE = new Date("2099-12-31T23:59:00").getTime();
 // return_date is allowed (gear is expected back by then). 48h matches the
 // warehouse staff's tolerance for chasing overdue returns.
 export const OVERDUE_BLOCK_BUFFER_MS = 48 * 60 * 60 * 1000;
+
+// ⚠️ THE BRIDGE BETWEEN THE DISPLAY LABEL AND THE INVENTORY MATH.
+//
+// "לא יצא?" is a label this file invents; the DB row underneath is still
+// מאושר/באיחור, and that raw value is what create_reservation_v2 and
+// update_reservation_status_v1 count. So anything deciding whether a row ties up
+// stock must list it alongside "באיחור" — the two lists below exist so that
+// decision is made in one place instead of at every call site.
+//
+// Leave it out and the failure is silent and one-sided: the browser shows the
+// gear as available, the student submits, and the RPC rejects the request with a
+// bare 409. Nothing in the UI would look wrong.
+export const INVENTORY_BLOCKING_STATUSES = ["מאושר", "פעילה", "באיחור", STATUS_NOT_PICKED_UP];
+
+// Which labels get the 48h grace window bolted onto their return time. Both do,
+// and identically — a never-collected request blocks exactly as long as it did
+// when it was simply called "באיחור", because the DB's own guards still treat it
+// that way. Narrowing this would hand the browser a more generous view of stock
+// than the RPC has, which is the same one-sided failure described above.
+export function isOverdueLikeStatus(status) {
+  return status === "באיחור" || status === STATUS_NOT_PICKED_UP;
+}
+
+// The status filter offered on the ACTIVE requests page. Exported because the
+// dropdown lives in App.jsx while the row-membership test lives in
+// ReservationsPage.jsx, and the list was previously spelled out in three places —
+// a filter option with no matching row (or a row with no way to filter to it) is
+// the failure mode that duplication produces here.
+//
+// "באיחור" is absent on purpose: genuinely-late loans have their own sub-page.
+// "לא יצא?" belongs HERE rather than there — its checkout window is still open,
+// so the warehouse must be able to reach it from the working list.
+export const ACTIVE_RESERVATION_STATUS_FILTERS = ["ממתין", "אישור ראש מחלקה", "מאושר", "פעילה", STATUS_NOT_PICKED_UP];
+
+// Statuses on which staff may open "עריכת בקשה". Read against the row's status
+// as it stands AFTER normalizeReservationsForArchive, which is why the display
+// label is in the list rather than the raw value it stands for.
+//
+// It was spelled out inline in three places and "לא יצא?" reached none of them,
+// so the request that most needs attention lost its edit button along with its
+// checkout panel — 🗑 was the only remaining action. One list, three call sites.
+export const STAFF_EDITABLE_STATUSES = ["ממתין", "מאושר", "פעילה", "נדחה", "באיחור", STATUS_NOT_PICKED_UP];
 
 // Loan types that physically take gear OUT of campus. Equipment flagged
 // "מוגבל להשאלת חוץ" (external_loan_restricted) is hidden from these flows, and
@@ -1089,16 +1155,20 @@ export function computeEquipmentAvailability(eqId, reqStart, reqEnd, reservation
   for (const res of reservations) {
     if (res.id === excludeId) continue;
     const effStatus = getEffectiveStatus(res);
-    // Only "מאושר" / "פעילה" / "באיחור" actually tie up inventory.
+    // Only מאושר / פעילה / באיחור / "לא יצא?" actually tie up inventory.
     // Pending requests ("ממתין", "אישור ראש מחלקה") are tentative — the equipment
     // isn't yet allocated, so they MUST NOT block other lecturers/students from
     // requesting the same equipment for the same window. Staff sees pending
     // overlaps via getReservationApprovalConflicts at approval time.
-    if (!["מאושר","פעילה","באיחור"].includes(effStatus)) continue;
+    //
+    // "לא יצא?" is in the list because it is a LABEL, not a state: the row is
+    // still מאושר/באיחור in the DB and still holds its allocation there. Dropping
+    // it here would free the stock in the browser only.
+    if (!INVENTORY_BLOCKING_STATUSES.includes(effStatus)) continue;
     const s = toDateTime(res.borrow_date, res.borrow_time || "00:00");
     // Overdue items block only within OVERDUE_BLOCK_BUFFER_MS of their scheduled
     // return — a loan starting >48h after the overdue return_date can be approved.
-    const e = effStatus === "באיחור"
+    const e = isOverdueLikeStatus(effStatus)
       ? toDateTime(res.return_date, res.return_time || "23:59") + OVERDUE_BLOCK_BUFFER_MS
       : toDateTime(res.return_date, res.return_time || "23:59");
     // Overlap: new period starts before existing ends AND new period ends after existing starts

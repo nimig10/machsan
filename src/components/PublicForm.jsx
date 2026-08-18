@@ -460,6 +460,11 @@ const STATUS_BADGE_COLORS = {
   "מאושר":            { bg:"rgba(22,163,74,0.16)",  fg:"#16a34a" },
   "פעילה":            { bg:"rgba(37,99,235,0.16)",  fg:"#2563eb" },
   "באיחור":           { bg:"rgba(220,38,38,0.16)",  fg:"#dc2626" },
+  // Neutral on purpose — calm, not dim. It tells the student their gear is still
+  // waiting at the warehouse, not that they did anything wrong. But it is also
+  // the one status here that requires them to act, and the same request must not
+  // read brighter to the warehouse than it does to the person who has to respond.
+  "לא יצא?":          { bg:"var(--slate-bg)",       fg:"var(--slate)" },
   "ממתין":            { bg:"rgba(107,114,128,0.18)",fg:"#6b7280" },
   "אישור ראש מחלקה":  { bg:"rgba(124,58,237,0.18)",fg:"#7c3aed" },
 };
@@ -467,9 +472,10 @@ const STATUS_BADGE_COLORS = {
 function ActiveLoanCard({ reservation, equipById }) {
   const r = reservation;
   const [open, setOpen] = useState(false);
-  // getEffectiveStatus promotes "מאושר" → "פעילה" once the borrow window starts.
-  // Show the effective status on the badge so an active loan reads "פעילה"
-  // even though the row in reservations_new still stores "מאושר".
+  // The badge shows the EFFECTIVE status, not the stored one. "פעילה" is no
+  // longer conjured from a clock — checkout writes it — but the row can still
+  // read "מאושר" while the student is looking at a loan that is already late, or
+  // at one whose gear they never came to collect ("לא יצא?").
   const effectiveStatus = getEffectiveStatus(r);
   const badge = STATUS_BADGE_COLORS[effectiveStatus] || { bg:"var(--surface)", fg:"var(--text3)" };
   const loanTypeColor = r.loan_type ? getLoanTypeColor(r.loan_type) : ["var(--surface2)","var(--text3)"];
