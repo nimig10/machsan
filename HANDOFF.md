@@ -9,7 +9,7 @@
 
 | | מצב |
 |---|---|
-| קוד | ✅ נדחף — 5 קומיטים על `feat/roster-name-source-of-truth` |
+| קוד | ✅ נדחף. ענף `feat/roster-name-source-of-truth`, **[PR #121](https://github.com/nimig10/machsan/pull/121)** פתוח מול `main` |
 | `npm run test:identity` (חדש) | ✅ **100/100** |
 | 10 החבילות הקיימות | ✅ ירוקות — checkout 196 · return 85 · night 67 · dates 54 · phone 39 · announce 32 · policy 27 · prodvis 22 · ics 20 · auth 12 |
 | `lint` · `build` | ✅ 0 errors (217 warnings — זהה ל-baseline) · עובר |
