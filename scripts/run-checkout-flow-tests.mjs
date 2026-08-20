@@ -940,6 +940,54 @@ console.log("\n\x1b[1m> checkout override removed (static)\x1b[0m");
 }
 
 
+console.log("\n\x1b[1m> staff may correct a live loan (static)\x1b[0m");
+{
+  const { readFileSync } = await import("node:fs");
+  // Comments here name the very things that must not come back, so the scan
+  // runs over comment-stripped source — same rule as the section above.
+  const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const modal = strip(readFileSync(new URL("../src/components/EditReservationModal.jsx", import.meta.url), "utf8"));
+
+  // PR #118 promoted "פעילה" to a real status, which switched this modal into a
+  // mode that pinned every quantity to original_items — so a warehouse worker
+  // who handed over an item and forgot to record it could not add it afterwards.
+  check("edit: the quantity ceiling is availability, in every status",
+    /const ceiling = getAvail\(eqId\);/.test(modal));
+  check("edit: no originalQtyFor ceiling left anywhere",
+    !/originalQtyFor/.test(modal));
+  check("edit: the + button is capped by availability alone",
+    /disabled=\{remaining<=0\}/.test(modal));
+  check("edit: the item pool is the full catalogue, not the loan's own rows",
+    /catalogueEq\.filter\(/.test(modal) && !/overdueEqItems/.test(modal));
+  check("edit: gear deleted from the catalogue is still renderable",
+    /const catalogueEq = /.test(modal) && /orphans/.test(modal));
+  check("edit: availability is really computed once the gear is out",
+    !/available:\s*0,\s*usedByOthers:\s*0/.test(modal));
+
+  // The archive reads original_items ?? items, so without a re-stamp a
+  // correction would show up everywhere EXCEPT the finished record.
+  const save = modal.slice(modal.indexOf("const save = async"), modal.indexOf("setSaving(true)"));
+  check("edit: a staff save re-stamps original_items from the saved list",
+    /updatedReservation\.original_items = items\.map/.test(save));
+  check("edit: …unconditionally, not only when the stamp is missing",
+    /if \(isOverdueReservation\) \{\s*updatedReservation\.original_items/.test(save));
+  check("edit: the over-booking gate still runs for מאושר and for gear that is out",
+    /getReservationApprovalConflicts\(updatedReservation, reservations, equipment\)/.test(save)
+    && /reservation\.status === "מאושר" \|\| isOverdueReservation/.test(save));
+
+  // The relaxation above is scoped to THIS path. These two are what keep
+  // lesson #35+#44 alive everywhere else, and they must not follow suit.
+  const checkoutApi = strip(readFileSync(new URL("../src/utils/checkoutApi.js", import.meta.url), "utf8"));
+  check("checkout still stamps original_items once and never overwrites",
+    /alreadyStamped \? \{\} : \{ original_items/.test(checkoutApi));
+  const returnApi = strip(readFileSync(new URL("../src/utils/returnApi.js", import.meta.url), "utf8"));
+  check("the return flow still never writes original_items",
+    !/original_items/.test(returnApi));
+  check("…nor reservation_items — it only moves units and status",
+    !/reservation_items/.test(returnApi));
+}
+
+
 console.log("");
 if (failed === 0) {
   console.log(`\x1b[32m\x1b[1mOK ${passed}/${passed} checkout-flow tests passed\x1b[0m`);

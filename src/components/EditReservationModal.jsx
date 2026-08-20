@@ -20,33 +20,34 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
   const loanOut = (loanHandlers||[]).find(h=>String(h.reservation_id)===String(reservation.id)&&h.kind==="out");
   const loanReturn = (loanHandlers||[]).find(h=>String(h.reservation_id)===String(reservation.id)&&h.kind==="return");
   const TIME_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30"];
-  // "Gear is already out of the warehouse" mode — the ceiling for a quantity
-  // becomes what physically went out rather than current availability, and
-  // original_items gets stamped on the first partial return.
+  // "Gear is already out of the warehouse" mode. It now means exactly two things:
+  // the dates are read-only (they are history, not a plan), and a save RE-STAMPS
+  // `original_items` so the archive shows the warehouse's latest word on what
+  // actually went out.
   //
-  // "פעילה" belongs here as much as "באיחור" does. It only ever reached this
-  // file as "מאושר" before, because the status was derived in the browser and
-  // never written; now checkout writes it, and without it a live loan would be
-  // edited against availability it does not have.
+  // It no longer restricts WHICH items may be on the request. It used to, and
+  // that was a real defect: a warehouse worker who handed over an item and
+  // forgot to record it had no way to add it afterwards. The restriction was
+  // invisible while only "באיחור" set this flag, because "פעילה" was derived in
+  // the browser and this file always saw "מאושר"; PR #118 made "פעילה" a real
+  // status and the lock landed on every live loan.
   const isOverdueReservation = reservation.status==="באיחור" || reservation.status==="פעילה";
   const [form, setForm]   = useState({...reservation});
   const [items, setItems] = useState(reservation.items ? [...reservation.items] : []);
-  // Overdue mode edits quantities of gear that is already out of the warehouse.
-  // The rendered row list must stay anchored to what ORIGINALLY went out, for two
-  // reasons: a row would otherwise vanish the moment its quantity hits 0 (setQty
-  // drops the entry) with no way to undo, and the archive must document the loan
-  // exactly as it stood while "פעילה".
+  // What this request held when the modal opened.
   //
-  // Seeding order matters. `original_items` is the frozen snapshot stamped on the
-  // FIRST partial return; once it exists it is the only truthful source. Reading
-  // `reservation.items` instead would re-seed from the already-reduced list, so a
-  // second staff member editing hours later would silently shrink the record.
+  // Its only remaining job is to keep a row ON SCREEN after its quantity hits 0
+  // (setQty drops the entry), so a mistaken decrement can be undone without
+  // reopening, and to keep gear that was deleted from the catalogue visible.
+  //
+  // Seeding order still matters: `original_items` first, `items` second. Reading
+  // `items` alone on a loan whose checkout returned something at the counter
+  // would drop those rows from the list entirely.
   const [originalItems] = useState(() => {
     const stamped = Array.isArray(reservation.original_items) ? reservation.original_items : null;
     const src = stamped && stamped.length ? stamped : (reservation.items || []);
     return [...src];
   });
-  const originalQtyFor = (eqId) => Number(originalItems.find(i => i.equipment_id == eqId)?.quantity) || 0;
   const [saving, setSaving] = useState(false);
   const [editConflicts, setEditConflicts] = useState([]);
   const [showLoanedOnly, setShowLoanedOnly] = useState(false);
@@ -87,11 +88,9 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
     setReportSending(false);
   };
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
-  // Overdue mode lists only the gear that actually went out. Enrichment is kept
-  // separate from filtering so the category chips can be derived from the whole
-  // loaned pool rather than from an already-category-filtered list.
-  // Source is `originalItems`, NOT `items` — see the note at its declaration:
-  // a row zeroed out during the edit must stay on screen so it can be restored.
+  // The rows this request already carries, enriched from the catalogue. Merged
+  // into `catalogueEq` below so a zeroed row stays on screen and so gear that no
+  // longer exists in `equipment` is still renderable.
   const overdueEqAll = originalItems.map((item) => {
     const eq = equipment.find((e) => e.id == item.equipment_id) || {};
     return {
@@ -103,20 +102,6 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
       soundOnly: !!eq.soundOnly,
       photoOnly: !!eq.photoOnly,
     };
-  });
-  const overdueEqItems = overdueEqAll.filter((item) => {
-    const searchText = editSearch.trim().toLowerCase();
-    if (searchText) {
-      const haystack = `${item.name||""} ${item.category||""}`.toLowerCase();
-      if (!haystack.includes(searchText)) return false;
-    }
-    if (!matchesEquipmentTypeFilter(item, editTypeFilter)) return false;
-    if (editCategoryFilters.length && !editCategoryFilters.includes(item.category)) return false;
-    // "פריטים בלבד" — only gear still out; rows zeroed by a partial return hide.
-    // Same semantics as matchesEditEquipmentFilters in normal mode. Reads `items`
-    // directly (not getQty — it is declared further down and this filter runs now).
-    if (showLoanedOnly && !(Number(items.find(i => i.equipment_id == item.id)?.quantity) > 0)) return false;
-    return true;
   });
   const sendOverdueMailFromEdit = async () => {
     if (!reservation?.email || !overdueEditMailText.trim()) return;
@@ -175,11 +160,22 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
   const getAvail = (eqId) => getEquipmentBlockingDetails(eqId).available;
 
   const setQty = (eqId, qty) => {
-    // Overdue: the gear already left the warehouse, so the ceiling is what
-    // physically went out — not current availability. Staying at-or-below the
-    // original quantity means the edit can only RELEASE stock back to the pool,
-    // never worsen anyone else's availability, so no over-booking is possible.
-    const ceiling = isOverdueReservation ? originalQtyFor(eqId) : getAvail(eqId);
+    // ONE ceiling for every status, and it is the honest one: how many units are
+    // free for THIS request to hold.
+    //
+    // getEquipmentBlockingDetails passes `reservation.id` as computeEquipmentAvailability's
+    // excludeId, so `available` already counts back whatever this reservation is
+    // holding right now. It is therefore "yours + free", not "free on top of
+    // yours" — adding originalQtyFor here would double-count.
+    //
+    // This used to be pinned to originalQtyFor() once the gear was out, which
+    // made the edit release-only. That was safe, but it also made it impossible
+    // for a warehouse worker to record an item they had actually handed over and
+    // forgotten to add — and after PR #118 promoted "פעילה" to a real status the
+    // restriction started applying to every live loan, not just overdue ones.
+    // Over-booking is caught on save instead, by the approval-conflict gate the
+    // original author had already wired up for exactly this relaxation.
+    const ceiling = getAvail(eqId);
     const q = Math.max(0, Math.min(qty, ceiling));
     const name = equipment.find(e=>e.id==eqId)?.name||"";
     setItems(prev => q===0 ? prev.filter(i=>i.equipment_id!=eqId)
@@ -188,10 +184,20 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
   };
   const getQty = (eqId) => items.find(i=>i.equipment_id==eqId)?.quantity||0;
 
+  // The pool every mode renders from: the live catalogue, plus any item on this
+  // request whose equipment row no longer exists. Without that union, gear that
+  // was deleted from the catalogue after it went out would vanish from the modal
+  // and could never be returned or corrected.
+  const catalogueEq = (() => {
+    const known = new Set(equipment.map(e => String(e.id)));
+    const orphans = overdueEqAll.filter(item => !known.has(String(item.id)));
+    return orphans.length ? [...equipment, ...orphans] : equipment;
+  })();
+
   // Chips come from the same pool the sections below render, minus the category
   // filter itself — including it would hide every other chip and make a second
   // selection impossible.
-  const chipPool = (isOverdueReservation ? overdueEqAll : equipment)
+  const chipPool = catalogueEq
     .filter((eq) => matchesEquipmentTypeFilter(eq, editTypeFilter));
   const equipmentCategories = deriveVisibleCategories(categories, chipPool);
   const toggleEditCategoryFilter = (category) => {
@@ -222,22 +228,39 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
   const save = async () => {
     const updatedReservation = { ...form, id: reservation.id, status: reservation.status, items };
 
-    // Partial return of an overdue loan: freeze what physically went out before
-    // the decrements erase it. Stamped once — an existing snapshot is never
-    // overwritten, so repeated partial returns keep converging on the same
-    // record instead of shrinking it. The archive reads this, nothing else does.
-    if (isOverdueReservation && !(Array.isArray(reservation.original_items) && reservation.original_items.length)) {
-      updatedReservation.original_items = originalItems.map(i => ({
+    // ── The archive follows the LAST staff edit ───────────────────────────────
+    //
+    // Once the gear is out, `original_items` is what the archive renders
+    // (archiveItems = original_items ?? items), and it used to be stamped ONCE
+    // and never rewritten. That made a correction unrepresentable: a warehouse
+    // worker who added an item they had actually handed over would see it in the
+    // request and in the return screen, and then watch it vanish the moment the
+    // loan closed, because the archive was still reading a snapshot taken before
+    // the correction.
+    //
+    // So a staff edit in these statuses now RE-STAMPS the snapshot from the list
+    // being saved. This deliberately relaxes "stamped once, never overwritten"
+    // (lesson #35+#44) for THIS path only — and only this path:
+    //   · checkout still stamps once and never overwrites (checkoutApi.js);
+    //   · the return flow never writes it at all (returnApi.js touches units and
+    //     status, never reservation_items);
+    //   · save_edited_reservation_v1 still preserves the column when the key is
+    //     absent, which is what every other caller relies on.
+    // The rule that replaces it: whoever last said "this is what went out" is
+    // the warehouse, through this modal, and the archive must agree with them.
+    if (isOverdueReservation) {
+      updatedReservation.original_items = items.map(i => ({
         equipment_id: i.equipment_id,
         name: i.name || "",
         quantity: Number(i.quantity) || 0,
       }));
     }
 
-    // באיחור holds stock just like מאושר, so it gets the same availability gate.
-    // With the ceiling pinned to the original quantity this can never actually
-    // fire today — it is here so the guard is already in place if that ceiling
-    // is ever relaxed.
+    // באיחור and פעילה hold stock just like מאושר, so they get the same
+    // availability gate. This USED to be unreachable — the ceiling was pinned to
+    // the original quantity, so an edit could only ever release stock. Now that
+    // adding is allowed it is the real over-booking guard, exactly as the note
+    // that used to sit here anticipated.
     if (reservation.status === "מאושר" || isOverdueReservation) {
       const conflicts = getReservationApprovalConflicts(updatedReservation, reservations, equipment);
       if (conflicts.length) {
@@ -385,13 +408,14 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
             </div>
             <div className="highlight-box" style={{marginBottom:16}}>
               {isOverdueReservation
-                ? "הציוד כבר יצא מהמחסן. אפשר לעדכן כמויות במקרה של החזרה חלקית — הפחתת כמות משחררת מיד את היחידות שחזרו חזרה למלאי. אי אפשר להוסיף ציוד חדש או לחרוג מהכמות שיצאה."
+                ? <>הציוד כבר יצא מהמחסן. אפשר <strong>להוסיף</strong> פריט שנמסר בפועל ונשכח, או <strong>להפחית</strong> כמות שלא יצאה — הפחתה משחררת מיד את היחידות חזרה למלאי. <strong>העריכה האחרונה היא זו שתופיע בארכיון</strong> אחרי שהבקשה תיסגר.</>
                 : <>המערכת סופרת מלאי רק מול בקשות <strong>מאושרות</strong> שחופפות בזמן לבקשה הזאת. אם ציוד חסום, יוצגו כאן שמות הסטודנטים והכמויות שחוסמות אותו כדי שתוכל לעבור לבקשות החופפות ולהפחית משם.</>}
             </div>
             {equipmentCategories.map(cat=>{
-              const catEq = isOverdueReservation
-                ? overdueEqItems.filter(item=>item.category===cat)
-                : equipment.filter(e=>e.category===cat && matchesEditEquipmentFilters(e));
+              // One pool in every mode. It used to be overdueEqItems (built from
+              // original_items alone) once the gear was out, which is what made
+              // adding a forgotten item impossible — the row was not even listed.
+              const catEq = catalogueEq.filter(e=>e.category===cat && matchesEditEquipmentFilters(e));
               if(!catEq.length) return null;
               return (
                 <div key={cat} style={{marginBottom:16}}>
@@ -401,7 +425,7 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                     // rendered from the original-loan snapshot, so reading the
                     // snapshot's static `eq.quantity` here would freeze the counter.
                     const qty = getQty(eq.id);
-                    const details = isOverdueReservation ? { available: 0, usedByOthers: 0, total: 0, blockers: [] } : getEquipmentBlockingDetails(eq.id);
+                    const details = getEquipmentBlockingDetails(eq.id);
                     const totalAvail = details.available;
                     const remaining = Math.max(0, totalAvail - qty);
                     const missingForApproval = Math.max(0, qty - totalAvail);
@@ -412,29 +436,29 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                         <div
                           className="item-row"
                           style={{
-                            opacity: isOverdueReservation ? 1 : blockedCompletely && !hasApprovalConflict ? 0.55 : 1,
-                            marginBottom: !isOverdueReservation && details.blockers.length ? 6 : 0,
-                            border: !isOverdueReservation && hasApprovalConflict ? "2px solid rgba(241,196,15,0.95)" : "1px solid var(--border)",
-                            background: !isOverdueReservation && hasApprovalConflict ? "rgba(241,196,15,0.22)" : "var(--surface2)",
-                            boxShadow: !isOverdueReservation && hasApprovalConflict ? "0 0 0 1px rgba(241,196,15,0.2)" : "none",
+                            opacity: blockedCompletely && !hasApprovalConflict ? 0.55 : 1,
+                            marginBottom: details.blockers.length ? 6 : 0,
+                            border: hasApprovalConflict ? "2px solid rgba(241,196,15,0.95)" : "1px solid var(--border)",
+                            background: hasApprovalConflict ? "rgba(241,196,15,0.22)" : "var(--surface2)",
+                            boxShadow: hasApprovalConflict ? "0 0 0 1px rgba(241,196,15,0.2)" : "none",
                           }}
                         >
                           {eq.image?.startsWith("data:")||eq.image?.startsWith("http")
                             ? <img src={cloudinaryThumb(eq.image)} alt="" style={{width:32,height:32,objectFit:"cover",borderRadius:6}}/>
                             : <span style={{fontSize:22}}>{eq.image || <Package size={22} strokeWidth={1.75} color="var(--accent)" />}</span>}
                           <div style={{flex:1}}>
-                            <div style={{fontWeight:700,fontSize:13,color:!isOverdueReservation && hasApprovalConflict?"var(--yellow)":"var(--text)"}}>{eq.name}</div>
+                            <div style={{fontWeight:700,fontSize:13,color:hasApprovalConflict?"var(--yellow)":"var(--text)"}}>{eq.name}</div>
                             <div style={{fontSize:11,color:"var(--text3)",display:"flex",gap:10,flexWrap:"wrap",marginTop:2}}>
                               <span>כמות: <strong style={{color:"var(--accent)"}}>{qty}</strong></span>
                               {eq.category && <span>{eq.category}</span>}
                               {eq.soundOnly && <span style={{color:"var(--accent)",display:"inline-flex",alignItems:"center",gap:2}}><Mic size={12} strokeWidth={1.75} /> ציוד סאונד</span>}
                               {eq.photoOnly && <span style={{color:"var(--green)"}}>🎥 ציוד צילום</span>}
-                              {!isOverdueReservation && <span>זמין: <span style={{color:remaining===0?"var(--red)":remaining<=2?"var(--yellow)":"var(--green)",fontWeight:700}}>{remaining}</span></span>}
-                              {!isOverdueReservation && details.usedByOthers>0 && <span>חסום ע"י אחרים: <strong style={{color:"var(--red)"}}>{details.usedByOthers}</strong></span>}
-                              {!isOverdueReservation && <span>סה"כ במלאי: <strong>{details.total}</strong></span>}
-                              {!isOverdueReservation && hasApprovalConflict && <span style={{color:"var(--yellow)",fontWeight:800}}>חסר לאישור: <strong>{missingForApproval}</strong></span>}
+                              {<span>זמין: <span style={{color:remaining===0?"var(--red)":remaining<=2?"var(--yellow)":"var(--green)",fontWeight:700}}>{remaining}</span></span>}
+                              {details.usedByOthers>0 && <span>חסום ע"י אחרים: <strong style={{color:"var(--red)"}}>{details.usedByOthers}</strong></span>}
+                              {<span>סה"כ במלאי: <strong>{details.total}</strong></span>}
+                              {hasApprovalConflict && <span style={{color:"var(--yellow)",fontWeight:800}}>חסר לאישור: <strong>{missingForApproval}</strong></span>}
                             </div>
-                            {!isOverdueReservation && hasApprovalConflict && (
+                            {hasApprovalConflict && (
                               <div style={{marginTop:4,fontSize:11,fontWeight:800,color:"var(--yellow)"}}>
                                 פריט זה חוסם את אישור הבקשה בגלל חוסר מלאי בחפיפה.
                               </div>
@@ -443,16 +467,16 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
                           <div className="qty-ctrl">
                             <button className="qty-btn" onClick={()=>setQty(eq.id,qty-1)}>−</button>
                             <span className="qty-num">{qty}</span>
-                            {/* Overdue is capped at the quantity that physically
-                                went out; normal editing is capped by availability. */}
+                            {/* One rule in every status: you may hold as many as
+                                are free for this request. See setQty. */}
                             <button
                               className="qty-btn"
-                              disabled={isOverdueReservation ? qty>=originalQtyFor(eq.id) : remaining<=0}
+                              disabled={remaining<=0}
                               onClick={()=>setQty(eq.id,qty+1)}
                             >+</button>
                           </div>
                         </div>
-                        {!isOverdueReservation && details.blockers.length > 0 && (
+                        {details.blockers.length > 0 && (
                           <div style={{background:"rgba(241,196,15,0.1)",border:"1px solid rgba(241,196,15,0.28)",borderRadius:10,padding:10,marginBottom:6}}>
                             <div style={{fontSize:12,fontWeight:800,color:"var(--yellow)",marginBottom:8}}>הציוד הזה חסום כרגע ע"י הבקשות הבאות:</div>
                             <div style={{display:"flex",flexDirection:"column",gap:6}}>
