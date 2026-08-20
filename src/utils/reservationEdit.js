@@ -60,7 +60,15 @@ export function makeSaveEditedReservation({ reservations, setReservations, showT
     const { error: rpcErr } = await supabase.rpc("save_edited_reservation_v1", {
       p_reservation_id: updated.id,
       p_fields: {
-        student_name:  rowFields.student_name,
+        // `student_name` is deliberately ABSENT — a key left out is preserved
+        // by the RPC, and preserving is exactly what we want.
+        //
+        // There is no name input in EditReservationModal; this key only ever
+        // echoed whatever copy of the row happened to be in memory when the
+        // modal opened. That made it a re-freezer: lesson #22 requires
+        // saveEditedReservation(..., {silent:true}) to run before EVERY
+        // approval, so approving a request would stamp a stale name back over
+        // one the roster cascade had just corrected.
         email:         rowFields.email,
         phone:         rowFields.phone,
         course:        rowFields.course,
