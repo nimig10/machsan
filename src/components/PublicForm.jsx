@@ -3,6 +3,7 @@ import { AlertTriangle, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, 
 import { useEffect, useState, useRef, useMemo } from "react";
 import { formatDate, formatTime, formatLocalDateInput, parseLocalDate, today, getAvailable, computeEquipmentAvailability, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, EXTERNAL_LOAN_TYPES, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR, groupReservationItemsByCategory, deriveVisibleCategories, stretchOverdueForCalendar, videoEmbedSrc, saveStudentPhone } from "../utils.js";
 import { pickSubmissionPhone, mayOverwriteRosterPhone } from "../utils/studentPhone.js";
+import { emailKeyOf, splitFullName, joinName } from "../utils/studentIdentity.js";
 import { supabase } from "../supabaseClient.js";
 import { listStudents } from "../utils/studentsApi.js";
 import { listLessons } from "../utils/lessonsApi.js";
@@ -1758,7 +1759,10 @@ function InfoPanel({ policies, kits, equipment, teamMembers, onClose, accentColo
 // "update-student-profile" which atomically updates both the auth.users
 // row and the certifications.students record.
 function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColor }) {
-  const [name,     setName]     = useState(String(student?.name  || ""));
+  // No `name` state, and no name box. The roster is the source of truth for a
+  // student's name, and a student may not rewrite it from here — the office
+  // owns it. The endpoint enforces the same thing server-side, because an old
+  // cached bundle can still POST one.
   const [phone,    setPhone]    = useState(String(student?.phone || ""));
   const [busy,     setBusy]     = useState(false);
   const [error,    setError]    = useState("");
@@ -1795,13 +1799,12 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
 
   const handleSave = async () => {
     setError("");
-    const nName  = String(name  || "").trim();
+    // Echoed straight back from the roster row this modal was handed — the
+    // endpoint no longer reads it, but sending it keeps the request shape valid
+    // for a server that has not been redeployed yet.
+    const nName  = String(student?.name || "").trim();
     const nPhoneRaw = String(phone || "").trim();
     const nPhone    = nPhoneRaw.replace(/[^\d+]/g, "");
-    if (!nName || nName.length < 2) {
-      setError("יש להזין שם מלא (לפחות 2 תווים).");
-      return;
-    }
     if (nPhone && !/^\+?\d{7,15}$/.test(nPhone)) {
       setError("מספר טלפון לא תקין (7 עד 15 ספרות).");
       return;
@@ -1915,17 +1918,14 @@ function AccountSettingsModal({ student, onClose, onSaved, showToast, accentColo
         </div>
 
         <div style={{padding:22,display:"flex",flexDirection:"column",gap:14}}>
-          <div>
-            <label style={{fontSize:13,fontWeight:700,color:"var(--text2)",display:"block",marginBottom:4}}>שם מלא</label>
-            <input
-              className="form-input"
-              type="text"
-              value={name}
-              onChange={(e)=>setName(e.target.value)}
-              disabled={busy}
-              placeholder="ישראל ישראלי"
-              autoComplete="name"
-            />
+          {/* Identity, shown but not editable. The roster owns it. */}
+          <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"10px 12px",display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:18}}>👤</span>
+            <div style={{minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:14}}>{student?.name || "—"}</div>
+              <div style={{fontSize:12,color:"var(--text3)",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>{student?.email || ""}</div>
+              <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>לשינוי השם — פנה/י לצוות המחסן</div>
+            </div>
           </div>
 
           <div>
@@ -2076,6 +2076,20 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [loggedInStudent, setLoggedInStudent] = useState(() => {
     try { const s = sessionStorage.getItem("public_student"); return s ? JSON.parse(s) : null; } catch { return null; }
   });
+  // ── The one identity source this form may read ────────────────────────────
+  //
+  // `loggedInStudent` is a photograph taken at login and mirrored into
+  // sessionStorage; the office can rename a student long after that, and the
+  // photograph would never catch up. `studentsFromTable` is re-fetched on every
+  // auth state change, so the roster row is the live value.
+  //
+  // Falls back to the photograph while the roster fetch is still in flight (and
+  // for anyone not on the roster at all) so the form never renders identity-less.
+  const rosterMe = (() => {
+    const key = emailKeyOf(loggedInStudent);
+    if (!key) return loggedInStudent || null;
+    return studentsFromTable.find(s => emailKeyOf(s) === key) || loggedInStudent || null;
+  })();
   // ── Role-switch transition ────────────────────────────────────────────────
   // A role switch (StudentHub / footer / lecturer / staff buttons) sets
   // active_role, clears the identity keys and reloads "/". On that fresh load
@@ -2183,7 +2197,7 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const [equipmentAiForcedLoanType, setEquipmentAiForcedLoanType] = useState("");
   const todayStr = today();
   const normalizedTrackSettings = buildTrackSettings(studentsFromTable, certifications?.trackSettings, certifications?.tracks);
-  const activeStudentTrack = String(loggedInStudent?.track || form.course || "").trim();
+  const activeStudentTrack = String(rosterMe?.track || form.course || "").trim();
   // ── Studio classification filtering ──
   // Same hard rule as loan types: classification dictates visibility.
   //   classroomOnly=true       → hidden from public form (classes only)
@@ -2255,32 +2269,50 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   useEffect(() => {
     if (loggedInStudent) {
       sessionStorage.setItem("public_student", JSON.stringify(loggedInStudent));
-      setForm(p => {
-        // Prefer explicit firstName/lastName; fall back to splitting `name`.
-        const explicitFn = String(loggedInStudent.firstName||"").trim();
-        const explicitLn = String(loggedInStudent.lastName ||"").trim();
-        let fn = explicitFn;
-        let ln = explicitLn;
-        if (!fn && !ln) {
-          const parts = String(loggedInStudent.name||"").trim().split(/\s+/).filter(Boolean);
-          fn = parts[0] || ""; ln = parts.slice(1).join(" ");
-        }
-        const combined = [fn, ln].filter(Boolean).join(" ");
-        return {
-          ...p,
-          student_first_name: fn || p.student_first_name,
-          student_last_name:  ln || p.student_last_name,
-          student_name: combined || p.student_name,
-          email: loggedInStudent.email || p.email,
-          ...(loggedInStudent.phone ? { phone: loggedInStudent.phone } : {}),
-          ...(loggedInStudent.track ? { course: loggedInStudent.track } : {}),
-        };
-      });
     } else {
       sessionStorage.removeItem("public_student");
       sessionStorage.removeItem("public_view");
     }
   }, [loggedInStudent]);
+
+  // ── Identity fields are DERIVED from the roster, never from the draft ──────
+  //
+  // These four fields used to be seeded with `fn || p.student_first_name`, i.e.
+  // "roster value, unless the draft already has something". That `||` is
+  // exactly how a name typed into one loan type ended up frozen onto another:
+  // the sessionStorage draft is restored at mount and the roster never got to
+  // overwrite it. Now the roster wins unconditionally, every time it resolves.
+  //
+  // Phone is deliberately NOT in here — it is the one identity field the
+  // student still edits, so its re-seed lives next to `phoneTouched` below.
+  useEffect(() => {
+    if (!rosterMe) return;   // logged out / roster still loading — never blank the form
+    const { first, last } = splitFullName(rosterMe.name);
+    setForm(p => ({
+      ...p,
+      student_first_name: first,
+      student_last_name:  last,
+      student_name: joinName(first, last),
+      email: rosterMe.email || p.email,
+      course: rosterMe.track || "",
+    }));
+  }, [rosterMe?.name, rosterMe?.email, rosterMe?.track]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fold a roster rename back into the cached session.
+  //
+  // `rosterMe` already fixes everything derived from it, but the greeting
+  // ("שלום, {loggedInStudent.name}") and the hub read the cached copy directly.
+  // Without this, a student renamed by the office keeps seeing the old name
+  // until they log out and back in. Converges after one pass: rosterMe always
+  // prefers the roster row, so the next comparison finds them equal.
+  useEffect(() => {
+    if (!rosterMe || !loggedInStudent) return;
+    if (rosterMe === loggedInStudent) return;   // not on the roster — nothing to fold
+    const sameName  = String(loggedInStudent.name  || "") === String(rosterMe.name  || "");
+    const sameTrack = String(loggedInStudent.track || "") === String(rosterMe.track || "");
+    if (sameName && sameTrack) return;
+    setLoggedInStudent(prev => (prev ? { ...prev, name: rosterMe.name, track: rosterMe.track } : prev));
+  }, [rosterMe, loggedInStudent]);
 
   useEffect(() => {
     if (loggedInStudent) sessionStorage.setItem("student_app", studentApp);
@@ -3217,26 +3249,28 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   // visit where nobody typed anything. Reset wherever the draft is cleared.
   const [phoneTouched, setPhoneTouched] = useState(false);
 
+  // Phone's half of the identity re-seed. Same shape as the name/email/course
+  // effect above, with one difference: the roster only wins while the student
+  // has not typed. That keeps a number saved in "הגדרות חשבון" from arriving
+  // stale here, without snatching the field out from under someone mid-edit.
+  useEffect(() => {
+    if (!rosterMe || phoneTouched) return;
+    const next = String(rosterMe.phone || "");
+    if (!next) return;
+    setForm(p => (p.phone === next ? p : { ...p, phone: next }));
+  }, [rosterMe?.phone, phoneTouched]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Name split helpers ──────────────────────────────────────────────────
   // The public form keeps three fields in lockstep: student_first_name,
   // student_last_name, and the combined student_name used by every payload,
-  // reservation, certification lookup, etc.
-  const splitFullName = (full) => {
-    const parts = String(full||"").trim().split(/\s+/).filter(Boolean);
-    return { first: parts[0] || "", last: parts.slice(1).join(" ") };
-  };
-  const setStudentFirstName = (v) => setForm(p => {
-    const fn = String(v||"");
-    const ln = String(p.student_last_name||"").trim();
-    const combined = [fn.trim(), ln].filter(Boolean).join(" ");
-    return { ...p, student_first_name: fn, student_name: combined };
-  });
-  const setStudentLastName = (v) => setForm(p => {
-    const fn = String(p.student_first_name||"").trim();
-    const ln = String(v||"");
-    const combined = [fn, ln.trim()].filter(Boolean).join(" ");
-    return { ...p, student_last_name: ln, student_name: combined };
-  });
+  // reservation, certification lookup, etc. `splitFullName` / `joinName` now
+  // come from studentIdentity.js so the form, the roster page and the cascade
+  // all split a name the same way.
+  //
+  // There are deliberately NO setStudentFirstName / setStudentLastName here.
+  // The borrower's name is derived from the roster and is not editable — those
+  // two setters WERE the leak: a name typed into one loan type survived in the
+  // sessionStorage draft and was frozen onto a later request of another type.
   // Crew name setters — keep crew_*_name (combined) in sync with the two halves
   // so the certification-matching lookup (which joins on `name`) keeps working.
   const setCrewPhotographerFirst = (v) => setForm(p => {
@@ -3487,24 +3521,28 @@ export function PublicForm({ equipment, reservations, setReservations, showToast
   const availableReturnSlots = isCinemaLoan
     ? cinemaMaxReturnSlots.filter((slot) => availableReturnSlotsBase.includes(slot))
     : availableReturnSlotsBase;
-  // Name requirements:
-  //   Production flow → director's שם פרטי ושם משפחה שניהם חובה (single input split).
-  //   Private / sound flow → same, שני השדות חובה.
-  const nameOk = isProductionLoan
-    ? !!(form.student_first_name && form.student_last_name)
-    : !!(form.student_first_name && form.student_last_name);
+  // The borrower's name is no longer typed — it is the roster's, so "valid"
+  // simply means the roster gave us one. Requiring BOTH halves (as this did)
+  // would now lock out anyone whose roster entry is a single word, since the
+  // halves are a presentation split of one column, not two stored fields.
+  const nameOk = !!String(rosterMe?.name || "").trim();
   // Photographer: שם פרטי + שם משפחה חובה. טלפון רשות (לא נדרש לאימות הסמכה).
   const photographerOk = !!(form.crew_photographer_first_name && form.crew_photographer_last_name);
   // Sound tech: optional block — שם פרטי+שם משפחה כשניהם או אף אחד.
   const soundAnyFilled = !!(form.crew_sound_first_name || form.crew_sound_last_name);
   const soundOk = !soundAnyFilled || (form.crew_sound_first_name && form.crew_sound_last_name);
   // For production loans we already know the director from `production_id` and the
-  // logged-in student, so phone+course are not required in step 1 (they can be
-  // pulled from the student record on submit). Keep them required for all other
-  // loan types so the legacy flows are unchanged.
+  // logged-in student, so phone is not required in step 1 (it is pulled from the
+  // production / student record on submit).
+  //
+  // `course` is no longer a gate. It is the roster's מסלול לימודים and there is
+  // no box to fill it in any more, so requiring it would strand the students who
+  // have no track assigned (one in production today) at step 1 forever. Both
+  // consumers already degrade safely: allowedLoanTypes falls back to every
+  // SMART_LOAN_TYPE, and visibleStudios to the "all" classification.
   const ok1 = isProductionLoan
     ? (nameOk && form.email && form.loan_type && !!form.production_id)
-    : (nameOk && form.email && form.phone && form.course && form.loan_type);
+    : (nameOk && form.email && form.phone && form.loan_type);
 
   // Production loan now requires picking a production the student owns (director).
   // Listed: published productions where directorEmail matches the logged-in student
@@ -3868,10 +3906,12 @@ ${inventory}
 
       const nextForm = {
         ...form,
-        student_name: form.student_name || loggedInStudent?.name || "",
-        email: form.email || loggedInStudent?.email || "",
-        phone: form.phone || loggedInStudent?.phone || "",
-        course: form.course || loggedInStudent?.track || "",
+        // Roster first, in this order and not the other way round: `form` can
+        // still be carrying a draft, and the roster is the source of truth.
+        student_name: rosterMe?.name || form.student_name || "",
+        email: rosterMe?.email || form.email || "",
+        phone: form.phone || rosterMe?.phone || "",
+        course: rosterMe?.track || form.course || "",
         loan_type: nextLoanType,
         borrow_date: startDate,
         borrow_time: startTime,
@@ -3883,20 +3923,13 @@ ${inventory}
       };
 
       if (nextLoanType === "הפקה" && !nextForm.crew_photographer_name) {
-        const fallbackFn = form.student_first_name || String(loggedInStudent?.firstName||"").trim() || "";
-        const fallbackLn = form.student_last_name  || String(loggedInStudent?.lastName ||"").trim() || "";
-        const fallbackFull = [fallbackFn, fallbackLn].filter(Boolean).join(" ")
-          || form.student_name || loggedInStudent?.name || "";
-        // If we only have a combined name, split on first space.
-        let fn = fallbackFn;
-        let ln = fallbackLn;
-        if (!fn && !ln && fallbackFull) {
-          const parts = fallbackFull.trim().split(/\s+/).filter(Boolean);
-          fn = parts[0] || ""; ln = parts.slice(1).join(" ");
-        }
-        nextForm.crew_photographer_first_name = fn;
-        nextForm.crew_photographer_last_name  = ln;
-        nextForm.crew_photographer_name = [fn, ln].filter(Boolean).join(" ") || fallbackFull;
+        // The director stands in as photographer. Their name is the roster's —
+        // the cert gate matches crew to certifications by normalised NAME, so a
+        // drafted spelling here would silently stop their certs from counting.
+        const { first, last } = splitFullName(nextForm.student_name);
+        nextForm.crew_photographer_first_name = first;
+        nextForm.crew_photographer_last_name  = last;
+        nextForm.crew_photographer_name = joinName(first, last);
       }
 
       const policyError = getSmartEquipmentPolicyError(nextForm, resolvedItems);
@@ -4200,7 +4233,18 @@ ${inventory}
       productionPhone: selectedProduction?.directorPhone,
       sessionPhone:    loggedInStudent?.phone,
     });
-    const newRes = { ...form, ...crewSnapshot, phone: resolvedPhone, id: reservationId, status: initStatus, created_at: today(), submitted_at: submittedAtHebrew, items };
+    // The roster's name and email win over anything `form` still carries. The
+    // server canonicalises this again from `students` (api/create-reservation.js)
+    // — belt and braces, because that is the row every display surface, every
+    // email template and the overdue cron read from afterwards.
+    const newRes = {
+      ...form, ...crewSnapshot,
+      student_name: rosterMe?.name || form.student_name,
+      email:        rosterMe?.email || form.email,
+      course:       rosterMe?.track || form.course,
+      phone: resolvedPhone, id: reservationId, status: initStatus,
+      created_at: today(), submitted_at: submittedAtHebrew, items,
+    };
 
     // ── ATOMIC SERVER-SIDE CREATE ─────────────────────────────────────────
     // create_reservation_v2 (migration 008) takes FOR UPDATE locks on each
@@ -4296,20 +4340,14 @@ ${inventory}
     // these prefilled exactly like the initial-load effect does. Without this,
     // a second production loan is blocked at פרטים→תאריכים because step 1→2 is
     // gated on ok1 (name+email+production_id) and the blanked fields fail it.
-    if (loggedInStudent) {
-      const explicitFn = String(loggedInStudent.firstName||"").trim();
-      const explicitLn = String(loggedInStudent.lastName ||"").trim();
-      let fn = explicitFn, ln = explicitLn;
-      if (!fn && !ln) {
-        const parts = String(loggedInStudent.name||"").trim().split(/\s+/).filter(Boolean);
-        fn = parts[0] || ""; ln = parts.slice(1).join(" ");
-      }
-      blank.student_first_name = fn;
-      blank.student_last_name  = ln;
-      blank.student_name = [fn, ln].filter(Boolean).join(" ");
-      blank.email = loggedInStudent.email || "";
-      if (loggedInStudent.phone) blank.phone = loggedInStudent.phone;
-      if (loggedInStudent.track) blank.course = loggedInStudent.track;
+    if (rosterMe) {
+      const { first, last } = splitFullName(rosterMe.name);
+      blank.student_first_name = first;
+      blank.student_last_name  = last;
+      blank.student_name = joinName(first, last);
+      blank.email = rosterMe.email || "";
+      if (rosterMe.phone) blank.phone = rosterMe.phone;
+      if (rosterMe.track) blank.course = rosterMe.track;
     }
     setForm(blank); setItems([]); setAgreed(false);
   };
@@ -4848,33 +4886,38 @@ ${inventory}
                 </div>
               ))}
             </div>
-            {isProductionLoan ? (
-              // For production loans, the director's identity is taken from the
-              // logged-in session — no manual inputs. The other identity fields
-              // (course, phone) are also auto-filled by applyStudentIdentity on login.
-              <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"12px 14px",marginBottom:14,fontSize:13,color:"var(--text)",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                <span style={{fontSize:18}}>👤</span>
-                <div>
-                  <div style={{fontWeight:700}}>{(form.student_first_name + " " + form.student_last_name).trim() || loggedInStudent?.name || "—"}</div>
-                  <div style={{fontSize:12,color:"var(--text3)"}}>{form.email || loggedInStudent?.email || ""}</div>
+            {/* Identity is READ-ONLY, for every loan type.
+                It used to be four free-text boxes, and that is how a request
+                went out under a name the college had never heard of: the typed
+                value survived in the sessionStorage draft and was frozen onto a
+                later request of a different type — where this very card only
+                LOOKED read-only, because it rendered form.student_first_name.
+                Everything here now comes from `rosterMe`, the live roster row.
+                The two fields below it are the only ones that are the student's
+                to answer. */}
+            <div className="form-section-title">פרטי הסטודנט</div>
+            <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",padding:"12px 14px",marginBottom:14,fontSize:13,color:"var(--text)",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              <span style={{fontSize:18}}>👤</span>
+              <div style={{minWidth:0}}>
+                <div style={{fontWeight:700}}>{rosterMe?.name || "—"}</div>
+                <div style={{fontSize:12,color:"var(--text3)",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>{rosterMe?.email || ""}</div>
+                <div style={{fontSize:12,color:rosterMe?.track?"var(--text3)":"var(--accent)",marginTop:2,display:"flex",alignItems:"center",gap:4}}>
+                  <GraduationCap size={12} strokeWidth={1.75}/>
+                  {rosterMe?.track || "לא הוגדר מסלול לימודים"}
                 </div>
+                <div style={{fontSize:11,color:"var(--text3)",marginTop:4}}>לעדכון פרטים אלה — פנה/י לצוות המחסן</div>
               </div>
-            ) : (
-              <>
-                <div className="form-section-title">פרטי הסטודנט</div>
-                <div className="grid-2">
-                  <div className="form-group"><label className="form-label">שם פרטי *</label><input className="form-input" name="student_first_name" autoComplete="given-name" value={form.student_first_name} onChange={e=>setStudentFirstName(e.target.value)}/></div>
-                  <div className="form-group"><label className="form-label">שם משפחה *</label><input className="form-input" name="student_last_name" autoComplete="family-name" value={form.student_last_name} onChange={e=>setStudentLastName(e.target.value)}/></div>
-                </div>
-                <div className="grid-2">
-                  <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" name="phone" autoComplete="tel" value={form.phone} onChange={e=>{setPhoneTouched(true);set("phone",e.target.value);}}/></div>
-                  <div className="form-group"><label className="form-label">אימייל *{loggedInStudent?.email&&<span style={{fontSize:11,fontWeight:600,color:"var(--text3)",marginRight:6}}>(מהחשבון שלך)</span>}</label><input type="email" className="form-input" name="email" autoComplete="email" value={form.email} onChange={e=>set("email",e.target.value)} readOnly={!!loggedInStudent?.email} style={loggedInStudent?.email?{opacity:0.7,cursor:"not-allowed"}:undefined}/></div>
-                </div>
-                <div className="grid-2">
-                  <div className="form-group"><label className="form-label">קורס / כיתה *</label><input className="form-input" value={form.course} onChange={e=>set("course",e.target.value)}/></div>
-                  <div className="form-group"><label className="form-label">שם הפרויקט</label><input className="form-input" value={form.project_name} onChange={e=>set("project_name",e.target.value)}/></div>
-                </div>
-              </>
+            </div>
+            {/* Production loans keep NO phone box, exactly as before: the number
+                comes from the production's director phone, and pickSubmissionPhone
+                puts directorPhone ahead of form.phone precisely BECAUSE nothing
+                here is typed. Adding a box would silently discard what the
+                student typed. Their project name is the production's title. */}
+            {!isProductionLoan && (
+              <div className="grid-2">
+                <div className="form-group"><label className="form-label">טלפון *</label><input className="form-input" name="phone" autoComplete="tel" value={form.phone} onChange={e=>{setPhoneTouched(true);set("phone",e.target.value);}}/></div>
+                <div className="form-group"><label className="form-label">שם הפרויקט</label><input className="form-input" value={form.project_name} onChange={e=>set("project_name",e.target.value)}/></div>
+              </div>
             )}
 
             {isProductionLoan && (<>
@@ -6351,7 +6394,14 @@ ${inventory}
             until: Date.now() + 15000,
           };
           // Update local state so the UI reflects the change immediately.
-          setLoggedInStudent(updatedStudent);
+          //
+          // MERGE, never replace: the server returns only {id,name,email,phone},
+          // so assigning it wholesale drops `track` and `certs`. That used to be
+          // invisible; now that קורס/כיתה is derived from the roster row it
+          // would empty the field, and with it activeStudentTrack →
+          // allowedLoanTypes / visibleStudios. The hub's copy of this handler
+          // always spread — the two were simply out of step.
+          setLoggedInStudent(prev => (prev ? { ...prev, ...updatedStudent } : updatedStudent));
           applyStudentIdentity(updatedStudent);
           set("email",        updatedStudent.email || "");
           if (updatedStudent.phone != null) set("phone", updatedStudent.phone || "");

@@ -177,17 +177,21 @@ function StaffTab({ showToast, teamMembers, setTeamMembers, reservations, setRes
             try {
               const freshRes = await (supabase.from("reservations_new").select("*, reservation_items(*)").then(res => (res.data || []).map(r => ({ ...r, items: r.reservation_items || [] }))));
               const src = Array.isArray(freshRes) ? freshRes : (Array.isArray(reservations) ? reservations : []);
-              let touched = false;
+              const targetIds = [];
               const renamed = src.map(r => {
                 if ((r?.email || "").toLowerCase() === emailLower && r.student_name !== newName) {
-                  touched = true;
+                  targetIds.push(r.id);
                   return { ...r, student_name: newName };
                 }
                 return r;
               });
-              if (touched) {
-                // Stage 5 — update student_name in Supabase (previously only blob)
-                await supabase.from("reservations_new").update({ student_name: newName }).ilike("email", emailLower);
+              if (targetIds.length) {
+                // .in("id", ids) — this used to be .ilike("email", emailLower),
+                // which is a wildcard match: "_" stands for any single character
+                // in SQL LIKE, so an address containing one (they are common)
+                // would also rename other people's reservations. The ids are
+                // already in hand from the comparison above.
+                await supabase.from("reservations_new").update({ student_name: newName }).in("id", targetIds);
                 if (typeof setReservations === "function") setReservations(renamed);
               }
             } catch (err) {

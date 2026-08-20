@@ -78,6 +78,42 @@ async function recordStudentPhone(reservation) {
   if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
 }
 
+// ── The borrower's name comes from the roster, not from the request body ─────
+//
+// `reservations_new.student_name` is a snapshot frozen at submit, and it is
+// what ~80 display surfaces, every email template, staff search, the overdue
+// cron's push body and the production certification gate all read afterwards.
+// It used to be whatever the client posted, and the client used to let a
+// student type it — which is how a request went out under a name that existed
+// in exactly one row of the database.
+//
+// The client no longer offers a box, but a client is not an enforcement point:
+// this endpoint takes NO authentication, so anyone can post any name. Hence the
+// canonicalisation here, where every caller of the endpoint passes.
+//
+// This is a READ of the students table, not a write to it — the anonymous-write
+// objection that shapes recordStudentPhone above does not apply. Email is
+// already this path's identity key: create_reservation_v2's per-student overlap
+// guard keys on lower(email).
+//
+// Returns the roster name, or "" when there is no match — staff-created loans
+// and anyone not on the roster keep the name they were given.
+async function rosterNameFor(email) {
+  const key = String(email || "").trim().toLowerCase();
+  if (!key) return "";
+  // `email=eq.` (exact), never `ilike` — `_` is a single-character wildcard in
+  // SQL LIKE, so an address containing one would match other people's rows.
+  const url = `${SB_URL}/rest/v1/students`
+    + `?email=eq.${encodeURIComponent(key)}`
+    + `&select=name&limit=1`;
+  const r = await fetch(url, {
+    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
+  });
+  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+  const rows = await r.json();
+  return String(rows?.[0]?.name || "").trim();
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ ok: false, error: "Method not allowed" });
@@ -102,6 +138,18 @@ export default async function handler(req, res) {
     if (!Number.isFinite(qty) || qty <= 0) {
       return res.status(400).json({ ok: false, error: "quantity must be a positive number" });
     }
+  }
+
+  // Canonicalise the borrower's name BEFORE the row is written — after the RPC
+  // it is already frozen, and a follow-up PATCH would be a second failure point
+  // on a request that has otherwise succeeded. A lookup failure is non-fatal:
+  // a Supabase hiccup must never cost a student their submission, so we log and
+  // fall through with whatever the client sent.
+  try {
+    const rosterName = await rosterNameFor(reservation.email);
+    if (rosterName) reservation.student_name = rosterName;
+  } catch (nameErr) {
+    console.warn("create-reservation: roster name lookup failed:", nameErr?.message || nameErr);
   }
 
   try {

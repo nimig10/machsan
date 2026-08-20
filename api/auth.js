@@ -406,11 +406,18 @@ async function handleEnsureUser(req, res) {
 
 // ── update-student-credentials ────────────────────────────────────────────────
 // Self-service endpoint invoked by a logged-in student from PublicForm's
-// "Account Settings" modal. Atomically updates BOTH:
-//   1) certifications.students[] (name, email) — DB source of truth
+// "Account Settings" modal. Updates BOTH:
+//   1) public.students (email, phone) — DB source of truth
 //   2) Supabase auth.users — email + password + user_metadata.full_name
 //      via the Admin API with email_confirm:true so the new email is
 //      active immediately (no confirmation-email round-trip required).
+//
+// NAME IS NOT ACCEPTED HERE. `public.students.name` is the college's record of
+// who a person is, and a student may not rewrite it from their own settings
+// panel — only staff, through the roster. `name` is deliberately not read from
+// the body: dropping the field from the client UI alone would leave the door
+// open to an old cached bundle, which is exactly how this class of bug survives
+// a "fix". The auth metadata is still kept in step, from the ROSTER's value.
 //
 // Only returns 200 if the store write succeeded. If the subsequent auth
 // update fails we return 500 with `profileSaved:true` so the client can
@@ -421,7 +428,7 @@ async function handleEnsureUser(req, res) {
 // "current email" — ignoring whatever the client sends — so a hostile
 // client cannot target another student's record.
 async function handleUpdateStudentCredentials(req, res) {
-  const { accessToken, name, email, phone, password } = req.body || {};
+  const { accessToken, email, phone, password } = req.body || {};
   if (!accessToken) {
     return res.status(401).json({ error: "missing_access_token" });
   }
@@ -432,7 +439,6 @@ async function handleUpdateStudentCredentials(req, res) {
   }
 
   const currentEmail = normalizeEmail(authUser.email);
-  const nextName     = String(name || "").trim();
   const nextEmail    = normalizeEmail(email);
   // Phone is optional. Strip anything that isn't a digit or leading '+' so
   // spaces / dashes / parentheses don't trip validation, then enforce a
@@ -441,9 +447,6 @@ async function handleUpdateStudentCredentials(req, res) {
   const nextPhoneRaw  = phoneProvided ? String(phone || "").trim() : "";
   const nextPhone     = nextPhoneRaw.replace(/[^\d+]/g, "");
 
-  if (!nextName || nextName.length < 2) {
-    return res.status(400).json({ error: "invalid_name" });
-  }
   if (!isValidEmail(nextEmail)) {
     return res.status(400).json({ error: "invalid_email" });
   }
@@ -467,9 +470,14 @@ async function handleUpdateStudentCredentials(req, res) {
     }
   }
 
-  // Update the students table directly. Only overwrite `phone` when the client
-  // actually sent the field — keeps legacy clients from wiping existing values.
-  const studentUpdates = { name: nextName, email: nextEmail };
+  // The roster's name, read back AFTER the lookup. This is the only value the
+  // rest of this handler is allowed to treat as "the student's name".
+  const nextName = String(me.name || "").trim();
+
+  // Update the students table directly. `name` is absent on purpose — see the
+  // header. Only overwrite `phone` when the client actually sent the field —
+  // keeps legacy clients from wiping existing values.
+  const studentUpdates = { email: nextEmail };
   if (phoneProvided) studentUpdates.phone = nextPhone || null;
   const storeOk = await updateStudentRow(me.id, studentUpdates);
   if (!storeOk) {
