@@ -223,6 +223,101 @@ console.log("\nmodule contract");
   check("no Date() — nothing here is time-dependent", !/new\s+Date\s*\(/.test(code));
 }
 
+// ── Static scans ────────────────────────────────────────────────────────────
+//
+// Comments are stripped BEFORE every search below. Each rule here is explained
+// in a comment in the file it guards, and those comments necessarily name the
+// very thing that must not come back — so scanning the raw source would make
+// the documentation fail its own guard.
+console.log("\nstatic: the free-text name boxes never come back");
+{
+  const form = stripComments(read("../src/components/PublicForm.jsx"));
+  check("no שם פרטי / שם משפחה inputs in the loan form",
+    !/name="student_first_name"/.test(form) && !/name="student_last_name"/.test(form));
+  check("no setStudentFirstName / setStudentLastName — they WERE the leak",
+    !/setStudentFirstName|setStudentLastName/.test(form));
+  check("no editable קורס / כיתה box — it is the roster's מסלול לימודים",
+    !/קורס \/ כיתה/.test(form));
+  check("the identity card renders rosterMe, not the form's own copy",
+    /rosterMe\?\.name/.test(form));
+  check("the submitted payload takes its name from the roster",
+    /student_name:\s*rosterMe\?\.name/.test(form));
+}
+
+console.log("\nstatic: a student cannot rename themselves");
+{
+  const form = stripComments(read("../src/components/PublicForm.jsx"));
+  check("no שם מלא field left in the account-settings modal", !/שם מלא/.test(form));
+
+  // The client half is cosmetic; this is the half that actually enforces it,
+  // because a stale cached bundle can still POST a name.
+  const auth = read("../api/auth.js");
+  const start = auth.indexOf("async function handleUpdateStudentCredentials");
+  const rest = auth.slice(start + 1);
+  const end = rest.indexOf("\nasync function ");
+  const handler = stripComments(end === -1 ? rest : rest.slice(0, end));
+  check("update-student-credentials found in api/auth.js", start !== -1);
+  check("…does not read `name` out of the request body",
+    !/const\s*\{[^}]*\bname\b[^}]*\}\s*=\s*req\.body/.test(handler));
+  check("…does not write `name` into the students row",
+    !/studentUpdates\s*=\s*\{[^}]*\bname\b/.test(handler));
+  check("…derives the name it echoes back from the roster row",
+    /nextName\s*=\s*String\(\s*me\.name/.test(handler));
+}
+
+console.log("\nstatic: the write paths canonicalise from the roster");
+{
+  const createRes = stripComments(read("../api/create-reservation.js"));
+  // Both rules live in this one file and are easy to break together.
+  check("still fill-only on the phone (the anonymous-write rule)",
+    /or=\(phone\.is\.null,phone\.eq\.\)/.test(createRes));
+  check("looks the borrower's name up in students by exact email",
+    /students`?\s*[\s\S]{0,120}email=eq\./.test(createRes));
+  check("…and never with ilike — \"_\" is a wildcard in SQL LIKE",
+    !/email=ilike\./.test(createRes));
+  check("…and overwrites the client-supplied name with it",
+    /reservation\.student_name\s*=\s*rosterName/.test(createRes));
+
+  const edit = stripComments(read("../src/utils/reservationEdit.js"));
+  const fields = edit.slice(edit.indexOf("p_fields:"), edit.indexOf("p_items:"));
+  check("save_edited_reservation_v1 gets NO student_name key — a missing key is preserved, and lesson #22 runs this before every approval",
+    !/student_name/.test(fields));
+}
+
+console.log("\nstatic: the cascade cannot be quietly deleted");
+{
+  const roster = stripComments(read("../src/components/StudentsPage.jsx"));
+  check("StudentsPage runs the rename cascade", /cascadeStudentRenames\(/.test(roster));
+  check("…selecting reservations by email", /selectReservationIdsForRename\(/.test(roster));
+  check("…crew snapshots via production_crew.student_id",
+    /selectCrewReservationIds\(/.test(roster) && /from\("production_crew"\)/.test(roster));
+  check("…productions and studio bookings too",
+    /selectProductionIdsForRename\(/.test(roster) && /selectStudioBookingIdsForRename\(/.test(roster));
+  check("…and it is hooked to save(), the funnel the imports also go through",
+    /const save = async/.test(roster) && roster.indexOf("cascadeStudentRenames(renames)") > roster.indexOf("const save = async"));
+
+  // The wildcard hole: "_" matches any single character in SQL LIKE, so
+  // .ilike("email", "a_b@x.com") also renames a_Xb@x.com's reservations.
+  const staff = stripComments(read("../src/components/StaffManagementPage.jsx"));
+  for (const [label, src] of [["StudentsPage", roster], ["StaffManagementPage", staff]]) {
+    check(`${label} never matches an email with ilike`, !/\.ilike\(\s*["']email["']/.test(src));
+  }
+}
+
+console.log("\nstatic: identity snapshots stay OUT of the cascade");
+{
+  // night_* and equipment_reports are deliberate identity snapshots that must
+  // survive a student being deleted (lesson #37). Rewriting them would edit
+  // exam history. This guard exists so the next reader does not "complete" the
+  // cascade out of tidiness.
+  const roster = stripComments(read("../src/components/StudentsPage.jsx"));
+  const mod = stripComments(read("../src/utils/studentIdentity.js"));
+  for (const table of ["night_quiz_attempts", "night_closing_checklists", "equipment_reports"]) {
+    check(`neither the cascade nor the module touches ${table}`,
+      !new RegExp(table).test(roster) && !new RegExp(table).test(mod));
+  }
+}
+
 console.log(
   failures.length === 0
     ? `\n\x1b[32m\x1b[1mOK ${passed}/${passed} student-identity tests passed\x1b[0m\n`

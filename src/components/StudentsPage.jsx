@@ -5,6 +5,14 @@ import { CheckCircle, ClipboardList, Clock, Film, GraduationCap, Headphones, Lay
 import { logActivity } from "../utils.js";
 import { dualWriteCertifications, listStudents } from "../utils/studentsApi.js";
 import { syncAllStudioBookings } from "../utils/studioBookingsApi.js";
+import {
+  emailKeyOf,
+  nameNeedsCascade,
+  selectReservationIdsForRename,
+  selectCrewReservationIds,
+  selectStudioBookingIdsForRename,
+  selectProductionIdsForRename,
+} from "../utils/studentIdentity.js";
 import { Modal } from "./ui.jsx";
 import SmartExcelImportButton from "./SmartExcelImportButton.jsx";
 
@@ -100,6 +108,127 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
   const [xlImporting, setXlImporting] = useState(false);
   const xlInputRef = useRef(null);
 
+  // ── Rename cascade ─────────────────────────────────────────────────────────
+  //
+  // `students.name` is the source of truth, but four other tables hold frozen
+  // photographs of it, and every one of them is read somewhere that matters:
+  //   reservations_new.student_name  — ~80 display surfaces, every email
+  //                                    template, staff search, and the overdue
+  //                                    cron's push-notification body;
+  //   crew_photographer_name /
+  //   crew_sound_name               — the production certification gate, which
+  //                                    matches crew to certs by NORMALISED
+  //                                    NAME. A stale one blocks approval with
+  //                                    a lie about missing certifications;
+  //   productions.director_name      — the board;
+  //   studio_bookings.student_name   — the room schedule, and the by-name half
+  //                                    of deleteStudent's own cascade below.
+  //
+  // Fixing this in the data rather than at display is what lets the four
+  // server-side readers (check-overdue, staff-schedule, staff-review, and
+  // approve-production) see the corrected name at all — no client-side
+  // resolution layer can reach a cron job.
+  //
+  // Keyed by EMAIL for reservations and by STUDENT ID everywhere else. Never by
+  // the old name: that is the value we already know is untrustworthy, and two
+  // students can share one.
+  const cascadeStudentRenames = async (renames) => {
+    for (const { studentId, emailKey, nextName } of renames) {
+      // Slim select on purpose — no reservation_items join. This needs four
+      // columns, and the join is the expensive part.
+      const { data: resRows, error: resErr } = await supabase
+        .from("reservations_new")
+        .select("id,email,loan_type,lesson_auto,student_name,production_id,crew_photographer_name,crew_sound_name");
+      if (resErr) throw resErr;
+      const rows = resRows || [];
+
+      const nameIds = selectReservationIdsForRename(rows, { emailKey, nextName });
+      if (nameIds.length) {
+        // .in("id", ids) — NOT .ilike("email", …). In SQL LIKE "_" is a
+        // single-character wildcard, so an address containing one would sweep
+        // up other people's rows.
+        const { error } = await supabase.from("reservations_new")
+          .update({ student_name: nextName }).in("id", nameIds);
+        if (error) throw error;
+      }
+
+      // Which productions is this student APPROVED crew on? production_crew
+      // .student_id is a real foreign key, so it survives a rename intact —
+      // which is exactly why the crew snapshots are resolved through it.
+      const { data: crewRows, error: crewErr } = await supabase
+        .from("production_crew")
+        .select("production_id,role")
+        .eq("student_id", studentId)
+        .eq("status", "approved");
+      if (crewErr) throw crewErr;
+      const byRole = { photographer: [], sound: [] };
+      for (const c of crewRows || []) {
+        if (byRole[c.role]) byRole[c.role].push(c.production_id);
+      }
+      const crewIds = { photographer: [], sound: [] };
+      for (const role of ["photographer", "sound"]) {
+        crewIds[role] = selectCrewReservationIds(rows, { productionIds: byRole[role], role, nextName });
+        if (!crewIds[role].length) continue;
+        const column = role === "photographer" ? "crew_photographer_name" : "crew_sound_name";
+        // Name only — crew_*_phone is the cert matcher's tie-breaker, and a
+        // rename says nothing about a phone number.
+        const { error } = await supabase.from("reservations_new")
+          .update({ [column]: nextName }).in("id", crewIds[role]);
+        if (error) throw error;
+      }
+
+      // Safe against the director-overlap triggers: they fire on
+      // UPDATE OF status, director_student_id — Postgres matches the SET
+      // clause, and this touches neither.
+      const { data: prodRows, error: prodErr } = await supabase
+        .from("productions").select("id,director_student_id,director_name")
+        .eq("director_student_id", studentId);
+      if (prodErr) throw prodErr;
+      const prodIds = selectProductionIdsForRename(prodRows || [], { studentId, nextName });
+      if (prodIds.length) {
+        const { error } = await supabase.from("productions")
+          .update({ director_name: nextName }).in("id", prodIds);
+        if (error) throw error;
+      }
+
+      // Targeted .in() rather than syncAllStudioBookings — that one is a
+      // full-array write with delete-missing and would clobber concurrent edits.
+      const bookingIds = selectStudioBookingIdsForRename(studioBookings || [], { studentId, nextName });
+      if (bookingIds.length) {
+        const { error } = await supabase.from("studio_bookings")
+          .update({ student_name: nextName }).in("id", bookingIds);
+        if (error) throw error;
+        if (typeof setStudioBookings === "function") {
+          const touched = new Set(bookingIds.map(String));
+          setStudioBookings(prev => (Array.isArray(prev)
+            ? prev.map(b => (touched.has(String(b.id)) ? { ...b, studentName: nextName } : b))
+            : prev));
+        }
+      }
+
+      // Optimistic local patch so the admin who typed the rename sees it at
+      // once. Every other open tab converges through the reservations_new
+      // realtime channel (400ms debounce) without extra plumbing.
+      if (typeof setReservations === "function") {
+        const named  = new Set(nameIds.map(String));
+        const photo  = new Set(crewIds.photographer.map(String));
+        const sound  = new Set(crewIds.sound.map(String));
+        if (named.size || photo.size || sound.size) {
+          setReservations(prev => (Array.isArray(prev) ? prev.map(r => {
+            const key = String(r.id);
+            if (!named.has(key) && !photo.has(key) && !sound.has(key)) return r;
+            return {
+              ...r,
+              ...(named.has(key) ? { student_name: nextName } : {}),
+              ...(photo.has(key) ? { crew_photographer_name: nextName } : {}),
+              ...(sound.has(key) ? { crew_sound_name: nextName } : {}),
+            };
+          }) : prev));
+        }
+      }
+    }
+  };
+
   const save = async (updatedPatch) => {
     const nextStudents = updatedPatch?.students ?? students;
     const nextTypes = updatedPatch?.types ?? types;
@@ -161,6 +290,38 @@ export function StudentsPage({ certifications, setCertifications, showToast, onL
       // Re-read so local state matches the canonical table state.
       const fresh = await listStudents();
       if (Array.isArray(fresh)) setStudents(fresh);
+
+      // Hooked here, on save(), and not on saveInlineEdit — save() is the one
+      // funnel every write goes through (inline editor, XL import, AI import,
+      // track editor), so hooking the editor alone would leave the imports
+      // silently uncovered.
+      //
+      // The inline editor autosaves on a 700ms debounce, so a name typed slowly
+      // fires this more than once. That is fine and deliberate: every selector
+      // is idempotent by construction, so each extra pass is 1-4 targeted
+      // UPDATEs that select nothing, and last-write-wins converges.
+      if (!skipStudents && Array.isArray(students)) {
+        const before = new Map(students.map(s => [s.id, s]));
+        const renames = nextStudents
+          .filter(stu => before.has(stu.id)
+            && nameNeedsCascade(before.get(stu.id)?.name, stu.name))
+          .map(stu => ({
+            studentId: String(stu.id),
+            emailKey:  emailKeyOf(stu),
+            nextName:  String(stu.name || "").trim().replace(/\s+/g, " "),
+          }));
+        if (renames.length) {
+          try {
+            await cascadeStudentRenames(renames);
+          } catch (err) {
+            // Never silent, and never fatal: the roster write already
+            // succeeded, so failing the save would be a lie. The student's
+            // history is simply still showing the old name until a retry.
+            console.warn("student rename cascade failed:", err);
+            showToast("error", "השם עודכן ברשימה אך העדכון בבקשות נכשל — רענן ונסה שוב");
+          }
+        }
+      }
     }
     return r.ok;
   };
