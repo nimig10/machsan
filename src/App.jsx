@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { AlertTriangle, AudioLines, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, Clock, ClipboardList, Download, FileText, Film, GraduationCap, HelpCircle, Info, Link, Lightbulb, LogOut, Mail, Mic, Minus, Package, Pencil, Phone, Plus, Save, Search, Settings, Shield, ShoppingCart, SlidersHorizontal, Trash2, Triangle, Upload, User, Video, Wrench, X, XCircle } from "lucide-react";
 import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, deleteReservation, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB, equipmentWriteInFlight, getValidTokenDirect, groupReservationItemsByCategory, matchesEquipmentTypeFilter, deriveVisibleCategories, stretchOverdueForCalendar, ACTIVE_RESERVATION_STATUS_FILTERS, pickupNeverHappened } from "./utils.js";
-import { lateStatusFor, STATUS_NOT_PICKED_UP } from "./utils/checkoutFlow.js";
+import { lateStatusFor, STATUS_NOT_PICKED_UP, setNotPickedUpGraceMinutes, DEFAULT_NOT_PICKED_UP_GRACE_MIN } from "./utils/checkoutFlow.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
 import { CalendarGrid } from "./components/CalendarGrid.jsx";
@@ -5460,7 +5460,18 @@ export default function App() {
   const [productions, _setProductions] = useState([]);
   const [policies, _setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"", לילה:"" });
   const [certifications, _setCertifications] = useState({ types:[], students:[] });
-  const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14, aiMaxRequests:5, studioFutureHoursLimit:16, publicDisplayInterval:18, checkoutLeadHours:3, userGuideVideos:[] });
+  const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14, aiMaxRequests:5, studioFutureHoursLimit:16, publicDisplayInterval:18, checkoutLeadHours:3, notPickedUpGraceMinutes:30, userGuideVideos:[] });
+  // Keep the "לא יצא?" grace register in step with the admin's setting.
+  //
+  // Written during RENDER, not in an effect: an effect runs after this pass, so
+  // the rows on screen would already have been normalised with the previous
+  // value and nothing would re-render to correct them. Here it lands before any
+  // child renders, so getEffectiveStatus and both normalizers see the right
+  // number on the very same pass. It is also the only spot that catches all four
+  // writers — the DB load, the realtime refetch, the undo snapshot, and
+  // SystemSettingsPage's functional update. Idempotent, so StrictMode's double
+  // render is a no-op. See the register in src/utils/checkoutFlow.js.
+  setNotPickedUpGraceMinutes(siteSettings?.notPickedUpGraceMinutes ?? DEFAULT_NOT_PICKED_UP_GRACE_MIN);
   // PDF user-guide assets per audience — loaded once + refreshed by realtime
   // when admin uploads/removes from SystemSettingsPage. null = no PDF for that
   // audience → consumer components hide their download button.
