@@ -1001,6 +1001,29 @@ th{background:#eee;font-weight:700}
             />
             <span style={{ fontSize: 12, color: "var(--text3)" }}>ברירת מחדל: 3 שעות · מקסימום: 12 · נשמר אוטומטית</span>
           </div>
+
+          <div style={{ borderTop: "1px solid var(--border)", margin: "18px 0 14px" }} />
+
+          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14, lineHeight: 1.7 }}>
+            כמה זמן אחרי מועד האיסוף בקשה שאיש הצוות <strong>לא הוציא</strong> מסומנת
+            <strong> "לא יצא?"</strong>. זו התראה פנימית לצוות המחסן שהשלב נשכח —
+            <strong>הסטודנט לא רואה אותה</strong>, ולא נשלח לו שום מייל.
+            הבקשה נשארת ברשימה הפעילה, מסך ההוצאה נשאר פתוח, והציוד ממשיך להיחשב תפוס.
+            0 = הסימון מופיע בדיוק במועד האיסוף.
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>סימון "לא יצא?" (דקות אחרי)</label>
+            <input
+              type="number" min={0} max={240}
+              value={draft.notPickedUpGraceMinutes ?? 30}
+              onChange={e => setDraft(p => ({ ...p, notPickedUpGraceMinutes: e.target.value }))}
+              onBlur={e => commitNumber("checkout", "notPickedUpGraceMinutes", e.target.value, { min: 0, max: 240, fallback: 30 })}
+              onKeyDown={commitOnEnter}
+              disabled={busyPanel === "checkout"}
+              style={{ width: 90, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: 16, textAlign: "center" }}
+            />
+            <span style={{ fontSize: 12, color: "var(--text3)" }}>ברירת מחדל: 30 דקות · מקסימום: 240 · נשמר אוטומטית</span>
+          </div>
         </div>
       </div>
 

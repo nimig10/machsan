@@ -1,6 +1,6 @@
 // DashboardPage.jsx — admin dashboard page
 import { useState } from "react";
-import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, reservationStatusErrorMessage, getAuthToken, syncReservationStatusToBlob, getLoanTypeColor, normalizeName, groupReservationItemsByCategory, stretchOverdueForCalendar, buildReservationContactWhatsAppLink, resolveStudentPhone, INVENTORY_BLOCKING_STATUSES, STAFF_EDITABLE_STATUSES } from "../utils.js";
+import { formatDate, formatTime, getLoanDurationDays, formatLocalDateInput, today, toDateTime, workingUnits, getReservationApprovalConflicts, getConsecutiveBookingWarnings, markReservationReturned, normalizeReservationsForArchive, getEffectiveStatus, updateReservationStatus, reservationStatusErrorMessage, getAuthToken, syncReservationStatusToBlob, getLoanTypeColor, normalizeName, groupReservationItemsByCategory, stretchOverdueForCalendar, buildReservationContactWhatsAppLink, resolveStudentPhone, INVENTORY_BLOCKING_STATUSES, STAFF_EDITABLE_STATUSES, mayDeleteNotPickedUp } from "../utils.js";
 import { Modal, statusBadge, WhatsAppLinkButton } from "./ui.jsx";
 import { CalendarGrid } from "./CalendarGrid.jsx";
 import { UpdateReviewModal } from "./UpdateReviewModal.jsx";
@@ -747,8 +747,14 @@ export function DashboardPage({ equipment, setEquipment = () => {}, reservations
                     Gated on the EFFECTIVE status: "לא יצא?" is a display label
                     and is never stored, so dashViewRes.status would never match.
                     A request nobody collected is the one case where deleting is
-                    the honest resolution, and this modal had no way to do it. */}
-                {getEffectiveStatus(dashViewRes)===STATUS_NOT_PICKED_UP&&(
+                    the honest resolution, and this modal had no way to do it.
+
+                    ⚠️ mayDeleteNotPickedUp, not the bare label. The badge now
+                    appears half an hour after the PICKUP slot, but this is a hard
+                    delete that "בטל פעולה" cannot undo (lesson #47), so the
+                    button stays behind the RETURN deadline — until then the
+                    student is merely running late on a live loan. */}
+                {mayDeleteNotPickedUp(dashViewRes)&&(
                   <button className="btn btn-danger" title="מחיקת הבקשה — הסטודנט לא אסף את הציוד"
                     onClick={()=>deleteNotPickedUp(dashViewRes)}>
                     <Trash2 size={14} strokeWidth={1.75} /> מחק בקשה

@@ -32,6 +32,8 @@ import {
   buildCheckoutOutcomesSnapshot, readCheckoutOutcomes, recordedCheckoutUnitIds,
   checkoutState, wasCheckedOut, checkoutWindowOpen, validateCheckoutOutcomes,
   lateStatusFor, STATUS_OVERDUE, STATUS_NOT_PICKED_UP,
+  pickupOverdue, setNotPickedUpGraceMinutes, getNotPickedUpGraceMs,
+  DEFAULT_NOT_PICKED_UP_GRACE_MIN, MAX_NOT_PICKED_UP_GRACE_MIN,
   CHECKOUT_COLOR,
 } from "../src/utils/checkoutFlow.js";
 import { OUTCOME_COLOR } from "../src/utils/returnFlow.js";
@@ -861,9 +863,16 @@ console.log("\n\x1b[1m> in-flight freeze (checkout + return overlays)\x1b[0m");
     const delIdx = dash.indexOf("deleteNotPickedUp(dashViewRes)");
     check("the dashboard delete button renders AFTER WhatsApp (⇒ left of it in RTL)",
       waIdx !== -1 && delIdx !== -1 && delIdx > waIdx);
-    // "לא יצא?" is never stored, so a raw-status gate would never fire.
-    check("delete is gated on the EFFECTIVE status, not the raw column",
-      /getEffectiveStatus\(dashViewRes\)===STATUS_NOT_PICKED_UP/.test(dash));
+    // "לא יצא?" is never stored, so a raw-status gate would never fire — but the
+    // effective status alone is no longer enough either. The badge now appears
+    // half an hour after the PICKUP slot, and this is a hard delete with no undo
+    // (lesson #47), so it must stay behind the RETURN deadline that
+    // mayDeleteNotPickedUp adds. A bare label gate here would let staff destroy
+    // a live loan whose student is simply running late.
+    check("delete is gated on mayDeleteNotPickedUp, not the bare label",
+      /mayDeleteNotPickedUp\(dashViewRes\)/.test(dash));
+    check("…and the bare-label gate is gone from the delete button",
+      !/getEffectiveStatus\(dashViewRes\)===STATUS_NOT_PICKED_UP&&/.test(dash));
     check("delete guards the row against a mid-flight refetch",
       /markReservationDeleting\(id\)/.test(dash) && /unmarkReservationDeleting\(id, 0\)/.test(dash));
   }
@@ -933,8 +942,19 @@ console.log("\n\x1b[1m> checkout override removed (static)\x1b[0m");
   const settings = strip(readFileSync(new URL("../src/components/SystemSettingsPage.jsx", import.meta.url), "utf8"));
   // 72h = 3 days would reopen the same hole through the settings back door, so
   // the visual cap and the commit clamp must BOTH be 12 — they disagreed once.
-  check("settings: lead-hours input caps at 12", settings.includes("max={12}"));
-  check("settings: commitNumber clamps to 12 as well", /max:\s*12/.test(settings));
+  //
+  // Scoped to the checkoutLeadHours field rather than searched across the whole
+  // file: there is now a SECOND numeric field in the same card, so a bare
+  // includes("max={12}") would be satisfied by any unrelated input and this
+  // guard would quietly stop guarding anything.
+  const leadIdx = settings.indexOf("checkoutLeadHours");
+  const leadBlock = settings.slice(
+    settings.lastIndexOf("<input", leadIdx),
+    settings.indexOf("/>", leadIdx) + 2,
+  );
+  check("settings: lead-hours input caps at 12", /max=\{12\}/.test(leadBlock));
+  check("settings: commitNumber clamps that same field to 12",
+    /commitNumber\("checkout",\s*"checkoutLeadHours"[^)]*max:\s*12/.test(leadBlock));
   check("settings: no 72-hour ceiling left", !/max=\{72\}/.test(settings) && !/max:\s*72/.test(settings));
   check("settings: copy no longer advertises the button", !settings.includes("הוצא עכשיו"));
 }
@@ -985,6 +1005,208 @@ console.log("\n\x1b[1m> staff may correct a live loan (static)\x1b[0m");
     !/original_items/.test(returnApi));
   check("…nor reservation_items — it only moves units and status",
     !/reservation_items/.test(returnApi));
+}
+
+// ── the pickup trigger — "לא יצא?" no longer waits for the return deadline ──
+console.log("\n\x1b[1m> pickupOverdue\x1b[0m");
+{
+  const now = 1_770_000_000_000;
+  const MIN = 60_000;
+  // Always inject graceMs here: these assertions must not depend on whatever
+  // the module-level register happens to hold when this block runs.
+  const at = (offset, graceMs = 30 * MIN) =>
+    pickupOverdue({ borrowTs: now - offset, nowMs: now, graceMs });
+
+  check("not yet — pickup was five minutes ago", at(5 * MIN) === false);
+  check("not yet — one millisecond short of the grace", at(30 * MIN - 1) === false);
+  check("fires exactly on the grace boundary", at(30 * MIN) === true);
+  check("fires an hour after pickup", at(60 * MIN) === true);
+  // The old rule waited for the return deadline; a week-long loan meant a
+  // week-late alert. Distance past pickup is now the only thing that matters.
+  check("still fires a week after pickup", at(7 * 24 * 60 * MIN) === true);
+  check("never fires before the pickup moment", at(-1 * MIN) === false);
+  check("a grace of 0 fires exactly at the pickup moment",
+    pickupOverdue({ borrowTs: now, nowMs: now, graceMs: 0 }) === true &&
+    pickupOverdue({ borrowTs: now + 1, nowMs: now, graceMs: 0 }) === false);
+  check("a missing pickup timestamp never fires",
+    pickupOverdue({ nowMs: now, graceMs: 0 }) === false &&
+    pickupOverdue({ borrowTs: 0, nowMs: now, graceMs: 0 }) === false);
+  check("garbage arguments do not throw",
+    pickupOverdue() === false && pickupOverdue({}, {}) === false &&
+    pickupOverdue({ borrowTs: "x", nowMs: now }) === false);
+  check("a non-finite graceMs falls back to the register, it does not become NaN",
+    pickupOverdue({ borrowTs: now - 60 * MIN, nowMs: now, graceMs: NaN }) === true);
+}
+
+console.log("\n\x1b[1m> the grace register\x1b[0m");
+{
+  const MIN = 60_000;
+  check("ships at 30 minutes", DEFAULT_NOT_PICKED_UP_GRACE_MIN === 30);
+  check("the register starts at the default",
+    getNotPickedUpGraceMs() === DEFAULT_NOT_PICKED_UP_GRACE_MIN * MIN);
+
+  check("the setter reports and stores the value it applied",
+    setNotPickedUpGraceMinutes(45) === 45 && getNotPickedUpGraceMs() === 45 * MIN);
+  // The settings field and this clamp must agree — they disagreed once for
+  // checkoutLeadHours, and typing past the spinner is not blocked by the browser.
+  check("clamps above the ceiling", setNotPickedUpGraceMinutes(9999) === MAX_NOT_PICKED_UP_GRACE_MIN);
+  check("clamps below zero", setNotPickedUpGraceMinutes(-5) === 0);
+  check("0 is a legal setting — the badge appears at the pickup moment",
+    setNotPickedUpGraceMinutes(0) === 0 && getNotPickedUpGraceMs() === 0);
+  check("garbage falls back to the default rather than poisoning every badge",
+    setNotPickedUpGraceMinutes("abc") === DEFAULT_NOT_PICKED_UP_GRACE_MIN &&
+    setNotPickedUpGraceMinutes(undefined) === DEFAULT_NOT_PICKED_UP_GRACE_MIN &&
+    setNotPickedUpGraceMinutes(null) === 0);
+
+  setNotPickedUpGraceMinutes(10);
+  check("pickupOverdue reads the register when no override is passed",
+    pickupOverdue({ borrowTs: 1000 * MIN, nowMs: 1010 * MIN }) === true &&
+    pickupOverdue({ borrowTs: 1000 * MIN, nowMs: 1009 * MIN }) === false);
+  check("an explicit graceMs still wins over the register",
+    pickupOverdue({ borrowTs: 1000 * MIN, nowMs: 1010 * MIN, graceMs: 60 * MIN }) === false);
+
+  setNotPickedUpGraceMinutes(DEFAULT_NOT_PICKED_UP_GRACE_MIN);
+  check("restored to the default for the rest of the suite",
+    getNotPickedUpGraceMs() === DEFAULT_NOT_PICKED_UP_GRACE_MIN * MIN);
+}
+
+// The earlier trigger must not disturb the fold. checkoutState and
+// checkoutWindowOpen both treat "לא יצא?" as באיחור, and their safety argument
+// is that the label is only ever emitted when issued_at IS NULL. Branch A keeps
+// that true — it is gated on !wasCheckedOut — so re-pinning it here is what
+// catches a future edit that drops the gate.
+console.log("\n\x1b[1m> the fold survives the earlier trigger\x1b[0m");
+{
+  const now = 1_770_000_000_000;
+  const H = 3600_000;
+  check("a row labelled at pickup time still gets the checkout panel",
+    checkoutState({ status: STATUS_NOT_PICKED_UP }) === "pending");
+  check("…and its checkout window is still open",
+    checkoutWindowOpen({ status: STATUS_NOT_PICKED_UP, borrowTs: now - 1 * H },
+      { nowMs: now, leadMs: 3 * H }) === true);
+  check("…and staff may still edit it",
+    checkoutState({ status: STATUS_NOT_PICKED_UP }) !== "none");
+  check("the label is still a fixed point",
+    lateStatusFor({ status: STATUS_NOT_PICKED_UP }) === STATUS_NOT_PICKED_UP);
+  // Branch A is gated on !wasCheckedOut, so a handed-over loan can never take
+  // the pickup trigger however long ago its pickup slot was.
+  check("a loan that DID go out is never a pickup problem",
+    wasCheckedOut({ status: "פעילה" }) &&
+    wasCheckedOut({ status: "מאושר", issued_at: AT }) &&
+    wasCheckedOut({ status: "פעילה", issued_at: AT }));
+  check("lateStatusFor still calls a handed-over loan באיחור, not לא יצא?",
+    lateStatusFor({ status: "פעילה" }) === STATUS_OVERDUE &&
+    lateStatusFor({ status: "מאושר", issued_at: AT }) === STATUS_OVERDUE);
+}
+
+// src/utils.js cannot be imported under Node — it pulls in the Supabase client —
+// so the wiring is pinned by reading the source. Comments are stripped first:
+// they name the very things these guards forbid.
+console.log("\n\x1b[1m> the pickup trigger is wired (static)\x1b[0m");
+{
+  const { readFileSync } = await import("node:fs");
+  const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const read = p => strip(readFileSync(new URL(p, import.meta.url), "utf8"));
+
+  const utils = read("../src/utils.js");
+  const app = read("../src/App.jsx");
+
+  // ONE implementation, three callers. This pair of normalizers has already
+  // drifted once (the "צוות" early-return utils.js has and App.jsx does not),
+  // and lesson #19 is what that costs — so the new rule gets no second copy to
+  // drift with. If either normalizer ever inlines its own version, the count of
+  // pickupOverdue callers outside the helper is what catches it.
+  check("pickupNeverHappened exists and is exported once",
+    (utils.match(/export function pickupNeverHappened/g) || []).length === 1);
+  check("getEffectiveStatus calls it", /pickupNeverHappened\(r\)/.test(utils));
+  check("the utils.js normalizer calls it",
+    /pickupNeverHappened\(normalizedReservation, nowMs\)/.test(utils));
+  check("the App.jsx normalizer calls the SAME helper, imported not re-implemented",
+    /pickupNeverHappened\(normalizedReservation, nowMs\)/.test(app)
+    && !/function pickupNeverHappened/.test(app));
+  check("no second call to pickupOverdue outside the one helper",
+    (utils.match(/pickupOverdue\(/g) || []).length === 1
+    && !/pickupOverdue\(/.test(app));
+
+  // The gate is what keeps checkoutState's fold safe by construction: the label
+  // is only ever emitted while the gear is still on the shelf. Drop it and a
+  // handed-over loan starts reading "לא יצא?".
+  const helper = (() => {
+    const from = utils.slice(utils.indexOf("export function pickupNeverHappened"));
+    return from.slice(0, from.indexOf("\n}") + 2);
+  })();
+  check("pickupNeverHappened is gated on wasCheckedOut, not on issued_at directly",
+    /wasCheckedOut\(reservation\)/.test(helper) && !/issued_at/.test(helper), helper.trim());
+  check("…and excludes lessons, as checkoutState and the migration both do",
+    /"שיעור"/.test(helper) && /lesson_auto/.test(helper), helper.trim());
+  check("…and reads the PICKUP fields, not the return ones",
+    /borrow_date/.test(helper) && /borrow_time/.test(helper)
+    && !/return_date/.test(helper), helper.trim());
+
+  // ⚠️ THE INVENTORY REGRESSION THIS FEATURE COULD CAUSE.
+  //
+  // The 48h buffer is a grace AFTER the return moment. Now that the label fires
+  // at pickup time it lands on rows whose return moment has not arrived and
+  // whose raw status create_reservation_v2 reads as a plain "מאושר" — so
+  // granting them the buffer would withhold 48h of stock the DB considers free,
+  // with no 409 to explain it. The nowMs test is what stops that.
+  check("the 48h buffer is gated on the return moment having passed",
+    /isOverdueLikeStatus\(effStatus\)\s*&&\s*nowMs\s*>=\s*endTs/.test(utils));
+  check("computeEquipmentAvailability accepts an injectable nowMs",
+    /computeEquipmentAvailability\([^)]*nowMs = Date\.now\(\)/.test(utils));
+  check("the label still blocks its own window — it stayed in the shared list",
+    /INVENTORY_BLOCKING_STATUSES\s*=\s*\[[^\]]*STATUS_NOT_PICKED_UP/.test(utils));
+
+  // Hard delete, no undo (lesson #47): the badge may appear at pickup+grace, the
+  // delete button may not.
+  const del = (() => {
+    const from = utils.slice(utils.indexOf("export function mayDeleteNotPickedUp"));
+    return from.slice(0, from.indexOf("\n}") + 2);
+  })();
+  check("mayDeleteNotPickedUp requires the return deadline as well as the label",
+    /STATUS_NOT_PICKED_UP/.test(del) && /getReservationReturnTimestamp/.test(del), del.trim());
+
+  // The student is not the audience. Folded at the display so every staff
+  // surface, the inventory maths and the archive keep the one derivation.
+  const form = read("../src/components/PublicForm.jsx");
+  check("the student portal folds the label away",
+    /derivedStatus === STATUS_NOT_PICKED_UP \? "מאושר"/.test(form));
+  check("…and folds to a literal, not back to r.status which IS the label",
+    !/derivedStatus === STATUS_NOT_PICKED_UP \? \(?r\.status/.test(form));
+
+  // ⚠️ NEGATIVE GUARD — this feature must not leak into the cron.
+  //
+  // check-overdue.js WRITES "באיחור" to the DB. Deriving it from borrow_date
+  // would stamp a real status on every loan the warehouse is half an hour behind
+  // on, and that status IS what the RPCs count.
+  const cron = read("../api/check-overdue.js");
+  check("the overdue cron still derives only from return_date",
+    /toDateTime\(r\.return_date/.test(cron) && !/toDateTime\(r\.borrow_date/.test(cron));
+  check("the cron writes no display label",
+    !cron.includes("לא יצא?") && !/pickupOverdue|pickupNeverHappened/.test(cron));
+
+  // The field and the clamp disagreed once for checkoutLeadHours; the new field
+  // must not repeat it, and 240 has to match MAX_NOT_PICKED_UP_GRACE_MIN.
+  const settings = read("../src/components/SystemSettingsPage.jsx");
+  const graceIdx = settings.indexOf("notPickedUpGraceMinutes");
+  const graceBlock = settings.slice(
+    settings.lastIndexOf("<input", graceIdx),
+    settings.indexOf("/>", graceIdx) + 2,
+  );
+  check("the grace field caps at 240 in the input", /max=\{240\}/.test(graceBlock));
+  check("…and commitNumber clamps the same field to 240",
+    /commitNumber\("checkout",\s*"notPickedUpGraceMinutes"[^)]*max:\s*240/.test(graceBlock));
+  check("…and the ceiling matches the module constant",
+    MAX_NOT_PICKED_UP_GRACE_MIN === 240);
+  check("…and the default matches too",
+    /fallback:\s*30/.test(graceBlock) && DEFAULT_NOT_PICKED_UP_GRACE_MIN === 30);
+
+  // Written during render, deliberately: an effect would leave the rows on
+  // screen normalised with the previous value and nothing would re-render.
+  check("App.jsx keeps the register in step with the setting",
+    /setNotPickedUpGraceMinutes\(siteSettings\?\.notPickedUpGraceMinutes/.test(app));
+  check("…outside any useEffect",
+    !/useEffect\([^)]*setNotPickedUpGraceMinutes/.test(app));
 }
 
 

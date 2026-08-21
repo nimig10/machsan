@@ -2,7 +2,7 @@
 import { supabase } from "./supabaseClient.js";
 // checkoutFlow.js is dependency-free (it imports only returnFlow.js), so this
 // direction is safe and there is no cycle: it never imports from here.
-import { lateStatusFor, STATUS_NOT_PICKED_UP } from "./utils/checkoutFlow.js";
+import { lateStatusFor, STATUS_NOT_PICKED_UP, wasCheckedOut, pickupOverdue } from "./utils/checkoutFlow.js";
 
 export { STATUS_NOT_PICKED_UP };
 
@@ -940,13 +940,62 @@ export function toDateTime(dateStr, timeStr) {
 // gear ever left; issued_at does.
 const LATE_CANDIDATE_STATUSES = ["מאושר", "פעילה", "באיחור"];
 
+// ⚠️ THE ONE IMPLEMENTATION OF THE PICKUP TRIGGER — do not inline a second copy.
+//
+// getEffectiveStatus and BOTH copies of normalizeReservationsForArchive call
+// this. They have to agree exactly (lesson #19), and the copies already drifted
+// once over the "צוות" branch below, so the way to stop it happening again to
+// the new rule is for there to be nothing to keep in sync.
+//
+// "לא יצא?" used to wait for the RETURN deadline, because it shared its trigger
+// with "באיחור" and only issued_at told them apart. The alert therefore arrived
+// long after it was actionable — hours on a same-day loan, a week on a weekly
+// one. It now fires a grace window after the PICKUP moment, which is the moment
+// the warehouse was supposed to act.
+//
+// The gate is wasCheckedOut, not issued_at directly: "פעילה" counts as handed
+// over even with a null stamp (the belt-and-braces branch in checkoutState), so
+// a loan that really went out can never be mistaken for one nobody collected.
+// Keeping that gate is also what keeps the fold in checkoutState safe — the
+// label is still only ever emitted when the gear is still on the shelf.
+export function pickupNeverHappened(reservation, nowMs = Date.now()) {
+  if (!reservation) return false;
+  if (!LATE_CANDIDATE_STATUSES.includes(reservation.status)) return false;
+  // Lessons come from the timetable and are never handed over at a counter —
+  // the same exclusion checkoutState makes, and the migration makes in SQL.
+  if (reservation.loan_type === "שיעור" || reservation.lesson_auto) return false;
+  if (!reservation.borrow_date) return false;
+  if (wasCheckedOut(reservation)) return false;
+  return pickupOverdue({
+    borrowTs: toDateTime(reservation.borrow_date, reservation.borrow_time || "00:00"),
+    nowMs,
+  });
+}
+
 export function getEffectiveStatus(r) {
   const status = r?.status;
+  // A — nobody ran the checkout screen. Fires a grace window after pickup.
+  if (pickupNeverHappened(r)) return STATUS_NOT_PICKED_UP;
+  // B — a real deadline miss. Unchanged: only gear that went out reaches this
+  // now, so lateStatusFor resolves to "באיחור" — but it stays the caller here
+  // so the two labels keep coming from one helper.
   if (LATE_CANDIDATE_STATUSES.includes(status) && r.borrow_date) {
     const returnAt = getReservationReturnTimestamp(r);
     if (returnAt !== null && Date.now() >= returnAt && r.loan_type !== "שיעור") return lateStatusFor(r);
   }
   return status || "";
+}
+
+// May staff permanently delete this uncollected request?
+//
+// The badge appears within half an hour of the pickup slot, but delete_reservation_v1
+// is a HARD delete that "בטל פעולה" cannot undo (lesson #47), so it stays behind
+// the RETURN deadline: until then the student is merely running late and the
+// loan is entirely live. Product-owner decision, 2026-08-21.
+export function mayDeleteNotPickedUp(reservation) {
+  if (getEffectiveStatus(reservation) !== STATUS_NOT_PICKED_UP) return false;
+  const returnAt = getReservationReturnTimestamp(reservation);
+  return returnAt !== null && Date.now() >= returnAt;
 }
 
 export function safeClone(value) {
@@ -1002,6 +1051,14 @@ export function normalizeReservationsForArchive(reservations, now = new Date()) 
     };
     if (normalizedReservation.status === "הוחזר") {
       return normalizedReservation.returned_at ? normalizedReservation : markReservationReturned(normalizedReservation, now);
+    }
+    // A — nobody ran the checkout screen. Same helper getEffectiveStatus uses,
+    // for the same reason (lesson #19). Staff loans ARE included: the cron
+    // already treats them like any other loan, and a staff loan sitting
+    // uncollected is exactly the thing this badge exists to surface. The "צוות"
+    // early-return further down belongs to the RETURN branch and is untouched.
+    if (pickupNeverHappened(normalizedReservation, nowMs)) {
+      return { ...normalizedReservation, status: STATUS_NOT_PICKED_UP };
     }
     const returnAt = getReservationReturnTimestamp(normalizedReservation);
     // "פעילה" is matched alongside "מאושר" because checkout now writes it for
@@ -1082,11 +1139,19 @@ export const OVERDUE_BLOCK_BUFFER_MS = 48 * 60 * 60 * 1000;
 // bare 409. Nothing in the UI would look wrong.
 export const INVENTORY_BLOCKING_STATUSES = ["מאושר", "פעילה", "באיחור", STATUS_NOT_PICKED_UP];
 
-// Which labels get the 48h grace window bolted onto their return time. Both do,
-// and identically — a never-collected request blocks exactly as long as it did
-// when it was simply called "באיחור", because the DB's own guards still treat it
-// that way. Narrowing this would hand the browser a more generous view of stock
-// than the RPC has, which is the same one-sided failure described above.
+// Which labels are ELIGIBLE for the 48h grace window bolted onto their return
+// time. Both are, and identically — a never-collected request blocks exactly as
+// long as it did when it was simply called "באיחור", because the DB's own guards
+// still treat it that way. Narrowing this would hand the browser a more generous
+// view of stock than the RPC has, which is the same one-sided failure described
+// above.
+//
+// ⚠️ ELIGIBLE, NOT ENTITLED — the caller must also check that the return moment
+// has actually passed. Since "לא יצא?" started firing at the PICKUP time, the
+// label appears on rows whose return date is still in the FUTURE and whose raw
+// status is a plain "מאושר". Granting those the buffer would block 48h that
+// create_reservation_v2 does not block, which is the mirror-image failure: the
+// browser hides stock that is genuinely free, and no 409 ever explains why.
 export function isOverdueLikeStatus(status) {
   return status === "באיחור" || status === STATUS_NOT_PICKED_UP;
 }
@@ -1148,7 +1213,7 @@ export function workingUnits(eq) {
 // Max concurrency within the window is always reached at some blocker's start
 // (clamped to reqStart), so we evaluate only at those candidate points. O(n^2),
 // n = blockers per item (tiny in practice).
-export function computeEquipmentAvailability(eqId, reqStart, reqEnd, reservations, equipment, excludeId = null) {
+export function computeEquipmentAvailability(eqId, reqStart, reqEnd, reservations, equipment, excludeId = null, { nowMs = Date.now() } = {}) {
   const eq = equipment.find(e => e.id == eqId);
   if (!eq) return { working: 0, peakUsed: 0, available: 0, overlapping: [] };
   const overlapping = [];
@@ -1168,9 +1233,18 @@ export function computeEquipmentAvailability(eqId, reqStart, reqEnd, reservation
     const s = toDateTime(res.borrow_date, res.borrow_time || "00:00");
     // Overdue items block only within OVERDUE_BLOCK_BUFFER_MS of their scheduled
     // return — a loan starting >48h after the overdue return_date can be approved.
-    const e = isOverdueLikeStatus(effStatus)
-      ? toDateTime(res.return_date, res.return_time || "23:59") + OVERDUE_BLOCK_BUFFER_MS
-      : toDateTime(res.return_date, res.return_time || "23:59");
+    //
+    // The `nowMs >= endTs` half is what keeps the buffer meaning "grace AFTER the
+    // return moment". It is a no-op for every genuinely-late row, which is past
+    // endTs by definition; it exists for "לא יצא?", which now appears at PICKUP
+    // time on rows whose return moment has not arrived and whose raw status the
+    // RPC reads as a plain "מאושר". Without it the browser would withhold 48h of
+    // stock the DB considers free. The row still blocks its own window either
+    // way — INVENTORY_BLOCKING_STATUSES covers the label.
+    const endTs = toDateTime(res.return_date, res.return_time || "23:59");
+    const e = (isOverdueLikeStatus(effStatus) && nowMs >= endTs)
+      ? endTs + OVERDUE_BLOCK_BUFFER_MS
+      : endTs;
     // Overlap: new period starts before existing ends AND new period ends after existing starts
     if (!(reqStart < e && reqEnd > s)) continue;
     const item = res.items?.find(i => i.equipment_id == eqId);
