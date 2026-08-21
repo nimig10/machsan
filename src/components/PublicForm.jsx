@@ -1,7 +1,7 @@
 // PublicForm.jsx — public loan request form
 import { AlertTriangle, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, ClipboardList, Clock, Download, Film, GraduationCap, Info, Lightbulb, Mail, Mic, Minus, Moon, Package, Pencil, Phone, Save, School, Search, Settings, Shield, ShieldCheck, Trash2, User, X, XCircle } from "lucide-react";
 import { useEffect, useState, useRef, useMemo } from "react";
-import { formatDate, formatTime, formatLocalDateInput, parseLocalDate, today, getAvailable, computeEquipmentAvailability, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, EXTERNAL_LOAN_TYPES, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR, groupReservationItemsByCategory, deriveVisibleCategories, stretchOverdueForCalendar, videoEmbedSrc, saveStudentPhone } from "../utils.js";
+import { formatDate, formatTime, formatLocalDateInput, parseLocalDate, today, getAvailable, computeEquipmentAvailability, toDateTime, getNextSoundDayLoanDate, getFutureTimeSlotsForDate, getPrivateLoanLimitedQty, normalizeName, isValidEmailAddress, NIMROD_PHONE, DEFAULT_CATEGORIES, FAR_FUTURE, EXTERNAL_LOAN_TYPES, getEffectiveStatus, cloudinaryThumb, createReservation, getAuthToken, getLoanTypeColor, PREVIEW_COLOR, groupReservationItemsByCategory, deriveVisibleCategories, stretchOverdueForCalendar, videoEmbedSrc, saveStudentPhone, STATUS_NOT_PICKED_UP } from "../utils.js";
 import { pickSubmissionPhone, mayOverwriteRosterPhone } from "../utils/studentPhone.js";
 import { emailKeyOf, splitFullName, joinName } from "../utils/studentIdentity.js";
 import { supabase } from "../supabaseClient.js";
@@ -461,10 +461,8 @@ const STATUS_BADGE_COLORS = {
   "מאושר":            { bg:"rgba(22,163,74,0.16)",  fg:"#16a34a" },
   "פעילה":            { bg:"rgba(37,99,235,0.16)",  fg:"#2563eb" },
   "באיחור":           { bg:"rgba(220,38,38,0.16)",  fg:"#dc2626" },
-  // Neutral on purpose — calm, not dim. It tells the student their gear is still
-  // waiting at the warehouse, not that they did anything wrong. But it is also
-  // the one status here that requires them to act, and the same request must not
-  // read brighter to the warehouse than it does to the person who has to respond.
+  // Unreachable since the fold in ActiveLoanCard, and kept as a backstop so a
+  // future surface that does show the label does not fall through to grey.
   "לא יצא?":          { bg:"var(--slate-bg)",       fg:"var(--slate)" },
   "ממתין":            { bg:"rgba(107,114,128,0.18)",fg:"#6b7280" },
   "אישור ראש מחלקה":  { bg:"rgba(124,58,237,0.18)",fg:"#7c3aed" },
@@ -475,9 +473,27 @@ function ActiveLoanCard({ reservation, equipById }) {
   const [open, setOpen] = useState(false);
   // The badge shows the EFFECTIVE status, not the stored one. "פעילה" is no
   // longer conjured from a clock — checkout writes it — but the row can still
-  // read "מאושר" while the student is looking at a loan that is already late, or
-  // at one whose gear they never came to collect ("לא יצא?").
-  const effectiveStatus = getEffectiveStatus(r);
+  // read "מאושר" while the student is looking at a loan that is already late.
+  //
+  // ⚠️ "לא יצא?" IS FOLDED BACK — the student never sees it.
+  //
+  // It is an operational alert aimed at the warehouse: "nobody ran the checkout
+  // screen". Since it started firing half an hour after the pickup slot rather
+  // than at the return deadline, the common case is a student who is simply on
+  // their way — and showing them a badge that reads like a fault, on a loan that
+  // is approved and waiting for them, would be a lie about their own request.
+  // Folded here rather than in getEffectiveStatus so the staff surfaces, the
+  // inventory maths and the archive normalizer all keep the one derivation
+  // (lesson #19); this is a display choice, and it lives at the display.
+  // Product-owner decision, 2026-08-21.
+  //
+  // Folds to the literal "מאושר" rather than to r.status: the normalizer has
+  // usually already overwritten status with the label itself, so reading it back
+  // would just re-emit the thing being hidden. "מאושר" is also the honest word
+  // either way — the gear never left, so the student holds nothing and owes
+  // nothing, which is exactly why the overdue cron sends them no email either.
+  const derivedStatus = getEffectiveStatus(r);
+  const effectiveStatus = derivedStatus === STATUS_NOT_PICKED_UP ? "מאושר" : derivedStatus;
   const badge = STATUS_BADGE_COLORS[effectiveStatus] || { bg:"var(--surface)", fg:"var(--text3)" };
   const loanTypeColor = r.loan_type ? getLoanTypeColor(r.loan_type) : ["var(--surface2)","var(--text3)"];
   const items = Array.isArray(r.items) ? r.items : [];
