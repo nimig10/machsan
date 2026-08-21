@@ -32,6 +32,8 @@ import {
   buildCheckoutOutcomesSnapshot, readCheckoutOutcomes, recordedCheckoutUnitIds,
   checkoutState, wasCheckedOut, checkoutWindowOpen, validateCheckoutOutcomes,
   lateStatusFor, STATUS_OVERDUE, STATUS_NOT_PICKED_UP,
+  pickupOverdue, setNotPickedUpGraceMinutes, getNotPickedUpGraceMs,
+  DEFAULT_NOT_PICKED_UP_GRACE_MIN, MAX_NOT_PICKED_UP_GRACE_MIN,
   CHECKOUT_COLOR,
 } from "../src/utils/checkoutFlow.js";
 import { OUTCOME_COLOR } from "../src/utils/returnFlow.js";
@@ -985,6 +987,98 @@ console.log("\n\x1b[1m> staff may correct a live loan (static)\x1b[0m");
     !/original_items/.test(returnApi));
   check("…nor reservation_items — it only moves units and status",
     !/reservation_items/.test(returnApi));
+}
+
+// ── the pickup trigger — "לא יצא?" no longer waits for the return deadline ──
+console.log("\n\x1b[1m> pickupOverdue\x1b[0m");
+{
+  const now = 1_770_000_000_000;
+  const MIN = 60_000;
+  // Always inject graceMs here: these assertions must not depend on whatever
+  // the module-level register happens to hold when this block runs.
+  const at = (offset, graceMs = 30 * MIN) =>
+    pickupOverdue({ borrowTs: now - offset, nowMs: now, graceMs });
+
+  check("not yet — pickup was five minutes ago", at(5 * MIN) === false);
+  check("not yet — one millisecond short of the grace", at(30 * MIN - 1) === false);
+  check("fires exactly on the grace boundary", at(30 * MIN) === true);
+  check("fires an hour after pickup", at(60 * MIN) === true);
+  // The old rule waited for the return deadline; a week-long loan meant a
+  // week-late alert. Distance past pickup is now the only thing that matters.
+  check("still fires a week after pickup", at(7 * 24 * 60 * MIN) === true);
+  check("never fires before the pickup moment", at(-1 * MIN) === false);
+  check("a grace of 0 fires exactly at the pickup moment",
+    pickupOverdue({ borrowTs: now, nowMs: now, graceMs: 0 }) === true &&
+    pickupOverdue({ borrowTs: now + 1, nowMs: now, graceMs: 0 }) === false);
+  check("a missing pickup timestamp never fires",
+    pickupOverdue({ nowMs: now, graceMs: 0 }) === false &&
+    pickupOverdue({ borrowTs: 0, nowMs: now, graceMs: 0 }) === false);
+  check("garbage arguments do not throw",
+    pickupOverdue() === false && pickupOverdue({}, {}) === false &&
+    pickupOverdue({ borrowTs: "x", nowMs: now }) === false);
+  check("a non-finite graceMs falls back to the register, it does not become NaN",
+    pickupOverdue({ borrowTs: now - 60 * MIN, nowMs: now, graceMs: NaN }) === true);
+}
+
+console.log("\n\x1b[1m> the grace register\x1b[0m");
+{
+  const MIN = 60_000;
+  check("ships at 30 minutes", DEFAULT_NOT_PICKED_UP_GRACE_MIN === 30);
+  check("the register starts at the default",
+    getNotPickedUpGraceMs() === DEFAULT_NOT_PICKED_UP_GRACE_MIN * MIN);
+
+  check("the setter reports and stores the value it applied",
+    setNotPickedUpGraceMinutes(45) === 45 && getNotPickedUpGraceMs() === 45 * MIN);
+  // The settings field and this clamp must agree — they disagreed once for
+  // checkoutLeadHours, and typing past the spinner is not blocked by the browser.
+  check("clamps above the ceiling", setNotPickedUpGraceMinutes(9999) === MAX_NOT_PICKED_UP_GRACE_MIN);
+  check("clamps below zero", setNotPickedUpGraceMinutes(-5) === 0);
+  check("0 is a legal setting — the badge appears at the pickup moment",
+    setNotPickedUpGraceMinutes(0) === 0 && getNotPickedUpGraceMs() === 0);
+  check("garbage falls back to the default rather than poisoning every badge",
+    setNotPickedUpGraceMinutes("abc") === DEFAULT_NOT_PICKED_UP_GRACE_MIN &&
+    setNotPickedUpGraceMinutes(undefined) === DEFAULT_NOT_PICKED_UP_GRACE_MIN &&
+    setNotPickedUpGraceMinutes(null) === 0);
+
+  setNotPickedUpGraceMinutes(10);
+  check("pickupOverdue reads the register when no override is passed",
+    pickupOverdue({ borrowTs: 1000 * MIN, nowMs: 1010 * MIN }) === true &&
+    pickupOverdue({ borrowTs: 1000 * MIN, nowMs: 1009 * MIN }) === false);
+  check("an explicit graceMs still wins over the register",
+    pickupOverdue({ borrowTs: 1000 * MIN, nowMs: 1010 * MIN, graceMs: 60 * MIN }) === false);
+
+  setNotPickedUpGraceMinutes(DEFAULT_NOT_PICKED_UP_GRACE_MIN);
+  check("restored to the default for the rest of the suite",
+    getNotPickedUpGraceMs() === DEFAULT_NOT_PICKED_UP_GRACE_MIN * MIN);
+}
+
+// The earlier trigger must not disturb the fold. checkoutState and
+// checkoutWindowOpen both treat "לא יצא?" as באיחור, and their safety argument
+// is that the label is only ever emitted when issued_at IS NULL. Branch A keeps
+// that true — it is gated on !wasCheckedOut — so re-pinning it here is what
+// catches a future edit that drops the gate.
+console.log("\n\x1b[1m> the fold survives the earlier trigger\x1b[0m");
+{
+  const now = 1_770_000_000_000;
+  const H = 3600_000;
+  check("a row labelled at pickup time still gets the checkout panel",
+    checkoutState({ status: STATUS_NOT_PICKED_UP }) === "pending");
+  check("…and its checkout window is still open",
+    checkoutWindowOpen({ status: STATUS_NOT_PICKED_UP, borrowTs: now - 1 * H },
+      { nowMs: now, leadMs: 3 * H }) === true);
+  check("…and staff may still edit it",
+    checkoutState({ status: STATUS_NOT_PICKED_UP }) !== "none");
+  check("the label is still a fixed point",
+    lateStatusFor({ status: STATUS_NOT_PICKED_UP }) === STATUS_NOT_PICKED_UP);
+  // Branch A is gated on !wasCheckedOut, so a handed-over loan can never take
+  // the pickup trigger however long ago its pickup slot was.
+  check("a loan that DID go out is never a pickup problem",
+    wasCheckedOut({ status: "פעילה" }) &&
+    wasCheckedOut({ status: "מאושר", issued_at: AT }) &&
+    wasCheckedOut({ status: "פעילה", issued_at: AT }));
+  check("lateStatusFor still calls a handed-over loan באיחור, not לא יצא?",
+    lateStatusFor({ status: "פעילה" }) === STATUS_OVERDUE &&
+    lateStatusFor({ status: "מאושר", issued_at: AT }) === STATUS_OVERDUE);
 }
 
 

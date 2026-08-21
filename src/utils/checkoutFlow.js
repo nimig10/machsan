@@ -387,11 +387,68 @@ export function wasCheckedOut(reservation) {
 export const STATUS_OVERDUE = "באיחור";
 export const STATUS_NOT_PICKED_UP = "לא יצא?";
 
-// Which label a reservation deserves once its return time has passed. The CALLER
-// owns the "has it passed" test — that needs toDateTime from src/utils.js, which
-// would drag the Supabase client in here (lesson #40).
+// Which label a reservation deserves once one of its deadlines has passed. The
+// CALLER owns the "has it passed" test — that needs toDateTime from
+// src/utils.js, which would drag the Supabase client in here (lesson #40).
 export function lateStatusFor(reservation) {
   return wasCheckedOut(reservation) ? STATUS_OVERDUE : STATUS_NOT_PICKED_UP;
+}
+
+// ── "לא יצא?" fires at the PICKUP time, not the return time ─────────────────
+//
+// The label exists to tell the warehouse that nobody ran the checkout screen.
+// It used to be derived from the RETURN deadline, because it shared its trigger
+// with "באיחור" and only issued_at told them apart. So a loan due out at 18:00
+// and back at 23:30 stayed plain "מאושר" until 23:30 — the alert arrived five
+// and a half hours after it was useful, and on a week-long loan, a week late.
+//
+// Now the two triggers are separate:
+//
+//   pickup + grace, never collected → "לא יצא?"  — nobody pressed הוצא
+//   return deadline, gear went out  → "באיחור"   — chase the student
+//
+// The grace window is the operator's, not the student's: it is there so the
+// badge does not appear while the warehouse is mid-handover.
+export const DEFAULT_NOT_PICKED_UP_GRACE_MIN = 30;
+export const MAX_NOT_PICKED_UP_GRACE_MIN = 240;
+
+// ⚠️ MODULE-LEVEL ON PURPOSE — the one value every surface reads.
+//
+// getEffectiveStatus is called from roughly ten places (the dashboard tile and
+// its calendar chip, isReallyOverdue, the PDF export, stretchOverdueForCalendar,
+// the follow-up panel, and BOTH copies of normalizeReservationsForArchive), and
+// none of them has siteSettings in scope. Threading the grace through as a
+// parameter would mean one forgotten call site showing a different label from
+// the rest of the same screen — which is lesson #19 exactly. A single value read
+// by everyone is what makes them agree.
+//
+// App.jsx writes it imperatively BEFORE each setSiteSettings, so the render that
+// state update triggers already normalises with the admin's number.
+let notPickedUpGraceMs = DEFAULT_NOT_PICKED_UP_GRACE_MIN * 60000;
+
+export function setNotPickedUpGraceMinutes(minutes) {
+  const n = Number(minutes);
+  const safe = Number.isFinite(n)
+    ? Math.min(MAX_NOT_PICKED_UP_GRACE_MIN, Math.max(0, n))
+    : DEFAULT_NOT_PICKED_UP_GRACE_MIN;
+  notPickedUpGraceMs = safe * 60000;
+  return safe;
+}
+
+export function getNotPickedUpGraceMs() {
+  return notPickedUpGraceMs;
+}
+
+// Has the pickup moment plus the grace window passed?
+//
+// Says nothing about whether the gear went out — the caller pairs this with
+// wasCheckedOut. borrowTs is injected as a number for the same reason
+// checkoutWindowOpen injects it: toDateTime lives in src/utils.js.
+export function pickupOverdue({ borrowTs, nowMs, graceMs } = {}) {
+  if (!Number.isFinite(borrowTs) || borrowTs <= 0) return false;
+  if (!Number.isFinite(nowMs)) return false;
+  const grace = Number.isFinite(graceMs) ? Math.max(0, graceMs) : notPickedUpGraceMs;
+  return nowMs - borrowTs >= grace;
 }
 
 // Is the checkout screen due to appear on its own?
