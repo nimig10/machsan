@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { AlertTriangle, AudioLines, Backpack, BookOpen, Briefcase, Calendar, Camera, Check, CheckCircle, Clock, ClipboardList, Download, FileText, Film, GraduationCap, HelpCircle, Info, Link, Lightbulb, LogOut, Mail, Mic, Minus, Package, Pencil, Phone, Plus, Save, Search, Settings, Shield, ShoppingCart, SlidersHorizontal, Trash2, Triangle, Upload, User, Video, Wrench, X, XCircle } from "lucide-react";
-import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, deleteReservation, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB, equipmentWriteInFlight, getValidTokenDirect, groupReservationItemsByCategory, matchesEquipmentTypeFilter, deriveVisibleCategories, stretchOverdueForCalendar, ACTIVE_RESERVATION_STATUS_FILTERS } from "./utils.js";
+import { logActivity, cloudinaryThumb, getEffectiveStatus, updateReservationStatus, deleteReservation, createLessonReservations, getAuthToken, getSbAuthHeaders, invalidateAuthTokenCache, writeEquipmentToDB, equipmentWriteInFlight, getValidTokenDirect, groupReservationItemsByCategory, matchesEquipmentTypeFilter, deriveVisibleCategories, stretchOverdueForCalendar, ACTIVE_RESERVATION_STATUS_FILTERS, pickupNeverHappened } from "./utils.js";
 import { lateStatusFor, STATUS_NOT_PICKED_UP } from "./utils/checkoutFlow.js";
 import * as XLSX from "xlsx";
 import { Toast, Modal, Loading, statusBadge } from "./components/ui.jsx";
@@ -520,6 +520,14 @@ function normalizeReservationsForArchive(reservations, now = new Date()) {
     };
     if (normalizedReservation.status === "הוחזר") {
       return normalizedReservation.returned_at ? normalizedReservation : markReservationReturned(normalizedReservation, now);
+    }
+    // A — nobody ran the checkout screen. The SAME helper getEffectiveStatus and
+    // the utils.js copy of this function call; there is deliberately no second
+    // implementation, because this pair has already drifted once (the "צוות"
+    // early-return the utils.js copy has and this one does not) and lesson #19
+    // is what that drift costs.
+    if (pickupNeverHappened(normalizedReservation, nowMs)) {
+      return { ...normalizedReservation, status: STATUS_NOT_PICKED_UP };
     }
     const returnAt = getReservationReturnTimestamp(normalizedReservation);
     // "פעילה" is matched alongside "מאושר" because checkout now writes it for
