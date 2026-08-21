@@ -14,6 +14,7 @@ import {
   matchesEquipmentTypeFilter,
   deriveVisibleCategories,
 } from "../utils.js";
+import { wasCheckedOut } from "../utils/checkoutFlow.js";
 
 export function EditReservationModal({ reservation, equipment, reservations, onSave, onApprove, onClose, collegeManager={}, managerToken="", siteSettings={}, loanHandlers=[], categories=[] }) {
   // Loan-request staff coordination (decoupled side-table) — read-only display here.
@@ -248,7 +249,18 @@ export function EditReservationModal({ reservation, equipment, reservations, onS
     //     absent, which is what every other caller relies on.
     // The rule that replaces it: whoever last said "this is what went out" is
     // the warehouse, through this modal, and the archive must agree with them.
-    if (isOverdueReservation) {
+    //
+    // ⚠️ `|| wasCheckedOut(...)` is purely ADDITIVE, and deliberately not folded
+    // into isOverdueReservation — that flag also drives the availability gate and
+    // six pieces of UI in this modal, none of which should move.
+    //
+    // It covers one state isOverdueReservation cannot see: a checkout whose write
+    // died between stamping issued_at and flipping the status, leaving issued_at
+    // set with the status still "מאושר" (checkoutState calls it half_issued). The
+    // gear IS out, so an edit must reach the archive — but the two-status test
+    // reads "מאושר" and skips the stamp, and the archive keeps the pre-edit list.
+    // Nothing else changes: every case that stamped before still stamps.
+    if (isOverdueReservation || wasCheckedOut(reservation)) {
       updatedReservation.original_items = items.map(i => ({
         equipment_id: i.equipment_id,
         name: i.name || "",

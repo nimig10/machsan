@@ -990,7 +990,15 @@ console.log("\n\x1b[1m> staff may correct a live loan (static)\x1b[0m");
   check("edit: a staff save re-stamps original_items from the saved list",
     /updatedReservation\.original_items = items\.map/.test(save));
   check("edit: …unconditionally, not only when the stamp is missing",
-    /if \(isOverdueReservation\) \{\s*updatedReservation\.original_items/.test(save));
+    /if \(isOverdueReservation \|\| wasCheckedOut\(reservation\)\) \{\s*updatedReservation\.original_items/.test(save));
+  // half_issued: a checkout whose write died after stamping issued_at but before
+  // the status flip leaves issued_at set with status still "מאושר". The gear is
+  // out, so an edit must reach the archive — the two-status test alone cannot see
+  // that row. Additive only: everything that stamped before still stamps.
+  check("edit: a half-written checkout still re-stamps — the gear IS out",
+    /wasCheckedOut\(reservation\)/.test(save));
+  check("edit: isOverdueReservation itself was NOT widened — it also drives the UI",
+    /const isOverdueReservation = reservation\.status==="באיחור" \|\| reservation\.status==="פעילה";/.test(modal));
   check("edit: the over-booking gate still runs for מאושר and for gear that is out",
     /getReservationApprovalConflicts\(updatedReservation, reservations, equipment\)/.test(save)
     && /reservation\.status === "מאושר" \|\| isOverdueReservation/.test(save));
