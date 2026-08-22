@@ -1027,6 +1027,34 @@ th{background:#eee;font-weight:700}
         </div>
       </div>
 
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-header"><div className="card-title">⏰ מייל איחור לסטודנט</div></div>
+        <div style={{ padding: "16px 20px" }}>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14, lineHeight: 1.7 }}>
+            כמה זמן אחרי <strong>שעת ההחזרה</strong> נשלח לסטודנט המייל
+            "אזהרת איחור בהחזרת ציוד". החלון קיים כדי לתת לאיש המחסן זמן לקלוט
+            החזרה מורכבת לפני שהסטודנט מקבל נזיפה על ציוד שכבר עומד על המדף.
+            <br />
+            <strong>מה שלא משתנה:</strong> הסטטוס עובר ל"באיחור" כרגיל,
+            30 דקות אחרי שעת ההחזרה — ההגדרה הזו נוגעת <strong>רק למייל</strong>.
+            בקשה שהציוד שלה מעולם לא יצא ("לא יצא?") לא מקבלת מייל בכלל.
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>שליחת מייל האיחור (דקות אחרי)</label>
+            <input
+              type="number" min={0} max={1440}
+              value={draft.overdueEmailDelayMinutes ?? 90}
+              onChange={e => setDraft(p => ({ ...p, overdueEmailDelayMinutes: e.target.value }))}
+              onBlur={e => commitNumber("overdue", "overdueEmailDelayMinutes", e.target.value, { min: 0, max: 1440, fallback: 90 })}
+              onKeyDown={commitOnEnter}
+              disabled={busyPanel === "overdue"}
+              style={{ width: 90, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: 16, textAlign: "center" }}
+            />
+            <span style={{ fontSize: 12, color: "var(--text3)" }}>ברירת מחדל: 90 דקות · מקסימום: 1440 (24 שעות) · נשמר אוטומטית</span>
+          </div>
+        </div>
+      </div>
+
       {renderAnnouncementPanel()}
       {/* Viewer list — a floating panel so it can be opened, scanned and closed
           without losing the admin's place in a long settings page. */}

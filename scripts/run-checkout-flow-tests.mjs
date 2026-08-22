@@ -1193,6 +1193,53 @@ console.log("\n\x1b[1m> the pickup trigger is wired (static)\x1b[0m");
   check("the cron writes no display label",
     !cron.includes("לא יצא?") && !/pickupOverdue|pickupNeverHappened/.test(cron));
 
+  // ── the overdue email delay is settable; the STATUS FLIP is not ───────────
+  //
+  // Explicit product-owner requirement: "ההחלפה לסטטוס באיחור צריכה לקרות כמו
+  // שקורה עכשיו בדיוק... לא לגעת בלוגיקה הזאת בכלל". Only the email moved.
+  const flipFilter = cron.slice(cron.indexOf("const overdueCandiates"),
+                                cron.indexOf("for (const r of overdueCandiates"));
+  check("cron: the status flip is still a fixed 30 minutes",
+    /THIRTY_MIN = 30 \* 60 \* 1000/.test(cron) && /nowMs - returnMs >= THIRTY_MIN/.test(flipFilter));
+  check("cron: …and is NOT wired to the settable delay",
+    !/emailDelayMs/.test(flipFilter));
+
+  // The email had to leave pass 1's loop entirely: that loop's filter drops rows
+  // already "באיחור", so a row stamped at minute 30 never comes back round for
+  // an email at minute 90. Left in place it would simply never send — silently.
+  const emailFilter = cron.slice(cron.indexOf("const emailCandidates"),
+                                 cron.indexOf("for (const r of emailCandidates"));
+  check("cron: the email lives in its own pass, keyed on the delay",
+    emailFilter.length > 0 && /nowMs - returnMs >= emailDelayMs/.test(emailFilter));
+  check("cron: the email pass does NOT require status באיחור — that would break delay < 30",
+    !/status === "באיחור"/.test(emailFilter));
+  check("cron: the email is still gated on issued_at (lesson #53)",
+    /if \(!r\.issued_at\) return false;/.test(emailFilter));
+  check("cron: lessons are excluded from BOTH passes",
+    /loan_type === "שיעור"/.test(flipFilter) && /loan_type === "שיעור"/.test(emailFilter));
+  check("cron: the email still fires once only",
+    /overdue_email_sent \|\| r\.overdue_notified/.test(emailFilter));
+  check("cron: a settings lookup can never stop the run",
+    /catch[\s\S]{0,120}return fallback;/.test(cron));
+
+  // Both senders must read the same key. The client sweep runs whenever staff
+  // have the app open, so a stale hardcoded 30 there would out-race the cron and
+  // cancel the setting outright.
+  check("cron and client read the same settings key",
+    cron.includes("overdueEmailDelayMinutes") && app.includes("overdueEmailDelayMinutes"));
+  check("no hardcoded THIRTY_MIN left in the client sweep",
+    !/THIRTY_MIN/.test(app));
+  const settingsSrc = read("../src/components/SystemSettingsPage.jsx");
+  const delayIdx = settingsSrc.indexOf("overdueEmailDelayMinutes");
+  const overdueBlock = settingsSrc.slice(
+    settingsSrc.lastIndexOf("<input", delayIdx),
+    settingsSrc.indexOf("/>", delayIdx) + 2);
+  check("settings: the delay field exists and caps at 1440, matching the cron clamp",
+    delayIdx !== -1 && /max=\{1440\}/.test(overdueBlock)
+    && /MAX_OVERDUE_EMAIL_DELAY_MIN = 1440/.test(cron));
+  check("settings: default 90 agrees in the field, the clamp and the cron",
+    /fallback:\s*90/.test(overdueBlock) && /DEFAULT_OVERDUE_EMAIL_DELAY_MIN = 90/.test(cron));
+
   // The field and the clamp disagreed once for checkoutLeadHours; the new field
   // must not repeat it, and 240 has to match MAX_NOT_PICKED_UP_GRACE_MIN.
   const settings = read("../src/components/SystemSettingsPage.jsx");

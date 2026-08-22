@@ -1,10 +1,20 @@
 // check-overdue.js — called by cron-job.org every 5 min.
 //
-// Runs two passes on reservations_new (Supabase table):
+// Runs three passes on reservations_new (Supabase table):
 //
-//  1. OVERDUE STATUS + EMAILS: reservations ≥30 min past return time,
-//     status not already closed. Marks "באיחור" in DB and sends email.
-//  2. PUSH REMINDERS: reservations 15–25 min before return, status "מאושר".
+//  1. OVERDUE STATUS: reservations ≥30 min past return time, status not already
+//     closed. Marks "באיחור" in DB. FIXED at 30 min, deliberately not settable.
+//  2. OVERDUE EMAILS: reservations past return time by the admin-set delay
+//     (overdueEmailDelayMinutes, default 90) that actually went out.
+//  3. PUSH REMINDERS: reservations 15–25 min before return, status "מאושר".
+//
+// ⚠️ 1 AND 2 ARE SEPARATE PASSES, AND THAT IS LOAD-BEARING.
+//
+// The email used to live inside pass 1's loop, which was fine only while the
+// two shared one threshold. Pass 1's candidate filter excludes rows that are
+// ALREADY "באיחור" — so once it stamps a row at minute 30, that row never
+// appears in the list again. Leaving the email there and giving it a later
+// deadline would mean it is simply never sent: no error, no log, nothing.
 //
 // ?force_push=email — skip time-window filter and send a test push to that email.
 
@@ -45,6 +55,44 @@ function formatDate(dateStr) {
 }
 
 const CLOSED_STATUSES = new Set(["הוחזר", "נדחה", "בוטל", "מבוטל"]);
+
+// How long after the return time the student is emailed. Admin-set, because 30
+// minutes turned out to be shorter than a complex return takes to process at the
+// counter — the student was being told "נדרשת פעולה מיידית" about gear already
+// standing on the shelf.
+//
+// ⚠️ This governs the EMAIL ONLY. The status flip in pass 1 stays at a fixed 30
+// minutes and must not be wired to this value; it is the warehouse's own early
+// signal, and the product owner asked for it explicitly to stay put.
+const DEFAULT_OVERDUE_EMAIL_DELAY_MIN = 90;
+const MAX_OVERDUE_EMAIL_DELAY_MIN = 1440;
+
+// First thing under api/ to read site_settings at all.
+//
+// NOT modelled on readStoreKey() in notify-course-end-7days.js — that one reads
+// a `store` row that migration 20260430140000 deleted, so it has been quietly
+// returning null ever since. This reads the live table with the service key the
+// file already holds.
+//
+// Any failure — network, missing key, junk value — falls back to the default.
+// A settings lookup must never be able to stop the cron from running.
+async function readOverdueEmailDelayMs() {
+  const fallback = DEFAULT_OVERDUE_EMAIL_DELAY_MIN * 60000;
+  try {
+    const r = await fetch(
+      `${SB_URL}/rest/v1/site_settings?key=eq.overdueEmailDelayMinutes&select=value&limit=1`,
+      { headers: SB_HEADERS },
+    );
+    if (!r.ok) return fallback;
+    const rows = await r.json();
+    const n = Number(rows?.[0]?.value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(0, Math.min(MAX_OVERDUE_EMAIL_DELAY_MIN, n)) * 60000;
+  } catch (e) {
+    console.warn("overdueEmailDelayMinutes lookup failed, using default:", e.message);
+    return fallback;
+  }
+}
 
 export default async function handler(req, res) {
   const authHeader = req.headers["authorization"];
@@ -107,7 +155,12 @@ export default async function handler(req, res) {
     let emailsSent = 0;
     let markedOverdue = 0;
 
-    // ── Pass 1: Detect overdue, mark status + send email ───────────────────
+    // ── Pass 1: Detect overdue, mark status ────────────────────────────────
+    //
+    // FIXED 30 minutes. Not settable, and deliberately so: this is the
+    // warehouse's own early signal that something has not come back, and the
+    // product owner asked for it to stay exactly where it is. Only the email
+    // below moved.
     const overdueCandiates = reservations.filter((r) => {
       if (CLOSED_STATUSES.has(r.status) || r.status === "באיחור") return false;
       if (!r.return_date) return false;
@@ -131,54 +184,73 @@ export default async function handler(req, res) {
         console.error(`  failed to mark overdue for ${r.id}:`, e.message);
         continue;
       }
+    }
 
+    // ── Pass 2: Overdue emails (admin-set delay, default 90 min) ───────────
+    //
+    // A SEPARATE pass, not a branch inside pass 1 — see the header. Pass 1's
+    // filter drops rows that are already "באיחור", so a row it stamped at
+    // minute 30 can never come back round for an email at minute 90.
+    //
+    // Deliberately does NOT filter on status === "באיחור". Requiring it would
+    // silently break every delay below 30 minutes, and it would also miss the
+    // rows pass 1 has just stamped in this very run (the in-memory array still
+    // carries their old status). Being past the return time by the configured
+    // delay is the whole condition.
+    const emailDelayMs = await readOverdueEmailDelayMs();
+    console.log(`  overdue email delay: ${Math.round(emailDelayMs / 60000)} min`);
+
+    const emailCandidates = reservations.filter((r) => {
+      if (CLOSED_STATUSES.has(r.status)) return false;
+      if (r.loan_type === "שיעור") return false;
       // ⚠️ NEVER-COLLECTED REQUESTS GET NO OVERDUE EMAIL.
       //
-      // The status above is still written — the row genuinely is past its return
-      // time, the UI re-labels it to "לא יצא?" from issued_at, and leaving the
-      // email flags unset means the real overdue email still fires later if the
-      // gear does go out and comes back late.
-      //
-      // But the email itself is subject-lined "אזהרת איחור בהחזרת ציוד — נדרשת
-      // פעולה מיידית", and sending that to somebody who never picked anything up
+      // The status is still written by pass 1 — the row genuinely is past its
+      // return time, and the UI re-labels it to "לא יצא?" from issued_at. But
+      // this email is subject-lined "אזהרת איחור בהחזרת ציוד — נדרשת פעולה
+      // מיידית", and sending that to somebody who never picked anything up
       // accuses them of losing gear that has been on the shelf the whole time.
-      // The anomaly is surfaced to STAFF instead, as a "לא יצא?" badge on the
-      // request and its own dashboard tile — a human decides what to do.
+      // The anomaly is surfaced to STAFF instead, as a "לא יצא?" badge and its
+      // own dashboard tile — a human decides what to do.
       //
       // Trade-off, stated on purpose: if an operator hands gear over and forgets
       // to run the checkout screen, that loan looks uncollected and its student
       // gets no overdue email. The badge is what makes the missed step visible.
-      if (!r.issued_at) {
-        console.log(`  no overdue email: ${r.id} was never checked out (issued_at is null)`);
-      } else if (r.email && !r.overdue_email_sent && !r.overdue_notified) {
-        try {
-          await fetch(`${baseUrl}/api/send-email`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              to: r.email,
-              type: "overdue",
-              student_name: r.student_name,
-              borrow_date: formatDate(r.borrow_date),
-              return_date: formatDate(r.return_date),
-              return_time: r.return_time || "",
-            }),
-          });
-          // Flag so we don't resend
-          await fetch(`${SB_URL}/rest/v1/reservations_new?id=eq.${encodeURIComponent(r.id)}`, {
-            method: "PATCH",
-            headers: { ...SB_HEADERS, Prefer: "return=minimal" },
-            body: JSON.stringify({ overdue_notified: true, overdue_email_sent: true }),
-          });
-          emailsSent++;
-          console.log(`  overdue email sent → ${r.email} (${r.loan_type})`);
-        } catch (e) {
-          console.error(`  overdue email error for ${r.id}:`, e.message);
-        }
+      if (!r.issued_at) return false;
+      if (!r.email || r.overdue_email_sent || r.overdue_notified) return false;
+      if (!r.return_date) return false;
+      const returnMs = toDateTime(r.return_date, r.return_time || "23:59");
+      return returnMs > 0 && nowMs - returnMs >= emailDelayMs;
+    });
+
+    for (const r of emailCandidates) {
+      try {
+        await fetch(`${baseUrl}/api/send-email`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: r.email,
+            type: "overdue",
+            student_name: r.student_name,
+            borrow_date: formatDate(r.borrow_date),
+            return_date: formatDate(r.return_date),
+            return_time: r.return_time || "",
+          }),
+        });
+        // Flag so we don't resend
+        await fetch(`${SB_URL}/rest/v1/reservations_new?id=eq.${encodeURIComponent(r.id)}`, {
+          method: "PATCH",
+          headers: { ...SB_HEADERS, Prefer: "return=minimal" },
+          body: JSON.stringify({ overdue_notified: true, overdue_email_sent: true }),
+        });
+        emailsSent++;
+        console.log(`  overdue email sent → ${r.email} (${r.loan_type})`);
+      } catch (e) {
+        console.error(`  overdue email error for ${r.id}:`, e.message);
       }
     }
 
-    // ── Pass 2: Push reminders (15–25 min before return) ──────────────────
+    // ── Pass 3: Push reminders (15–25 min before return) ──────────────────
     const MIN_MS = 15 * 60 * 1000;
     const MAX_MS = 25 * 60 * 1000;
     const windowStartMs = nowMs + MIN_MS;
