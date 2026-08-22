@@ -5460,7 +5460,7 @@ export default function App() {
   const [productions, _setProductions] = useState([]);
   const [policies, _setPolicies]       = useState({ פרטית:"", הפקה:"", סאונד:"", לילה:"" });
   const [certifications, _setCertifications] = useState({ types:[], students:[] });
-  const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14, aiMaxRequests:5, studioFutureHoursLimit:16, publicDisplayInterval:18, checkoutLeadHours:3, notPickedUpGraceMinutes:30, userGuideVideos:[] });
+  const [siteSettings, _setSiteSettings] = useState({ logo:"", soundLogo:"", theme:"dark", accentColor:"#f5a623", adminAccentColor:"#f5a623", adminFontSize:14, aiMaxRequests:5, studioFutureHoursLimit:16, publicDisplayInterval:18, checkoutLeadHours:3, notPickedUpGraceMinutes:30, overdueEmailDelayMinutes:90, userGuideVideos:[] });
   // Keep the "לא יצא?" grace register in step with the admin's setting.
   //
   // Written during RENDER, not in an effect: an effect runs after this pass, so
@@ -7189,7 +7189,14 @@ export default function App() {
     return () => window.clearInterval(timerId);
   }, [loading]);
 
-  // ── Auto-send overdue email 30 minutes after return time ──
+  // ── Auto-send overdue email once the admin-set delay has passed ──
+  //
+  // ⚠️ MUST read the same setting api/check-overdue.js reads.
+  //
+  // This sweep runs whenever a staff member has the app open, so it is a second
+  // sender, not a fallback. While it held its own hardcoded 30 minutes it would
+  // simply out-race the cron and send at minute 30 no matter what the admin had
+  // configured — quietly cancelling the whole setting.
   const overdueInFlightRef = useRef(false);
   useEffect(() => {
     if (loading) return;
@@ -7198,7 +7205,8 @@ export default function App() {
       overdueInFlightRef.current = true;
       try {
         const now = Date.now();
-        const THIRTY_MIN = 30 * 60 * 1000;
+        const overdueEmailDelayMs = Math.max(0, Math.min(1440,
+          Number(siteSettings?.overdueEmailDelayMinutes ?? 90) || 0)) * 60000;
         const toSend = reservations.filter(r =>
           r.status === "באיחור" &&
           !r.overdue_email_sent &&
@@ -7206,7 +7214,7 @@ export default function App() {
           r.loan_type !== "שיעור"
         ).filter(r => {
           const returnAt = getReservationReturnTimestamp(r);
-          return returnAt && (now - returnAt) >= THIRTY_MIN;
+          return returnAt && (now - returnAt) >= overdueEmailDelayMs;
         });
         if (!toSend.length) return;
         const ac = new AbortController();
@@ -7257,7 +7265,9 @@ export default function App() {
     const t = setTimeout(checkOverdueEmails, 90000); // first check after 90s
     const i = setInterval(checkOverdueEmails, 15 * 60 * 1000); // then every 15 min
     return () => { clearTimeout(t); clearInterval(i); };
-  }, [loading, reservations]);
+    // The delay is a dep, narrowed to the one field: an admin who changes it
+    // must not have to reload before this sweep honours the new value.
+  }, [loading, reservations, siteSettings?.overdueEmailDelayMinutes]);
 
   const pending = reservations.filter(r=>r.status==="ממתין").length;
   const damagedCount = equipment.reduce((sum, eq) =>
